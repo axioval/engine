@@ -7,7 +7,10 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_DIR = ROOT / "target" / "package"
+if len(sys.argv) > 2:
+    print(f"usage: {Path(sys.argv[0]).name} [PACKAGE_DIR]", file=sys.stderr)
+    raise SystemExit(2)
+PACKAGE_DIR = Path(sys.argv[1]).resolve() if len(sys.argv) == 2 else ROOT / "target" / "package"
 EXPECTED = {
     "axioval",
     "axioval-axiolid",

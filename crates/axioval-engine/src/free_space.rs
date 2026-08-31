@@ -18,6 +18,10 @@ pub enum FreeSpaceError {
     InvalidMetricFrame,
     #[error("clearance shape dimensions must be positive and finite")]
     InvalidClearanceShape,
+    #[error("placement offset interval is non-finite or reversed")]
+    InvalidOffsetInterval,
+    #[error("placement support gap must be finite and non-negative")]
+    InvalidSupportGap,
     #[error("clearance evidence is incomplete")]
     IncompleteClearanceEvidence,
     #[error("obstruction evidence has no blocking objects")]
@@ -32,6 +36,8 @@ pub enum FreeSpaceError {
     InexactPlacementEvidence,
     #[error("placement frame is not grounded in the requested scope")]
     PlacementScopeMismatch,
+    #[error("placement witness falls outside its requested search domain")]
+    PlacementDomainMismatch,
     #[error("free-space backend returned evidence for another request")]
     ResponseRequestMismatch,
     #[error("free-space geometry is unavailable for `{0}`")]
@@ -255,12 +261,152 @@ impl FreeAreaRequest {
     }
 }
 
+/// Inclusive signed offset bounds in canonical metres.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SignedDistanceInterval {
+    lower_metres: f64,
+    upper_metres: f64,
+}
+impl SignedDistanceInterval {
+    pub fn try_new(lower_metres: f64, upper_metres: f64) -> Result<Self, FreeSpaceError> {
+        if !lower_metres.is_finite() || !upper_metres.is_finite() || lower_metres > upper_metres {
+            return Err(FreeSpaceError::InvalidOffsetInterval);
+        }
+        Ok(Self {
+            lower_metres,
+            upper_metres,
+        })
+    }
+    pub fn exact(metres: f64) -> Result<Self, FreeSpaceError> {
+        Self::try_new(metres, metres)
+    }
+    pub fn lower_metres(&self) -> f64 {
+        self.lower_metres
+    }
+    pub fn upper_metres(&self) -> f64 {
+        self.upper_metres
+    }
+    fn contains(self, metres: f64) -> bool {
+        const TOLERANCE: f64 = 1.0e-9;
+        metres >= self.lower_metres - TOLERANCE && metres <= self.upper_metres + TOLERANCE
+    }
+}
+
+/// Requires the entire placement base to lie on an object's support surface.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SupportedPlacement {
+    support: ObjectId,
+    maximum_gap_metres: f64,
+}
+impl SupportedPlacement {
+    pub fn try_new(support: ObjectId, maximum_gap_metres: f64) -> Result<Self, FreeSpaceError> {
+        if !valid_non_negative(maximum_gap_metres) {
+            return Err(FreeSpaceError::InvalidSupportGap);
+        }
+        Ok(Self {
+            support,
+            maximum_gap_metres,
+        })
+    }
+    pub fn support(&self) -> &ObjectId {
+        &self.support
+    }
+    pub fn maximum_gap_metres(&self) -> f64 {
+        self.maximum_gap_metres
+    }
+}
+
+/// Restricts candidate-frame origins to offsets in an anchor frame.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameOffsetPlacement {
+    anchor: MetricFrame,
+    right: SignedDistanceInterval,
+    forward: SignedDistanceInterval,
+    up: SignedDistanceInterval,
+}
+impl FrameOffsetPlacement {
+    pub fn new(
+        anchor: MetricFrame,
+        right: SignedDistanceInterval,
+        forward: SignedDistanceInterval,
+        up: SignedDistanceInterval,
+    ) -> Self {
+        Self {
+            anchor,
+            right,
+            forward,
+            up,
+        }
+    }
+    pub fn anchor(&self) -> &MetricFrame {
+        &self.anchor
+    }
+    pub fn right(&self) -> SignedDistanceInterval {
+        self.right
+    }
+    pub fn forward(&self) -> SignedDistanceInterval {
+        self.forward
+    }
+    pub fn up(&self) -> SignedDistanceInterval {
+        self.up
+    }
+    fn contains_frame(&self, frame: &MetricFrame) -> bool {
+        const AXIS_TOLERANCE: f64 = 1.0e-9;
+        let aligned = [
+            (self.anchor.right(), frame.right()),
+            (self.anchor.forward(), frame.forward()),
+            (self.anchor.up(), frame.up()),
+        ]
+        .into_iter()
+        .all(|(expected, actual)| {
+            expected
+                .components()
+                .into_iter()
+                .zip(actual.components())
+                .all(|(a, b)| (a - b).abs() <= AXIS_TOLERANCE)
+        });
+        if !aligned {
+            return false;
+        }
+        let anchor = self.anchor.origin().coordinates_metres();
+        let found = frame.origin().coordinates_metres();
+        let delta = [
+            found[0] - anchor[0],
+            found[1] - anchor[1],
+            found[2] - anchor[2],
+        ];
+        let project = |axis: MetricDirection| {
+            axis.components()
+                .into_iter()
+                .zip(delta)
+                .map(|(a, b)| a * b)
+                .sum()
+        };
+        self.right.contains(project(self.anchor.right()))
+            && self.forward.contains(project(self.anchor.forward()))
+            && self.up.contains(project(self.anchor.up()))
+    }
+}
+
+/// Geometric predicate limiting where a backend may search for placements.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlacementDomain {
+    Unconstrained,
+    Supported(SupportedPlacement),
+    FrameOffsets(FrameOffsetPlacement),
+    SupportedFrameOffsets {
+        support: SupportedPlacement,
+        offsets: FrameOffsetPlacement,
+    },
+}
+
 /// Searches an object-grounded scope for any placement of a clearance shape.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacementRequest {
     scope: ObjectId,
     shape: ClearanceShape,
     obstacles: Vec<ObjectId>,
+    domain: PlacementDomain,
 }
 impl PlacementRequest {
     pub fn new(scope: ObjectId, shape: ClearanceShape, mut obstacles: Vec<ObjectId>) -> Self {
@@ -270,7 +416,31 @@ impl PlacementRequest {
             scope,
             shape,
             obstacles,
+            domain: PlacementDomain::Unconstrained,
         }
+    }
+    pub fn new_in_domain(
+        scope: ObjectId,
+        shape: ClearanceShape,
+        mut obstacles: Vec<ObjectId>,
+        domain: PlacementDomain,
+    ) -> Result<Self, FreeSpaceError> {
+        let offsets = match &domain {
+            PlacementDomain::FrameOffsets(offsets)
+            | PlacementDomain::SupportedFrameOffsets { offsets, .. } => Some(offsets),
+            _ => None,
+        };
+        if offsets.is_some_and(|offsets| offsets.anchor().origin().subject() != &scope) {
+            return Err(FreeSpaceError::PlacementScopeMismatch);
+        }
+        obstacles.sort();
+        obstacles.dedup();
+        Ok(Self {
+            scope,
+            shape,
+            obstacles,
+            domain,
+        })
     }
     pub fn scope(&self) -> &ObjectId {
         &self.scope
@@ -280,6 +450,9 @@ impl PlacementRequest {
     }
     pub fn obstacles(&self) -> &[ObjectId] {
         &self.obstacles
+    }
+    pub fn domain(&self) -> &PlacementDomain {
+        &self.domain
     }
 }
 
@@ -367,6 +540,14 @@ impl ClearancePlacementEvidence {
     ) -> Result<Self, FreeSpaceError> {
         if frame.origin().subject() != request.scope() {
             return Err(FreeSpaceError::PlacementScopeMismatch);
+        }
+        let offsets = match request.domain() {
+            PlacementDomain::FrameOffsets(offsets)
+            | PlacementDomain::SupportedFrameOffsets { offsets, .. } => Some(offsets),
+            _ => None,
+        };
+        if offsets.is_some_and(|offsets| !offsets.contains_frame(&frame)) {
+            return Err(FreeSpaceError::PlacementDomainMismatch);
         }
         if !reviewable_exact_evidence(&evidence) {
             return Err(FreeSpaceError::InexactPlacementEvidence);

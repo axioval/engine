@@ -22,7 +22,12 @@ Partial geometry therefore cannot produce a false clear result.
 
 ## Placement search
 
-`PlacementRequest` asks whether a box or cylinder can fit anywhere in a source-qualified scope. This supports free-floor-space requirements that ask for a free rectangle or turning circle rather than only a total area.
+`PlacementRequest` asks whether a box or cylinder can fit in a source-qualified search scope. A `PlacementDomain` makes the admissible candidate set explicit:
+
+- `Unconstrained` preserves generic searches without implying support;
+- `Supported` requires the whole candidate base on a source-qualified support object within a maximum gap;
+- `FrameOffsets` limits right/forward/up translation in an anchor frame;
+- `SupportedFrameOffsets` requires both support and anchor-relative bounds.
 
 - `Found` carries one exact, scope-grounded placement frame.
 - `NoPlacement` requires complete exact search evidence.

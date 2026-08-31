@@ -218,6 +218,7 @@ mod free_space;
 mod metric_routing;
 mod services;
 mod topology;
+mod walkability;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
@@ -233,6 +234,11 @@ pub use metric_routing::{
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
+};
+pub use walkability::{
+    VerifiedWalkablePassage, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
+    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
+    WalkabilitySnapshot,
 };
 
 /// Deterministic runtime that invokes only registered trusted capabilities.

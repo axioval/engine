@@ -12,3 +12,4 @@ All notable changes are documented here. This project follows Semantic Versionin
 - Exact source-neutral connectivity graphs with deterministic width-constrained traversal.
 - Backend-neutral metric-routing requests, bounded shortest-distance evidence, and request-bound blocked verdicts.
 - Backend-neutral free-area, directional-clearance, and placement-search evidence contracts.
+- Complete walkable-region snapshots with deterministic three-valued width-constrained routing.

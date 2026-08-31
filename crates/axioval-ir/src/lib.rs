@@ -310,6 +310,7 @@ pub enum NotEvaluatedReason {
     BackendUnavailable,
     IncompleteEvidence,
     InvalidEvidence,
+    InvalidDeclaration,
     ResourceLimit,
 }
 /// Explicit fail-closed evaluation outcome. This is not a compliance finding.

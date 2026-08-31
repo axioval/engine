@@ -4,6 +4,8 @@ Trusted capability registration, strict package binding, typed host services, ex
 
 Packages are untrusted data. Unknown definitions, capability/signature drift, unknown parameters, missing required values, and type mismatches fail compilation. Capability execution returns `CapabilityEvaluation`; missing services or unusable evidence belong in typed not-evaluated outcomes, never an empty-findings false pass. Runtime attaches the compiled rule identity and sorts report outcomes deterministically.
 
+`properties.rs` owns exact source-neutral property requests, request-bound present values and absence proofs, response validation, and the typed property-resolution service handle. Every conclusive response must bind the complete request, including the source-qualified object identity; matching property names alone are insufficient. Missing object-map entries are not evidence of absence. Source interpretation and completeness proof stay in providers.
+
 `topology.rs` owns deterministic source-neutral connectivity and route queries over exact typed evidence. It must not infer edges from source relationships or import geometry, IFC, ICDD, Axiolid, or vendor types.
 
 `metric_routing.rs` owns canonical-metre requests, conservative distance bounds, three-valued threshold comparison, and the backend-neutral service handle. Algorithms and native geometry types stay in Axiolid or another geometry provider. A blocked result requires complete exact evidence; a known route through incomplete topology proves existence only.

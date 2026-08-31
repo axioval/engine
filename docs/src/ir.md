@@ -18,7 +18,7 @@ Adapters may expose external aliases, but aliases never replace source-qualified
 
 ## Semantic data
 
-Objects expose canonical concepts, typed properties, classifications and directed relationships. Canonical concept IDs are package vocabulary identifiers; source-specific names are adapter bindings.
+Objects expose canonical concepts, typed properties, classifications and directed relationships. Canonical concept IDs are package vocabulary identifiers; source-specific names are adapter bindings. Stored property values are observations, not proof that an omitted key is absent. Conclusive property checks use the typed property-resolution service and exact request-bound evidence.
 
 Values distinguish null/unavailable from concrete values and preserve units where relevant. Adapters must not silently coerce malformed source values.
 

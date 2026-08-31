@@ -1,0 +1,23 @@
+[book]
+title = "Axioval Engine"
+description = "Source-neutral pure-Rust rule engine"
+authors = ["Axioval contributors"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/axioval/engine"
+edit-url-template = "https://github.com/axioval/engine/edit/main/docs/{path}"
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true

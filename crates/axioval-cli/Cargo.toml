@@ -1,0 +1,23 @@
+[package]
+name = "axioval-cli"
+description = "Command-line runner for normalized Axioval packages"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "axioval"
+path = "src/main.rs"
+doc = false
+
+[dependencies]
+axioval = { path = "../axioval", version = "0.1.0" }
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

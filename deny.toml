@@ -1,0 +1,48 @@
+# cargo-deny policy for all workspace crates and features.
+# Keep exceptions narrow, versioned, and justified inline.
+
+[graph]
+all-features = true
+
+[advisories]
+ignore = []
+
+[licenses]
+allow = [
+  "AGPL-3.0-or-later",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "MIT",
+  "Unicode-3.0",
+]
+confidence-threshold = 0.93
+exceptions = []
+
+[licenses.private]
+ignore = false
+registries = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+allow-workspace = false
+deny = []
+skip = [
+  { crate = "syn@2.0.119", reason = "tracing-attributes has not yet converged on syn 3" },
+]
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []

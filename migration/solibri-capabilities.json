@@ -1,0 +1,538 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": {
+    "repository": "point-grey/smc-lrp",
+    "commit": "7a8f37e050192b260cad9ebebd1bed40cdca7b6f",
+    "path": "crates/spec/data/cset_execution_capabilities.json",
+    "sourceSchemaVersion": "1.2.0"
+  },
+  "completionContract": [
+    "capability implemented in axioval-rules",
+    "source-neutral tests pass",
+    "Solibri wrapper consumes Axioval implementation",
+    "legacy parity evidence passes",
+    "old implementation no longer owns policy"
+  ],
+  "entries": [
+    {
+      "nativeType": "AccessibleRouteComplianceRule",
+      "legacyDefinitionId": "geometry.path",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "AccessibleRouteRule",
+      "legacyDefinitionId": "geometry.route_components",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "AccessibleSpaceRule",
+      "legacyDefinitionId": "geometry.accessible_space",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "AllowedBeamIntersectionsRule",
+      "legacyDefinitionId": "geometry.beam_intersections",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "AllowedProfilesRule",
+      "legacyDefinitionId": "geometry.allowed_profiles",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ArchitectureStructureCoverage",
+      "legacyDefinitionId": "geometry.architecture_structure_coverage",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "BuildingEnvelopeRule",
+      "legacyDefinitionId": "geometry.building_envelope",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "BuildingMustHaveInstancesOfClassConstraint",
+      "legacyDefinitionId": "model.required_components",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "model",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "BuildingStoreyConstraint",
+      "legacyDefinitionId": "model.building_storey",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "model",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ClashDetectionMatrixRule",
+      "legacyDefinitionId": "coordination.clash_matrix",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "coordination",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComparisonBetweenPropertyValuesRule",
+      "legacyDefinitionId": "property.comparison",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "property",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComponentDistanceRule",
+      "legacyDefinitionId": "geometry.pairwise",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComponentInsideComponentRule",
+      "legacyDefinitionId": "geometry.component_containment",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComponentMustMeetSlabConstraint",
+      "legacyDefinitionId": "geometry.slab_contact",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComponentSimilarityConstraint",
+      "legacyDefinitionId": "element.consistent_property",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "element",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComponentVisibilityRule",
+      "legacyDefinitionId": "geometry.component_visibility",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ComponentsMustBeRelatedToSpace",
+      "legacyDefinitionId": "component.related_to_space",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "component",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ConstructionTypesFromAgreedListConstraint",
+      "legacyDefinitionId": "element.agreed_type_values",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "element",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "DistancesBetweenSpacesConstraint",
+      "legacyDefinitionId": "space.distance_requirements",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "DoorRule",
+      "legacyDefinitionId": "opening.door_accessibility",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "opening",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "EffectiveCoverageAreaRule",
+      "legacyDefinitionId": "geometry.effective_coverage",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ElementHoleValidationRule",
+      "legacyDefinitionId": "geometry.element_hole_placement",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "EscapeRouteConstraint",
+      "legacyDefinitionId": "life_safety.escape_route",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "life_safety",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ExitAccessDoorwayArrangementRule",
+      "legacyDefinitionId": "geometry.exit_access_doorway_arrangement",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ExternalWallValidation",
+      "legacyDefinitionId": "geometry.external_wall_validation",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "FireCompartmentAreaConstraint",
+      "legacyDefinitionId": "space.fire_compartment_area",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "FireWallsDoorsWindowsConstraint",
+      "legacyDefinitionId": "fire.fire_wall_components",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "fire",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "FloorDistanceRule",
+      "legacyDefinitionId": "geometry.floor_spacing",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "FreeAreaInFrontOfComponentsRule",
+      "legacyDefinitionId": "geometry.front_clearance",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "FreeFloorSpaceRule",
+      "legacyDefinitionId": "accessibility.free_floor_space",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "accessibility",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "FreeSpaceAroundComponentRule",
+      "legacyDefinitionId": "accessibility.component_clearance",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "accessibility",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "GeneralInterferenceConstraint",
+      "legacyDefinitionId": "geometry.interference",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "HorizontalComponentsGuardedRule",
+      "legacyDefinitionId": "safety.horizontal_guard",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "safety",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "IdsRule",
+      "legacyDefinitionId": null,
+      "legacyRuntimeFidelity": "unsupported",
+      "targetModule": "read-only",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "LayerOfComponentFromAgreedListConstraint",
+      "legacyDefinitionId": "classification.layer_agreement",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "classification",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "LocalAccessibleCirculationRule",
+      "legacyDefinitionId": "accessibility.local_circulation",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "accessibility",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ManualCheckingRule",
+      "legacyDefinitionId": "issue.manual",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "issue",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ModelArchitectureConstraint",
+      "legacyDefinitionId": "model.architecture",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "model",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ModelComparisonRule",
+      "legacyDefinitionId": "coordination.model_comparison",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "coordination",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "NumberOfComponentsInSpace",
+      "legacyDefinitionId": "space.component_count",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "NumberOfSpacesWithRequiredTypeAndSizeConstraint",
+      "legacyDefinitionId": "space.type_size_count",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ParkingRule",
+      "legacyDefinitionId": "geometry.parking",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "PropertyRuleTemplateWithFilters",
+      "legacyDefinitionId": "data.property_predicates",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "data",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "RampRule",
+      "legacyDefinitionId": "accessibility.ramp",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "accessibility",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "RatioOfFloorWindowAreaConstraint",
+      "legacyDefinitionId": "space.floor_opening_ratio",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "RelativeNumberRule",
+      "legacyDefinitionId": "aggregate.relative_count",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "aggregate",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "RequiredPropertySets",
+      "legacyDefinitionId": "building.required_property",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "building",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "ShelfRunningMetreRule",
+      "legacyDefinitionId": "space.shelf_capacity",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceAreaConstraint",
+      "legacyDefinitionId": "space.area_range",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceAreasOnEachBuildingStoreyConstraint",
+      "legacyDefinitionId": "space.storey_area_aggregate",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceConnectionRule",
+      "legacyDefinitionId": "space.connection",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceCountsOnEachBuildingStoreyConstraint",
+      "legacyDefinitionId": "space.storey_count_aggregate",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceGroupContainmentConstraint",
+      "legacyDefinitionId": "space.group_containment",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpacePropertyMustBeSet",
+      "legacyDefinitionId": "space.required_identity",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceTypesFromAgreedListConstraint",
+      "legacyDefinitionId": "space.agreed_type_values",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpaceValidationCheck",
+      "legacyDefinitionId": "geometry.space_validation",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpacesMustBeInFireCompartments",
+      "legacyDefinitionId": "space.fire_compartment_membership",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "SpacesMustBeInSpaceGroupsConstraint",
+      "legacyDefinitionId": "space.in_derived_groups",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "StairRule",
+      "legacyDefinitionId": "accessibility.stair",
+      "legacyRuntimeFidelity": "partial",
+      "targetModule": "accessibility",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "StoreysNamesMustBeConsecutiveRule",
+      "legacyDefinitionId": "storey.name_sequence",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "storey",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "StructureArchitectureConformity",
+      "legacyDefinitionId": "geometry.structure_architecture_conformity",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "UniqueSpaceNumberConstraint",
+      "legacyDefinitionId": "space.unique_identifier",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "space",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "WallDistanceRule",
+      "legacyDefinitionId": "geometry.wall_spacing",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "WallValidation",
+      "legacyDefinitionId": "geometry.wall_validation",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "geometry",
+      "status": "pending",
+      "proof": []
+    },
+    {
+      "nativeType": "WindowRule",
+      "legacyDefinitionId": "opening.sill_height",
+      "legacyRuntimeFidelity": "full",
+      "targetModule": "opening",
+      "status": "pending",
+      "proof": []
+    }
+  ]
+}

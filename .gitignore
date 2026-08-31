@@ -1,0 +1,7 @@
+/target/
+/docs/book/
+__pycache__/
+*.pyc
+*.profraw
+*.profdata
+.DS_Store

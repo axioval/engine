@@ -1,0 +1,26 @@
+[package]
+name = "axioval"
+description = "Batteries-included facade for the Axioval validation engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+axioval-engine.workspace = true
+axioval-ir.workspace = true
+axioval-rules.workspace = true
+axioval-openbim = { workspace = true, optional = true }
+axioval-axiolid = { workspace = true, optional = true }
+axioval-icdd = { workspace = true, optional = true }
+
+[features]
+default = []
+openbim = ["dep:axioval-openbim"]
+axiolid = ["dep:axioval-axiolid"]
+icdd = ["dep:axioval-icdd"]
+
+[lints]
+workspace = true

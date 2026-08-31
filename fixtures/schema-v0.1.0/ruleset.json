@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.ruleset",
+    "name": "Example ruleset",
+    "version": "0.1.0",
+    "description": "Non-production example of a modular Axioval ruleset.",
+    "repository": "https://github.com/axioval/schema",
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:example.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Example checks",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "wall-reference-required",
+        "definitionId": "axioval:example.property-exists",
+        "name": {
+          "default": "Walls require a reference",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "error",
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "property": "axioval:example.ifc.reference",
+            "propertySet": "axioval:example.ifc.pset-wall-common"
+          }
+        },
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:example.ifc.wall",
+          "includeSubtypes": true
+        },
+        "tags": [
+          "example"
+        ]
+      }
+    ],
+    "folders": []
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.definitions",
+    "name": "Example definitions",
+    "version": "0.1.0",
+    "description": "Non-production terminology used by the schema examples.",
+    "repository": "https://github.com/axioval/schema",
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:example.ifc.wall": {
+      "id": "axioval:example.ifc.wall",
+      "name": {
+        "default": "Wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:example.ifc.reference": {
+      "id": "axioval:example.ifc.reference",
+      "name": {
+        "default": "Reference",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Reference"
+        }
+      ]
+    }
+  },
+  "propertySets": {
+    "axioval:example.ifc.pset-wall-common": {
+      "id": "axioval:example.ifc.pset-wall-common",
+      "name": {
+        "default": "Pset_WallCommon",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Pset_WallCommon"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "axioval:example.property-exists": {
+      "id": "axioval:example.property-exists",
+      "name": {
+        "default": "Required property",
+        "translations": {}
+      },
+      "description": {
+        "default": "Checks that a typed property exists on selected entities.",
+        "translations": {}
+      },
+      "capability": "axioval:capability.property-exists",
+      "parameters": {
+        "property": {
+          "id": "property",
+          "name": {
+            "default": "Property reference",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": true,
+          "allowedValues": []
+        }
+      },
+      "tags": [
+        "example",
+        "property"
+      ]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-or-later"
+authors = ["Axioval contributors"]
+repository = "https://github.com/axioval/engine"
+keywords = ["bim", "validation", "rules", "geometry", "ifc"]
+categories = ["development-tools", "parser-implementations"]
+
+[workspace.dependencies]
+axioval-ir = { path = "crates/axioval-ir", version = "0.1.0" }
+axioval-engine = { path = "crates/axioval-engine", version = "0.1.0" }
+axioval-rules = { path = "crates/axioval-rules", version = "0.1.0" }
+axioval-openbim = { path = "crates/axioval-openbim", version = "0.1.0" }
+axioval-axiolid = { path = "crates/axioval-axiolid", version = "0.1.0" }
+axioval-icdd = { path = "crates/axioval-icdd", version = "0.1.0" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+thiserror = "2.0.16"
+indexmap = { version = "2.11.0", features = ["serde"] }
+smallvec = { version = "1.15.1", features = ["serde"] }
+uuid = { version = "1.18.1", features = ["serde", "v5"] }
+tracing = "0.1.41"
+clap = { version = "4.5.46", features = ["derive"] }
+regex = "1.11.2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"

@@ -2,11 +2,11 @@
 
 use axioval_engine::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
-    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, FrameOffsetPlacement,
-    FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
-    MetricDirection, MetricFrame, MetricPoint, MobilityProfile, ObstructionEvidence,
-    PlacementDomain, PlacementOutcome, PlacementRequest, ServiceRegistry, SignedDistanceInterval,
-    SupportedPlacement, ThresholdVerdict,
+    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
+    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
+    FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
+    ObstructionEvidence, PlacementDomain, PlacementOutcome, PlacementRequest, ServiceRegistry,
+    SignedDistanceInterval, SupportedPlacement, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -422,6 +422,22 @@ fn support_and_frame_offset_constraints_can_be_conjoined() {
     )
     .unwrap();
     assert_eq!(r.domain(), &domain);
+    let frame = placement_frame_at("cad", "room", [0.5, 1.0, 0.0]);
+    let proof = CompleteSupportEvidence::try_new(
+        object("cad", "floor"),
+        frame.clone(),
+        0.005,
+        evidence("combined-support"),
+    )
+    .unwrap();
+    let found = ClearancePlacementEvidence::try_new_supported(
+        r.clone(),
+        frame,
+        proof,
+        evidence("combined-placement"),
+    )
+    .unwrap();
+    assert_eq!(found.request(), &r);
 }
 
 #[test]
@@ -443,5 +459,158 @@ fn placement_witness_must_preserve_anchor_orientation() {
     assert_eq!(
         ClearancePlacementEvidence::try_new(r, found, evidence("rotated")),
         Err(FreeSpaceError::PlacementDomainMismatch)
+    );
+}
+
+#[test]
+fn exact_offset_domain_rejects_tolerance_expansion() {
+    let offsets = FrameOffsetPlacement::new(
+        placement_frame("cad", "room"),
+        SignedDistanceInterval::exact(0.0).unwrap(),
+        SignedDistanceInterval::exact(0.0).unwrap(),
+        SignedDistanceInterval::exact(0.0).unwrap(),
+    );
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        PlacementDomain::FrameOffsets(offsets),
+    )
+    .unwrap();
+    let found = placement_frame_at("cad", "room", [5.0e-10, 0.0, 0.0]);
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(r, found, evidence("outside-exact")),
+        Err(FreeSpaceError::PlacementDomainMismatch)
+    );
+}
+
+#[test]
+fn supported_domain_rejects_found_witness_without_support_proof() {
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        PlacementDomain::Supported(
+            SupportedPlacement::try_new(object("cad", "floor"), 0.01).unwrap(),
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(
+            r,
+            placement_frame("cad", "room"),
+            evidence("placement")
+        ),
+        Err(FreeSpaceError::MissingSupportEvidence)
+    );
+}
+
+#[test]
+fn supported_witness_requires_exact_frame_bound_support_proof() {
+    let frame = placement_frame("cad", "room");
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        PlacementDomain::Supported(
+            SupportedPlacement::try_new(object("cad", "floor"), 0.01).unwrap(),
+        ),
+    )
+    .unwrap();
+    let support = CompleteSupportEvidence::try_new(
+        object("cad", "floor"),
+        frame.clone(),
+        0.005,
+        evidence("full-base-support"),
+    )
+    .unwrap();
+    let found = ClearancePlacementEvidence::try_new_supported(
+        r.clone(),
+        frame,
+        support,
+        evidence("placement"),
+    )
+    .unwrap();
+    assert_eq!(found.request(), &r);
+}
+
+#[test]
+fn support_proof_must_name_requested_source_qualified_support() {
+    let frame = placement_frame("cad", "room");
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        PlacementDomain::Supported(
+            SupportedPlacement::try_new(object("cad", "floor"), 0.01).unwrap(),
+        ),
+    )
+    .unwrap();
+    let proof = CompleteSupportEvidence::try_new(
+        object("other", "floor"),
+        frame.clone(),
+        0.0,
+        evidence("wrong-support"),
+    )
+    .unwrap();
+    assert_eq!(
+        ClearancePlacementEvidence::try_new_supported(r, frame, proof, evidence("placement")),
+        Err(FreeSpaceError::SupportEvidenceMismatch)
+    );
+}
+
+#[test]
+fn support_proof_must_match_frame_and_gap_limit() {
+    let frame = placement_frame("cad", "room");
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        PlacementDomain::Supported(
+            SupportedPlacement::try_new(object("cad", "floor"), 0.01).unwrap(),
+        ),
+    )
+    .unwrap();
+    let moved = placement_frame_at("cad", "room", [0.1, 0.0, 0.0]);
+    let wrong_frame =
+        CompleteSupportEvidence::try_new(object("cad", "floor"), moved, 0.0, evidence("support"))
+            .unwrap();
+    assert_eq!(
+        ClearancePlacementEvidence::try_new_supported(
+            r.clone(),
+            frame.clone(),
+            wrong_frame,
+            evidence("placement")
+        ),
+        Err(FreeSpaceError::SupportEvidenceMismatch)
+    );
+    let excessive = CompleteSupportEvidence::try_new(
+        object("cad", "floor"),
+        frame.clone(),
+        0.02,
+        evidence("support"),
+    )
+    .unwrap();
+    assert_eq!(
+        ClearancePlacementEvidence::try_new_supported(r, frame, excessive, evidence("placement")),
+        Err(FreeSpaceError::SupportEvidenceMismatch)
+    );
+}
+
+#[test]
+fn support_proof_must_be_exact_and_reviewable() {
+    let approximate = Evidence {
+        source: SourceId::new("test", "geometry").unwrap(),
+        locator: "support".into(),
+        exact: false,
+    };
+    assert_eq!(
+        CompleteSupportEvidence::try_new(
+            object("cad", "floor"),
+            placement_frame("cad", "room"),
+            0.0,
+            approximate
+        ),
+        Err(FreeSpaceError::InexactSupportEvidence)
     );
 }

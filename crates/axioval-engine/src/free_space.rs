@@ -34,6 +34,12 @@ pub enum FreeSpaceError {
     InexactAreaEvidence,
     #[error("placement evidence is not exact and reviewable")]
     InexactPlacementEvidence,
+    #[error("support evidence is not exact and reviewable")]
+    InexactSupportEvidence,
+    #[error("supported placement has no complete support evidence")]
+    MissingSupportEvidence,
+    #[error("support evidence does not match the requested support or found frame")]
+    SupportEvidenceMismatch,
     #[error("placement frame is not grounded in the requested scope")]
     PlacementScopeMismatch,
     #[error("placement witness falls outside its requested search domain")]
@@ -286,9 +292,8 @@ impl SignedDistanceInterval {
     pub fn upper_metres(&self) -> f64 {
         self.upper_metres
     }
-    fn contains(self, metres: f64) -> bool {
-        const TOLERANCE: f64 = 1.0e-9;
-        metres >= self.lower_metres - TOLERANCE && metres <= self.upper_metres + TOLERANCE
+    fn contains(self, value: f64) -> bool {
+        value >= self.lower_metres && value <= self.upper_metres
     }
 }
 
@@ -351,20 +356,9 @@ impl FrameOffsetPlacement {
         self.up
     }
     fn contains_frame(&self, frame: &MetricFrame) -> bool {
-        const AXIS_TOLERANCE: f64 = 1.0e-9;
-        let aligned = [
-            (self.anchor.right(), frame.right()),
-            (self.anchor.forward(), frame.forward()),
-            (self.anchor.up(), frame.up()),
-        ]
-        .into_iter()
-        .all(|(expected, actual)| {
-            expected
-                .components()
-                .into_iter()
-                .zip(actual.components())
-                .all(|(a, b)| (a - b).abs() <= AXIS_TOLERANCE)
-        });
+        let aligned = self.anchor.right() == frame.right()
+            && self.anchor.forward() == frame.forward()
+            && self.anchor.up() == frame.up();
         if !aligned {
             return false;
         }
@@ -398,6 +392,14 @@ pub enum PlacementDomain {
         support: SupportedPlacement,
         offsets: FrameOffsetPlacement,
     },
+}
+
+fn requested_support(domain: &PlacementDomain) -> Option<&SupportedPlacement> {
+    match domain {
+        PlacementDomain::Supported(support)
+        | PlacementDomain::SupportedFrameOffsets { support, .. } => Some(support),
+        _ => None,
+    }
 }
 
 /// Searches an object-grounded scope for any placement of a clearance shape.
@@ -453,6 +455,49 @@ impl PlacementRequest {
     }
     pub fn domain(&self) -> &PlacementDomain {
         &self.domain
+    }
+}
+
+/// Exact proof that the entire candidate base is supported at a found frame.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompleteSupportEvidence {
+    support: ObjectId,
+    frame: MetricFrame,
+    maximum_gap_metres: f64,
+    evidence: Evidence,
+}
+
+impl CompleteSupportEvidence {
+    pub fn try_new(
+        support: ObjectId,
+        frame: MetricFrame,
+        maximum_gap_metres: f64,
+        evidence: Evidence,
+    ) -> Result<Self, FreeSpaceError> {
+        if !valid_non_negative(maximum_gap_metres) {
+            return Err(FreeSpaceError::InvalidSupportGap);
+        }
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(FreeSpaceError::InexactSupportEvidence);
+        }
+        Ok(Self {
+            support,
+            frame,
+            maximum_gap_metres,
+            evidence,
+        })
+    }
+    pub fn support(&self) -> &ObjectId {
+        &self.support
+    }
+    pub fn frame(&self) -> &MetricFrame {
+        &self.frame
+    }
+    pub fn maximum_gap_metres(&self) -> f64 {
+        self.maximum_gap_metres
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
     }
 }
 
@@ -530,31 +575,67 @@ pub enum ClearanceOutcome {
 pub struct ClearancePlacementEvidence {
     request: PlacementRequest,
     frame: MetricFrame,
+    support_evidence: Option<Box<CompleteSupportEvidence>>,
     evidence: Evidence,
 }
+fn validate_placement_witness(
+    request: &PlacementRequest,
+    frame: &MetricFrame,
+    evidence: &Evidence,
+) -> Result<(), FreeSpaceError> {
+    if frame.origin().subject() != request.scope() {
+        return Err(FreeSpaceError::PlacementScopeMismatch);
+    }
+    let offsets = match request.domain() {
+        PlacementDomain::FrameOffsets(offsets)
+        | PlacementDomain::SupportedFrameOffsets { offsets, .. } => Some(offsets),
+        _ => None,
+    };
+    if offsets.is_some_and(|offsets| !offsets.contains_frame(frame)) {
+        return Err(FreeSpaceError::PlacementDomainMismatch);
+    }
+    if !reviewable_exact_evidence(evidence) {
+        return Err(FreeSpaceError::InexactPlacementEvidence);
+    }
+    Ok(())
+}
+
 impl ClearancePlacementEvidence {
     pub fn try_new(
         request: PlacementRequest,
         frame: MetricFrame,
         evidence: Evidence,
     ) -> Result<Self, FreeSpaceError> {
-        if frame.origin().subject() != request.scope() {
-            return Err(FreeSpaceError::PlacementScopeMismatch);
+        if requested_support(request.domain()).is_some() {
+            return Err(FreeSpaceError::MissingSupportEvidence);
         }
-        let offsets = match request.domain() {
-            PlacementDomain::FrameOffsets(offsets)
-            | PlacementDomain::SupportedFrameOffsets { offsets, .. } => Some(offsets),
-            _ => None,
-        };
-        if offsets.is_some_and(|offsets| !offsets.contains_frame(&frame)) {
-            return Err(FreeSpaceError::PlacementDomainMismatch);
-        }
-        if !reviewable_exact_evidence(&evidence) {
-            return Err(FreeSpaceError::InexactPlacementEvidence);
+        validate_placement_witness(&request, &frame, &evidence)?;
+        Ok(Self {
+            request,
+            frame,
+            support_evidence: None,
+            evidence,
+        })
+    }
+    pub fn try_new_supported(
+        request: PlacementRequest,
+        frame: MetricFrame,
+        support_evidence: CompleteSupportEvidence,
+        evidence: Evidence,
+    ) -> Result<Self, FreeSpaceError> {
+        validate_placement_witness(&request, &frame, &evidence)?;
+        let required =
+            requested_support(request.domain()).ok_or(FreeSpaceError::SupportEvidenceMismatch)?;
+        if support_evidence.support() != required.support()
+            || support_evidence.frame() != &frame
+            || support_evidence.maximum_gap_metres() > required.maximum_gap_metres()
+        {
+            return Err(FreeSpaceError::SupportEvidenceMismatch);
         }
         Ok(Self {
             request,
             frame,
+            support_evidence: Some(Box::new(support_evidence)),
             evidence,
         })
     }
@@ -563,6 +644,9 @@ impl ClearancePlacementEvidence {
     }
     pub fn frame(&self) -> &MetricFrame {
         &self.frame
+    }
+    pub fn support_evidence(&self) -> Option<&CompleteSupportEvidence> {
+        self.support_evidence.as_deref()
     }
     pub fn evidence(&self) -> &Evidence {
         &self.evidence

@@ -222,10 +222,11 @@ mod walkability;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
-    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CylinderClearance,
-    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
-    FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence, PlacementDomain,
-    PlacementOutcome, PlacementRequest, SignedDistanceInterval, SupportedPlacement,
+    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
+    CylinderClearance, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
+    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
+    PlacementDomain, PlacementOutcome, PlacementRequest, SignedDistanceInterval,
+    SupportedPlacement,
 };
 pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,

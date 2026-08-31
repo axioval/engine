@@ -12,3 +12,5 @@ Adapter crates are peers:
 Rule packages cannot register services and cannot supply executable code. Missing required services must produce an explicit not-evaluated/backend-unavailable outcome, never a pass.
 
 Metric routing is exposed as `MetricRoutingServiceHandle`. The concrete handle wraps a backend-neutral trait object so it remains type-indexable in `ServiceRegistry`. Engine capabilities consume validated metric requests and bounded evidence; adapters keep native mesh and B-rep types behind the service.
+
+Free-space area, fixed directional clearance, and placement search are exposed through `FreeSpaceServiceHandle`. The handle enforces exact request binding and preserves asymmetric proof requirements: one obstruction or placement witness may be sufficient, while clear and no-placement verdicts require complete evidence. See [Free space and clearance](./free-space.md).

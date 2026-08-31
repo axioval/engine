@@ -11,3 +11,4 @@ All notable changes are documented here. This project follows Semantic Versionin
 - Dependency-policy, canonical snapshot identity, and workspace package-verification gates.
 - Exact source-neutral connectivity graphs with deterministic width-constrained traversal.
 - Backend-neutral metric-routing requests, bounded shortest-distance evidence, and request-bound blocked verdicts.
+- Backend-neutral free-area, directional-clearance, and placement-search evidence contracts.

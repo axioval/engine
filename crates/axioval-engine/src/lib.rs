@@ -214,10 +214,17 @@ impl ExecutionPlan {
 }
 
 mod compiler;
+mod free_space;
 mod metric_routing;
 mod services;
 mod topology;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
+pub use free_space::{
+    AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
+    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CylinderClearance,
+    FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
+    MetricDirection, MetricFrame, ObstructionEvidence, PlacementOutcome, PlacementRequest,
+};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
     MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,

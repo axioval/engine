@@ -2,10 +2,10 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    CapabilityRegistry, CompiledRule, EngineError, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext, Runtime, compile,
+    CapabilityEvaluation, CapabilityRegistry, CompiledRule, EngineError, NotEvaluatedReason,
+    ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime, compile,
 };
-use axioval_ir::{DefinitionPackage, Finding, Project, RuleSetPackage};
+use axioval_ir::{DefinitionPackage, Project, RuleSetPackage};
 
 struct Stub;
 impl RuleCapability for Stub {
@@ -18,8 +18,8 @@ impl RuleCapability for Stub {
             ParameterType::PropertyReference,
         )]
     }
-    fn evaluate(&self, _: &RuleContext<'_>, _: &CompiledRule) -> Vec<Finding> {
-        vec![]
+    fn evaluate(&self, _: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        CapabilityEvaluation::evaluated(vec![])
     }
 }
 fn packages() -> (DefinitionPackage, RuleSetPackage) {
@@ -87,4 +87,45 @@ fn compiler_rejects_duplicate_definition_package_ids() {
 
     let error = compile(&registry, &[definitions, duplicate], &rules).unwrap_err();
     assert!(matches!(error, EngineError::DuplicateDefinitionPackage(_)));
+}
+
+struct Unavailable;
+impl RuleCapability for Unavailable {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-exists"
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![ParameterDescriptor::required(
+            "property",
+            ParameterType::PropertyReference,
+        )]
+    }
+    fn evaluate(&self, _: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        let mut evaluation = CapabilityEvaluation::default();
+        evaluation.push_not_evaluated(NotEvaluatedReason::MissingService, "z diagnostic");
+        evaluation.push_not_evaluated(NotEvaluatedReason::MissingService, "a diagnostic");
+        evaluation
+    }
+}
+
+#[test]
+fn runtime_reports_capability_unavailability_without_false_pass() {
+    let (definitions, rules) = packages();
+    let registry = CapabilityRegistry::new().register(Unavailable).unwrap();
+    let plan = compile(&registry, &[definitions], &rules).unwrap();
+    let report = Runtime::new(registry)
+        .run(&Project::new(vec![]).unwrap(), plan)
+        .unwrap();
+    assert!(report.findings().is_empty());
+    assert_eq!(report.not_evaluated().len(), 2);
+    assert_eq!(report.not_evaluated()[0].message, "a diagnostic");
+    assert_eq!(report.not_evaluated()[1].message, "z diagnostic");
+    assert_eq!(
+        report.not_evaluated()[0].reason,
+        NotEvaluatedReason::MissingService
+    );
+    assert_eq!(
+        report.not_evaluated()[0].rule_id.to_string(),
+        "wall-reference-required"
+    );
 }

@@ -2,12 +2,15 @@
 #![forbid(unsafe_code)]
 
 use axioval_engine::{
-    CapabilityRegistry, CompiledRule, EngineError, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext,
+    CapabilityEvaluation, CapabilityRegistry, CompiledRule, EngineError, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
-use axioval_ir::{Finding, Object, Property, PropertyValue, RuleId, Severity};
+use axioval_ir::{Finding, Object, Property, PropertyValue, Severity};
 use regex::Regex;
+
+mod free_floor_circle;
+pub use free_floor_circle::FreeFloorCircle;
 
 /// Registers all maintained built-in capabilities into a host registry.
 ///
@@ -18,6 +21,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
     registry
         .register(PropertyExists)
         .and_then(|registry| registry.register(PropertyPredicate))
+        .and_then(|registry| registry.register(FreeFloorCircle))
 }
 
 fn string<'a>(rule: &'a CompiledRule, name: &str) -> Option<&'a str> {
@@ -167,7 +171,7 @@ fn ordered(actual: &PropertyValue, expected: &ParameterValue) -> Option<std::cmp
 
 fn finding(rule: &CompiledRule, object: &Object, message: String) -> Finding {
     Finding {
-        rule_id: RuleId::new(rule.id.clone()).expect("compiled rule IDs are validated"),
+        rule_id: rule.id.clone(),
         object_id: object.id.clone(),
         severity: match rule.severity {
             axioval_ir::contract::Severity::Error => Severity::Error,
@@ -191,11 +195,11 @@ impl RuleCapability for PropertyExists {
             ParameterType::PropertyReference,
         )]
     }
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> Vec<Finding> {
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         let Some((set, name)) = property_reference(rule, "property") else {
-            return vec![];
+            return CapabilityEvaluation::default();
         };
-        context
+        let findings = context
             .project
             .objects()
             .filter(|object| selector_matches(&rule.selector, object))
@@ -210,7 +214,8 @@ impl RuleCapability for PropertyExists {
                         .is_none_or(|evidence| !evidence.exact))
                 .then(|| finding(rule, object, format!("missing exact property {name}")))
             })
-            .collect()
+            .collect();
+        CapabilityEvaluation::evaluated(findings)
     }
 }
 
@@ -228,16 +233,16 @@ impl RuleCapability for PropertyPredicate {
             ParameterDescriptor::required("value", ParameterType::Integer),
         ]
     }
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> Vec<Finding> {
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         let (Some(set), Some(name), Some(operator), Some(expected)) = (
             string(rule, "property_set"),
             string(rule, "property"),
             string(rule, "operator"),
             integer(rule, "value"),
         ) else {
-            return vec![];
+            return CapabilityEvaluation::default();
         };
-        context
+        let findings = context
             .project
             .objects()
             .filter(|object| selector_matches(&rule.selector, object))
@@ -265,6 +270,7 @@ impl RuleCapability for PropertyPredicate {
                     )
                 })
             })
-            .collect()
+            .collect();
+        CapabilityEvaluation::evaluated(findings)
     }
 }

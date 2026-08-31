@@ -4,8 +4,9 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
+pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
-use axioval_ir::{Finding, Project, Report};
+use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId};
 use thiserror::Error;
 
 /// Errors while compiling untrusted declarations into a trusted execution plan.
@@ -51,6 +52,9 @@ pub enum EngineError {
     /// A rule binds a parameter more than once.
     #[error("rule has duplicate parameter binding `{0}`")]
     DuplicateBinding(String),
+    /// A rule ID violates the engine identity contract.
+    #[error("invalid rule id `{0}`")]
+    InvalidRuleId(String),
     /// A rule references no loaded definition.
     #[error("unknown rule definition `{0}`")]
     UnknownDefinition(String),
@@ -141,7 +145,7 @@ impl ParameterDescriptor {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompiledRule {
     /// Package-local stable rule ID.
-    pub id: String,
+    pub id: RuleId,
     /// Registered capability ID.
     pub capability: String,
     /// Rule severity.
@@ -160,6 +164,91 @@ pub struct RuleContext<'a> {
     pub services: &'a ServiceRegistry,
 }
 
+/// Fail-closed output from one trusted capability evaluation.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CapabilityEvaluation {
+    findings: Vec<Finding>,
+    not_evaluated: Vec<CapabilityNotEvaluated>,
+}
+/// A not-evaluated outcome before the runtime binds its compiled rule ID.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CapabilityNotEvaluated {
+    object_id: Option<ObjectId>,
+    reason: NotEvaluatedReason,
+    message: String,
+}
+impl CapabilityNotEvaluated {
+    #[must_use]
+    pub fn object_id(&self) -> Option<&ObjectId> {
+        self.object_id.as_ref()
+    }
+    #[must_use]
+    pub fn reason(&self) -> &NotEvaluatedReason {
+        &self.reason
+    }
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl CapabilityEvaluation {
+    /// Conclusive findings emitted by this capability.
+    #[must_use]
+    pub fn findings(&self) -> &[Finding] {
+        &self.findings
+    }
+    /// Explicit fail-closed outcomes emitted by this capability.
+    #[must_use]
+    pub fn not_evaluated_outcomes(&self) -> &[CapabilityNotEvaluated] {
+        &self.not_evaluated
+    }
+    /// Creates a conclusive evaluation from zero or more findings.
+    #[must_use]
+    pub fn evaluated(findings: Vec<Finding>) -> Self {
+        Self {
+            findings,
+            not_evaluated: Vec::new(),
+        }
+    }
+    /// Creates a rule-level not-evaluated outcome.
+    #[must_use]
+    pub fn not_evaluated(reason: NotEvaluatedReason, message: impl Into<String>) -> Self {
+        let mut outcome = Self::default();
+        outcome.push_not_evaluated(reason, message);
+        outcome
+    }
+    /// Adds a conclusive finding.
+    pub fn push_finding(&mut self, finding: Finding) {
+        self.findings.push(finding);
+    }
+    /// Adds a rule-level not-evaluated outcome.
+    pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
+        self.push_unavailable(None, reason, message);
+    }
+    /// Adds an object-specific not-evaluated outcome.
+    pub fn push_object_not_evaluated(
+        &mut self,
+        object_id: ObjectId,
+        reason: NotEvaluatedReason,
+        message: impl Into<String>,
+    ) {
+        self.push_unavailable(Some(object_id), reason, message);
+    }
+    fn push_unavailable(
+        &mut self,
+        object_id: Option<ObjectId>,
+        reason: NotEvaluatedReason,
+        message: impl Into<String>,
+    ) {
+        self.not_evaluated.push(CapabilityNotEvaluated {
+            object_id,
+            reason,
+            message: message.into(),
+        });
+    }
+}
+
 /// Trusted code selected by a package capability ID; packages never supply executable code.
 pub trait RuleCapability: Send + Sync {
     /// Stable trusted capability ID.
@@ -167,7 +256,7 @@ pub trait RuleCapability: Send + Sync {
     /// Strict accepted parameters.
     fn parameters(&self) -> Vec<ParameterDescriptor>;
     /// Evaluates an already-validated rule request.
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> Vec<Finding>;
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
 }
 
 /// Host-controlled registry of trusted capabilities.
@@ -272,12 +361,23 @@ impl Runtime {
             services: &self.services,
         };
         let mut findings = Vec::new();
+        let mut not_evaluated = Vec::new();
         for rule in plan.rules {
             let capability = self
                 .registry
                 .get(&rule.capability)
                 .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
-            findings.extend(capability.evaluate(&context, &rule));
+            let rule_id = rule.id.clone();
+            let evaluation = capability.evaluate(&context, &rule);
+            findings.extend(evaluation.findings);
+            not_evaluated.extend(evaluation.not_evaluated.into_iter().map(|outcome| {
+                NotEvaluated {
+                    rule_id: rule_id.clone(),
+                    object_id: outcome.object_id,
+                    reason: outcome.reason,
+                    message: outcome.message,
+                }
+            }));
         }
         findings.sort_by(|a, b| {
             a.rule_id
@@ -285,6 +385,10 @@ impl Runtime {
                 .then_with(|| a.object_id.cmp(&b.object_id))
                 .then_with(|| a.message.cmp(&b.message))
         });
-        Ok(Report { findings })
+        not_evaluated.sort();
+        Ok(Report {
+            findings,
+            not_evaluated,
+        })
     }
 }

@@ -4,6 +4,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-31
+
 ### Added
 
 - Initial source-neutral engine workspace and architecture contract.
@@ -22,3 +24,6 @@ All notable changes are documented here. This project follows Semantic Versionin
 ### Fixed
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
+
+[Unreleased]: https://github.com/axioval/engine/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/axioval/engine/releases/tag/v0.1.0

@@ -1,7 +1,7 @@
-//! Exact source-neutral free-floor-circle capability.
+//! Exact source-neutral free-floor-rectangle capability.
 
 use axioval_engine::{
-    CapabilityEvaluation, ClearanceShape, CompiledRule, CylinderClearance, FreeSpaceError,
+    BoxClearance, CapabilityEvaluation, ClearanceShape, CompiledRule, FreeSpaceError,
     FreeSpaceServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     PlacementDomain, PlacementOutcome, PlacementRequest, RuleCapability, RuleContext,
     SupportedPlacement,
@@ -11,32 +11,33 @@ use axioval_ir::{Finding, Object, Severity};
 
 use crate::selection::select_objects;
 
-/// Exact free-floor circle placement using a trusted free-space service.
-pub struct FreeFloorCircle;
+/// Exact free-floor rectangle placement using a trusted free-space service.
+pub struct FreeFloorRectangle;
 
-impl RuleCapability for FreeFloorCircle {
+impl RuleCapability for FreeFloorRectangle {
     fn id(&self) -> &'static str {
-        "axioval:capability.free-floor-circle"
+        "axioval:capability.free-floor-rectangle"
     }
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         vec![
-            ParameterDescriptor::required("diameter_metres", ParameterType::Number),
+            ParameterDescriptor::required("width_metres", ParameterType::Number),
+            ParameterDescriptor::required("length_metres", ParameterType::Number),
             ParameterDescriptor::required("height_metres", ParameterType::Number),
         ]
     }
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let Some((diameter, height)) = dimensions(rule) else {
+        let Some((width, length, height)) = dimensions(rule) else {
             return invalid_parameters(
                 selected,
-                "free-floor circle dimensions are invalid",
+                "free-floor rectangle dimensions are invalid",
                 evaluation,
             );
         };
-        let Ok(shape) = CylinderClearance::try_new(diameter / 2.0, height) else {
+        let Ok(shape) = BoxClearance::try_new(width, length, height) else {
             return invalid_parameters(
                 selected,
-                "free-floor circle dimensions must be positive and finite",
+                "free-floor rectangle dimensions must be positive and finite",
                 evaluation,
             );
         };
@@ -72,7 +73,7 @@ impl RuleCapability for FreeFloorCircle {
             };
             let request = match PlacementRequest::new_in_domain(
                 space.id.clone(),
-                ClearanceShape::Cylinder(shape),
+                ClearanceShape::Box(shape),
                 obstacles,
                 PlacementDomain::Supported(support),
             ) {
@@ -92,7 +93,7 @@ impl RuleCapability for FreeFloorCircle {
                     rule_id: rule.id.clone(),
                     object_id: space.id.clone(),
                     severity: severity(rule),
-                    message: "NO_FREE_FLOOR_SPACE_FOR_CIRCLE".into(),
+                    message: "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE".into(),
                     evidence: vec![proof.evidence().clone()],
                 }),
                 Err(error) => evaluation.push_object_not_evaluated(
@@ -106,12 +107,16 @@ impl RuleCapability for FreeFloorCircle {
     }
 }
 
-fn dimensions(rule: &CompiledRule) -> Option<(f64, f64)> {
+fn dimensions(rule: &CompiledRule) -> Option<(f64, f64, f64)> {
     let number = |name: &str| match rule.parameters.get(name)? {
         ParameterValue::Number { value } => Some(*value),
         _ => None,
     };
-    Some((number("diameter_metres")?, number("height_metres")?))
+    Some((
+        number("width_metres")?,
+        number("length_metres")?,
+        number("height_metres")?,
+    ))
 }
 fn severity(rule: &CompiledRule) -> Severity {
     match rule.severity {

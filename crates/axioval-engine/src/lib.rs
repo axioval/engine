@@ -305,6 +305,7 @@ impl ExecutionPlan {
 mod compiler;
 mod free_space;
 mod metric_routing;
+mod properties;
 mod services;
 mod topology;
 mod walkability;
@@ -321,6 +322,10 @@ pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
     MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
     MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
+};
+pub use properties::{
+    CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use topology::{

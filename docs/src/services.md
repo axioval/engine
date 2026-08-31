@@ -11,6 +11,8 @@ Adapter crates are peers:
 
 Rule packages cannot register services and cannot supply executable code. Missing required services must produce an explicit not-evaluated/backend-unavailable outcome, never a pass.
 
+Property resolution is exposed through `PropertyResolutionServiceHandle`. A present response is a `ResolvedProperty` bound to the complete `PropertyRequest`, including the source-qualified object identity and property key; absence requires equivalent exact request-bound evidence. The handle rejects cross-object substitution, mismatched property keys, absent provenance, approximate values, and non-reviewable absence claims. Built-in property capabilities and property-based selectors require this service rather than treating a missing entry in an object map as proof of absence.
+
 Metric routing is exposed as `MetricRoutingServiceHandle`. The concrete handle wraps a backend-neutral trait object so it remains type-indexable in `ServiceRegistry`. Engine capabilities consume validated metric requests and bounded evidence; adapters keep native mesh and B-rep types behind the service.
 
 Free-space area, fixed directional clearance, and constrained placement search are exposed through `FreeSpaceServiceHandle`. The handle enforces exact request binding and preserves asymmetric proof requirements: one obstruction or placement witness may be sufficient, while clear and no-placement verdicts require complete evidence. Placement domains distinguish unrestricted, support-grounded, and anchor-frame offset searches. Supported found witnesses require exact whole-base support evidence bound to the requested object, found frame, and maximum gap. See [Free space and clearance](./free-space.md).

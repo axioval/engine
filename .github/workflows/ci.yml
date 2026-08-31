@@ -37,6 +37,8 @@ jobs:
           tar -xzf mdbook.tar.gz -C "$HOME/.cargo/bin"
       - name: Full repository gate
         env:
+          # The immediately preceding pinned action already ran cargo-deny.
+          AXIOVAL_DEPENDENCY_AUDIT_COMPLETE: "1"
           RUSTDOCFLAGS: "-D warnings"
         run: ./scripts/check.sh
       - name: Verify publishable workspace archives

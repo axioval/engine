@@ -214,9 +214,15 @@ impl ExecutionPlan {
 }
 
 mod compiler;
+mod metric_routing;
 mod services;
 mod topology;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
+pub use metric_routing::{
+    BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
+    MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
+};
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,

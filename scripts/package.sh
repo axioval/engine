@@ -14,3 +14,4 @@ fi
 # feature gate. It creates a temporary local registry so unpublished workspace
 # dependencies are verified in publish order.
 RUSTC_BOOTSTRAP=1 cargo -Z package-workspace package --workspace --locked
+python3 scripts/check_package_contents.py

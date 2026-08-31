@@ -10,3 +10,5 @@ Adapter crates are peers:
 - Alternate geometry backends register the same source-neutral service interfaces.
 
 Rule packages cannot register services and cannot supply executable code. Missing required services must produce an explicit not-evaluated/backend-unavailable outcome, never a pass.
+
+Metric routing is exposed as `MetricRoutingServiceHandle`. The concrete handle wraps a backend-neutral trait object so it remains type-indexable in `ServiceRegistry`. Engine capabilities consume validated metric requests and bounded evidence; adapters keep native mesh and B-rep types behind the service.

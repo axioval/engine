@@ -9,6 +9,7 @@
 - [Source-neutral IR](./ir.md)
 - [Capabilities](./capabilities.md)
 - [Connectivity and routes](./topology.md)
+- [Metric routing](./metric-routing.md)
 - [Typed host services](./services.md)
 - [Independent adapters](./adapters.md)
 

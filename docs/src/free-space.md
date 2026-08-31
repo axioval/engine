@@ -29,7 +29,7 @@ Partial geometry therefore cannot produce a false clear result.
 - `FrameOffsets` limits right/forward/up translation in an anchor frame;
 - `SupportedFrameOffsets` requires both support and anchor-relative bounds.
 
-- `Found` carries one exact, scope-grounded placement frame.
+- `Found` carries one exact, scope-grounded placement frame. Supported domains additionally require exact evidence that the whole candidate base is supported by the requested source-qualified object at that exact frame and within the requested gap.
 - `NoPlacement` requires complete exact search evidence.
 
 A bounded or partial search cannot claim that no placement exists. Connected corridor requirements use [metric routing](./metric-routing.md) with an appropriate mobility profile rather than inventing a second path contract.

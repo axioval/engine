@@ -99,8 +99,10 @@
       "legacyDefinitionId": "property.comparison",
       "legacyRuntimeFidelity": "full",
       "targetModule": "property",
-      "status": "pending",
-      "proof": []
+      "status": "in_progress",
+      "proof": [
+        "axioval:capability.property-comparison exact property-to-property slice"
+      ]
     },
     {
       "nativeType": "ComponentDistanceRule",

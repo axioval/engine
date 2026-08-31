@@ -214,6 +214,7 @@ fn from_kind(kind: &ParameterKind) -> ParameterType {
         ParameterKind::Reference => ParameterType::Reference,
         ParameterKind::ObjectTypeReference => ParameterType::ObjectTypeReference,
         ParameterKind::PropertyReference => ParameterType::PropertyReference,
+        ParameterKind::Selector => ParameterType::Selector,
         ParameterKind::StringList => ParameterType::StringList,
         ParameterKind::ReferenceList => ParameterType::ReferenceList,
     }

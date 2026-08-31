@@ -85,6 +85,7 @@ pub enum ParameterType {
     Reference,
     ObjectTypeReference,
     PropertyReference,
+    Selector,
     StringList,
     ReferenceList,
 }
@@ -107,6 +108,7 @@ impl ParameterType {
                     Self::PropertyReference,
                     schema::ParameterValue::PropertyReference { .. }
                 )
+                | (Self::Selector, schema::ParameterValue::Selector { .. })
                 | (Self::StringList, schema::ParameterValue::StringList { .. })
                 | (
                     Self::ReferenceList,
@@ -306,6 +308,7 @@ mod compiler;
 mod free_space;
 mod metric_routing;
 mod properties;
+mod relationships;
 mod services;
 mod topology;
 mod walkability;
@@ -326,6 +329,11 @@ pub use metric_routing::{
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
+};
+pub use relationships::{
+    CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
+    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
+    SemanticRelationship, TraversalDirection,
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use topology::{

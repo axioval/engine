@@ -18,6 +18,10 @@ FORBIDDEN_SOURCE = (
 )
 ACTION_USE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.M)
 IMMUTABLE_ACTION = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+DEPENDENCY_AUDIT_MARKER = "AXIOVAL_DEPENDENCY_AUDIT_COMPLETE"
+CARGO_DENY_ACTION = re.compile(
+    r"uses:\s*EmbarkStudios/cargo-deny-action@[0-9a-f]{40}", re.I
+)
 
 
 def dependency_names(manifest: str) -> set[str]:
@@ -58,6 +62,10 @@ def workflow_violations(source: str) -> list[str]:
             failures.append(f"mutable action reference {action!r}")
     if "curl " in source and "sha256sum --check --strict" not in source:
         failures.append("download executes without SHA-256 verification")
+    if DEPENDENCY_AUDIT_MARKER in source:
+        marker_offset = source.index(DEPENDENCY_AUDIT_MARKER)
+        if not CARGO_DENY_ACTION.search(source[:marker_offset]):
+            failures.append("dependency-audit marker lacks a preceding pinned cargo-deny action")
     return failures
 
 
@@ -75,6 +83,14 @@ def self_test() -> None:
         "- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
     )
     assert workflow_violations("run: curl https://example.invalid/tool | sh")
+    assert workflow_violations(
+        "env:\n  AXIOVAL_DEPENDENCY_AUDIT_COMPLETE: '1'\nrun: ./scripts/check.sh"
+    )
+    assert not workflow_violations(
+        "- uses: EmbarkStudios/cargo-deny-action@"
+        "3c6349835b2b7b196a839186cb8b78e02f7b5f25\n"
+        "- env:\n    AXIOVAL_DEPENDENCY_AUDIT_COMPLETE: '1'\n"
+    )
     assert not manifest_violations('[dependencies]\nserde = "1"\n')
     assert not source_violations("/// IFC is an adapter, not the IR.\npub struct Project;")
 

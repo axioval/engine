@@ -81,6 +81,7 @@ pub enum ParameterKind {
     Reference,
     ObjectTypeReference,
     PropertyReference,
+    Selector,
     StringList,
     ReferenceList,
 }

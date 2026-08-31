@@ -6,6 +6,8 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `properties.rs` owns exact source-neutral property requests, request-bound present values and absence proofs, response validation, and the typed property-resolution service handle. Every conclusive response must bind the complete request, including the source-qualified object identity; matching property names alone are insufficient. Missing object-map entries are not evidence of absence. Source interpretation and completeness proof stay in providers.
 
+`relationships.rs` owns exact comparison-candidate requests and request-bound complete selections. The request binds the checked object, canonical candidate universe, and semantic traversal or shared-group query. Providers interpret native relationship structures and must return exact reviewable completeness evidence. Capabilities must not treat the legacy `Object.relationships` map as authoritative.
+
 `topology.rs` owns deterministic source-neutral connectivity and route queries over exact typed evidence. It must not infer edges from source relationships or import geometry, IFC, ICDD, Axiolid, or vendor types.
 
 `metric_routing.rs` owns canonical-metre requests, conservative distance bounds, three-valued threshold comparison, and the backend-neutral service handle. Algorithms and native geometry types stay in Axiolid or another geometry provider. A blocked result requires complete exact evidence; a known route through incomplete topology proves existence only.

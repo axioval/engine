@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+use super::Selector;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
@@ -35,6 +36,9 @@ pub enum ParameterValue {
         property: String,
         #[serde(rename = "propertySet")]
         property_set: Option<String>,
+    },
+    Selector {
+        value: Box<Selector>,
     },
     StringList {
         value: Vec<String>,

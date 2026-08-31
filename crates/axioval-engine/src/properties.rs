@@ -1,6 +1,6 @@
 //! Exact source-neutral property-resolution host-service contracts.
 
-use axioval_ir::{Evidence, ObjectId, Property};
+use axioval_ir::{Evidence, ObjectId, Property, PropertyValue};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -16,6 +16,9 @@ pub enum PropertyResolutionError {
     /// A conclusive answer lacks exact, reviewable provenance.
     #[error("property evidence is not exact and reviewable")]
     InexactEvidence,
+    /// A conclusive answer contains a non-finite numeric value.
+    #[error("property value is not finite")]
+    InvalidValue,
     /// The source cannot currently provide a conclusive answer.
     #[error("property resolution unavailable: {0}")]
     Unavailable(String),
@@ -115,6 +118,9 @@ impl ResolvedProperty {
         if !property.evidence.as_ref().is_some_and(reviewable) {
             return Err(PropertyResolutionError::InexactEvidence);
         }
+        if !valid_value(&property.value) {
+            return Err(PropertyResolutionError::InvalidValue);
+        }
         Ok(Self { request, property })
     }
     /// Bound request, including the source-qualified object identity.
@@ -172,6 +178,9 @@ impl PropertyResolutionServiceHandle {
                 {
                     return Err(PropertyResolutionError::InexactEvidence);
                 }
+                if !valid_value(&resolved.property().value) {
+                    return Err(PropertyResolutionError::InvalidValue);
+                }
             }
             PropertyResolution::Absent(evidence) => {
                 if evidence.request() != request {
@@ -183,6 +192,16 @@ impl PropertyResolutionServiceHandle {
             }
         }
         Ok(resolution)
+    }
+}
+
+fn valid_value(value: &PropertyValue) -> bool {
+    match value {
+        PropertyValue::Decimal(value) | PropertyValue::Quantity { value, .. } => value.is_finite(),
+        PropertyValue::Null
+        | PropertyValue::Boolean(_)
+        | PropertyValue::Integer(_)
+        | PropertyValue::String(_) => true,
     }
 }
 

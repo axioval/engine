@@ -79,6 +79,15 @@ impl fmt::Display for ObjectId {
     }
 }
 
+/// Physical dimension of a canonical SI quantity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuantityDimension {
+    Length,
+    Area,
+    Volume,
+}
+
 /// A value supplied by a source adapter.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
@@ -87,6 +96,10 @@ pub enum PropertyValue {
     Boolean(bool),
     Integer(i64),
     Decimal(f64),
+    Quantity {
+        value: f64,
+        dimension: QuantityDimension,
+    },
     String(String),
 }
 

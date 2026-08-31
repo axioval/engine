@@ -15,7 +15,9 @@ All notable changes are documented here. This project follows Semantic Versionin
 - Complete walkable-region snapshots with deterministic three-valued width-constrained routing.
 - Explicit deterministic report outcomes for missing services, backend outages, incomplete/invalid evidence, and resource limits.
 - Exact grounded free-floor circle and rectangle capabilities backed by the source-neutral free-space service.
-- Exact request-bound property resolution for both present values and conclusive absence evidence, including cross-object substitution rejection and fail-closed property selector evaluation.
+- Exact property-to-property comparison capability slice with independent candidate selectors, request-bound relationship selection, target factors, `each` / `at_least_one`, and evidence-backed missing-information behavior.
+- Exact request-bound property resolution for both present values and conclusive absence evidence, including cross-object substitution rejection, finite numeric validation, and fail-closed property selector evaluation.
+- Source-neutral canonical SI quantity dimensions, boxed selector-valued parameters, and exact relationship-selection requests bound to a checked object and complete candidate universe.
 
 ### Fixed
 

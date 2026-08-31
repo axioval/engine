@@ -116,6 +116,25 @@ fn inexact_present_property_is_rejected_by_the_trusted_constructor() {
 }
 
 #[test]
+fn non_finite_present_property_is_rejected() {
+    for value in [
+        axioval_ir::PropertyValue::Decimal(f64::NAN),
+        axioval_ir::PropertyValue::Quantity {
+            value: f64::INFINITY,
+            dimension: axioval_ir::QuantityDimension::Length,
+        },
+    ] {
+        let property = axioval_ir::Property::new("Pset_WallCommon", "Reference", value)
+            .unwrap()
+            .with_evidence(Evidence::exact(source(), "native property table"));
+        assert_eq!(
+            ResolvedProperty::try_new(request(), property).unwrap_err(),
+            PropertyResolutionError::InvalidValue
+        );
+    }
+}
+
+#[test]
 fn exact_present_property_bound_to_another_object_is_rejected() {
     let requested = request();
     let other_request = PropertyRequest::try_new(

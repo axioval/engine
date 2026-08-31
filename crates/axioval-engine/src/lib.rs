@@ -215,8 +215,12 @@ impl ExecutionPlan {
 
 mod compiler;
 mod services;
+mod topology;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
 pub use services::{ServiceRegistry, ServiceRegistryError};
+pub use topology::{
+    CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
+};
 
 /// Deterministic runtime that invokes only registered trusted capabilities.
 pub struct Runtime {

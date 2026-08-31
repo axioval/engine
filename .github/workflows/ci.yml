@@ -39,3 +39,5 @@ jobs:
         env:
           RUSTDOCFLAGS: "-D warnings"
         run: ./scripts/check.sh
+      - name: Verify publishable workspace archives
+        run: ./scripts/package.sh

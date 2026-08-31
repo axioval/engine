@@ -11,6 +11,7 @@
 - [Connectivity and routes](./topology.md)
 - [Metric routing](./metric-routing.md)
 - [Free space and clearance](./free-space.md)
+- [Walkability topology](./walkability.md)
 - [Typed host services](./services.md)
 - [Independent adapters](./adapters.md)
 

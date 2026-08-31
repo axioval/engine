@@ -13,6 +13,6 @@ Rule packages cannot register services and cannot supply executable code. Missin
 
 Metric routing is exposed as `MetricRoutingServiceHandle`. The concrete handle wraps a backend-neutral trait object so it remains type-indexable in `ServiceRegistry`. Engine capabilities consume validated metric requests and bounded evidence; adapters keep native mesh and B-rep types behind the service.
 
-Free-space area, fixed directional clearance, and placement search are exposed through `FreeSpaceServiceHandle`. The handle enforces exact request binding and preserves asymmetric proof requirements: one obstruction or placement witness may be sufficient, while clear and no-placement verdicts require complete evidence. See [Free space and clearance](./free-space.md).
+Free-space area, fixed directional clearance, and constrained placement search are exposed through `FreeSpaceServiceHandle`. The handle enforces exact request binding and preserves asymmetric proof requirements: one obstruction or placement witness may be sufficient, while clear and no-placement verdicts require complete evidence. Placement domains distinguish unrestricted, support-grounded, and anchor-frame offset searches. See [Free space and clearance](./free-space.md).
 
 Walkable-region topology is exposed through `WalkabilityServiceHandle`. A trusted geometry backend supplies a complete exact snapshot; engine routing distinguishes definite-width, impossible, and uncertain-width paths without importing backend cells or geometry. See [Walkability topology](./walkability.md).

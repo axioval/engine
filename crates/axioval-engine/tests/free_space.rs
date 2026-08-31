@@ -2,10 +2,11 @@
 
 use axioval_engine::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
-    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, FreeAreaEvidence,
-    FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection,
-    MetricFrame, MetricPoint, MobilityProfile, ObstructionEvidence, PlacementOutcome,
-    PlacementRequest, ServiceRegistry, ThresholdVerdict,
+    ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, FrameOffsetPlacement,
+    FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
+    MetricDirection, MetricFrame, MetricPoint, MobilityProfile, ObstructionEvidence,
+    PlacementDomain, PlacementOutcome, PlacementRequest, ServiceRegistry, SignedDistanceInterval,
+    SupportedPlacement, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -43,6 +44,24 @@ fn placement_request(doc: &str, local: &str) -> PlacementRequest {
         ClearanceShape::Box(BoxClearance::try_new(1.5, 1.2, 2.0).unwrap()),
         vec![object(doc, "wall")],
     )
+}
+
+fn placement_shape() -> ClearanceShape {
+    ClearanceShape::Box(BoxClearance::try_new(1.5, 1.2, 2.0).unwrap())
+}
+
+fn direction(components: [f64; 3]) -> MetricDirection {
+    MetricDirection::try_new(components).unwrap()
+}
+
+fn placement_frame(doc: &str, local: &str) -> MetricFrame {
+    MetricFrame::try_new(
+        point(doc, local),
+        MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap(),
+        MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap(),
+        MetricDirection::try_new([0.0, 0.0, 1.0]).unwrap(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -286,5 +305,143 @@ fn service_rejects_placement_evidence_for_another_request() {
     assert_eq!(
         handle.find_placement(&req),
         Err(FreeSpaceError::ResponseRequestMismatch)
+    );
+}
+
+#[test]
+fn placement_domains_validate_metric_bounds() {
+    assert_eq!(
+        SignedDistanceInterval::try_new(1.0, -1.0),
+        Err(FreeSpaceError::InvalidOffsetInterval)
+    );
+    assert_eq!(
+        SupportedPlacement::try_new(object("cad", "floor"), -0.1),
+        Err(FreeSpaceError::InvalidSupportGap)
+    );
+}
+
+#[test]
+fn supported_placement_is_explicitly_request_bound() {
+    let support = SupportedPlacement::try_new(object("cad", "floor"), 0.01).unwrap();
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        PlacementDomain::Supported(support.clone()),
+    )
+    .unwrap();
+    assert_eq!(r.domain(), &PlacementDomain::Supported(support));
+}
+
+fn relative_domain(src: &str) -> PlacementDomain {
+    let offsets = FrameOffsetPlacement::new(
+        placement_frame(src, "room"),
+        SignedDistanceInterval::try_new(-1.0, 1.0).unwrap(),
+        SignedDistanceInterval::try_new(0.0, 2.0).unwrap(),
+        SignedDistanceInterval::exact(0.0).unwrap(),
+    );
+    PlacementDomain::FrameOffsets(offsets)
+}
+
+#[test]
+fn placement_witness_must_satisfy_frame_offset_domain() {
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        relative_domain("cad"),
+    )
+    .unwrap();
+    let found = MetricFrame::try_new(
+        MetricPoint::try_new(object("cad", "room"), [2.0, 0.0, 0.0]).unwrap(),
+        direction([1.0, 0.0, 0.0]),
+        direction([0.0, 1.0, 0.0]),
+        direction([0.0, 0.0, 1.0]),
+    )
+    .unwrap();
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(r, found, evidence("placement")),
+        Err(FreeSpaceError::PlacementDomainMismatch)
+    );
+}
+
+#[test]
+fn relative_domain_anchor_must_match_request_scope() {
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "other"),
+        placement_shape(),
+        vec![],
+        relative_domain("cad"),
+    );
+    assert_eq!(r, Err(FreeSpaceError::PlacementScopeMismatch));
+}
+
+fn placement_frame_at(doc: &str, local: &str, xyz: [f64; 3]) -> MetricFrame {
+    MetricFrame::try_new(
+        MetricPoint::try_new(object(doc, local), xyz).unwrap(),
+        direction([1.0, 0.0, 0.0]),
+        direction([0.0, 1.0, 0.0]),
+        direction([0.0, 0.0, 1.0]),
+    )
+    .unwrap()
+}
+
+#[test]
+fn placement_witness_within_frame_offsets_is_accepted() {
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        relative_domain("cad"),
+    )
+    .unwrap();
+    let witness = ClearancePlacementEvidence::try_new(
+        r.clone(),
+        placement_frame_at("cad", "room", [0.5, 1.0, 0.0]),
+        evidence("inside"),
+    )
+    .unwrap();
+    assert_eq!(witness.request(), &r);
+}
+
+#[test]
+fn support_and_frame_offset_constraints_can_be_conjoined() {
+    let support = SupportedPlacement::try_new(object("cad", "floor"), 0.01).unwrap();
+    let PlacementDomain::FrameOffsets(offsets) = relative_domain("cad") else {
+        unreachable!()
+    };
+    let domain = PlacementDomain::SupportedFrameOffsets {
+        support: support.clone(),
+        offsets,
+    };
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        domain.clone(),
+    )
+    .unwrap();
+    assert_eq!(r.domain(), &domain);
+}
+
+#[test]
+fn placement_witness_must_preserve_anchor_orientation() {
+    let r = PlacementRequest::new_in_domain(
+        object("cad", "room"),
+        placement_shape(),
+        vec![],
+        relative_domain("cad"),
+    )
+    .unwrap();
+    let found = MetricFrame::try_new(
+        point("cad", "room"),
+        direction([0.0, 1.0, 0.0]),
+        direction([-1.0, 0.0, 0.0]),
+        direction([0.0, 0.0, 1.0]),
+    )
+    .unwrap();
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(r, found, evidence("rotated")),
+        Err(FreeSpaceError::PlacementDomainMismatch)
     );
 }

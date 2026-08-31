@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_ir::contract::{ParameterKind, RuleFolder, RuleInstance};
-use axioval_ir::{DefinitionPackage, RuleSetPackage};
+use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
 use crate::{
     CapabilityRegistry, CompiledRule, EngineError, ExecutionPlan, ParameterDescriptor,
@@ -103,7 +103,8 @@ pub fn compile(
             }
         }
         rules.push(CompiledRule {
-            id: rule.id.clone(),
+            id: RuleId::new(rule.id.clone())
+                .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?,
             capability: definition.capability.clone(),
             severity: rule.severity.clone(),
             selector: rule.applicability.clone(),

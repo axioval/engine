@@ -44,3 +44,9 @@ fn semantic_property_values_preserve_provenance() {
         &PropertyValue::String("60".into())
     );
 }
+
+#[test]
+fn legacy_report_without_not_evaluated_field_remains_readable() {
+    let report: axioval_ir::Report = serde_json::from_str(r#"{"findings":[]}"#).unwrap();
+    assert!(report.not_evaluated().is_empty());
+}

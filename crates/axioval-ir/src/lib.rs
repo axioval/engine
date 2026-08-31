@@ -302,15 +302,40 @@ pub struct Finding {
     pub message: String,
     pub evidence: Vec<Evidence>,
 }
+/// Why an object or rule instance could not be evaluated conclusively.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotEvaluatedReason {
+    MissingService,
+    BackendUnavailable,
+    IncompleteEvidence,
+    InvalidEvidence,
+    ResourceLimit,
+}
+/// Explicit fail-closed evaluation outcome. This is not a compliance finding.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NotEvaluated {
+    pub rule_id: RuleId,
+    pub object_id: Option<ObjectId>,
+    pub reason: NotEvaluatedReason,
+    pub message: String,
+}
 /// Ordered report from a plan execution.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Report {
     pub findings: Vec<Finding>,
+    #[serde(default)]
+    pub not_evaluated: Vec<NotEvaluated>,
 }
 impl Report {
     /// Findings in deterministic order.
     pub fn findings(&self) -> &[Finding] {
         &self.findings
+    }
+    /// Fail-closed rule or object evaluations in deterministic order.
+    pub fn not_evaluated(&self) -> &[NotEvaluated] {
+        &self.not_evaluated
     }
 }

@@ -14,6 +14,13 @@ Publish a production-capable source-neutral pure-Rust rule engine, port reusable
 6. Results are deterministic, source-qualified, provenance-carrying, and fail closed.
 7. Migration preserves Solibri behavior through dual-run parity gates.
 
+## Current proven slices
+
+- Published `0.1.0`: source-neutral exact property resolution, relationship selection, bounded property comparison, and the Solibri property-comparison cutover.
+- Unreleased: `axioval:capability.property-required` distinguishes exact absence/null/blank text from exact non-empty typed values. Engine tests are complete; publication and Solibri consumption remain open, so it is not a migrated capability.
+
+Unchecked workstream boxes below denote incomplete families, not an absence of all supporting primitives.
+
 ## Workstreams and completion gates
 
 ### 1. Repository and publication

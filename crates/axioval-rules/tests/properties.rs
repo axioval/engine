@@ -16,7 +16,9 @@ use axioval_ir::{
     DefinitionPackage, Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId,
     RuleSetPackage, SourceId,
 };
-use axioval_rules::{BooleanPropertyEquals, PropertyPredicate, register_builtins};
+use axioval_rules::{
+    BooleanPropertyEquals, PropertyPredicate, PropertyRequired, register_builtins,
+};
 
 fn packages() -> (DefinitionPackage, RuleSetPackage) {
     (
@@ -141,6 +143,92 @@ fn property_exists_accepts_exact_non_ifc_source_evidence() {
     let project = Project::new(vec![object().with_property(property.clone())]).unwrap();
     let report = run(&project, definitions, &rules, Some(vec![property]));
     assert!(report.findings().is_empty());
+    assert!(report.not_evaluated().is_empty());
+}
+
+fn required_property(value: Option<PropertyValue>) -> axioval_engine::CapabilityEvaluation {
+    let property = value.map(|value| exact_property("Pset.Required", "Code", value));
+    let project = Project::new(vec![match &property {
+        Some(property) => object().with_property(property.clone()),
+        None => object(),
+    }])
+    .unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(PropertyResolutionServiceHandle::new(Arc::new(
+            ExactProperties(property.into_iter().collect()),
+        )))
+        .unwrap();
+    let rule = CompiledRule {
+        id: RuleId::new("required").unwrap(),
+        capability: "axioval:capability.property-required".into(),
+        severity: RuleSeverity::Warning,
+        selector: Selector::All,
+        parameters: BTreeMap::from([(
+            "property".into(),
+            ParameterValue::PropertyReference {
+                property_set: Some("Pset.Required".into()),
+                property: "Code".into(),
+            },
+        )]),
+    };
+    PropertyRequired.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        &rule,
+    )
+}
+
+#[test]
+fn required_property_rejects_exact_absence_null_and_blank_text() {
+    for value in [
+        None,
+        Some(PropertyValue::Null),
+        Some(PropertyValue::String("  \t".into())),
+    ] {
+        let evaluation = required_property(value);
+        assert_eq!(evaluation.findings().len(), 1);
+        assert!(evaluation.not_evaluated_outcomes().is_empty());
+        assert!(
+            evaluation.findings()[0]
+                .message
+                .contains("missing required property Code")
+        );
+        assert!(!evaluation.findings()[0].evidence.is_empty());
+    }
+}
+
+#[test]
+fn required_property_accepts_nonblank_and_nontext_values() {
+    for value in [
+        PropertyValue::String(" A ".into()),
+        PropertyValue::Boolean(false),
+        PropertyValue::Integer(0),
+    ] {
+        let evaluation = required_property(Some(value));
+        assert!(evaluation.findings().is_empty());
+        assert!(evaluation.not_evaluated_outcomes().is_empty());
+    }
+}
+
+#[test]
+fn required_property_compiles_from_a_declarative_definition() {
+    let (mut definitions, rules) = packages();
+    let definition = definitions
+        .definitions
+        .get_mut("axioval:example.property-exists")
+        .unwrap();
+    definition.capability = "axioval:capability.property-required".into();
+    let blank = exact_property(
+        "axioval:example.ifc.pset-wall-common",
+        "axioval:example.ifc.reference",
+        PropertyValue::String(" ".into()),
+    );
+    let project = Project::new(vec![object().with_property(blank.clone())]).unwrap();
+    let report = run(&project, definitions, &rules, Some(vec![blank]));
+    assert_eq!(report.findings().len(), 1);
     assert!(report.not_evaluated().is_empty());
 }
 

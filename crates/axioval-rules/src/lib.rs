@@ -12,7 +12,9 @@ mod selection;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use property_comparison::PropertyComparison;
-pub use property_rules::{BooleanPropertyEquals, PropertyExists, PropertyPredicate};
+pub use property_rules::{
+    BooleanPropertyEquals, PropertyExists, PropertyPredicate, PropertyRequired,
+};
 
 /// Registers all maintained built-in capabilities into a host registry.
 ///
@@ -22,6 +24,7 @@ pub use property_rules::{BooleanPropertyEquals, PropertyExists, PropertyPredicat
 pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegistry, EngineError> {
     registry
         .register(PropertyExists)
+        .and_then(|registry| registry.register(PropertyRequired))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

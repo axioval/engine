@@ -137,6 +137,79 @@ impl RuleCapability for PropertyExists {
     }
 }
 
+/// Requires an exactly resolved property to contain a non-empty semantic value.
+///
+/// Exact absence, `null`, and blank text are violations. Other exact typed
+/// values satisfy the requirement; adapter failures remain not-evaluated.
+pub struct PropertyRequired;
+impl RuleCapability for PropertyRequired {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-required"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![ParameterDescriptor::required(
+            "property",
+            ParameterType::PropertyReference,
+        )]
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        let Some((set, name)) = property_reference(rule, "property") else {
+            return CapabilityEvaluation::not_evaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                "property-required has no valid property reference",
+            );
+        };
+        let (selected, mut evaluation) = select_objects(context, &rule.selector);
+        let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
+            return unavailable_selected(
+                &selected,
+                &NotEvaluatedReason::MissingService,
+                "property-resolution service is not registered",
+                evaluation,
+            );
+        };
+        for object in selected {
+            let request =
+                match PropertyRequest::try_new(object.id.clone(), set.map(ToOwned::to_owned), name)
+                {
+                    Ok(request) => request,
+                    Err(error) => {
+                        evaluation.push_not_evaluated(
+                            NotEvaluatedReason::InvalidDeclaration,
+                            error.to_string(),
+                        );
+                        return evaluation;
+                    }
+                };
+            match service.resolve(&request) {
+                Ok(PropertyResolution::Present(resolved)) => {
+                    let value = &resolved.property().value;
+                    if matches!(value, PropertyValue::Null)
+                        || matches!(value, PropertyValue::String(text) if text.trim().is_empty())
+                    {
+                        evaluation.push_finding(finding(
+                            rule,
+                            object,
+                            format!("missing required property {name}"),
+                            resolved.property().evidence.clone().into_iter().collect(),
+                        ));
+                    }
+                }
+                Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
+                    rule,
+                    object,
+                    format!("missing required property {name}"),
+                    vec![proof.evidence().clone()],
+                )),
+                Err(error) => resolve_error(&mut evaluation, object, error),
+            }
+        }
+        evaluation
+    }
+}
+
 fn boolean(rule: &CompiledRule, name: &str) -> Option<bool> {
     match rule.parameters.get(name)? {
         ParameterValue::Boolean { value } => Some(*value),

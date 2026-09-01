@@ -4,6 +4,10 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- Source-neutral `axioval:capability.property-required`, with exact absence/null/blank findings and fail-closed property-resolution errors.
+
 ## [0.1.0] - 2026-08-31
 
 ### Added

@@ -16,8 +16,7 @@ Publish a production-capable source-neutral pure-Rust rule engine, port reusable
 
 ## Current proven slices
 
-- Published `0.1.0`: source-neutral exact property resolution, relationship selection, bounded property comparison, and the the provider property-comparison cutover.
-- Unreleased: `axioval:capability.property-required` distinguishes exact absence/null/blank text from exact non-empty typed values. Engine tests are complete; publication and the provider consumption remain open, so it is not a migrated capability.
+- Published `0.1.1`: source-neutral exact property resolution, relationship selection, bounded property comparison, and `axioval:capability.property-required`. The the provider property-comparison cutover consumes `0.1.0`; required-property publication is complete but its consumer cutover remains open.
 
 Unchecked workstream boxes below denote incomplete families, not an absence of all supporting primitives.
 

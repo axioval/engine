@@ -4,6 +4,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-01
+
 ### Added
 
 - Source-neutral `axioval:capability.property-required`, with exact absence/null/blank findings and fail-closed property-resolution errors.
@@ -29,5 +31,6 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/axioval/engine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/axioval/engine/releases/tag/v0.1.0

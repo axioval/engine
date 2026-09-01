@@ -360,6 +360,18 @@ fn integer_predicate_uses_the_declared_operator() {
 }
 
 #[test]
+fn integer_not_equal_retains_evidence_for_equal_value_violation() {
+    let passing = predicate(4, "not_equal", 5);
+    assert!(passing.findings().is_empty());
+    assert!(passing.not_evaluated_outcomes().is_empty());
+
+    let failing = predicate(5, "not_equal", 5);
+    assert_eq!(failing.findings().len(), 1);
+    assert!(!failing.findings()[0].evidence.is_empty());
+    assert!(failing.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
 fn unsupported_integer_predicate_operator_is_not_evaluated() {
     let evaluation = predicate(5, "approximately", 5);
     assert!(evaluation.findings().is_empty());

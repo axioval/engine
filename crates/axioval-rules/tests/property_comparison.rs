@@ -50,16 +50,21 @@ impl PropertyResolutionService for Properties {
                         .is_none_or(|set| item.property_set == set)
             })
         }) {
+            let mut item = item.clone();
+            item.evidence
+                .as_mut()
+                .expect("fixture property has evidence")
+                .source = request.object_id().source.clone();
             Ok(PropertyResolution::Present(ResolvedProperty::try_new(
                 request.clone(),
-                item.clone(),
+                item,
             )?))
         } else {
             Ok(PropertyResolution::Absent(
                 CompletePropertyAbsenceEvidence::try_new(
                     request.clone(),
                     Evidence::exact(
-                        source("properties"),
+                        request.object_id().source.clone(),
                         format!("absence:{}", request.object_id()),
                     ),
                 )?,

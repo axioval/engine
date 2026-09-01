@@ -178,6 +178,9 @@ pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedRea
         PropertyResolutionError::Unavailable(message) => {
             (NotEvaluatedReason::BackendUnavailable, message)
         }
+        PropertyResolutionError::Incomplete(message) => {
+            (NotEvaluatedReason::IncompleteEvidence, message)
+        }
         error => (NotEvaluatedReason::InvalidEvidence, error.to_string()),
     }
 }

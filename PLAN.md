@@ -16,7 +16,7 @@ Publish a production-capable source-neutral pure-Rust rule engine, port reusable
 
 ## Current proven slices
 
-- Published `0.1.1`: source-neutral exact property resolution, relationship selection, bounded property comparison, and `axioval:capability.property-required`. The Solibri property-comparison cutover consumes `0.1.0`; required-property publication is complete but its consumer cutover remains open.
+- Release candidate `0.1.2`: immutable evidence sessions, strict IFC4 STEP import through published OpenBIM crates, exact direct occurrence/type property evidence, and evidence-preserving integer `not_equal`. Relationship completeness remains deliberately fail-closed. The Solibri property-comparison cutover consumes `0.1.0`; required-property consumer cutover remains open.
 
 Unchecked workstream boxes below denote incomplete families, not an absence of all supporting primitives.
 
@@ -39,6 +39,8 @@ Unchecked workstream boxes below denote incomplete families, not an absence of a
 ### 3. Independent adapters
 
 - [ ] OpenBIM semantic adapter
+  - [x] Strict IFC4 STEP session and exact direct occurrence/type property source
+  - [ ] Exact relationship, classification, placement, and remaining semantic sources
 - [ ] Axiolid geometry adapter usable by any source
 - [ ] ICDD project assembly adapter
 - [ ] Adapter conformance kit and mock alternate geometry backend
@@ -80,4 +82,8 @@ Unchecked workstream boxes below denote incomplete families, not an absence of a
 
 ## Rollback
 
-Migration is capability-scoped. Solibri keeps a runtime legacy fallback until the replacement capability passes dual-run parity. Each wave is an atomic scoped commit and can be reverted independently.
+Migration is capability-scoped. Each wave is an atomic scoped commit and can be
+reverted independently. A declaration recognized as supported by the Axioval
+facade never silently falls back to legacy evaluation: unavailable or incomplete
+session evidence is terminal. Unsupported declaration shapes remain explicitly
+outside that cutover until separately implemented and certified.

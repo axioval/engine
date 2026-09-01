@@ -15,7 +15,7 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-axioval = { path = "../axioval", version = "0.1.1" }
+axioval = { path = "../axioval", version = "0.1.2" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

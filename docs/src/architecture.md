@@ -21,10 +21,14 @@ axioval-engine ← axioval-rules
 1. A normalized package is deserialized under a deny-unknown-fields contract.
 2. The compiler binds selectors and parameters to trusted capability descriptors.
 3. Compilation produces an immutable ordered execution plan.
-4. A run selects a `ProjectView` and negotiates required evidence capabilities.
-5. Capabilities evaluate semantic facts and typed evidence.
-6. Findings retain rule, source, object, evidence, precision and diagnostic provenance.
-7. Stable ordering produces reproducible reports.
+4. An `EvidenceSession` binds the project to one immutable revision,
+   fingerprint, and optional schema per declared source. Every trusted evidence
+   service must expose its own source snapshots; registration rejects unbound,
+   duplicate, unknown, or non-identical revision/fingerprint/schema bindings.
+5. A run selects that session-bound `ProjectView` and negotiates required evidence capabilities.
+6. Capabilities evaluate semantic facts and typed evidence.
+7. Findings retain rule, source, object, evidence, precision and diagnostic provenance.
+8. Stable ordering produces reproducible reports.
 
 ## Project model
 

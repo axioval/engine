@@ -297,6 +297,7 @@ impl RuleCapability for BooleanPropertyEquals {
 #[derive(Clone, Copy)]
 enum IntegerOperator {
     Equal,
+    NotEqual,
     GreaterThan,
     GreaterOrEqual,
     LessThan,
@@ -306,6 +307,7 @@ impl IntegerOperator {
     fn parse(value: &str) -> Option<Self> {
         match value {
             "equal" => Some(Self::Equal),
+            "not_equal" => Some(Self::NotEqual),
             "greater_than" => Some(Self::GreaterThan),
             "greater_or_equal" => Some(Self::GreaterOrEqual),
             "less_than" => Some(Self::LessThan),
@@ -316,6 +318,7 @@ impl IntegerOperator {
     fn passes(self, actual: i64, expected: i64) -> bool {
         match self {
             Self::Equal => actual == expected,
+            Self::NotEqual => actual != expected,
             Self::GreaterThan => actual > expected,
             Self::GreaterOrEqual => actual >= expected,
             Self::LessThan => actual < expected,

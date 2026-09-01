@@ -2,7 +2,7 @@
 
 A source-neutral, pure-Rust rule engine for validating federated engineering and construction data.
 
-Axioval Engine compiles portable [Axioval Schema](https://github.com/axioval/schema) packages into deterministic execution plans. Rules operate on an engine-specific semantic IR rather than IFC, STEP, ICDD, or a geometry-kernel object model.
+Axioval Engine compiles portable [Axioval MCS](https://github.com/axioval/mcs) packages into deterministic execution plans. Rules operate on an engine-specific semantic IR rather than IFC, STEP, ICDD, or a geometry-kernel object model.
 
 ## Design boundaries
 

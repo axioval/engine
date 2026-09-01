@@ -4,6 +4,8 @@ use axioval_ir::{Evidence, ObjectId, Property, PropertyValue};
 use std::sync::Arc;
 use thiserror::Error;
 
+use crate::session::{SnapshotBoundService, SourceSnapshot};
+
 /// Failure to resolve a property conclusively.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum PropertyResolutionError {
@@ -19,12 +21,22 @@ pub enum PropertyResolutionError {
     /// A conclusive answer contains a non-finite numeric value.
     #[error("property value is not finite")]
     InvalidValue,
+    /// The source could answer only part of the request scope.
+    #[error("property source coverage is incomplete: {0}")]
+    Incomplete(String),
+    /// Mutually incompatible exact facts were returned.
+    #[error("property evidence conflicts: {0}")]
+    Conflicting(String),
     /// The source cannot currently provide a conclusive answer.
     #[error("property resolution unavailable: {0}")]
     Unavailable(String),
 }
 
-/// Request for one property on one source-qualified object.
+/// Request for one direct property on one source-qualified object.
+///
+/// This contract covers occurrence/type inheritance owned by the source adapter,
+/// but never traverses semantic relationships to other objects. Related-object
+/// selection requires a separately complete relationship service.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PropertyRequest {
     object_id: ObjectId,
@@ -85,7 +97,7 @@ impl CompletePropertyAbsenceEvidence {
         request: PropertyRequest,
         evidence: Evidence,
     ) -> Result<Self, PropertyResolutionError> {
-        if !reviewable(&evidence) {
+        if !reviewable(&evidence) || evidence.source != request.object_id().source {
             return Err(PropertyResolutionError::InexactEvidence);
         }
         Ok(Self { request, evidence })
@@ -115,7 +127,9 @@ impl ResolvedProperty {
         if !request.matches(&property) {
             return Err(PropertyResolutionError::ResponseRequestMismatch);
         }
-        if !property.evidence.as_ref().is_some_and(reviewable) {
+        if !property.evidence.as_ref().is_some_and(|evidence| {
+            reviewable(evidence) && evidence.source == request.object_id().source
+        }) {
             return Err(PropertyResolutionError::InexactEvidence);
         }
         if !valid_value(&property.value) {
@@ -144,6 +158,13 @@ pub enum PropertyResolution {
 
 /// Trusted adapter seam for property resolution.
 pub trait PropertyResolutionService: Send + Sync {
+    /// Exact source snapshots used to construct this resolver.
+    ///
+    /// The default is intentionally unbound for services used only through a
+    /// raw [`crate::ServiceRegistry`]; an [`crate::EvidenceSession`] rejects it.
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &[]
+    }
     /// Resolves one request or reports why it is not conclusive.
     fn resolve(
         &self,
@@ -153,18 +174,20 @@ pub trait PropertyResolutionService: Send + Sync {
 
 /// Cloneable, type-erased property service registered by the host.
 #[derive(Clone)]
-pub struct PropertyResolutionServiceHandle(Arc<dyn PropertyResolutionService>);
+pub struct PropertyResolutionServiceHandle {
+    service: Arc<dyn PropertyResolutionService>,
+}
 impl PropertyResolutionServiceHandle {
-    /// Wraps a trusted service.
+    /// Wraps a trusted service for use outside an evidence session.
     pub fn new(service: Arc<dyn PropertyResolutionService>) -> Self {
-        Self(service)
+        Self { service }
     }
     /// Resolves and validates request binding and exact provenance.
     pub fn resolve(
         &self,
         request: &PropertyRequest,
     ) -> Result<PropertyResolution, PropertyResolutionError> {
-        let resolution = self.0.resolve(request)?;
+        let resolution = self.service.resolve(request)?;
         match &resolution {
             PropertyResolution::Present(resolved) => {
                 if resolved.request() != request || !request.matches(resolved.property()) {
@@ -174,7 +197,9 @@ impl PropertyResolutionServiceHandle {
                     .property()
                     .evidence
                     .as_ref()
-                    .is_some_and(reviewable)
+                    .is_some_and(|evidence| {
+                        reviewable(evidence) && evidence.source == request.object_id().source
+                    })
                 {
                     return Err(PropertyResolutionError::InexactEvidence);
                 }
@@ -186,12 +211,20 @@ impl PropertyResolutionServiceHandle {
                 if evidence.request() != request {
                     return Err(PropertyResolutionError::ResponseRequestMismatch);
                 }
-                if !reviewable(evidence.evidence()) {
+                if !reviewable(evidence.evidence())
+                    || evidence.evidence().source != request.object_id().source
+                {
                     return Err(PropertyResolutionError::InexactEvidence);
                 }
             }
         }
         Ok(resolution)
+    }
+}
+
+impl SnapshotBoundService for PropertyResolutionServiceHandle {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        self.service.source_snapshots()
     }
 }
 

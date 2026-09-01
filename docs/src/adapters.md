@@ -4,7 +4,18 @@ Adapters are peers around the source-neutral engine. No adapter receives special
 
 ## OpenBIM
 
-`axioval-openbim` maps IFC/OpenBIM objects, concepts, properties, classifications, relationships, placements and provenance to the IR. It does not depend on Axiolid and does not own geometry policy.
+`axioval-openbim` provides a production IFC4 STEP path for exact direct properties:
+strict bytes become a SHA-256 fingerprinted `EvidenceSession`; IFC objects become
+source-qualified Axioval objects; and `ifc-properties::exact_property` backs the
+session's property service with occurrence/type provenance and exact absence.
+The property resolver owns and declares the same source/revision/fingerprint/schema
+snapshot registered by the session; mismatched service composition is rejected.
+Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
+unsupported values fail closed.
+
+Direct-property completeness does not imply relationship completeness. The IFC
+session deliberately registers no relationship-selection service yet. The
+adapter does not depend on Axiolid and does not own geometry policy.
 
 ## Axiolid
 

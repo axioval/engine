@@ -9,6 +9,8 @@ use axioval_ir::contract as schema;
 use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId};
 use thiserror::Error;
 
+mod session;
+
 /// Errors while compiling untrusted declarations into a trusted execution plan.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EngineError {
@@ -336,6 +338,7 @@ pub use relationships::{
     SemanticRelationship, TraversalDirection,
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
+pub use session::{EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceSnapshot};
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
 };
@@ -369,10 +372,25 @@ impl Runtime {
     /// Execution fails closed if the host registry no longer contains any capability
     /// that was present when the plan was compiled.
     pub fn run(&self, project: &Project, plan: ExecutionPlan) -> Result<Report, EngineError> {
-        let context = RuleContext {
-            project,
-            services: &self.services,
-        };
+        self.run_with_services(project, &self.services, plan)
+    }
+
+    /// Executes a plan against one immutable source/evidence snapshot.
+    pub fn run_session(
+        &self,
+        session: &EvidenceSession,
+        plan: ExecutionPlan,
+    ) -> Result<Report, EngineError> {
+        self.run_with_services(session.project(), session.services(), plan)
+    }
+
+    fn run_with_services(
+        &self,
+        project: &Project,
+        services: &ServiceRegistry,
+        plan: ExecutionPlan,
+    ) -> Result<Report, EngineError> {
+        let context = RuleContext { project, services };
         let mut findings = Vec::new();
         let mut not_evaluated = Vec::new();
         for rule in plan.rules {

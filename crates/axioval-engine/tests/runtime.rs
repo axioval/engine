@@ -2,10 +2,11 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    CapabilityEvaluation, CapabilityRegistry, CompiledRule, EngineError, NotEvaluatedReason,
-    ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime, compile,
+    CapabilityEvaluation, CapabilityRegistry, CompiledRule, EngineError, EvidenceSession,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime,
+    ServiceRegistry, SnapshotBoundService, SourceSnapshot, compile,
 };
-use axioval_ir::{DefinitionPackage, Project, RuleSetPackage};
+use axioval_ir::{DefinitionPackage, Object, ObjectId, Project, RuleSetPackage, SourceId};
 
 struct Stub;
 impl RuleCapability for Stub {
@@ -108,6 +109,35 @@ impl RuleCapability for Unavailable {
     }
 }
 
+struct SessionMarker {
+    label: &'static str,
+    snapshots: Vec<SourceSnapshot>,
+}
+impl SnapshotBoundService for SessionMarker {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+}
+
+struct SessionServiceCapability;
+impl RuleCapability for SessionServiceCapability {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-exists"
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![ParameterDescriptor::required(
+            "property",
+            ParameterType::PropertyReference,
+        )]
+    }
+    fn evaluate(&self, context: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        let mut evaluation = CapabilityEvaluation::default();
+        let marker = context.services.get::<SessionMarker>().unwrap();
+        evaluation.push_not_evaluated(NotEvaluatedReason::MissingService, marker.label);
+        evaluation
+    }
+}
+
 #[test]
 fn runtime_reports_capability_unavailability_without_false_pass() {
     let (definitions, rules) = packages();
@@ -128,4 +158,42 @@ fn runtime_reports_capability_unavailability_without_false_pass() {
         report.not_evaluated()[0].rule_id.to_string(),
         "wall-reference-required"
     );
+}
+
+#[test]
+fn session_services_are_authoritative_for_session_runs() {
+    let (definitions, rules) = packages();
+    let registry = CapabilityRegistry::new()
+        .register(SessionServiceCapability)
+        .unwrap();
+    let plan = compile(&registry, &[definitions], &rules).unwrap();
+    let source = SourceId::new("test", "runtime-session").unwrap();
+    let snapshot =
+        SourceSnapshot::try_new(source.clone(), "revision-1", "sha256:runtime-session").unwrap();
+    let project = Project::new(vec![Object::new(
+        ObjectId::new(source, "object-1").unwrap(),
+        "wall",
+    )])
+    .unwrap();
+    let mut runtime_services = ServiceRegistry::new();
+    runtime_services
+        .register(SessionMarker {
+            label: "runtime",
+            snapshots: vec![snapshot.clone()],
+        })
+        .unwrap();
+    let session = EvidenceSession::try_new(project, [snapshot.clone()])
+        .unwrap()
+        .with_service(SessionMarker {
+            label: "session",
+            snapshots: vec![snapshot],
+        })
+        .unwrap();
+
+    let report = Runtime::new(registry)
+        .with_services(runtime_services)
+        .run_session(&session, plan)
+        .unwrap();
+
+    assert_eq!(report.not_evaluated()[0].message, "session");
 }

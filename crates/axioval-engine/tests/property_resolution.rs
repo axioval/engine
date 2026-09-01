@@ -116,6 +116,30 @@ fn inexact_present_property_is_rejected_by_the_trusted_constructor() {
 }
 
 #[test]
+fn exact_evidence_from_another_source_is_rejected() {
+    let other = SourceId::new("cad", "other-model").unwrap();
+    let property = axioval_ir::Property::new(
+        "Pset_WallCommon",
+        "Reference",
+        axioval_ir::PropertyValue::String("EI60".into()),
+    )
+    .unwrap()
+    .with_evidence(Evidence::exact(other.clone(), "property table"));
+    assert_eq!(
+        ResolvedProperty::try_new(request(), property).unwrap_err(),
+        PropertyResolutionError::InexactEvidence
+    );
+    assert_eq!(
+        CompletePropertyAbsenceEvidence::try_new(
+            request(),
+            Evidence::exact(other, "complete property table"),
+        )
+        .unwrap_err(),
+        PropertyResolutionError::InexactEvidence
+    );
+}
+
+#[test]
 fn non_finite_present_property_is_rejected() {
     for value in [
         axioval_ir::PropertyValue::Decimal(f64::NAN),

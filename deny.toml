@@ -5,7 +5,10 @@
 all-features = true
 
 [advisories]
-ignore = []
+# ifc-schema@0.1.0 uses bincode 2.0.1 solely to decode bundled, build-produced
+# schema artifacts. RUSTSEC-2025-0141 reports project discontinuation, not a
+# vulnerability, and states that no safe upgrade exists.
+ignore = ["RUSTSEC-2025-0141"]
 
 [licenses]
 allow = [

@@ -1,10 +1,13 @@
 #![allow(clippy::doc_markdown)]
 
-//! Source-neutral `OpenBIM` semantic adapter contracts.
+//! Source-neutral `OpenBIM` semantic adapter contracts and production IFC seam.
 //!
-//! This crate intentionally does not parse IFC/STEP yet. Concrete importers live behind
-//! [`OpenBimImporter`], and the supplied unavailable importer fails explicitly until an
-//! upstream parser is selected and integrated.
+//! [`import_ifc_session`] parses strict IFC4 STEP bytes into an immutable,
+//! fingerprint-bound Axioval evidence session. The older importer trait remains
+//! available for host-defined OpenBIM sources.
+
+mod ifc;
+pub use ifc::{IfcSessionError, import_ifc_session};
 
 use std::collections::BTreeSet;
 

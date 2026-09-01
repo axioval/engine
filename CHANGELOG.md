@@ -4,6 +4,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-01
+
+### Added
+
+- Immutable `EvidenceSession` snapshots bind each project source to revision,
+  fingerprint, optional schema, and a session-authoritative service registry;
+  registration rejects unbound or stale service snapshot identities.
+- Production IFC4 STEP import in `axioval-openbim`, with exact direct-property
+  presence/absence, occurrence/type provenance, and fingerprint-bound evidence.
+
+### Changed
+
+- Direct-property failures now preserve incomplete and conflicting source states;
+  exact evidence from a different source is rejected.
+- Integer property predicates now support evidence-preserving `not_equal` directly.
+- Relationship property completeness remains deliberately unavailable and
+  fail-closed in production IFC sessions.
+- Cargo-deny narrowly ignores RUSTSEC-2025-0141 for `ifc-schema`'s bundled
+  `bincode 2.0.1` decoder; the advisory is project discontinuation, not a vulnerability.
+
 ## [0.1.1] - 2026-09-01
 
 ### Added
@@ -31,6 +51,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/axioval/engine/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/axioval/engine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/axioval/engine/releases/tag/v0.1.0

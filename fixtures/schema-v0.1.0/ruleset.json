@@ -5,7 +5,7 @@
     "name": "Example ruleset",
     "version": "0.1.0",
     "description": "Non-production example of a modular Axioval ruleset.",
-    "repository": "https://github.com/axioval/schema",
+    "repository": "https://github.com/axioval/mcs",
     "authors": []
   },
   "definitionPackages": [

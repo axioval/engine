@@ -5,7 +5,7 @@
     "name": "Example definitions",
     "version": "0.1.0",
     "description": "Non-production terminology used by the schema examples.",
-    "repository": "https://github.com/axioval/schema",
+    "repository": "https://github.com/axioval/mcs",
     "authors": []
   },
   "objectTypes": {

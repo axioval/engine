@@ -391,8 +391,12 @@
       "legacyDefinitionId": "building.required_property",
       "legacyRuntimeFidelity": "full",
       "targetModule": "building",
-      "status": "pending",
-      "proof": []
+      "status": "in_progress",
+      "proof": [
+        "axioval:capability.property-required exact absence/null/blank capability published in axioval@0.1.1",
+        "solibri-rs:published axioval@0.1.1 facade rewire for mandatory direct property-set rows with exact request-scoped facts and terminal unavailable/conflict handling",
+        "solibri-rs:CSET optional, empty, mustNotHave, and unknown valueExists modes refused before neutral lowering"
+      ]
     },
     {
       "nativeType": "ShelfRunningMetreRule",

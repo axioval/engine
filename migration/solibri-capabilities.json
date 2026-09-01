@@ -101,7 +101,9 @@
       "targetModule": "property",
       "status": "in_progress",
       "proof": [
-        "axioval:capability.property-comparison exact property-to-property slice"
+        "axioval:capability.property-comparison exact property-to-property slice",
+        "solibri-rs:published axioval@0.1.0 facade rewire with backend identity and overflow fail-closed regression",
+        "solibri-rs:request-bound relationship and edge provenance projected through rules::Issue.evidence with cross-model and deterministic-order regressions"
       ]
     },
     {

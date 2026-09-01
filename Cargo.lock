@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "axioval"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axioval-axiolid",
  "axioval-engine",
@@ -75,14 +75,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-axiolid"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axioval",
  "clap",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-engine"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axioval-ir",
  "indexmap",
@@ -105,14 +105,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-icdd"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-ir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "indexmap",
  "serde",
@@ -124,14 +124,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-openbim"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-rules"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axioval-engine",
  "axioval-ir",

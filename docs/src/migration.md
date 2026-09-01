@@ -5,7 +5,7 @@ A box is checked only when the Axioval implementation is the production owner, S
 ## Current capability waves
 
 - **Property comparison:** the bounded published `0.1.0` slice is consumed by Solibri and recorded in the machine ledger as `in_progress`; unsupported operators and modes remain outside the cutover.
-- **Required property:** `axioval:capability.property-required` is implemented and tested in the engine. It is deliberately not marked migrated until a new facade version is published and Solibri's production checker executes it with exact source evidence.
+- **Required property:** `axioval:capability.property-required` is published in the `0.1.1` facade and tested in the engine. It is deliberately not marked migrated until Solibri's production checker executes it with exact source evidence.
 
 ## Shared runtime
 

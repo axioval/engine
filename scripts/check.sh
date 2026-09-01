@@ -20,6 +20,7 @@ fi
 
 python3 scripts/architecture.py --self-test
 python3 scripts/migration.py
+python3 scripts/test_check_package_contents.py
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features

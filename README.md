@@ -44,7 +44,7 @@ See [PLAN.md](PLAN.md), [architecture](docs/src/architecture.md), and the [contr
 
 Active extraction from `projects/vendor/solibri`. Compatibility is tracked capability-by-capability in [the migration ledger](docs/src/migration.md). A capability is not marked migrated until Solibri consumes the Axioval implementation and parity gates pass.
 
-The published `0.1.0` facade is consumed by Solibri for the bounded property-comparison slice. The source tree additionally contains `axioval:capability.property-required`, which treats exact absence, null, and blank text as violations while preserving adapter failures as not-evaluated. That capability is not yet marked migrated because it requires a subsequent facade release and Solibri cutover.
+The published `0.1.1` facade contains the bounded property-comparison slice and `axioval:capability.property-required`, which treats exact absence, null, and blank text as violations while preserving adapter failures as not-evaluated. Solibri consumes the former through `0.1.0`; required-property remains unmigrated until its production cutover is certified.
 
 ## License
 

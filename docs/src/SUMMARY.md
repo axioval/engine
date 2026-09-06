@@ -7,6 +7,7 @@
 - [Architecture](./architecture.md)
 - [ADR 0001: source-neutral engine and independent adapters](./adr-0001.md)
 - [ADR 0002: extract the engine by moving contracts](./adr-0002.md)
+- [ADR 0003: neutral object identity blocks the runtime move](./adr-0003.md)
 - [Source-neutral IR](./ir.md)
 - [Capabilities](./capabilities.md)
 - [Connectivity and routes](./topology.md)

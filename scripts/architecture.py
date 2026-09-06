@@ -145,6 +145,27 @@ def service_seam_violations(source: str, stems: set[str]) -> list[str]:
     return failures
 
 
+# ADR 0003: an adapter must mint `ObjectId` from a source-stable identifier.
+# A per-model arena index or parse position is not durable identity: it does not
+# survive reparse or a differing importer, so findings keyed by it cannot be
+# compared across runs. Minting from an index-typed local id is rejected.
+ARENA_IDENTITY = re.compile(
+    r"ObjectId::new\s*\(.*?,\s*(?:[\w.]*\.)?\b(?:"
+    r"(?:entity|element|node|item|slot)(?:_?(?:ref|idx|index|pos|position|offset))?"
+    r")\b\s*(?:\.to_string\(\)|\.0\b|as\s+u(?:32|64)|\.index\(\))",
+    re.S | re.I,
+)
+
+
+def arena_identity_violations(source: str) -> list[str]:
+    """Reject ObjectId minted from an in-memory index rather than a stable id."""
+    code = strip_noise(source)
+    return [
+        match.group(0).split("(")[0].strip()
+        for match in ARENA_IDENTITY.finditer(code)
+    ]
+
+
 IMMUTABLE_ACTION = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 DEPENDENCY_AUDIT_MARKER = "AXIOVAL_DEPENDENCY_AUDIT_COMPLETE"
 CARGO_DENY_ACTION = re.compile(
@@ -238,6 +259,26 @@ def self_test() -> None:
         "pub trait FreeSpaceService {\n    fn largest_inscribed_circle(&self, o: ObjectId) -> u8;\n}",
         stems,
     )
+    # ADR 0003: identity must come from a stable source id, not an arena index.
+    assert arena_identity_violations(
+        'ObjectId::new(source.clone(), entity.to_string())'
+    ) == ["ObjectId::new"]
+    # The real the provider sidecar shape: multi-line, field-qualified arena index.
+    assert arena_identity_violations(
+        "ObjectId::new(\n"
+        "    SourceId::new(IFC_STEP_SYSTEM, entity.model_id.clone()).ok()?,\n"
+        "    entity.entity.to_string(),\n"
+        ")"
+    ) == ["ObjectId::new"]
+    assert arena_identity_violations("ObjectId::new(src, element_index.to_string())")
+    assert arena_identity_violations("ObjectId::new(src, node_ref.0)")
+    assert arena_identity_violations("ObjectId::new(src, slot as u32)")
+    assert arena_identity_violations("ObjectId::new(src, item.index())")
+    # A STEP entity id or GlobalId is a stable source identifier.
+    assert not arena_identity_violations("ObjectId::new(source.clone(), id.to_string())")
+    assert not arena_identity_violations("ObjectId::new(src, global_id.to_string())")
+    assert not arena_identity_violations("// ObjectId::new(src, entity.to_string())")
+
     # A capability may name a rule -- policy belongs in `axioval-rules`.
     assert not service_seam_violations(
         "pub trait RuleCapability {\n    fn resolve_stair(&self, plan: &StairPlanSpec) -> u8;\n}", stems
@@ -315,6 +356,13 @@ def check(root: Path) -> list[str]:
                 failures.append(f"{source.relative_to(root)}: forbidden source coupling matching {pattern!r}")
             for detail in service_seam_violations(text, stems):
                 failures.append(f"{source.relative_to(root)}: {detail}")
+    # ADR 0003 applies to every crate: adapters are exactly where identity is
+    # minted, so exempting them would exempt the only code that can violate it.
+    for source in sorted((root / "crates").rglob("src/**/*.rs")):
+        for detail in arena_identity_violations(source.read_text(encoding="utf-8")):
+            failures.append(
+                f"{source.relative_to(root)}: ObjectId minted from arena index `{detail}`"
+            )
     for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
         for detail in workflow_violations(workflow.read_text(encoding="utf-8")):
             failures.append(f"{workflow.relative_to(root)}: {detail}")

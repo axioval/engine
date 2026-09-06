@@ -35,8 +35,18 @@ mechanically:
 
 1. **Contract.** `crates/spec` (21,363 LOC, zero internal dependencies) becomes
    the engine's rule vocabulary next to `axioval-ir`'s package contract.
-2. **Runtime.** `rules/src/engine` + `rules/src/engines` (5,527 LOC) become
-   `axioval-engine` compilation, selection, quantifiers, pairwise, circulation.
+2. **Runtime.** Blocked on identity, not on code motion. Measured per file,
+   `rules/src/engine` + `rules/src/engines` does **not** move wholesale:
+   `compile.rs` (1,347 LOC) imports 68 concrete vendor rule types and is a
+   catalog dispatch table; `glob.rs`/`java_pattern.rs` implement the provider
+   `ConstraintUtils`/`Operators.MATCHES` compatibility and are vendor adapter
+   code by ADR 0002's own ownership test. The remaining 4,000 LOC
+   (`circulation/network.rs`, `selection/scope.rs`, `pairwise/mod.rs`,
+   `result.rs`) is blocked on one thing: it is written against
+   `EntityRef(pub u32)`, a per-model arena index, where ADR 0001 requires
+   source-qualified opaque identity. The engine already owns that identity
+   (`axioval_ir::ObjectId`, `Finding`, `Report`). Step 2 is therefore rewriting
+   the runtime against neutral identity, not relocating files.
 3. **Seam.** Each of the 23 `PlanSpec`-shaped provider methods is decomposed
    into neutral evidence plus policy in `axioval-rules`.
 4. **Families.** Rule policy ports against evidence that already exists.

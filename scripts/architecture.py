@@ -10,7 +10,19 @@ import sys
 import tomllib
 from pathlib import Path
 
-CORE = ("axioval-ir", "axioval-engine", "axioval-rules")
+# Crates that must stay source-neutral. Adapters and the facade are exempt by
+# name; everything else is core by default, so a newly added crate is guarded
+# from its first commit rather than whenever someone remembers to list it.
+ADAPTER_CRATES = frozenset(
+    {"axioval-openbim", "axioval-axiolid", "axioval-icdd", "axioval", "axioval-cli"}
+)
+
+
+def core_crates(root: Path) -> tuple[str, ...]:
+    """Every workspace crate that is not a named adapter or frontend."""
+    crates = (name.parent.name for name in sorted((root / "crates").glob("*/Cargo.toml")))
+    return tuple(name for name in crates if name not in ADAPTER_CRATES)
+
 FORBIDDEN_DEPENDENCIES = ("ifc", "step", "openbim", "icdd", "axiolid", "opencascade", "cgal", "the provider")
 FORBIDDEN_SOURCE = (
     re.compile(r"\b(?:use|extern\s+crate)\s+[^;]*(?:ifc|step|openbim|icdd|axiolid|opencascade|cgal|the provider)", re.I),
@@ -231,6 +243,15 @@ def self_test() -> None:
         "pub trait RuleCapability {\n    fn resolve_stair(&self, plan: &StairPlanSpec) -> u8;\n}", stems
     )
 
+    # Core membership is derived, not listed: a new crate is guarded on arrival.
+    root = Path(__file__).resolve().parents[1]
+    derived = core_crates(root)
+    assert "axioval-spec" in derived, derived
+    assert "axioval-engine" in derived, derived
+    assert "axioval-openbim" not in derived, derived
+    assert "axioval-cli" not in derived, derived
+
+
     # --- regressions for reviewed bypasses (deleg_a59d2236, task 2) ---
 
     # 1. Unlisted verb prefix must not launder a rule-named method.
@@ -283,7 +304,7 @@ def check(root: Path) -> list[str]:
     failures: list[str] = []
     ledger = root / "migration" / "the provider-capabilities.json"
     stems = rule_stems(ledger.read_text(encoding="utf-8"))
-    for crate in CORE:
+    for crate in core_crates(root):
         crate_root = root / "crates" / crate
         manifest = crate_root / "Cargo.toml"
         for dependency in manifest_violations(manifest.read_text(encoding="utf-8")):

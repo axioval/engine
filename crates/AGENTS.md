@@ -1,5 +1,6 @@
 # Crates
 
+- `axioval-spec` — source-neutral rule and classification vocabulary.
 - `axioval-ir` — source-neutral data and normalized package contracts.
 - `axioval-engine` — compiler, trusted registry, services, runtime.
 - `axioval-rules` — reusable capability policy and algorithms.

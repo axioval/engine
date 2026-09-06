@@ -163,6 +163,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axioval-spec"
+version = "0.1.2"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "bincode"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

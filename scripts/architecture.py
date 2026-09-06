@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tomllib
@@ -17,6 +18,121 @@ FORBIDDEN_SOURCE = (
     re.compile(r"\b(?:IfcModel|EntityRef|IfcModelSet|StepModel)\b"),
 )
 ACTION_USE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.M)
+# ADR 0002: an evidence service may be parameterized by geometry and identity,
+# never by a rule. A `*PlanSpec` argument, or a method named after a native rule,
+# means rule policy has leaked into the evidence seam -- the exact defect that
+# made the legacy 43-method `GeometryProvider` unportable one rule at a time.
+SERVICE_TRAIT = re.compile(r"pub\s+trait\s+(\w*Service)\b[^{]*\{", re.M)
+METHOD_NAME = re.compile(r"\bfn\s+(\w+)")
+PLAN_ARGUMENT = re.compile(r"\b\w*PlanSpec\b")
+PLAN_ALIAS = re.compile(r"^\s*(?:pub\s+)?type\s+(\w+)\s*=\s*[^;]*\w*PlanSpec\b", re.M)
+RULE_SUFFIX = re.compile(r"(?:Rule|Constraint|Check)$")
+CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def rule_stems(ledger: str) -> set[str]:
+    """Snake-case stems of every native rule named in the migration ledger.
+
+    Fails loudly on schema drift. Defaulting to an empty list would silently
+    disable the entire rule-name half of the gate the moment a ledger key is
+    renamed -- a green gate that checks nothing.
+    """
+    document = json.loads(ledger)
+    if not isinstance(document, dict) or not isinstance(document.get("entries"), list):
+        raise ValueError("migration ledger must be an object with an `entries` list")
+    stems: set[str] = set()
+    for entry in document["entries"]:
+        base = RULE_SUFFIX.sub("", entry.get("nativeType", ""))
+        if base:
+            stems.add(CAMEL_BOUNDARY.sub("_", base).lower())
+    if not stems:
+        raise ValueError("migration ledger names no rules; the seam gate would be inert")
+    return stems
+
+
+def strip_noise(source: str) -> str:
+    """Blank out comments and string literals, preserving byte offsets.
+
+    The brace matcher below counts `{`/`}` to find a trait body. A brace inside
+    a doc comment or string would close the body early and hide every violation
+    after it, so those regions are neutralised first.
+    """
+    out = list(source)
+    index, size = 0, len(source)
+    while index < size:
+        pair = source[index : index + 2]
+        if pair in ("//", "/*"):
+            terminator, skip = ("\n", 1) if pair == "//" else ("*/", 2)
+            stop = source.find(terminator, index + 2)
+            stop = size if stop < 0 else stop + skip
+            for position in range(index, stop):
+                if out[position] != "\n":
+                    out[position] = " "
+            index = stop
+            continue
+        if source[index] == '"':
+            index += 1
+            while index < size and source[index] != '"':
+                index += 2 if source[index] == "\\" else 1
+                out[index - 1] = " "
+            index += 1
+            continue
+        index += 1
+    return "".join(out)
+
+
+def trait_bodies(source: str) -> list[tuple[str, str]]:
+    """(trait name, body) for each public service trait, brace-matched."""
+    scan = strip_noise(source)
+    bodies: list[tuple[str, str]] = []
+    for match in SERVICE_TRAIT.finditer(scan):
+        depth, index = 1, match.end()
+        while index < len(scan) and depth:
+            depth += {"{": 1, "}": -1}.get(scan[index], 0)
+            index += 1
+        bodies.append((match.group(1), scan[match.end() : index - 1]))
+    return bodies
+
+
+def method_signatures(body: str) -> list[tuple[str, str]]:
+    """(name, signature) per method, tolerating generic parameter lists."""
+    signatures: list[tuple[str, str]] = []
+    for match in METHOD_NAME.finditer(body):
+        open_paren = body.find("(", match.end())
+        if open_paren < 0:
+            continue
+        depth, index = 1, open_paren + 1
+        while index < len(body) and depth:
+            depth += {"(": 1, ")": -1}.get(body[index], 0)
+            index += 1
+        signatures.append((match.group(1), body[open_paren:index]))
+    return signatures
+
+
+def service_seam_violations(source: str, stems: set[str]) -> list[str]:
+    """Reject rule policy embedded in an evidence-service interface."""
+    aliases = set(PLAN_ALIAS.findall(source))
+    plan_types = PLAN_ARGUMENT
+    failures: list[str] = []
+    for trait, body in trait_bodies(source):
+        for method, signature in method_signatures(body):
+            plans = set(plan_types.findall(signature))
+            plans |= {alias for alias in aliases if re.search(rf"\b{alias}\b", signature)}
+            for plan in sorted(plans):
+                failures.append(f"service `{trait}::{method}` takes rule plan `{plan}`")
+            # Token containment, not prefix-strip: `get_stair`, `stair_lookup`
+            # and `resolve_stair` are the same leak wearing different verbs.
+            tokens = set(method.split("_"))
+            for stem in sorted(stems):
+                parts = stem.split("_")
+                if set(parts) <= tokens and "_".join(parts) in method:
+                    failures.append(
+                        f"service `{trait}::{method}` is named after rule `{stem}`"
+                    )
+                    break
+    return failures
+
+
 IMMUTABLE_ACTION = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 DEPENDENCY_AUDIT_MARKER = "AXIOVAL_DEPENDENCY_AUDIT_COMPLETE"
 CARGO_DENY_ACTION = re.compile(
@@ -93,18 +209,91 @@ def self_test() -> None:
     )
     assert not manifest_violations('[dependencies]\nserde = "1"\n')
     assert not source_violations("/// IFC is an adapter, not the IR.\npub struct Project;")
+    ledger = '{"entries": [{"nativeType": "StairRule"}, {"nativeType": "FreeFloorSpaceRule"}]}'
+    stems = rule_stems(ledger)
+    assert stems == {"stair", "free_floor_space"}
+    assert service_seam_violations(
+        "pub trait StairService {\n    fn resolve_stair(&self, plan: &StairPlanSpec) -> u8;\n}", stems
+    ) == [
+        "service `StairService::resolve_stair` takes rule plan `StairPlanSpec`",
+        "service `StairService::resolve_stair` is named after rule `stair`",
+    ]
+    assert service_seam_violations(
+        "pub trait FreeSpaceService {\n    fn free_floor_space(&self, o: ObjectId) -> u8;\n}", stems
+    ) == ["service `FreeSpaceService::free_floor_space` is named after rule `free_floor_space`"]
+    # Neutral evidence: parameterized by identity and geometry, not by a rule.
+    assert not service_seam_violations(
+        "pub trait FreeSpaceService {\n    fn largest_inscribed_circle(&self, o: ObjectId) -> u8;\n}",
+        stems,
+    )
+    # A capability may name a rule -- policy belongs in `axioval-rules`.
+    assert not service_seam_violations(
+        "pub trait RuleCapability {\n    fn resolve_stair(&self, plan: &StairPlanSpec) -> u8;\n}", stems
+    )
+
+    # --- regressions for reviewed bypasses (deleg_a59d2236, task 2) ---
+
+    # 1. Unlisted verb prefix must not launder a rule-named method.
+    for name in ("get_stair", "fetch_stair", "stair_lookup"):
+        assert service_seam_violations(
+            f"pub trait S Service {{\n    fn {name}(&self, o: ObjectId) -> u8;\n}}".replace(
+                "S Service", "StairService"
+            ),
+            stems,
+        ), name
+
+    # 2. A brace inside a doc comment must not close the trait body early.
+    assert service_seam_violations(
+        "pub trait StairService {\n"
+        "    /// e.g. HashMap::from([(\"k\", 1)]) }\n"
+        "    fn resolve_stair(&self, plan: &StairPlanSpec) -> u8;\n}",
+        stems,
+    )
+
+    # 3. A type alias must not hide the plan argument.
+    assert service_seam_violations(
+        "type StairArgs = StairPlanSpec;\n"
+        "pub trait StairService {\n    fn evidence(&self, plan: &StairArgs) -> u8;\n}",
+        stems,
+    ) == ["service `StairService::evidence` takes rule plan `StairArgs`"]
+
+    # 4. Generic parameters must not skip the method entirely.
+    assert service_seam_violations(
+        "pub trait StairService {\n"
+        "    fn resolve_stair<T: Send>(&self, plan: &StairPlanSpec) -> T;\n}",
+        stems,
+    )
+
+    # 5. Ledger schema drift must fail loudly, never silently disarm the gate.
+    for broken in ('{"rules": []}', '{"entries": {}}', '{"entries": []}', "[]"):
+        try:
+            rule_stems(broken)
+        except ValueError:
+            continue
+        raise AssertionError(f"ledger drift accepted: {broken}")
+
+    # Neutral evidence with an incidental substring stays clean.
+    assert not service_seam_violations(
+        "pub trait FreeSpaceService {\n    fn staircase_free_area(&self, o: ObjectId) -> u8;\n}",
+        {"stair"},
+    )
 
 
 def check(root: Path) -> list[str]:
     failures: list[str] = []
+    ledger = root / "migration" / "the provider-capabilities.json"
+    stems = rule_stems(ledger.read_text(encoding="utf-8"))
     for crate in CORE:
         crate_root = root / "crates" / crate
         manifest = crate_root / "Cargo.toml"
         for dependency in manifest_violations(manifest.read_text(encoding="utf-8")):
             failures.append(f"{manifest.relative_to(root)}: forbidden dependency {dependency!r}")
         for source in sorted((crate_root / "src").rglob("*.rs")):
-            for pattern in source_violations(source.read_text(encoding="utf-8")):
+            text = source.read_text(encoding="utf-8")
+            for pattern in source_violations(text):
                 failures.append(f"{source.relative_to(root)}: forbidden source coupling matching {pattern!r}")
+            for detail in service_seam_violations(text, stems):
+                failures.append(f"{source.relative_to(root)}: {detail}")
     for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
         for detail in workflow_violations(workflow.read_text(encoding="utf-8")):
             failures.append(f"{workflow.relative_to(root)}: {detail}")

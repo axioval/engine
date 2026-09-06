@@ -20,6 +20,38 @@ Publish a production-capable source-neutral pure-Rust rule engine, port reusable
 
 Unchecked workstream boxes below denote incomplete families, not an absence of all supporting primitives.
 
+## Extraction strategy (ADR 0002)
+
+Three sidecar waves added `+9110` net LOC to `vendor/the provider` while moving 0 of
+83 native rule implementations out of it. The per-family sidecar is
+anti-convergent: it keeps both implementations alive by construction.
+
+The blocker is the evidence seam, not rule policy. Legacy `GeometryProvider`
+has 43 methods, **23 of which take a `spec::rule::*PlanSpec`** — one bespoke
+evidence method per rule, so per-rule migration cost never amortizes.
+
+Extraction therefore moves the contract and runtime first, and families follow
+mechanically:
+
+1. **Contract.** `crates/spec` (21,363 LOC, zero internal dependencies) becomes
+   the engine's rule vocabulary next to `axioval-ir`'s package contract.
+2. **Runtime.** `rules/src/engine` + `rules/src/engines` (5,527 LOC) become
+   `axioval-engine` compilation, selection, quantifiers, pairwise, circulation.
+3. **Seam.** Each of the 23 `PlanSpec`-shaped provider methods is decomposed
+   into neutral evidence plus policy in `axioval-rules`.
+4. **Families.** Rule policy ports against evidence that already exists.
+5. **Vendor.** `vendor/the provider` keeps only CSET/SMC byte formats, authoring,
+   CLI and Python — one application on the engine, not the engine's home.
+
+Enforced by `scripts/architecture.py`: a `*Service` trait may not take a
+`*PlanSpec` or be named after a rule in the migration ledger. The gate is
+mutation-proven against injected leaks in a real `axioval-engine` service trait
+(`7/7` killed, covering verb-prefix laundering, comment-brace shielding, type
+aliasing, generic methods and ledger schema drift).
+
+No new `families/<name>/axioval.rs` sidecars. The three that exist are removed
+when their families move.
+
 ## Workstreams and completion gates
 
 ### 1. Repository and publication

@@ -22,11 +22,11 @@ Only trusted host code may create `VerifiedConnection` values. Each edge carries
 
 A host may independently obtain:
 
-- semantic candidates and identities from `axioval-openbim` or a proprietary CAD adapter;
+- semantic candidates and identities from `axioval-ifc` or a proprietary CAD adapter;
 - aperture, landing, and free-space proofs from `axioval-axiolid` or another geometry adapter;
 - container/project assembly from `axioval-icdd`.
 
-The host composes those results before constructing the graph. There is deliberately no `axioval-openbim-axiolid` adapter or dependency direction.
+The host composes those results before constructing the graph. There is deliberately no `axioval-ifc-axiolid` adapter or dependency direction.
 
 ## Determinism
 

@@ -76,26 +76,26 @@ dependencies = [
 
 [[package]]
 name = "axioval"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axioval-axiolid",
  "axioval-engine",
  "axioval-icdd",
+ "axioval-ifc",
  "axioval-ir",
- "axioval-openbim",
  "axioval-rules",
 ]
 
 [[package]]
 name = "axioval-axiolid"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-cli"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axioval",
  "clap",
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-engine"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axioval-ir",
  "indexmap",
@@ -118,26 +118,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-icdd"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
-name = "axioval-ir"
-version = "0.1.11"
-dependencies = [
- "indexmap",
- "serde",
- "serde_json",
- "smallvec",
- "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "axioval-openbim"
-version = "0.1.11"
+name = "axioval-ifc"
+version = "0.1.12"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -150,8 +138,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "axioval-ir"
+version = "0.1.12"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "axioval-rules"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-spec"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "serde",
  "serde_json",

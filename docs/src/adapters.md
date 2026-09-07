@@ -2,9 +2,9 @@
 
 Adapters are peers around the source-neutral engine. No adapter receives special privileges.
 
-## OpenBIM
+## IFC
 
-`axioval-openbim` provides a production IFC4 STEP path for exact direct properties:
+`axioval-ifc` provides a production IFC4 STEP path for exact direct properties:
 strict bytes become a SHA-256 fingerprinted `EvidenceSession`; IFC objects become
 source-qualified Axioval objects; and `ifc-properties::exact_property` backs the
 session's property service with occurrence/type provenance and exact absence.

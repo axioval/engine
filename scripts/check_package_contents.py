@@ -15,9 +15,10 @@ EXPECTED = {
     "axioval-cli",
     "axioval-engine",
     "axioval-icdd",
+    "axioval-ifc",
     "axioval-ir",
-    "axioval-openbim",
     "axioval-rules",
+    "axioval-spec",
 }
 
 
@@ -39,6 +40,24 @@ def workspace_versions() -> dict[str, str]:
 # both leaks a private integration and contradicts the neutrality the crates
 # claim. Compared case-insensitively against every shipped text file.
 FORBIDDEN_TERMS = ("the provider",)
+
+
+# A crate's LICENSE is a relative symlink to the workspace root. Moving a crate
+# between directories changes its depth and silently dangles that link, which
+# only surfaces once archives are built -- by which point a crate can already
+# have been published without its license. Checked directly on the source tree
+# so it fails in seconds, before packaging.
+def dangling_license_links() -> list[str]:
+    errors: list[str] = []
+    for manifest in sorted((ROOT / "crates").rglob("Cargo.toml")):
+        crate = manifest.parent
+        if "[package]" not in manifest.read_text(encoding="utf-8"):
+            continue
+        link = crate / "LICENSE"
+        if not link.is_file():
+            target = link.readlink() if link.is_symlink() else "missing"
+            errors.append(f"{link.relative_to(ROOT)}: unreadable LICENSE ({target})")
+    return errors
 
 
 def verify(package_dir: Path, versions: dict[str, str]) -> list[str]:
@@ -94,7 +113,8 @@ def main(argv: list[str]) -> int:
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
         print(f"workspace metadata unavailable: {error}", file=sys.stderr)
         return 1
-    errors = verify(package_dir, versions)
+    errors = dangling_license_links()
+    errors += verify(package_dir, versions)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

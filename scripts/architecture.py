@@ -14,14 +14,44 @@ from pathlib import Path
 # name; everything else is core by default, so a newly added crate is guarded
 # from its first commit rather than whenever someone remembers to list it.
 ADAPTER_CRATES = frozenset(
-    {"axioval-openbim", "axioval-axiolid", "axioval-icdd", "axioval", "axioval-cli"}
+    {"axioval-ifc", "axioval-axiolid", "axioval-icdd", "axioval", "axioval-cli"}
 )
 
+# Crates live in category directories (`contracts/`, `engine/`, `sources/…`),
+# so the tree depth varies and a fixed `crates/*/Cargo.toml` glob would silently
+# return nothing -- a green gate that checks no crate at all. Discovery is
+# recursive and keyed on the manifest's declared package name, never on its
+# path, so moving a crate between categories can never disable its guard.
+PACKAGE_NAME = re.compile(r"^\s*name\s*=\s*\"([^\"]+)\"", re.M)
 
-def core_crates(root: Path) -> tuple[str, ...]:
-    """Every workspace crate that is not a named adapter or frontend."""
-    crates = (name.parent.name for name in sorted((root / "crates").glob("*/Cargo.toml")))
-    return tuple(name for name in crates if name not in ADAPTER_CRATES)
+
+def crate_manifests(root: Path) -> tuple[tuple[str, Path], ...]:
+    """Every workspace crate as `(package name, crate root)`, found by manifest."""
+    found: list[tuple[str, Path]] = []
+    for manifest in sorted((root / "crates").rglob("Cargo.toml")):
+        text = manifest.read_text(encoding="utf-8")
+        if "[package]" not in text:
+            continue
+        match = PACKAGE_NAME.search(text[text.index("[package]") :])
+        if match:
+            found.append((match.group(1), manifest.parent))
+    return tuple(found)
+
+
+def core_crates(root: Path) -> tuple[tuple[str, Path], ...]:
+    """Every workspace crate that is not a named adapter or frontend.
+
+    Fails closed: an empty result means discovery broke (a moved tree, a bad
+    glob), not that the workspace is adapter-only. Returning nothing would
+    silently pass every neutrality check in this gate.
+    """
+    crates = crate_manifests(root)
+    if not crates:
+        raise ValueError(f"no crate manifests found under {root / 'crates'}")
+    core = tuple((name, path) for name, path in crates if name not in ADAPTER_CRATES)
+    if not core:
+        raise ValueError(f"no core crates among {[name for name, _ in crates]}")
+    return core
 
 FORBIDDEN_DEPENDENCIES = ("ifc", "step", "openbim", "icdd", "axiolid", "opencascade", "cgal", "the provider")
 FORBIDDEN_SOURCE = (
@@ -314,11 +344,20 @@ def self_test() -> None:
 
     # Core membership is derived, not listed: a new crate is guarded on arrival.
     root = Path(__file__).resolve().parents[1]
-    derived = core_crates(root)
+    derived = {name for name, _ in core_crates(root)}
     assert "axioval-spec" in derived, derived
     assert "axioval-engine" in derived, derived
-    assert "axioval-openbim" not in derived, derived
+    assert "axioval-ifc" not in derived, derived
     assert "axioval-cli" not in derived, derived
+
+    # Discovery is recursive and name-keyed: crates nested in category
+    # directories are still found, and a core crate cannot escape the guard by
+    # moving. A flat-glob implementation would return nothing here.
+    discovered = {name for name, _ in crate_manifests(root)}
+    assert "axioval-ifc" in discovered, discovered
+    assert "axioval-engine" in discovered, discovered
+    for name, path in crate_manifests(root):
+        assert (path / "Cargo.toml").is_file(), (name, path)
 
 
     # --- regressions for reviewed bypasses (deleg_a59d2236, task 2) ---
@@ -413,8 +452,7 @@ def check(root: Path) -> list[str]:
     failures: list[str] = []
     ledger = root / "migration" / "the provider-capabilities.json"
     stems = rule_stems(ledger.read_text(encoding="utf-8"))
-    for crate in core_crates(root):
-        crate_root = root / "crates" / crate
+    for crate, crate_root in core_crates(root):
         manifest = crate_root / "Cargo.toml"
         for dependency in manifest_violations(manifest.read_text(encoding="utf-8")):
             failures.append(f"{manifest.relative_to(root)}: forbidden dependency {dependency!r}")

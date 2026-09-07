@@ -1,17 +1,38 @@
 # Architecture
 
+## Workspace layout
+
+Crates are grouped by the role they play, never by the dependency they wrap.
+The directory says what a crate may do; the name says what it contains.
+
+```text
+crates/
+  contracts/{spec,ir}          source-neutral vocabulary
+  engine/{core,rules}          capability execution
+  sources/semantic/ifc         one adapter per format
+  sources/geometry/axiolid     one adapter per kernel
+  sources/assembly/icdd        one adapter per container
+  facade/axioval               feature-gated re-exports
+  apps/cli                     executables
+```
+
+Adding a geometry backend (CGAL, manifold3d) means a new sibling under
+`sources/geometry/` and a feature on the facade. Nothing in `contracts/` or
+`engine/` changes, because neither may name a source.
+
 ## Dependency direction
 
 ```text
-axioval-ir
-    ↑
-axioval-engine ← axioval-rules
-    ↑                 ↑
-    ├─ axioval-openbim│
-    ├─ axioval-axiolid│
-    └─ axioval-icdd   │
-          ↑           │
-        axioval facade
+contracts/ir
+    ^
+engine/core  <-  engine/rules
+    ^                 ^
+    |                 |
+    +- sources/semantic/ifc
+    +- sources/geometry/axiolid
+    +- sources/assembly/icdd
+              ^
+        facade/axioval
 ```
 
 `axioval-ir`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.

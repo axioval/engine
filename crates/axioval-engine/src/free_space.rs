@@ -3,6 +3,7 @@
 //! Geometry algorithms and native shapes remain in Axiolid or another trusted
 //! backend. This module carries canonical metric requests and reviewable evidence.
 
+use crate::services::reviewable_exact_evidence;
 use crate::{MetricPoint, MobilityProfile, ThresholdVerdict};
 use axioval_ir::{Evidence, ObjectId};
 use std::sync::Arc;
@@ -778,7 +779,4 @@ fn valid_non_negative(value: f64) -> bool {
 }
 fn valid_positive(value: f64) -> bool {
     value.is_finite() && value > 0.0
-}
-fn reviewable_exact_evidence(evidence: &Evidence) -> bool {
-    evidence.exact && !evidence.locator.trim().is_empty()
 }

@@ -42,3 +42,13 @@ impl ServiceRegistry {
         self.entries.get(&TypeId::of::<T>())?.downcast_ref()
     }
 }
+
+/// Evidence an adapter may present as fact.
+///
+/// Exact, and carrying a locator a human can follow back to the source. Both
+/// halves matter: an exact measurement nobody can audit is not reviewable, and
+/// a well-located estimate is not exact. Owned here so every service applies
+/// the same admission test.
+pub(crate) fn reviewable_exact_evidence(evidence: &axioval_ir::Evidence) -> bool {
+    evidence.exact && !evidence.locator.trim().is_empty()
+}

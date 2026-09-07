@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use crate::services::reviewable_exact_evidence;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
@@ -388,8 +389,4 @@ impl MetricRoutingServiceHandle {
 
 fn valid_non_negative(value: f64) -> bool {
     value.is_finite() && value >= 0.0
-}
-
-fn reviewable_exact_evidence(evidence: &Evidence) -> bool {
-    evidence.exact && !evidence.locator.trim().is_empty()
 }

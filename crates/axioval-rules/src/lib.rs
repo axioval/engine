@@ -8,6 +8,7 @@ mod free_floor_rectangle;
 mod property_comparison;
 mod property_rules;
 mod selection;
+mod shelf_capacity;
 
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
@@ -15,6 +16,7 @@ pub use property_comparison::PropertyComparison;
 pub use property_rules::{
     BooleanPropertyEquals, PropertyExists, PropertyPredicate, PropertyRequired,
 };
+pub use shelf_capacity::ShelfCapacity;
 
 /// Registers all maintained built-in capabilities into a host registry.
 ///
@@ -28,6 +30,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))
+        .and_then(|registry| registry.register(ShelfCapacity))
         .and_then(|registry| registry.register(FreeFloorCircle))
         .and_then(|registry| registry.register(FreeFloorRectangle))
 }

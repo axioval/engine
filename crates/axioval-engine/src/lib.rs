@@ -308,6 +308,7 @@ impl ExecutionPlan {
 
 mod compiler;
 mod free_space;
+mod linear_quantity;
 mod metric_routing;
 mod properties;
 mod relationships;
@@ -322,6 +323,10 @@ pub use free_space::{
     FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
     PlacementDomain, PlacementOutcome, PlacementRequest, SignedDistanceInterval,
     SupportedPlacement,
+};
+pub use linear_quantity::{
+    LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
+    LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle,
 };
 pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,

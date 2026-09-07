@@ -4,6 +4,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-07
+
+### Added
+
+- `ContactService` and the `axioval:capability.slab-contact` capability: how
+  much of a face rests on another element is measured; whether that suffices
+  is decided by policy. The measurement is exact, so a ratio can no longer be
+  rounded across a declared minimum.
+- `EnvelopeMembershipService` and `axioval:capability.external-wall-validation`:
+  declared and derived envelope sets are compared per element. Applicability
+  is not carried as evidence, and one request names one derivation.
+- `SpaceService` and `axioval:capability.space-validation`: duplicates, clear
+  height, boundary gaps, overlaps, cap coverage and storey residuals are
+  measured independently, so one unavailable aspect no longer sinks the rest.
+- `GuardService` and `axioval:capability.horizontal-guard`: exposed edges and
+  nearby barriers, landings and climbable objects are measured; search radii
+  travel with the request. Edge coverage unions intervals rather than summing
+  them, so overlapping rails cannot fake a guarded edge.
+
 ## [0.1.4] - 2026-09-07
 
 ### Fixed

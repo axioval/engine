@@ -16,7 +16,7 @@ Publish a production-capable source-neutral pure-Rust rule engine, port reusable
 
 ## Current proven slices
 
-- Release candidate `0.1.4`: source-neutral `LinearQuantityService` and the `ShelfCapacity` capability -- the first ADR 0004 decomposition, splitting a measured shelf run from the policy that judges it. Supersedes the yanked `0.1.3`, which leaked downstream-vendor references into published crates.
+- Release candidate `0.1.5`: four ADR 0004 decompositions -- slab contact, external-wall validation, space validation and horizontal guard -- each splitting measured geometry from the policy that judges it. `0.1.4` carried the first, `LinearQuantityService` and the `ShelfCapacity` capability, and superseded the yanked `0.1.3`.
 - Release `0.1.2`: immutable evidence sessions, strict IFC4 STEP import through published OpenBIM crates, exact direct occurrence/type property evidence, and evidence-preserving integer `not_equal`. Relationship completeness remains deliberately fail-closed. The the provider property-comparison cutover consumes `0.1.0`; required-property consumer cutover remains open.
 
 Unchecked workstream boxes below denote incomplete families, not an absence of all supporting primitives.

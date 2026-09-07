@@ -315,6 +315,7 @@ mod metric_routing;
 mod properties;
 mod relationships;
 mod services;
+mod space;
 mod topology;
 mod walkability;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
@@ -354,6 +355,10 @@ pub use relationships::{
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceSnapshot};
+pub use space::{
+    BoundaryGap, Cap, CapCoverage, ClearHeightEvidence, Containment, SpaceError, SpaceOverlap,
+    SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
+};
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
 };

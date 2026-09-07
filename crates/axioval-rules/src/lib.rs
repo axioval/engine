@@ -11,6 +11,7 @@ mod property_rules;
 mod selection;
 mod shelf_capacity;
 mod slab_contact;
+mod space_validation;
 
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
@@ -21,6 +22,7 @@ pub use property_rules::{
 };
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
+pub use space_validation::SpaceValidation;
 
 /// Registers all maintained built-in capabilities into a host registry.
 ///
@@ -37,6 +39,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(ShelfCapacity))
         .and_then(|registry| registry.register(SlabContact))
         .and_then(|registry| registry.register(ExternalWallValidation))
+        .and_then(|registry| registry.register(SpaceValidation))
         .and_then(|registry| registry.register(FreeFloorCircle))
         .and_then(|registry| registry.register(FreeFloorRectangle))
 }

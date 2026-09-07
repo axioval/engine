@@ -4,6 +4,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-09-07
+
+### Fixed
+
+- Horizontal guard reports every distinct defect on a surface instead of only
+  the worst one. Edges are sample points along a boundary, so a slab with a
+  short rail on one side and no rail on another has two separate problems and
+  a reviewer must see both. Findings are grouped by surface and defect, and
+  the elements responsible are merged and sorted across the edges that share
+  a defect.
+
 ## [0.1.9] - 2026-09-07
 
 ### Changed

@@ -3,6 +3,7 @@
 
 use axioval_engine::{CapabilityRegistry, EngineError};
 
+mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
 mod property_comparison;
@@ -11,6 +12,7 @@ mod selection;
 mod shelf_capacity;
 mod slab_contact;
 
+pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use property_comparison::PropertyComparison;
@@ -34,6 +36,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PropertyComparison))
         .and_then(|registry| registry.register(ShelfCapacity))
         .and_then(|registry| registry.register(SlabContact))
+        .and_then(|registry| registry.register(ExternalWallValidation))
         .and_then(|registry| registry.register(FreeFloorCircle))
         .and_then(|registry| registry.register(FreeFloorRectangle))
 }

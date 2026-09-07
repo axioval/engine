@@ -308,6 +308,7 @@ impl ExecutionPlan {
 
 mod compiler;
 mod contact;
+mod envelope_membership;
 mod free_space;
 mod linear_quantity;
 mod metric_routing;
@@ -320,6 +321,10 @@ pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
+};
+pub use envelope_membership::{
+    EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,
+    EnvelopeMembershipRequest, EnvelopeMembershipService, EnvelopeMembershipServiceHandle,
 };
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,

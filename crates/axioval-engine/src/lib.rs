@@ -307,6 +307,7 @@ impl ExecutionPlan {
 }
 
 mod compiler;
+mod contact;
 mod free_space;
 mod linear_quantity;
 mod metric_routing;
@@ -316,6 +317,10 @@ mod services;
 mod topology;
 mod walkability;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
+pub use contact::{
+    ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
+    ContactSide, ContactTolerance,
+};
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,

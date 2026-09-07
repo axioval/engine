@@ -38,7 +38,7 @@ pub enum EnvelopeMembershipError {
 }
 
 /// Which spatial extent the envelope is derived from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum EnvelopeDerivation {
     /// Every space in the model bounds the envelope.

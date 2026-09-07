@@ -4,6 +4,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-07
+
+### Fixed
+
+- `CapCoverage` normalises negative zero. A geometry kernel can return `-0.0`
+  for an empty intersection; it compares equal to zero and so passed every
+  guard, but rendered as `-0.0`, reporting an uncovered cap as
+  "bottom cap only -0.0% covered".
+
+### Added
+
+- `EnvelopeDerivation` derives `Hash`, so it can key a `HashMap` in an adapter.
+
 ## [0.1.6] - 2026-09-07
 
 ### Added

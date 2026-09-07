@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.88"
 license = "AGPL-3.0-or-later"
@@ -14,13 +14,13 @@ keywords = ["bim", "validation", "rules", "geometry", "ifc"]
 categories = ["development-tools", "parser-implementations"]
 
 [workspace.dependencies]
-axioval-spec = { path = "crates/axioval-spec", version = "0.1.6" }
-axioval-ir = { path = "crates/axioval-ir", version = "0.1.6" }
-axioval-engine = { path = "crates/axioval-engine", version = "0.1.6" }
-axioval-rules = { path = "crates/axioval-rules", version = "0.1.6" }
-axioval-openbim = { path = "crates/axioval-openbim", version = "0.1.6" }
-axioval-axiolid = { path = "crates/axioval-axiolid", version = "0.1.6" }
-axioval-icdd = { path = "crates/axioval-icdd", version = "0.1.6" }
+axioval-spec = { path = "crates/axioval-spec", version = "0.1.7" }
+axioval-ir = { path = "crates/axioval-ir", version = "0.1.7" }
+axioval-engine = { path = "crates/axioval-engine", version = "0.1.7" }
+axioval-rules = { path = "crates/axioval-rules", version = "0.1.7" }
+axioval-openbim = { path = "crates/axioval-openbim", version = "0.1.7" }
+axioval-axiolid = { path = "crates/axioval-axiolid", version = "0.1.7" }
+axioval-icdd = { path = "crates/axioval-icdd", version = "0.1.7" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"

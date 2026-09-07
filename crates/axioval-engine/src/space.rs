@@ -179,7 +179,10 @@ impl CapCoverage {
         elements.dedup();
         Ok(Self {
             whole_area_square_metres,
-            covered_area_square_metres,
+            // A geometry kernel can return -0.0 for an empty intersection.
+            // It compares equal to 0.0 but renders as "-0.0", so a cap with no
+            // coverage would report "-0.0% covered". Normalise at the boundary.
+            covered_area_square_metres: covered_area_square_metres + 0.0,
             elements,
         })
     }
@@ -337,6 +340,15 @@ mod tests {
             CapCoverage::try_new(0.0, 0.0, Vec::new()),
             Err(SpaceError::InvalidQuantity)
         );
+    }
+
+    /// A geometry kernel can hand back -0.0 for an empty intersection. It
+    /// compares equal to zero but renders as "-0.0", so an uncovered cap would
+    /// be reported as "-0.0% covered".
+    #[test]
+    fn negative_zero_coverage_is_normalised() {
+        let coverage = CapCoverage::try_new(10.0, -0.0, Vec::new()).unwrap();
+        assert_eq!(format!("{:.1}", coverage.covered_ratio() * 100.0), "0.0");
     }
 
     #[test]

@@ -326,7 +326,7 @@ pub use free_space::{
 };
 pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
-    LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle,
+    LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
 pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,

@@ -12,7 +12,7 @@
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, LinearQuantityError, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityServiceHandle, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext,
+    ParameterType, RuleCapability, RuleContext, ShelfGeometry,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Finding, Severity};
@@ -28,10 +28,15 @@ impl RuleCapability for ShelfCapacity {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![ParameterDescriptor::required(
-            "minimum_running_metres",
-            ParameterType::Number,
-        )]
+        vec![
+            ParameterDescriptor::required("minimum_running_metres", ParameterType::Number),
+            ParameterDescriptor::required("shelf_depth_metres", ParameterType::Number),
+            ParameterDescriptor::required("horizontal_spacing_metres", ParameterType::Number),
+            ParameterDescriptor::required("vertical_spacing_metres", ParameterType::Number),
+            ParameterDescriptor::required("bottom_elevation_metres", ParameterType::Number),
+            ParameterDescriptor::required("top_elevation_metres", ParameterType::Number),
+            ParameterDescriptor::required("door_clearance_metres", ParameterType::Number),
+        ]
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -43,6 +48,17 @@ impl RuleCapability for ShelfCapacity {
                     object.id.clone(),
                     NotEvaluatedReason::InvalidDeclaration,
                     "shelf capacity minimum must be a finite, non-negative number",
+                );
+            }
+            return evaluation;
+        };
+
+        let Some(geometry) = shelf_geometry(rule) else {
+            for object in selected {
+                evaluation.push_object_not_evaluated(
+                    object.id.clone(),
+                    NotEvaluatedReason::InvalidDeclaration,
+                    "shelf geometry parameters are missing or not physically realisable",
                 );
             }
             return evaluation;
@@ -62,7 +78,7 @@ impl RuleCapability for ShelfCapacity {
         for object in selected {
             let request = LinearQuantityRequest::new(
                 object.id.clone(),
-                LinearQuantityKind::ShelfRunningLength,
+                LinearQuantityKind::ShelfRunningLength(geometry),
             );
             match service.measure_linear_quantity(&request) {
                 Ok(measured) => {
@@ -103,6 +119,11 @@ impl RuleCapability for ShelfCapacity {
                         | LinearQuantityError::InvalidInterval => {
                             NotEvaluatedReason::InvalidEvidence
                         }
+                        // The arrangement was validated before the request, so
+                        // reaching here means the declaration, not the model.
+                        LinearQuantityError::InvalidGeometry => {
+                            NotEvaluatedReason::InvalidDeclaration
+                        }
                     },
                     error.to_string(),
                 ),
@@ -113,8 +134,28 @@ impl RuleCapability for ShelfCapacity {
 }
 
 fn minimum_running_metres(rule: &CompiledRule) -> Option<f64> {
-    match rule.parameters.get("minimum_running_metres")? {
-        ParameterValue::Number { value } if value.is_finite() && *value >= 0.0 => Some(*value),
+    number(rule, "minimum_running_metres").filter(|value| *value >= 0.0)
+}
+
+fn number(rule: &CompiledRule, key: &str) -> Option<f64> {
+    match rule.parameters.get(key)? {
+        ParameterValue::Number { value } if value.is_finite() => Some(*value),
         _ => None,
     }
+}
+
+/// The measured arrangement, taken from the declaration.
+///
+/// Validity is decided by `ShelfGeometry`, so an impossible arrangement is
+/// rejected once rather than by each adapter.
+fn shelf_geometry(rule: &CompiledRule) -> Option<ShelfGeometry> {
+    ShelfGeometry::try_new(
+        number(rule, "shelf_depth_metres")?,
+        number(rule, "horizontal_spacing_metres")?,
+        number(rule, "vertical_spacing_metres")?,
+        number(rule, "bottom_elevation_metres")?,
+        number(rule, "top_elevation_metres")?,
+        number(rule, "door_clearance_metres")?,
+    )
+    .ok()
 }

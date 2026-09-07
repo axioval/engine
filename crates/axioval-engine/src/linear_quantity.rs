@@ -27,6 +27,9 @@ pub enum LinearQuantityError {
     /// The adapter cannot measure this quantity for this object.
     #[error("linear quantity is unavailable for the requested scope")]
     Unavailable,
+    /// The requested arrangement is not physically realisable.
+    #[error("shelf geometry must be positive, finite and ordered")]
+    InvalidGeometry,
 }
 
 /// A measured length, in metres, bounded below and above.
@@ -87,18 +90,90 @@ impl LinearInterval {
     }
 }
 
+/// The physical shelving arrangement whose run length is being measured.
+///
+/// These are *geometry inputs*, not thresholds: they describe the shelf being
+/// measured, so they belong to the measurement request. The minimum a space
+/// must provide is policy and stays with the capability. Keeping the two apart
+/// is what stops a threshold drifting back behind the evidence seam.
+#[derive(Clone, Copy, Debug, PartialEq)]
+// The shared `_metres` suffix is the point: every field is a length in the
+// same unit, and naming it on each one is what stops a millimetre value being
+// passed where metres are meant. Dropping the suffix would trade a real
+// safety property for brevity.
+#[allow(clippy::struct_field_names)]
+pub struct ShelfGeometry {
+    depth_metres: f64,
+    horizontal_spacing_metres: f64,
+    vertical_spacing_metres: f64,
+    bottom_elevation_metres: f64,
+    top_elevation_metres: f64,
+    door_clearance_metres: f64,
+}
+
+impl ShelfGeometry {
+    /// Rejects a physically impossible arrangement.
+    pub fn try_new(
+        depth_metres: f64,
+        horizontal_spacing_metres: f64,
+        vertical_spacing_metres: f64,
+        bottom_elevation_metres: f64,
+        top_elevation_metres: f64,
+        door_clearance_metres: f64,
+    ) -> Result<Self, LinearQuantityError> {
+        let positive = |v: f64| v.is_finite() && v > 0.0;
+        let non_negative = |v: f64| v.is_finite() && v >= 0.0;
+        if !positive(depth_metres)
+            || !positive(horizontal_spacing_metres)
+            || !positive(vertical_spacing_metres)
+            || !non_negative(bottom_elevation_metres)
+            || !non_negative(door_clearance_metres)
+            || !top_elevation_metres.is_finite()
+            || top_elevation_metres <= bottom_elevation_metres
+        {
+            return Err(LinearQuantityError::InvalidGeometry);
+        }
+        Ok(Self {
+            depth_metres,
+            horizontal_spacing_metres,
+            vertical_spacing_metres,
+            bottom_elevation_metres,
+            top_elevation_metres,
+            door_clearance_metres,
+        })
+    }
+    pub fn depth_metres(&self) -> f64 {
+        self.depth_metres
+    }
+    pub fn horizontal_spacing_metres(&self) -> f64 {
+        self.horizontal_spacing_metres
+    }
+    pub fn vertical_spacing_metres(&self) -> f64 {
+        self.vertical_spacing_metres
+    }
+    pub fn bottom_elevation_metres(&self) -> f64 {
+        self.bottom_elevation_metres
+    }
+    pub fn top_elevation_metres(&self) -> f64 {
+        self.top_elevation_metres
+    }
+    pub fn door_clearance_metres(&self) -> f64 {
+        self.door_clearance_metres
+    }
+}
+
 /// What linear quantity is being asked for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum LinearQuantityKind {
-    /// Total running length of shelving within the scope.
-    ShelfRunningLength,
+    /// Total running length of shelving fitting the given arrangement.
+    ShelfRunningLength(ShelfGeometry),
 }
 
 impl LinearQuantityKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            LinearQuantityKind::ShelfRunningLength => "shelf-running-length",
+            LinearQuantityKind::ShelfRunningLength(_) => "shelf-running-length",
         }
     }
 }

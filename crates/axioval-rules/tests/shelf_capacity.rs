@@ -31,7 +31,35 @@ fn rule_with(minimum: ParameterValue) -> CompiledRule {
             object_type: "space".into(),
             include_subtypes: true,
         },
-        parameters: BTreeMap::from([("minimum_running_metres".into(), minimum)]),
+        parameters: BTreeMap::from([
+            ("minimum_running_metres".into(), minimum),
+            // A physically realisable arrangement; the measured run is stubbed,
+            // so these only need to pass ShelfGeometry validation.
+            (
+                "shelf_depth_metres".into(),
+                ParameterValue::Number { value: 0.4 },
+            ),
+            (
+                "horizontal_spacing_metres".into(),
+                ParameterValue::Number { value: 0.3 },
+            ),
+            (
+                "vertical_spacing_metres".into(),
+                ParameterValue::Number { value: 0.35 },
+            ),
+            (
+                "bottom_elevation_metres".into(),
+                ParameterValue::Number { value: 0.1 },
+            ),
+            (
+                "top_elevation_metres".into(),
+                ParameterValue::Number { value: 2.0 },
+            ),
+            (
+                "door_clearance_metres".into(),
+                ParameterValue::Number { value: 0.9 },
+            ),
+        ]),
     }
 }
 fn rule() -> CompiledRule {
@@ -203,4 +231,24 @@ fn non_numeric_or_negative_minimum_is_an_invalid_declaration() {
             &NotEvaluatedReason::InvalidDeclaration
         );
     }
+}
+
+/// Geometry is a measurement input, not a threshold. An impossible arrangement
+/// is a declaration defect, and must not reach an adapter.
+#[test]
+fn impossible_shelf_geometry_is_an_invalid_declaration() {
+    let mut rule = rule();
+    rule.parameters.insert(
+        "top_elevation_metres".into(),
+        ParameterValue::Number { value: 0.0 },
+    );
+    let outcome = evaluate_with(
+        Answer::Measured(LinearInterval::exact(50.0).unwrap()),
+        &rule,
+    );
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
 }

@@ -4,6 +4,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-07
+
+### Fixed
+
+- Published crates no longer name a downstream vendor or internal repository
+  path. `0.1.3` shipped 36 such references across 21 files, including every
+  crate README, and is yanked; `0.1.0`-`0.1.2` carry the same leak.
+- Doc comments that explained the neutral model by reference to one vendor now
+  attribute it to "a source format", matching the source-neutrality these
+  crates claim. The reasoning is retained, not deleted.
+
+### Changed
+
+- `check_package_contents.py` reads every shipped text member of every `.crate`
+  and rejects forbidden vendor terms, so the check runs against what a registry
+  would actually receive.
+
 ## [0.1.3] - 2026-09-07
 
 ### Added

@@ -21,7 +21,6 @@ use crate::guard_diagnosis::{GuardDefect, GuardDiagnosis};
 use crate::selection::select_objects;
 use axioval_ir::ObjectId;
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 /// Tolerance for comparing measured lengths, in metres.
 const EPSILON_M: f64 = 1.0e-6;
@@ -112,32 +111,31 @@ impl RuleCapability for HorizontalGuard {
             }
         };
 
-        // A surface reports its worst defect, not one finding per edge: a
-        // reviewer acts on the surface, and burying the missing railing among
-        // twenty coverage notes is how a real defect gets missed.
-        let mut by_surface: BTreeMap<ObjectId, GuardDiagnosis> = BTreeMap::new();
+        // One finding per distinct defect on a surface, not one per edge and
+        // not only the worst. Edges are sample points along the boundary, so a
+        // slab with a short rail on one side and no rail on another has two
+        // separate problems and a reviewer must see both.
+        let mut grouped: BTreeMap<(ObjectId, GuardDefect), Vec<ObjectId>> = BTreeMap::new();
         for edge in measured.edges() {
             let Some(diagnosis) = edge_diagnosis(edge, &policy) else {
                 continue;
             };
-            match by_surface.entry(edge.surface().clone()) {
-                Entry::Vacant(slot) => {
-                    slot.insert(diagnosis);
-                }
-                Entry::Occupied(mut slot) => {
-                    if diagnosis.defect() < slot.get().defect() {
-                        slot.insert(diagnosis);
-                    }
-                }
-            }
+            grouped
+                .entry((edge.surface().clone(), diagnosis.defect()))
+                .or_default()
+                .extend(diagnosis.related().iter().cloned());
         }
-        for (surface, diagnosis) in by_surface {
+        for ((surface, defect), mut related) in grouped {
+            // Each diagnosis sorted its own related elements; merging several
+            // edges can still interleave them, so normalise once more here.
+            related.sort();
+            related.dedup();
             evaluation.push_finding(Finding {
                 rule_id: rule.id.clone(),
                 object_id: surface,
                 severity: Severity::Error,
-                related: diagnosis.related().to_vec(),
-                message: diagnosis.defect().code().to_string(),
+                related,
+                message: defect.code().to_string(),
                 evidence: vec![measured.evidence().clone()],
             });
         }

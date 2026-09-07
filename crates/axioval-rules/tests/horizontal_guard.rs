@@ -424,7 +424,7 @@ fn a_defect_names_the_element_a_reviewer_must_look_at() {
 }
 
 #[test]
-fn a_surface_reports_its_worst_defect_not_one_finding_per_edge() {
+fn a_surface_reports_each_distinct_defect_once_not_one_finding_per_edge() {
     // Same surface, two edges: one merely has a hole, the other has nothing.
     let holed = edge(
         vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
@@ -435,8 +435,8 @@ fn a_surface_reports_its_worst_defect_not_one_finding_per_edge() {
     let outcome = evaluate_edges(vec![holed, bare]);
     assert_eq!(
         outcome.findings().len(),
-        1,
-        "one surface must yield one finding: {:?}",
+        2,
+        "two different defects on one surface must both be reported: {:?}",
         outcome.findings()
     );
     assert_eq!(
@@ -510,4 +510,72 @@ fn each_landing_shortfall_is_named_for_its_own_cause() {
         &rule(),
     );
     assert_eq!(message_of(&too_narrow), "landings_too_small");
+}
+
+/// Related elements are reported in a stable order regardless of the order the
+/// service measured them, so a finding does not churn between runs.
+#[test]
+fn related_elements_are_ordered_independently_of_measurement_order() {
+    let far = GuardCandidate::try_new(oid("z-rail"), 0.05, 0.4, [0.0, 0.5], 0.0, None).unwrap();
+    let near = GuardCandidate::try_new(oid("a-rail"), 0.05, 0.4, [0.5, 1.0], 0.0, None).unwrap();
+    let outcome = evaluate(Ok(edge(vec![far, near], Vec::new(), Vec::new())), &rule());
+    // Both halves are short, so both rails are named across the two sampled
+    // edges. Whatever the set, it must be sorted.
+    let related: Vec<&str> = outcome
+        .findings()
+        .iter()
+        .flat_map(|finding| finding.related.iter())
+        .map(|id| id.local_id.as_str())
+        .collect();
+    let mut sorted = related.clone();
+    sorted.sort_unstable();
+    assert_eq!(
+        related, sorted,
+        "related elements must be sorted, not left in measurement order"
+    );
+    assert!(!related.is_empty(), "the responsible rail must be named");
+}
+
+/// Two edges of one surface, each naming a different rail for the same defect,
+/// merge into one finding whose related elements stay sorted.
+#[test]
+fn related_elements_merged_across_edges_stay_sorted() {
+    let z = GuardCandidate::try_new(oid("z-rail"), 0.05, 0.4, [0.0, 1.0], 0.0, None).unwrap();
+    let a = GuardCandidate::try_new(oid("a-rail"), 0.05, 0.4, [0.0, 1.0], 0.0, None).unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(GuardServiceHandle::new(Arc::new(TwoEdges(
+            edge(vec![z], Vec::new(), Vec::new()),
+            edge(vec![a], Vec::new(), Vec::new()),
+        ))))
+        .unwrap();
+    let project = Project::new(vec![Object::new(oid("slab-1"), "slab")]).unwrap();
+    let outcome = HorizontalGuard.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        &rule(),
+    );
+    let related: Vec<&str> = outcome.findings()[0]
+        .related
+        .iter()
+        .map(|id| id.local_id.as_str())
+        .collect();
+    assert_eq!(
+        related,
+        vec!["a-rail", "z-rail"],
+        "merged set must be sorted"
+    );
+}
+
+struct TwoEdges(GuardEdge, GuardEdge);
+impl GuardService for TwoEdges {
+    fn measure_guard_edges(&self, _search: GuardSearch) -> Result<GuardEvidence, GuardError> {
+        GuardEvidence::try_new(
+            vec![self.0.clone(), self.1.clone()],
+            1,
+            Evidence::exact(source(), "guard:edges"),
+        )
+    }
 }

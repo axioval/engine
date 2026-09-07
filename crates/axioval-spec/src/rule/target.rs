@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Target {
-    /// the provider `.cset` (Java-serialized the vendor `ConstraintModel` graph).
+    /// Vendor `.cset` (Java-serialized constraint-model graph).
     Cset,
     /// buildingSMART IDS XML.
     Ids,

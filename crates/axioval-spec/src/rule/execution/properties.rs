@@ -17,7 +17,7 @@ pub enum SimilarityScope {
 /// family through `PropertyReference.getStringValue`, so each variant must
 /// resolve to a display string through an accessor that is actually grounded;
 /// the codec refuses references whose accessor would silently read something
-/// other than what the provider compares.
+/// other than what the source compares.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsistentPropertyRef {
     /// Native TYPE designation (the wildcard `TypeWildcard` reference).

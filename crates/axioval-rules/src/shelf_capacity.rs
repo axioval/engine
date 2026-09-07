@@ -4,7 +4,7 @@
 //! [`LinearQuantityServiceHandle`]; the decision -- whether that clears the
 //! declared minimum -- is made here, in source-neutral policy.
 //!
-//! In the the provider application this comparison lived inside
+//! In the source application this comparison lived inside
 //! `production/accessibility`-style adapter code, so the rule could only
 //! restate a verdict it had already been handed. Splitting it this way is what
 //! lets the rule port without dragging an IFC-shaped verdict producer along.

@@ -515,7 +515,7 @@ mod tests {
     ///
     /// Native `TotalFilter` only builds match branches for INCLUDE rows, so an
     /// empty or exclude-only filter authors an empty selector. Rejecting that
-    /// at the spec gate would refuse check sets that the provider itself loads and
+    /// at the spec gate would refuse check sets that source tools load and
     /// runs (to zero findings).
     #[test]
     fn property_predicate_validation_accepts_an_inactive_plan_as_a_no_op() {

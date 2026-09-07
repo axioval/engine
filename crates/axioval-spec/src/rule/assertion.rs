@@ -68,12 +68,12 @@ pub enum AssertionSpec {
     /// silently reporting "passes" for each element in isolation.
     ///
     /// `source` names *which* value is the identifier — an IFC attribute
-    /// (`name`, `object_type`) or a property — because the provider's
+    /// (`name`, `object_type`) or a property — because the source
     /// `UniqueSpaceNumberConstraint` lets the author choose, and most IFC
     /// exports write a space's "Number" into its `Name` attribute.
     ValueUnique {
         source: IdentifierRef,
-        /// Whether a missing or blank value is itself a problem. the provider reports
+        /// Whether a missing or blank value is itself a problem. Sources report
         /// it as the separate "no identifier" issue, so it is a distinct flag
         /// rather than being implied by uniqueness.
         #[serde(default)]

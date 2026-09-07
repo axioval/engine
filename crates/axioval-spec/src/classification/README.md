@@ -104,13 +104,13 @@ This single sentence justifies most of the design below.
 
 ## 2. Why the existing tools do not cover it
 
-### the provider filters
+### Vendor filter tables
 
 `ClassAndPropertyFilter` = class + property + operator + value, composed into
 And/Or/Not trees. Every project exception becomes another row, duplicated into
 every rule that needs it. No name, no provenance, no reuse.
 
-### the provider classifications
+### Vendor classifications
 
 Better: a **named** artifact with ordered rows, a `MatchMethod`
 (`FirstMatch`/`BestMatch`/`AllMatching`), provenance (`source`, `edition`), and
@@ -399,7 +399,7 @@ accident.
   instantly.
 - **Do not invent an ontology format.** IFC, IDS and SHACL exist. Lower to them
   where possible; extend only where they provably cannot express the domain.
-- **Do not let vendor concepts in.** No `SSpace`, no the provider formula dialect.
+- **Do not let vendor concepts in.** No vendor class leaves, no vendor formula dialect.
   Those belong at the `codec` lowering boundary.
 - **Do not conflate applicability with identity.** "Is this a wall?" and "does
   this wall comply?" are different questions. IDS blurs them; we should not.

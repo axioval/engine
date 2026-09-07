@@ -1,7 +1,7 @@
 //! Format-neutral plans for small reusable model checks.
 //!
 //! These plans describe executable capabilities. They deliberately contain no
-//! the provider class names or source-format vocabulary; codecs own that mapping.
+//! vendor class names or source-format vocabulary; codecs own that mapping.
 
 use serde::{Deserialize, Serialize};
 

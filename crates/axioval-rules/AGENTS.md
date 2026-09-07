@@ -2,7 +2,7 @@
 
 Maintained source-neutral capability policy and shared rule algorithms.
 
-Capabilities may depend on Axioval IR and typed host-service interfaces, never concrete OpenBIM, ICDD, Axiolid, the provider, STEP, or vendor CAD types. Source interpretation belongs in adapters.
+Capabilities may depend on Axioval IR and typed host-service interfaces, never concrete OpenBIM, ICDD, Axiolid, STEP, or vendor CAD types. Source interpretation belongs in adapters.
 
 `property_rules.rs` owns property compliance policy; `selection.rs` owns fail-closed selector evaluation. Both must resolve property values and absences through `PropertyResolutionServiceHandle`. Never infer absence from a missing `Object.properties` entry, and never silently skip an object when a property selector cannot be resolved exactly. `property-exists` means exact presence even when a source value is null or blank; `property-required` is the stronger non-empty contract and treats exact absence, null, and blank text as violations without converting adapter failures into findings.
 

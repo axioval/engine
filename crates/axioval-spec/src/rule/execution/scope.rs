@@ -19,7 +19,7 @@ pub enum ElementScopeCombine {
     /// Compatibility mode used by the original four CSET bindings.
     #[default]
     AnyClause,
-    /// the provider `TotalFilter`: AND include clauses inside one IFC-type group,
+    /// Source `TotalFilter`: AND include clauses inside one IFC-type group,
     /// then OR the groups. Excludes remain negations after group selection.
     AllPerType,
 }

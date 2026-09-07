@@ -1,6 +1,6 @@
 //! Applicability — *which* model elements a rule inspects.
 //!
-//! This is the format-neutral selector model. the provider expresses it as
+//! This is the format-neutral selector model. One source format expresses it as
 //! `ClassAndPropertyFilter` chains; IDS as `<applicability>` facets; `OpenBimRL`
 //! as node/predicate selectors. The IR keeps a small, composable selector set
 //! that all three can lower from.

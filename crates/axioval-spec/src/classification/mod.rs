@@ -5,7 +5,7 @@
 //!
 //! # Filter is the primitive; classification is the abstraction
 //!
-//! the provider expresses element selection two ways, and the corpus settles how
+//! Source formats express element selection two ways, and the corpus settles how
 //! they relate: a `ClassificationDocument` **contains** `filters`, while a
 //! `ClassAndPropertyFilter` contains no classification. The containment is
 //! one-directional, so these are not siblings — a classification is a *named,
@@ -38,12 +38,12 @@
 //!   are evaluated per component at check time. Flattening one to a literal
 //!   name produces confidently wrong output.
 //!
-//! # Deliberately not the provider-shaped
+//! # Deliberately not source-shaped
 //!
 //! "A named group of elements defined by predicates" exists in every BIM tool —
 //! `IfcClassification`/`IfcGroup`, Navisworks selection sets, Revit filters,
 //! IDS `applicability`. A neutral scheme lowers to any of them. Vendor
-//! specifics (the `SSpace` class leaf, the provider's formula dialect) belong at the
+//! specifics (a vendor class leaf, a vendor formula dialect) belong at the
 //! lowering boundary in `codec`, never here.
 
 pub mod expr;

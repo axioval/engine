@@ -1,6 +1,6 @@
 //! Boolean composition over [`Predicate`]s.
 //!
-//! the provider composes filter rows into `OrFilter` / `AndFilter` / `NotFilter`
+//! One source format composes filter rows into `OrFilter` / `AndFilter` / `NotFilter`
 //! trees; this is the neutral form of that tree. It is deliberately a *separate*
 //! layer from [`crate::classification::predicate::State`]: include/exclude/ignore is
 //! a property of a row within a set, while And/Or/Not is a property of the
@@ -77,7 +77,7 @@ impl Expr {
 
     /// Depth of the tree — 0 for a leaf or `Any`.
     ///
-    /// A target whose filter model is a flat row table (the provider's `.filter`)
+    /// A target whose filter model is a flat row table (a `.filter` table)
     /// can represent depth ≤ 1 of a single connective; deeper trees need the
     /// lowering to say so rather than silently flatten. See R12.
     pub fn depth(&self) -> usize {

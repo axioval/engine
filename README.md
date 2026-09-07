@@ -42,9 +42,9 @@ See [PLAN.md](PLAN.md), [architecture](docs/src/architecture.md), and the [contr
 
 ## Status
 
-Active extraction from `projects/vendor/the provider`. Compatibility is tracked capability-by-capability in [the migration ledger](docs/src/migration.md). A capability is not marked migrated until the provider consumes the Axioval implementation and parity gates pass.
+Capability compatibility is tracked capability-by-capability in [the migration ledger](docs/src/migration.md). A capability is not marked migrated until a downstream host consumes the Axioval implementation and parity gates pass.
 
-The published `0.1.1` facade contains the bounded property-comparison slice and `axioval:capability.property-required`, which treats exact absence, null, and blank text as violations while preserving adapter failures as not-evaluated. the provider consumes the former through `0.1.0`; required-property remains unmigrated until its production cutover is certified.
+The published facade contains the bounded property-comparison slice and `axioval:capability.property-required`, which treats exact absence, null, and blank text as violations while preserving adapter failures as not-evaluated. Required-property remains unmigrated until its production cutover is certified.
 
 ## License
 

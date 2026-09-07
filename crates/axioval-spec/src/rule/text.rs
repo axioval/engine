@@ -1,6 +1,6 @@
 //! Localized display text.
 //!
-//! the provider stores rule/folder labels as `LocalizedString` (a `lang -> text`
+//! Some sources store rule/folder labels as `LocalizedString` (a `lang -> text`
 //! map); IDS uses plain strings; `OpenBimRL` uses identifiers. The canonical IR
 //! keeps a small locale map and lets each backend pick the locale it needs.
 

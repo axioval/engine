@@ -24,7 +24,7 @@ pub struct RuleInstance {
     pub id: String,
     /// The [`crate::rule::definition::RuleDefinition::id`] this instantiates.
     pub definition_id: String,
-    /// Display name for this instance (the provider rule name / IDS spec name).
+    /// Display name for this instance (source rule name / IDS spec name).
     #[serde(default, skip_serializing_if = "LocalizedText::is_empty")]
     pub name: LocalizedText,
     /// Parameter values keyed by [`crate::rule::param::ParameterSpec::id`].
@@ -74,7 +74,7 @@ impl RuleInstance {
     }
 }
 
-/// A folder in the ruleset tree (the provider nests rulesets as `ConstraintModel`s).
+/// A folder in the ruleset tree (sources may nest rulesets as models).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RuleFolder {
     #[serde(default, skip_serializing_if = "LocalizedText::is_empty")]

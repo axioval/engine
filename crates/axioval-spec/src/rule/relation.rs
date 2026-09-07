@@ -25,7 +25,7 @@ pub enum EntityRelationSpec {
     /// Provider-derived nearest-space relation. This cannot be inferred from
     /// IFC relationship records and must be supplied by the model provider.
     NearestSpaces,
-    /// Provider spatial-reference relation (`SContainsReferenced` in the provider).
+    /// Provider spatial-reference relation (a contains-referenced relation).
     SpatialReference,
     /// Exact provider-derived geometry containment (`SContains` / nearest-space
     /// geometry mode). This is never synthesized from envelopes or IFC props.

@@ -148,7 +148,7 @@ pub struct Scheme {
     /// Ordered rows. Order is load-bearing under [`MatchMethod::FirstMatch`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<SchemeRow>,
-    /// Explicit rows from the provider's classification-name/defaultData table.
+    /// Explicit rows from a classification-name/defaultData table.
     /// They may exist without a literal rule assignment in formula-based schemes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub names: Vec<SchemeName>,

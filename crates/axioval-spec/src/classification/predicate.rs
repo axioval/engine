@@ -7,7 +7,7 @@
 //!
 //! # Vendor-neutral by construction
 //!
-//! the provider stores a component class as a leaf class name (`SWall`), IFC calls
+//! One source format stores a component class as a leaf class name, IFC calls
 //! it `IfcWall`, Revit calls it something else again. The IR stores the
 //! **canonical** concept and leaves the vendor spelling to the lowering in
 //! `codec`. A predicate that mentioned `SWall` would have leaked the vendor into
@@ -17,14 +17,14 @@ use serde::{Deserialize, Serialize};
 
 /// How a [`Predicate`] participates in its containing set.
 ///
-/// 🚨 This is **not** boolean negation — `Ignore` is a third state the provider's
+/// 🚨 This is **not** boolean negation — `Ignore` is a third state the source
 /// `filterState` really carries, and collapsing it to include/exclude changes
 /// which components are checked. `Not` composition lives in
 /// [`crate::classification::expr::Expr`], deliberately separate.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum State {
-    /// The row contributes matches. the provider's default when unset.
+    /// The row contributes matches. The source default when unset.
     #[default]
     Include,
     /// The row removes matches contributed by other rows.
@@ -65,10 +65,10 @@ pub enum Operator {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Subject {
     /// The component's entity class, canonically (`Wall`, `Slab`, `Space`).
-    /// Lowered to `SWall` for the provider, `IfcWall` for IFC/IDS.
+    /// Lowered to a leaf class name by the source codec, `IfcWall` for IFC/IDS.
     ComponentClass,
     /// A built-in identification field (`Name`, `Type`, `Description`,
-    /// `GUID`, …). the provider models these as `IdentificationPropertyReference`.
+    /// `GUID`, …), modelled by some sources as an identification reference.
     Identification { field: String },
     /// A property in a named property set (`Pset_WallCommon.LoadBearing`).
     Property { set: String, name: String },

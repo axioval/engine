@@ -6,6 +6,7 @@ use axioval_engine::{CapabilityRegistry, EngineError};
 mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
+mod guard_diagnosis;
 mod horizontal_guard;
 mod property_comparison;
 mod property_rules;
@@ -17,6 +18,7 @@ mod space_validation;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
+pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
 pub use property_comparison::PropertyComparison;
 pub use property_rules::{

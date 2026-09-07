@@ -17,7 +17,11 @@ use axioval_engine::{
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Finding, Severity};
 
+use crate::guard_diagnosis::{GuardDefect, GuardDiagnosis};
 use crate::selection::select_objects;
+use axioval_ir::ObjectId;
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 /// Tolerance for comparing measured lengths, in metres.
 const EPSILON_M: f64 = 1.0e-6;
@@ -108,16 +112,32 @@ impl RuleCapability for HorizontalGuard {
             }
         };
 
+        // A surface reports its worst defect, not one finding per edge: a
+        // reviewer acts on the surface, and burying the missing railing among
+        // twenty coverage notes is how a real defect gets missed.
+        let mut by_surface: BTreeMap<ObjectId, GuardDiagnosis> = BTreeMap::new();
         for edge in measured.edges() {
-            let Some(message) = edge_problem(edge, &policy) else {
+            let Some(diagnosis) = edge_diagnosis(edge, &policy) else {
                 continue;
             };
+            match by_surface.entry(edge.surface().clone()) {
+                Entry::Vacant(slot) => {
+                    slot.insert(diagnosis);
+                }
+                Entry::Occupied(mut slot) => {
+                    if diagnosis.defect() < slot.get().defect() {
+                        slot.insert(diagnosis);
+                    }
+                }
+            }
+        }
+        for (surface, diagnosis) in by_surface {
             evaluation.push_finding(Finding {
                 rule_id: rule.id.clone(),
-                object_id: edge.surface().clone(),
+                object_id: surface,
                 severity: Severity::Error,
-                related: Vec::new(),
-                message,
+                related: diagnosis.related().to_vec(),
+                message: diagnosis.defect().code().to_string(),
                 evidence: vec![measured.evidence().clone()],
             });
         }
@@ -173,35 +193,113 @@ fn sample_spacing(policy: &Policy) -> f64 {
 }
 
 /// Describes why an edge is unguarded, or `None` when it is protected.
-fn edge_problem(edge: &GuardEdge, policy: &Policy) -> Option<String> {
+/// Which defect an edge has, or `None` when it is adequately guarded.
+///
+/// Barrier protection is decided first: an edge covered by barriers that are
+/// tall enough is safe unless something climbable defeats them. Only an edge
+/// without adequate barrier coverage falls through to landings, where a short
+/// fall onto something wide enough to stand on is also safe.
+fn edge_diagnosis(edge: &GuardEdge, policy: &Policy) -> Option<GuardDiagnosis> {
+    let barriers = adequate_barriers(edge, policy);
     let barrier_coverage = GuardEdge::covered_fraction(
-        &adequate_barriers(edge, policy),
+        &barriers,
         policy
             .maximum_barrier_gap_metres
             .max(policy.maximum_platform_gap_metres),
     );
+
     if barrier_coverage >= REQUIRED_COVERAGE {
+        // The barrier covers the edge; only a climbable object can defeat it.
         return defeating_climbable(edge, policy).map(|climbable| {
-            format!(
-                "barrier can be climbed from an object {:.3} m away",
-                climbable.distance_to_barrier_metres()
+            GuardDiagnosis::new(
+                GuardDefect::BarrierTooLowDueToClimbableObject,
+                [climbable.element().clone()],
             )
         });
     }
 
-    let landing_coverage = GuardEdge::covered_fraction(
-        &adequate_landings(edge, policy),
-        policy.maximum_landing_gap_metres,
-    );
+    // Barriers reach the edge but do not protect it: name why. A barrier
+    // filtered out of `adequate_barriers` is too short, so the unfiltered list
+    // is what distinguishes "too low" from "absent".
+    if let Some(tallest) = tallest_reaching_barrier(edge, policy) {
+        let mut defects = Vec::new();
+        if barrier_height(&tallest, policy) + EPSILON_M < policy.minimum_barrier_height_metres {
+            // The curb is the *reason* the barrier is short, so it is the more
+            // specific and more actionable diagnosis of the two.
+            let defect = if curb_lowers_barrier(&tallest, policy) {
+                GuardDefect::BarrierTooLowDueToCurb
+            } else {
+                GuardDefect::BarrierTooLow
+            };
+            defects.push(GuardDiagnosis::new(defect, [tallest.element().clone()]));
+        } else if barrier_coverage > 0.0 {
+            // Tall enough somewhere, but not along the whole edge.
+            defects.push(GuardDiagnosis::new(
+                GuardDefect::HoleInBarrier,
+                [tallest.element().clone()],
+            ));
+        }
+        if let Some(worst) = GuardDiagnosis::worst(defects) {
+            return Some(worst);
+        }
+    }
+
+    let landings = adequate_landings(edge, policy);
+    let landing_coverage =
+        GuardEdge::covered_fraction(&landings, policy.maximum_landing_gap_metres);
     if landing_coverage >= REQUIRED_COVERAGE {
         return None;
     }
 
-    Some(format!(
-        "edge is {:.1}% guarded by barriers and {:.1}% by landings",
-        barrier_coverage * 100.0,
-        landing_coverage * 100.0
-    ))
+    // No adequate protection. If a landing was measured at all, the way it
+    // falls short is more useful than "missing barrier".
+    if let Some(nearest) = nearest_landing(edge) {
+        let defect = if nearest.horizontal_gap_metres() > policy.maximum_landing_gap_metres {
+            GuardDefect::LandingTooFarAway
+        } else if -nearest.top_offset_metres() > policy.maximum_fall_height_metres + EPSILON_M {
+            GuardDefect::LandingTooLow
+        } else if nearest.landing_width_metres() + EPSILON_M < policy.minimum_landing_width_metres {
+            GuardDefect::LandingsTooSmall
+        } else {
+            GuardDefect::InsufficientLandings
+        };
+        return Some(GuardDiagnosis::new(defect, [nearest.element().clone()]));
+    }
+
+    Some(GuardDiagnosis::new(GuardDefect::MissingBarrier, []))
+}
+
+/// The tallest barrier close enough to the edge to matter, regardless of
+/// whether it is tall enough. Distinguishes an inadequate barrier from none.
+fn tallest_reaching_barrier(edge: &GuardEdge, policy: &Policy) -> Option<GuardCandidate> {
+    edge.barriers()
+        .iter()
+        .filter(|barrier| {
+            barrier.horizontal_gap_metres() <= policy.maximum_platform_gap_metres + EPSILON_M
+        })
+        .max_by(|left, right| {
+            barrier_height(left, policy).total_cmp(&barrier_height(right, policy))
+        })
+        .cloned()
+}
+
+/// The landing nearest the edge, whatever its quality.
+fn nearest_landing(edge: &GuardEdge) -> Option<GuardCandidate> {
+    edge.landings()
+        .iter()
+        .min_by(|left, right| {
+            left.horizontal_gap_metres()
+                .total_cmp(&right.horizontal_gap_metres())
+        })
+        .cloned()
+}
+
+/// Whether the barrier only reaches the required height when measured from the
+/// floor rather than the curb it stands on.
+fn curb_lowers_barrier(barrier: &GuardCandidate, policy: &Policy) -> bool {
+    policy.measure_barrier_from_curb
+        && barrier.curb_top_offset_metres().is_some()
+        && barrier.top_offset_metres() + EPSILON_M >= policy.minimum_barrier_height_metres
 }
 
 /// Barriers tall enough to stop a fall.

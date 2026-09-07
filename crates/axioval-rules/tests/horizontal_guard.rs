@@ -129,7 +129,7 @@ fn a_barrier_below_the_required_height_does_not_protect() {
         &rule(),
     );
     assert_eq!(outcome.findings().len(), 1);
-    assert!(outcome.findings()[0].message.contains("guarded"));
+    assert_eq!(outcome.findings()[0].message, "barrier_too_low");
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn partial_barrier_coverage_is_not_protection() {
         &rule(),
     );
     assert_eq!(outcome.findings().len(), 1);
-    assert!(outcome.findings()[0].message.contains("50.0%"));
+    assert_eq!(outcome.findings()[0].message, "hole_in_barrier");
 }
 
 /// Two rails guarding the same half do not add up to a guarded edge.
@@ -221,7 +221,10 @@ fn a_climbable_object_defeats_an_otherwise_adequate_barrier() {
         &rule(),
     );
     assert_eq!(outcome.findings().len(), 1);
-    assert!(outcome.findings()[0].message.contains("climbed"));
+    assert_eq!(
+        outcome.findings()[0].message,
+        "barrier_too_low_due_to_climbable_object"
+    );
 }
 
 #[test]
@@ -321,4 +324,190 @@ fn invalid_declaration_is_refused() {
         outcome.not_evaluated_outcomes()[0].reason(),
         &NotEvaluatedReason::InvalidDeclaration
     );
+}
+
+// ---------------------------------------------------------------------------
+// Defect naming and per-surface grouping.
+//
+// A capability that reports only "not guarded" is not actionable. These pin
+// that each defect is named, and that a surface reports its worst one.
+// ---------------------------------------------------------------------------
+
+/// Serves several edges of the same surface from one measurement.
+struct MultiEdge(Vec<GuardEdge>);
+
+impl GuardService for MultiEdge {
+    fn measure_guard_edges(&self, _search: GuardSearch) -> Result<GuardEvidence, GuardError> {
+        GuardEvidence::try_new(self.0.clone(), 1, Evidence::exact(source(), "guard:edges"))
+    }
+}
+
+fn evaluate_edges(edges: Vec<GuardEdge>) -> axioval_engine::CapabilityEvaluation {
+    let project = Project::new(vec![Object::new(oid("slab-1"), "slab")]).unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(GuardServiceHandle::new(Arc::new(MultiEdge(edges))))
+        .unwrap();
+    HorizontalGuard.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        &rule(),
+    )
+}
+
+fn message_of(outcome: &axioval_engine::CapabilityEvaluation) -> String {
+    assert_eq!(outcome.findings().len(), 1, "{:?}", outcome.findings());
+    outcome.findings()[0].message.clone()
+}
+
+#[test]
+fn an_edge_with_nothing_near_it_names_a_missing_barrier() {
+    let outcome = evaluate(Ok(edge(Vec::new(), Vec::new(), Vec::new())), &rule());
+    assert_eq!(message_of(&outcome), "missing_barrier");
+}
+
+#[test]
+fn a_short_barrier_is_named_too_low_not_merely_unguarded() {
+    let outcome = evaluate(
+        Ok(edge(
+            vec![barrier(0.05, 0.4, [0.0, 1.0], None)],
+            Vec::new(),
+            Vec::new(),
+        )),
+        &rule(),
+    );
+    assert_eq!(message_of(&outcome), "barrier_too_low");
+}
+
+#[test]
+fn a_tall_barrier_covering_part_of_the_edge_is_named_a_hole() {
+    let outcome = evaluate(
+        Ok(edge(
+            vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
+            Vec::new(),
+            Vec::new(),
+        )),
+        &rule(),
+    );
+    assert_eq!(message_of(&outcome), "hole_in_barrier");
+}
+
+#[test]
+fn a_climbable_object_beside_an_adequate_barrier_is_named() {
+    let outcome = evaluate(
+        Ok(edge(
+            vec![barrier(0.05, 1.2, [0.0, 1.0], None)],
+            Vec::new(),
+            vec![climbable(0.1, 0.5, 0.4)],
+        )),
+        &rule(),
+    );
+    assert_eq!(
+        message_of(&outcome),
+        "barrier_too_low_due_to_climbable_object"
+    );
+}
+
+#[test]
+fn a_defect_names_the_element_a_reviewer_must_look_at() {
+    let outcome = evaluate(
+        Ok(edge(
+            vec![barrier(0.05, 0.4, [0.0, 1.0], None)],
+            Vec::new(),
+            Vec::new(),
+        )),
+        &rule(),
+    );
+    assert_eq!(outcome.findings()[0].related, vec![oid("rail")]);
+}
+
+#[test]
+fn a_surface_reports_its_worst_defect_not_one_finding_per_edge() {
+    // Same surface, two edges: one merely has a hole, the other has nothing.
+    let holed = edge(
+        vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
+        Vec::new(),
+        Vec::new(),
+    );
+    let bare = edge(Vec::new(), Vec::new(), Vec::new());
+    let outcome = evaluate_edges(vec![holed, bare]);
+    assert_eq!(
+        outcome.findings().len(),
+        1,
+        "one surface must yield one finding: {:?}",
+        outcome.findings()
+    );
+    assert_eq!(
+        outcome.findings()[0].message,
+        "missing_barrier",
+        "the worst defect must win, not the first measured"
+    );
+}
+
+#[test]
+fn worst_defect_selection_is_independent_of_measurement_order() {
+    let holed = edge(
+        vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
+        Vec::new(),
+        Vec::new(),
+    );
+    let bare = edge(Vec::new(), Vec::new(), Vec::new());
+    let forward = evaluate_edges(vec![holed.clone(), bare.clone()]);
+    let reversed = evaluate_edges(vec![bare, holed]);
+    assert_eq!(
+        forward.findings()[0].message,
+        reversed.findings()[0].message
+    );
+}
+
+#[test]
+fn a_barrier_tall_only_from_its_curb_is_named_distinctly() {
+    // Tall enough measured from the floor, but it stands on a curb: the
+    // exposed part is what stops a fall. This must not read as a plain
+    // "barrier_too_low" -- the remedy is different.
+    let outcome = evaluate(
+        Ok(edge(
+            vec![barrier(0.05, 1.2, [0.0, 1.0], Some(0.9))],
+            Vec::new(),
+            Vec::new(),
+        )),
+        &rule_with(&[(
+            "measure_barrier_from_curb",
+            ParameterValue::Boolean { value: true },
+        )]),
+    );
+    assert_eq!(
+        message_of(&outcome),
+        "barrier_too_low_due_to_curb",
+        "a curb-lowered barrier needs its own diagnosis"
+    );
+}
+
+#[test]
+fn each_landing_shortfall_is_named_for_its_own_cause() {
+    // Same edge, same missing protection, three different reasons -- a
+    // reviewer needs to know which one to fix.
+    let too_far = evaluate(
+        Ok(edge(Vec::new(), vec![landing(5.0, -0.2, 2.0)], Vec::new())),
+        &rule(),
+    );
+    assert_eq!(message_of(&too_far), "landing_too_far_away");
+
+    let too_low = evaluate(
+        Ok(edge(Vec::new(), vec![landing(0.05, -3.0, 2.0)], Vec::new())),
+        &rule(),
+    );
+    assert_eq!(message_of(&too_low), "landing_too_low");
+
+    let too_narrow = evaluate(
+        Ok(edge(
+            Vec::new(),
+            vec![landing(0.05, -0.2, 0.05)],
+            Vec::new(),
+        )),
+        &rule(),
+    );
+    assert_eq!(message_of(&too_narrow), "landings_too_small");
 }

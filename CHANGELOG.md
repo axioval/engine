@@ -4,6 +4,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-07
+
+### Fixed
+
+- A barrier is treated as present on an edge only when it runs along more than
+  half of it, matching the native gate. A stub of railing beside a long open
+  edge now reports `missing_barrier` rather than `hole_in_barrier`: the first
+  tells a reviewer the railing was never built, the second sends them looking
+  for a gap to close.
+
 ## [0.1.10] - 2026-09-07
 
 ### Fixed

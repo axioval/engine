@@ -26,6 +26,8 @@ use std::collections::BTreeMap;
 const EPSILON_M: f64 = 1.0e-6;
 /// An edge is guarded when this much of it is covered.
 const REQUIRED_COVERAGE: f64 = 1.0 - 1.0e-6;
+/// A barrier is *present* on an edge only when it runs along more than half.
+const BARRIER_PRESENT_COVERAGE: f64 = 0.5;
 
 /// Requires exposed edges of walking surfaces to be guarded against falls.
 pub struct HorizontalGuard;
@@ -216,10 +218,21 @@ fn edge_diagnosis(edge: &GuardEdge, policy: &Policy) -> Option<GuardDiagnosis> {
         });
     }
 
-    // Barriers reach the edge but do not protect it: name why. A barrier
-    // filtered out of `adequate_barriers` is too short, so the unfiltered list
-    // is what distinguishes "too low" from "absent".
-    if let Some(tallest) = tallest_reaching_barrier(edge, policy) {
+    // A barrier only counts as *present* on this edge when it runs along more
+    // than half of it. Below that the edge is unprotected regardless of how
+    // tall the stub is, and the fall itself is what matters -- so the landing
+    // branch decides. Without this gate a single short railing beside a long
+    // open edge reports `hole_in_barrier` instead of `missing_barrier`.
+    let reaching = reaching_barriers(edge, policy);
+    let reaching_coverage = GuardEdge::covered_fraction(
+        &reaching,
+        policy
+            .maximum_barrier_gap_metres
+            .max(policy.maximum_platform_gap_metres),
+    );
+    if reaching_coverage > BARRIER_PRESENT_COVERAGE
+        && let Some(tallest) = tallest_reaching_barrier(edge, policy)
+    {
         let mut defects = Vec::new();
         if barrier_height(&tallest, policy) + EPSILON_M < policy.minimum_barrier_height_metres {
             // The curb is the *reason* the barrier is short, so it is the more
@@ -269,6 +282,17 @@ fn edge_diagnosis(edge: &GuardEdge, policy: &Policy) -> Option<GuardDiagnosis> {
 
 /// The tallest barrier close enough to the edge to matter, regardless of
 /// whether it is tall enough. Distinguishes an inadequate barrier from none.
+/// Every barrier close enough to the edge to count, whatever its height.
+fn reaching_barriers(edge: &GuardEdge, policy: &Policy) -> Vec<GuardCandidate> {
+    edge.barriers()
+        .iter()
+        .filter(|barrier| {
+            barrier.horizontal_gap_metres() <= policy.maximum_platform_gap_metres + EPSILON_M
+        })
+        .cloned()
+        .collect()
+}
+
 fn tallest_reaching_barrier(edge: &GuardEdge, policy: &Policy) -> Option<GuardCandidate> {
     edge.barriers()
         .iter()

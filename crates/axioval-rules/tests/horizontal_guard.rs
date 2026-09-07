@@ -150,7 +150,7 @@ fn a_barrier_too_far_from_the_edge_does_not_protect() {
 fn partial_barrier_coverage_is_not_protection() {
     let outcome = evaluate(
         Ok(edge(
-            vec![barrier(0.0, 1.2, [0.0, 0.5], None)],
+            vec![barrier(0.0, 1.2, [0.0, 0.6], None)],
             vec![],
             vec![],
         )),
@@ -385,7 +385,7 @@ fn a_short_barrier_is_named_too_low_not_merely_unguarded() {
 fn a_tall_barrier_covering_part_of_the_edge_is_named_a_hole() {
     let outcome = evaluate(
         Ok(edge(
-            vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
+            vec![barrier(0.05, 1.2, [0.0, 0.7], None)],
             Vec::new(),
             Vec::new(),
         )),
@@ -427,7 +427,7 @@ fn a_defect_names_the_element_a_reviewer_must_look_at() {
 fn a_surface_reports_each_distinct_defect_once_not_one_finding_per_edge() {
     // Same surface, two edges: one merely has a hole, the other has nothing.
     let holed = edge(
-        vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
+        vec![barrier(0.05, 1.2, [0.0, 0.7], None)],
         Vec::new(),
         Vec::new(),
     );
@@ -578,4 +578,26 @@ impl GuardService for TwoEdges {
             Evidence::exact(source(), "guard:edges"),
         )
     }
+}
+
+/// A stub of railing beside a long open edge is not a barrier with a hole in
+/// it -- the edge is simply unguarded. Native gates the whole barrier branch
+/// on more than half the edge being reached, and the distinction matters: a
+/// reviewer told `hole_in_barrier` looks for a gap to close, while
+/// `missing_barrier` says the railing was never built.
+#[test]
+fn a_barrier_along_less_than_half_the_edge_is_absent_not_holed() {
+    let outcome = evaluate(
+        Ok(edge(
+            vec![barrier(0.05, 1.2, [0.0, 0.4], None)],
+            Vec::new(),
+            Vec::new(),
+        )),
+        &rule(),
+    );
+    assert_eq!(
+        message_of(&outcome),
+        "missing_barrier",
+        "a barrier covering 40% of the edge is not present on it"
+    );
 }

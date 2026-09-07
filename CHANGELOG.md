@@ -4,6 +4,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-09-07
+
+### Fixed
+
+- Space-validation findings carry their related objects: the body a space
+  overlaps, the elements along an uncovered boundary run, and the elements
+  covering a cap. Only duplicate findings did before, so the rest said
+  something was wrong without saying where.
+
 ## [0.1.7] - 2026-09-07
 
 ### Fixed

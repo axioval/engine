@@ -402,3 +402,27 @@ fn invalid_declaration_is_refused() {
         &NotEvaluatedReason::InvalidDeclaration
     );
 }
+
+/// Every finding names the objects a reviewer must open: the body a space
+/// overlaps, the elements along an uncovered boundary, the elements covering a
+/// cap. Without them the message says something is wrong but not where.
+#[test]
+fn findings_name_the_objects_a_reviewer_must_open() {
+    let overlap = evaluate(
+        Stub {
+            overlaps: Some(Ok(vec![(false, 2.0, 1.0, Containment::Partial)])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert_eq!(overlap.findings()[0].related, vec![oid("other")]);
+
+    let boundary = evaluate(
+        Stub {
+            gaps: Some(Ok(vec![(2.0, vec![oid("wall-1")])])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert_eq!(boundary.findings()[0].related, vec![oid("wall-1")]);
+}

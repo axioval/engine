@@ -270,13 +270,22 @@ fn check_boundary(
                 .map(axioval_engine::BoundaryGap::length_metres)
                 .sum();
             if total > 0.0 {
-                evaluation.push_finding(finding(
-                    rule,
-                    space.clone(),
-                    Severity::Warning,
-                    format!("{total:.3} m of space boundary is uncovered"),
-                    evidence,
-                ));
+                // The elements along the uncovered runs, so a reviewer can
+                // see which boundary is short.
+                let related = gaps
+                    .iter()
+                    .filter(|gap| gap.length_metres() >= policy.uncovered_segment_length_metres)
+                    .flat_map(|gap| gap.elements().iter().cloned());
+                evaluation.push_finding(
+                    finding(
+                        rule,
+                        space.clone(),
+                        Severity::Warning,
+                        format!("{total:.3} m of space boundary is uncovered"),
+                        evidence,
+                    )
+                    .with_related(related),
+                );
             }
         }
         Err(error) => {
@@ -316,13 +325,11 @@ fn check_overlaps(
                     Containment::Partial => None,
                 };
                 if let Some(message) = message {
-                    evaluation.push_finding(finding(
-                        rule,
-                        space.clone(),
-                        Severity::Error,
-                        message,
-                        evidence,
-                    ));
+                    evaluation.push_finding(
+                        finding(rule, space.clone(), Severity::Error, message, evidence)
+                            // The body it overlaps, so a reviewer can open it.
+                            .with_related([overlap.other().clone()]),
+                    );
                 }
             }
         }
@@ -343,20 +350,26 @@ fn check_cap(
     match service.measure_cap_coverage(space, cap) {
         Ok(coverage) => {
             if let Some((severity, ratio)) = cap_shortfall(&coverage) {
-                evaluation.push_finding(finding(
-                    rule,
-                    space.clone(),
-                    severity,
-                    format!(
-                        "{} cap only {:.1}% covered",
-                        match cap {
-                            Cap::Top => "top",
-                            Cap::Bottom => "bottom",
-                        },
-                        ratio * 100.0
-                    ),
-                    evidence,
-                ));
+                let related = coverage.elements().to_vec();
+                evaluation.push_finding(
+                    finding(
+                        rule,
+                        space.clone(),
+                        severity,
+                        format!(
+                            "{} cap only {:.1}% covered",
+                            match cap {
+                                Cap::Top => "top",
+                                Cap::Bottom => "bottom",
+                            },
+                            ratio * 100.0
+                        ),
+                        evidence,
+                    )
+                    // The elements covering the cap, so a reviewer can see what
+                    // is there and what is missing.
+                    .with_related(related),
+                );
             }
         }
         Err(error) => {

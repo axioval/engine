@@ -4,6 +4,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-07
+
+### Added
+
+- Source-neutral `LinearQuantityService`: adapters report a measured
+  `LinearInterval` plus supporting evidence, never a verdict (ADR 0004).
+- `ShelfCapacity` capability compares a measured shelf run against a declared
+  minimum. A measurement spanning the minimum is reported as incomplete
+  evidence rather than a violation, because it has not been shown to fail.
+
+### Changed
+
+- `reviewable_exact_evidence` now has a single owner in `services`, so every
+  evidence service applies the same admission test.
+
 ## [0.1.2] - 2026-09-01
 
 ### Added

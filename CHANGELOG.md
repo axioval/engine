@@ -4,6 +4,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-09-07
+
+### Changed
+
+- The horizontal-guard capability names which fall-protection defect an edge has
+  instead of reporting one generic verdict. Nine diagnoses are distinguished,
+  ordered worst-first, and a surface reports its worst defect rather than one
+  finding per edge. Findings carry the barrier, landing or climbable object
+  responsible.
+
+### Fixed
+
+- A barrier that is only tall enough when measured from its curb is reported as
+  `barrier_too_low_due_to_curb` rather than the generic `barrier_too_low`. The
+  curb reason was previously unreachable.
+- Landing shortfalls name their own cause (`landing_too_low`,
+  `landings_too_small`, `landing_too_far_away`) instead of collapsing into
+  `insufficient_landings`.
+
 ## [0.1.8] - 2026-09-07
 
 ### Fixed

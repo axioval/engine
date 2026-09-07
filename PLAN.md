@@ -51,9 +51,9 @@ mechanically:
    plan-shaped provider methods, **17 return a verdict, not a measurement**:
    a `findings: Vec<Resolved*Finding>` list whose `kind` is a rule-specific
    enum (`CircleDoesNotFit`, `NarrowCorridor`). The compliance logic lives
-   in the provider, not the rule: `StairRule` is 112 LOC that stringifies
+   in the provider, not the rule: `StairRule` is 198 LOC that stringifies
    `finding.kind`, while `production/accessibility/stair.rs` is 1,645 LOC --
-   15:1 policy in the provider. Each method splits into the measured
+   8:1 policy in the provider. Each method splits into the measured
    quantity (behind a neutral service, source-specific) and the comparison
    against declared parameters (`axioval-rules`, source-neutral). The 6
    already-measurement-shaped methods go first to validate the seam.

@@ -40,6 +40,8 @@ ACTION_USE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.M)
 SERVICE_TRAIT = re.compile(r"pub\s+trait\s+(\w*(?:Service|Provider))\b[^{]*\{", re.M)
 METHOD_NAME = re.compile(r"\bfn\s+(\w+)")
 PLAN_ARGUMENT = re.compile(r"\b\w*PlanSpec\b")
+PLAN_METHOD = re.compile(r"fn\s+\w+\s*\((?:[^()]|\([^()]*\))*?_?plan\s*:\s*&\w*PlanSpec\b", re.S)
+PLAN_METHOD_BUDGET = 23
 PLAN_ALIAS = re.compile(r"^\s*(?:pub\s+)?type\s+(\w+)\s*=\s*[^;]*\w*PlanSpec\b", re.M)
 RULE_SUFFIX = re.compile(r"(?:Rule|Constraint|Check)$")
 CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
@@ -378,6 +380,34 @@ def self_test() -> None:
     assert not verdict_return_violations(
         "pub trait FreeSpaceService {\n    fn measure_free_area(&self, r: &FreeAreaRequest) -> Result<FreeAreaEvidence, E>;\n}"
     )
+    # ADR 0004 ratchet: a missing source repo is not a violation (CI), but
+    # a source over budget is. Proven against the real 23-method provider.
+    assert not source_ratchet(Path("/nonexistent/extraction/source"), 23)
+    _real_source = Path("$HOME/projects/vendor/the provider")
+    if (_real_source / "crates/rules/src/evidence/core/source.rs").is_file():
+        assert not source_ratchet(_real_source, PLAN_METHOD_BUDGET)
+        assert source_ratchet(_real_source, PLAN_METHOD_BUDGET - 1)
+
+
+
+def source_ratchet(source_root: Path, budget: int) -> list[str]:
+    # Guard the extraction SOURCE against regression. ADR 0004 gates the
+    # destination, but nothing stopped vendor/the provider growing a 24th
+    # plan-shaped provider method. This is a one-way ratchet: the count
+    # may fall as methods are decomposed, never rise.
+    provider = source_root / "crates/rules/src/evidence/core/source.rs"
+    if not provider.is_file():
+        return []
+    found = len(PLAN_METHOD.findall(provider.read_text(encoding="utf-8")))
+    if found > budget:
+        return [
+            f"plan-shaped provider methods rose to {found} (budget {budget}); "
+            "ADR 0004 decomposes these into measurement plus policy"
+        ]
+    return []
+
+
+
 
 def check(root: Path) -> list[str]:
     failures: list[str] = []
@@ -396,6 +426,12 @@ def check(root: Path) -> list[str]:
                 failures.append(f"{source.relative_to(root)}: {detail}")
             for detail in verdict_return_violations(text):
                 failures.append(f"{source.relative_to(root)}: {detail}")
+    # ADR 0004 ratchet on the extraction SOURCE. Optional: the gate runs in
+    # CI where vendor/the provider is absent, and a missing source is not a
+    # violation -- but when present it must never grow a new plan-shaped
+    # provider method. Budget falls as methods are decomposed.
+    source_root = Path("$HOME/projects/vendor/the provider")
+    failures.extend(source_ratchet(source_root, PLAN_METHOD_BUDGET))
     # ADR 0003 applies to every crate: adapters are exactly where identity is
     # minted, so exempting them would exempt the only code that can violate it.
     for source in sorted((root / "crates").rglob("src/**/*.rs")):

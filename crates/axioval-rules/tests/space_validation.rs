@@ -176,6 +176,23 @@ fn duplicated_space_body_is_an_error() {
     assert_eq!(outcome.findings()[0].severity, Severity::Error);
 }
 
+/// The coincident spaces travel with the finding, normalised: a reviewer needs
+/// to open them, and ordering must not depend on adapter traversal order.
+#[test]
+fn a_duplicate_finding_names_the_coincident_spaces() {
+    let outcome = evaluate(
+        Stub {
+            duplicates: Some(Ok(vec![oid("space-3"), oid("space-2"), oid("space-3")])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert_eq!(
+        outcome.findings()[0].related,
+        vec![oid("space-2"), oid("space-3")]
+    );
+}
+
 #[test]
 fn height_below_requirement_is_reported_but_tolerance_is_respected() {
     let low = evaluate(

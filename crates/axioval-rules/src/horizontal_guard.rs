@@ -116,6 +116,7 @@ impl RuleCapability for HorizontalGuard {
                 rule_id: rule.id.clone(),
                 object_id: edge.surface().clone(),
                 severity: Severity::Error,
+                related: Vec::new(),
                 message,
                 evidence: vec![measured.evidence().clone()],
             });

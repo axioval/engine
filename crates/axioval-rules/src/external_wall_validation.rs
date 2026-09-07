@@ -71,6 +71,7 @@ impl RuleCapability for ExternalWallValidation {
                         rule_id: rule.id.clone(),
                         object_id,
                         severity: Severity::Warning,
+                        related: Vec::new(),
                         message: format!(
                             "declared external but not on the {} envelope",
                             derivation.as_str()
@@ -83,6 +84,7 @@ impl RuleCapability for ExternalWallValidation {
                         rule_id: rule.id.clone(),
                         object_id,
                         severity: Severity::Warning,
+                        related: Vec::new(),
                         message: format!(
                             "on the {} envelope but not declared external",
                             derivation.as_str()

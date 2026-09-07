@@ -310,10 +310,34 @@ pub enum Severity {
 #[serde(deny_unknown_fields)]
 pub struct Finding {
     pub rule_id: RuleId,
+    /// The object the finding is reported against.
     pub object_id: ObjectId,
     pub severity: Severity,
     pub message: String,
+    /// Other objects that participate in the finding -- the slab a wall rests
+    /// on, the body a space intersects.
+    ///
+    /// A finding a reviewer cannot act on is a finding that gets ignored:
+    /// "this wall has insufficient contact" is only useful alongside *what*
+    /// it fails to rest on. Empty when the object alone explains the finding.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related: Vec<ObjectId>,
     pub evidence: Vec<Evidence>,
+}
+
+impl Finding {
+    /// Attaches the other objects that participate in this finding, sorted and
+    /// deduplicated so ordering never depends on adapter traversal order.
+    #[must_use]
+    pub fn with_related(mut self, related: impl IntoIterator<Item = ObjectId>) -> Self {
+        self.related = related.into_iter().collect();
+        self.related.sort();
+        self.related.dedup();
+        // The subject is already named by `object_id`; repeating it adds noise.
+        self.related
+            .retain(|candidate| candidate != &self.object_id);
+        self
+    }
 }
 /// Why an object or rule instance could not be evaluated conclusively.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]

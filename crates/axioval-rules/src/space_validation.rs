@@ -172,6 +172,7 @@ fn finding(
     Finding {
         rule_id: rule.id.clone(),
         object_id,
+        related: Vec::new(),
         severity,
         message,
         evidence: vec![evidence.clone()],
@@ -204,16 +205,17 @@ fn check_duplicates(
 ) {
     match service.measure_duplicates(space) {
         Ok(duplicates) if duplicates.is_empty() => {}
-        Ok(duplicates) => evaluation.push_finding(finding(
-            rule,
-            space.clone(),
-            Severity::Error,
-            format!(
+        Ok(duplicates) => {
+            let message = format!(
                 "space body duplicated by {} other space(s)",
                 duplicates.len()
-            ),
-            evidence,
-        )),
+            );
+            evaluation.push_finding(
+                finding(rule, space.clone(), Severity::Error, message, evidence)
+                    // The coincident spaces, so a reviewer can open them.
+                    .with_related(duplicates),
+            );
+        }
         Err(error) => {
             evaluation.push_object_not_evaluated(space.clone(), reason(error), error.to_string());
         }

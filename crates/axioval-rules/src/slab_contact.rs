@@ -74,8 +74,6 @@ impl RuleCapability for SlabContact {
                     if ratio >= minimum_ratio {
                         continue;
                     }
-                    let mut elements = vec![object.id.clone()];
-                    elements.extend(measured.touching().iter().cloned());
                     let (severity, message) = if measured.contact_area_square_metres() == 0.0 {
                         (
                             absent_severity(measured.nearest_distance_metres()),
@@ -87,13 +85,18 @@ impl RuleCapability for SlabContact {
                             format!("contact ratio {ratio:.4} below required {minimum_ratio:.4}"),
                         )
                     };
-                    evaluation.push_finding(Finding {
-                        rule_id: rule.id.clone(),
-                        object_id: object.id.clone(),
-                        severity,
-                        message,
-                        evidence: vec![measured.evidence().clone()],
-                    });
+                    evaluation.push_finding(
+                        Finding {
+                            rule_id: rule.id.clone(),
+                            object_id: object.id.clone(),
+                            severity,
+                            message,
+                            related: Vec::new(),
+                            evidence: vec![measured.evidence().clone()],
+                        }
+                        // What the face rests on, so a reviewer can open it.
+                        .with_related(measured.touching().iter().cloned()),
+                    );
                 }
                 Err(error) => evaluation.push_object_not_evaluated(
                     object.id.clone(),

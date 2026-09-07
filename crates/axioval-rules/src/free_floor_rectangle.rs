@@ -93,6 +93,7 @@ impl RuleCapability for FreeFloorRectangle {
                     rule_id: rule.id.clone(),
                     object_id: space.id.clone(),
                     severity: severity(rule),
+                    related: Vec::new(),
                     message: "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE".into(),
                     evidence: vec![proof.evidence().clone()],
                 }),

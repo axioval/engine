@@ -238,3 +238,43 @@ fn invalid_declarations_are_refused() {
         );
     }
 }
+
+/// A finding a reviewer cannot act on gets ignored: "insufficient contact" is
+/// only useful alongside *what* the face fails to rest on.
+#[test]
+fn a_shortfall_names_the_objects_the_face_rests_on() {
+    let outcome = evaluate(
+        Stub(Ok((
+            100.0,
+            10.0,
+            None,
+            // Reversed and duplicated: ordering must not depend on the order
+            // an adapter happened to walk the model.
+            vec![oid("slab-b"), oid("slab-a"), oid("slab-b")],
+        ))),
+        &rule(),
+    );
+    assert_eq!(outcome.findings().len(), 1);
+    assert_eq!(
+        outcome.findings()[0].related,
+        vec![oid("slab-a"), oid("slab-b")],
+        "touching slabs must be sorted and deduplicated with the finding"
+    );
+}
+
+/// The subject is already named by `object_id`; repeating it is noise.
+#[test]
+fn the_subject_is_not_repeated_among_related_objects() {
+    let outcome = evaluate(
+        Stub(Ok((100.0, 10.0, None, vec![oid("wall"), oid("slab-a")]))),
+        &rule(),
+    );
+    assert_eq!(outcome.findings()[0].related, vec![oid("slab-a")]);
+}
+
+/// No contact means nothing to open, unless a nearest candidate was found.
+#[test]
+fn a_finding_with_nothing_touching_has_no_related_objects() {
+    let outcome = evaluate(Stub(Ok((10.0, 0.0, Some(0.3), Vec::new()))), &rule());
+    assert!(outcome.findings()[0].related.is_empty());
+}

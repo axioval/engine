@@ -101,6 +101,7 @@ impl RuleCapability for ShelfCapacity {
                         rule_id: rule.id.clone(),
                         object_id: object.id.clone(),
                         severity: Severity::Warning,
+                        related: Vec::new(),
                         message: format!(
                             "shelf running metres {:.3} below required {minimum:.3}",
                             interval.upper_metres()

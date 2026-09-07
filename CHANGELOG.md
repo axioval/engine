@@ -4,6 +4,24 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-07
+
+### Added
+
+- `Finding::related` carries the other objects that participate in a finding --
+  the slab a wall rests on, the spaces a body duplicates. A finding a reviewer
+  cannot act on is a finding that gets ignored: "insufficient contact" is only
+  useful alongside what the face fails to rest on. `Finding::with_related`
+  sorts, deduplicates, and drops the subject, so ordering never depends on the
+  order an adapter walked the model.
+- Slab contact reports the touching surfaces; space validation reports
+  coincident space bodies and the body a space overlaps.
+
+### Compatibility
+
+- `related` is `#[serde(default)]` and omitted when empty, so existing payloads
+  deserialize unchanged.
+
 ## [0.1.5] - 2026-09-07
 
 ### Added

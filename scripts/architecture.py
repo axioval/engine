@@ -34,7 +34,10 @@ ACTION_USE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.M)
 # never by a rule. A `*PlanSpec` argument, or a method named after a native rule,
 # means rule policy has leaked into the evidence seam -- the exact defect that
 # made the legacy 43-method `GeometryProvider` unportable one rule at a time.
-SERVICE_TRAIT = re.compile(r"pub\s+trait\s+(\w*Service)\b[^{]*\{", re.M)
+# An evidence seam is any trait supplying evidence to rules: Service or
+# Provider. ADR 0004 applies to both -- GeometryProvider is the trait that
+# grew 17 verdict-shaped methods.
+SERVICE_TRAIT = re.compile(r"pub\s+trait\s+(\w*(?:Service|Provider))\b[^{]*\{", re.M)
 METHOD_NAME = re.compile(r"\bfn\s+(\w+)")
 PLAN_ARGUMENT = re.compile(r"\b\w*PlanSpec\b")
 PLAN_ALIAS = re.compile(r"^\s*(?:pub\s+)?type\s+(\w+)\s*=\s*[^;]*\w*PlanSpec\b", re.M)
@@ -106,9 +109,9 @@ def trait_bodies(source: str) -> list[tuple[str, str]]:
     return bodies
 
 
-def method_signatures(body: str) -> list[tuple[str, str]]:
-    """(name, signature) per method, tolerating generic parameter lists."""
-    signatures: list[tuple[str, str]] = []
+def method_signatures(body: str) -> list[tuple[str, str, str]]:
+    """(name, signature, return type) per method, tolerating generics."""
+    signatures: list[tuple[str, str, str]] = []
     for match in METHOD_NAME.finditer(body):
         open_paren = body.find("(", match.end())
         if open_paren < 0:
@@ -117,8 +120,31 @@ def method_signatures(body: str) -> list[tuple[str, str]]:
         while index < len(body) and depth:
             depth += {"(": 1, ")": -1}.get(body[index], 0)
             index += 1
-        signatures.append((match.group(1), body[open_paren:index]))
+        # Return type: everything up to the method terminator, so a
+        # verdict-shaped result is visible to ADR 0004.
+        tail = body[index:]
+        stop = min((x for x in (tail.find(chr(59)), tail.find(chr(123))) if x >= 0), default=len(tail))
+        signatures.append((match.group(1), body[open_paren:index], tail[:stop]))
     return signatures
+
+
+# ADR 0004: a service returns what was MEASURED; a capability decides what it
+# means. A return type naming a finding/violation/compliance verdict means rule
+# policy was computed behind the evidence seam -- the defect that made 17 of 23
+# plan-shaped provider methods unportable one rule at a time.
+VERDICT_RETURN = re.compile(r"\b\w*(?:Finding|Violation|Compliance|Verdict)\w*\b")
+
+
+def verdict_return_violations(source: str) -> list[str]:
+    """Service methods returning a decided verdict rather than a measurement."""
+    failures: list[str] = []
+    for trait, body in trait_bodies(source):
+        for method, _signature, ret in method_signatures(body):
+            for verdict in sorted(set(VERDICT_RETURN.findall(ret))):
+                failures.append(
+                    f"service `{trait}::{method}` returns verdict `{verdict}`"
+                )
+    return failures
 
 
 def service_seam_violations(source: str, stems: set[str]) -> list[str]:
@@ -127,7 +153,7 @@ def service_seam_violations(source: str, stems: set[str]) -> list[str]:
     plan_types = PLAN_ARGUMENT
     failures: list[str] = []
     for trait, body in trait_bodies(source):
-        for method, signature in method_signatures(body):
+        for method, signature, _ret in method_signatures(body):
             plans = set(plan_types.findall(signature))
             plans |= {alias for alias in aliases if re.search(rf"\b{alias}\b", signature)}
             for plan in sorted(plans):
@@ -341,6 +367,18 @@ def self_test() -> None:
     )
 
 
+    # ADR 0004: the real GeometryProvider shape. The provider decided the
+    # verdict, so the rule layer had nothing portable to stand on.
+    assert verdict_return_violations(
+        "pub trait GeometryProvider {\n    fn resolve_stair(&self, plan: &StairPlanSpec) -> QueryOutcome<ResolvedStairFinding>;\n}"
+    ) == [
+        "service `GeometryProvider::resolve_stair` returns verdict `ResolvedStairFinding`",
+    ]
+    # A service that returns a measurement is exactly what ADR 0004 wants.
+    assert not verdict_return_violations(
+        "pub trait FreeSpaceService {\n    fn measure_free_area(&self, r: &FreeAreaRequest) -> Result<FreeAreaEvidence, E>;\n}"
+    )
+
 def check(root: Path) -> list[str]:
     failures: list[str] = []
     ledger = root / "migration" / "the provider-capabilities.json"
@@ -355,6 +393,8 @@ def check(root: Path) -> list[str]:
             for pattern in source_violations(text):
                 failures.append(f"{source.relative_to(root)}: forbidden source coupling matching {pattern!r}")
             for detail in service_seam_violations(text, stems):
+                failures.append(f"{source.relative_to(root)}: {detail}")
+            for detail in verdict_return_violations(text):
                 failures.append(f"{source.relative_to(root)}: {detail}")
     # ADR 0003 applies to every crate: adapters are exactly where identity is
     # minted, so exempting them would exempt the only code that can violate it.

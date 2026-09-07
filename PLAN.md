@@ -47,8 +47,16 @@ mechanically:
    source-qualified opaque identity. The engine already owns that identity
    (`axioval_ir::ObjectId`, `Finding`, `Report`). Step 2 is therefore rewriting
    the runtime against neutral identity, not relocating files.
-3. **Seam.** Each of the 23 `PlanSpec`-shaped provider methods is decomposed
-   into neutral evidence plus policy in `axioval-rules`.
+3. **Seam.** Not a relocation but a decomposition (ADR 0004). Of the 23
+   plan-shaped provider methods, **17 return a verdict, not a measurement**:
+   a `findings: Vec<Resolved*Finding>` list whose `kind` is a rule-specific
+   enum (`CircleDoesNotFit`, `NarrowCorridor`). The compliance logic lives
+   in the provider, not the rule: `StairRule` is 112 LOC that stringifies
+   `finding.kind`, while `production/accessibility/stair.rs` is 1,645 LOC --
+   15:1 policy in the provider. Each method splits into the measured
+   quantity (behind a neutral service, source-specific) and the comparison
+   against declared parameters (`axioval-rules`, source-neutral). The 6
+   already-measurement-shaped methods go first to validate the seam.
 4. **Families.** Rule policy ports against evidence that already exists.
 5. **Vendor.** `vendor/the provider` keeps only CSET/SMC byte formats, authoring,
    CLI and Python — one application on the engine, not the engine's home.

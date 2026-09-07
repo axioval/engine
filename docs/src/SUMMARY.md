@@ -8,6 +8,7 @@
 - [ADR 0001: source-neutral engine and independent adapters](./adr-0001.md)
 - [ADR 0002: extract the engine by moving contracts](./adr-0002.md)
 - [ADR 0003: neutral object identity blocks the runtime move](./adr-0003.md)
+- [ADR 0004: decompose plan-shaped evidence](./adr-0004.md)
 - [Source-neutral IR](./ir.md)
 - [Capabilities](./capabilities.md)
 - [Connectivity and routes](./topology.md)

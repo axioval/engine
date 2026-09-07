@@ -41,7 +41,7 @@ SERVICE_TRAIT = re.compile(r"pub\s+trait\s+(\w*(?:Service|Provider))\b[^{]*\{", 
 METHOD_NAME = re.compile(r"\bfn\s+(\w+)")
 PLAN_ARGUMENT = re.compile(r"\b\w*PlanSpec\b")
 PLAN_METHOD = re.compile(r"fn\s+\w+\s*\((?:[^()]|\([^()]*\))*?_?plan\s*:\s*&\w*PlanSpec\b", re.S)
-PLAN_METHOD_BUDGET = 22
+PLAN_METHOD_BUDGET = 21
 PLAN_ALIAS = re.compile(r"^\s*(?:pub\s+)?type\s+(\w+)\s*=\s*[^;]*\w*PlanSpec\b", re.M)
 RULE_SUFFIX = re.compile(r"(?:Rule|Constraint|Check)$")
 CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")

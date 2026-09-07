@@ -4,6 +4,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-09-07
+
+### Changed
+
+- **Renamed `axioval-openbim` to `axioval-ifc`**, and the facade's `openbim`
+  feature to `ifc`. The crate adapts IFC specifically -- it never covered the
+  rest of the OpenBIM ecosystem -- so it was named for a dependency family
+  rather than its content. Migration: replace the dependency name, the
+  `openbim` feature with `ifc`, and `axioval::openbim` with `axioval::ifc`.
+  `axioval-openbim` is discontinued at 0.1.11 and will not receive updates.
+- Crates are now grouped by role: `contracts/`, `engine/`, `sources/`,
+  `facade/`, and `apps/`. Published crate names are unchanged apart from the
+  rename above, so this is a source-tree change only. A new geometry backend
+  or source format is a sibling directory under `sources/` and needs no change
+  to the engine or contracts.
+
+### Fixed
+
+- The architecture gate discovers crates recursively by declared package name
+  rather than by a fixed `crates/*` glob, and fails closed when discovery
+  returns nothing. The previous glob would have silently passed every
+  neutrality check under the nested layout.
+
 ## [0.1.11] - 2026-09-07
 
 ### Fixed

@@ -1,9 +1,23 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+# Crates are grouped by role, not by the dependency they happen to wrap:
+#   contracts/  source-neutral vocabulary, depends on nothing in this tree
+#   engine/     capability execution over those contracts
+#   sources/    adapters that feed the engine, one directory per port kind
+#   facade/     batteries-included re-export surface
+#   apps/       executables
+# A new geometry backend (CGAL, manifold3d) is a sibling under
+# sources/geometry/ and needs no change anywhere else.
+members = [
+    "crates/contracts/*",
+    "crates/engine/*",
+    "crates/sources/*/*",
+    "crates/facade/*",
+    "crates/apps/*",
+]
 
 [workspace.package]
-version = "0.1.11"
+version = "0.1.12"
 edition = "2024"
 rust-version = "1.88"
 license = "AGPL-3.0-or-later"
@@ -14,13 +28,13 @@ keywords = ["bim", "validation", "rules", "geometry", "ifc"]
 categories = ["development-tools", "parser-implementations"]
 
 [workspace.dependencies]
-axioval-spec = { path = "crates/axioval-spec", version = "0.1.11" }
-axioval-ir = { path = "crates/axioval-ir", version = "0.1.11" }
-axioval-engine = { path = "crates/axioval-engine", version = "0.1.11" }
-axioval-rules = { path = "crates/axioval-rules", version = "0.1.11" }
-axioval-openbim = { path = "crates/axioval-openbim", version = "0.1.11" }
-axioval-axiolid = { path = "crates/axioval-axiolid", version = "0.1.11" }
-axioval-icdd = { path = "crates/axioval-icdd", version = "0.1.11" }
+axioval-spec = { path = "crates/contracts/spec", version = "0.1.12" }
+axioval-ir = { path = "crates/contracts/ir", version = "0.1.12" }
+axioval-engine = { path = "crates/engine/core", version = "0.1.12" }
+axioval-rules = { path = "crates/engine/rules", version = "0.1.12" }
+axioval-ifc = { path = "crates/sources/semantic/ifc", version = "0.1.12" }
+axioval-axiolid = { path = "crates/sources/geometry/axiolid", version = "0.1.12" }
+axioval-icdd = { path = "crates/sources/assembly/icdd", version = "0.1.12" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"

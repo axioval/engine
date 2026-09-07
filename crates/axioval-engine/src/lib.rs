@@ -310,6 +310,7 @@ mod compiler;
 mod contact;
 mod envelope_membership;
 mod free_space;
+mod guard;
 mod linear_quantity;
 mod metric_routing;
 mod properties;
@@ -334,6 +335,10 @@ pub use free_space::{
     FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
     PlacementDomain, PlacementOutcome, PlacementRequest, SignedDistanceInterval,
     SupportedPlacement,
+};
+pub use guard::{
+    ClimbableCandidate, GuardCandidate, GuardEdge, GuardError, GuardEvidence, GuardSearch,
+    GuardService, GuardServiceHandle,
 };
 pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,

@@ -4,6 +4,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-09-07
+
+### Added
+
+- `axioval-axiolid` implements the engine's `ContactService` over the published
+  Axiolid kernel (`axiolid-mesh`, `axiolid-measure`, `axiolid-overlay`). An
+  application can now measure real contact from meshes using published crates
+  only -- previously every geometry service had to be supplied by the host.
+  Hosts register a `TriMesh` per `ObjectId`, so proprietary CAD sources use this
+  without any IFC dependency.
+
+  Contact area is measured in plan by intersecting projected geometry, and the
+  nearest separation stays a 3D measurement.
+
+
 ## [0.1.12] - 2026-09-07
 
 ### Changed

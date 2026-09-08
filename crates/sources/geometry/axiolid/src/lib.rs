@@ -6,6 +6,10 @@
 //! producers can participate without an IFC dependency. No geometry kernel is silently
 //! substituted: missing backends return [`AxiolidError::IntegrationUnavailable`].
 
+pub mod contact;
+
+pub use contact::{AxiolidContactGeometry, AxiolidContactService};
+
 use std::collections::BTreeMap;
 
 use thiserror::Error;

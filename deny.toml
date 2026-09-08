@@ -16,6 +16,13 @@ allow = [
   "Apache-2.0",
   "BSD-3-Clause",
   "MIT",
+  # Weak, file-level copyleft. MPL-2.0 section 3.3 permits distributing a larger
+  # work under a Secondary License (GPL/AGPL family), so an AGPL-3.0-or-later
+  # distribution may include MPL-2.0 files provided those files stay under MPL.
+  # None of the MPL dependencies here carry the "Incompatible With Secondary
+  # Licenses" notice that would remove that permission. Used by the Axiolid
+  # geometry kernel.
+  "MPL-2.0",
   "Unicode-3.0",
 ]
 confidence-threshold = 0.93

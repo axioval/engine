@@ -75,8 +75,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiolid-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f22ddafd3e9877764344fd14f7fc4f4c787caca14a7294a44208690cea84d8a"
+dependencies = [
+ "glam",
+]
+
+[[package]]
+name = "axiolid-measure"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2b96c7d47462dcd15040a6ccdba370e88035048322262cb384e302cf1c06148"
+dependencies = [
+ "axiolid-core",
+ "axiolid-mesh",
+]
+
+[[package]]
+name = "axiolid-mesh"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2693e6675d45887845c8249cb4931d372523c76636abc36be02eec99dd6e1a5"
+dependencies = [
+ "axiolid-core",
+]
+
+[[package]]
+name = "axiolid-overlay"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b442d77f95cc33d3bdbe26465cdc3c3a33a29ecae406901317e7eeb96a4f96c"
+dependencies = [
+ "axiolid-core",
+ "i_overlay",
+]
+
+[[package]]
 name = "axioval"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "axioval-axiolid",
  "axioval-engine",
@@ -88,14 +126,20 @@ dependencies = [
 
 [[package]]
 name = "axioval-axiolid"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
+ "axiolid-core",
+ "axiolid-measure",
+ "axiolid-mesh",
+ "axiolid-overlay",
+ "axioval-engine",
+ "axioval-ir",
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-cli"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "axioval",
  "clap",
@@ -105,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-engine"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "axioval-ir",
  "indexmap",
@@ -118,14 +162,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-icdd"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-ifc"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -139,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-ir"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "indexmap",
  "serde",
@@ -151,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-rules"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -164,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-spec"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "serde",
  "serde_json",
@@ -349,6 +393,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.29.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8babf46d4c1c9d92deac9f7be466f76dfc4482b6452fc5024b5e8daf6ffeb3ee"
+
+[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -359,6 +409,48 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+
+[[package]]
+name = "i_float"
+version = "1.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "813145bb0ad5b60f55cbbf3c74cdceda1c0a9d253b35c4cc36ae0df7887cb78f"
+dependencies = [
+ "libm",
+]
+
+[[package]]
+name = "i_key_sort"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d73d122b937fca067feb0ad74f62388920272b27c356d4df2d0cfdd59e044cf0"
+
+[[package]]
+name = "i_overlay"
+version = "4.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dd314b4668e2b3a12508f2e125558c82a6c0a8636fa5107a900f79ce414e450"
+dependencies = [
+ "i_float",
+ "i_key_sort",
+ "i_shape",
+ "i_tree",
+]
+
+[[package]]
+name = "i_shape"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfa9eac533d7509a8ab87672b60ac610c17240f9ea4851d26227689fdfe349c8"
+dependencies = [
+ "i_float",
+]
+
+[[package]]
+name = "i_tree"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4804bdc1dc124eb7e1aa9e144ecc04096bcf787a10a15fa44af682b51f0f6cce"
 
 [[package]]
 name = "ifc-model"
@@ -444,6 +536,12 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+
+[[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "memchr"

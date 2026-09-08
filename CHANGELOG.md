@@ -4,6 +4,30 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-09-07
+
+### Added
+
+- `AxiolidEnvelopeMembershipService` derives building-envelope membership from
+  geometry: an object bounds the envelope when its plan footprint meets a
+  declared bounding space. Both `EnvelopeDerivation` variants are served from
+  separate declared space sets, so a model can be checked against all spaces or
+  against gross-area groups only.
+
+### Changed
+
+- Plan-projection helpers moved to an internal `planar` module shared by the
+  services, and the mesh/triangle vocabulary moved to `geometry`. No public API
+  changed; `AxiolidGeometry` gains `with_space` and `with_gross_area_space`.
+
+### Removed
+
+- A redundant empty-envelope guard in the envelope derivation. An empty
+  bounding set always produced empty bounding geometry, which the following
+  guard already rejected with the same error, so the branch could never be
+  observed to matter. Proven by a mutant that no test could kill until the
+  duplicate was removed.
+
 ## [0.1.15] - 2026-09-07
 
 ### Added

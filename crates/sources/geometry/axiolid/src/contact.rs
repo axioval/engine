@@ -8,15 +8,13 @@
 //! by the host as triangle meshes. That is what lets a proprietary CAD source
 //! use this adapter without an IFC dependency.
 
-use axiolid_core::Point3;
-use axiolid_core::{Frame2, Point2, Vec2};
 use axiolid_measure::{closest_points_on_triangles, surface_properties};
-use axiolid_mesh::{TriMesh, TriangleMeshView};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, overlay};
 use axioval_engine::{ContactError, ContactEvidence, ContactRequest, ContactService, ContactSide};
 use axioval_ir::{Evidence, SourceId};
 
-use crate::geometry::AxiolidGeometry;
+use crate::geometry::{AxiolidGeometry, Triangle, triangles};
+use crate::planar::{plan_frame, polygon_area, projected_polygons};
 
 /// Tolerance used for mesh-health auditing when measuring areas.
 ///
@@ -25,9 +23,6 @@ use crate::geometry::AxiolidGeometry;
 /// laundered into the engine as fact.
 const AUDIT_LINEAR_TOLERANCE: f64 = 1e-9;
 const AUDIT_ANGULAR_TOLERANCE: f64 = 1e-9;
-
-/// A triangle as three points, the form the proximity primitive consumes.
-type Triangle = [Point3; 3];
 
 /// Measures contact between registered meshes using Axiolid.
 #[derive(Debug)]
@@ -42,23 +37,6 @@ impl AxiolidContactService {
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
         Self { geometry, source }
     }
-}
-
-/// The triangles of a mesh as coordinate triples.
-fn triangles(mesh: &TriMesh) -> Vec<Triangle> {
-    (0..mesh.triangle_count())
-        .map(|index| {
-            let [a, b, c] = mesh.triangle(index);
-            // Indices come from a foreign mesh, so a value that cannot be a
-            // position index is a corrupt mesh, not something to truncate.
-            [a, b, c].map(|index| {
-                usize::try_from(index)
-                    .ok()
-                    .filter(|i| *i < mesh.position_count())
-                    .map_or(Point3::ZERO, |i| mesh.position(i))
-            })
-        })
-        .collect()
 }
 
 /// Whether `candidate` lies on the requested side of `subject`.
@@ -152,63 +130,6 @@ fn planar_contact_area(
     Ok(result.polygons.iter().map(polygon_area).sum())
 }
 
-/// The xy plan frame both projections share.
-fn plan_frame() -> Frame2 {
-    Frame2 {
-        origin: Point2::new(0.0, 0.0),
-        x: Vec2::new(1.0, 0.0),
-        y: Vec2::new(0.0, 1.0),
-    }
-}
-
-/// Triangles projected to xy as overlay polygons, dropping degenerate ones.
-///
-/// A triangle seen edge-on in plan has no plan area and cannot contribute
-/// coverage, so dropping it is a measurement decision, not a shortcut.
-fn projected_polygons(triangles: &[Triangle]) -> Vec<Polygon> {
-    triangles
-        .iter()
-        .filter_map(|[a, b, c]| {
-            let ring = Ring {
-                points: vec![
-                    Point2::new(a.x, a.y),
-                    Point2::new(b.x, b.y),
-                    Point2::new(c.x, c.y),
-                ],
-            };
-            (ring_area(&ring).abs() > f64::EPSILON).then_some(Polygon {
-                outer: ring,
-                holes: Vec::new(),
-            })
-        })
-        .collect()
-}
-
-/// Absolute area of a polygon, holes subtracted.
-///
-/// Both boundaries are honoured because a result polygon MAY carry holes in
-/// general. For the triangle-soup inputs this adapter builds, the overlay was
-/// observed to return hole-free polygons, so the subtraction is defensive: it
-/// keeps the function correct for any polygon rather than only for the shapes
-/// this call site happens to produce today.
-fn polygon_area(polygon: &Polygon) -> f64 {
-    let outer = ring_area(&polygon.outer).abs();
-    let holes: f64 = polygon.holes.iter().map(|r| ring_area(r).abs()).sum();
-    (outer - holes).max(0.0)
-}
-
-/// Signed shoelace area of a ring.
-fn ring_area(ring: &Ring) -> f64 {
-    let points = &ring.points;
-    let mut sum = 0.0;
-    for index in 0..points.len() {
-        let current = points[index];
-        let next = points[(index + 1) % points.len()];
-        sum += current.x * next.y - next.x * current.y;
-    }
-    sum * 0.5
-}
-
 impl ContactService for AxiolidContactService {
     fn measure_contact(&self, request: &ContactRequest) -> Result<ContactEvidence, ContactError> {
         let subject_mesh = self
@@ -273,44 +194,5 @@ impl ContactService for AxiolidContactService {
                 format!("axiolid:contact:{}", request.subject().local_id),
             ),
         )
-    }
-}
-
-#[cfg(test)]
-mod polygon_area_tests {
-    use super::{Polygon, Ring, polygon_area, ring_area};
-    use axiolid_core::Point2;
-
-    fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Ring {
-        Ring {
-            points: vec![
-                Point2::new(x0, y0),
-                Point2::new(x1, y0),
-                Point2::new(x1, y1),
-                Point2::new(x0, y1),
-            ],
-        }
-    }
-
-    #[test]
-    fn a_hole_is_subtracted_from_the_area_it_removes() {
-        let with_hole = Polygon {
-            outer: rect(0.0, 0.0, 2.0, 2.0),
-            holes: vec![rect(0.5, 0.5, 1.5, 1.5)],
-        };
-        // 4.0 outer minus a 1.0 void.
-        assert!((polygon_area(&with_hole) - 3.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn ring_orientation_does_not_change_the_area() {
-        let mut reversed = rect(0.0, 0.0, 2.0, 2.0);
-        reversed.points.reverse();
-        assert!(ring_area(&reversed) < 0.0, "reversed ring is negative");
-        let polygon = Polygon {
-            outer: reversed,
-            holes: Vec::new(),
-        };
-        assert!((polygon_area(&polygon) - 4.0).abs() < 1e-9);
     }
 }

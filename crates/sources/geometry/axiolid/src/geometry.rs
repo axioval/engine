@@ -5,7 +5,8 @@
 
 use std::collections::BTreeMap;
 
-use axiolid_mesh::TriMesh;
+use axiolid_core::Point3;
+use axiolid_mesh::{TriMesh, TriangleMeshView};
 use axioval_ir::ObjectId;
 
 /// Geometry for one object, keyed by the identity the engine uses.
@@ -58,6 +59,11 @@ impl AxiolidGeometry {
         self.doorways.get(object).copied().unwrap_or(0)
     }
 
+    /// Every registered object and its mesh, in identity order.
+    pub(crate) fn objects(&self) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
+        self.meshes.iter()
+    }
+
     /// Every registered object other than `subject`, in identity order.
     pub(crate) fn counterparts(
         &self,
@@ -65,4 +71,24 @@ impl AxiolidGeometry {
     ) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
         self.meshes.iter().filter(move |(id, _)| *id != subject)
     }
+}
+
+/// A triangle as three points, the form the geometry primitives consume.
+pub(crate) type Triangle = [axiolid_core::Point3; 3];
+
+/// The triangles of a mesh as coordinate triples.
+pub(crate) fn triangles(mesh: &TriMesh) -> Vec<Triangle> {
+    (0..mesh.triangle_count())
+        .map(|index| {
+            let [a, b, c] = mesh.triangle(index);
+            // Indices come from a foreign mesh, so a value that cannot be a
+            // position index is a corrupt mesh, not something to truncate.
+            [a, b, c].map(|index| {
+                usize::try_from(index)
+                    .ok()
+                    .filter(|i| *i < mesh.position_count())
+                    .map_or(Point3::ZERO, |i| mesh.position(i))
+            })
+        })
+        .collect()
 }

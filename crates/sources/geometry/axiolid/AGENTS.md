@@ -2,6 +2,13 @@
 
 Geometry evidence for any source, measured with the Axiolid kernel.
 
+- `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
+  by every service here. Doorway counts live here too: a mesh does not say which
+  wall segments are openings, so the host declares them.
+- `src/linear_quantity.rs` implements `LinearQuantityService`, measuring shelf
+  running length from footprint, real ceiling height and doorways. It reports an
+  upper bound, never an exact value, because the footprint bounds a
+  non-rectangular room rather than describing it.
 - `src/contact.rs` implements the engine's `ContactService` over `axiolid-mesh`,
   `axiolid-measure` and `axiolid-overlay`. Hosts register a `TriMesh` per
   `ObjectId`; no IFC types appear anywhere in this crate.

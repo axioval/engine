@@ -8,15 +8,15 @@
 //! by the host as triangle meshes. That is what lets a proprietary CAD source
 //! use this adapter without an IFC dependency.
 
-use std::collections::BTreeMap;
-
 use axiolid_core::Point3;
 use axiolid_core::{Frame2, Point2, Vec2};
 use axiolid_measure::{closest_points_on_triangles, surface_properties};
 use axiolid_mesh::{TriMesh, TriangleMeshView};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
 use axioval_engine::{ContactError, ContactEvidence, ContactRequest, ContactService, ContactSide};
-use axioval_ir::{Evidence, ObjectId, SourceId};
+use axioval_ir::{Evidence, SourceId};
+
+use crate::geometry::AxiolidGeometry;
 
 /// Tolerance used for mesh-health auditing when measuring areas.
 ///
@@ -29,54 +29,17 @@ const AUDIT_ANGULAR_TOLERANCE: f64 = 1e-9;
 /// A triangle as three points, the form the proximity primitive consumes.
 type Triangle = [Point3; 3];
 
-/// Geometry for one object, keyed by the identity the engine uses.
-///
-/// Holding meshes by `ObjectId` is what keeps this adapter source-neutral:
-/// the host decides how its native elements map onto identities.
-#[derive(Debug, Default)]
-pub struct AxiolidContactGeometry {
-    meshes: BTreeMap<ObjectId, TriMesh>,
-}
-
-impl AxiolidContactGeometry {
-    /// Creates an empty geometry set.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            meshes: BTreeMap::new(),
-        }
-    }
-
-    /// Registers one object's mesh.
-    #[must_use]
-    pub fn with_mesh(mut self, object: ObjectId, mesh: TriMesh) -> Self {
-        self.meshes.insert(object, mesh);
-        self
-    }
-
-    /// Returns the mesh registered for an object.
-    #[must_use]
-    pub fn mesh(&self, object: &ObjectId) -> Option<&TriMesh> {
-        self.meshes.get(object)
-    }
-
-    /// Every registered object other than `subject`, in identity order.
-    fn counterparts(&self, subject: &ObjectId) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
-        self.meshes.iter().filter(move |(id, _)| *id != subject)
-    }
-}
-
 /// Measures contact between registered meshes using Axiolid.
 #[derive(Debug)]
 pub struct AxiolidContactService {
-    geometry: AxiolidContactGeometry,
+    geometry: AxiolidGeometry,
     source: SourceId,
 }
 
 impl AxiolidContactService {
     /// Creates a service over the supplied geometry.
     #[must_use]
-    pub fn new(geometry: AxiolidContactGeometry, source: SourceId) -> Self {
+    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
         Self { geometry, source }
     }
 }

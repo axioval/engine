@@ -11,11 +11,13 @@ pub mod envelope_membership;
 pub mod geometry;
 pub mod linear_quantity;
 pub(crate) mod planar;
+pub mod space;
 
 pub use contact::AxiolidContactService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
 pub use geometry::AxiolidGeometry;
 pub use linear_quantity::AxiolidLinearQuantityService;
+pub use space::AxiolidSpaceService;
 
 use std::collections::BTreeMap;
 

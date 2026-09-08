@@ -5,6 +5,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
   by every service here. Doorway counts live here too: a mesh does not say which
   wall segments are openings, so the host declares them.
+- `src/space.rs` implements `SpaceService`: seven independent space
+  measurements over storey-assigned, role-tagged geometry.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
   the envelope when its plan footprint meets a declared bounding space. The
   declared set is plain `ObjectId` data, so this stays a geometry adapter.

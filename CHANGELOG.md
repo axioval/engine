@@ -4,6 +4,24 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-09-07
+
+### Added
+
+- `AxiolidSpaceService` measures all seven space aspects from supplied geometry:
+  duplicates, clear height, boundary gaps, overlaps, cap coverage, storey
+  residuals and support counts. Each aspect fails independently, so an
+  unmeasurable clear height no longer hides a measurable overlap.
+- `AxiolidGeometry` gained storey assignment and element roles (space, slab,
+  roof), declared by the host rather than inferred from a mesh.
+
+### Removed
+
+- The cap-coverage clamp `covered.min(whole)`. Coverage is the intersection of
+  the merged cap elements with the space footprint, so it is bounded by that
+  footprint by construction; the clamp could never change a result.
+
+
 ## [0.1.16] - 2026-09-07
 
 ### Added

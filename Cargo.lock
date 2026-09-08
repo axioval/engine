@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "axioval"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axioval-axiolid",
  "axioval-engine",
@@ -126,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-axiolid"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axiolid-core",
  "axiolid-measure",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-cli"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axioval",
  "clap",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-engine"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axioval-ir",
  "indexmap",
@@ -162,14 +162,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-icdd"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-ifc"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-ir"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "indexmap",
  "serde",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-rules"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-spec"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "serde",
  "serde_json",

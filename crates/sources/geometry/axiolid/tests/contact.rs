@@ -5,7 +5,7 @@
 
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
-use axioval_axiolid::{AxiolidContactGeometry, AxiolidContactService};
+use axioval_axiolid::{AxiolidContactService, AxiolidGeometry};
 use axioval_engine::{ContactError, ContactService, ContactSide, ContactTolerance};
 use axioval_ir::{ObjectId, SourceId};
 
@@ -53,7 +53,7 @@ fn request(subject: &str, side: ContactSide) -> axioval_engine::ContactRequest {
 
 #[test]
 fn a_slab_resting_on_a_wall_reports_full_contact() {
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0));
     let service = AxiolidContactService::new(geometry, source());
@@ -78,7 +78,7 @@ fn a_slab_resting_on_a_wall_reports_full_contact() {
 #[test]
 fn a_counterpart_beyond_the_gap_tolerance_is_not_touching() {
     // 0.5 m away, far outside the 0.01 m gap tolerance.
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.5, 2.0));
     let service = AxiolidContactService::new(geometry, source());
@@ -99,7 +99,7 @@ fn a_counterpart_beyond_the_gap_tolerance_is_not_touching() {
 #[test]
 fn partial_coverage_is_measured_as_a_fraction_not_rounded_to_all_or_nothing() {
     // Counterpart covers the right half of a 2 m face.
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad_at(0.005, 1.0, 1.0));
     let service = AxiolidContactService::new(geometry, source());
@@ -121,7 +121,7 @@ fn partial_coverage_is_measured_as_a_fraction_not_rounded_to_all_or_nothing() {
 #[test]
 fn a_counterpart_on_the_other_side_is_not_contact_for_the_requested_side() {
     // The wall sits BELOW the slab, but contact was requested above.
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(-0.005, 2.0));
     let service = AxiolidContactService::new(geometry, source());
@@ -145,14 +145,14 @@ fn a_counterpart_on_the_other_side_is_not_contact_for_the_requested_side() {
 
 #[test]
 fn an_unknown_subject_is_unavailable_rather_than_silently_zero() {
-    let service = AxiolidContactService::new(AxiolidContactGeometry::new(), source());
+    let service = AxiolidContactService::new(AxiolidGeometry::new(), source());
     let outcome = service.measure_contact(&request("absent", ContactSide::Above));
     assert_eq!(outcome.unwrap_err(), ContactError::Unavailable);
 }
 
 #[test]
 fn contact_evidence_is_exact_and_locates_its_subject() {
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0));
     let service = AxiolidContactService::new(geometry, source());
@@ -176,7 +176,7 @@ fn contact_evidence_is_exact_and_locates_its_subject() {
 /// face is more than fully supported, which is not a thing.
 #[test]
 fn overlapping_counterparts_cannot_report_more_than_the_whole_face() {
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall-a"), quad(0.005, 2.0))
         .with_mesh(id("wall-b"), quad(0.005, 2.0));
@@ -200,7 +200,7 @@ fn overlapping_counterparts_cannot_report_more_than_the_whole_face() {
 #[test]
 fn a_void_between_counterparts_is_not_reported_as_contact() {
     // Two 0.5 m strips at x=[0,0.5] and x=[1.5,2.0]: half the 2 m face is void.
-    let geometry = AxiolidContactGeometry::new()
+    let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("left"), quad_at(0.005, 0.5, 0.0))
         .with_mesh(id("right"), quad_at(0.005, 0.5, 1.5));

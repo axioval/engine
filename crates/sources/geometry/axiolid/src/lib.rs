@@ -7,8 +7,12 @@
 //! substituted: missing backends return [`AxiolidError::IntegrationUnavailable`].
 
 pub mod contact;
+pub mod geometry;
+pub mod linear_quantity;
 
-pub use contact::{AxiolidContactGeometry, AxiolidContactService};
+pub use contact::AxiolidContactService;
+pub use geometry::AxiolidGeometry;
+pub use linear_quantity::AxiolidLinearQuantityService;
 
 use std::collections::BTreeMap;
 

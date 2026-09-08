@@ -4,6 +4,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-09-07
+
+### Added
+
+- `axioval-axiolid` implements `LinearQuantityService`, measuring shelf running
+  length from an object's footprint, ceiling height and declared doorways. The
+  `shelf-capacity` capability now runs against real geometry.
+- `AxiolidGeometry::with_doorways` records how many openings interrupt an
+  object's perimeter. Openings are a semantic fact a mesh does not carry, so
+  the host declares them rather than the adapter inferring them.
+
+### Changed
+
+- The mesh store moved from `contact` to a shared `geometry` module and is now
+  `AxiolidGeometry`: it was never contact-specific, and a second service needs
+  the same lookup. `AxiolidContactGeometry` is renamed accordingly.
+- Shelf length is reported as an upper-bounded interval rather than an exact
+  value, because it derives from a bounding footprint. The capability already
+  fails closed on an interval that straddles its minimum.
+
 ## [0.1.13] - 2026-09-07
 
 ### Added

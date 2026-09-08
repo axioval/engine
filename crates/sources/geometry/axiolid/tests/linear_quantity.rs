@@ -140,3 +140,26 @@ fn a_footprint_bound_is_not_reported_as_exact() {
         "a bound derived from a footprint must not claim to be exact"
     );
 }
+
+/// One geometry set feeds several services.
+///
+/// An application registers contact and linear-quantity services over the same
+/// model. If the store cannot be shared, every consumer has to rebuild it,
+/// which is how two services silently end up measuring different geometry.
+///
+/// Bit-equality is the contract: the same geometry must not merely measure
+/// closely, it must measure identically.
+#[test]
+#[allow(clippy::float_cmp)]
+fn one_geometry_set_serves_several_services() {
+    let geometry = AxiolidGeometry::new().with_mesh(id("room"), room(6.0, 6.0, 3.0));
+    let shared = geometry.clone();
+
+    let first = measure(geometry, id("room")).expect("measurable");
+    let second = measure(shared, id("room")).expect("clone measurable");
+
+    assert_eq!(
+        first, second,
+        "a shared geometry set must measure identically"
+    );
+}

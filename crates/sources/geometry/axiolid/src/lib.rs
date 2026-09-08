@@ -7,10 +7,13 @@
 //! substituted: missing backends return [`AxiolidError::IntegrationUnavailable`].
 
 pub mod contact;
+pub mod envelope_membership;
 pub mod geometry;
 pub mod linear_quantity;
+pub(crate) mod planar;
 
 pub use contact::AxiolidContactService;
+pub use envelope_membership::AxiolidEnvelopeMembershipService;
 pub use geometry::AxiolidGeometry;
 pub use linear_quantity::AxiolidLinearQuantityService;
 

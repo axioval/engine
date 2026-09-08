@@ -217,3 +217,35 @@ fn a_void_between_counterparts_is_not_reported_as_contact() {
         "only the covered strips count, not the void between: {ratio}"
     );
 }
+
+/// An overlap below the minimum polygon area is numerical dust, not contact.
+///
+/// The tolerance exists to reject specks: two faces sharing a hairline strip
+/// have not been shown to bear on each other. Without the filter the ratio
+/// would creep upward from slivers the model never meant as support.
+// Exact zero is the contract: the filter discards the polygon entirely rather
+// than accumulating a small area.
+#[allow(clippy::float_cmp)]
+#[test]
+fn an_overlap_below_the_minimum_polygon_area_is_discarded() {
+    // A 2 m quad offset by 1.999 m overlaps by 0.001 m x 2 m = 0.002 m2.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), quad(0.0, 2.0))
+        .with_mesh(id("wall"), quad_at(0.005, 2.0, 1.999));
+    let service = AxiolidContactService::new(geometry, source());
+    // Minimum polygon area 0.01 m2 is five times the sliver.
+    let strict = ContactTolerance::try_new(0.01, 0.01, 0.01).expect("valid tolerance");
+    let measured = service
+        .measure_contact(&axioval_engine::ContactRequest::new(
+            id("slab"),
+            ContactSide::Above,
+            strict,
+        ))
+        .expect("measurable");
+    assert_eq!(
+        measured.contact_area_square_metres(),
+        0.0,
+        "a sliver under the minimum polygon area must not count as contact"
+    );
+    assert!(measured.touching().is_empty(), "nothing bears on the slab");
+}

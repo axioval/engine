@@ -12,7 +12,7 @@ use axioval_ir::ObjectId;
 ///
 /// Holding meshes by `ObjectId` is what keeps this adapter source-neutral:
 /// the host decides how its native elements map onto identities.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct AxiolidGeometry {
     meshes: BTreeMap<ObjectId, TriMesh>,
     doorways: BTreeMap<ObjectId, usize>,

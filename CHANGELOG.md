@@ -4,6 +4,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-09-07
+
+### Added
+
+- `AxiolidGeometry` is `Clone`, so one geometry set can be registered with
+  several services. Found by an application registering contact and
+  linear-quantity services over the same model: without it every consumer has
+  to rebuild the store, which is how two services end up measuring different
+  geometry.
+
 ## [0.1.14] - 2026-09-07
 
 ### Added

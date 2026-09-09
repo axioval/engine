@@ -5,3 +5,7 @@ __pycache__/
 *.profraw
 *.profdata
 .DS_Store
+# Staging crates depend on the local Axiolid checkout by path, so their
+# lockfile pins absolute paths from one machine. It is regenerated on build
+# and must not be committed.
+/staging/*/Cargo.lock

@@ -4,7 +4,7 @@
 //! contact and what it touches; whether that is enough is a rule's decision.
 //!
 //! The engine's [`ContactService`] is source-neutral, so nothing here may
-//! assume IFC: subjects arrive as [`ObjectId`]s and their geometry is supplied
+//! assume IFC: subjects arrive as `ObjectId`s and their geometry is supplied
 //! by the host as triangle meshes. That is what lets a proprietary CAD source
 //! use this adapter without an IFC dependency.
 

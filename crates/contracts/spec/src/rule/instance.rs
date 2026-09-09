@@ -67,7 +67,7 @@ impl RuleInstance {
         self
     }
     /// Effective parameter value, falling back to the definition default via
-    /// [`crate::validate`] helpers when needed (this raw getter does not apply
+    /// `validate` helpers when needed (this raw getter does not apply
     /// defaults — validation/compilation does).
     pub fn get(&self, id: &str) -> Option<&ParamValue> {
         self.params.get(id)

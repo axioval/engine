@@ -12,13 +12,45 @@ This repository owns the source-neutral Rust rule runtime, its portable contract
 - Missing evidence and unsupported capabilities fail closed.
 - Stable ordering and source-qualified identities are compatibility contracts.
 
+## Neutrality is a publication contract
+
+This repository and every crate published from it are public. Axioval is
+source-neutral, so naming a particular commercial product, downstream consumer,
+or private integration in tracked text both leaks a private relationship and
+contradicts the neutrality the crates claim.
+
+- Never name a specific commercial checking product, client, or private
+  consumer in tracked files, commit messages, or published artifacts.
+- Describe capabilities by what they do, not by whose product they came from:
+  "the capability migration ledger", not a vendor's name.
+- Interoperability *formats* may be named where they are genuine public
+  standards or file extensions the code reads (`.cset`, IDS, IFC, OpenBimRL).
+  Naming the format is a technical fact; naming the company is a leak.
+- Private material lives in `private/` (untracked). Gates read it through an
+  environment variable and fail closed when it is missing.
+
+## Development
+
+Development is hot on `main`: use scoped Conventional Commits, keep history
+linear, and stage explicit paths only.
+
+The public documentation system is mdBook plus workspace rustdoc, deployed by
+`.github/workflows/pages.yml`. Update the relevant page with every public
+contract or architecture change and keep `docs/src/SUMMARY.md` complete.
+
 ## Direct children
 
 - `crates/` — Rust crates; descend into each crate's `AGENTS.md` before editing.
-- `docs/` — mdBook sources and architecture/migration documentation.
+- `docs/` — mdBook sources and architecture documentation.
 - `scripts/` — repository validation and architecture checks.
+- `staging/` — crates developed against unpublished path dependencies.
+- `attic/` — retired crate names kept only to serve a deprecation notice.
 - `.github/workflows/` — CI and GitHub Pages deployment.
+- `private/` — untracked maintainer-only inputs (capability ledger, publish denylist).
 
 ## Gates
 
-Run `./scripts/check.sh`. It formats, lints, tests, checks architecture boundaries, builds rustdoc, and builds the mdBook. Do not mark a the provider capability migrated without its parity evidence and cutover reference in `docs/src/migration.md`.
+Run `./scripts/check.sh`. It formats, lints, tests, checks architecture
+boundaries, builds rustdoc, and builds the mdBook. The architecture gate is
+mutation-proven and binds to `scripts/rule_vocabulary.json`; a capability is
+never marked migrated without its parity evidence and cutover reference.

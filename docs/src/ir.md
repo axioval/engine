@@ -36,4 +36,4 @@ Every imported fact and computed evidence can reference its source record, adapt
 
 ## No source leakage
 
-Core architecture checks reject references to `IfcModel`, STEP entity handles, ICDD container types, Axiolid meshes, OpenCascade, CGAL, and the provider types.
+Core architecture checks reject references to `IfcModel`, STEP entity handles, ICDD container types, Axiolid meshes, OpenCascade, CGAL, and the legacy runtime types.

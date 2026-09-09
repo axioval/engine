@@ -20,8 +20,8 @@
 
 # Operations
 
-- [Migration from the provider](./migration.md)
-- [the provider compatibility ledger](./compatibility.md)
+- [Capability migration](./migration.md)
+- [Compatibility ledger](./compatibility.md)
 - [Contributing](./contributing.md)
 - [Security](./security.md)
 

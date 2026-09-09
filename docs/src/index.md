@@ -10,4 +10,4 @@ IFC remains an important adapter, but its schema inheritance, STEP identity, fil
 
 ## Current status
 
-The engine is being extracted from the production the provider compatibility implementation. The migration ledger records what is actually cut over; unchecked entries are not claims of support.
+The engine is being extracted from a production legacy compatibility implementation. The migration ledger records what is actually cut over; unchecked entries are not claims of support.

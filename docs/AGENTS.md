@@ -8,7 +8,8 @@ This directory is the mdBook source for the public GitHub Pages site.
 - `src/ir.md` documents the source-neutral model independently of any adapter.
 - `src/adapters.md` documents each adapter separately; never describe OpenBIM+Axiolid as one ownership layer.
 - `src/capabilities.md` describes trusted executable capabilities and their evidence requirements.
-- `src/migration.md` is the capability cutover ledger. Never claim migration without tests and the provider consumption evidence.
+- `src/migration.md` is the capability cutover ledger. Never claim migration without tests and downstream consumption evidence.
+- This site is public. Never name a private downstream consumer, clie...[truncated]
 - Generated rustdoc is nested at `/api` by CI; do not commit generated output.
 
 Build with `mdbook build docs` and treat warnings/broken links as failures in CI.

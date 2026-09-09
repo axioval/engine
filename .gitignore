@@ -5,6 +5,8 @@ __pycache__/
 # denylist both name a private downstream consumer, so they are untracked in
 # this public repository. Scripts that need them fail closed when absent.
 /private/
+/migration/
+/HERMES.md
 *.pyc
 *.profraw
 *.profdata

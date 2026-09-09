@@ -19,6 +19,7 @@ if [[ "${AXIOVAL_DEPENDENCY_AUDIT_COMPLETE:-0}" != "1" ]]; then
 fi
 
 python3 scripts/architecture.py --self-test
+python3 scripts/staging_isolation.py
 python3 scripts/migration.py
 python3 scripts/test_check_package_contents.py
 cargo fmt --all -- --check

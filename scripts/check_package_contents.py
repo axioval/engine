@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -39,7 +40,27 @@ def workspace_versions() -> dict[str, str]:
 # crate. Axioval is source-neutral: naming a particular vendor in shipped text
 # both leaks a private integration and contradicts the neutrality the crates
 # claim. Compared case-insensitively against every shipped text file.
-FORBIDDEN_TERMS = ("the provider",)
+#
+# The term list names those private parties, so hardcoding it here would be the
+# very disclosure this check exists to prevent. It is loaded from a private,
+# untracked file instead. Absence is FAIL, never skip: a publish gate that
+# quietly disarms itself when its denylist goes missing is worse than no gate,
+# because the one moment it disappears is the moment a leak ships.
+DEFAULT_TERMS_FILE = ROOT / "private" / "forbidden-terms.json"
+
+
+def forbidden_terms() -> tuple[str, ...]:
+    configured = os.environ.get("AXIOVAL_FORBIDDEN_TERMS", "").strip()
+    path = Path(configured) if configured else DEFAULT_TERMS_FILE
+    if not path.is_file():
+        raise ValueError(
+            f"forbidden-term list not found at {path}; set AXIOVAL_FORBIDDEN_TERMS. "
+            "Refusing to verify a package with an empty denylist."
+        )
+    terms = json.loads(path.read_text(encoding="utf-8")).get("terms")
+    if not isinstance(terms, list) or not terms or not all(isinstance(t, str) and t for t in terms):
+        raise ValueError(f"{path}: `terms` must be a non-empty list of strings")
+    return tuple(term.casefold() for term in terms)
 
 
 # A crate's LICENSE is a relative symlink to the workspace root. Moving a crate
@@ -61,6 +82,7 @@ def dangling_license_links() -> list[str]:
 
 
 def verify(package_dir: Path, versions: dict[str, str]) -> list[str]:
+    terms = forbidden_terms()
     errors: list[str] = []
     for package in sorted(EXPECTED):
         version = versions[package]
@@ -88,11 +110,11 @@ def verify(package_dir: Path, versions: dict[str, str]) -> list[str]:
                     body = handle.read().decode("utf-8")
                 except UnicodeDecodeError:
                     continue
-                for term in FORBIDDEN_TERMS:
+                for term in terms:
                     if term in body.casefold():
                         errors.append(
-                            f"{archive.name}: {member.name} names forbidden "
-                            f"downstream vendor {term!r}"
+                            f"{archive.name}: {member.name} names a forbidden "
+                            f"downstream party"
                         )
             manifest = crate.extractfile(root + "Cargo.toml")
             text = manifest.read().decode() if manifest is not None else ""

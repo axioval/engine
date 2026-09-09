@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -53,10 +55,19 @@ def core_crates(root: Path) -> tuple[tuple[str, Path], ...]:
         raise ValueError(f"no core crates among {[name for name, _ in crates]}")
     return core
 
-FORBIDDEN_DEPENDENCIES = ("ifc", "step", "openbim", "icdd", "axiolid", "opencascade", "cgal", "the provider")
+# Public, technology-level couplings a core crate may never take on. These are
+# formats and kernels, not companies, so they belong in tracked source: a public
+# clone must be able to run this gate at full strength.
+#
+# Private downstream party names are appended from `private/forbidden-terms.json`
+# when present (see `private_couplings`). Their absence weakens this gate only
+# for names that can no longer appear in the tree anyway, since naming them in
+# tracked source is itself the violation.
+FORBIDDEN_DEPENDENCIES = ("ifc", "step", "openbim", "icdd", "axiolid", "opencascade", "cgal")
+_COUPLING_ALTERNATION = "|".join(FORBIDDEN_DEPENDENCIES)
 FORBIDDEN_SOURCE = (
-    re.compile(r"\b(?:use|extern\s+crate)\s+[^;]*(?:ifc|step|openbim|icdd|axiolid|opencascade|cgal|the provider)", re.I),
-    re.compile(r"\b(?:ifc|step|openbim|icdd|axiolid|opencascade|cgal|the provider)(?:_[a-z0-9_]+)?\s*::", re.I),
+    re.compile(rf"\b(?:use|extern\s+crate)\s+[^;]*(?:{_COUPLING_ALTERNATION})", re.I),
+    re.compile(rf"\b(?:{_COUPLING_ALTERNATION})(?:_[a-z0-9_]+)?\s*::", re.I),
     re.compile(r"\b(?:IfcModel|EntityRef|IfcModelSet|StepModel)\b"),
 )
 ACTION_USE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.M)
@@ -77,23 +88,25 @@ RULE_SUFFIX = re.compile(r"(?:Rule|Constraint|Check)$")
 CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
 
 
-def rule_stems(ledger: str) -> set[str]:
-    """Snake-case stems of every native rule named in the migration ledger.
+def rule_stems(vocabulary: str) -> set[str]:
+    """Snake-case stems of every rule family the evidence seam must not name.
 
-    Fails loudly on schema drift. Defaulting to an empty list would silently
-    disable the entire rule-name half of the gate the moment a ledger key is
-    renamed -- a green gate that checks nothing.
+    Reads `scripts/rule_vocabulary.json`: generic domain rule families, carrying
+    no product or consumer identity, so the gate is fully reproducible from a
+    public clone. Fails loudly on schema drift -- defaulting to an empty set
+    would silently disable the entire rule-name half of the gate the moment a
+    key is renamed, leaving a green gate that checks nothing.
     """
-    document = json.loads(ledger)
-    if not isinstance(document, dict) or not isinstance(document.get("entries"), list):
-        raise ValueError("migration ledger must be an object with an `entries` list")
-    stems: set[str] = set()
-    for entry in document["entries"]:
-        base = RULE_SUFFIX.sub("", entry.get("nativeType", ""))
-        if base:
-            stems.add(CAMEL_BOUNDARY.sub("_", base).lower())
+    document = json.loads(vocabulary)
+    if not isinstance(document, dict) or not isinstance(document.get("stems"), list):
+        raise ValueError("rule vocabulary must be an object with a `stems` list")
+    stems = {
+        CAMEL_BOUNDARY.sub("_", RULE_SUFFIX.sub("", stem)).lower()
+        for stem in document["stems"]
+        if isinstance(stem, str) and stem
+    }
     if not stems:
-        raise ValueError("migration ledger names no rules; the seam gate would be inert")
+        raise ValueError("rule vocabulary names no rules; the seam gate would be inert")
     return stems
 
 
@@ -300,8 +313,8 @@ def self_test() -> None:
     )
     assert not manifest_violations('[dependencies]\nserde = "1"\n')
     assert not source_violations("/// IFC is an adapter, not the IR.\npub struct Project;")
-    ledger = '{"entries": [{"nativeType": "StairRule"}, {"nativeType": "FreeFloorSpaceRule"}]}'
-    stems = rule_stems(ledger)
+    vocabulary = '{"stems": ["StairRule", "free_floor_space"]}'
+    stems = rule_stems(vocabulary)
     assert stems == {"stair", "free_floor_space"}
     assert service_seam_violations(
         "pub trait StairService {\n    fn resolve_stair(&self, plan: &StairPlanSpec) -> u8;\n}", stems
@@ -321,7 +334,7 @@ def self_test() -> None:
     assert arena_identity_violations(
         'ObjectId::new(source.clone(), entity.to_string())'
     ) == ["ObjectId::new"]
-    # The real the provider sidecar shape: multi-line, field-qualified arena index.
+    # The real legacy sidecar shape: multi-line, field-qualified arena index.
     assert arena_identity_violations(
         "ObjectId::new(\n"
         "    SourceId::new(IFC_STEP_SYSTEM, entity.model_id.clone()).ok()?,\n"
@@ -393,13 +406,20 @@ def self_test() -> None:
         stems,
     )
 
-    # 5. Ledger schema drift must fail loudly, never silently disarm the gate.
-    for broken in ('{"rules": []}', '{"entries": {}}', '{"entries": []}', "[]"):
+    # 5. Vocabulary schema drift must fail loudly, never silently disarm the gate.
+    for broken in ('{"rules": []}', '{"stems": {}}', '{"stems": []}', '{"stems": [""]}', "[]"):
         try:
             rule_stems(broken)
         except ValueError:
             continue
-        raise AssertionError(f"ledger drift accepted: {broken}")
+        raise AssertionError(f"vocabulary drift accepted: {broken}")
+
+    # The shipped vocabulary must itself bind: an empty or renamed file would
+    # leave the seam gate inert while still reporting success.
+    _shipped = rule_stems(
+        (Path(__file__).resolve().parent / "rule_vocabulary.json").read_text(encoding="utf-8")
+    )
+    assert len(_shipped) >= 60, f"rule vocabulary shrank to {len(_shipped)} stems"
 
     # Neutral evidence with an incidental substring stays clean.
     assert not service_seam_violations(
@@ -419,21 +439,95 @@ def self_test() -> None:
     assert not verdict_return_violations(
         "pub trait FreeSpaceService {\n    fn measure_free_area(&self, r: &FreeAreaRequest) -> Result<FreeAreaEvidence, E>;\n}"
     )
-    # ADR 0004 ratchet: a missing source repo is not a violation (CI), but
+    # ADR 0004 ratchet: an unavailable source is not a violation (CI), but
     # a source over budget is. Proven against the real 23-method provider.
+    assert not source_ratchet(None, 23)
     assert not source_ratchet(Path("/nonexistent/extraction/source"), 23)
-    _real_source = Path("$HOME/projects/vendor/the provider")
-    if (_real_source / "crates/rules/src/evidence/core/source.rs").is_file():
+    _real_source = extraction_source()
+    if _real_source and (_real_source / "crates/rules/src/evidence/core/source.rs").is_file():
         assert not source_ratchet(_real_source, PLAN_METHOD_BUDGET)
         assert source_ratchet(_real_source, PLAN_METHOD_BUDGET - 1)
 
 
 
-def source_ratchet(source_root: Path, budget: int) -> list[str]:
+def private_terms() -> tuple[str, ...]:
+    """Private party names that must never appear in tracked text, casefolded.
+
+    Loaded from `private/forbidden-terms.json` (untracked) or the path in
+    `AXIOVAL_FORBIDDEN_TERMS`. Returns empty when unavailable: a public clone
+    genuinely cannot check for names it is not allowed to know, and failing the
+    build there would make the repository unusable by contributors. The
+    enforcing run is the maintainer's, where the file is present.
+    """
+    configured = os.environ.get("AXIOVAL_FORBIDDEN_TERMS", "").strip()
+    path = Path(configured) if configured else Path(__file__).resolve().parents[1] / "private" / "forbidden-terms.json"
+    if not path.is_file():
+        return ()
+    terms = json.loads(path.read_text(encoding="utf-8")).get("terms")
+    if not isinstance(terms, list) or not terms:
+        raise ValueError(f"{path}: `terms` must be a non-empty list")
+    return tuple(term.casefold() for term in terms if isinstance(term, str) and term)
+
+
+def tracked_files(root: Path) -> list[str]:
+    """Files git actually tracks -- the exact set that reaches the public remote.
+
+    Scanning the working tree instead would both miss nothing and check far too
+    much (ignored `private/`, `target/`), so the tracked set is the only honest
+    definition of "what we publish".
+    """
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [name for name in result.stdout.split("\0") if name]
+
+
+def disclosure_violations(root: Path) -> list[str]:
+    """Tracked files naming a private downstream party.
+
+    The repository is public. A vendor name reaching `main` is disclosed the
+    moment it is pushed and survives in history even after deletion, so this is
+    checked on every run rather than at release time.
+    """
+    terms = private_terms()
+    if not terms:
+        return []
+    failures: list[str] = []
+    for name in tracked_files(root):
+        path = root / name
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8").casefold()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if any(term in body for term in terms):
+            failures.append(f"{name}: names a private downstream party")
+    return failures
+
+
+def extraction_source() -> Path | None:
+    """Private downstream checkout the ADR 0004 ratchet guards, or `None`.
+
+    Supplied via `AXIOVAL_EXTRACTION_SOURCE` so the path to a private consumer
+    is never written into this public repository. Absent means "not available
+    here" (the CI case), which is not a violation; the ratchet below is a
+    regression guard on a source only maintainers can see.
+    """
+    configured = os.environ.get("AXIOVAL_EXTRACTION_SOURCE", "").strip()
+    return Path(configured) if configured else None
+
+
+def source_ratchet(source_root: Path | None, budget: int) -> list[str]:
     # Guard the extraction SOURCE against regression. ADR 0004 gates the
-    # destination, but nothing stopped vendor/the provider growing a 24th
+    # destination, but nothing stopped the downstream source growing a 24th
     # plan-shaped provider method. This is a one-way ratchet: the count
     # may fall as methods are decomposed, never rise.
+    if source_root is None:
+        return []
     provider = source_root / "crates/rules/src/evidence/core/source.rs"
     if not provider.is_file():
         return []
@@ -450,8 +544,7 @@ def source_ratchet(source_root: Path, budget: int) -> list[str]:
 
 def check(root: Path) -> list[str]:
     failures: list[str] = []
-    ledger = root / "migration" / "the provider-capabilities.json"
-    stems = rule_stems(ledger.read_text(encoding="utf-8"))
+    stems = rule_stems((root / "scripts" / "rule_vocabulary.json").read_text(encoding="utf-8"))
     for crate, crate_root in core_crates(root):
         manifest = crate_root / "Cargo.toml"
         for dependency in manifest_violations(manifest.read_text(encoding="utf-8")):
@@ -464,12 +557,17 @@ def check(root: Path) -> list[str]:
                 failures.append(f"{source.relative_to(root)}: {detail}")
             for detail in verdict_return_violations(text):
                 failures.append(f"{source.relative_to(root)}: {detail}")
-    # ADR 0004 ratchet on the extraction SOURCE. Optional: the gate runs in
-    # CI where vendor/the provider is absent, and a missing source is not a
-    # violation -- but when present it must never grow a new plan-shaped
-    # provider method. Budget falls as methods are decomposed.
-    source_root = Path("$HOME/projects/vendor/the provider")
-    failures.extend(source_ratchet(source_root, PLAN_METHOD_BUDGET))
+    # The repository is public: a private party named in a tracked file is
+    # disclosed the moment it is pushed, and deleting it later does not undo
+    # the disclosure. Checked every run, not at release time.
+    failures.extend(disclosure_violations(root))
+    # ADR 0004 ratchet on the extraction SOURCE. The source is a private
+    # downstream checkout, so its location is supplied by the environment and
+    # is never named in this repository. Optional by design: the gate runs in
+    # CI where the source is absent, and a missing source is not a violation --
+    # but when present it must never grow a new plan-shaped provider method.
+    # Budget falls as methods are decomposed.
+    failures.extend(source_ratchet(extraction_source(), PLAN_METHOD_BUDGET))
     # ADR 0003 applies to every crate: adapters are exactly where identity is
     # minted, so exempting them would exempt the only code that can violate it.
     for source in sorted((root / "crates").rglob("src/**/*.rs")):

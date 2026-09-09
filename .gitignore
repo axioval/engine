@@ -1,6 +1,10 @@
 /target/
 /docs/book/
 __pycache__/
+# Private maintainer artifacts. The capability ledger and the forbidden-term
+# denylist both name a private downstream consumer, so they are untracked in
+# this public repository. Scripts that need them fail closed when absent.
+/private/
 *.pyc
 *.profraw
 *.profdata

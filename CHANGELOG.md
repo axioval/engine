@@ -4,6 +4,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- The retired `axioval-openbim` name now carries a deprecation notice on
+  crates.io, published as `0.2.0`. It contains no functionality and points at
+  `axioval-ifc`.
+
+  Released as `0.2.0` rather than `0.1.12` deliberately: under Cargo's semver
+  rules a `0.1.12` would be selected automatically by anyone depending on
+  `"0.1"`, turning a routine update into an empty crate. Verified against the
+  live registry -- a `"0.1"` dependency still resolves to `0.1.11`.
+
+  `0.1.11` is intentionally not yanked. Yanking would break existing lockfiles
+  while explaining nothing about where the code went.
+
+
 ## [0.1.17] - 2026-09-07
 
 ### Added

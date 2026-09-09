@@ -5,6 +5,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
   by every service here. Doorway counts live here too: a mesh does not say which
   wall segments are openings, so the host declares them.
+- `src/guard.rs` implements `GuardService`: barriers, landings and climbing
+  aids around a walking surface's edge. Proximity is footprint-to-footprint,
+  never vertex-to-vertex.
+- `src/free_space.rs` implements `FreeSpaceService` for clearance and free
+  area. `find_placement` refuses: its `NoPlacement` arm asserts an exhaustive
+  search this adapter cannot perform.
 - `src/space.rs` implements `SpaceService`: seven independent space
   measurements over storey-assigned, role-tagged geometry.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds

@@ -234,13 +234,14 @@ fn an_unavailable_aspect_does_not_suppress_the_rest() {
         AxiolidGeometry::new().with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.5));
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
 
-    // Boundary gaps need segment data a triangle soup does not carry.
+    // An undeclared space has no geometry, so that aspect cannot be measured.
     assert_eq!(
-        service.measure_boundary_gaps(&id("space")),
+        service.measure_clear_height(&id("absent")),
         Err(SpaceError::Unavailable),
         "an unsupplied input must be reported, not guessed"
     );
-    // Every other aspect still answers.
+    // Every aspect of the space that IS present still answers.
+    assert!(service.measure_boundary_gaps(&id("space")).is_ok());
     assert!(service.measure_clear_height(&id("space")).is_ok());
     assert!(service.measure_duplicates(&id("space")).is_ok());
     assert!(service.measure_overlaps(&id("space")).is_ok());
@@ -344,5 +345,52 @@ fn an_overhanging_slab_covers_only_the_cap() {
         (coverage.covered_ratio() - 1.0).abs() < 1e-9,
         "a fully covered cap is exactly full, got {}",
         coverage.covered_ratio()
+    );
+}
+
+/// A space walled on one side reports the rest of its perimeter as gaps.
+///
+/// The measurement walks the real perimeter: unioning the triangle soup first
+/// collapses the interior edge between the two triangles of the floor, which
+/// would otherwise be reported as a phantom uncovered run.
+#[test]
+fn an_unwalled_boundary_is_reported_as_a_gap() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        // A wall along the whole south edge only.
+        .with_mesh(id("wall"), body(-0.1, 4.1, -0.1, 0.1, 0.0, 3.0));
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    let gaps = service
+        .measure_boundary_gaps(&id("space"))
+        .expect("measurable");
+
+    let uncovered: f64 = gaps
+        .iter()
+        .map(axioval_engine::BoundaryGap::length_metres)
+        .sum();
+    assert!(
+        uncovered > 0.0,
+        "three unwalled sides must be reported as gaps"
+    );
+    assert!(
+        uncovered < 16.0,
+        "the walled side must not count as a gap, got {uncovered} of 16 m"
+    );
+}
+
+/// A fully enclosed space has no boundary gaps.
+#[test]
+fn a_fully_walled_space_has_no_gaps() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        // A slab covering the whole footprint sits on every boundary point.
+        .with_mesh(id("enclosure"), body(-0.5, 4.5, -0.5, 4.5, 0.0, 3.0));
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    let gaps = service
+        .measure_boundary_gaps(&id("space"))
+        .expect("measurable");
+    assert!(
+        gaps.is_empty(),
+        "an enclosed boundary has no gaps: {gaps:?}"
     );
 }

@@ -5,7 +5,7 @@
 //! disagreeing about what 'in plan' means would be a silent measurement bug.
 
 use axiolid_core::{Frame2, Point2, Vec2};
-use axiolid_overlay::{Polygon, Ring};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
 
 use crate::geometry::Triangle;
 
@@ -64,6 +64,54 @@ pub(crate) fn ring_area(ring: &Ring) -> f64 {
         sum += current.x * next.y - next.x * current.y;
     }
     sum * 0.5
+}
+
+/// The plan boundary of a triangle set, as its outer rings.
+///
+/// A mesh arrives as triangle soup: the shared edges between triangles are
+/// interior, not boundary. Unioning first collapses them, leaving only the
+/// real perimeter -- which is what an edge-based measurement must walk.
+pub(crate) fn boundary_rings(
+    triangles: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Option<Vec<Ring>> {
+    let polygons = projected_polygons(triangles);
+    if polygons.is_empty() {
+        return None;
+    }
+    let input = OverlayInput {
+        frame: plan_frame(),
+        polygons,
+    };
+    let merged = overlay(
+        &input,
+        &input,
+        OverlayOperation::Union,
+        FillRule::NonZero,
+        tolerance,
+    )
+    .ok()?;
+    let rings: Vec<Ring> = merged.polygons.into_iter().map(|p| p.outer).collect();
+    (!rings.is_empty()).then_some(rings)
+}
+
+/// Consecutive point pairs of a ring, closing back to the first point.
+pub(crate) fn ring_segments(ring: &Ring) -> Vec<(Point2, Point2)> {
+    let points = &ring.points;
+    if points.len() < 2 {
+        return Vec::new();
+    }
+    (0..points.len())
+        .map(|i| (points[i], points[(i + 1) % points.len()]))
+        .collect()
+}
+
+/// Perimeter length of a ring.
+pub(crate) fn ring_perimeter(ring: &Ring) -> f64 {
+    ring_segments(ring)
+        .into_iter()
+        .map(|(a, b)| ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt())
+        .sum()
 }
 
 #[cfg(test)]

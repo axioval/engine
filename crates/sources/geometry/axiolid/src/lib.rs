@@ -8,14 +8,18 @@
 
 pub mod contact;
 pub mod envelope_membership;
+pub mod free_space;
 pub mod geometry;
+pub mod guard;
 pub mod linear_quantity;
 pub(crate) mod planar;
 pub mod space;
 
 pub use contact::AxiolidContactService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
+pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::AxiolidGeometry;
+pub use guard::AxiolidGuardService;
 pub use linear_quantity::AxiolidLinearQuantityService;
 pub use space::AxiolidSpaceService;
 

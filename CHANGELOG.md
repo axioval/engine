@@ -4,6 +4,40 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-09-07
+
+### Added
+
+- `AxiolidGuardService` measures guard edges: what stands above a walking
+  surface's exposed edge (barriers), what lies below it (landings), and what
+  sits beside a barrier low enough to climb it. Edge coverage is reported as a
+  parameterised interval so a policy can union overlapping protection.
+- `AxiolidFreeSpaceService` measures clearance and free floor area. `Clear` is
+  returned only when every named obstacle was measured and none intersects, so
+  the completeness claim is earned rather than assumed.
+- `SpaceService::measure_boundary_gaps` is now implemented. Unioning the
+  triangle soup collapses interior edges, leaving the real perimeter to walk;
+  previously this aspect reported `Unavailable`.
+- Internal `planar::boundary_rings`, `ring_segments` and `ring_perimeter`,
+  shared by the services that walk a footprint edge.
+
+### Changed
+
+- Guard proximity is measured between plan footprints, not between vertices.
+  Two boxes whose faces are 50 mm apart have corner vertices a metre apart, so
+  vertex distance put a touching climbing aid outside a 0.5 m search radius.
+- An object can be both a barrier and a climbing aid for a taller barrier. The
+  climbable pass previously excluded everything already classed as a barrier,
+  which hid the classic defeat case of a low parapet beside a tall railing.
+
+### Not implemented
+
+- `FreeSpaceService::find_placement` returns `Unavailable`. `NoPlacement`
+  asserts an exhaustive search proving the shape fits nowhere; a sampled sweep
+  can only fail to find a witness, which is a weaker claim. Returning it would
+  launder "did not find" into "does not exist".
+
+
 ### Changed
 
 - The retired `axioval-openbim` name now carries a deprecation notice on

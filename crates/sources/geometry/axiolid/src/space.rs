@@ -17,7 +17,8 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{plan_frame, polygon_area, projected_polygons};
+use crate::planar::{boundary_rings, plan_frame, polygon_area, projected_polygons, ring_segments};
+use axiolid_core::Point2;
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, overlay};
 
 /// Areas below this are numerical dust, not a measured overlap.
@@ -251,13 +252,52 @@ impl SpaceService for AxiolidSpaceService {
         &self,
         space: &ObjectId,
     ) -> Result<Vec<axioval_engine::BoundaryGap>, SpaceError> {
-        // A boundary gap is a run of the space perimeter that no element
-        // covers. Deriving it needs the boundary decomposed into segments,
-        // which a triangle soup does not carry: a host supplying only meshes
-        // has not supplied the input this measurement requires. Reporting
-        // "no gaps" would assert a complete boundary that was never checked.
-        let _ = self.triangles_of(space)?;
-        Err(SpaceError::Unavailable)
+        let subject = self.triangles_of(space)?;
+        let tolerance = tolerance()?;
+        // Unioning the triangle soup collapses interior edges, leaving the
+        // real perimeter: the shared edge between two triangles of one slab is
+        // not boundary, and walking it as such would report phantom gaps.
+        let rings = boundary_rings(&subject, tolerance).ok_or(SpaceError::Unavailable)?;
+
+        let mut gaps = Vec::new();
+        for ring in &rings {
+            let mut uncovered_run = 0.0;
+            let mut covering: Vec<ObjectId> = Vec::new();
+            for (a, b) in ring_segments(ring) {
+                let length = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+                let midpoint = Point2::new(f64::midpoint(a.x, b.x), f64::midpoint(a.y, b.y));
+                let coverer = self.covering_element(space, midpoint);
+                match coverer {
+                    Some(element) => {
+                        // A covered segment closes the current run. The gap
+                        // carries the elements bounding it, so a reviewer can
+                        // open the walls the uncovered stretch runs between.
+                        if uncovered_run > 0.0 {
+                            if !covering.contains(&element) {
+                                covering.push(element);
+                            }
+                            gaps.push(axioval_engine::BoundaryGap::try_new(
+                                uncovered_run,
+                                std::mem::take(&mut covering),
+                            )?);
+                            uncovered_run = 0.0;
+                        } else if !covering.contains(&element) {
+                            // Remember the element preceding a future run.
+                            covering.clear();
+                            covering.push(element);
+                        }
+                    }
+                    None => uncovered_run += length,
+                }
+            }
+            if uncovered_run > 0.0 {
+                gaps.push(axioval_engine::BoundaryGap::try_new(
+                    uncovered_run,
+                    covering,
+                )?);
+            }
+        }
+        Ok(gaps)
     }
 
     fn measure_overlaps(&self, space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError> {
@@ -448,6 +488,41 @@ impl SpaceService for AxiolidSpaceService {
     fn evidence(&self) -> Evidence {
         Evidence::exact(self.source.clone(), "axiolid:space")
     }
+}
+
+impl AxiolidSpaceService {
+    /// The element covering a point on the space boundary, if any.
+    ///
+    /// "Covered" means an object other than the space itself has plan
+    /// footprint at that point: a wall standing on the boundary covers it, and
+    /// an unbounded stretch has nothing there.
+    fn covering_element(&self, space: &ObjectId, point: Point2) -> Option<ObjectId> {
+        for (candidate, mesh) in self.geometry.objects() {
+            if candidate == space || self.is_space(candidate) {
+                continue;
+            }
+            let body = triangles(mesh);
+            if point_in_footprint(&body, point) {
+                return Some(candidate.clone());
+            }
+        }
+        None
+    }
+}
+
+/// Whether a plan point lies within a triangle set's projected footprint.
+fn point_in_footprint(triangles: &[Triangle], point: Point2) -> bool {
+    triangles.iter().any(|[a, b, c]| {
+        let sign = |p: Point2, q: (f64, f64), r: (f64, f64)| {
+            (p.x - r.0) * (q.1 - r.1) - (q.0 - r.0) * (p.y - r.1)
+        };
+        let d1 = sign(point, (a.x, a.y), (b.x, b.y));
+        let d2 = sign(point, (b.x, b.y), (c.x, c.y));
+        let d3 = sign(point, (c.x, c.y), (a.x, a.y));
+        let has_negative = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+        let has_positive = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+        !(has_negative && has_positive)
+    })
 }
 
 /// The audit tolerance every measurement here shares.

@@ -16,12 +16,12 @@ publish = false
 # Published: the engine contract this implements.
 axioval-engine = "0.1.17"
 axioval-ir = "0.1.17"
-axiolid-core = { path = "../axiolid/kernel/crates/foundation/core" }
+axiolid-core = { path = "../../../../axiolid/kernel/crates/foundation/core" }
 
 # UNPUBLISHED — path deps until these land on crates.io. This is the only
 # reason this crate is not a workspace member and cannot be published.
 axiolid-route = { path = "../../../../axiolid/kernel/crates/algorithms/planar/route" }
-axiolid-overlay = { path = "../axiolid/kernel/crates/algorithms/planar/overlay" }
+axiolid-overlay = { path = "../../../../axiolid/kernel/crates/algorithms/planar/overlay" }
 
 [lints.clippy]
 all = "deny"

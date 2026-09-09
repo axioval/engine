@@ -1,0 +1,27 @@
+# Standalone: NOT a member of the engine workspace. The publish gate asserts
+# exactly nine workspace crates, and this one cannot be published at all while
+# it carries a path dependency.
+[workspace]
+
+[package]
+name = "axioval-axiolid-routing"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-or-later"
+description = "Staging: metric routing over unpublished Axiolid pathfinding crates"
+publish = false
+
+[dependencies]
+# Published: the engine contract this implements.
+axioval-engine = "0.1.17"
+axioval-ir = "0.1.17"
+axiolid-core = { path = "../axiolid/kernel/crates/foundation/core" }
+
+# UNPUBLISHED — path deps until these land on crates.io. This is the only
+# reason this crate is not a workspace member and cannot be published.
+axiolid-route = { path = "../../../../axiolid/kernel/crates/algorithms/planar/route" }
+axiolid-overlay = { path = "../axiolid/kernel/crates/algorithms/planar/overlay" }
+
+[lints.clippy]
+all = "deny"

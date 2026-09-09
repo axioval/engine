@@ -5,7 +5,7 @@ This repository owns the source-neutral Rust rule runtime, its portable contract
 ## Boundaries
 
 - Core crates must not depend on IFC, STEP, ICDD, Axiolid, OpenCascade, CGAL, or vendor types.
-- `axioval-openbim` and `axioval-axiolid` are independent adapters. Never create an adapter combining both organizations.
+- `axioval-ifc` and `axioval-axiolid` are independent adapters. Never create an adapter combining both organizations.
 - Source adapters map external identities and semantics into `axioval-ir`; they do not implement checking policy.
 - Geometry adapters provide typed evidence and exactness/provenance. They do not emit policy findings.
 - Rulesets select trusted capability IDs. Never execute package-provided code.

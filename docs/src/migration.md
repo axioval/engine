@@ -1,11 +1,11 @@
-# Migration from the provider
+# Capability migration
 
-A box is checked only when the Axioval implementation is the production owner, the provider consumes it, and parity evidence passes.
+A box is checked only when the Axioval implementation is the production owner, the legacy runtime consumes it, and parity evidence passes.
 
 ## Current capability waves
 
-- **Property comparison:** the bounded published `0.1.0` slice is consumed by the provider and recorded in the machine ledger as `in_progress`; unsupported operators and modes remain outside the cutover.
-- **Required property:** `axioval:capability.property-required` is published in the `0.1.1` facade and tested in the engine. It is deliberately not marked migrated until the provider's production checker executes it with exact source evidence.
+- **Property comparison:** the bounded published `0.1.0` slice is consumed by the legacy runtime and recorded in the machine ledger as `in_progress`; unsupported operators and modes remain outside the cutover.
+- **Required property:** `axioval:capability.property-required` is published in the `0.1.1` facade and tested in the engine. It is deliberately not marked migrated until the legacy production checker executes it with exact source evidence.
 
 ## Shared runtime
 
@@ -43,4 +43,4 @@ A box is checked only when the Axioval implementation is the production owner, t
 
 ## Required evidence per row
 
-Record the Axioval tests, the provider tests, oracle corpus, discrepancy count, performance measurement, cutover commit and rollback switch. Unsupported behavior remains unchecked and documented; it is never represented by an empty module or unconditional success.
+Record the Axioval tests, legacy tests, oracle corpus, discrepancy count, performance measurement, cutover commit and rollback switch. Unsupported behavior remains unchecked and documented; it is never represented by an empty module or unconditional success.

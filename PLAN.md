@@ -2,7 +2,9 @@
 
 ## Goal
 
-Publish a production-capable source-neutral pure-Rust rule engine, port reusable the provider rule-kernel behavior, and rewire `projects/vendor/the provider` to consume it.
+Publish a production-capable source-neutral pure-Rust rule engine, port reusable
+rule-kernel behavior out of a legacy checking runtime, and rewire that runtime to
+consume the engine.
 
 ## Constraints
 
@@ -12,22 +14,33 @@ Publish a production-capable source-neutral pure-Rust rule engine, port reusable
 4. Geometry is optional and replaceable; non-geometric rules run without a backend.
 5. Rule packages are declarative and untrusted.
 6. Results are deterministic, source-qualified, provenance-carrying, and fail closed.
-7. Migration preserves the provider behavior through dual-run parity gates.
+7. Migration preserves legacy behavior through dual-run parity gates.
+8. The repository and its crates are public and source-neutral: no tracked text
+   names a specific commercial product, client, or private downstream consumer.
 
 ## Current proven slices
 
-- Release candidate `0.1.5`: four ADR 0004 decompositions -- slab contact, external-wall validation, space validation and horizontal guard -- each splitting measured geometry from the policy that judges it. `0.1.4` carried the first, `LinearQuantityService` and the `ShelfCapacity` capability, and superseded the yanked `0.1.3`.
-- Release `0.1.2`: immutable evidence sessions, strict IFC4 STEP import through published OpenBIM crates, exact direct occurrence/type property evidence, and evidence-preserving integer `not_equal`. Relationship completeness remains deliberately fail-closed. The the provider property-comparison cutover consumes `0.1.0`; required-property consumer cutover remains open.
+- Release candidate `0.1.5`: four ADR 0004 decompositions -- slab contact,
+  external-wall validation, space validation and horizontal guard -- each
+  splitting measured geometry from the policy that judges it. `0.1.4` carried the
+  first, `LinearQuantityService` and the `ShelfCapacity` capability, and
+  superseded the yanked `0.1.3`.
+- Release `0.1.2`: immutable evidence sessions, strict IFC4 STEP import through
+  published OpenBIM crates, exact direct occurrence/type property evidence, and
+  evidence-preserving integer `not_equal`. Relationship completeness remains
+  deliberately fail-closed. The legacy property-comparison cutover consumes
+  `0.1.0`; required-property consumer cutover remains open.
 
-Unchecked workstream boxes below denote incomplete families, not an absence of all supporting primitives.
+Unchecked workstream boxes below denote incomplete families, not an absence of
+all supporting primitives.
 
 ## Extraction strategy (ADR 0002)
 
-Three sidecar waves added `+9110` net LOC to `vendor/the provider` while moving 0 of
+Three sidecar waves added `+9110` net LOC to the legacy runtime while moving 0 of
 83 native rule implementations out of it. The per-family sidecar is
 anti-convergent: it keeps both implementations alive by construction.
 
-The blocker is the evidence seam, not rule policy. Legacy `GeometryProvider`
+The blocker is the evidence seam, not rule policy. The legacy `GeometryProvider`
 has 43 methods, **23 of which take a `spec::rule::*PlanSpec`** — one bespoke
 evidence method per rule, so per-rule migration cost never amortizes.
 
@@ -38,10 +51,10 @@ mechanically:
    the engine's rule vocabulary next to `axioval-ir`'s package contract.
 2. **Runtime.** Blocked on identity, not on code motion. Measured per file,
    `rules/src/engine` + `rules/src/engines` does **not** move wholesale:
-   `compile.rs` (1,347 LOC) imports 68 concrete vendor rule types and is a
-   catalog dispatch table; `glob.rs`/`java_pattern.rs` implement the provider
-   `ConstraintUtils`/`Operators.MATCHES` compatibility and are vendor adapter
-   code by ADR 0002's own ownership test. The remaining 4,000 LOC
+   `compile.rs` (1,347 LOC) imports 68 concrete legacy rule types and is a
+   catalog dispatch table; `glob.rs`/`java_pattern.rs` implement legacy
+   `ConstraintUtils`/`Operators.MATCHES` compatibility and are adapter code by
+   ADR 0002's own ownership test. The remaining 4,000 LOC
    (`circulation/network.rs`, `selection/scope.rs`, `pairwise/mod.rs`,
    `result.rs`) is blocked on one thing: it is written against
    `EntityRef(pub u32)`, a per-model arena index, where ADR 0001 requires
@@ -59,14 +72,18 @@ mechanically:
    against declared parameters (`axioval-rules`, source-neutral). The 6
    already-measurement-shaped methods go first to validate the seam.
 4. **Families.** Rule policy ports against evidence that already exists.
-5. **Vendor.** `vendor/the provider` keeps only CSET/SMC byte formats, authoring,
-   CLI and Python — one application on the engine, not the engine's home.
+5. **Legacy runtime.** Keeps only its proprietary byte formats, authoring, CLI
+   and Python — one application on the engine, not the engine's home.
 
 Enforced by `scripts/architecture.py`: a `*Service` trait may not take a
-`*PlanSpec` or be named after a rule in the migration ledger. The gate is
-mutation-proven against injected leaks in a real `axioval-engine` service trait
-(`7/7` killed, covering verb-prefix laundering, comment-brace shielding, type
-aliasing, generic methods and ledger schema drift).
+`*PlanSpec` or be named after a rule family in `scripts/rule_vocabulary.json`.
+The gate is mutation-proven against injected leaks in a real `axioval-engine`
+service trait (`12/12` killed, covering verb-prefix laundering, comment-brace
+shielding, type aliasing, generic methods and vocabulary schema drift).
+
+The ADR 0004 source ratchet guards the extraction source against regression. Its
+location is supplied by `AXIOVAL_EXTRACTION_SOURCE` and is never written into
+this repository; an unavailable source is skipped, never silently passed.
 
 No new `families/<name>/axioval.rs` sidecars. The three that exist are removed
 when their families move.
@@ -77,6 +94,7 @@ when their families move.
 
 - [x] Cargo workspace and ownership boundaries
 - [x] README, progressive `AGENTS.md`, plan and docs structure
+- [x] Public-neutrality gate over tracked files and published archives
 - [ ] CI, GitHub Pages and release automation pass remotely
 
 ### 2. Contracts and runtime
@@ -113,9 +131,9 @@ when their families move.
 - [ ] Life-safety families
 - [ ] Federation/comparison families
 
-### 6. the provider cutover
+### 6. Legacy runtime cutover
 
-- [ ] CSET/spec conversion targets normalized Axioval contracts
+- [ ] Native spec conversion targets normalized Axioval contracts
 - [ ] Checker executes Axioval plans
 - [ ] CLI, Python and reporting consume Axioval reports
 - [ ] IFC source uses OpenBIM adapter
@@ -125,7 +143,7 @@ when their families move.
 ### 7. Proof
 
 - [ ] Full engine CI and architecture mutation tests
-- [ ] Full the provider CI-equivalent gates
+- [ ] Full legacy CI-equivalent gates
 - [ ] Per-capability oracle/parity ledger
 - [ ] Benchmarks with baselines
 - [ ] Clean-clone documentation and examples

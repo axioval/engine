@@ -1,0 +1,16 @@
+[package]
+name = "axioval-openbim"
+version = "0.2.0"
+description = "Deprecated: renamed to axioval-ifc. This crate is a notice only and contains no functionality."
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-or-later"
+readme = "README.md"
+authors = ["Axioval contributors"]
+repository = "https://github.com/axioval/engine"
+keywords = ["deprecated", "ifc", "openbim", "bim"]
+categories = ["science"]
+
+# No dependencies on purpose: a deprecation notice must not drag the real
+# stack in, and must keep building long after the code it replaced moved on.
+[dependencies]

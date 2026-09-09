@@ -70,7 +70,13 @@ def forbidden_terms() -> tuple[str, ...]:
 # so it fails in seconds, before packaging.
 def dangling_license_links() -> list[str]:
     errors: list[str] = []
-    for manifest in sorted((ROOT / "crates").rglob("Cargo.toml")):
+    # `attic/` is scanned too: retired crates are still publishable
+    # artifacts carrying the same relative-symlink LICENSE. Being outside
+    # the workspace is what makes them easy to forget, not what makes them
+    # safe -- a retired crate can be republished with a dangling license.
+    roots = (ROOT / "crates", ROOT / "attic")
+    manifests = sorted(m for root in roots if root.is_dir() for m in root.rglob("Cargo.toml"))
+    for manifest in manifests:
         crate = manifest.parent
         if "[package]" not in manifest.read_text(encoding="utf-8"):
             continue

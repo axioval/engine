@@ -13,6 +13,11 @@ is exactly nine crates, and this is not one of them: it shares neither the
 workspace version nor its dependencies, and must keep building unchanged long
 after the engine moves on.
 
+Being outside the workspace is not automatic, though: it carries its own
+empty `[workspace]` table. Without it Cargo walks up, finds the engine
+workspace and refuses every command run here, which silently breaks the
+republish procedure below. `cargo test` in this directory is the check.
+
 To republish (rarely needed — only to correct the notice text):
 
 ```bash

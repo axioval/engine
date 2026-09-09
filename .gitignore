@@ -15,3 +15,8 @@ __pycache__/
 # lockfile pins absolute paths from one machine. It is regenerated on build
 # and must not be committed.
 /staging/*/Cargo.lock
+
+# The retired notice crate roots its own workspace, so it generates a lockfile
+# and target dir beside its manifest. Neither belongs in the repo.
+/attic/*/target/
+/attic/*/Cargo.lock

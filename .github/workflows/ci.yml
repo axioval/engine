@@ -42,4 +42,8 @@ jobs:
           RUSTDOCFLAGS: "-D warnings"
         run: ./scripts/check.sh
       - name: Verify publishable workspace archives
-        run: ./scripts/package.sh
+        # Structure only: the forbidden-term denylist is private and untracked,
+        # so a public runner cannot perform that scan. The maintainer's
+        # release run calls ./scripts/package.sh with no flag, where the
+        # denylist is present and the scan is enforced.
+        run: ./scripts/package.sh --structure-only

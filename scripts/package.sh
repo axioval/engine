@@ -23,4 +23,4 @@ trap cleanup EXIT
 CARGO_TARGET_DIR="$package_target" \
   RUSTC_BOOTSTRAP=1 \
   cargo -Z package-workspace package --workspace --locked
-python3 scripts/check_package_contents.py "$package_target/package"
+python3 scripts/check_package_contents.py "$@" "$package_target/package"

@@ -48,6 +48,13 @@ def workspace_versions() -> dict[str, str]:
 # because the one moment it disappears is the moment a leak ships.
 DEFAULT_TERMS_FILE = ROOT / "private" / "forbidden-terms.json"
 
+# Opting out of the term scan is explicit and per-invocation. A public
+# checkout -- CI included -- cannot hold the denylist, but inferring the
+# relaxation from its absence would silently disarm the publish gate on the
+# maintainer's machine too, the one place it must bite. Forgetting the flag
+# fails closed; passing it is a visible choice in the caller.
+STRUCTURE_ONLY_FLAG = "--structure-only"
+
 
 def forbidden_terms() -> tuple[str, ...]:
     configured = os.environ.get("AXIOVAL_FORBIDDEN_TERMS", "").strip()
@@ -87,8 +94,7 @@ def dangling_license_links() -> list[str]:
     return errors
 
 
-def verify(package_dir: Path, versions: dict[str, str]) -> list[str]:
-    terms = forbidden_terms()
+def verify(package_dir: Path, versions: dict[str, str], terms: tuple[str, ...]) -> list[str]:
     errors: list[str] = []
     for package in sorted(EXPECTED):
         version = versions[package]
@@ -132,17 +138,28 @@ def verify(package_dir: Path, versions: dict[str, str]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) > 2:
-        print(f"usage: {Path(argv[0]).name} [PACKAGE_DIR]", file=sys.stderr)
+    args = [a for a in argv[1:] if a != STRUCTURE_ONLY_FLAG]
+    structure_only = STRUCTURE_ONLY_FLAG in argv[1:]
+    if len(args) > 1:
+        print(f"usage: {Path(argv[0]).name} [{STRUCTURE_ONLY_FLAG}] [PACKAGE_DIR]", file=sys.stderr)
         return 2
-    package_dir = Path(argv[1]).resolve() if len(argv) == 2 else ROOT / "target" / "package"
+    package_dir = Path(args[0]).resolve() if args else ROOT / "target" / "package"
     try:
         versions = workspace_versions()
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
         print(f"workspace metadata unavailable: {error}", file=sys.stderr)
         return 1
+    terms: tuple[str, ...] = ()
+    if structure_only:
+        print("structure-only: skipping the forbidden-term scan", file=sys.stderr)
+    else:
+        try:
+            terms = forbidden_terms()
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 1
     errors = dangling_license_links()
-    errors += verify(package_dir, versions)
+    errors += verify(package_dir, versions, terms)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tarfile
 import tempfile
 import unittest
@@ -31,7 +32,21 @@ class PackageContentsTests(unittest.TestCase):
                         info = tarfile.TarInfo(root + relative)
                         info.size = len(content)
                         crate.addfile(info, io.BytesIO(content))
-            self.assertEqual(checker.verify(package_dir, versions), [])
+            # `forbidden_terms()` fails closed when the denylist is absent, and
+            # the real list is private and untracked -- so CI, which has no
+            # `private/`, could never run this test. Point the documented
+            # override at a throwaway list: the test asserts archive layout,
+            # not the denylist's contents, and a term that appears in no
+            # fixture keeps `verify` returning [] for the right reason.
+            terms = package_dir / "forbidden-terms.json"
+            terms.write_text(
+                json.dumps({"terms": ["a-term-no-fixture-contains"]}),
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ, {"AXIOVAL_FORBIDDEN_TERMS": str(terms)}
+            ):
+                self.assertEqual(checker.verify(package_dir, versions), [])
 
     @patch("check_package_contents.subprocess.check_output")
     def test_workspace_versions_rejects_missing_expected_package(self, output) -> None:

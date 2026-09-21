@@ -44,7 +44,7 @@ uuid = { version = "1.18.1", features = ["serde", "v5"] }
 tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
 axiolid-core = "0.1.0"
-axiolid-mesh = "0.1.0"
+axiolid-mesh = "0.2.1"
 axiolid-measure = "0.1.0"
 axiolid-overlay = "0.1.0"
 ifc-model = "0.1.0"

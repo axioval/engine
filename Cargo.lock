@@ -84,12 +84,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiolid-core"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2c524a1a49b7ff40f92abdaae6c48fbc7765802d83279ddce7a944c0fcbacb3"
+dependencies = [
+ "glam",
+]
+
+[[package]]
 name = "axiolid-measure"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2b96c7d47462dcd15040a6ccdba370e88035048322262cb384e302cf1c06148"
 dependencies = [
- "axiolid-core",
+ "axiolid-core 0.1.0",
  "axiolid-mesh",
 ]
 
@@ -99,7 +108,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2693e6675d45887845c8249cb4931d372523c76636abc36be02eec99dd6e1a5"
 dependencies = [
- "axiolid-core",
+ "axiolid-core 0.1.0",
 ]
 
 [[package]]
@@ -108,7 +117,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b442d77f95cc33d3bdbe26465cdc3c3a33a29ecae406901317e7eeb96a4f96c"
 dependencies = [
- "axiolid-core",
+ "axiolid-core 0.1.0",
  "i_overlay",
 ]
 
@@ -128,7 +137,7 @@ dependencies = [
 name = "axioval-axiolid"
 version = "0.1.18"
 dependencies = [
- "axiolid-core",
+ "axiolid-core 0.2.1",
  "axiolid-measure",
  "axiolid-mesh",
  "axiolid-overlay",

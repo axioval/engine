@@ -43,7 +43,7 @@ smallvec = { version = "1.15.1", features = ["serde"] }
 uuid = { version = "1.18.1", features = ["serde", "v5"] }
 tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
-axiolid-core = "0.1.0"
+axiolid-core = "0.2.1"
 axiolid-mesh = "0.1.0"
 axiolid-measure = "0.1.0"
 axiolid-overlay = "0.1.0"

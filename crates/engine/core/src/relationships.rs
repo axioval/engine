@@ -5,6 +5,8 @@ use std::sync::Arc;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
+use crate::session::{SnapshotBoundService, SourceSnapshot};
+
 /// Failure to select comparison candidates conclusively.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum RelationshipSelectionError {
@@ -79,12 +81,30 @@ pub enum RelationshipQuery {
     },
 }
 
+/// What a relationship service does with an instance whose required end is absent.
+///
+/// A source can carry relationship instances that omit an end the schema
+/// requires, for example a virtual space boundary with no bounding element.
+/// Such an instance contributes no edge through the absent end, so treating it
+/// as a complete answer would silently read "not related" into a gap. The
+/// default refuses; a rule opts into skipping explicitly, and the service then
+/// names every skipped instance it passed over in the selection's evidence.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AbsentEndPolicy {
+    /// Refuse the whole answer while any instance of the type lacks a required end.
+    #[default]
+    Refuse,
+    /// Answer from the edges that exist and cite each skipped instance.
+    Skip,
+}
+
 /// Request for relationship-selected objects within a caller-bound universe.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelationshipSelectionRequest {
     anchor: ObjectId,
     candidate_universe: Vec<ObjectId>,
     query: RelationshipQuery,
+    absent_ends: AbsentEndPolicy,
 }
 
 impl RelationshipSelectionRequest {
@@ -102,7 +122,21 @@ impl RelationshipSelectionRequest {
             anchor,
             candidate_universe,
             query,
+            absent_ends: AbsentEndPolicy::default(),
         })
+    }
+
+    /// Sets how instances with an absent required end are treated.
+    #[must_use]
+    pub fn with_absent_ends(mut self, policy: AbsentEndPolicy) -> Self {
+        self.absent_ends = policy;
+        self
+    }
+
+    /// How instances with an absent required end are treated.
+    #[must_use]
+    pub fn absent_ends(&self) -> AbsentEndPolicy {
+        self.absent_ends
     }
 
     /// Anchor whose relationships determine the selection.
@@ -190,6 +224,13 @@ impl CompleteRelationshipSelection {
 
 /// Trusted adapter seam for complete relationship-based candidate selection.
 pub trait RelationshipSelectionService: Send + Sync {
+    /// Exact source snapshots used to construct this service.
+    ///
+    /// The default is intentionally unbound for services used only through a
+    /// raw [`crate::ServiceRegistry`]; an [`crate::EvidenceSession`] rejects it.
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &[]
+    }
     /// Selects candidates or reports why the result is not conclusive.
     fn select(
         &self,
@@ -235,6 +276,12 @@ impl RelationshipSelectionServiceHandle {
             return Err(RelationshipSelectionError::InexactEvidence);
         }
         Ok(selection)
+    }
+}
+
+impl SnapshotBoundService for RelationshipSelectionServiceHandle {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        self.0.source_snapshots()
     }
 }
 

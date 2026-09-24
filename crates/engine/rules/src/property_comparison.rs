@@ -3,8 +3,8 @@
 use std::cmp::Ordering;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
+    AbsentEndPolicy, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
     RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
     RuleCapability, RuleContext, SemanticRelationship, TraversalDirection,
 };
@@ -53,6 +53,9 @@ impl RuleCapability for PropertyComparison {
             ParameterDescriptor::optional("relationship", ParameterType::String),
             ParameterDescriptor::optional("direction", ParameterType::String),
             ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
+            // Opt-in: answer from the relationships that exist when the source
+            // has instances missing a required end, citing each one.
+            ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
             ParameterDescriptor::required("quantifier", ParameterType::String),
         ]
     }
@@ -247,6 +250,7 @@ struct Config<'a> {
     relationship: Option<&'a str>,
     direction: TraversalDirection,
     follow_chain: bool,
+    absent_ends: AbsentEndPolicy,
     quantifier: Quantifier,
 }
 impl<'a> Config<'a> {
@@ -304,6 +308,11 @@ impl<'a> Config<'a> {
             Some(ParameterValue::Boolean { value }) => *value,
             _ => return None,
         };
+        let absent_ends = match rule.parameters.get("skip_absent_relationship_ends") {
+            None | Some(ParameterValue::Boolean { value: false }) => AbsentEndPolicy::Refuse,
+            Some(ParameterValue::Boolean { value: true }) => AbsentEndPolicy::Skip,
+            _ => return None,
+        };
         let quantifier = match string("quantifier")? {
             "each" => Quantifier::Each,
             "at_least_one" => Quantifier::AtLeastOne,
@@ -321,6 +330,7 @@ impl<'a> Config<'a> {
             relationship,
             direction,
             follow_chain,
+            absent_ends,
             quantifier,
         })
     }
@@ -375,7 +385,8 @@ fn relationship_selection(
         universe.iter().map(|item| item.id.clone()).collect(),
         query,
     )
-    .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?;
+    .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?
+    .with_absent_ends(config.absent_ends);
     service
         .select(&request)
         .map(|selection| {

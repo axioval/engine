@@ -3,8 +3,9 @@ use std::sync::Arc;
 use axioval_engine::{
     CompletePropertyAbsenceEvidence, EvidenceSession, EvidenceSessionError, PropertyRequest,
     PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, ResolvedProperty, SourceSnapshot, TypeHierarchyError,
-    TypeHierarchyService, TypeHierarchyServiceHandle,
+    PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
+    TypeHierarchyServiceHandle,
 };
 use axioval_ir::{Evidence, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId};
 use ifc_model::{Codec, EntityId, Model};
@@ -15,6 +16,9 @@ use ifc_schema::{SchemaVersion, ifc4};
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::integrity::IfcIntegrity;
+use crate::relationships::IfcRelationshipService;
 
 /// Production IFC import/session construction failure.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -260,15 +264,25 @@ pub fn import_ifc_session(
             .and_then(|snapshot| snapshot.with_type_system(IFC4_TYPE_SYSTEM))
             .map_err(|error| session_error(&error))?;
     let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
+    let model = Arc::new(model);
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
-        model: Arc::new(model),
+        model: model.clone(),
         snapshots: snapshots.clone(),
     }));
+    let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
+        model.clone(),
+        snapshots.clone(),
+    )));
+    let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
+        IfcRelationshipService::new(model, snapshots.clone()),
+    ));
     let hierarchy = TypeHierarchyServiceHandle::new(Arc::new(IfcTypeHierarchy { snapshots }));
     EvidenceSession::try_new(project, [snapshot])
         .map_err(|error| session_error(&error))?
         .with_service(service)
+        .and_then(|session| session.with_service(relationships))
         .and_then(|session| session.with_service(hierarchy))
+        .and_then(|session| session.with_service(integrity))
         .map_err(|error| session_error(&error))
 }
 

@@ -14,8 +14,34 @@ Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
 unsupported values fail closed.
 
 Direct-property completeness does not imply relationship completeness. The IFC
-session deliberately registers no relationship-selection service yet. The
-adapter does not depend on Axiolid and does not own geometry policy.
+session registers an exact relationship-selection service: a relationship
+identity is the IFC4 name of an objectified relationship entity type (for
+example `IfcRelContainedInSpatialStructure`, `IfcRelVoidsElement`), and a
+supertype such as `IfcRelConnects` covers every concrete subtype present. End
+slots are read from the bundled normative schema, not a hand-written table.
+Every answer carries a scan locator naming the type and instance count, which is
+what makes an empty selection exact. A malformed instance, a dangling reference,
+a relationship type whose ends are not object references (such as
+`IfcRelDefinesByProperties`), or an object from another source refuses the whole
+answer rather than dropping an edge. The adapter does not depend on Axiolid and
+does not own geometry policy.
+
+An instance that leaves a schema-required end empty (`$`) is handled
+separately, because real exporters do it routinely: second-level virtual space
+boundaries often carry no `RelatedBuildingElement`. By default such an instance
+also refuses the answer, since its missing edge could touch any object. A
+request built with `with_absent_ends(AbsentEndPolicy::Skip)` answers from the
+edges that exist instead and cites every skipped instance as
+`relationship-absent-end:<instance>:<attribute>` evidence. The capability
+parameter `skip_absent_relationship_ends` opts a rule in; the default stays
+strict.
+
+The session also registers a `SourceIntegrityServiceHandle`. Its scan uses the
+same end reader, so it always lists exactly the instances a strict request
+refuses on: an absent required end is a `relationship.absent-required-end`
+**warning**, while a dangling or wrongly shaped end is a
+`relationship.malformed` **error**. Hosts show these beside the report whether
+or not any rule skipped them.
 
 The session declares the IFC4 ADD2 TC1 type system (`IFC4_TYPE_SYSTEM`) on its
 snapshot, so package concepts bind to IFC names (see

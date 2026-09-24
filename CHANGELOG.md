@@ -29,6 +29,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- `axioval-ifc` registers an exact `RelationshipSelectionService` over the
+  model's objectified relationships (containment, aggregation, voids, fills,
+  space boundaries, type and group assignment, and any other IFC4
+  relationship with object ends). Relationship identities are IFC4 entity
+  names; supertypes include every subtype. Checked against `ifc-spatial`'s
+  independent spatial tree on a real IFC4 model: 323 containment answers, all
+  equal.
+  IFC2X3 sources are refused until upstream exact property resolution
+  supports them (openbimrs/ifc#48).
+- `RelationshipSelectionService::source_snapshots`, so a relationship service
+  can be bound to an `EvidenceSession`.
+- `AbsentEndPolicy` and `RelationshipSelectionRequest::with_absent_ends`: a
+  relationship instance that leaves a schema-required end empty refuses the
+  answer by default; `Skip` answers from the existing edges and cites each
+  skipped instance. `property-comparison` exposes it as the optional
+  `skip_absent_relationship_ends` parameter (default `false`). On the IFC4
+  reference model, 98 virtual space boundaries without a
+  `RelatedBuildingElement` previously made every space-boundary query refuse.
+- `SourceIntegrityService` / `SourceIntegrityServiceHandle`, `IntegrityIssue`
+  and `IntegritySeverity`: a channel for source irregularities that are
+  neither findings nor not-evaluated outcomes. `axioval-ifc` reports absent
+  required relationship ends as warnings (`ABSENT_REQUIRED_END`) and malformed
+  relationships as errors (`MALFORMED_RELATIONSHIP`).
 - `ConceptCatalog`, `ConceptBindings` and `BindingError`; the compiler rejects
   references to concepts no loaded definition package declares.
 - `SourceSnapshot::with_type_system`, and `TypeHierarchyService` /

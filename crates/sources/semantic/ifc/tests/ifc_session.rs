@@ -27,10 +27,11 @@ fn strict_ifc_bytes_build_an_exact_direct_property_session() {
     assert!(snapshot.fingerprint().starts_with("sha256:"));
     assert_eq!(snapshot.revision(), snapshot.fingerprint());
     let fingerprint = snapshot.fingerprint().to_owned();
+    // Relationships are answered from the same fingerprint-bound model.
     assert!(
         session
             .service::<RelationshipSelectionServiceHandle>()
-            .is_none()
+            .is_some()
     );
 
     let properties = session

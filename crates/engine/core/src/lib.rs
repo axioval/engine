@@ -346,6 +346,7 @@ mod contact;
 mod envelope_membership;
 mod free_space;
 mod guard;
+mod integrity;
 mod linear_quantity;
 mod metric_routing;
 mod properties;
@@ -379,6 +380,10 @@ pub use guard::{
     ClimbableCandidate, GuardCandidate, GuardEdge, GuardError, GuardEvidence, GuardSearch,
     GuardService, GuardServiceHandle,
 };
+pub use integrity::{
+    IntegrityError, IntegrityIssue, IntegritySeverity, SourceIntegrityService,
+    SourceIntegrityServiceHandle,
+};
 pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
@@ -393,7 +398,7 @@ pub use properties::{
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use relationships::{
-    CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
+    AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
     SemanticRelationship, TraversalDirection,
 };

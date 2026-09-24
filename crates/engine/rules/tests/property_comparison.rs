@@ -7,7 +7,7 @@ use std::{
 };
 
 use axioval_engine::{
-    CapabilityRegistry, CompiledRule, CompletePropertyAbsenceEvidence,
+    AbsentEndPolicy, CapabilityRegistry, CompiledRule, CompletePropertyAbsenceEvidence,
     CompleteRelationshipSelection, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipQuery,
     RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
@@ -595,5 +595,63 @@ fn builtins_register_property_comparison() {
             .unwrap()
             .get("axioval:capability.property-comparison")
             .is_some()
+    );
+}
+
+/// Runs one related-mode rule and returns the absent-end policy the service saw.
+fn requested_policy(skip: Option<ParameterValue>) -> Option<AbsentEndPolicy> {
+    let checked = object("checked", "x");
+    let project = Project::new(vec![checked]).unwrap();
+    let mut compiled = rule("related", "each");
+    if let Some(value) = skip {
+        compiled
+            .parameters
+            .insert("skip_absent_relationship_ends".into(), value);
+    }
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let _ = evaluate(
+        &project,
+        &compiled,
+        Properties::default(),
+        Some(Relationships {
+            candidates: vec![],
+            evidence: vec![Evidence::exact(source("relations"), "scan")],
+            seen: seen.clone(),
+        }),
+    );
+    let requests = seen.lock().unwrap();
+    requests
+        .first()
+        .map(RelationshipSelectionRequest::absent_ends)
+}
+
+#[test]
+fn absent_relationship_ends_are_refused_unless_the_rule_opts_in() {
+    assert_eq!(requested_policy(None), Some(AbsentEndPolicy::Refuse));
+    assert_eq!(
+        requested_policy(Some(ParameterValue::Boolean { value: false })),
+        Some(AbsentEndPolicy::Refuse)
+    );
+    assert_eq!(
+        requested_policy(Some(ParameterValue::Boolean { value: true })),
+        Some(AbsentEndPolicy::Skip)
+    );
+}
+
+#[test]
+fn a_non_boolean_skip_parameter_is_an_invalid_declaration() {
+    let checked = object("checked", "x");
+    let project = Project::new(vec![checked]).unwrap();
+    let mut compiled = rule("related", "each");
+    compiled.parameters.insert(
+        "skip_absent_relationship_ends".into(),
+        ParameterValue::String {
+            value: "yes".into(),
+        },
+    );
+    let outcome = evaluate(&project, &compiled, Properties::default(), None);
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
     );
 }

@@ -7,7 +7,10 @@
 //! available for host-defined OpenBIM sources.
 
 mod ifc;
+mod integrity;
+mod relationships;
 pub use ifc::{IFC4_TYPE_SYSTEM, IfcSessionError, import_ifc_session};
+pub use integrity::{ABSENT_REQUIRED_END, MALFORMED_RELATIONSHIP};
 
 use std::collections::BTreeSet;
 

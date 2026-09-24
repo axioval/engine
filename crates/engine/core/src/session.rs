@@ -26,6 +26,7 @@ pub struct SourceSnapshot {
     revision: Arc<str>,
     fingerprint: Arc<str>,
     schema: Option<Arc<str>>,
+    type_systems: Vec<Arc<str>>,
 }
 
 impl SourceSnapshot {
@@ -45,7 +46,33 @@ impl SourceSnapshot {
             revision,
             fingerprint,
             schema: None,
+            type_systems: Vec::new(),
         })
+    }
+    /// Declares one type system this source's vocabulary uses.
+    ///
+    /// Package concepts bind to source data only through an external name in
+    /// a declared type system. A source usually speaks one release-bound
+    /// system (an IFC4 model: IFC4 entities and its property templates) and
+    /// may add a project namespace for custom property sets. A source that
+    /// declares none cannot bind any concept, so package rules over it are
+    /// not evaluated rather than passed. Declaring a system twice is a no-op.
+    pub fn with_type_system(
+        mut self,
+        type_system: impl Into<Arc<str>>,
+    ) -> Result<Self, EvidenceSessionError> {
+        let type_system = type_system.into();
+        if type_system.trim().is_empty() {
+            return Err(EvidenceSessionError::InvalidSnapshotIdentity);
+        }
+        if let Err(index) = self.type_systems.binary_search(&type_system) {
+            self.type_systems.insert(index, type_system);
+        }
+        Ok(self)
+    }
+    /// Declared type systems for concept binding, sorted and unique.
+    pub fn type_systems(&self) -> &[Arc<str>] {
+        &self.type_systems
     }
     /// Binds a source-declared semantic schema to the immutable snapshot.
     pub fn with_schema(

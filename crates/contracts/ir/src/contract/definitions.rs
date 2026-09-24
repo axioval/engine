@@ -1,7 +1,8 @@
 #![allow(missing_docs)]
-use super::{ExternalName, LocalizedText, PackageMetadata, ParameterValue};
+use super::{Citation, ExternalName, LocalizedText, PackageMetadata, ParameterValue, Source};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ObjectTypeDefinition {
@@ -9,6 +10,8 @@ pub struct ObjectTypeDefinition {
     pub name: LocalizedText,
     pub description: Option<LocalizedText>,
     pub external_names: Vec<ExternalName>,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -19,6 +22,8 @@ pub struct PropertyDefinition {
     pub value_kind: PropertyValueKind,
     pub unit_dimension: Option<String>,
     pub external_names: Vec<ExternalName>,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -27,6 +32,8 @@ pub struct PropertySetDefinition {
     pub name: LocalizedText,
     pub description: Option<LocalizedText>,
     pub external_names: Vec<ExternalName>,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -42,6 +49,8 @@ pub struct ParameterDefinition {
     #[serde(default)]
     pub allowed_values: Vec<ParameterValue>,
     pub unit_dimension: Option<String>,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -54,12 +63,16 @@ pub struct RuleDefinition {
     pub parameters: BTreeMap<String, ParameterDefinition>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DefinitionPackage {
     pub schema_version: String,
     pub package: PackageMetadata,
+    #[serde(default)]
+    pub sources: BTreeMap<String, Source>,
     #[serde(default)]
     pub object_types: BTreeMap<String, ObjectTypeDefinition>,
     #[serde(default)]

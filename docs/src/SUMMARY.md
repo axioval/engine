@@ -10,6 +10,7 @@
 - [ADR 0003: neutral object identity blocks the runtime move](./adr-0003.md)
 - [ADR 0004: decompose plan-shaped evidence](./adr-0004.md)
 - [Source-neutral IR](./ir.md)
+- [Concept binding](./concept-binding.md)
 - [Capabilities](./capabilities.md)
 - [Connectivity and routes](./topology.md)
 - [Metric routing](./metric-routing.md)

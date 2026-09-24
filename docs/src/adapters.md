@@ -17,6 +17,11 @@ Direct-property completeness does not imply relationship completeness. The IFC
 session deliberately registers no relationship-selection service yet. The
 adapter does not depend on Axiolid and does not own geometry policy.
 
+The session declares the IFC4 ADD2 TC1 type system (`IFC4_TYPE_SYSTEM`) on its
+snapshot, so package concepts bind to IFC names (see
+[Concept binding](./concept-binding.md)), and registers IFC4 entity
+inheritance from the bundled normative schema for `includeSubtypes`.
+
 ## Axiolid
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.

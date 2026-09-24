@@ -36,6 +36,13 @@ impl ServiceRegistry {
         self.entries.insert(TypeId::of::<T>(), Arc::new(service));
         Ok(())
     }
+    /// Registers a service, replacing any existing one of the same type.
+    ///
+    /// Crate-private: only the engine may overwrite, and only for services it
+    /// derives per run and must not accept from a host.
+    pub(crate) fn replace<T: Any + Send + Sync>(&mut self, service: T) {
+        self.entries.insert(TypeId::of::<T>(), Arc::new(service));
+    }
     /// Looks up a service by its concrete interface type.
     #[must_use]
     pub fn get<T: Any + Send + Sync>(&self) -> Option<&T> {

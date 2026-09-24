@@ -29,7 +29,7 @@ fn rule_with(derivation: ParameterValue) -> CompiledRule {
         severity: RuleSeverity::Warning,
         selector: Selector::EntityType {
             object_type: "wall".into(),
-            include_subtypes: true,
+            include_subtypes: false,
         },
         parameters: BTreeMap::from([("envelope_derivation".to_string(), derivation)]),
     }

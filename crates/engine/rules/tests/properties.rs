@@ -4,13 +4,13 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    CapabilityRegistry, CompiledRule, CompletePropertyAbsenceEvidence, PropertyRequest,
-    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    CapabilityRegistry, CompiledRule, CompletePropertyAbsenceEvidence, EvidenceSession,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
     PropertyResolutionServiceHandle, ResolvedProperty, RuleCapability, RuleContext, Runtime,
-    ServiceRegistry, compile,
+    ServiceRegistry, SourceSnapshot, compile,
 };
 use axioval_ir::contract::{
-    ComparisonOperator, ParameterValue, Selector, Severity as RuleSeverity,
+    ComparisonOperator, ParameterValue, RuleApplicability, Selector, Severity as RuleSeverity,
 };
 use axioval_ir::{
     DefinitionPackage, Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId,
@@ -47,8 +47,11 @@ fn exact_property(set: &str, name: &str, value: PropertyValue) -> Property {
         .with_evidence(Evidence::exact(source(), format!("native {set}.{name}")))
 }
 
-struct ExactProperties(Vec<Property>);
+struct ExactProperties(Vec<Property>, Vec<SourceSnapshot>);
 impl PropertyResolutionService for ExactProperties {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.1
+    }
     fn resolve(
         &self,
         request: &PropertyRequest,
@@ -79,6 +82,80 @@ impl PropertyResolutionService for ExactProperties {
     }
 }
 
+/// The type system the canonical fixture's concepts are named in.
+///
+/// The fixture's wall concept is named in IFC4.3; its property and set use the
+/// MCS examples namespace. A source binds concepts only when it declares the
+/// type system, so the fixture objects use the examples names throughout and
+/// this test source declares that namespace.
+const EXAMPLES: &str = "https://github.com/axioval/mcs/tree/main/examples";
+/// A second catalogued property, used as a property-selector trigger.
+const TRIGGER: &str = "axioval:example.ifc.trigger";
+const TRIGGER_SET: &str = "axioval:example.ifc.pset-trigger";
+
+/// Adds the examples-namespace name for every fixture concept that lacks one,
+/// so one declared type system binds the whole ruleset.
+fn with_examples_names(mut definitions: DefinitionPackage) -> DefinitionPackage {
+    let mut trigger = definitions.properties["axioval:example.ifc.reference"].clone();
+    trigger.id = TRIGGER.into();
+    trigger.value_kind = axioval_ir::contract::PropertyValueKind::Boolean;
+    trigger.external_names.clear();
+    definitions.properties.insert(TRIGGER.into(), trigger);
+    let mut trigger_set = definitions.property_sets["axioval:example.ifc.pset-wall-common"].clone();
+    trigger_set.id = TRIGGER_SET.into();
+    trigger_set.external_names.clear();
+    definitions
+        .property_sets
+        .insert(TRIGGER_SET.into(), trigger_set);
+    let name = |id: &str| axioval_ir::contract::ExternalName {
+        type_system: EXAMPLES.into(),
+        name: id.into(),
+    };
+    for (id, concept) in &mut definitions.object_types {
+        if !concept
+            .external_names
+            .iter()
+            .any(|n| n.type_system == EXAMPLES)
+        {
+            concept.external_names.push(name(id));
+        }
+    }
+    for (id, concept) in &mut definitions.properties {
+        if !concept
+            .external_names
+            .iter()
+            .any(|n| n.type_system == EXAMPLES)
+        {
+            concept.external_names.push(name(id));
+        }
+    }
+    for (id, concept) in &mut definitions.property_sets {
+        if !concept
+            .external_names
+            .iter()
+            .any(|n| n.type_system == EXAMPLES)
+        {
+            concept.external_names.push(name(id));
+        }
+    }
+    definitions
+}
+
+/// Flattens the MCS target-group applicability to its one selector.
+///
+/// The minimal example names a single `walls` group. This harness exercises
+/// property capabilities, not group semantics, so it evaluates that group's
+/// selector directly; group handling has its own tests.
+fn flat(mut rules: RuleSetPackage) -> RuleSetPackage {
+    let rule = &mut rules.root.rules[0];
+    if let RuleApplicability::Groups(groups) = &rule.applicability {
+        let selector = groups.groups["walls"].selector.clone();
+        rule.applicability = RuleApplicability::Selector(selector);
+    }
+    rule.requirements.clear();
+    rules
+}
+
 fn run(
     project: &Project,
     definitions: DefinitionPackage,
@@ -86,19 +163,21 @@ fn run(
     properties: Option<Vec<Property>>,
 ) -> axioval_ir::Report {
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
-    let plan = compile(&registry, &[definitions], rules).unwrap();
-    let runtime = if let Some(properties) = properties {
-        let mut services = ServiceRegistry::new();
-        services
-            .register(PropertyResolutionServiceHandle::new(Arc::new(
-                ExactProperties(properties),
+    let rules = flat(rules.clone());
+    let plan = compile(&registry, &[with_examples_names(definitions)], &rules).unwrap();
+    let snapshot = SourceSnapshot::try_new(source(), "r1", "sha256:fixture")
+        .unwrap()
+        .with_type_system(EXAMPLES)
+        .unwrap();
+    let mut session = EvidenceSession::try_new(project.clone(), [snapshot.clone()]).unwrap();
+    if let Some(properties) = properties {
+        session = session
+            .with_service(PropertyResolutionServiceHandle::new(Arc::new(
+                ExactProperties(properties, vec![snapshot]),
             )))
             .unwrap();
-        Runtime::new(registry).with_services(services)
-    } else {
-        Runtime::new(registry)
-    };
-    runtime.run(project, plan).unwrap()
+    }
+    Runtime::new(registry).run_session(&session, plan).unwrap()
 }
 
 #[test]
@@ -159,7 +238,7 @@ fn required_property(value: Option<PropertyValue>) -> axioval_engine::Capability
     let mut services = ServiceRegistry::new();
     services
         .register(PropertyResolutionServiceHandle::new(Arc::new(
-            ExactProperties(property.into_iter().collect()),
+            ExactProperties(property.into_iter().collect(), vec![]),
         )))
         .unwrap();
     let rule = CompiledRule {
@@ -238,13 +317,13 @@ fn required_property_compiles_from_a_declarative_definition() {
 #[test]
 fn property_applicability_uses_exact_resolution_without_silent_skip() {
     let (definitions, mut rules) = packages();
-    rules.root.rules[0].applicability = Selector::Property {
-        property_set: Some("Pset.Trigger".into()),
-        property: "Enabled".into(),
+    rules.root.rules[0].applicability = RuleApplicability::Selector(Selector::Property {
+        property_set: Some(TRIGGER_SET.into()),
+        property: TRIGGER.into(),
         operator: ComparisonOperator::Exists,
         value: None,
-    };
-    let trigger = exact_property("Pset.Trigger", "Enabled", PropertyValue::Boolean(true));
+    });
+    let trigger = exact_property(TRIGGER_SET, TRIGGER, PropertyValue::Boolean(true));
     let project = Project::new(vec![object().with_property(trigger.clone())]).unwrap();
     let report = run(&project, definitions, &rules, Some(vec![trigger]));
     assert_eq!(report.findings().len(), 1);
@@ -254,12 +333,12 @@ fn property_applicability_uses_exact_resolution_without_silent_skip() {
 #[test]
 fn property_applicability_without_service_is_explicitly_not_evaluated() {
     let (definitions, mut rules) = packages();
-    rules.root.rules[0].applicability = Selector::Property {
-        property_set: Some("Pset.Trigger".into()),
-        property: "Enabled".into(),
+    rules.root.rules[0].applicability = RuleApplicability::Selector(Selector::Property {
+        property_set: Some(TRIGGER_SET.into()),
+        property: TRIGGER.into(),
         operator: ComparisonOperator::Exists,
         value: None,
-    };
+    });
     let report = run(
         &Project::new(vec![object()]).unwrap(),
         definitions,
@@ -273,12 +352,12 @@ fn property_applicability_without_service_is_explicitly_not_evaluated() {
 #[test]
 fn malformed_property_selector_is_rejected_before_resolution() {
     let (definitions, mut rules) = packages();
-    rules.root.rules[0].applicability = Selector::Property {
-        property_set: Some("Pset.Trigger".into()),
-        property: "Enabled".into(),
+    rules.root.rules[0].applicability = RuleApplicability::Selector(Selector::Property {
+        property_set: Some(TRIGGER_SET.into()),
+        property: TRIGGER.into(),
         operator: ComparisonOperator::Exists,
         value: Some(ParameterValue::Boolean { value: true }),
-    };
+    });
     let report = run(
         &Project::new(vec![object()]).unwrap(),
         definitions,
@@ -312,7 +391,7 @@ fn predicate(actual: i64, operator: &str, expected: i64) -> axioval_engine::Capa
     let mut services = ServiceRegistry::new();
     services
         .register(PropertyResolutionServiceHandle::new(Arc::new(
-            ExactProperties(vec![property]),
+            ExactProperties(vec![property], vec![]),
         )))
         .unwrap();
     let rule = CompiledRule {
@@ -405,7 +484,7 @@ fn boolean_equals(
     if with_service {
         services
             .register(PropertyResolutionServiceHandle::new(Arc::new(
-                ExactProperties(property.into_iter().collect()),
+                ExactProperties(property.into_iter().collect(), vec![]),
             )))
             .unwrap();
     }

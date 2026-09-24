@@ -51,7 +51,7 @@ fn rule_with(overrides: &[(&str, ParameterValue)]) -> CompiledRule {
         severity: RuleSeverity::Error,
         selector: Selector::EntityType {
             object_type: "slab".into(),
-            include_subtypes: true,
+            include_subtypes: false,
         },
         parameters,
     }

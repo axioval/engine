@@ -99,7 +99,7 @@ fn rule(mode: &str, quantifier: &str) -> CompiledRule {
         severity: RuleSeverity::Error,
         selector: Selector::EntityType {
             object_type: "checked".into(),
-            include_subtypes: true,
+            include_subtypes: false,
         },
         parameters: BTreeMap::from([
             (
@@ -107,7 +107,7 @@ fn rule(mode: &str, quantifier: &str) -> CompiledRule {
                 ParameterValue::Selector {
                     value: Box::new(Selector::EntityType {
                         object_type: "candidate".into(),
-                        include_subtypes: true,
+                        include_subtypes: false,
                     }),
                 },
             ),

@@ -4,6 +4,50 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Package concepts were never bound to source data, so a checker could
+  report a false pass.** A ruleset names canonical concepts
+  (`axioval:fire.ifc4.wall`); the engine compared them verbatim with source
+  kinds (`IFCWALL`) and property names (`Reference`). Nothing matched, the
+  selector selected nothing, and the report came back empty: zero findings,
+  zero not-evaluated. The compiler now builds a concept catalog, and every
+  entity-type selector and property reference is translated per source through
+  an external name in the type system that source's snapshot declares. A
+  concept that cannot bind, binds ambiguously, or names a source with no
+  declared type system is reported as not evaluated, never skipped.
+- `includeSubtypes` was ignored: an `IfcWallStandardCase` was never selected
+  by a wall rule. Subtype membership now comes from a
+  `TypeHierarchyServiceHandle`; without one, a different kind is not evaluated
+  rather than treated as a non-member.
+- The package contract drifted from MCS `0.1.0` normalized output: localized
+  package names, source catalogs, citations, requirements, target-group
+  applicability, parameter citations and explanatory images were rejected, so
+  every published Axioval package failed to load. The IR now accepts the
+  complete contract, and the compatibility fixture is regenerated from the
+  current MCS `minimal` example.
+
+### Added
+
+- `ConceptCatalog`, `ConceptBindings` and `BindingError`; the compiler rejects
+  references to concepts no loaded definition package declares.
+- `SourceSnapshot::with_type_system`, and `TypeHierarchyService` /
+  `TypeHierarchyServiceHandle`.
+- Target-group applicability: one group compiles as its selector; several
+  groups are carried in `ExecutionPlan::deferred` and reported as not
+  evaluated, because a one-selector capability cannot evaluate them.
+- `axioval-ifc` declares the IFC4 type system (`IFC4_TYPE_SYSTEM`) and
+  registers IFC4 entity inheritance from the bundled normative schema. An
+  entity the schema does not declare is an error, not a non-member.
+
+### Changed
+
+- **Breaking.** `RuleInstance::applicability` is `RuleApplicability`, and
+  `PackageMetadata::name`/`description` are `LocalizedText`.
+- **Breaking.** `Runtime::run` over a bare `Project` declares no type systems,
+  so a compiled package's concepts bind to nothing there; run an
+  `EvidenceSession` to evaluate packages.
+
 ## [0.2.0] - 2026-09-24
 
 A minor release rather than 0.1.19: the dependency upgrade changes a public

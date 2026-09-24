@@ -3,7 +3,8 @@ use std::sync::Arc;
 use axioval_engine::{
     CompletePropertyAbsenceEvidence, EvidenceSession, EvidenceSessionError, PropertyRequest,
     PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, ResolvedProperty, SourceSnapshot,
+    PropertyResolutionServiceHandle, ResolvedProperty, SourceSnapshot, TypeHierarchyError,
+    TypeHierarchyService, TypeHierarchyServiceHandle,
 };
 use axioval_ir::{Evidence, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId};
 use ifc_model::{Codec, EntityId, Model};
@@ -39,6 +40,38 @@ pub enum IfcSessionError {
     /// Immutable snapshot/session binding failed.
     #[error("failed to construct evidence session: {0}")]
     Session(String),
+}
+
+/// Type system of the IFC4 ADD2 TC1 release, as declared by `openbim.ifc`.
+///
+/// Package concepts bind to data from this adapter only through an external
+/// name in exactly this type system. It is the release's semantic identifier,
+/// not a transport or documentation URL, and it differs per IFC release.
+pub const IFC4_TYPE_SYSTEM: &str = "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4";
+
+/// IFC4 entity inheritance, answered from the bundled normative schema.
+struct IfcTypeHierarchy {
+    snapshots: Arc<[SourceSnapshot]>,
+}
+
+impl TypeHierarchyService for IfcTypeHierarchy {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+
+    fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError> {
+        let schema = ifc4();
+        // `is_a` answers false for a name the schema does not declare, which
+        // would make an unknown kind look like a proven non-member.
+        for name in [kind, ancestor] {
+            if schema.entity(name).is_none() {
+                return Err(TypeHierarchyError::UnknownType(format!(
+                    "`{name}` is not an IFC4 entity"
+                )));
+            }
+        }
+        Ok(schema.is_a(kind, ancestor))
+    }
 }
 
 #[derive(Clone)]
@@ -224,14 +257,18 @@ pub fn import_ifc_session(
     let snapshot =
         SourceSnapshot::try_new(source.clone(), fingerprint.clone(), fingerprint.clone())
             .and_then(|snapshot| snapshot.with_schema("IFC4"))
+            .and_then(|snapshot| snapshot.with_type_system(IFC4_TYPE_SYSTEM))
             .map_err(|error| session_error(&error))?;
+    let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
         model: Arc::new(model),
-        snapshots: Arc::from([snapshot.clone()]),
+        snapshots: snapshots.clone(),
     }));
+    let hierarchy = TypeHierarchyServiceHandle::new(Arc::new(IfcTypeHierarchy { snapshots }));
     EvidenceSession::try_new(project, [snapshot])
         .map_err(|error| session_error(&error))?
         .with_service(service)
+        .and_then(|session| session.with_service(hierarchy))
         .map_err(|error| session_error(&error))
 }
 

@@ -17,13 +17,25 @@ fn canonical_schema_v010_parses() {
         rule.parameters["property"],
         ParameterValue::PropertyReference { .. }
     ));
+    // Real MCS output: one named target group, a requirement bound to it,
+    // citations and an explanatory image. All of it must deserialize.
+    let axioval_ir::contract::RuleApplicability::Groups(groups) = &rule.applicability else {
+        panic!("the MCS minimal example uses target-group applicability");
+    };
     assert!(matches!(
-        rule.applicability,
+        groups.groups["walls"].selector,
         Selector::EntityType {
             include_subtypes: true,
             ..
         }
     ));
+    assert_eq!(rule.requirements[0].target_groups, ["walls"]);
+    assert_eq!(rule.explanatory_images.len(), 1);
+    assert!(
+        d.object_types["axioval:example.ifc.wall"].external_names[0]
+            .type_system
+            .starts_with("https://")
+    );
 }
 
 #[test]

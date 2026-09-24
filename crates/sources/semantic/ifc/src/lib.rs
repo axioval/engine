@@ -7,7 +7,7 @@
 //! available for host-defined OpenBIM sources.
 
 mod ifc;
-pub use ifc::{IfcSessionError, import_ifc_session};
+pub use ifc::{IFC4_TYPE_SYSTEM, IfcSessionError, import_ifc_session};
 
 use std::collections::BTreeSet;
 

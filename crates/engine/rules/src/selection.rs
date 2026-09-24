@@ -1,8 +1,9 @@
 //! Deterministic, fail-closed selector evaluation.
 
 use axioval_engine::{
-    CapabilityEvaluation, NotEvaluatedReason, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext,
+    BindingError, CapabilityEvaluation, ConceptBindings, NotEvaluatedReason, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext,
+    TypeHierarchyError, TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Object, Property, PropertyValue};
@@ -36,7 +37,10 @@ enum Selection {
 fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Object) -> Selection {
     match selector {
         Selector::All => Selection::Match,
-        Selector::EntityType { object_type, .. } => verdict(object.kind() == object_type),
+        Selector::EntityType {
+            object_type,
+            include_subtypes,
+        } => entity_type_matches(context, object, object_type, *include_subtypes),
         Selector::Classification { system, code, .. } => verdict(
             object
                 .classifications
@@ -66,11 +70,114 @@ fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Obj
         } => property_selector_matches(
             context,
             object,
-            property_set.clone(),
+            property_set.as_deref(),
             property,
             operator,
             value.as_ref(),
         ),
+    }
+}
+
+/// Vocabulary the names in a rule are written in.
+///
+/// A plan compiled from packages always runs with [`ConceptBindings`]: its
+/// names are canonical concepts and must be translated per source. A trusted
+/// host that evaluates a capability directly, without bindings, writes rules
+/// in its own source vocabulary, and those names are used verbatim.
+enum Vocabulary<'a> {
+    Package(&'a ConceptBindings),
+    Native,
+}
+
+fn vocabulary<'a>(context: &RuleContext<'a>) -> Vocabulary<'a> {
+    context
+        .services
+        .get::<ConceptBindings>()
+        .map_or(Vocabulary::Native, Vocabulary::Package)
+}
+
+fn binding_error(error: &BindingError) -> (NotEvaluatedReason, String) {
+    // An unbound concept is a property of the package/source pairing, not of
+    // the evidence: the package names nothing this source can express.
+    (NotEvaluatedReason::InvalidDeclaration, error.to_string())
+}
+
+/// Builds a property request in the checked object's own source vocabulary.
+///
+/// Package rules reference canonical concepts, which are bound through the
+/// object's declared type system first, for both the property and its
+/// optional set qualifier. An unbindable concept is never passed through
+/// verbatim: a source asked for a name it does not use would answer "absent"
+/// and turn a vocabulary gap into a violation.
+pub(crate) fn bound_property_request(
+    context: &RuleContext<'_>,
+    object: &Object,
+    set: Option<&str>,
+    name: &str,
+) -> Result<PropertyRequest, (NotEvaluatedReason, String)> {
+    let (property_set, property) = match vocabulary(context) {
+        Vocabulary::Native => (set.map(ToOwned::to_owned), name),
+        Vocabulary::Package(bindings) => {
+            let source = &object.id.source;
+            let property = bindings
+                .property(name, source)
+                .map_err(|error| binding_error(&error))?;
+            let property_set = set
+                .map(|set| bindings.property_set(set, source).map(ToOwned::to_owned))
+                .transpose()
+                .map_err(|error| binding_error(&error))?;
+            (property_set, property)
+        }
+    };
+    PropertyRequest::try_new(object.id.clone(), property_set, property)
+        .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))
+}
+
+/// Whether an object is an instance of an object type.
+///
+/// A kind always matches itself. Beyond that, `include_subtypes` needs the
+/// source's own type hierarchy; the engine knows none, so without that service
+/// a different kind is unknown rather than "no". Before this, subtypes were
+/// ignored and every subtype instance was silently left out of scope.
+fn entity_type_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    object_type: &str,
+    include_subtypes: bool,
+) -> Selection {
+    let name = match vocabulary(context) {
+        Vocabulary::Native => object_type,
+        Vocabulary::Package(bindings) => match bindings.object_type(object_type, &object.id.source)
+        {
+            Ok(name) => name,
+            Err(error) => {
+                let (reason, message) = binding_error(&error);
+                return Selection::NotEvaluated(reason, message);
+            }
+        },
+    };
+    // Source kinds are compared case-insensitively: STEP writes `IFCWALL` for
+    // the schema's `IfcWall`, and both name the same entity.
+    if object.kind().eq_ignore_ascii_case(name) {
+        return Selection::Match;
+    }
+    if !include_subtypes {
+        return Selection::NoMatch;
+    }
+    let Some(hierarchy) = context.services.get::<TypeHierarchyServiceHandle>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "type-hierarchy service is not registered; subtype membership is unknown".into(),
+        );
+    };
+    match hierarchy.is_a(&object.id.source, object.kind(), name) {
+        Ok(matches) => verdict(matches),
+        Err(TypeHierarchyError::UnknownType(message)) => {
+            Selection::NotEvaluated(NotEvaluatedReason::InvalidEvidence, message)
+        }
+        Err(error) => {
+            Selection::NotEvaluated(NotEvaluatedReason::BackendUnavailable, error.to_string())
+        }
     }
 }
 
@@ -109,7 +216,7 @@ fn any_of(items: impl Iterator<Item = Selection>) -> Selection {
 fn property_selector_matches(
     context: &RuleContext<'_>,
     object: &Object,
-    set: Option<String>,
+    set: Option<&str>,
     name: &str,
     operator: &ComparisonOperator,
     expected: Option<&ParameterValue>,
@@ -123,9 +230,9 @@ fn property_selector_matches(
             "property-resolution service is not registered".into(),
         );
     };
-    let request = match PropertyRequest::try_new(object.id.clone(), set, name) {
+    let request = match bound_property_request(context, object, set, name) {
         Ok(request) => request,
-        Err(error) => return invalid(&error),
+        Err((reason, message)) => return Selection::NotEvaluated(reason, message),
     };
     match service.resolve(&request) {
         Ok(PropertyResolution::Absent(_)) => Selection::NoMatch,
@@ -167,10 +274,6 @@ fn selector_declaration_error(
         }
         (_, Some(_)) => None,
     }
-}
-
-fn invalid(error: &PropertyResolutionError) -> Selection {
-    Selection::NotEvaluated(NotEvaluatedReason::InvalidDeclaration, error.to_string())
 }
 
 pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedReason, String) {

@@ -73,6 +73,16 @@ pub enum EngineError {
     /// Rule IDs must be unique throughout the recursive folder tree.
     #[error("duplicate rule id `{0}`")]
     DuplicateRule(String),
+    /// Two loaded definition packages declare the same concept identity.
+    #[error("duplicate concept `{0}` across definition packages")]
+    DuplicateConcept(String),
+    /// A rule names a concept no loaded definition package declares.
+    #[error("rule `{rule}` references unknown {kind} concept `{concept}`")]
+    UnknownConcept {
+        rule: String,
+        kind: String,
+        concept: String,
+    },
 }
 
 /// Supported declarative parameter types.
@@ -294,19 +304,44 @@ impl CapabilityRegistry {
     }
 }
 
+/// A compiled rule the engine cannot execute as authored.
+///
+/// Carried in the plan so every run reports it as not evaluated; dropping it
+/// would make an unexecuted requirement indistinguishable from a satisfied one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeferredRule {
+    /// Package-local stable rule ID.
+    pub id: RuleId,
+    /// Registered capability ID.
+    pub capability: String,
+    /// Why the rule cannot run as authored.
+    pub reason: String,
+}
+
 /// Validated, deterministic request plan.
 #[derive(Clone, Debug)]
 pub struct ExecutionPlan {
     rules: Vec<CompiledRule>,
+    deferred: Vec<DeferredRule>,
+    concepts: Arc<ConceptCatalog>,
 }
 impl ExecutionPlan {
     /// Rules ordered by stable rule ID.
     pub fn rules(&self) -> &[CompiledRule] {
         &self.rules
     }
+    /// Rules compiled but not executable as authored, ordered by rule ID.
+    pub fn deferred(&self) -> &[DeferredRule] {
+        &self.deferred
+    }
+    /// Canonical concepts declared by the ruleset's definition packages.
+    pub fn concepts(&self) -> &ConceptCatalog {
+        &self.concepts
+    }
 }
 
 mod compiler;
+mod concepts;
 mod contact;
 mod envelope_membership;
 mod free_space;
@@ -320,6 +355,10 @@ mod space;
 mod topology;
 mod walkability;
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
+pub use concepts::{
+    BindingError, ConceptBindings, ConceptCatalog, ConceptKind, TypeHierarchyError,
+    TypeHierarchyService, TypeHierarchyServiceHandle,
+};
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
@@ -396,8 +435,12 @@ impl Runtime {
     ///
     /// Execution fails closed if the host registry no longer contains any capability
     /// that was present when the plan was compiled.
+    ///
+    /// A bare project carries no source type-system declarations, so package
+    /// concepts bind to nothing and concept-based selection is reported as not
+    /// evaluated. Hosts that want concept binding run an [`EvidenceSession`].
     pub fn run(&self, project: &Project, plan: ExecutionPlan) -> Result<Report, EngineError> {
-        self.run_with_services(project, &self.services, plan)
+        self.run_with_services(project, &self.services, BTreeMap::new(), plan)
     }
 
     /// Executes a plan against one immutable source/evidence snapshot.
@@ -406,18 +449,39 @@ impl Runtime {
         session: &EvidenceSession,
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
-        self.run_with_services(session.project(), session.services(), plan)
+        let type_systems = session
+            .snapshots()
+            .map(|snapshot| (snapshot.source().clone(), snapshot.type_systems().to_vec()))
+            .collect();
+        self.run_with_services(session.project(), session.services(), type_systems, plan)
     }
 
     fn run_with_services(
         &self,
         project: &Project,
         services: &ServiceRegistry,
+        type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
+        // Bindings are per run: they join this plan's package concepts to this
+        // project's declared type systems, so they cannot be registered once by
+        // a host. A host-registered `ConceptBindings` is overridden rather than
+        // trusted, because it could bind concepts the packages never declared.
+        let mut services = services.clone();
+        services.replace(ConceptBindings::new(plan.concepts.clone(), type_systems));
+        let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
-        let mut not_evaluated = Vec::new();
+        let mut not_evaluated: Vec<NotEvaluated> = plan
+            .deferred
+            .into_iter()
+            .map(|rule| NotEvaluated {
+                rule_id: rule.id,
+                object_id: None,
+                reason: NotEvaluatedReason::InvalidDeclaration,
+                message: rule.reason,
+            })
+            .collect();
         for rule in plan.rules {
             let capability = self
                 .registry

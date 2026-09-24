@@ -2,13 +2,12 @@
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle, RuleCapability,
-    RuleContext,
+    PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
 
-use crate::selection::{property_error, select_objects};
+use crate::selection::{bound_property_request, property_error, select_objects};
 
 fn property_reference<'a>(
     rule: &'a CompiledRule,
@@ -111,18 +110,13 @@ impl RuleCapability for PropertyExists {
             );
         };
         for object in selected {
-            let request =
-                match PropertyRequest::try_new(object.id.clone(), set.map(ToOwned::to_owned), name)
-                {
-                    Ok(request) => request,
-                    Err(error) => {
-                        evaluation.push_not_evaluated(
-                            NotEvaluatedReason::InvalidDeclaration,
-                            error.to_string(),
-                        );
-                        return evaluation;
-                    }
-                };
+            let request = match bound_property_request(context, object, set, name) {
+                Ok(request) => request,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                    continue;
+                }
+            };
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(_)) => {}
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
@@ -172,18 +166,13 @@ impl RuleCapability for PropertyRequired {
             );
         };
         for object in selected {
-            let request =
-                match PropertyRequest::try_new(object.id.clone(), set.map(ToOwned::to_owned), name)
-                {
-                    Ok(request) => request,
-                    Err(error) => {
-                        evaluation.push_not_evaluated(
-                            NotEvaluatedReason::InvalidDeclaration,
-                            error.to_string(),
-                        );
-                        return evaluation;
-                    }
-                };
+            let request = match bound_property_request(context, object, set, name) {
+                Ok(request) => request,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                    continue;
+                }
+            };
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let value = &resolved.property().value;
@@ -252,18 +241,13 @@ impl RuleCapability for BooleanPropertyEquals {
             );
         };
         for object in selected {
-            let request =
-                match PropertyRequest::try_new(object.id.clone(), set.map(ToOwned::to_owned), name)
-                {
-                    Ok(request) => request,
-                    Err(error) => {
-                        evaluation.push_not_evaluated(
-                            NotEvaluatedReason::InvalidDeclaration,
-                            error.to_string(),
-                        );
-                        return evaluation;
-                    }
-                };
+            let request = match bound_property_request(context, object, set, name) {
+                Ok(request) => request,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                    continue;
+                }
+            };
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();
@@ -372,17 +356,13 @@ impl RuleCapability for PropertyPredicate {
             );
         };
         for object in selected {
-            let request =
-                match PropertyRequest::try_new(object.id.clone(), Some(set.to_owned()), name) {
-                    Ok(request) => request,
-                    Err(error) => {
-                        evaluation.push_not_evaluated(
-                            NotEvaluatedReason::InvalidDeclaration,
-                            error.to_string(),
-                        );
-                        return evaluation;
-                    }
-                };
+            let request = match bound_property_request(context, object, Some(set), name) {
+                Ok(request) => request,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                    continue;
+                }
+            };
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();

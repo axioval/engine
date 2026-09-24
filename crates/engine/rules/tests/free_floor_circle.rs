@@ -27,7 +27,7 @@ fn rule() -> CompiledRule {
         severity: RuleSeverity::Warning,
         selector: Selector::EntityType {
             object_type: "space".into(),
-            include_subtypes: true,
+            include_subtypes: false,
         },
         parameters: BTreeMap::from([
             (

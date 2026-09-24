@@ -4,14 +4,14 @@ use std::cmp::Ordering;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
+    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
     RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
     RuleCapability, RuleContext, SemanticRelationship, TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
 
-use crate::selection::{property_error, select_objects};
+use crate::selection::{bound_property_request, property_error, select_objects};
 
 /// Compares a property on relationship-selected candidates with a property on each checked object.
 pub struct PropertyComparison;
@@ -119,7 +119,13 @@ impl RuleCapability for PropertyComparison {
                 );
                 continue;
             };
-            let target = resolve(properties, object, config.target_set, config.target_name);
+            let target = resolve(
+                context,
+                properties,
+                object,
+                config.target_set,
+                config.target_name,
+            );
             let target = match target {
                 Ok((Some(value), _)) => value,
                 Ok((None, absence_evidence)) => {
@@ -149,6 +155,7 @@ impl RuleCapability for PropertyComparison {
                     continue;
                 };
                 match resolve(
+                    context,
                     properties,
                     candidate,
                     config.compared_set,
@@ -321,13 +328,13 @@ impl<'a> Config<'a> {
 
 type Resolved = (axioval_ir::Property, Vec<Evidence>);
 fn resolve(
+    context: &RuleContext<'_>,
     service: &PropertyResolutionServiceHandle,
     object: &Object,
     set: Option<&str>,
     name: &str,
 ) -> Result<(Option<Resolved>, Vec<Evidence>), (NotEvaluatedReason, String)> {
-    let request = PropertyRequest::try_new(object.id.clone(), set.map(str::to_owned), name)
-        .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?;
+    let request = bound_property_request(context, object, set, name)?;
     match service.resolve(&request) {
         Ok(PropertyResolution::Present(value)) => {
             let property = value.property().clone();

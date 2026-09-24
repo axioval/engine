@@ -5,13 +5,18 @@
 //! and returned an empty report: zero findings, zero not-evaluated. A
 //! caller reads that as a pass. These tests pin that it can no longer
 //! happen, and that a package bound to the adapter's type system does run.
+//!
+//! Lives in the facade because it spans the rules and IFC crates: a
+//! dev-dependency from `axioval-ifc` on the unpublished sibling
+//! `axioval-rules` breaks workspace package verification.
+#![cfg(feature = "ifc")]
 #![allow(missing_docs)]
 
-use axioval_engine::{CapabilityRegistry, Runtime, compile};
-use axioval_ifc::{IFC4_TYPE_SYSTEM, import_ifc_session};
-use axioval_ir::contract::ExternalName;
-use axioval_ir::{DefinitionPackage, NotEvaluatedReason, RuleSetPackage};
-use axioval_rules::register_builtins;
+use axioval::engine::{CapabilityRegistry, Runtime, compile};
+use axioval::ifc::{IFC4_TYPE_SYSTEM, import_ifc_session};
+use axioval::ir::contract::ExternalName;
+use axioval::ir::{DefinitionPackage, NotEvaluatedReason, RuleSetPackage};
+use axioval::rules::register_builtins;
 
 /// A wall, a wall subtype, and a slab. Only the plain wall carries the
 /// reference, through `Pset_WallCommon`.
@@ -35,11 +40,11 @@ END-ISO-10303-21;
 fn packages() -> (DefinitionPackage, RuleSetPackage) {
     (
         serde_json::from_str(include_str!(
-            "../../../../../fixtures/schema-v0.1.0/definitions.json"
+            "../../../../fixtures/schema-v0.1.0/definitions.json"
         ))
         .unwrap(),
         serde_json::from_str(include_str!(
-            "../../../../../fixtures/schema-v0.1.0/ruleset.json"
+            "../../../../fixtures/schema-v0.1.0/ruleset.json"
         ))
         .unwrap(),
     )
@@ -73,7 +78,7 @@ fn bind_to_ifc4(mut definitions: DefinitionPackage) -> DefinitionPackage {
     definitions
 }
 
-fn run(definitions: DefinitionPackage) -> axioval_ir::Report {
+fn run(definitions: DefinitionPackage) -> axioval::ir::Report {
     let (_, rules) = packages();
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
     let plan = compile(&registry, &[definitions], &rules).unwrap();

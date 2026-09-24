@@ -17,6 +17,9 @@ axioval-ifc = { workspace = true, optional = true }
 axioval-axiolid = { workspace = true, optional = true }
 axioval-icdd = { workspace = true, optional = true }
 
+[dev-dependencies]
+serde_json.workspace = true
+
 # One feature per source adapter, named for the format or library it adapts.
 # A future geometry backend adds `cgal = ["dep:axioval-cgal"]` beside `axiolid`
 # without disturbing any existing consumer.

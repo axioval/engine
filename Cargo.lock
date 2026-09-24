@@ -130,6 +130,7 @@ dependencies = [
  "axioval-ifc",
  "axioval-ir",
  "axioval-rules",
+ "serde_json",
 ]
 
 [[package]]
@@ -181,12 +182,10 @@ version = "0.2.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
- "axioval-rules",
  "ifc-model",
  "ifc-properties",
  "ifc-schema",
  "ifc-step",
- "serde_json",
  "sha2",
  "thiserror",
 ]

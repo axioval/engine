@@ -24,6 +24,11 @@ allow = [
   # geometry kernel.
   "MPL-2.0",
   "Unicode-3.0",
+  # Public-domain dedication with a permissive fallback licence; it imposes no
+  # conditions an AGPL-3.0-or-later distribution could conflict with. Reached
+  # through tiny-keccak <- const-random <- ahash, which both Axiolid 0.3 and
+  # the IFC 0.2 crates pull in.
+  "CC0-1.0",
 ]
 confidence-threshold = 0.93
 exceptions = []

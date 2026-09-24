@@ -4,6 +4,36 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-24
+
+A minor release rather than 0.1.19: the dependency upgrade changes a public
+signature. Under Cargo's 0.x rules `cargo update` would pull a patch release
+into every `axioval = "0.1"` build, breaking any consumer that builds its own
+meshes with `axiolid-mesh` 0.1.
+
+### Changed
+
+- **Breaking.** `AxiolidGeometry::with_mesh` and `AxiolidGeometry::mesh` take
+  and return `axiolid_mesh::TriMesh` from `axiolid-mesh` 0.3. A consumer that
+  builds meshes with `axiolid-mesh` 0.1 gets a type mismatch; move both
+  `axioval` and `axiolid-mesh` together. Verified: a 0.1 mesh fails to compile
+  against this release, and the same scenario built on 0.3 produces output
+  identical to 0.1.18.
+- Axiolid dependencies move from 0.1 to 0.3 (`axiolid-core`, `-mesh`,
+  `-measure`, `-overlay`) and IFC dependencies from 0.1 to 0.2
+  (`ifc-model` 0.2.2, `ifc-schema` 0.2.2, `ifc-step` 0.2.1,
+  `ifc-properties` 0.2.0). No other Axioval API changes; `axioval-ifc`
+  exposes no upstream types. The IFC crates bring the STEP parser
+  `openbim-step` with them, transitively, from 0.4.0 to 0.5.1.
+- IFC error enums upstream are now `#[non_exhaustive]`. Unrecognised property
+  errors, including the new `AuthoringInvalid`, resolve to
+  `PropertyResolutionError::Unavailable`, so a new upstream failure mode can
+  never pass as evidence.
+- `CC0-1.0` is allowed in `deny.toml`. It reaches the tree through
+  `tiny-keccak` <- `const-random` <- `ahash`, now used by both upstreams.
+  Entity iteration order is unaffected: `ifc-model` iterates an explicit
+  insertion-order vector, not its hash map.
+
 ## [0.1.18] - 2026-09-07
 
 ### Added

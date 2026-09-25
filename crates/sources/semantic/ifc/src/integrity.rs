@@ -1,7 +1,11 @@
-//! Integrity warnings for one IFC model's objectified relationships.
+//! Integrity issues for one IFC model.
 //!
-//! This scan uses the same end reader as relationship selection, so a warning
-//! here and a refusal there always describe the same instances.
+//! Relationship ends are scanned with the same reader as relationship
+//! selection, so a warning here and a refusal there always describe the same
+//! instances. Spatial and zone cardinality violations come from `ifc-systems`,
+//! which reads them against the file's own release; only anomalies that are
+//! pure schema violations are taken from it, because dangling references are
+//! already reported by the relationship scan and would otherwise appear twice.
 
 use std::sync::Arc;
 
@@ -12,11 +16,20 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, SourceId};
 use ifc_model::Model;
+use ifc_systems::{SystemAnomaly, spatial_placements, zones};
 
 /// Code for a relationship instance that omits an end its schema requires.
 pub const ABSENT_REQUIRED_END: &str = "relationship.absent-required-end";
 /// Code for a relationship instance whose end is not a resolvable reference.
 pub const MALFORMED_RELATIONSHIP: &str = "relationship.malformed";
+/// Code for an element contained by two spatial structures.
+///
+/// `ContainedInStructure` is `SET [0:1]`; the file states two homes that
+/// cannot both be true. Relationship selection still reports both, as the
+/// file does, so this warning is the only place the conflict surfaces.
+pub const CONTAINED_TWICE: &str = "spatial.contained-twice";
+/// Code for an `IfcZone` member that the zone's WR1 rule does not permit.
+pub const ZONE_MEMBER_NOT_SPATIAL: &str = "zone.member-not-spatial";
 
 pub(crate) struct IfcIntegrity {
     release: Release,
@@ -95,6 +108,53 @@ impl SourceIntegrityService for IfcIntegrity {
                 }));
             }
         }
+        issues.extend(self.schema_violations(&locator));
         Ok(issues)
+    }
+}
+
+impl IfcIntegrity {
+    /// Cardinality and membership violations stated by the file.
+    fn schema_violations(&self, locator: &impl Fn(String) -> Evidence) -> Vec<IntegrityIssue> {
+        let (_, placement_anomalies) = spatial_placements(&self.model);
+        let (_, zone_anomalies) = zones(&self.model);
+        placement_anomalies
+            .into_iter()
+            .chain(zone_anomalies)
+            .filter_map(|anomaly| match anomaly {
+                SystemAnomaly::ContainedTwice {
+                    element,
+                    first,
+                    second,
+                } => Some(IntegrityIssue {
+                    code: CONTAINED_TWICE.into(),
+                    severity: IntegritySeverity::Warning,
+                    message: format!(
+                        "{element} is contained by both {first} and {second}; an element has \
+                         at most one containing spatial structure"
+                    ),
+                    evidence: locator(format!(
+                        "spatial-contained-twice:{element}:{first}:{second}"
+                    )),
+                }),
+                SystemAnomaly::ZoneMemberNotSpatial {
+                    relation,
+                    zone,
+                    member,
+                    type_name,
+                } => Some(IntegrityIssue {
+                    code: ZONE_MEMBER_NOT_SPATIAL.into(),
+                    severity: IntegritySeverity::Warning,
+                    message: format!(
+                        "{relation} assigns {member} ({type_name}) to zone {zone}; a zone may \
+                         only group zones, spaces and spatial zones"
+                    ),
+                    evidence: locator(format!("zone-member:{relation}:{member}")),
+                }),
+                // Dangling references are the relationship scan's to report;
+                // the rest describe systems and ports, not source integrity.
+                _ => None,
+            })
+            .collect()
     }
 }

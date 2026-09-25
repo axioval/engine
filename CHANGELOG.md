@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Classification service.** `ClassificationService` /
+  `ClassificationServiceHandle` let a source state which classifications an
+  object carries, each as a system plus its code chain from the assigned item
+  to the root. The IFC session registers one backed by
+  `ifc-classification` 0.2.1: direct assignments and those inherited from the
+  object's type, read per release (IFC2X3 `ItemReference`, IFC4
+  `Identification`). An assignment whose system the file does not state, such
+  as an IFC2X3 notation or a reference with no `ReferencedSource`, makes a
+  system-qualified selector not evaluated rather than a mismatch.
+- **Cardinality warnings.** The IFC integrity scan reports
+  `spatial.contained-twice` (an element named by two
+  `IfcRelContainedInSpatialStructure`) and `zone.member-not-spatial` (an
+  `IfcZone` grouping something other than zones, spaces and spatial zones),
+  both from `ifc-systems` 0.2.1. On one real IFC2X3 model the scan reports
+  29 elements contained twice, matching an independent count of the file.
 - **IFC2X3 support.** `import_ifc_session` accepts IFC2X3 TC1 as well as IFC4
   ADD2 TC1. The header's release is decided once (`IfcRelease`) and every
   service reads that release's schema: property resolution
@@ -20,6 +35,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Classification selectors silently passed over sources.** A
+  `classification` selector read the project's inline classification list,
+  which no production adapter fills. Over an IFC model every classification
+  rule selected nothing and returned an empty report. It now asks the
+  classification service, and a session without one reports each object as
+  not evaluated (`MissingService`). **Breaking:** hosts that relied on inline
+  `Object::classifications` must register a `ClassificationService`.
 - **Package concepts were never bound to source data, so a checker could
   report a false pass.** A ruleset names canonical concepts
   (`axioval:fire.ifc4.wall`); the engine compared them verbatim with source

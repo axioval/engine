@@ -12,7 +12,10 @@ use axioval_engine::{
     RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
     SemanticRelationship, SourceIntegrityServiceHandle, TraversalDirection,
 };
-use axioval_ifc::{ABSENT_REQUIRED_END, MALFORMED_RELATIONSHIP, import_ifc_session};
+use axioval_ifc::{
+    ABSENT_REQUIRED_END, CONTAINED_TWICE, MALFORMED_RELATIONSHIP, ZONE_MEMBER_NOT_SPATIAL,
+    import_ifc_session,
+};
 use axioval_ir::{ObjectId, SourceId};
 
 fn step(data: &str) -> Vec<u8> {
@@ -213,4 +216,55 @@ fn an_absent_required_relating_end_is_flagged_and_refused_too() {
         relationships(&session).select(&request),
         Err(RelationshipSelectionError::Unavailable(_))
     ));
+}
+
+/// Wall #7 contained by two spaces; zone #8 grouping a space and, against
+/// the zone's WR1 rule, the wall.
+const SPATIAL_CONFLICTS: &str = "\
+#5=IFCSPACE('r1',$,'R1',$,$,$,$,$,$,$,$);
+#6=IFCSPACE('r2',$,'R2',$,$,$,$,$,$,$,$);
+#7=IFCWALL('w',$,$,$,$,$,$,$,$);
+#8=IFCZONE('z',$,'Z',$,$,$);
+#20=IFCRELCONTAINEDINSPATIALSTRUCTURE('c1',$,$,$,(#7),#5);
+#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('c2',$,$,$,(#7),#6);
+#22=IFCRELASSIGNSTOGROUP('g',$,$,$,(#5,#7),$,#8);
+";
+
+#[test]
+fn the_integrity_scan_warns_about_schema_cardinality_violations() {
+    let session = session(SPATIAL_CONFLICTS);
+    let issues = session
+        .service::<SourceIntegrityServiceHandle>()
+        .unwrap()
+        .issues(&source())
+        .unwrap();
+    let codes: Vec<&str> = issues.iter().map(|issue| issue.code.as_str()).collect();
+    assert_eq!(
+        codes,
+        [CONTAINED_TWICE, ZONE_MEMBER_NOT_SPATIAL],
+        "{issues:#?}"
+    );
+    assert!(
+        issues
+            .iter()
+            .all(|issue| issue.severity == IntegritySeverity::Warning)
+    );
+    assert!(issues[0].message.contains("#7"), "{}", issues[0].message);
+    assert!(issues[1].message.contains("#8"), "{}", issues[1].message);
+}
+
+#[test]
+fn a_single_home_and_a_valid_zone_raise_nothing() {
+    let valid = SPATIAL_CONFLICTS
+        .replace(
+            "#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('c2',$,$,$,(#7),#6);\n",
+            "",
+        )
+        .replace("(#5,#7),$,#8", "(#5,#6),$,#8");
+    let issues = session(&valid)
+        .service::<SourceIntegrityServiceHandle>()
+        .unwrap()
+        .issues(&source())
+        .unwrap();
+    assert!(issues.is_empty(), "{issues:#?}");
 }

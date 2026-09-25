@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    CompletePropertyAbsenceEvidence, EvidenceSession, EvidenceSessionError, PropertyRequest,
-    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
-    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
-    TypeHierarchyServiceHandle,
+    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, EvidenceSession,
+    EvidenceSessionError, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
+    ResolvedProperty, SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError,
+    TypeHierarchyService, TypeHierarchyServiceHandle,
 };
 use axioval_ir::{Evidence, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId};
 use ifc_model::{Codec, EntityId, Model};
@@ -16,6 +16,7 @@ use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::classifications::IfcClassificationService;
 use crate::integrity::IfcIntegrity;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
@@ -268,6 +269,9 @@ pub fn import_ifc_session(
         model.clone(),
         snapshots.clone(),
     )));
+    let classifications = ClassificationServiceHandle::new(Arc::new(
+        IfcClassificationService::new(model.clone(), snapshots.clone()),
+    ));
     let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
         IfcRelationshipService::new(release, model, snapshots.clone()),
     ));
@@ -279,6 +283,7 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(relationships))
         .and_then(|session| session.with_service(hierarchy))
         .and_then(|session| session.with_service(integrity))
+        .and_then(|session| session.with_service(classifications))
         .map_err(|error| session_error(&error))
 }
 

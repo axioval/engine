@@ -51,6 +51,27 @@ snapshot, so package concepts bind to IFC names (see
 [Concept binding](./concept-binding.md)), and registers that release's entity
 inheritance from the bundled normative schema for `includeSubtypes`.
 
+### Classifications
+
+The session registers a classification service backed by
+`ifc-classification`. For each object it returns every assignment, direct or
+inherited from the object's type, as the classification system's name and
+the chain of codes from the assigned item up to the root. A selector matches
+the leaf code, or any code in the chain when `includeDescendants` is set.
+
+IFC2X3 hierarchies are flat: a reference's `ReferencedSource` may only name
+the system itself. A file that chains references anyway is refused rather
+than flattened. An assignment whose system the file does not state is
+neither a match nor a mismatch, and the object is reported as not evaluated.
+
+### Integrity warnings
+
+Besides relationship ends, the integrity scan reports two schema cardinality
+violations as warnings: an element contained by more than one spatial
+structure (`spatial.contained-twice`), and a zone grouping something other
+than zones, spaces and spatial zones (`zone.member-not-spatial`). Both come
+from `ifc-systems`; rules still see every containment the file states.
+
 ## Axiolid
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.

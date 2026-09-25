@@ -340,6 +340,7 @@ impl ExecutionPlan {
     }
 }
 
+mod classifications;
 mod compiler;
 mod concepts;
 mod contact;
@@ -355,6 +356,10 @@ mod services;
 mod space;
 mod topology;
 mod walkability;
+pub use classifications::{
+    ClassificationAssignment, ClassificationError, ClassificationService,
+    ClassificationServiceHandle,
+};
 pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
 pub use concepts::{
     BindingError, ConceptBindings, ConceptCatalog, ConceptKind, TypeHierarchyError,

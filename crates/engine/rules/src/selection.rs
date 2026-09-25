@@ -1,9 +1,10 @@
 //! Deterministic, fail-closed selector evaluation.
 
 use axioval_engine::{
-    BindingError, CapabilityEvaluation, ConceptBindings, NotEvaluatedReason, PropertyRequest,
-    PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext,
-    TypeHierarchyError, TypeHierarchyServiceHandle,
+    BindingError, CapabilityEvaluation, ClassificationError, ClassificationServiceHandle,
+    ConceptBindings, NotEvaluatedReason, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, TypeHierarchyError,
+    TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Object, Property, PropertyValue};
@@ -41,12 +42,11 @@ fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Obj
             object_type,
             include_subtypes,
         } => entity_type_matches(context, object, object_type, *include_subtypes),
-        Selector::Classification { system, code, .. } => verdict(
-            object
-                .classifications
-                .iter()
-                .any(|item| item.system == *system && item.code == *code),
-        ),
+        Selector::Classification {
+            system,
+            code,
+            include_descendants,
+        } => classification_matches(context, object, system, code, *include_descendants),
         Selector::AllOf { operands } => all_of(
             operands
                 .iter()
@@ -211,6 +211,55 @@ fn any_of(items: impl Iterator<Item = Selection>) -> Selection {
         }
     }
     unavailable.unwrap_or(Selection::NoMatch)
+}
+
+/// Whether `object` carries `code` in `system`, as its source states.
+///
+/// The project's inline classification list is not consulted: an empty list
+/// cannot tell "unclassified" from "never read", and treating the second as
+/// the first made every classification rule over an IFC model select nothing
+/// and pass. A source with no classification service is not evaluated.
+fn classification_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    system: &str,
+    code: &str,
+    include_descendants: bool,
+) -> Selection {
+    let Some(service) = context.services.get::<ClassificationServiceHandle>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "classification service is not registered; classifications are unknown".into(),
+        );
+    };
+    let assignments = match service.classifications(&object.id) {
+        Ok(assignments) => assignments,
+        Err(error @ ClassificationError::Unreadable(_)) => {
+            return Selection::NotEvaluated(NotEvaluatedReason::InvalidEvidence, error.to_string());
+        }
+        Err(error) => {
+            return Selection::NotEvaluated(
+                NotEvaluatedReason::BackendUnavailable,
+                error.to_string(),
+            );
+        }
+    };
+    let mut undecided = false;
+    for assignment in &assignments {
+        match assignment.matches(system, code, include_descendants) {
+            Some(true) => return Selection::Match,
+            Some(false) => {}
+            None => undecided = true,
+        }
+    }
+    if undecided {
+        Selection::NotEvaluated(
+            NotEvaluatedReason::IncompleteEvidence,
+            "a classification of this object is not linked to a system".into(),
+        )
+    } else {
+        Selection::NoMatch
+    }
 }
 
 fn property_selector_matches(

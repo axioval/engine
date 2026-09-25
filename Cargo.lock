@@ -182,10 +182,12 @@ version = "0.2.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
+ "ifc-classification",
  "ifc-model",
  "ifc-properties",
  "ifc-schema",
  "ifc-step",
+ "ifc-systems",
  "sha2",
  "thiserror",
 ]
@@ -511,6 +513,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4804bdc1dc124eb7e1aa9e144ecc04096bcf787a10a15fa44af682b51f0f6cce"
 
 [[package]]
+name = "ifc-classification"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d59ccb952688a96a667df15118d462757b89a967243eeca49f683f7eb66cf04"
+dependencies = [
+ "ifc-model",
+ "ifc-schema",
+ "thiserror",
+]
+
+[[package]]
 name = "ifc-model"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,6 +565,16 @@ dependencies = [
  "memmap2",
  "openbim-step",
  "thiserror",
+]
+
+[[package]]
+name = "ifc-systems"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa8bf8af849ba7c8277e798d6be27466ff913a35b5a77550485d2f9f346a0e95"
+dependencies = [
+ "ifc-model",
+ "ifc-schema",
 ]
 
 [[package]]

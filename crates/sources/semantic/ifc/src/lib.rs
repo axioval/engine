@@ -6,12 +6,15 @@
 //! fingerprint-bound Axioval evidence session. The older importer trait remains
 //! available for host-defined OpenBIM sources.
 
+mod classifications;
 mod ifc;
 mod integrity;
 mod relationships;
 mod release;
 pub use ifc::{IfcSessionError, import_ifc_session};
-pub use integrity::{ABSENT_REQUIRED_END, MALFORMED_RELATIONSHIP};
+pub use integrity::{
+    ABSENT_REQUIRED_END, CONTAINED_TWICE, MALFORMED_RELATIONSHIP, ZONE_MEMBER_NOT_SPATIAL,
+};
 pub use release::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM};
 
 use std::collections::BTreeSet;

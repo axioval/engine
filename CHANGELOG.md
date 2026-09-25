@@ -4,6 +4,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **IFC2X3 support.** `import_ifc_session` accepts IFC2X3 TC1 as well as IFC4
+  ADD2 TC1. The header's release is decided once (`IfcRelease`) and every
+  service reads that release's schema: property resolution
+  (`ifc-properties` 0.2.1), entity inheritance, relationship end slots and
+  integrity. The snapshot declares `IFC2X3_TYPE_SYSTEM`, so a package binds
+  on IFC2X3 data only through IFC2X3 external names. IFC4X3, several
+  releases, or none are still refused. On six real models (one IFC4, five
+  IFC2X3), 4,378 relationship answers match `ifc-spatial`'s independent
+  reader. Of 22,392 real property assignments, every one is either resolved
+  or refused for a stated reason; the 636 refusals are measure-typed values
+  (`IFCAREAMEASURE`, `IFCENERGYMEASURE`, ...) the adapter does not yet map.
+
 ### Fixed
 
 - **Package concepts were never bound to source data, so a checker could

@@ -12,13 +12,13 @@ use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
     ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
 };
-use ifc_schema::{SchemaVersion, ifc4};
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::integrity::IfcIntegrity;
 use crate::relationships::IfcRelationshipService;
+use crate::release::Release;
 
 /// Production IFC import/session construction failure.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -35,8 +35,8 @@ pub enum IfcSessionError {
         /// Number of source diagnostics retained by the parser.
         diagnostics: usize,
     },
-    /// The file did not declare exactly one supported IFC4 schema.
-    #[error("exact IFC sessions require one IFC4 schema declaration, found {0:?}")]
+    /// The file did not declare exactly one supported schema (IFC2X3 or IFC4).
+    #[error("exact IFC sessions require one IFC2X3 or IFC4 schema declaration, found {0:?}")]
     UnsupportedSchema(Vec<String>),
     /// Source-neutral project construction failed.
     #[error("failed to construct source-neutral project: {0}")]
@@ -46,15 +46,9 @@ pub enum IfcSessionError {
     Session(String),
 }
 
-/// Type system of the IFC4 ADD2 TC1 release, as declared by `openbim.ifc`.
-///
-/// Package concepts bind to data from this adapter only through an external
-/// name in exactly this type system. It is the release's semantic identifier,
-/// not a transport or documentation URL, and it differs per IFC release.
-pub const IFC4_TYPE_SYSTEM: &str = "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4";
-
-/// IFC4 entity inheritance, answered from the bundled normative schema.
+/// Entity inheritance of the session's release, from its bundled normative schema.
 struct IfcTypeHierarchy {
+    release: Release,
     snapshots: Arc<[SourceSnapshot]>,
 }
 
@@ -64,13 +58,14 @@ impl TypeHierarchyService for IfcTypeHierarchy {
     }
 
     fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError> {
-        let schema = ifc4();
+        let schema = self.release.schema;
         // `is_a` answers false for a name the schema does not declare, which
         // would make an unknown kind look like a proven non-member.
         for name in [kind, ancestor] {
             if schema.entity(name).is_none() {
                 return Err(TypeHierarchyError::UnknownType(format!(
-                    "`{name}` is not an IFC4 entity"
+                    "`{name}` is not an {} entity",
+                    self.release.label
                 )));
             }
         }
@@ -241,15 +236,14 @@ pub fn import_ifc_session(
         });
     }
     let schemas = model.header().schema.clone();
-    if !matches!(schemas.as_slice(), [schema] if SchemaVersion::from_header_token(schema) == Some(SchemaVersion::Ifc4))
-    {
+    let Some(release) = Release::from_header(&schemas) else {
         return Err(IfcSessionError::UnsupportedSchema(schemas));
-    }
+    };
 
     let fingerprint: Arc<str> = Arc::from(format!("sha256:{:x}", Sha256::digest(bytes)));
     let objects = model
         .iter()
-        .filter(|(_, entity)| ifc4().is_a(&entity.type_name, "IFCOBJECT"))
+        .filter(|(_, entity)| release.schema.is_a(&entity.type_name, "IFCOBJECT"))
         .map(|(id, entity)| {
             ObjectId::new(source.clone(), id.to_string())
                 .map(|object_id| Object::new(object_id, entity.type_name.to_string()))
@@ -260,8 +254,8 @@ pub fn import_ifc_session(
         Project::new(objects).map_err(|error| IfcSessionError::Project(error.to_string()))?;
     let snapshot =
         SourceSnapshot::try_new(source.clone(), fingerprint.clone(), fingerprint.clone())
-            .and_then(|snapshot| snapshot.with_schema("IFC4"))
-            .and_then(|snapshot| snapshot.with_type_system(IFC4_TYPE_SYSTEM))
+            .and_then(|snapshot| snapshot.with_schema(release.label))
+            .and_then(|snapshot| snapshot.with_type_system(release.type_system))
             .map_err(|error| session_error(&error))?;
     let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
     let model = Arc::new(model);
@@ -270,13 +264,15 @@ pub fn import_ifc_session(
         snapshots: snapshots.clone(),
     }));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
+        release,
         model.clone(),
         snapshots.clone(),
     )));
     let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
-        IfcRelationshipService::new(model, snapshots.clone()),
+        IfcRelationshipService::new(release, model, snapshots.clone()),
     ));
-    let hierarchy = TypeHierarchyServiceHandle::new(Arc::new(IfcTypeHierarchy { snapshots }));
+    let hierarchy =
+        TypeHierarchyServiceHandle::new(Arc::new(IfcTypeHierarchy { release, snapshots }));
     EvidenceSession::try_new(project, [snapshot])
         .map_err(|error| session_error(&error))?
         .with_service(service)

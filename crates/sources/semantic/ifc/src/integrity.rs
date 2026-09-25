@@ -1,18 +1,17 @@
-//! Integrity warnings for one IFC4 model's objectified relationships.
+//! Integrity warnings for one IFC model's objectified relationships.
 //!
 //! This scan uses the same end reader as relationship selection, so a warning
 //! here and a refusal there always describe the same instances.
 
 use std::sync::Arc;
 
+use crate::relationships::{EdgeIndex, ends_of, read_instance};
+use crate::release::Release;
 use axioval_engine::{
     IntegrityError, IntegrityIssue, IntegritySeverity, SourceIntegrityService, SourceSnapshot,
 };
 use axioval_ir::{Evidence, SourceId};
 use ifc_model::Model;
-use ifc_schema::ifc4;
-
-use crate::relationships::{EdgeIndex, ends_of, read_instance};
 
 /// Code for a relationship instance that omits an end its schema requires.
 pub const ABSENT_REQUIRED_END: &str = "relationship.absent-required-end";
@@ -20,13 +19,22 @@ pub const ABSENT_REQUIRED_END: &str = "relationship.absent-required-end";
 pub const MALFORMED_RELATIONSHIP: &str = "relationship.malformed";
 
 pub(crate) struct IfcIntegrity {
+    release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
 }
 
 impl IfcIntegrity {
-    pub(crate) fn new(model: Arc<Model>, snapshots: Arc<[SourceSnapshot]>) -> Self {
-        Self { model, snapshots }
+    pub(crate) fn new(
+        release: Release,
+        model: Arc<Model>,
+        snapshots: Arc<[SourceSnapshot]>,
+    ) -> Self {
+        Self {
+            release,
+            model,
+            snapshots,
+        }
     }
 }
 
@@ -46,7 +54,7 @@ impl SourceIntegrityService for IfcIntegrity {
                 format!("ifc:{}:{detail}", snapshot.fingerprint()),
             )
         };
-        let schema = ifc4();
+        let schema = self.release.schema;
         let mut types: Vec<&str> = schema.subtypes("IfcRelationship");
         types.sort_unstable();
         types.dedup();
@@ -76,9 +84,9 @@ impl SourceIntegrityService for IfcIntegrity {
                     code: ABSENT_REQUIRED_END.into(),
                     severity: IntegritySeverity::Warning,
                     message: format!(
-                        "{} {} has no `{}`, which IFC4 requires; it contributes no edge \
+                        "{} {} has no `{}`, which {} requires; it contributes no edge \
                          through that end",
-                        absent.type_name, absent.instance, absent.attribute
+                        absent.type_name, absent.instance, absent.attribute, self.release.label
                     ),
                     evidence: locator(format!(
                         "relationship-absent-end:{}:{}",

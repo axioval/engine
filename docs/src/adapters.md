@@ -4,7 +4,7 @@ Adapters are peers around the source-neutral engine. No adapter receives special
 
 ## IFC
 
-`axioval-ifc` provides a production IFC4 STEP path for exact direct properties:
+`axioval-ifc` provides a production IFC2X3 and IFC4 STEP path for exact direct properties:
 strict bytes become a SHA-256 fingerprinted `EvidenceSession`; IFC objects become
 source-qualified Axioval objects; and `ifc-properties::exact_property` backs the
 session's property service with occurrence/type provenance and exact absence.
@@ -15,7 +15,7 @@ unsupported values fail closed.
 
 Direct-property completeness does not imply relationship completeness. The IFC
 session registers an exact relationship-selection service: a relationship
-identity is the IFC4 name of an objectified relationship entity type (for
+identity is the entity name, in the source's own release, of an objectified relationship type (for
 example `IfcRelContainedInSpatialStructure`, `IfcRelVoidsElement`), and a
 supertype such as `IfcRelConnects` covers every concrete subtype present. End
 slots are read from the bundled normative schema, not a hand-written table.
@@ -43,9 +43,12 @@ refuses on: an absent required end is a `relationship.absent-required-end`
 `relationship.malformed` **error**. Hosts show these beside the report whether
 or not any rule skipped them.
 
-The session declares the IFC4 ADD2 TC1 type system (`IFC4_TYPE_SYSTEM`) on its
+The session binds to the one release the file header declares: IFC2X3 TC1
+(`IFC2X3_TYPE_SYSTEM`) or IFC4 ADD2 TC1 (`IFC4_TYPE_SYSTEM`). A header naming
+any other release, several releases, or none is refused rather than read with
+the wrong tables. The session declares that release's type system on its
 snapshot, so package concepts bind to IFC names (see
-[Concept binding](./concept-binding.md)), and registers IFC4 entity
+[Concept binding](./concept-binding.md)), and registers that release's entity
 inheritance from the bundled normative schema for `includeSubtypes`.
 
 ## Axiolid

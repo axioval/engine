@@ -24,7 +24,10 @@ findings and no not-evaluated outcomes. A caller reads that as a pass.
    snapshot uses with `SourceSnapshot::with_type_system`. The identity is a
    release-bound semantic URI, for example
    `https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4` for IFC4
-   ADD2 TC1. IFC4 and IFC4.3 are different type systems.
+   ADD2 TC1, and `https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/`
+   for IFC2x3 TC1 (the identity `openbim.ifc` assigns; bSDD publishes no IFC2x3
+   dictionary). IFC2X3, IFC4 and IFC4.3 are different type systems, so a package
+   needs a name in each release it should run against.
 3. **Binding.** At run time the engine registers `ConceptBindings` for the
    session. Selection and property resolution translate each concept through
    the one external name whose type system the object's source declared.

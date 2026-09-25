@@ -4,7 +4,7 @@ use axioval_engine::{
     PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
     RelationshipSelectionServiceHandle,
 };
-use axioval_ifc::import_ifc_session;
+use axioval_ifc::{IfcSessionError, import_ifc_session};
 use axioval_ir::{ObjectId, PropertyValue, SourceId};
 
 const IFC: &[u8] = b"ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n#1=IFCWALL('g',$,$,$,$,$,$,$,$);\n#2=IFCPROPERTYSINGLEVALUE('Flag',$,ifcboolean(.T.),$);\n#3=IFCPROPERTYSINGLEVALUE('Big',$,IFCINTEGER(9007199254740993),$);\n#4=IFCPROPERTYSET('p',$,'Pset_Test',$,(#2,#3,#6,#7,#8,#10));\n#5=IFCRELDEFINESBYPROPERTIES('r',$,$,$,(#1),#4);\n#6=IFCPROPERTYSINGLEVALUE('Logical',$,IFCLOGICAL(.U.),$);\n#7=IFCPROPERTYSINGLEVALUE('Bits',$,IFCBINARY(\"0101\"),$);\n#8=IFCPROPERTYSINGLEVALUE('Length',$,IFCLENGTHMEASURE(1.),$);\n#9=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n#10=IFCPROPERTYSINGLEVALUE('UnitReal',$,IFCREAL(1.),#9);\nENDSEC;\nEND-ISO-10303-21;\n";
@@ -133,10 +133,26 @@ fn source_failures_remain_distinct_terminal_errors() {
 }
 
 #[test]
-fn malformed_or_non_ifc4_input_cannot_create_an_exact_session() {
+fn malformed_or_unsupported_input_cannot_create_an_exact_session() {
     assert!(import_ifc_session("broken.ifc", b"not STEP").is_err());
-    let ifc2x3 = String::from_utf8(IFC.to_vec())
-        .unwrap()
-        .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC2X3'))");
-    assert!(import_ifc_session("old.ifc", ifc2x3.as_bytes()).is_err());
+    let with_header = |header: &str| {
+        String::from_utf8(IFC.to_vec())
+            .unwrap()
+            .replace("FILE_SCHEMA(('IFC4'))", header)
+    };
+    // IFC4X3 has a schema table but no exact property resolution; several
+    // or no schemas leave the release undecided. All are refused, not guessed.
+    for header in [
+        "FILE_SCHEMA(('IFC4X3_ADD2'))",
+        "FILE_SCHEMA(('IFC2X3','IFC4'))",
+        "FILE_SCHEMA(())",
+    ] {
+        let Err(error) = import_ifc_session("other.ifc", with_header(header).as_bytes()) else {
+            panic!("{header}: expected a refusal");
+        };
+        assert!(
+            matches!(error, IfcSessionError::UnsupportedSchema(_)),
+            "{header}: {error:?}"
+        );
+    }
 }

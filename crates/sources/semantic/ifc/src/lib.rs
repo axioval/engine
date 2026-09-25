@@ -2,15 +2,17 @@
 
 //! Source-neutral `OpenBIM` semantic adapter contracts and production IFC seam.
 //!
-//! [`import_ifc_session`] parses strict IFC4 STEP bytes into an immutable,
+//! [`import_ifc_session`] parses strict IFC2X3 or IFC4 STEP bytes into an immutable,
 //! fingerprint-bound Axioval evidence session. The older importer trait remains
 //! available for host-defined OpenBIM sources.
 
 mod ifc;
 mod integrity;
 mod relationships;
-pub use ifc::{IFC4_TYPE_SYSTEM, IfcSessionError, import_ifc_session};
+mod release;
+pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{ABSENT_REQUIRED_END, MALFORMED_RELATIONSHIP};
+pub use release::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM};
 
 use std::collections::BTreeSet;
 

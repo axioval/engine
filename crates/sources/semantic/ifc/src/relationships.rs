@@ -1,13 +1,16 @@
-//! Exact relationship selection over the objectified relationships of one IFC4 model.
+//! Exact relationship selection over the objectified relationships of one IFC model.
 //!
 //! IFC stores no parent pointers: an `IfcRelContainedInSpatialStructure`
 //! entity names both the storey and its elements. A relationship identity in a
-//! request is therefore the IFC4 name of a relationship entity type, and every
+//! request is therefore the name of a relationship entity type in the
+//! session's release (IFC2X3 or IFC4), and every
 //! instance of that type (or of a subtype) is one edge set from its relating
 //! end to each of its related ends.
 //!
-//! Which attribute slot is which end is read from the bundled normative
-//! schema rather than hard-coded: the slot positions differ per type
+//! Which attribute slot is which end, and whether it is optional, is read from
+//! the bundled normative schema of the file's own release rather than
+//! hard-coded (`IfcRelSpaceBoundary.RelatedBuildingElement` is optional in
+//! IFC2X3, required in IFC4): the slot positions differ per type
 //! (`IfcRelAggregates` keeps the relating end in slot 4, containment in slot
 //! 5, `IfcRelConnectsElements` in slot 5 because connection geometry takes 4),
 //! and a hand-written table silently inverts direction when one is wrong.
@@ -27,11 +30,15 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId};
 use ifc_model::{EntityId, Model, Value};
-use ifc_schema::{Schema, TypeKind, ifc4};
+use ifc_schema::{Schema, TypeKind};
+
+use crate::release::Release;
 
 /// End slots of one concrete relationship entity type.
 #[derive(Clone, Debug)]
 pub(crate) struct Ends {
+    /// Canonical schema spelling of the concrete type, used in reports.
+    type_name: String,
     relating: usize,
     relating_optional: bool,
     relating_name: String,
@@ -62,14 +69,20 @@ pub(crate) struct EdgeIndex {
 }
 
 pub(crate) struct IfcRelationshipService {
+    release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     cache: Mutex<BTreeMap<String, Result<Arc<EdgeIndex>, RelationshipSelectionError>>>,
 }
 
 impl IfcRelationshipService {
-    pub(crate) fn new(model: Arc<Model>, snapshots: Arc<[SourceSnapshot]>) -> Self {
+    pub(crate) fn new(
+        release: Release,
+        model: Arc<Model>,
+        snapshots: Arc<[SourceSnapshot]>,
+    ) -> Self {
         Self {
+            release,
             model,
             snapshots,
             cache: Mutex::new(BTreeMap::new()),
@@ -88,7 +101,7 @@ impl IfcRelationshipService {
             .map_err(|_| unavailable("relationship index lock is poisoned"))?;
         cache
             .entry(key)
-            .or_insert_with(|| build_index(&self.model, relationship).map(Arc::new))
+            .or_insert_with(|| build_index(self.release, &self.model, relationship).map(Arc::new))
             .clone()
     }
 
@@ -250,14 +263,19 @@ fn shared_group(index: &EdgeIndex, anchor: EntityId) -> Reached {
     (reached, used)
 }
 
-fn build_index(model: &Model, relationship: &str) -> Result<EdgeIndex, RelationshipSelectionError> {
-    let schema = ifc4();
+fn build_index(
+    release: Release,
+    model: &Model,
+    relationship: &str,
+) -> Result<EdgeIndex, RelationshipSelectionError> {
+    let schema = release.schema;
     let requested = schema
         .entity(relationship)
         .filter(|entity| schema.is_a(&entity.name, "IfcRelationship"))
         .ok_or_else(|| {
             unavailable(format!(
-                "`{relationship}` is not an IFC4 relationship entity type"
+                "`{relationship}` is not an {} relationship entity type",
+                release.label
             ))
         })?;
     let mut index = EdgeIndex {
@@ -303,9 +321,7 @@ pub(crate) fn read_instance(
             instance: id,
             // The schema's canonical spelling, not the file's upper case, so
             // the same instance reads the same in every report.
-            type_name: ifc4()
-                .entity(&entity.type_name)
-                .map_or_else(|| entity.type_name.to_string(), |def| def.name.clone()),
+            type_name: ends.type_name.clone(),
             attribute: attribute.to_owned(),
         });
     };
@@ -384,6 +400,9 @@ pub(crate) fn ends_of(
     }
     match (relating.as_slice(), related.is_empty()) {
         ([(slot, optional, name)], false) => Ok(Ends {
+            type_name: schema
+                .entity(type_name)
+                .map_or_else(|| type_name.to_owned(), |entity| entity.name.clone()),
             relating: *slot,
             relating_optional: *optional,
             relating_name: name.clone(),

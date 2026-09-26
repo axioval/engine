@@ -13,6 +13,7 @@ pub mod geometry;
 pub mod guard;
 pub mod linear_quantity;
 pub(crate) mod planar;
+pub mod proximity;
 pub mod space;
 
 pub use contact::AxiolidContactService;
@@ -21,6 +22,7 @@ pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::AxiolidGeometry;
 pub use guard::AxiolidGuardService;
 pub use linear_quantity::AxiolidLinearQuantityService;
+pub use proximity::AxiolidProximityService;
 pub use space::AxiolidSpaceService;
 
 use std::collections::BTreeMap;

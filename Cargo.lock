@@ -106,6 +106,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiolid-guarantees"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "725e20ec6cb607c3e9cf125759123c1ede040c5e3e2685089ba8eff3de719dca"
+
+[[package]]
 name = "axiolid-measure"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -136,6 +142,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiolid-predicates"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50b696b06ec53f2efa706f5874de8acf96d9ff0f580cadddf1908056111af7e1"
+dependencies = [
+ "axiolid-core",
+ "axiolid-guarantees",
+]
+
+[[package]]
+name = "axiolid-ray-mesh"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26757ecd08d020f2298e620e477132f92ff4f7f58374cf3951b8aaf213910069"
+dependencies = [
+ "axiolid-core",
+ "axiolid-guarantees",
+ "axiolid-mesh",
+ "axiolid-predicates",
+]
+
+[[package]]
 name = "axioval"
 version = "0.2.0"
 dependencies = [
@@ -158,6 +186,7 @@ dependencies = [
  "axiolid-measure",
  "axiolid-mesh",
  "axiolid-overlay",
+ "axiolid-ray-mesh",
  "axioval-engine",
  "axioval-ir",
  "thiserror",

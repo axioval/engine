@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use axiolid_core::Point3;
 use axiolid_mesh::{TriMesh, TriangleMeshView};
+use axioval_engine::{GeometryFidelity, ProximityError};
 use axioval_ir::ObjectId;
 
 /// Geometry for one object, keyed by the identity the engine uses.
@@ -17,6 +18,7 @@ use axioval_ir::ObjectId;
 pub struct AxiolidGeometry {
     meshes: BTreeMap<ObjectId, TriMesh>,
     doorways: BTreeMap<ObjectId, usize>,
+    chord_deviations: BTreeMap<ObjectId, f64>,
 }
 
 impl AxiolidGeometry {
@@ -26,14 +28,51 @@ impl AxiolidGeometry {
         Self {
             meshes: BTreeMap::new(),
             doorways: BTreeMap::new(),
+            chord_deviations: BTreeMap::new(),
         }
     }
 
-    /// Registers one object's mesh.
+    /// Registers one object's mesh, asserting every face is planar so the
+    /// mesh is the object's exact shape. Curved parts belong in
+    /// [`Self::with_tessellated_mesh`].
     #[must_use]
     pub fn with_mesh(mut self, object: ObjectId, mesh: TriMesh) -> Self {
+        self.chord_deviations.remove(&object);
         self.meshes.insert(object, mesh);
         self
+    }
+
+    /// Registers one object's mesh as a tessellation of curved faces.
+    ///
+    /// `chord_deviation_metres` bounds how far the true surface may lie from
+    /// the mesh. Measurements that honour fidelity report such an object as
+    /// approximate, never exact. An invalid deviation is kept and refused when
+    /// measured, so it cannot silently become exact.
+    #[must_use]
+    pub fn with_tessellated_mesh(
+        mut self,
+        object: ObjectId,
+        mesh: TriMesh,
+        chord_deviation_metres: f64,
+    ) -> Self {
+        self.chord_deviations
+            .insert(object.clone(), chord_deviation_metres);
+        self.meshes.insert(object, mesh);
+        self
+    }
+
+    /// How faithfully an object's mesh represents it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the declared chord deviation is negative or
+    /// non-finite.
+    pub fn fidelity(&self, object: &ObjectId) -> Result<GeometryFidelity, ProximityError> {
+        self.chord_deviations
+            .get(object)
+            .map_or(Ok(GeometryFidelity::Exact), |deviation| {
+                GeometryFidelity::tessellated(*deviation)
+            })
     }
 
     /// Returns the mesh registered for an object.

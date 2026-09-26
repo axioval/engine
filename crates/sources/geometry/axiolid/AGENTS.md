@@ -33,6 +33,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   plan overlap alone would count anything passing overhead as contact.
 - The area clamp against the subject's own face area is load-bearing: independent
   counterparts are measured independently and can double-count a shared region.
+- `src/proximity.rs` implements `ProximityService` for clash and distance
+  checks: separation from `closest_points_on_triangles`, plan overlap from
+  the oriented footprint overlay in `planar.rs`, and penetration witnessed by
+  sampling points (including midpoints between an edge's crossings of the
+  other surface, via `axiolid-ray-mesh`) against winding numbers. Only closed
+  two-manifold meshes have an inside; open ones report no penetration.
+  Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`; only this
+  service honours it so far.
+- `plan_overlap_area` orients projected triangles before the non-zero overlay:
+  a closed solid's top and bottom faces project with opposite windings and
+  otherwise cancel to no footprint.
 - `src/lib.rs` keeps the source-scoping contracts and the in-memory conformance
   double. `UnavailableGeometryBackend` remains the explicit "no kernel linked"
   placeholder.

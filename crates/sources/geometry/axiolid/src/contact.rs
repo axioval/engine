@@ -9,12 +9,11 @@
 //! use this adapter without an IFC dependency.
 
 use axiolid_measure::{closest_points_on_triangles, surface_properties};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, overlay};
 use axioval_engine::{ContactError, ContactEvidence, ContactRequest, ContactService, ContactSide};
 use axioval_ir::{Evidence, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{plan_frame, polygon_area, projected_polygons};
+use crate::planar::plan_overlap_area;
 
 /// Tolerance used for mesh-health auditing when measuring areas.
 ///
@@ -107,27 +106,7 @@ fn planar_contact_area(
     counterpart: &[Triangle],
     tolerance: axiolid_core::Tolerance,
 ) -> Result<f64, ContactError> {
-    let frame = plan_frame();
-    let subject_input = OverlayInput {
-        frame,
-        polygons: projected_polygons(subject),
-    };
-    let counterpart_input = OverlayInput {
-        frame,
-        polygons: projected_polygons(counterpart),
-    };
-    if subject_input.polygons.is_empty() || counterpart_input.polygons.is_empty() {
-        return Ok(0.0);
-    }
-    let result = overlay(
-        &subject_input,
-        &counterpart_input,
-        OverlayOperation::Intersection,
-        FillRule::NonZero,
-        tolerance,
-    )
-    .map_err(|_| ContactError::Unavailable)?;
-    Ok(result.polygons.iter().map(polygon_area).sum())
+    plan_overlap_area(subject, counterpart, tolerance).ok_or(ContactError::Unavailable)
 }
 
 impl ContactService for AxiolidContactService {

@@ -114,6 +114,53 @@ pub(crate) fn ring_perimeter(ring: &Ring) -> f64 {
         .sum()
 }
 
+/// Projected triangles, every one wound counter-clockwise.
+///
+/// A closed solid's top and bottom faces project onto the same area with
+/// opposite windings. Under the non-zero fill rule they cancel, and the solid
+/// would have no footprint at all; orienting them first makes the fill their
+/// union.
+fn footprint_polygons(triangles: &[Triangle]) -> Vec<Polygon> {
+    let mut polygons = projected_polygons(triangles);
+    for polygon in &mut polygons {
+        if ring_area(&polygon.outer) < 0.0 {
+            polygon.outer.points.reverse();
+        }
+    }
+    polygons
+}
+
+/// Area of the overlap of two triangle sets' footprints.
+///
+/// `None` when the overlay cannot be computed; an empty footprint overlaps
+/// nothing and measures zero.
+pub(crate) fn plan_overlap_area(
+    first: &[Triangle],
+    second: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Option<f64> {
+    let first = OverlayInput {
+        frame: plan_frame(),
+        polygons: footprint_polygons(first),
+    };
+    let second = OverlayInput {
+        frame: plan_frame(),
+        polygons: footprint_polygons(second),
+    };
+    if first.polygons.is_empty() || second.polygons.is_empty() {
+        return Some(0.0);
+    }
+    let result = overlay(
+        &first,
+        &second,
+        OverlayOperation::Intersection,
+        FillRule::NonZero,
+        tolerance,
+    )
+    .ok()?;
+    Some(result.polygons.iter().map(polygon_area).sum())
+}
+
 #[cfg(test)]
 mod polygon_area_tests {
     use super::{polygon_area, ring_area};

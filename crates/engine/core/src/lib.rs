@@ -350,7 +350,9 @@ mod guard;
 mod integrity;
 mod linear_quantity;
 mod metric_routing;
+mod pairwise;
 mod properties;
+mod proximity;
 mod relationships;
 mod services;
 mod space;
@@ -398,9 +400,14 @@ pub use metric_routing::{
     MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
     MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
 };
+pub use pairwise::{CandidatePair, CandidateSearchError, candidate_pairs};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
+};
+pub use proximity::{
+    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, ProximityError, ProximityEvidence,
+    ProximityRequest, ProximityService, ProximityServiceHandle,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,

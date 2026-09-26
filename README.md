@@ -29,6 +29,18 @@ There is deliberately no combined OpenBIM–Axiolid adapter. `axioval-ifc` maps 
 | `axioval` | Batteries-included facade |
 | `axioval-cli` | Portable command-line runner |
 
+## Usage
+
+```bash
+axioval check --model building.ifc \
+  --definitions definitions.json --ruleset ruleset.json \
+  --bcf issues.bcfzip > result.json
+```
+
+Exit status 0 means every rule ran and found nothing, 3 means findings, and 4
+means part of the check could not be evaluated. See the command-line page of
+the book for the full contract.
+
 ## Development
 
 ```bash

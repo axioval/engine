@@ -209,6 +209,7 @@ version = "0.2.0"
 dependencies = [
  "axioval",
  "clap",
+ "openbim-bcf",
  "serde",
  "serde_json",
 ]

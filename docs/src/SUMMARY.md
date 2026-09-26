@@ -24,6 +24,7 @@
 
 # Operations
 
+- [Command line](./cli.md)
 - [Capability migration](./migration.md)
 - [Compatibility ledger](./compatibility.md)
 - [Contributing](./contributing.md)

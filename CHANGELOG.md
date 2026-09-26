@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **`axioval check`.** Runs a ruleset over an IFC2X3 or IFC4 model and writes
+  the report and the model's integrity issues as JSON, and optionally a BCF
+  2.1 archive (`--bcf`). Exit status separates a clean pass (0), findings (3)
+  and an incomplete check (4), so a check that could not evaluate something
+  never exits 0. `SOURCE_DATE_EPOCH` makes BCF output reproducible.
 - **Clash and distance checks.** New capabilities
   `axioval:capability.clash` (hard clashes beyond a penetration tolerance,
   containment, optional clearance) and `axioval:capability.distance` (the

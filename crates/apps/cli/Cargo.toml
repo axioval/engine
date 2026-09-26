@@ -15,10 +15,14 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-axioval = { path = "../../facade/axioval", version = "0.2.0" }
+# The CLI is the host that composes a source adapter with a report sink.
+axioval = { path = "../../facade/axioval", version = "0.2.0", features = ["ifc", "bcf"] }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+openbim-bcf.workspace = true
 
 [lints]
 workspace = true

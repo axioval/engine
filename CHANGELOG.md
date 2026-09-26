@@ -72,6 +72,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   `IfcRelDefinesByType` type object: a space's number (`Name`), name
   (`LongName`) and type name. Measures such as a storey's `Elevation` are
   refused until units are converted.
+- **Measured values in SI.** `ifc-properties` 0.3.0 resolves a measure's
+  effective unit exactly. The IFC adapter converts measure-typed property
+  values and attributes to SI quantities, or refuses when no unit applies.
+  `QuantityDimension` gains `PlaneAngle` and `Other { exponents }`, which is a
+  breaking change for exhaustive matches.
+- **Presentation layers.** The reserved `axioval:presentation` set's `Layer`
+  is the presentation layer of an object's shape. The IFC adapter reads it
+  through representations, items and mapped representations.
+- **Plan areas.** `PlanAreaService` measures footprints and footprint
+  overlaps as intervals; `AxiolidPlanAreaService` implements it. The
+  capabilities `area-ratio` and `plan-coverage` judge them, and
+  `level-spacing` checks storey heights from elevations.
+- **Relationship paths and relative-count tables.** Relationship-scoped
+  capabilities accept a `path` of relationship steps. `relative-count`
+  gains a table mode.
 - **Semantic capabilities.** These read exact properties, classifications
   and relationships and need no geometry:
   - `selector-conformance` checks agreed value lists.

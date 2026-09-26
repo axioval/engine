@@ -98,9 +98,34 @@ construction type. The evidence locator names the instance
 - An unset attribute (`$`), an attribute the entity does not declare, and an
   object without a type are exact absences.
 - An object typed by two type objects is a conflict.
-- A measure such as `IfcBuildingStorey.Elevation` is refused, because it is
-  stated in the project's units and this adapter does not convert units
-  yet. So are references, aggregates and derived values.
+- A measure such as `IfcBuildingStorey.Elevation` is converted to SI with
+  the project's default unit, as described under *Measures*. References,
+  aggregates and derived values are refused.
+
+### Measures
+
+A measure is a number in a unit: the explicit `Unit` of a property,
+otherwise the project's default unit of its kind. Property values and
+attributes of a measure type go through `ifc_properties::exact_unit`
+(0.3.0). It resolves the effective unit to an exact SI scale, with an offset
+for degrees Celsius, and follows conversion-based and derived units. The
+value becomes a quantity in SI (`240` mm reads as `0.24` m); a ratio or
+count becomes a plain decimal. A measure whose unit cannot be resolved is
+refused rather than read as a bare number, and so is a plain scalar
+(`IFCREAL`, `IFCINTEGER`) that carries a unit. Causes include no
+`IfcProject`, no project unit of the needed kind, or an ambiguous
+assignment.
+
+### Presentation layers
+
+`axioval:presentation.Layer` is read from `IfcPresentationLayerAssignment`.
+The adapter looks for layer assignments on:
+- the object's shape representations;
+- their items;
+- the representations that `IfcMappedItem`s map in, which is how a type's shared geometry reaches its occurrences.
+
+Several distinct layers are a conflict. An object without a shape, or with no assigned layer, has none. The locator names the object and the assignment
+(`layer:#1:#80`).
 
 ### Integrity warnings
 
@@ -128,6 +153,12 @@ are warnings: the object stays checkable and only loses its alias.
 ## Axiolid
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.
+
+`AxiolidPlanAreaService` measures plan footprints and footprint overlaps
+through the same plan overlay. A planar mesh measures exactly. A tessellated
+mesh with chord deviation `d` and footprint perimeter `P` measures within
+`2·P·d + π·d²`, the area of the band where the true and meshed boundaries can
+differ.
 
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 

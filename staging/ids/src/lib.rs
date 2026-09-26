@@ -62,6 +62,7 @@ const PROPERTY_REQUIRED: &str = "axioval:capability.property-required";
 const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
 const PROPERTY_VALUE: &str = "axioval:capability.property-value";
 const ATTRIBUTE_VALUE: &str = "axioval:capability.attribute-value";
+const PREDEFINED_TYPE: &str = "axioval:capability.predefined-type";
 
 /// Identity of the packages written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -478,6 +479,10 @@ impl<'o> Writer<'o> {
         } = check;
         let definition_id = self.definition(kind);
         let (reference, subject) = match &set {
+            _ if matches!(kind, CheckKind::PredefinedType) => (
+                ("", ParameterValue::Boolean { value: false }),
+                String::new(),
+            ),
             Some(set) => (
                 (
                     "property",
@@ -499,10 +504,14 @@ impl<'o> Writer<'o> {
                 format!("attribute {name}"),
             ),
         };
-        let mut parameters = BTreeMap::from([(reference.0.to_owned(), reference.1)]);
+        let mut parameters = BTreeMap::new();
+        if !reference.0.is_empty() {
+            parameters.insert(reference.0.to_owned(), reference.1);
+        }
         parameters.extend(extra);
         let optional = parameters.contains_key("optional");
         let title = match kind {
+            CheckKind::PredefinedType => format!("{name} has the required predefined type"),
             CheckKind::Required => format!("{subject} is required"),
             CheckKind::DataType => format!("{subject} is required with a declared type"),
             CheckKind::Value | CheckKind::Attribute if optional => {
@@ -549,6 +558,12 @@ impl<'o> Writer<'o> {
                 "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
                 PROPERTY_DATA_TYPE,
             ),
+            CheckKind::PredefinedType => (
+                "predefined-type",
+                "Predefined type",
+                "An IDS entity requirement with a predefinedType on the applicability's own class.",
+                PREDEFINED_TYPE,
+            ),
             CheckKind::Attribute => (
                 "attribute-value",
                 "Attribute meets constraints",
@@ -569,12 +584,20 @@ impl<'o> Writer<'o> {
             } else {
                 "property"
             };
-            let mut parameters = BTreeMap::from([(
-                reference.to_owned(),
-                parameter(reference, ParameterKind::PropertyReference, true),
-            )]);
+            let mut parameters = BTreeMap::new();
+            if !matches!(kind, CheckKind::PredefinedType) {
+                parameters.insert(
+                    reference.to_owned(),
+                    parameter(reference, ParameterKind::PropertyReference, true),
+                );
+            }
             let optional: &[(&str, ParameterKind)] = match kind {
                 CheckKind::Required => &[],
+                CheckKind::PredefinedType => &[
+                    ("values", ParameterKind::StringList),
+                    ("patterns", ParameterKind::StringList),
+                    ("user_defined", ParameterKind::Boolean),
+                ],
                 CheckKind::DataType => {
                     parameters.insert(
                         "data_type".to_owned(),
@@ -746,6 +769,8 @@ enum CheckKind {
     Value,
     /// `attribute-value`.
     Attribute,
+    /// `predefined-type`.
+    PredefinedType,
 }
 
 /// The supported releases, recording a gap for each unsupported one.
@@ -919,17 +944,26 @@ fn check(
         Facet::Attribute(attribute) => attribute_check(attribute, requirement.occurrence),
         Facet::Entity(entity) => {
             // Requiring the class the applicability already selected always
-            // holds. Anything else needs an entity capability.
+            // holds; a predefined type on it is checked on its own.
             let same = applicability.is_some_and(|applicable| {
                 applicable.predefined_type.is_none()
-                    && entity.predefined_type.is_none()
                     && matches!((&applicable.name, &entity.name), (Value::Simple(a), Value::Simple(b)) if a == b)
             });
-            if same {
-                Ok(None)
-            } else {
-                Err(Reason::EntityRequirement)
+            if !same {
+                return Err(Reason::EntityRequirement);
             }
+            let Some(designation) = &entity.predefined_type else {
+                return Ok(None);
+            };
+            let Value::Simple(class) = &entity.name else {
+                return Err(Reason::EntityRequirement);
+            };
+            Ok(Some(Check {
+                set: None,
+                name: class.clone(),
+                kind: CheckKind::PredefinedType,
+                parameters: predefined_type_parameters(designation)?,
+            }))
         }
         other => Err(Reason::FacetKind(other.kind())),
     }
@@ -1008,6 +1042,50 @@ fn attribute_check(attribute: &Attribute, occurrence: Occurrence) -> Result<Opti
         kind: CheckKind::Attribute,
         parameters,
     }))
+}
+
+/// The `predefined-type` parameters an IDS predefined type stands for.
+///
+/// A literal `USERDEFINED` asks whether the type is user-defined at all, as
+/// IDS reads it; any other literal, an enumeration and patterns name the
+/// designation itself.
+fn predefined_type_parameters(value: &Value) -> Result<BTreeMap<String, ParameterValue>, Reason> {
+    let strings = |values: &[String]| ParameterValue::StringList {
+        value: values.to_vec(),
+    };
+    match value {
+        Value::Simple(literal) if literal == "USERDEFINED" => Ok(BTreeMap::from([(
+            "user_defined".to_owned(),
+            ParameterValue::Boolean { value: true },
+        )])),
+        Value::Simple(literal) => Ok(BTreeMap::from([(
+            "values".to_owned(),
+            strings(std::slice::from_ref(literal)),
+        )])),
+        Value::Restriction(restriction) => {
+            let only_names = restriction.min_inclusive.is_none()
+                && restriction.max_inclusive.is_none()
+                && restriction.min_exclusive.is_none()
+                && restriction.max_exclusive.is_none()
+                && restriction.length.is_none()
+                && restriction.min_length.is_none()
+                && restriction.max_length.is_none()
+                && restriction.total_digits.is_none()
+                && restriction.fraction_digits.is_none();
+            let mut parameters = BTreeMap::new();
+            if !restriction.enumeration.is_empty() {
+                parameters.insert("values".to_owned(), strings(&restriction.enumeration));
+            }
+            if !restriction.patterns.is_empty() {
+                parameters.insert("patterns".to_owned(), strings(&restriction.patterns));
+            }
+            if only_names && !parameters.is_empty() {
+                Ok(parameters)
+            } else {
+                Err(Reason::Restriction)
+            }
+        }
+    }
 }
 
 /// The `property-value` parameters an IDS value stands for.

@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use axioval::default_registry;
 use axioval::engine::{Runtime, compile};
 use axioval::ifc::import_ifc_session;
-use axioval_ids::{Options, Part, Reason, Translation, translate};
+use axioval_ids::{Options, translate};
 
 fn cases() -> Vec<PathBuf> {
     let root = PathBuf::from(
@@ -58,9 +58,6 @@ enum Class {
     SoundPass,
     /// A fail case the rules caught.
     CaughtFail,
-    /// A fail case with no finding, explained by existence: the model has
-    /// no applicable object and reports cannot say so.
-    ExistenceFail,
     /// A fail case with no finding and gaps that may explain it.
     UnjudgedFail,
     /// The adapter refused the model, e.g. an IFC4X3 file.
@@ -69,35 +66,6 @@ enum Class {
     NotEvaluated,
     /// A false failure or an unexplained miss.
     Mismatch,
-}
-
-fn only_existence(translation: &Translation) -> bool {
-    translation
-        .gaps()
-        .all(|(_, gap)| gap.part == Part::Occurrence && gap.reason == Reason::Existence)
-}
-
-/// Objects whose class the applicability names, counted independently of the
-/// engine: the translation selects on entity names only.
-fn applicable_objects(
-    translation: &Translation,
-    session: &axioval::engine::EvidenceSession,
-) -> usize {
-    let names: Vec<&str> = translation
-        .definitions
-        .object_types
-        .values()
-        .map(|concept| concept.name.default.as_str())
-        .collect();
-    session
-        .project()
-        .objects()
-        .filter(|object| {
-            names
-                .iter()
-                .any(|name| object.kind().eq_ignore_ascii_case(name))
-        })
-        .count()
 }
 
 fn classify(case: &Path) -> Option<(Class, String)> {
@@ -130,7 +98,8 @@ fn classify(case: &Path) -> Option<(Class, String)> {
     let report = Runtime::new(registry)
         .run_session(&session, plan)
         .expect("plan runs");
-    let findings = report.findings().len();
+    // Findings about objects and about whole populations alike.
+    let findings = report.findings().len() + report.rule_findings().len();
     let detail = format!(
         "{} finding(s), {} not evaluated, gaps: [{}]",
         findings,
@@ -148,13 +117,6 @@ fn classify(case: &Path) -> Option<(Class, String)> {
         (true, false) if translation.is_complete() => Class::ExactPass,
         (true, false) => Class::SoundPass,
         (false, false) if translation.is_complete() => Class::Mismatch,
-        (false, false) if only_existence(&translation) => {
-            if applicable_objects(&translation, &session) == 0 {
-                Class::ExistenceFail
-            } else {
-                Class::Mismatch
-            }
-        }
         (false, false) => Class::UnjudgedFail,
     };
     Some((class, detail))
@@ -177,11 +139,7 @@ fn run() {
         if std::env::var_os("IDS_CORPUS_VERBOSE").is_some()
             || matches!(
                 class,
-                Class::CaughtFail
-                    | Class::ExactPass
-                    | Class::NotEvaluated
-                    | Class::ExistenceFail
-                    | Class::ModelRefused
+                Class::CaughtFail | Class::ExactPass | Class::NotEvaluated | Class::ModelRefused
             )
         {
             for case in cases {

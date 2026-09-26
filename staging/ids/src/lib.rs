@@ -67,6 +67,7 @@ const CLASSIFICATION: &str = "axioval:capability.classification";
 const MATERIAL: &str = "axioval:capability.material";
 const PART_OF: &str = "axioval:capability.part-of";
 const ENTITY: &str = "axioval:capability.entity";
+const POPULATION: &str = "axioval:capability.population";
 
 /// Identity of the packages written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -176,8 +177,6 @@ impl fmt::Display for Gap {
 pub enum Part {
     /// `@ifcVersion`.
     Releases,
-    /// The applicability's `minOccurs`/`maxOccurs`.
-    Occurrence,
     /// An applicability facet, numbered from 1 in document order.
     Applicability {
         /// Position among the applicability facets.
@@ -194,7 +193,6 @@ impl fmt::Display for Part {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Part::Releases => f.write_str("ifcVersion"),
-            Part::Occurrence => f.write_str("applicability occurrence"),
             Part::Applicability { facet } => write!(f, "applicability facet {facet}"),
             Part::Requirement { facet } => write!(f, "requirement facet {facet}"),
         }
@@ -209,18 +207,6 @@ pub enum Reason {
     UnsupportedRelease(IfcVersion),
     /// No listed release is supported, so no rule could bind to any model.
     NoSupportedRelease,
-    /// At least one applicable object must exist. A report carries findings
-    /// about objects only, so "none exists" has nowhere to go.
-    Existence,
-    /// No applicable object may exist.
-    Prohibition,
-    /// A bounded count of applicable objects other than "at least one".
-    Count {
-        /// `minOccurs`.
-        min: u32,
-        /// `maxOccurs`; `None` is unbounded.
-        max: Option<u32>,
-    },
     /// An applicability without facets.
     EmptyApplicability,
     /// A facet kind no capability decides yet, named as IDS spells it.
@@ -259,14 +245,6 @@ impl fmt::Display for Reason {
                 write!(f, "{release} has no type system an adapter declares")
             }
             Reason::NoSupportedRelease => f.write_str("no listed IFC release is supported"),
-            Reason::Existence => f.write_str(
-                "requires at least one applicable object; reports cannot state that none exists",
-            ),
-            Reason::Prohibition => f.write_str("requires that no applicable object exists"),
-            Reason::Count { min, max } => match max {
-                Some(max) => write!(f, "requires {min} to {max} applicable objects"),
-                None => write!(f, "requires at least {min} applicable objects"),
-            },
             Reason::EmptyApplicability => f.write_str("the applicability has no facets"),
             Reason::FacetKind(kind) => write!(f, "no capability decides a {kind} facet"),
             Reason::UnknownEntity { entity, release } => {
@@ -405,11 +383,15 @@ impl<'o> Writer<'o> {
     ) -> (Vec<RuleInstance>, Vec<Gap>) {
         let mut gaps = Vec::new();
         let releases = releases(specification, &mut gaps);
-        occurrence(specification, &mut gaps);
+        let population = occurrence(specification);
+        // IDS ignores the requirements of a prohibited specification: no
+        // applicable object may exist at all.
+        let prohibited = specification.applicability.max_occurs == Some(0);
         let applicability = applicability(specification, &releases, &mut gaps);
         let requirements = specification
             .requirements
             .iter()
+            .filter(|_| !prohibited)
             .flat_map(|requirements| requirements.facets.iter())
             .enumerate()
             .filter_map(|(index, requirement)| {
@@ -428,20 +410,29 @@ impl<'o> Writer<'o> {
             return (Vec::new(), gaps);
         };
         let selector = self.selector(&entities, &releases);
-        let rules = requirements
-            .into_iter()
-            .map(|(facet, requirement, check)| {
-                self.rule(
-                    number,
-                    facet,
-                    specification,
-                    requirement,
-                    check,
-                    &selector,
-                    &releases,
-                )
-            })
-            .collect();
+        let mut rules = Vec::new();
+        if let Some(check) = population {
+            rules.push(self.rule(
+                number,
+                None,
+                specification,
+                None,
+                check,
+                &selector,
+                &releases,
+            ));
+        }
+        for (facet, requirement, check) in requirements {
+            rules.push(self.rule(
+                number,
+                Some(facet),
+                specification,
+                Some(requirement),
+                check,
+                &selector,
+                &releases,
+            ));
+        }
         (rules, gaps)
     }
 
@@ -465,9 +456,9 @@ impl<'o> Writer<'o> {
     fn rule(
         &mut self,
         number: usize,
-        facet: usize,
+        facet: Option<usize>,
         specification: &Specification,
-        requirement: &Requirement,
+        requirement: Option<&Requirement>,
         check: Check,
         selector: &Selector,
         releases: &[IfcVersion],
@@ -517,6 +508,7 @@ impl<'o> Writer<'o> {
             CheckKind::Material => format!("material {name}"),
             CheckKind::PartOf => format!("part of {name}"),
             CheckKind::Entity => format!("is a {name}"),
+            CheckKind::Population => name.clone(),
             CheckKind::Required => format!("{subject} is required"),
             CheckKind::DataType => format!("{subject} is required with a declared type"),
             CheckKind::Value | CheckKind::Attribute if optional => {
@@ -526,12 +518,14 @@ impl<'o> Writer<'o> {
             CheckKind::Value | CheckKind::Attribute => format!("{subject} meets its constraints"),
         };
         let description = requirement
-            .instructions
-            .as_deref()
+            .and_then(|requirement| requirement.instructions.as_deref())
             .or(specification.instructions.as_deref())
             .map(LocalizedText::plain);
         RuleInstance {
-            id: format!("spec{number}.facet{facet}"),
+            id: match facet {
+                Some(facet) => format!("spec{number}.facet{facet}"),
+                None => format!("spec{number}.occurrence"),
+            },
             definition_id,
             name: LocalizedText::plain(title),
             description,
@@ -723,6 +717,8 @@ enum CheckKind {
     PartOf,
     /// `entity`.
     Entity,
+    /// `population`.
+    Population,
 }
 
 const VALUE_PARAMETERS: &[(&str, ParameterKind, bool)] = &[
@@ -755,6 +751,12 @@ impl CheckKind {
                 "Property is required with a data type",
                 "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
                 PROPERTY_DATA_TYPE,
+            ),
+            CheckKind::Population => (
+                "population",
+                "Population",
+                "An IDS specification's minOccurs/maxOccurs: how many applicable objects may exist.",
+                POPULATION,
             ),
             CheckKind::Entity => (
                 "entity",
@@ -810,7 +812,8 @@ impl CheckKind {
             | CheckKind::Classification
             | CheckKind::Material
             | CheckKind::PartOf
-            | CheckKind::Entity => None,
+            | CheckKind::Entity
+            | CheckKind::Population => None,
         }
     }
 
@@ -824,6 +827,10 @@ impl CheckKind {
                 ("values", ParameterKind::StringList, false),
                 ("patterns", ParameterKind::StringList, false),
                 ("user_defined", ParameterKind::Boolean, false),
+            ],
+            CheckKind::Population => &[
+                ("min", ParameterKind::Integer, false),
+                ("max", ParameterKind::Integer, false),
             ],
             CheckKind::Entity => &[
                 ("classes", ParameterKind::StringList, false),
@@ -901,20 +908,39 @@ fn names(releases: &[IfcVersion], name: &str) -> Vec<ExternalName> {
         .collect()
 }
 
-/// Records a gap unless the bounds ask only that every applicable object
-/// meet the requirements.
-fn occurrence(specification: &Specification, gaps: &mut Vec<Gap>) {
+/// The population rule the applicability's bounds call for, if any: at
+/// least `minOccurs` and at most `maxOccurs` applicable objects. The IDS
+/// default of exactly one is taken literally.
+fn occurrence(specification: &Specification) -> Option<Check> {
     let applicability = &specification.applicability;
-    let reason = match (applicability.min_occurs, applicability.max_occurs) {
-        (0, None) => return,
-        (_, Some(0)) => Reason::Prohibition,
-        (1, None) => Reason::Existence,
-        (min, max) => Reason::Count { min, max },
+    let (min, max) = (applicability.min_occurs, applicability.max_occurs);
+    let mut parameters = BTreeMap::new();
+    if min > 0 {
+        parameters.insert(
+            "min".to_owned(),
+            ParameterValue::Integer { value: min.into() },
+        );
+    }
+    if let Some(max) = max {
+        parameters.insert(
+            "max".to_owned(),
+            ParameterValue::Integer { value: max.into() },
+        );
+    }
+    if parameters.is_empty() {
+        return None;
+    }
+    let name = match (min, max) {
+        (_, Some(0)) => "no applicable object may exist".to_owned(),
+        (min, None) => format!("at least {min} applicable object(s)"),
+        (min, Some(max)) => format!("{min} to {max} applicable objects"),
     };
-    gaps.push(Gap {
-        part: Part::Occurrence,
-        reason,
-    });
+    Some(Check {
+        set: None,
+        name,
+        kind: CheckKind::Population,
+        parameters,
+    })
 }
 
 /// The entity names the applicability selects, and the entity facet itself.

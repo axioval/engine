@@ -30,7 +30,8 @@ DATA;
 #3=IFCRELAGGREGATES('0000000000000000000003',$,$,$,#1,(#2,#4));
 #4=IFCBUILDINGSTOREY('0000000000000000000004',$,'3',$,$,$,$,$,.ELEMENT.,3000.);
 #5=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
-#6=IFCUNITASSIGNMENT((#5));
+#6=IFCUNITASSIGNMENT((#5,#8));
+#8=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);
 #7=IFCPROJECT('0000000000000000000007',$,'P',$,$,$,$,$,#6);
 #10=IFCSPACE('000000000000000000000A',$,'101',$,$,$,$,'Office',.ELEMENT.,.INTERNAL.,$);
 #11=IFCSPACE('000000000000000000000B',$,'101',$,$,$,$,'Kitchen',.ELEMENT.,.INTERNAL.,$);
@@ -42,6 +43,12 @@ DATA;
 #23=IFCRELDEFINESBYTYPE('000000000000000000000N',$,$,$,(#11),#21);
 #30=IFCZONE('000000000000000000000Z',$,'Z1',$,$,$);
 #31=IFCRELASSIGNSTOGROUP('000000000000000000000Y',$,$,$,(#10,#11),$,#30);
+#40=IFCQUANTITYAREA('NetFloorArea',$,$,24.,$);
+#41=IFCQUANTITYAREA('NetFloorArea',$,$,8.5,$);
+#42=IFCELEMENTQUANTITY('000000000000000000000Q',$,'Qto_SpaceBaseQuantities',$,$,(#40));
+#43=IFCELEMENTQUANTITY('000000000000000000000R',$,'Qto_SpaceBaseQuantities',$,$,(#41));
+#44=IFCRELDEFINESBYPROPERTIES('000000000000000000000S',$,$,$,(#10,#12),#42);
+#45=IFCRELDEFINESBYPROPERTIES('000000000000000000000T',$,$,$,(#11),#43);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -134,6 +141,10 @@ fn definitions(registry: &CapabilityRegistry, capabilities: &[&str]) -> Definiti
             "axioval:test.number": property_concept("axioval:test.number", "Name", "string"),
             "axioval:test.type-name": property_concept("axioval:test.type-name", "Name", "string"),
             "axioval:test.elevation": property_concept("axioval:test.elevation", "Elevation", "quantity"),
+            "axioval:test.net-floor-area": property_concept("axioval:test.net-floor-area", "NetFloorArea", "quantity"),
+        },
+        "propertySets": {
+            "axioval:test.space-base-quantities": concept("axioval:test.space-base-quantities", "Qto_SpaceBaseQuantities"),
         },
         "definitions": definitions,
     }))
@@ -193,6 +204,17 @@ fn ruleset() -> RuleSetPackage {
             }),
         ),
         rule(
+            "minimum-floor-area",
+            "property-predicate",
+            "axioval:test.space",
+            json!({
+                "property_set": { "type": "string", "value": "axioval:test.space-base-quantities" },
+                "property": { "type": "string", "value": "axioval:test.net-floor-area" },
+                "operator": { "type": "string", "value": "greater_or_equal" },
+                "quantity": { "type": "quantity", "value": 10.0, "unit": "m2" },
+            }),
+        ),
+        rule(
             "storey-names",
             "name-sequence",
             "axioval:test.building",
@@ -223,6 +245,7 @@ fn report() -> Report {
     let definitions = definitions(
         &registry,
         &[
+            "property-predicate",
             "unique-value",
             "related-count",
             "selector-conformance",
@@ -284,4 +307,10 @@ fn storeys_are_ordered_by_their_elevation_in_si() {
         "{:?}",
         report.not_evaluated()
     );
+}
+
+#[test]
+fn base_quantities_are_checked_in_si_through_a_package() {
+    // #11 states 8.5 m² of net floor area; the others 24 m².
+    assert_eq!(flagged(&report(), "minimum-floor-area"), ["#11"]);
 }

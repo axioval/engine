@@ -95,6 +95,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   `IfcRelDefinesByType` type object: a space's number (`Name`), name
   (`LongName`) and type name. Measures such as a storey's `Elevation` are
   refused until units are converted.
+- **Quantity sets.** With `ifc-properties` 0.4.0, `IfcElementQuantity`
+  members resolve like properties and convert to SI:
+  `Qto_SpaceBaseQuantities.NetFloorArea` is an area quantity. Complex
+  quantities, predefined-set attributes, and a property set and a quantity
+  set sharing a name are refused, never answered as absent.
 - **Measured values in SI.** `ifc-properties` 0.3.0 resolves a measure's
   effective unit exactly. The IFC adapter converts measure-typed property
   values and attributes to SI quantities, or refuses when no unit applies.
@@ -198,6 +203,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   when one of them has a member of that name. The check is model-wide, so it
   can only turn an absence into not evaluated. Found by running translated
   buildingSMART IDS test cases.
+  `ifc-properties` 0.4.0 resolves quantity sets itself (openbimrs/ifc#66),
+  so this local guard is gone: see *Quantity sets* above.
 - **Classification selectors silently passed over sources.** A
   `classification` selector read the project's inline classification list,
   which no production adapter fills. Over an IFC model every classification

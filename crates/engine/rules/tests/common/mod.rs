@@ -1,5 +1,5 @@
 //! An in-memory exact source for semantic capability tests.
-#![allow(dead_code)]
+#![allow(dead_code, clippy::match_same_arms)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;

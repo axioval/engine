@@ -42,6 +42,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   surfaces report no penetration.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`; only this
   service honours it so far.
+- Proximity queries go through an `axiolid-spatial` BVH per body; skips are
+  exact (box gap never exceeds triangle gap), and the unit tests compare the
+  indexed results with an exhaustive scan. Penetration ranks samples by
+  indexed surface distance and runs the O(n) winding test deepest first,
+  stopping at the first inside point. Keep that order: it is what makes a
+  19k-triangle pair take 0.26 s instead of 91 s.
 - `projected_polygons` winds every projected triangle counter-clockwise. A
   closed solid's top and bottom faces project with opposite windings and,
   under the non-zero fill every service uses, cancel to no footprint at all.

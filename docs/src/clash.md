@@ -72,6 +72,12 @@ primitives:
   no vertex inside the wall, but the midpoint of each long edge's crossings
   lies half a wall deep. An exact duplicate is found through its centre.
 
+Both bodies are indexed with an `axiolid-spatial` bounding-volume hierarchy,
+so each query touches only nearby triangles. Samples are ranked by their
+distance to the other surface and tested deepest first; the first one inside is
+the deepest witness. On two 18,816-triangle columns, a full measurement takes
+0.26 s, and separation alone 0.8 ms against 140 s for the exhaustive scan.
+
 Points are tested only against closed two-manifold meshes. A pair needs at
 least one of them to report a penetration. Hosts declare curved parts with
 `AxiolidGeometry::with_tessellated_mesh(object, mesh, chord_deviation_metres)`.

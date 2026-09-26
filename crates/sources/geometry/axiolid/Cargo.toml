@@ -17,6 +17,7 @@ axiolid-mesh.workspace = true
 axiolid-measure.workspace = true
 axiolid-overlay.workspace = true
 axiolid-ray-mesh.workspace = true
+axiolid-spatial.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

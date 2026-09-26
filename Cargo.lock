@@ -164,6 +164,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiolid-spatial"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66d596518d11df600a8463e7423da046cef4bb49bb43e1ffa51018396ba1054f"
+dependencies = [
+ "axiolid-core",
+]
+
+[[package]]
 name = "axioval"
 version = "0.2.0"
 dependencies = [
@@ -187,6 +196,7 @@ dependencies = [
  "axiolid-mesh",
  "axiolid-overlay",
  "axiolid-ray-mesh",
+ "axiolid-spatial",
  "axioval-engine",
  "axioval-ir",
  "thiserror",

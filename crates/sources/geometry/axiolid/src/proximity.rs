@@ -22,10 +22,11 @@
 //! two-manifold mesh. A surface reaching into a solid is measured; two open
 //! surfaces share no volume and report `None` rather than a depth of zero.
 
-use axiolid_core::{Point3, Ray3, Tolerance};
+use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_measure::{WindingMesh, closest_point_on_triangle, closest_points_on_triangles};
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
+use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
     BodyContainment, Bounds3, ObjectBounds, ProximityError, ProximityEvidence, ProximityRequest,
     ProximityService,
@@ -72,9 +73,22 @@ impl AxiolidProximityService {
             return Err(ProximityError::Unavailable);
         }
         let bounds = extent(&triangles)?;
+        let boxes: Vec<Bounds3> = triangles.iter().map(triangle_box).collect();
+        let index = Bvh::build(
+            boxes
+                .iter()
+                .enumerate()
+                .map(|(triangle, bounds)| SpatialItem::new(triangle, aabb(bounds))),
+        );
+        // Audited coordinates are finite, so every box is accepted; a rejected
+        // one would be a triangle no query could ever find.
+        if index.rejected_items() != 0 {
+            return Err(ProximityError::Unavailable);
+        }
         Ok(Body {
             mesh,
-            boxes: triangles.iter().map(triangle_box).collect(),
+            boxes,
+            index,
             triangles,
             bounds,
             solid: health.is_closed_two_manifold(),
@@ -86,8 +100,32 @@ struct Body<'a> {
     mesh: &'a TriMesh,
     triangles: Vec<Triangle>,
     boxes: Vec<Bounds3>,
+    /// Triangle hierarchy, so a query touches only the triangles near it
+    /// instead of scanning the whole mesh.
+    index: Bvh<usize>,
     bounds: Bounds3,
     solid: bool,
+}
+
+impl Body<'_> {
+    /// Indices of the triangles whose boxes meet `probe`, in index order.
+    fn near(&self, probe: &Bounds3) -> Vec<usize> {
+        let mut hits = Vec::new();
+        self.index.query_aabb(&aabb(probe), &mut hits);
+        let mut triangles: Vec<usize> = hits
+            .into_iter()
+            .filter_map(|hit| self.index.item(hit).map(|item| item.key))
+            .collect();
+        triangles.sort_unstable();
+        triangles
+    }
+}
+
+fn aabb(bounds: &Bounds3) -> Aabb {
+    Aabb {
+        min: Point3::from_array(bounds.min()),
+        max: Point3::from_array(bounds.max()),
+    }
 }
 
 fn tolerance() -> Result<Tolerance, ProximityError> {
@@ -111,19 +149,28 @@ fn extent(triangles: &[Triangle]) -> Result<Bounds3, ProximityError> {
 }
 
 /// Shortest distance between two triangle sets.
+///
+/// Each triangle of `first` is measured only against the triangles of
+/// `second` inside its box grown by the best distance so far. Anything outside
+/// that box is farther than the best already found, so the skip loses nothing.
 fn separation(first: &Body<'_>, second: &Body<'_>) -> Result<f64, ProximityError> {
     let mut best = f64::INFINITY;
     for (a, a_box) in first.triangles.iter().zip(&first.boxes) {
         if a_box.gap(&second.bounds) >= best {
             continue;
         }
-        for (b, b_box) in second.triangles.iter().zip(&second.boxes) {
-            // The box gap never exceeds the triangle gap, so this skip is exact.
+        let probe = if best.is_finite() {
+            a_box.expanded(best)
+        } else {
+            second.bounds
+        };
+        for index in second.near(&probe) {
+            let b_box = &second.boxes[index];
             if a_box.gap(b_box) >= best {
                 continue;
             }
-            let pair =
-                closest_points_on_triangles(*a, *b).map_err(|_| ProximityError::Unavailable)?;
+            let pair = closest_points_on_triangles(*a, second.triangles[index])
+                .map_err(|_| ProximityError::Unavailable)?;
             let distance = pair.distance_squared.sqrt();
             if !distance.is_finite() {
                 return Err(ProximityError::InvalidMeasurement);
@@ -142,12 +189,23 @@ fn separation(first: &Body<'_>, second: &Body<'_>) -> Result<f64, ProximityError
 }
 
 /// Distance from a point to a triangle set's surface.
+///
+/// The triangle whose box is nearest bounds the answer from above; only
+/// triangles within that bound can improve on it.
 fn surface_distance(point: Point3, body: &Body<'_>) -> Result<f64, ProximityError> {
-    let mut best = f64::INFINITY;
-    for triangle in &body.triangles {
-        let closest =
-            closest_point_on_triangle(point, *triangle).map_err(|_| ProximityError::Unavailable)?;
-        best = best.min(closest.distance(point));
+    let to = |index: usize| -> Result<f64, ProximityError> {
+        closest_point_on_triangle(point, body.triangles[index])
+            .map(|closest| closest.distance(point))
+            .map_err(|_| ProximityError::Unavailable)
+    };
+    let nearest = body
+        .index
+        .nearest_to(&Aabb::from_point(point), |_| true)
+        .ok_or(ProximityError::Unavailable)?;
+    let mut best = to(nearest.key)?;
+    let probe = Bounds3::try_new(point.to_array(), point.to_array())?.expanded(best);
+    for index in body.near(&probe) {
+        best = best.min(to(index)?);
     }
     Ok(best)
 }
@@ -194,11 +252,8 @@ fn crossing_midpoints(
         direction,
     };
     let mut crossings = vec![0.0, 1.0];
-    for (index, (triangle, triangle_box)) in other.triangles.iter().zip(&other.boxes).enumerate() {
-        if segment.gap(triangle_box) > 0.0 {
-            continue;
-        }
-        let hit = intersect_triangle(&ray, *triangle, tolerance, index)
+    for index in other.near(&segment) {
+        let hit = intersect_triangle(&ray, other.triangles[index], tolerance, index)
             .map_err(|_| ProximityError::Unavailable)?;
         if let Some(hit) = hit.filter(|hit| (0.0..=1.0).contains(&hit.t)) {
             crossings.push(hit.t);
@@ -216,22 +271,41 @@ fn crossing_midpoints(
 
 /// Deepest witnessed point of `body` inside `other`, zero when none is.
 fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityError> {
-    let winding =
-        WindingMesh::prepare(other.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
-    let mut deepest: f64 = 0.0;
+    // A point's depth is its distance to the other surface, which the index
+    // answers cheaply; whether it is inside at all costs a winding number over
+    // every triangle. So rank the candidates by depth and test them deepest
+    // first: the first one inside is the deepest witness, and the rest need
+    // no winding test. Points outside the other body's box cannot be inside,
+    // and points within tolerance of its surface are contact, not depth.
+    let mut candidates = Vec::new();
     for point in sample_points(body, other)? {
-        if !inside(&winding, point)? {
+        let within = (0..3).all(|axis| {
+            (other.bounds.min()[axis]..=other.bounds.max()[axis]).contains(&point[axis])
+        });
+        if !within {
             continue;
         }
-        deepest = deepest.max(surface_distance(point, other)?);
+        let depth = surface_distance(point, other)?;
+        if depth > LINEAR_TOLERANCE {
+            candidates.push((depth, point));
+        }
     }
-    // Touching faces put sample points on the other surface, where rounding
-    // can leave a depth of a few ulps. That is contact, not penetration.
-    Ok(if deepest <= LINEAR_TOLERANCE {
-        0.0
-    } else {
-        deepest
-    })
+    candidates.sort_by(|(a_depth, a), (b_depth, b)| {
+        b_depth.total_cmp(a_depth).then_with(|| {
+            a.to_array()
+                .partial_cmp(&b.to_array())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    });
+    let winding =
+        WindingMesh::prepare(other.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
+    for (depth, point) in candidates {
+        if inside(&winding, point)? {
+            return Ok(depth);
+        }
+    }
+    // No sample lies inside by more than rounding: the bodies touch.
+    Ok(0.0)
 }
 
 fn inside(winding: &WindingMesh<'_, TriMesh>, point: Point3) -> Result<bool, ProximityError> {
@@ -337,5 +411,117 @@ impl ProximityService for AxiolidProximityService {
                 exact: fidelity.is_exact(),
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use axioval_ir::SourceId;
+
+    use super::*;
+
+    fn id(local: &str) -> ObjectId {
+        ObjectId::new(SourceId::new("cad", "m").unwrap(), local).unwrap()
+    }
+
+    /// A closed prism around `axis` with `sides` chords and `rings` bands.
+    fn column(centre: [f64; 3], radius: f64, height: f64, sides: u32, rings: u32) -> TriMesh {
+        let mut positions = Vec::new();
+        for ring in 0..=rings {
+            let z = centre[2] + height * f64::from(ring) / f64::from(rings);
+            for side in 0..sides {
+                let angle = std::f64::consts::TAU * f64::from(side) / f64::from(sides);
+                positions.push(Point3::new(
+                    centre[0] + radius * angle.cos(),
+                    centre[1] + radius * angle.sin(),
+                    z,
+                ));
+            }
+        }
+        let bottom = u32::try_from(positions.len()).unwrap();
+        positions.push(Point3::new(centre[0], centre[1], centre[2]));
+        positions.push(Point3::new(centre[0], centre[1], centre[2] + height));
+        let mut indices = Vec::new();
+        for ring in 0..rings {
+            for side in 0..sides {
+                let next = (side + 1) % sides;
+                let (a, b) = (ring * sides + side, ring * sides + next);
+                let (c, d) = (a + sides, b + sides);
+                indices.extend([a, b, d, a, d, c]);
+            }
+        }
+        for side in 0..sides {
+            let next = (side + 1) % sides;
+            indices.extend([bottom, next, side]);
+            let top = rings * sides;
+            indices.extend([bottom + 1, top + side, top + next]);
+        }
+        TriMesh::new(positions, indices)
+    }
+
+    fn brute_separation(first: &Body<'_>, second: &Body<'_>) -> f64 {
+        let mut best = f64::INFINITY;
+        for a in &first.triangles {
+            for b in &second.triangles {
+                let pair = closest_points_on_triangles(*a, *b).unwrap();
+                best = best.min(pair.distance_squared.sqrt());
+            }
+        }
+        best
+    }
+
+    /// The index may only skip work, never change the answer.
+    #[test]
+    fn indexed_separation_matches_the_exhaustive_scan() {
+        for (offset, height) in [(0.55, 3.0), (1.3, 2.0), (0.9, 0.5)] {
+            let geometry = AxiolidGeometry::new()
+                .with_mesh(id("a"), column([0.0, 0.0, 0.0], 0.3, 3.0, 24, 6))
+                .with_mesh(id("b"), column([offset, 0.2, 1.0], 0.25, height, 20, 5));
+            let service = AxiolidProximityService::new(geometry);
+            let (a, b) = (
+                service.body(&id("a")).unwrap(),
+                service.body(&id("b")).unwrap(),
+            );
+            let indexed = separation(&a, &b).unwrap();
+            let exhaustive = brute_separation(&a, &b);
+            let exhaustive = if exhaustive <= LINEAR_TOLERANCE {
+                0.0
+            } else {
+                exhaustive
+            };
+            assert!(
+                (indexed - exhaustive).abs() < 1e-12,
+                "offset {offset}: {indexed} vs {exhaustive}"
+            );
+        }
+    }
+
+    #[test]
+    fn indexed_surface_distance_matches_the_exhaustive_scan() {
+        let geometry =
+            AxiolidGeometry::new().with_mesh(id("a"), column([0.0, 0.0, 0.0], 0.3, 3.0, 24, 6));
+        let service = AxiolidProximityService::new(geometry);
+        let body = service.body(&id("a")).unwrap();
+        for point in [
+            Point3::new(0.0, 0.0, 1.5),
+            Point3::new(0.1, -0.05, 0.2),
+            Point3::new(2.0, 1.0, 4.0),
+        ] {
+            let exhaustive = body
+                .triangles
+                .iter()
+                .map(|t| {
+                    closest_point_on_triangle(point, *t)
+                        .unwrap()
+                        .distance(point)
+                })
+                .fold(f64::INFINITY, f64::min);
+            let indexed = surface_distance(point, &body).unwrap();
+            assert!(
+                (indexed - exhaustive).abs() < 1e-12,
+                "{point}: {indexed} vs {exhaustive}"
+            );
+        }
     }
 }

@@ -125,6 +125,39 @@ pub(crate) fn ring_perimeter(ring: &Ring) -> f64 {
         .sum()
 }
 
+/// Area and perimeter of a triangle set's footprint, holes included.
+///
+/// `None` when the overlay cannot be computed; an empty footprint measures
+/// zero with no perimeter.
+pub(crate) fn footprint_measure(
+    triangles: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Option<(f64, f64)> {
+    let input = OverlayInput {
+        frame: plan_frame(),
+        polygons: projected_polygons(triangles),
+    };
+    if input.polygons.is_empty() {
+        return Some((0.0, 0.0));
+    }
+    let merged = overlay(
+        &input,
+        &input,
+        OverlayOperation::Union,
+        FillRule::NonZero,
+        tolerance,
+    )
+    .ok()?;
+    let area = merged.polygons.iter().map(polygon_area).sum();
+    let perimeter = merged
+        .polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .map(ring_perimeter)
+        .sum();
+    Some((area, perimeter))
+}
+
 /// Area of the overlap of two triangle sets' footprints.
 ///
 /// `None` when the overlay cannot be computed; an empty footprint overlaps

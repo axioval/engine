@@ -24,6 +24,15 @@ Objects expose canonical concepts, typed properties, classifications and directe
 
 Values distinguish null/unavailable from concrete values and preserve units where relevant. Adapters must not silently coerce malformed source values.
 
+### Attribute sets
+
+Some facts about an object are not in any property set but in fields of the object itself, such as a space's number and name, or the name of its construction type. Two reserved property-set names reach them through the same property resolver:
+
+- `ATTRIBUTE_SET` (`axioval:attributes`) names the object's own attributes, by the source's attribute name.
+- `TYPE_ATTRIBUTE_SET` (`axioval:type-attributes`) names the attributes of the type object the source assigns to the object. An object with no type has none (an exact absence). An object with several types is a conflict, not a choice.
+
+Both are engine vocabulary. They name no property set of any source, a package cannot redeclare them, and concept binding passes them through unchanged, while the property name inside them is still bound per source. A request without a set never searches attributes.
+
 ## Views and layers
 
 A project can expose raw source views and composed views. This supports today's single IFC model and ICDD federation as well as future IFCX-style layers without changing rule capability APIs.

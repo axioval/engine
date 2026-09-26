@@ -130,6 +130,30 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         };
         let volume_span = (z, z + height);
 
+        // The volume's box. A tessellated obstacle whose true body could reach
+        // it makes the verdict an estimate; this evidence is exact.
+        let volume = footprint.outer.points.iter().fold(
+            (
+                [f64::INFINITY, f64::INFINITY, volume_span.0],
+                [f64::NEG_INFINITY, f64::NEG_INFINITY, volume_span.1],
+            ),
+            |(min, max), p| {
+                (
+                    [min[0].min(p.x), min[1].min(p.y), min[2]],
+                    [max[0].max(p.x), max[1].max(p.y), max[2]],
+                )
+            },
+        );
+        if self
+            .geometry
+            .tessellated_near(&volume, 0.0, false, |object| {
+                !request.obstacles().contains(object)
+            })
+            .is_some()
+        {
+            return Err(FreeSpaceError::InexactObstructionEvidence);
+        }
+
         let mut blockers = Vec::new();
         for obstacle in request.obstacles() {
             // A named obstacle without geometry cannot be shown to be clear of
@@ -196,6 +220,22 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             .geometry
             .mesh(request.scope())
             .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(request.scope().clone())))?;
+        // Free area is exact evidence. A tessellated scope, or a tessellated
+        // obstacle whose true footprint could reach it, makes it an estimate.
+        let scope_extent = self
+            .geometry
+            .enclosing_extent(request.scope())
+            .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(request.scope().clone())))?;
+        if self.geometry.is_tessellated(request.scope())
+            || self
+                .geometry
+                .tessellated_near(&scope_extent, 0.0, true, |object| {
+                    !request.obstacles().contains(object)
+                })
+                .is_some()
+        {
+            return Err(FreeSpaceError::InexactAreaEvidence);
+        }
         let scope = triangles(scope_mesh);
         let scope_polygons = projected_polygons(&scope);
         if scope_polygons.is_empty() {

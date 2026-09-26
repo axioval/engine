@@ -83,6 +83,13 @@ least one of them to report a penetration. Hosts declare curved parts with
 `AxiolidGeometry::with_tessellated_mesh(object, mesh, chord_deviation_metres)`.
 A mesh registered with `with_mesh` asserts planar faces.
 
+The other Axiolid services only produce exact evidence, so they refuse when a
+tessellation could change their answer. That is the case when the subject is
+tessellated, or when a tessellated part's enclosing box comes within the
+measurement's reach: the contact gap, the guard radius, or the clearance
+volume. A curved part elsewhere in the model does not block anything. Shelf
+length is an upper bound, so it widens by the deviation instead of refusing.
+
 ## Capabilities
 
 `axioval:capability.clash` checks the rule's selected subjects against a

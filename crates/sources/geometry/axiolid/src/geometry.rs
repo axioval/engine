@@ -81,6 +81,42 @@ impl AxiolidGeometry {
         self.meshes.get(object)
     }
 
+    /// Whether an object's mesh was registered as a tessellation.
+    pub(crate) fn is_tessellated(&self, object: &ObjectId) -> bool {
+        self.chord_deviations.contains_key(object)
+    }
+
+    /// An object's mesh extent grown by its chord deviation, so it encloses
+    /// the true body. `None` without a mesh or with an invalid deviation.
+    pub(crate) fn enclosing_extent(&self, object: &ObjectId) -> Option<Extent> {
+        let (min, max) = mesh_extent(self.meshes.get(object)?)?;
+        let deviation = self.fidelity(object).ok()?.deviation_metres();
+        Some((min.map(|v| v - deviation), max.map(|v| v + deviation)))
+    }
+
+    /// A tessellated object that could change a measurement taken around
+    /// `probe`: its enclosing extent lies within `reach` of it, in plan when
+    /// `plan` is set. Objects `skip` accepts are ignored, and an invalid
+    /// declared deviation counts as near, since nothing bounds it.
+    ///
+    /// Services that report exact evidence refuse when this finds anything:
+    /// a chord approximation near the measurement makes the result an
+    /// estimate, and presenting it as exact would launder it into fact.
+    pub(crate) fn tessellated_near(
+        &self,
+        probe: &Extent,
+        reach: f64,
+        plan: bool,
+        skip: impl Fn(&ObjectId) -> bool,
+    ) -> Option<&ObjectId> {
+        self.chord_deviations.keys().find(|object| {
+            !skip(object)
+                && self
+                    .enclosing_extent(object)
+                    .is_none_or(|extent| extent_gap(probe, &extent, plan) <= reach)
+        })
+    }
+
     /// Records how many doorways interrupt an object's perimeter.
     ///
     /// Openings are a semantic fact: a mesh of a room does not say which of
@@ -110,6 +146,29 @@ impl AxiolidGeometry {
     ) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
         self.meshes.iter().filter(move |(id, _)| *id != subject)
     }
+}
+
+/// An axis-aligned `(min, max)` extent in metres.
+pub(crate) type Extent = ([f64; 3], [f64; 3]);
+
+/// The extent of a mesh's positions; `None` for an empty mesh.
+pub(crate) fn mesh_extent(mesh: &TriMesh) -> Option<Extent> {
+    let mut positions = (0..mesh.position_count()).map(|i| mesh.position(i));
+    let first = positions.next()?;
+    let (min, max) = positions.fold((first, first), |(min, max), p| (min.min(p), max.max(p)));
+    Some((min.to_array(), max.to_array()))
+}
+
+/// Euclidean gap between two extents, over x and y only when `plan` is set.
+pub(crate) fn extent_gap(a: &Extent, b: &Extent, plan: bool) -> f64 {
+    let axes = if plan { 2 } else { 3 };
+    (0..axes)
+        .map(|axis| {
+            let gap = (b.0[axis] - a.1[axis]).max(a.0[axis] - b.1[axis]).max(0.0);
+            gap * gap
+        })
+        .sum::<f64>()
+        .sqrt()
 }
 
 /// A triangle as three points, the form the geometry primitives consume.

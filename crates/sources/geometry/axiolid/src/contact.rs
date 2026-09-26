@@ -115,6 +115,10 @@ impl ContactService for AxiolidContactService {
             .geometry
             .mesh(request.subject())
             .ok_or(ContactError::Unavailable)?;
+        // Contact evidence is exact; a chord approximation of the face is not.
+        if self.geometry.is_tessellated(request.subject()) {
+            return Err(ContactError::InexactEvidence);
+        }
         let tolerance =
             axiolid_core::Tolerance::new(AUDIT_LINEAR_TOLERANCE, AUDIT_ANGULAR_TOLERANCE)
                 .map_err(|_| ContactError::Unavailable)?;
@@ -155,6 +159,26 @@ impl ContactService for AxiolidContactService {
                 contact_area += pair_area;
                 touching.push(candidate_id.clone());
             }
+        }
+
+        // A tessellated counterpart close enough to touch, or to be the nearest
+        // candidate, makes the area or the distance an estimate. Its enclosing
+        // box is grown by its chord deviation and never farther than its body.
+        let reach = nearest.map_or(request.tolerance().maximum_gap_metres(), |distance| {
+            distance.max(request.tolerance().maximum_gap_metres())
+        });
+        let subject_extent = self
+            .geometry
+            .enclosing_extent(request.subject())
+            .ok_or(ContactError::Unavailable)?;
+        if self
+            .geometry
+            .tessellated_near(&subject_extent, reach, false, |object| {
+                object == request.subject()
+            })
+            .is_some()
+        {
+            return Err(ContactError::InexactEvidence);
         }
 
         // Independent counterparts may each touch overlapping triangles, so the

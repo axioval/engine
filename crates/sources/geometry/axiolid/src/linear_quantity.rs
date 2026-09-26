@@ -79,10 +79,18 @@ fn shelf_running_length(
     mesh: &impl TriangleMeshView,
     shelf: ShelfGeometry,
     doorways: usize,
+    chord_deviation: f64,
 ) -> Option<(f64, f64)> {
     let (min_x, max_x, min_y, max_y) = footprint(mesh)?;
     let (floor, ceiling) = elevation_span(mesh)?;
-    let (width, depth) = (max_x - min_x, max_y - min_y);
+    // A tessellated room's true surface may lie up to the chord deviation
+    // beyond its mesh on every side. The bound only grows with the room, so
+    // growing the extents keeps it an upper bound on the true room.
+    let (width, depth) = (
+        max_x - min_x + 2.0 * chord_deviation,
+        max_y - min_y + 2.0 * chord_deviation,
+    );
+    let (floor, ceiling) = (floor - chord_deviation, ceiling + chord_deviation);
     if width <= 0.0 || depth <= 0.0 {
         return None;
     }
@@ -140,7 +148,12 @@ impl LinearQuantityService for AxiolidLinearQuantityService {
         };
 
         let doorways = self.geometry.doorway_count(request.scope());
-        let (lower, upper) = shelf_running_length(mesh, arrangement, doorways)
+        let deviation = self
+            .geometry
+            .fidelity(request.scope())
+            .map_err(|_| LinearQuantityError::InvalidGeometry)?
+            .deviation_metres();
+        let (lower, upper) = shelf_running_length(mesh, arrangement, doorways, deviation)
             .ok_or(LinearQuantityError::InvalidGeometry)?;
 
         // The bound is derived from a bounding footprint, so it is an upper

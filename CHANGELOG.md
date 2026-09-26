@@ -86,6 +86,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Tessellated parts were measured as exact.** Axiolid contact, envelope,
+  free-space, guard and space evidence is exact by contract, but it was
+  reported for curved parts registered as tessellations. Each service now
+  refuses with its inexact-evidence error when a tessellation could change
+  its answer, and only then. Shelf length widens its upper bound by the chord
+  deviation instead.
 - **Closed solids lost their footprint in plan.** The Axiolid free-space,
   space, envelope-membership and guard services, and the new proximity service,
   projected triangles without orienting them. A closed, outward-oriented

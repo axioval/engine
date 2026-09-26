@@ -225,6 +225,24 @@ impl GuardService for AxiolidGuardService {
             let Some(rings) = boundary_rings(&surface_triangles, tolerance) else {
                 continue;
             };
+            // Barriers and landings lie within the search radius of the edge,
+            // climbing aids within the radius of a barrier. A tessellated
+            // surface, or a tessellated candidate whose true body could fall
+            // within that reach, makes the edge evidence an estimate.
+            let extent = self
+                .geometry
+                .enclosing_extent(surface)
+                .ok_or(GuardError::Unavailable)?;
+            if self.geometry.is_tessellated(surface)
+                || self
+                    .geometry
+                    .tessellated_near(&extent, 2.0 * radius, true, |object| {
+                        self.surfaces.contains(object)
+                    })
+                    .is_some()
+            {
+                return Err(GuardError::InexactEvidence);
+            }
             evaluated += 1;
 
             // The outer ring is the exposed edge; interior rings are holes,

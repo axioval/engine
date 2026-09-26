@@ -139,6 +139,23 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
             return Err(EnvelopeMembershipError::Unavailable);
         }
 
+        // Membership is plan overlap with a bounding space. A tessellated space,
+        // or a tessellated object whose true footprint could reach one, makes
+        // that overlap an estimate, and this evidence is exact.
+        for space in bounding {
+            let Some(extent) = self.geometry.enclosing_extent(space) else {
+                continue;
+            };
+            if self.geometry.is_tessellated(space)
+                || self
+                    .geometry
+                    .tessellated_near(&extent, 0.0, true, |object| bounding.contains(object))
+                    .is_some()
+            {
+                return Err(EnvelopeMembershipError::InexactEvidence);
+            }
+        }
+
         let mut derived = Vec::new();
         let mut evaluated = 0usize;
         for (object, mesh) in self.geometry.objects() {

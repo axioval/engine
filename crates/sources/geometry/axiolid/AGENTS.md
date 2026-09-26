@@ -40,8 +40,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   other surface, via `axiolid-ray-mesh`) against winding numbers. Only closed
   two-manifold meshes have an inside; a pair with one is measured, two open
   surfaces report no penetration.
-  Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`; only this
-  service honours it so far.
+  Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`.
+- **Every service honours fidelity.** Proximity reports approximate evidence.
+  The services whose contracts only accept exact evidence -- contact,
+  envelope, free space, guard, space -- refuse with their inexact-evidence
+  error when a tessellation could change the answer: the subject itself, or a
+  part whose enclosing extent (mesh box grown by its chord deviation) comes
+  within the measurement's reach (`AxiolidGeometry::tessellated_near`). A
+  curved part elsewhere in the model blocks nothing. Shelf length is an upper
+  bound that only grows with the room, so it widens by the deviation instead.
+  `tests/fidelity.rs` pins each case and fails without the guards.
 - Proximity queries go through an `axiolid-spatial` BVH per body; skips are
   exact (box gap never exceeds triangle gap), and the unit tests compare the
   indexed results with an exhaustive scan. Penetration ranks samples by

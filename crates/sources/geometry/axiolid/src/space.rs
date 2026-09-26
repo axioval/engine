@@ -122,6 +122,33 @@ impl AxiolidSpaceService {
         self.role(object) == Some(Role::Space)
     }
 
+    /// Refuses a measurement of `space` that a tessellation could change: the
+    /// space itself, or an object `candidate` accepts whose true body could
+    /// come within `reach` of it. Space evidence is exact.
+    fn require_exact(
+        &self,
+        space: &ObjectId,
+        reach: f64,
+        plan: bool,
+        candidate: impl Fn(&ObjectId) -> bool,
+    ) -> Result<(), SpaceError> {
+        let extent = self
+            .geometry
+            .enclosing_extent(space)
+            .ok_or(SpaceError::Unavailable)?;
+        if self.geometry.is_tessellated(space)
+            || self
+                .geometry
+                .tessellated_near(&extent, reach, plan, |object| {
+                    object == space || !candidate(object)
+                })
+                .is_some()
+        {
+            return Err(SpaceError::InexactEvidence);
+        }
+        Ok(())
+    }
+
     /// Triangles of a declared object, or `Unavailable` when it has no mesh.
     fn triangles_of(&self, object: &ObjectId) -> Result<Vec<Triangle>, SpaceError> {
         let mesh = self.geometry.mesh(object).ok_or(SpaceError::Unavailable)?;
@@ -211,6 +238,7 @@ fn containment(subject_area: f64, other_area: f64, shared: f64) -> Containment {
 impl SpaceService for AxiolidSpaceService {
     fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError> {
         let subject = self.triangles_of(space)?;
+        self.require_exact(space, 0.0, false, |candidate| self.is_space(candidate))?;
         let tolerance = tolerance()?;
         let subject_area = plan_area(&subject, tolerance);
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
@@ -244,6 +272,7 @@ impl SpaceService for AxiolidSpaceService {
 
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
         let subject = self.triangles_of(space)?;
+        self.require_exact(space, 0.0, false, |_| false)?;
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
         ClearHeightEvidence::try_new(space.clone(), (ceiling - floor).max(0.0), self.evidence())
     }
@@ -253,6 +282,8 @@ impl SpaceService for AxiolidSpaceService {
         space: &ObjectId,
     ) -> Result<Vec<axioval_engine::BoundaryGap>, SpaceError> {
         let subject = self.triangles_of(space)?;
+        // Any footprint touching the boundary in plan may cover it.
+        self.require_exact(space, 0.0, true, |_| true)?;
         let tolerance = tolerance()?;
         // Unioning the triangle soup collapses interior edges, leaving the
         // real perimeter: the shared edge between two triangles of one slab is
@@ -302,6 +333,7 @@ impl SpaceService for AxiolidSpaceService {
 
     fn measure_overlaps(&self, space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError> {
         let subject = self.triangles_of(space)?;
+        self.require_exact(space, 0.0, false, |_| true)?;
         let tolerance = tolerance()?;
         let subject_area = plan_area(&subject, tolerance);
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
@@ -338,6 +370,9 @@ impl SpaceService for AxiolidSpaceService {
 
     fn measure_cap_coverage(&self, space: &ObjectId, cap: Cap) -> Result<CapCoverage, SpaceError> {
         let subject = self.triangles_of(space)?;
+        self.require_exact(space, CAP_PLANE_TOLERANCE_M, false, |candidate| {
+            matches!(self.role(candidate), Some(Role::Slab | Role::Roof))
+        })?;
         let tolerance = tolerance()?;
         let whole = plan_area(&subject, tolerance);
         if whole <= 0.0 {
@@ -425,6 +460,15 @@ impl SpaceService for AxiolidSpaceService {
 
     fn measure_storey_residuals(&self) -> Result<Vec<StoreyResidual>, SpaceError> {
         let tolerance = tolerance()?;
+        // Residuals sum every storey-assigned body, so any tessellated one
+        // makes them estimates.
+        if self
+            .storeys
+            .keys()
+            .any(|object| self.geometry.is_tessellated(object))
+        {
+            return Err(SpaceError::InexactEvidence);
+        }
         let mut per_storey: BTreeMap<ObjectId, StoreyBodies> = BTreeMap::new();
         for (object, storey) in &self.storeys {
             let Some(mesh) = self.geometry.mesh(object) else {

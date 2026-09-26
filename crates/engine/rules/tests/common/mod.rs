@@ -68,6 +68,16 @@ impl Model {
         capability: &dyn RuleCapability,
         rule: &CompiledRule,
     ) -> CapabilityEvaluation {
+        self.evaluate_with(capability, rule, |_| {})
+    }
+
+    /// Evaluates with further services registered by `extra`.
+    pub fn evaluate_with(
+        self,
+        capability: &dyn RuleCapability,
+        rule: &CompiledRule,
+        extra: impl FnOnce(&mut ServiceRegistry),
+    ) -> CapabilityEvaluation {
         let project = Project::new(self.objects.clone()).unwrap();
         let shared = Arc::new(self);
         let mut services = ServiceRegistry::new();
@@ -77,6 +87,7 @@ impl Model {
         services
             .register(RelationshipSelectionServiceHandle::new(shared))
             .unwrap();
+        extra(&mut services);
         capability.evaluate(
             &RuleContext {
                 project: &project,

@@ -13,13 +13,13 @@ use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
 /// Objects a selector picks, split into decided and undecided.
-struct Population {
-    matched: BTreeSet<ObjectId>,
-    undecided: BTreeSet<ObjectId>,
+pub(crate) struct Population {
+    pub(crate) matched: BTreeSet<ObjectId>,
+    pub(crate) undecided: BTreeSet<ObjectId>,
 }
 
 impl Population {
-    fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
+    pub(crate) fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
         let (matched, outcomes) = select_objects(context, selector);
         Self {
             matched: matched
@@ -40,15 +40,15 @@ impl Population {
 }
 
 /// How many of `population` belong to `anchor`: decided, undecided, and which.
-struct Tally {
-    decided: Vec<ObjectId>,
-    undecided: usize,
-    evidence: Vec<Evidence>,
+pub(crate) struct Tally {
+    pub(crate) decided: Vec<ObjectId>,
+    pub(crate) undecided: usize,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 /// The members of `population` an anchor reaches through the traversal, or
 /// every member of the anchor's own source when there is none.
-fn tally(
+pub(crate) fn tally(
     context: &RuleContext<'_>,
     traversal: Option<&Traversal<'_>>,
     anchor: &Object,
@@ -89,7 +89,7 @@ fn tally(
     })
 }
 
-fn relation_text(traversal: Option<&Traversal<'_>>) -> String {
+pub(crate) fn relation_text(traversal: Option<&Traversal<'_>>) -> String {
     traversal.map_or_else(
         || "in the same source".to_owned(),
         |traversal| format!("via {}", traversal.relationship),

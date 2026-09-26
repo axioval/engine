@@ -175,7 +175,19 @@ On a real 6 MiB IFC4 model, 951 bodies mesh exactly, 20 as tessellations
 (round columns) and none fail, and a wall-against-wall clash check finds the
 overlapping wall joints (0.05 m and 0.10 m) in under a second.
 
+Shelf capacity needs the doorways that interrupt each room's perimeter, which
+a mesh does not show. The CLI counts them from the space boundaries the model
+states: a door counts when an `IfcRelSpaceBoundary` of the space names it, or
+names an opening the door fills (`IfcRelFillsElement`). A space's count stays
+undeclared, and its shelf-capacity rule reports not evaluated rather than
+assuming zero doorways, when:
+
+- the space has no space boundary at all;
+- a bounding opening is filled by nothing, since it may be a doorless passage
+  or a niche;
+- the model has a space boundary without a required end, which makes every
+  boundary answer refuse.
+
 Services that need facts IFC does not state reliably are not registered, so
 their rules report `missing-service`: guard checks (which surfaces are
-walkable), envelope membership (which spaces bound the envelope) and shelf
-capacity (doorways per room).
+walkable) and envelope membership (which spaces bound the envelope).

@@ -41,7 +41,20 @@ fn shelf() -> ShelfGeometry {
     ShelfGeometry::try_new(0.3, 1.0, 0.4, 0.0, 2.0, 0.9).expect("valid shelf geometry")
 }
 
+/// Measures `scope`, declaring no doorways unless the geometry already has.
 fn measure(geometry: AxiolidGeometry, scope: ObjectId) -> Result<f64, LinearQuantityError> {
+    let geometry = if geometry.doorway_count(&scope).is_some() {
+        geometry
+    } else {
+        geometry.with_doorways(scope.clone(), 0)
+    };
+    measure_as_declared(geometry, scope)
+}
+
+fn measure_as_declared(
+    geometry: AxiolidGeometry,
+    scope: ObjectId,
+) -> Result<f64, LinearQuantityError> {
     let service = AxiolidLinearQuantityService::new(geometry, source());
     let request =
         LinearQuantityRequest::new(scope, LinearQuantityKind::ShelfRunningLength(shelf()));
@@ -82,6 +95,19 @@ fn doorways_reduce_the_usable_wall() {
     assert!(
         door_metres < clear_metres,
         "doorways must reduce capacity, got {door_metres} vs {clear_metres}"
+    );
+}
+
+/// A room whose doorways nobody declared is not measured.
+///
+/// Zero doorways would credit the whole perimeter, so an undeclared count
+/// must refuse rather than overstate the shelf length.
+#[test]
+fn undeclared_doorways_refuse_rather_than_count_zero() {
+    let geometry = AxiolidGeometry::new().with_mesh(id("room"), room(6.0, 6.0, 3.0));
+    assert_eq!(
+        measure_as_declared(geometry, id("room")),
+        Err(LinearQuantityError::Unavailable)
     );
 }
 
@@ -128,7 +154,9 @@ fn an_unknown_object_is_unavailable() {
 /// the geometry supports, and the capability fails closed on that ambiguity.
 #[test]
 fn a_footprint_bound_is_not_reported_as_exact() {
-    let geometry = AxiolidGeometry::new().with_mesh(id("room"), room(6.0, 6.0, 3.0));
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), room(6.0, 6.0, 3.0))
+        .with_doorways(id("room"), 0);
     let service = AxiolidLinearQuantityService::new(geometry, source());
     let request =
         LinearQuantityRequest::new(id("room"), LinearQuantityKind::ShelfRunningLength(shelf()));

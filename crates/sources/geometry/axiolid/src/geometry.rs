@@ -174,10 +174,13 @@ impl AxiolidGeometry {
         self
     }
 
-    /// Doorways recorded for an object; absent means none were declared.
+    /// Doorways recorded for an object, or `None` when the host declared none.
+    ///
+    /// An undeclared count is unknown, not zero: reading it as zero would
+    /// credit wall that a door interrupts.
     #[must_use]
-    pub fn doorway_count(&self, object: &ObjectId) -> usize {
-        self.doorways.get(object).copied().unwrap_or(0)
+    pub fn doorway_count(&self, object: &ObjectId) -> Option<usize> {
+        self.doorways.get(object).copied()
     }
 
     /// Every registered object and its mesh, in identity order.

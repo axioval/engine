@@ -147,7 +147,10 @@ impl LinearQuantityService for AxiolidLinearQuantityService {
             return Err(LinearQuantityError::Unavailable);
         };
 
-        let doorways = self.geometry.doorway_count(request.scope());
+        let doorways = self
+            .geometry
+            .doorway_count(request.scope())
+            .ok_or(LinearQuantityError::Unavailable)?;
         let deviation = self
             .geometry
             .fidelity(request.scope())

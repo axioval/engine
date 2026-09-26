@@ -27,12 +27,14 @@ use axiolid_primitive::Primitive;
 use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
-    AxiolidContactService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidProximityService,
-    AxiolidSpaceService,
+    AxiolidContactService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidLinearQuantityService,
+    AxiolidProximityService, AxiolidSpaceService,
 };
 use axioval::engine::{
-    ContactServiceHandle, EvidenceSession, FreeSpaceServiceHandle, ProximityServiceHandle,
-    SpaceServiceHandle, TypeHierarchyServiceHandle,
+    ContactServiceHandle, EvidenceSession, FreeSpaceServiceHandle, LinearQuantityServiceHandle,
+    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SpaceServiceHandle,
+    TraversalDirection, TypeHierarchyServiceHandle,
 };
 use axioval::ir::{ObjectId, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -149,6 +151,11 @@ pub fn attach(
         }
     }
 
+    if let Some(relationships) = session.service::<RelationshipSelectionServiceHandle>() {
+        for (space, count) in doorways(relationships, &kinds, &is_a) {
+            geometry = geometry.with_doorways(space, count);
+        }
+    }
     let space = space_service(&model, &geometry, &source, &kinds, &is_a);
     let bound = std::slice::from_ref(snapshot);
     let session = session
@@ -168,10 +175,84 @@ pub fn attach(
         )?
         .with_host_service(SpaceServiceHandle::new(Arc::new(space)), bound)?
         .with_host_service(
+            LinearQuantityServiceHandle::new(Arc::new(AxiolidLinearQuantityService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        .with_host_service(
             ProximityServiceHandle::new(Arc::new(AxiolidProximityService::new(geometry))),
             bound,
         )?;
     Ok((session, report))
+}
+
+/// Doorways per space, from the space boundaries the model states.
+///
+/// A doorway is a door that bounds the space, directly or through an opening
+/// it fills (`IfcRelFillsElement`). Only spaces whose count is known are
+/// returned; the linear-quantity service refuses the rest rather than count
+/// zero, which would credit wall a door interrupts. A space is left out when:
+///
+/// - it has no space boundary at all, so the model says nothing about its doors;
+/// - a bounding opening is filled by nothing, since it may be a doorless
+///   passage or a niche and the model does not say which;
+/// - any relationship answer is refused, including for a boundary instance
+///   that omits a required end anywhere in the model.
+fn doorways(
+    relationships: &RelationshipSelectionServiceHandle,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&str, &str) -> bool,
+) -> Vec<(ObjectId, usize)> {
+    let of_kind = |ancestor: &str| -> Vec<ObjectId> {
+        kinds
+            .iter()
+            .filter(|(_, kind)| is_a(kind, ancestor))
+            .map(|(id, _)| id.clone())
+            .collect()
+    };
+    let doors = of_kind("IfcDoor");
+    let openings = of_kind("IfcOpeningElement");
+    let everything: Vec<ObjectId> = kinds.keys().cloned().collect();
+    let related = |anchor: &ObjectId, relationship: &str, universe: &[ObjectId]| {
+        let query = RelationshipQuery::Related {
+            relationship: SemanticRelationship::try_new(relationship).ok()?,
+            direction: TraversalDirection::Forward,
+            follow_chain: false,
+        };
+        let request =
+            RelationshipSelectionRequest::try_new(anchor.clone(), universe.to_vec(), query).ok()?;
+        let selection = relationships.select(&request).ok()?;
+        Some(selection.candidates().to_vec())
+    };
+    let count = |space: &ObjectId| -> Option<usize> {
+        let bounding = related(space, "IfcRelSpaceBoundary", &everything)?;
+        if bounding.is_empty() {
+            return None;
+        }
+        let mut found: BTreeSet<ObjectId> = BTreeSet::new();
+        for element in &bounding {
+            if doors.binary_search(element).is_ok() {
+                found.insert(element.clone());
+            } else if openings.binary_search(element).is_ok() {
+                let fillings = related(element, "IfcRelFillsElement", &everything)?;
+                if fillings.is_empty() {
+                    return None;
+                }
+                found.extend(
+                    fillings
+                        .into_iter()
+                        .filter(|filling| doors.binary_search(filling).is_ok()),
+                );
+            }
+        }
+        Some(found.len())
+    };
+    of_kind("IfcSpace")
+        .into_iter()
+        .filter_map(|space| count(&space).map(|n| (space, n)))
+        .collect()
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {

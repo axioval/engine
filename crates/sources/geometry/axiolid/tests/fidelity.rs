@@ -254,7 +254,7 @@ fn a_curved_space_is_not_measured_exactly() {
 fn shelf_length_widens_rather_than_refuses() {
     let shelf = ShelfGeometry::try_new(0.3, 1.0, 0.4, 0.0, 2.0, 0.9).unwrap();
     let measure = |geometry: AxiolidGeometry| {
-        AxiolidLinearQuantityService::new(geometry, source())
+        AxiolidLinearQuantityService::new(geometry.with_doorways(id("room"), 0), source())
             .measure_linear_quantity(&LinearQuantityRequest::new(
                 id("room"),
                 LinearQuantityKind::ShelfRunningLength(shelf),

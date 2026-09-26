@@ -563,3 +563,133 @@ fn without_geometry_geometric_rules_are_not_evaluated_and_say_why() {
     let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
     assert!(result.get("geometry").is_none());
 }
+
+/// Two 4 m × 4 m × 3 m rooms. Room A (#40) is bounded by door #50 directly
+/// and by opening #51, which door #52 fills. Room B (#41) states no space
+/// boundary at all.
+fn rooms_with_doors() -> String {
+    let room = |first: u32, x: f64, global: &str| {
+        let [p, pos, profile, solid, shape, product, space] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        format!(
+            "#{p}=IFCCARTESIANPOINT(({x},0.));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},4.,4.);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{space}=IFCSPACE('{global}',$,$,$,$,#3,#{product},$,.ELEMENT.,$,$);\n"
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}\
+         #50=IFCDOOR('0000000000000000000050',$,$,$,$,#3,$,$,2.,0.9,$,$,$);\n\
+         #51=IFCOPENINGELEMENT('0000000000000000000051',$,$,$,$,#3,$,$,.OPENING.);\n\
+         #52=IFCDOOR('0000000000000000000052',$,$,$,$,#3,$,$,2.,0.9,$,$,$);\n\
+         #53=IFCRELFILLSELEMENT('0000000000000000000053',$,$,$,#51,#52);\n\
+         #54=IFCRELSPACEBOUNDARY('0000000000000000000054',$,$,$,#16,#50,$,.PHYSICAL.,.INTERNAL.);\n\
+         #55=IFCRELSPACEBOUNDARY('0000000000000000000055',$,$,$,#16,#51,$,.PHYSICAL.,.INTERNAL.);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        room(10, 2.0, "0000000000000000000016"),
+        room(20, 8.0, "0000000000000000000026"),
+    )
+}
+
+#[test]
+fn with_geometry_shelf_capacity_counts_doorways_from_space_boundaries() {
+    let case = Case::new("geometry-doorways");
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    definitions["objectTypes"]["axioval:example.ifc.space"] = json!({
+        "id": "axioval:example.ifc.space",
+        "name": {"default": "Space", "translations": {}},
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IfcSpace"}],
+        "citations": [],
+    });
+    let names = [
+        "minimum_running_metres",
+        "shelf_depth_metres",
+        "horizontal_spacing_metres",
+        "vertical_spacing_metres",
+        "bottom_elevation_metres",
+        "top_elevation_metres",
+        "door_clearance_metres",
+    ];
+    let parameters: serde_json::Map<String, Value> = names
+        .iter()
+        .map(|id| {
+            (
+                (*id).to_owned(),
+                json!({"id": id, "name": {"default": id, "translations": {}},
+                       "kind": "number", "required": true, "allowedValues": [],
+                       "citations": []}),
+            )
+        })
+        .collect();
+    definitions["definitions"]["axioval:example.shelf"] = json!({
+        "id": "axioval:example.shelf",
+        "name": {"default": "Shelf capacity", "translations": {}},
+        "description": {"default": "Rooms hold enough shelving.", "translations": {}},
+        "capability": "axioval:capability.shelf-capacity",
+        "parameters": parameters,
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("rooms-hold-shelving");
+    rule["definitionId"] = json!("axioval:example.shelf");
+    // 16 m of perimeter in five 0.4 m tiers holds 80 m. Each doorway takes
+    // 0.9 m of wall, so exactly two doorways leave 14 whole pitches (70 m);
+    // none or one would leave at least 75 m, which is not below the minimum.
+    let values = [75.0, 0.3, 1.0, 0.4, 0.0, 2.0, 0.9];
+    rule["parameters"] = names
+        .iter()
+        .zip(values)
+        .map(|(id, value)| ((*id).to_owned(), json!({"type": "number", "value": value})))
+        .collect::<serde_json::Map<_, _>>()
+        .into();
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!("axioval:example.ifc.space");
+    let model = case.write("model.ifc", &rooms_with_doors());
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    // A finding decides the exit status even though room B stays unmeasured.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#16", "{result:#}");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("70.000 below required 75.000"),
+        "{message}"
+    );
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(
+        not_evaluated[0]["object_id"]["local_id"], "#26",
+        "{result:#}"
+    );
+}

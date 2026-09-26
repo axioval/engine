@@ -4,7 +4,7 @@
 use axioval::default_registry;
 use axioval::engine::{Runtime, compile};
 use axioval::ifc::import_ifc_session;
-use axioval::ir::contract::{RuleApplicability, Selector};
+use axioval::ir::contract::{ParameterValue, RuleApplicability, Selector};
 use axioval::ir::{NotEvaluatedReason, Report};
 use axioval_ids::{
     IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, Options, OptionsError, Part, Reason, Translation,
@@ -45,6 +45,23 @@ const WALL: &str = "<entity><name><simpleValue>IFCWALL</simpleValue></name></ent
 fn property(set: &str, name: &str, attributes: &str) -> String {
     format!(
         "<property {attributes}><propertySet><simpleValue>{set}</simpleValue></propertySet><baseName><simpleValue>{name}</simpleValue></baseName></property>"
+    )
+}
+
+/// A property facet in set `P` with a `<value>` holding `value` (a
+/// `simpleValue` or an `xs:restriction`).
+fn valued(name: &str, value: &str) -> String {
+    valued_with("P", name, "", value)
+}
+
+fn valued_with(set: &str, name: &str, attributes: &str, value: &str) -> String {
+    let value = if value.starts_with('<') {
+        value.to_owned()
+    } else {
+        format!("<simpleValue>{value}</simpleValue>")
+    };
+    format!(
+        "<property {attributes}><propertySet><simpleValue>{set}</simpleValue></propertySet><baseName><simpleValue>{name}</simpleValue></baseName><value>{value}</value></property>"
     )
 }
 
@@ -189,6 +206,42 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
 }
 
 #[test]
+fn only_classes_a_model_session_checks_are_applicable() {
+    let entity =
+        |name: &str| format!("<entity><name><simpleValue>{name}</simpleValue></name></entity>");
+    let gap = |releases: &str, name: &str| {
+        let translation = one(releases, OPTIONAL, &entity(name), &property("P", "N", ""));
+        let outcome = &translation.specifications[0];
+        outcome
+            .gaps
+            .iter()
+            .find(|gap| matches!(gap.part, Part::Applicability { .. }))
+            .map(|gap| (outcome.is_skipped(), gap.reason.clone()))
+    };
+    // A type object is not an occurrence, so rules over it would select nothing.
+    assert_eq!(
+        gap("IFC4", "IFCWALLTYPE"),
+        Some((true, Reason::NotAnObject("IFCWALLTYPE".into())))
+    );
+    // IfcProject is an IfcObject in IFC2X3 and an IfcContext in IFC4.
+    assert_eq!(gap("IFC2X3", "IFCPROJECT"), None);
+    assert_eq!(
+        gap("IFC2X3 IFC4", "IFCPROJECT"),
+        Some((true, Reason::NotAnObject("IFCPROJECT".into())))
+    );
+    assert_eq!(
+        gap("IFC4", "IFCNOSUCHTHING"),
+        Some((
+            true,
+            Reason::UnknownEntity {
+                entity: "IFCNOSUCHTHING".into(),
+                release: IfcVersion::Ifc4
+            }
+        ))
+    );
+}
+
+#[test]
 fn an_entity_enumeration_selects_any_of_its_classes() {
     let translation = one(
         "IFC4",
@@ -206,8 +259,11 @@ fn an_entity_enumeration_selects_any_of_its_classes() {
 #[test]
 fn requirement_gaps_leave_the_other_requirements_translated() {
     let requirements = [
-        property("P", "Typed", "dataType=\"IFCLABEL\" cardinality=\"optional\""),
-        "<property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>Valued</simpleValue></baseName><value><simpleValue>x</simpleValue></value></property>".to_owned(),
+        valued(
+            "Digits",
+            "<xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"3\"/></xs:restriction>",
+        ),
+        valued("Open", "<xs:restriction base=\"xs:string\"/>"),
         property("P", "Banned", "cardinality=\"prohibited\""),
         property("P", "Maybe", "cardinality=\"optional\""),
         "<attribute><name><simpleValue>Name</simpleValue></name></attribute>".to_owned(),
@@ -222,8 +278,8 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     assert_eq!(
         reasons(&translation),
         [
-            (requirement(1), Reason::OptionalDataType("IFCLABEL".into())),
-            (requirement(2), Reason::PropertyValue),
+            (requirement(1), Reason::RestrictionFacet("totalDigits")),
+            (requirement(2), Reason::EmptyRestriction),
             (requirement(3), Reason::Prohibited),
             (requirement(5), Reason::FacetKind("attribute")),
             (requirement(6), Reason::EntityRequirement),
@@ -358,7 +414,7 @@ fn a_typed_presence_requirement_becomes_a_property_data_type_rule() {
     );
     assert_eq!(
         rule.parameters["data_type"],
-        axioval::ir::contract::ParameterValue::String {
+        ParameterValue::String {
             value: "IFCLABEL".into()
         }
     );
@@ -407,6 +463,134 @@ fn typed_rules_check_the_declared_type_of_a_real_model() {
             ),
         ]
     );
+}
+
+fn only_rule(translation: &Translation) -> &axioval::ir::contract::RuleInstance {
+    assert!(translation.is_complete(), "{:?}", reasons(translation));
+    let rule = &translation.ruleset.root.folders[0].rules[0];
+    assert_eq!(
+        translation.definitions.definitions[&rule.definition_id].capability,
+        "axioval:capability.property-value"
+    );
+    rule
+}
+
+fn strings(values: &[&str]) -> ParameterValue {
+    ParameterValue::StringList {
+        value: values.iter().map(|value| (*value).to_owned()).collect(),
+    }
+}
+
+#[test]
+fn a_simple_value_becomes_a_one_element_value_list() {
+    let translation = one("IFC4", OPTIONAL, WALL, &valued("Code", "EI 90"));
+    let rule = only_rule(&translation);
+    assert_eq!(rule.parameters["values"], strings(&["EI 90"]));
+    assert!(!rule.parameters.contains_key("optional"));
+}
+
+#[test]
+fn restriction_facets_become_their_parameters() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        WALL,
+        &valued_with(
+            "P",
+            "Code",
+            "dataType=\"IFCLABEL\" cardinality=\"optional\"",
+            "<xs:restriction base=\"xs:string\"><xs:enumeration value=\"A\"/><xs:enumeration value=\"B\"/><xs:pattern value=\"[AB]\"/><xs:minLength value=\"1\"/><xs:maxLength value=\"2\"/></xs:restriction>",
+        ),
+    );
+    let rule = only_rule(&translation);
+    let text = |value: &str| ParameterValue::String {
+        value: value.into(),
+    };
+    assert_eq!(rule.parameters["values"], strings(&["A", "B"]));
+    assert_eq!(rule.parameters["patterns"], strings(&["[AB]"]));
+    assert_eq!(
+        rule.parameters["min_length"],
+        ParameterValue::Integer { value: 1 }
+    );
+    assert_eq!(
+        rule.parameters["max_length"],
+        ParameterValue::Integer { value: 2 }
+    );
+    assert_eq!(rule.parameters["data_type"], text("IFCLABEL"));
+    assert_eq!(
+        rule.parameters["optional"],
+        ParameterValue::Boolean { value: true }
+    );
+
+    let bounded = one(
+        "IFC4",
+        OPTIONAL,
+        WALL,
+        &valued(
+            "Width",
+            "<xs:restriction base=\"xs:double\"><xs:minInclusive value=\"0.2\"/><xs:maxExclusive value=\"1e1\"/></xs:restriction>",
+        ),
+    );
+    let rule = only_rule(&bounded);
+    assert_eq!(rule.parameters["min_inclusive"], text("0.2"));
+    assert_eq!(rule.parameters["max_exclusive"], text("1e1"));
+}
+
+#[test]
+fn an_optional_typed_property_checks_its_type_only_when_present() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        WALL,
+        &property(
+            "P",
+            "Code",
+            "dataType=\"IFCLABEL\" cardinality=\"optional\"",
+        ),
+    );
+    let rule = only_rule(&translation);
+    assert!(!rule.parameters.contains_key("values"));
+    assert_eq!(
+        rule.parameters["optional"],
+        ParameterValue::Boolean { value: true }
+    );
+}
+
+#[test]
+fn value_rules_check_a_real_model() {
+    let flagged = |attributes: &str, value: &str| {
+        let translation = one(
+            "IFC4",
+            OPTIONAL,
+            WALL,
+            &valued_with("Pset_WallCommon", "FireRating", attributes, value),
+        );
+        let report = run(&translation, IFC4_MODEL);
+        assert!(
+            report.not_evaluated().is_empty(),
+            "{:?}",
+            report.not_evaluated()
+        );
+        report
+            .findings()
+            .iter()
+            .map(|finding| finding.object_id.local_id.clone())
+            .collect::<Vec<_>>()
+    };
+    // #1 states 'EI 90'; #2 has no FireRating.
+    assert_eq!(flagged("dataType=\"IFCLABEL\"", "EI 90"), ["#2"]);
+    assert_eq!(flagged("", "EI 60"), ["#1", "#2"]);
+    assert_eq!(flagged("", "ei 90"), ["#1", "#2"]);
+    assert_eq!(
+        flagged(
+            "",
+            "<xs:restriction base=\"xs:string\"><xs:pattern value=\"EI [0-9]+\"/></xs:restriction>"
+        ),
+        ["#2"]
+    );
+    // Optional: the absent #2 passes, the present #1 must still match.
+    assert_eq!(flagged("cardinality=\"optional\"", "EI 60"), ["#1"]);
+    assert!(flagged("cardinality=\"optional\"", "EI 90").is_empty());
 }
 
 #[test]

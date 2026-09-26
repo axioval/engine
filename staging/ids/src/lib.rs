@@ -40,7 +40,8 @@ use axioval_ir::contract::{
     Selector, Severity,
 };
 use openbim_ids::{
-    Entity, Facet, Ids, IfcVersion, Occurrence, Property, Requirement, Specification, Value,
+    Attribute, Entity, Facet, Ids, IfcVersion, Occurrence, Property, Requirement, Specification,
+    Value,
 };
 use thiserror::Error;
 
@@ -60,6 +61,7 @@ const SCHEMA_VERSION: &str = "0.1.0";
 const PROPERTY_REQUIRED: &str = "axioval:capability.property-required";
 const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
 const PROPERTY_VALUE: &str = "axioval:capability.property-value";
+const ATTRIBUTE_VALUE: &str = "axioval:capability.attribute-value";
 
 /// Identity of the packages written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -475,23 +477,39 @@ impl<'o> Writer<'o> {
             parameters: extra,
         } = check;
         let definition_id = self.definition(kind);
-        let property = self.property(&set, &name, releases);
-        let property_set = self.property_set(&set, releases);
-        let mut parameters = BTreeMap::from([(
-            "property".to_owned(),
-            ParameterValue::PropertyReference {
-                property,
-                property_set: Some(property_set),
-            },
-        )]);
+        let (reference, subject) = match &set {
+            Some(set) => (
+                (
+                    "property",
+                    ParameterValue::PropertyReference {
+                        property: self.property(set, &name, releases),
+                        property_set: Some(self.property_set(set, releases)),
+                    },
+                ),
+                format!("{set}.{name}"),
+            ),
+            None => (
+                (
+                    "attribute",
+                    ParameterValue::PropertyReference {
+                        property: self.attribute(&name, releases),
+                        property_set: None,
+                    },
+                ),
+                format!("attribute {name}"),
+            ),
+        };
+        let mut parameters = BTreeMap::from([(reference.0.to_owned(), reference.1)]);
         parameters.extend(extra);
+        let optional = parameters.contains_key("optional");
         let title = match kind {
-            CheckKind::Required => format!("{set}.{name} is required"),
-            CheckKind::DataType => format!("{set}.{name} is required with a declared type"),
-            CheckKind::Value if parameters.contains_key("optional") => {
-                format!("{set}.{name}, where present, meets its value constraints")
+            CheckKind::Required => format!("{subject} is required"),
+            CheckKind::DataType => format!("{subject} is required with a declared type"),
+            CheckKind::Value | CheckKind::Attribute if optional => {
+                format!("{subject}, where present, meets its constraints")
             }
-            CheckKind::Value => format!("{set}.{name} meets its value constraints"),
+            CheckKind::Attribute if parameters.len() == 1 => format!("{subject} is required"),
+            CheckKind::Value | CheckKind::Attribute => format!("{subject} meets its constraints"),
         };
         let description = requirement
             .instructions
@@ -531,6 +549,12 @@ impl<'o> Writer<'o> {
                 "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
                 PROPERTY_DATA_TYPE,
             ),
+            CheckKind::Attribute => (
+                "attribute-value",
+                "Attribute meets constraints",
+                "An IDS attribute facet: the attribute must hold a value, and meet the value constraints if any.",
+                ATTRIBUTE_VALUE,
+            ),
             CheckKind::Value => (
                 "property-value",
                 "Property value meets constraints",
@@ -540,9 +564,14 @@ impl<'o> Writer<'o> {
         };
         let id = format!("{}.{suffix}", self.options.package_id);
         self.definitions.entry(id.clone()).or_insert_with(|| {
+            let reference = if matches!(kind, CheckKind::Attribute) {
+                "attribute"
+            } else {
+                "property"
+            };
             let mut parameters = BTreeMap::from([(
-                "property".to_owned(),
-                parameter("property", ParameterKind::PropertyReference, true),
+                reference.to_owned(),
+                parameter(reference, ParameterKind::PropertyReference, true),
             )]);
             let optional: &[(&str, ParameterKind)] = match kind {
                 CheckKind::Required => &[],
@@ -553,7 +582,7 @@ impl<'o> Writer<'o> {
                     );
                     &[]
                 }
-                CheckKind::Value => &[
+                CheckKind::Value | CheckKind::Attribute => &[
                     ("data_type", ParameterKind::String),
                     ("values", ParameterKind::StringList),
                     ("patterns", ParameterKind::StringList),
@@ -640,6 +669,28 @@ impl<'o> Writer<'o> {
         id
     }
 
+    /// A direct attribute, as a property concept without a set.
+    fn attribute(&mut self, name: &str, releases: &[IfcVersion]) -> String {
+        let (id, new) = self.concept("attribute", releases, name);
+        if new {
+            self.properties.insert(
+                id.clone(),
+                PropertyDefinition {
+                    id: id.clone(),
+                    name: LocalizedText::plain(name),
+                    description: Some(LocalizedText::plain(format!(
+                        "The IFC attribute {name}. IDS states no value kind; `string` is nominal."
+                    ))),
+                    value_kind: PropertyValueKind::String,
+                    unit_dimension: None,
+                    external_names: names(releases, name),
+                    citations: Vec::new(),
+                },
+            );
+        }
+        id
+    }
+
     fn property_set(&mut self, set: &str, releases: &[IfcVersion]) -> String {
         let (id, new) = self.concept("property-set", releases, set);
         if new {
@@ -676,7 +727,8 @@ fn parameter(id: &str, kind: ParameterKind, required: bool) -> ParameterDefiniti
 
 /// One exactly translatable requirement.
 struct Check {
-    set: String,
+    /// The property set; `None` for a direct attribute.
+    set: Option<String>,
     name: String,
     kind: CheckKind,
     /// Parameters besides the property reference.
@@ -692,6 +744,8 @@ enum CheckKind {
     DataType,
     /// `property-value`.
     Value,
+    /// `attribute-value`.
+    Attribute,
 }
 
 /// The supported releases, recording a gap for each unsupported one.
@@ -862,6 +916,7 @@ fn check(
 ) -> Result<Option<Check>, Reason> {
     match &requirement.facet {
         Facet::Property(property) => property_check(property, requirement.occurrence),
+        Facet::Attribute(attribute) => attribute_check(attribute, requirement.occurrence),
         Facet::Entity(entity) => {
             // Requiring the class the applicability already selected always
             // holds. Anything else needs an entity capability.
@@ -918,9 +973,39 @@ fn property_check(property: &Property, occurrence: Occurrence) -> Result<Option<
         );
     }
     Ok(Some(Check {
-        set: set.clone(),
+        set: Some(set.clone()),
         name: name.clone(),
         kind,
+        parameters,
+    }))
+}
+
+fn attribute_check(attribute: &Attribute, occurrence: Occurrence) -> Result<Option<Check>, Reason> {
+    let Value::Simple(name) = &attribute.name else {
+        return Err(Reason::Restriction);
+    };
+    let optional = match occurrence {
+        Occurrence::Required => false,
+        Occurrence::Optional => true,
+        Occurrence::Prohibited => return Err(Reason::Prohibited),
+    };
+    let mut parameters = BTreeMap::new();
+    match &attribute.value {
+        Some(value) => value_parameters(value, &mut parameters)?,
+        // An optional attribute with no value passes whether or not it is set.
+        None if optional => return Ok(None),
+        None => {}
+    }
+    if optional {
+        parameters.insert(
+            "optional".to_owned(),
+            ParameterValue::Boolean { value: true },
+        );
+    }
+    Ok(Some(Check {
+        set: None,
+        name: name.clone(),
+        kind: CheckKind::Attribute,
         parameters,
     }))
 }

@@ -281,12 +281,14 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
             (requirement(1), Reason::RestrictionFacet("totalDigits")),
             (requirement(2), Reason::EmptyRestriction),
             (requirement(3), Reason::Prohibited),
-            (requirement(5), Reason::FacetKind("attribute")),
             (requirement(6), Reason::EntityRequirement),
         ]
     );
     // The optional value-less property and the redundant entity need no rule.
-    assert_eq!(translation.specifications[0].rules, ["spec1.facet8"]);
+    assert_eq!(
+        translation.specifications[0].rules,
+        ["spec1.facet5", "spec1.facet8"]
+    );
 }
 
 #[test]
@@ -591,6 +593,45 @@ fn value_rules_check_a_real_model() {
     // Optional: the absent #2 passes, the present #1 must still match.
     assert_eq!(flagged("cardinality=\"optional\"", "EI 60"), ["#1"]);
     assert!(flagged("cardinality=\"optional\"", "EI 90").is_empty());
+}
+
+#[test]
+fn attribute_rules_check_a_real_model() {
+    let flagged = |requirement: &str| {
+        let translation = one("IFC4", OPTIONAL, WALL, requirement);
+        let rule = &translation.ruleset.root.folders[0].rules[0];
+        assert_eq!(
+            translation.definitions.definitions[&rule.definition_id].capability,
+            "axioval:capability.attribute-value"
+        );
+        let report = run(&translation, IFC4_MODEL);
+        assert!(
+            report.not_evaluated().is_empty(),
+            "{:?}",
+            report.not_evaluated()
+        );
+        report
+            .findings()
+            .iter()
+            .map(|finding| finding.object_id.local_id.clone())
+            .collect::<Vec<_>>()
+    };
+    let attribute = |cardinality: &str, value: &str| {
+        let value = if value.is_empty() {
+            String::new()
+        } else {
+            format!("<value><simpleValue>{value}</simpleValue></value>")
+        };
+        format!(
+            "<attribute {cardinality}><name><simpleValue>GlobalId</simpleValue></name>{value}</attribute>"
+        )
+    };
+    // Every wall in the model has a GlobalId; only #1's is ...01.
+    assert!(flagged(&attribute("", "")).is_empty());
+    assert_eq!(flagged(&attribute("", "0000000000000000000001")), ["#2"]);
+    let name = "<attribute><name><simpleValue>Name</simpleValue></name></attribute>";
+    // No wall in the model is named.
+    assert_eq!(flagged(name), ["#1", "#2"]);
 }
 
 #[test]

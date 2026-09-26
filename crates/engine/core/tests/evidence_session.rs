@@ -168,3 +168,51 @@ fn session_rejects_missing_duplicate_and_unexpected_snapshots() {
         Err(EvidenceSessionError::UnexpectedSource(_))
     ));
 }
+
+/// A service a host built itself, with no snapshot of its own.
+#[derive(Debug, PartialEq)]
+struct HostGeometry(&'static str);
+
+#[test]
+fn a_host_service_joins_only_with_a_matching_binding() {
+    let session = EvidenceSession::try_new(project(), [snapshot()])
+        .unwrap()
+        .with_host_service(HostGeometry("meshes"), &[snapshot()])
+        .unwrap();
+    assert_eq!(
+        session.service::<HostGeometry>(),
+        Some(&HostGeometry("meshes"))
+    );
+
+    let unbound = EvidenceSession::try_new(project(), [snapshot()])
+        .unwrap()
+        .with_host_service(HostGeometry("meshes"), &[]);
+    assert!(matches!(unbound, Err(EvidenceSessionError::UnboundService)));
+
+    // Built from another revision of the same source.
+    let other_revision = SourceSnapshot::try_new(
+        SourceId::new("test", "snapshot-1").unwrap(),
+        "revision-8",
+        "sha256:fedcba9876543210",
+    )
+    .unwrap();
+    let stale = EvidenceSession::try_new(project(), [snapshot()])
+        .unwrap()
+        .with_host_service(HostGeometry("meshes"), &[other_revision]);
+    assert!(matches!(
+        stale,
+        Err(EvidenceSessionError::ServiceSnapshotMismatch(_))
+    ));
+
+    let twice = EvidenceSession::try_new(project(), [snapshot()])
+        .unwrap()
+        .with_host_service(HostGeometry("a"), &[snapshot()])
+        .unwrap()
+        .with_host_service(HostGeometry("b"), &[snapshot()]);
+    assert!(matches!(
+        twice,
+        Err(EvidenceSessionError::ServiceRegistry(
+            ServiceRegistryError::Duplicate
+        ))
+    ));
+}

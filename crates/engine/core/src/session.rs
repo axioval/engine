@@ -186,7 +186,36 @@ impl EvidenceSession {
         mut self,
         service: T,
     ) -> Result<Self, EvidenceSessionError> {
-        let bindings = service.source_snapshots();
+        self.check_bindings(service.source_snapshots())?;
+        self.services.register(service)?;
+        Ok(self)
+    }
+
+    /// Registers a host service that records no snapshot of its own.
+    ///
+    /// Some services are built by the host from data it read alongside the
+    /// session, such as geometry meshed from the same file, and carry only a
+    /// source identity. The host states which of this session's snapshots
+    /// the service was built from, and the same checks as
+    /// [`Self::with_service`] apply: at least one binding, no source twice,
+    /// and every binding equal to the session's snapshot for that source.
+    /// A service built from another revision of a source is refused.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a binding is missing, repeated or stale, or a
+    /// service of this type is already registered.
+    pub fn with_host_service<T: std::any::Any + Send + Sync>(
+        mut self,
+        service: T,
+        built_from: &[SourceSnapshot],
+    ) -> Result<Self, EvidenceSessionError> {
+        self.check_bindings(built_from)?;
+        self.services.register(service)?;
+        Ok(self)
+    }
+
+    fn check_bindings(&self, bindings: &[SourceSnapshot]) -> Result<(), EvidenceSessionError> {
         if bindings.is_empty() {
             return Err(EvidenceSessionError::UnboundService);
         }
@@ -203,8 +232,7 @@ impl EvidenceSession {
                 ));
             }
         }
-        self.services.register(service)?;
-        Ok(self)
+        Ok(())
     }
 
     /// Returns the immutable project snapshot.

@@ -9,6 +9,8 @@ Adapter crates are peers:
 - ICDD implementations can provide project assembly and cross-document link services.
 - Alternate geometry backends register the same source-neutral service interfaces.
 
+Services reach a run through its `EvidenceSession`, bound to the source snapshots they were built from. An adapter's service records its own snapshots (`with_service`). A service the host builds itself, such as geometry meshed from the same file, records only a source identity, so the host states the snapshots it was built from (`with_host_service`). Both are checked the same way: at least one binding, no source twice, and every binding equal to the session's snapshot, so a service built from another revision is refused.
+
 Rule packages cannot register services and cannot supply executable code. Missing required services must produce an explicit not-evaluated/backend-unavailable outcome, never a pass.
 
 Property resolution is exposed through `PropertyResolutionServiceHandle`. A present response is a `ResolvedProperty` bound to the complete `PropertyRequest`, including the source-qualified object identity and property key; absence requires equivalent exact request-bound evidence. The handle rejects cross-object substitution, mismatched property keys, absent provenance, approximate values, non-finite numerics, and non-reviewable absence claims. Built-in property capabilities and property-based selectors require this service rather than treating a missing entry in an object map as proof of absence.

@@ -38,16 +38,16 @@ fn session(schema: &str, data: &str) -> EvidenceSession {
 /// space with a virtual boundary that names no element, and a door typed by
 /// an `IfcDoorStyle`, which IFC2X3 has and IFC4 renamed.
 const BUILDING: &str = "\
-#1=IFCSPACE('s',$,'R1',$,$,$,$,$,.ELEMENT.,.INTERNAL.,$);
-#2=IFCWALL('w',$,$,$,$,$,$,$);
-#3=IFCDOOR('d',$,$,$,$,$,$,$,$,$);
-#4=IFCDOORSTYLE('ds',$,'Style',$,$,$,$,$,.SINGLE_SWING_LEFT.,.WOOD.,.F.,.F.);
-#5=IFCRELDEFINESBYTYPE('t',$,$,$,(#3),#4);
+#1=IFCSPACE('000000000000000000000s',$,'R1',$,$,$,$,$,.ELEMENT.,.INTERNAL.,$);
+#2=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$);
+#3=IFCDOOR('000000000000000000000d',$,$,$,$,$,$,$,$,$);
+#4=IFCDOORSTYLE('00000000000000000000ds',$,'Style',$,$,$,$,$,.SINGLE_SWING_LEFT.,.WOOD.,.F.,.F.);
+#5=IFCRELDEFINESBYTYPE('000000000000000000000t',$,$,$,(#3),#4);
 #6=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('W-1'),$);
-#7=IFCPROPERTYSET('p',$,'Pset_WallCommon',$,(#6));
-#8=IFCRELDEFINESBYPROPERTIES('r',$,$,$,(#2),#7);
-#10=IFCRELSPACEBOUNDARY('b1',$,$,$,#1,#2,$,.PHYSICAL.,.EXTERNAL.);
-#11=IFCRELSPACEBOUNDARY('b2',$,$,$,#1,$,$,.VIRTUAL.,.INTERNAL.);
+#7=IFCPROPERTYSET('000000000000000000000p',$,'Pset_WallCommon',$,(#6));
+#8=IFCRELDEFINESBYPROPERTIES('000000000000000000000r',$,$,$,(#2),#7);
+#10=IFCRELSPACEBOUNDARY('00000000000000000000b1',$,$,$,#1,#2,$,.PHYSICAL.,.EXTERNAL.);
+#11=IFCRELSPACEBOUNDARY('00000000000000000000b2',$,$,$,#1,$,$,.VIRTUAL.,.INTERNAL.);
 ";
 
 #[test]
@@ -67,9 +67,9 @@ fn objects_are_discovered_with_the_declared_release_ancestry() {
     // IfcProject is an IfcObject in IFC2X3 but an IfcContext in IFC4. Read
     // with IFC4 ancestry, both would drop out of an IFC2X3 project.
     let data = "\
-#1=IFCPROJECT('p',$,'P',$,$,$,$,$,$);
-#2=IFCELECTRICALCIRCUIT('c',$,'Circuit',$,$);
-#3=IFCWALL('w',$,$,$,$,$,$,$);
+#1=IFCPROJECT('000000000000000000000p',$,'P',$,$,$,$,$,$);
+#2=IFCELECTRICALCIRCUIT('000000000000000000000c',$,'Circuit',$,$);
+#3=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$);
 ";
     let x3 = session("IFC2X3", data);
     let kinds = |session: &EvidenceSession| {
@@ -166,10 +166,10 @@ fn the_same_unset_end_in_ifc4_is_still_a_warning() {
     // The IFC4 counterpart of the fixture above, so the difference is the
     // declared release and nothing else.
     let ifc4 = "\
-#1=IFCSPACE('s',$,'R1',$,$,$,$,$,.ELEMENT.,.INTERNAL.,$,$);
-#2=IFCWALL('w',$,$,$,$,$,$,$,$);
-#10=IFCRELSPACEBOUNDARY('b1',$,$,$,#1,#2,$,.PHYSICAL.,.EXTERNAL.);
-#11=IFCRELSPACEBOUNDARY('b2',$,$,$,#1,$,$,.VIRTUAL.,.INTERNAL.);
+#1=IFCSPACE('000000000000000000000s',$,'R1',$,$,$,$,$,.ELEMENT.,.INTERNAL.,$,$);
+#2=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$,$);
+#10=IFCRELSPACEBOUNDARY('00000000000000000000b1',$,$,$,#1,#2,$,.PHYSICAL.,.EXTERNAL.);
+#11=IFCRELSPACEBOUNDARY('00000000000000000000b2',$,$,$,#1,$,$,.VIRTUAL.,.INTERNAL.);
 ";
     let session = session("IFC4", ifc4);
     let issues = session

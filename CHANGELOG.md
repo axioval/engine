@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **External identities.** `ExternalId` (scheme plus value) lets an object
+  carry aliases beside its source-qualified `ObjectId`, read with
+  `Object::external_id`. `Project::new` rejects an object with two ids in one
+  scheme and two objects of one source sharing an id. This is a breaking change
+  for code that builds `Object` with a struct literal; serialized objects
+  without aliases keep their shape.
+- **IFC GlobalId aliases.** The IFC session attaches each object's
+  `IfcRoot.GlobalId` in the `ifc-globalid` scheme (`IFC_GLOBAL_ID`). An unset,
+  malformed or out-of-range GlobalId (`identity.invalid-global-id`) and one
+  claimed by several `IfcRoot` instances (`identity.duplicate-global-id`) are
+  integrity warnings, and no object carries them. On three real exports
+  (3,578 objects), every object carries its alias and no warning is raised.
 - **Classification service.** `ClassificationService` /
   `ClassificationServiceHandle` let a source state which classifications an
   object carries, each as a system plus its code chain from the assigned item

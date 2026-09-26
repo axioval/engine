@@ -7,13 +7,16 @@
 //! available for host-defined OpenBIM sources.
 
 mod classifications;
+mod identity;
 mod ifc;
 mod integrity;
 mod relationships;
 mod release;
+pub use identity::IFC_GLOBAL_ID;
 pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{
-    ABSENT_REQUIRED_END, CONTAINED_TWICE, MALFORMED_RELATIONSHIP, ZONE_MEMBER_NOT_SPATIAL,
+    ABSENT_REQUIRED_END, CONTAINED_TWICE, DUPLICATE_GLOBAL_ID, INVALID_GLOBAL_ID,
+    MALFORMED_RELATIONSHIP, ZONE_MEMBER_NOT_SPATIAL,
 };
 pub use release::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM};
 

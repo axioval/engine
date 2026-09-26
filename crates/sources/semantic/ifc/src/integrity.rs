@@ -6,9 +6,12 @@
 //! which reads them against the file's own release; only anomalies that are
 //! pure schema violations are taken from it, because dangling references are
 //! already reported by the relationship scan and would otherwise appear twice.
+//! GlobalId defects come from the same scan that decided which aliases the
+//! session's objects carry, so every missing alias has exactly one warning.
 
 use std::sync::Arc;
 
+use crate::identity::{GlobalIdDefect, GlobalIds};
 use crate::relationships::{EdgeIndex, ends_of, read_instance};
 use crate::release::Release;
 use axioval_engine::{
@@ -30,10 +33,21 @@ pub const MALFORMED_RELATIONSHIP: &str = "relationship.malformed";
 pub const CONTAINED_TWICE: &str = "spatial.contained-twice";
 /// Code for an `IfcZone` member that the zone's WR1 rule does not permit.
 pub const ZONE_MEMBER_NOT_SPATIAL: &str = "zone.member-not-spatial";
+/// Code for an `IfcRoot` instance whose GlobalId is missing or malformed.
+///
+/// The object stays checkable; it only carries no GlobalId alias, so output
+/// that names objects by GlobalId cannot reference it.
+pub const INVALID_GLOBAL_ID: &str = "identity.invalid-global-id";
+/// Code for a GlobalId that more than one `IfcRoot` instance claims.
+///
+/// None of the claimants carries the alias: picking one would let a consumer
+/// resolve the id to the wrong object.
+pub const DUPLICATE_GLOBAL_ID: &str = "identity.duplicate-global-id";
 
 pub(crate) struct IfcIntegrity {
     release: Release,
     model: Arc<Model>,
+    global_ids: Arc<GlobalIds>,
     snapshots: Arc<[SourceSnapshot]>,
 }
 
@@ -41,11 +55,13 @@ impl IfcIntegrity {
     pub(crate) fn new(
         release: Release,
         model: Arc<Model>,
+        global_ids: Arc<GlobalIds>,
         snapshots: Arc<[SourceSnapshot]>,
     ) -> Self {
         Self {
             release,
             model,
+            global_ids,
             snapshots,
         }
     }
@@ -109,11 +125,50 @@ impl SourceIntegrityService for IfcIntegrity {
             }
         }
         issues.extend(self.schema_violations(&locator));
+        issues.extend(self.global_id_defects(&locator));
         Ok(issues)
     }
 }
 
 impl IfcIntegrity {
+    /// GlobalIds that were not attached as aliases, and why.
+    fn global_id_defects(&self, locator: &impl Fn(String) -> Evidence) -> Vec<IntegrityIssue> {
+        self.global_ids
+            .defects
+            .iter()
+            .map(|defect| match defect {
+                GlobalIdDefect::Invalid { instance, found } => IntegrityIssue {
+                    code: INVALID_GLOBAL_ID.into(),
+                    severity: IntegritySeverity::Warning,
+                    message: format!(
+                        "{instance} has GlobalId {found}, which is not a valid 22-character \
+                         GlobalId; the object carries no GlobalId alias"
+                    ),
+                    evidence: locator(format!("global-id-invalid:{instance}")),
+                },
+                GlobalIdDefect::Duplicate {
+                    global_id,
+                    instances,
+                } => {
+                    let ids: Vec<String> = instances.iter().map(ToString::to_string).collect();
+                    let list = ids.join(", ");
+                    IntegrityIssue {
+                        code: DUPLICATE_GLOBAL_ID.into(),
+                        severity: IntegritySeverity::Warning,
+                        message: format!(
+                            "GlobalId '{global_id}' is claimed by {list}; a GlobalId must be \
+                             unique, so none of them carries it as an alias"
+                        ),
+                        evidence: locator(format!(
+                            "global-id-duplicate:{global_id}:{}",
+                            ids.join(",")
+                        )),
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Cardinality and membership violations stated by the file.
     fn schema_violations(&self, locator: &impl Fn(String) -> Evidence) -> Vec<IntegrityIssue> {
         let (_, placement_anomalies) = spatial_placements(&self.model);

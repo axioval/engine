@@ -24,6 +24,20 @@ pub enum IrError {
     /// A project contains an ambiguous identity.
     #[error("duplicate object id: {0}")]
     DuplicateObject(ObjectId),
+    /// One object states two identities in the same external scheme.
+    #[error("object {object} has more than one `{scheme}` identity")]
+    ConflictingExternalId { object: ObjectId, scheme: String },
+    /// Two objects of one source claim the same external identity.
+    #[error("external id {} is claimed by both {} and {}", .0.id, .0.first, .0.second)]
+    DuplicateExternalId(Box<ExternalIdClash>),
+}
+
+/// Two objects of one source claiming one external id, in identity order.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ExternalIdClash {
+    pub id: ExternalId,
+    pub first: ObjectId,
+    pub second: ObjectId,
 }
 
 fn required(value: impl Into<String>, kind: &'static str) -> Result<String, IrError> {
@@ -76,6 +90,33 @@ impl ObjectId {
 impl fmt::Display for ObjectId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.source, self.local_id)
+    }
+}
+
+/// An identity an object also carries in a scheme outside this engine.
+///
+/// An alias, never a replacement: the engine keys everything on [`ObjectId`].
+/// External ids exist so output formats and cross-revision tools can name an
+/// object the way other software does. The scheme is an adapter-defined label;
+/// the IR attaches no meaning to it beyond uniqueness within one source.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalId {
+    pub scheme: String,
+    pub value: String,
+}
+impl ExternalId {
+    /// Creates an external identity.
+    pub fn new(scheme: impl Into<String>, value: impl Into<String>) -> Result<Self, IrError> {
+        Ok(Self {
+            scheme: required(scheme, "external id scheme")?,
+            value: required(value, "external id value")?,
+        })
+    }
+}
+impl fmt::Display for ExternalId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.scheme, self.value)
     }
 }
 
@@ -179,6 +220,9 @@ impl Property {
 pub struct Object {
     pub id: ObjectId,
     pub kind: String,
+    /// Aliases in external schemes, at most one per scheme, sorted by scheme.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_ids: Vec<ExternalId>,
     pub properties: Vec<Property>,
     pub classifications: Vec<Classification>,
     pub relationships: BTreeMap<String, Vec<ObjectId>>,
@@ -189,10 +233,27 @@ impl Object {
         Self {
             id,
             kind: kind.into(),
+            external_ids: vec![],
             properties: vec![],
             classifications: vec![],
             relationships: BTreeMap::new(),
         }
+    }
+    /// Adds an external identity, keeping `external_ids` sorted by scheme.
+    ///
+    /// A second identity in the same scheme is kept and rejected when the
+    /// object enters a [`Project`], so the conflict cannot pass unnoticed.
+    pub fn with_external_id(mut self, id: ExternalId) -> Self {
+        let at = self.external_ids.partition_point(|held| held <= &id);
+        self.external_ids.insert(at, id);
+        self
+    }
+    /// The object's identity in `scheme`, if the source states one.
+    pub fn external_id(&self, scheme: &str) -> Option<&str> {
+        self.external_ids
+            .iter()
+            .find(|id| id.scheme == scheme)
+            .map(|id| id.value.as_str())
     }
     /// Adds a property.
     pub fn with_property(mut self, property: Property) -> Self {
@@ -224,8 +285,41 @@ pub struct Project {
 }
 impl Project {
     /// Builds a project, rejecting ambiguous IDs.
+    ///
+    /// Ambiguity covers external ids too: an object with two ids in one
+    /// scheme, or two objects of one source sharing an external id, would
+    /// make any consumer that resolves the alias pick one silently.
     pub fn new(objects: Vec<Object>) -> Result<Self, IrError> {
         let mut result = Self::default();
+        let mut claimed: BTreeMap<(&SourceId, &ExternalId), &ObjectId> = BTreeMap::new();
+        for object in &objects {
+            // Not a sorted-neighbour check: deserialized objects need not be sorted.
+            let mut schemes = std::collections::BTreeSet::new();
+            if let Some(id) = object
+                .external_ids
+                .iter()
+                .find(|id| !schemes.insert(id.scheme.as_str()))
+            {
+                return Err(IrError::ConflictingExternalId {
+                    object: object.id.clone(),
+                    scheme: id.scheme.clone(),
+                });
+            }
+            for id in &object.external_ids {
+                if let Some(first) = claimed.insert((&object.id.source, id), &object.id) {
+                    let (first, second) = if first <= &object.id {
+                        (first, &object.id)
+                    } else {
+                        (&object.id, first)
+                    };
+                    return Err(IrError::DuplicateExternalId(Box::new(ExternalIdClash {
+                        id: id.clone(),
+                        first: first.clone(),
+                        second: second.clone(),
+                    })));
+                }
+            }
+        }
         for object in objects {
             if result
                 .objects

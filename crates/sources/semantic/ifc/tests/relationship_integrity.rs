@@ -27,10 +27,10 @@ fn step(data: &str) -> Vec<u8> {
 
 /// Space 1 bounded physically by wall 2 (#10) and virtually by nothing (#11).
 const BOUNDARIES: &str = "\
-#1=IFCSPACE('s',$,'R1',$,$,$,$,$,$,$,$);
-#2=IFCWALL('w',$,$,$,$,$,$,$,$);
-#10=IFCRELSPACEBOUNDARY2NDLEVEL('b1',$,$,$,#1,#2,$,.PHYSICAL.,.EXTERNAL.,$,$);
-#11=IFCRELSPACEBOUNDARY2NDLEVEL('b2',$,$,$,#1,$,$,.VIRTUAL.,.INTERNAL.,$,$);
+#1=IFCSPACE('000000000000000000000s',$,'R1',$,$,$,$,$,$,$,$);
+#2=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$,$);
+#10=IFCRELSPACEBOUNDARY2NDLEVEL('00000000000000000000b1',$,$,$,#1,#2,$,.PHYSICAL.,.EXTERNAL.,$,$);
+#11=IFCRELSPACEBOUNDARY2NDLEVEL('00000000000000000000b2',$,$,$,#1,$,$,.VIRTUAL.,.INTERNAL.,$,$);
 ";
 
 fn session(data: &str) -> EvidenceSession {
@@ -149,8 +149,8 @@ fn the_integrity_scan_warns_about_absent_ends_whatever_a_rule_chooses() {
 #[test]
 fn the_integrity_scan_reports_corruption_as_an_error() {
     let data = "\
-#1=IFCBUILDINGSTOREY('s',$,'EG',$,$,$,$,$,$,$);
-#2=IFCRELCONTAINEDINSPATIALSTRUCTURE('c',$,$,$,(#1),#99);
+#1=IFCBUILDINGSTOREY('000000000000000000000s',$,'EG',$,$,$,$,$,$,$);
+#2=IFCRELCONTAINEDINSPATIALSTRUCTURE('000000000000000000000c',$,$,$,(#1),#99);
 ";
     let session = session(data);
     let issues = session
@@ -166,9 +166,9 @@ fn the_integrity_scan_reports_corruption_as_an_error() {
 #[test]
 fn a_clean_file_has_no_integrity_issues() {
     let data = "\
-#1=IFCBUILDINGSTOREY('s',$,'EG',$,$,$,$,$,$,$);
-#2=IFCWALL('w',$,$,$,$,$,$,$,$);
-#3=IFCRELCONTAINEDINSPATIALSTRUCTURE('c',$,$,$,(#2),#1);
+#1=IFCBUILDINGSTOREY('000000000000000000000s',$,'EG',$,$,$,$,$,$,$);
+#2=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$,$);
+#3=IFCRELCONTAINEDINSPATIALSTRUCTURE('000000000000000000000c',$,$,$,(#2),#1);
 ";
     let session = session(data);
     assert!(
@@ -185,8 +185,8 @@ fn a_clean_file_has_no_integrity_issues() {
 fn an_absent_required_relating_end_is_flagged_and_refused_too() {
     // Containment without its structure: `RelatingStructure` is required.
     let data = "\
-#1=IFCWALL('w',$,$,$,$,$,$,$,$);
-#2=IFCRELCONTAINEDINSPATIALSTRUCTURE('c',$,$,$,(#1),$);
+#1=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$,$);
+#2=IFCRELCONTAINEDINSPATIALSTRUCTURE('000000000000000000000c',$,$,$,(#1),$);
 ";
     let session = session(data);
     let issues = session
@@ -221,13 +221,13 @@ fn an_absent_required_relating_end_is_flagged_and_refused_too() {
 /// Wall #7 contained by two spaces; zone #8 grouping a space and, against
 /// the zone's WR1 rule, the wall.
 const SPATIAL_CONFLICTS: &str = "\
-#5=IFCSPACE('r1',$,'R1',$,$,$,$,$,$,$,$);
-#6=IFCSPACE('r2',$,'R2',$,$,$,$,$,$,$,$);
-#7=IFCWALL('w',$,$,$,$,$,$,$,$);
-#8=IFCZONE('z',$,'Z',$,$,$);
-#20=IFCRELCONTAINEDINSPATIALSTRUCTURE('c1',$,$,$,(#7),#5);
-#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('c2',$,$,$,(#7),#6);
-#22=IFCRELASSIGNSTOGROUP('g',$,$,$,(#5,#7),$,#8);
+#5=IFCSPACE('00000000000000000000r1',$,'R1',$,$,$,$,$,$,$,$);
+#6=IFCSPACE('00000000000000000000r2',$,'R2',$,$,$,$,$,$,$,$);
+#7=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$,$);
+#8=IFCZONE('000000000000000000000z',$,'Z',$,$,$);
+#20=IFCRELCONTAINEDINSPATIALSTRUCTURE('00000000000000000000c1',$,$,$,(#7),#5);
+#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('00000000000000000000c2',$,$,$,(#7),#6);
+#22=IFCRELASSIGNSTOGROUP('000000000000000000000g',$,$,$,(#5,#7),$,#8);
 ";
 
 #[test]
@@ -257,7 +257,7 @@ fn the_integrity_scan_warns_about_schema_cardinality_violations() {
 fn a_single_home_and_a_valid_zone_raise_nothing() {
     let valid = SPATIAL_CONFLICTS
         .replace(
-            "#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('c2',$,$,$,(#7),#6);\n",
+            "#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('00000000000000000000c2',$,$,$,(#7),#6);\n",
             "",
         )
         .replace("(#5,#7),$,#8", "(#5,#6),$,#8");

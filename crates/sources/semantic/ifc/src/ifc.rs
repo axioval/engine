@@ -7,7 +7,9 @@ use axioval_engine::{
     ResolvedProperty, SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError,
     TypeHierarchyService, TypeHierarchyServiceHandle,
 };
-use axioval_ir::{Evidence, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId};
+use axioval_ir::{
+    Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
+};
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
     ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
@@ -17,6 +19,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::classifications::IfcClassificationService;
+use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
@@ -242,12 +245,21 @@ pub fn import_ifc_session(
     };
 
     let fingerprint: Arc<str> = Arc::from(format!("sha256:{:x}", Sha256::digest(bytes)));
+    let global_ids = Arc::new(GlobalIds::read(release, &model));
     let objects = model
         .iter()
         .filter(|(_, entity)| release.schema.is_a(&entity.type_name, "IFCOBJECT"))
         .map(|(id, entity)| {
-            ObjectId::new(source.clone(), id.to_string())
-                .map(|object_id| Object::new(object_id, entity.type_name.to_string()))
+            let object = Object::new(
+                ObjectId::new(source.clone(), id.to_string())?,
+                entity.type_name.to_string(),
+            );
+            Ok(match global_ids.of(id) {
+                Some(global_id) => {
+                    object.with_external_id(ExternalId::new(IFC_GLOBAL_ID, global_id)?)
+                }
+                None => object,
+            })
         })
         .collect::<Result<Vec<_>, IrError>>()
         .map_err(|error| IfcSessionError::Project(error.to_string()))?;
@@ -267,6 +279,7 @@ pub fn import_ifc_session(
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,
         model.clone(),
+        global_ids,
         snapshots.clone(),
     )));
     let classifications = ClassificationServiceHandle::new(Arc::new(

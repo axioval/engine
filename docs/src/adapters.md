@@ -72,6 +72,21 @@ structure (`spatial.contained-twice`), and a zone grouping something other
 than zones, spaces and spatial zones (`zone.member-not-spatial`). Both come
 from `ifc-systems`; rules still see every containment the file states.
 
+### GlobalId aliases
+
+Object identity stays the STEP instance (`#42`), which is unique in a file but
+renumbered by every export. Each object also carries its `IfcRoot.GlobalId` as
+an external id in the `ifc-globalid` scheme (`IFC_GLOBAL_ID`), the identity
+issue exchange and model comparison need.
+
+The alias is attached only when a consumer can trust it. A GlobalId that is
+unset, not 22 characters of the IFC alphabet, or has a leading digit above `3`
+(which does not fit a 128-bit UUID and would collide with another id) is
+reported as `identity.invalid-global-id`. A GlobalId claimed by more than one
+`IfcRoot` instance, relationships and type objects included, is reported once
+as `identity.duplicate-global-id` and attached to none of its claimants. Both
+are warnings: the object stays checkable and only loses its alias.
+
 ## Axiolid
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.

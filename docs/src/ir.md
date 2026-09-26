@@ -16,6 +16,8 @@ The IR describes what a checker can observe without mirroring any source schema.
 
 Adapters may expose external aliases, but aliases never replace source-qualified identity.
 
+An alias is an `ExternalId`: an adapter-defined `scheme` and a `value`, listed in `Object::external_ids` and read with `Object::external_id(scheme)`. It exists so output formats and cross-revision tools can name an object the way other software does; capabilities never key on it. `Project::new` rejects an object with two ids in one scheme and two objects of one source sharing an id, because any consumer resolving that alias would pick one silently. Two sources may share an alias: two revisions of one model do.
+
 ## Semantic data
 
 Objects expose canonical concepts, typed properties, classifications and directed relationships. Canonical concept IDs are package vocabulary identifiers; source-specific names are adapter bindings. Stored property values are observations, not proof that an omitted key is absent. Conclusive property checks use the typed property-resolution service and exact request-bound evidence.

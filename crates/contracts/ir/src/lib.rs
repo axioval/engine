@@ -187,6 +187,12 @@ pub struct Property {
     pub property_set: String,
     pub name: String,
     pub value: PropertyValue,
+    /// The value's type as the source declares it, in the source's own
+    /// vocabulary (an IFC property: `IFCLABEL`, `IFCLENGTHMEASURE`). `None`
+    /// when the source declares none or the adapter does not report it,
+    /// which is never evidence of any particular type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_type: Option<String>,
     pub evidence: Option<Evidence>,
 }
 impl Property {
@@ -200,13 +206,27 @@ impl Property {
             property_set: required(property_set, "property set")?,
             name: required(name, "property name")?,
             value,
+            data_type: None,
             evidence: None,
         })
+    }
+    /// Records the value's type as the source declares it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `data_type` is blank.
+    pub fn with_data_type(mut self, data_type: impl Into<String>) -> Result<Self, IrError> {
+        self.data_type = Some(required(data_type, "property data type")?);
+        Ok(self)
     }
     /// Attaches source evidence.
     pub fn with_evidence(mut self, evidence: Evidence) -> Self {
         self.evidence = Some(evidence);
         self
+    }
+    /// The value's type as the source declares it, if reported.
+    pub fn data_type(&self) -> Option<&str> {
+        self.data_type.as_deref()
     }
     /// Returns the typed property value.
     pub fn value(&self) -> &PropertyValue {

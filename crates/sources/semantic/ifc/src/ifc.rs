@@ -160,16 +160,23 @@ impl PropertyResolutionService for IfcPropertyService {
                     ExactValue::Text(value) => PropertyValue::String(value.to_string()),
                     _ => return Err(PropertyResolutionError::InexactEvidence),
                 };
-                let property =
+                let mut property =
                     Property::new(exact.property_set.as_ref(), request.property(), value)
-                        .map_err(|_| PropertyResolutionError::InvalidRequest)?
-                        .with_evidence(Evidence::exact(
-                            self.snapshots[0].source().clone(),
-                            self.locator(format_args!(
-                                "{provenance}:{}/{}",
-                                exact.set_id, exact.property_id
-                            )),
-                        ));
+                        .map_err(|_| PropertyResolutionError::InvalidRequest)?;
+                // STEP writes type names upper case; report them that way
+                // whatever case the file used.
+                if let Some(value_type) = exact.value_type.as_deref() {
+                    property = property
+                        .with_data_type(value_type.to_ascii_uppercase())
+                        .map_err(|_| PropertyResolutionError::InexactEvidence)?;
+                }
+                let property = property.with_evidence(Evidence::exact(
+                    self.snapshots[0].source().clone(),
+                    self.locator(format_args!(
+                        "{provenance}:{}/{}",
+                        exact.set_id, exact.property_id
+                    )),
+                ));
                 Ok(PropertyResolution::Present(ResolvedProperty::try_new(
                     request.clone(),
                     property,

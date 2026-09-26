@@ -41,6 +41,8 @@ fn strict_ifc_bytes_build_an_exact_direct_property_session() {
         panic!("flag must be present");
     };
     assert_eq!(flag.property().value, PropertyValue::Boolean(true));
+    // The file writes `ifcboolean`; the declared type is reported upper case.
+    assert_eq!(flag.property().data_type(), Some("IFCBOOLEAN"));
     let flag_evidence = flag.property().evidence.as_ref().unwrap();
     assert_eq!(flag_evidence.source, request("Flag").object_id().source);
     assert!(flag_evidence.locator.contains(&fingerprint));
@@ -53,6 +55,7 @@ fn strict_ifc_bytes_build_an_exact_direct_property_session() {
         big.property().value,
         PropertyValue::Integer(9_007_199_254_740_993)
     );
+    assert_eq!(big.property().data_type(), Some("IFCINTEGER"));
 
     let PropertyResolution::Absent(absence) = properties.resolve(&request("Missing")).unwrap()
     else {

@@ -13,6 +13,9 @@ snapshot registered by the session; mismatched service composition is rejected.
 Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
 unsupported values fail closed.
 
+A present property reports the IFC type its value was written with (`IFCLABEL`,
+`IFCBOOLEAN`, ...) as `Property::data_type`, upper case whatever the file used.
+
 Exact absence covers what the resolver reads: `IfcPropertySet` members.
 Quantity sets (`IfcElementQuantity`) and predefined property sets
 (`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused

@@ -14,6 +14,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   Results now carry an `objects` index (kind and GlobalId of every object the
   report names). On a real model the summary is 712 bytes against 271 KB of
   JSON, so an agent can read the shape first and fetch entries on demand.
+- **Declared property types.** `Property::data_type` carries the value's type
+  as the source declares it, and the IFC session reports it (`IFCLABEL`,
+  `IFCBOOLEAN`, ...). Unreported is `None` and serializes as before. This is a
+  breaking change for code that builds `Property` with a struct literal.
+- **`axioval:capability.property-data-type`.** A required, non-empty
+  property whose declared type equals `data_type`. Another type is a finding;
+  an unreported type is not evaluated. Measure-typed IFC values
+  (`IFCLENGTHMEASURE`, ...) stay not evaluated while the adapter refuses them
+  pending unit handling.
 - **`axioval check`.** Runs a ruleset over an IFC2X3 or IFC4 model and writes
   the report and the model's integrity issues as JSON, and optionally a BCF
   2.1 archive (`--bcf`). Exit status separates a clean pass (0), findings (3)

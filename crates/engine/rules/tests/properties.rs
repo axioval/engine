@@ -17,7 +17,7 @@ use axioval_ir::{
     RuleSetPackage, SourceId,
 };
 use axioval_rules::{
-    BooleanPropertyEquals, PropertyPredicate, PropertyRequired, register_builtins,
+    BooleanPropertyEquals, PropertyDataType, PropertyPredicate, PropertyRequired, register_builtins,
 };
 
 fn packages() -> (DefinitionPackage, RuleSetPackage) {
@@ -537,4 +537,114 @@ fn boolean_property_equals_without_service_is_not_evaluated() {
         outcome.not_evaluated_outcomes()[0].reason(),
         &axioval_ir::NotEvaluatedReason::MissingService
     );
+}
+
+fn typed_property(
+    value: Option<PropertyValue>,
+    declared: Option<&str>,
+    expected: &str,
+) -> axioval_engine::CapabilityEvaluation {
+    let property = value.map(|value| {
+        let property = exact_property("Pset.Typed", "Code", value);
+        match declared {
+            Some(data_type) => property.with_data_type(data_type).unwrap(),
+            None => property,
+        }
+    });
+    let project = Project::new(vec![object()]).unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(PropertyResolutionServiceHandle::new(Arc::new(
+            ExactProperties(property.into_iter().collect(), vec![]),
+        )))
+        .unwrap();
+    let rule = CompiledRule {
+        id: RuleId::new("typed").unwrap(),
+        capability: "axioval:capability.property-data-type".into(),
+        severity: RuleSeverity::Error,
+        selector: Selector::All,
+        parameters: BTreeMap::from([
+            (
+                "property".into(),
+                ParameterValue::PropertyReference {
+                    property_set: Some("Pset.Typed".into()),
+                    property: "Code".into(),
+                },
+            ),
+            (
+                "data_type".into(),
+                ParameterValue::String {
+                    value: expected.into(),
+                },
+            ),
+        ]),
+    };
+    PropertyDataType.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        &rule,
+    )
+}
+
+#[test]
+fn data_type_accepts_a_non_empty_value_of_the_declared_type() {
+    for (value, declared) in [
+        (PropertyValue::String("EI 90".into()), "IFCLABEL"),
+        (PropertyValue::Boolean(false), "IFCBOOLEAN"),
+        // STEP type names are case-insensitive.
+        (PropertyValue::Integer(0), "IfcInteger"),
+    ] {
+        let expected = declared.to_ascii_uppercase();
+        let evaluation = typed_property(Some(value), Some(declared), &expected);
+        assert!(evaluation.findings().is_empty(), "{declared}");
+        assert!(evaluation.not_evaluated_outcomes().is_empty(), "{declared}");
+    }
+}
+
+#[test]
+fn data_type_rejects_absence_emptiness_and_another_type() {
+    for (value, declared, message) in [
+        (None, None, "missing required property Code"),
+        (
+            Some(PropertyValue::Null),
+            None,
+            "missing required property Code",
+        ),
+        (
+            Some(PropertyValue::String(" ".into())),
+            Some("IFCLABEL"),
+            "missing required property Code",
+        ),
+        (
+            Some(PropertyValue::String("x".into())),
+            Some("IFCTEXT"),
+            "property Code is IFCTEXT, not IFCLABEL",
+        ),
+    ] {
+        let evaluation = typed_property(value, declared, "IFCLABEL");
+        assert_eq!(evaluation.findings().len(), 1, "{message}");
+        assert_eq!(evaluation.findings()[0].message, message);
+        assert!(!evaluation.findings()[0].evidence.is_empty(), "{message}");
+        assert!(evaluation.not_evaluated_outcomes().is_empty(), "{message}");
+    }
+}
+
+#[test]
+fn an_unreported_data_type_is_not_evaluated_never_matched() {
+    let evaluation = typed_property(Some(PropertyValue::String("x".into())), None, "IFCLABEL");
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(evaluation.not_evaluated_outcomes().len(), 1);
+}
+
+#[test]
+fn a_blank_data_type_parameter_is_an_invalid_declaration() {
+    let evaluation = typed_property(
+        Some(PropertyValue::String("x".into())),
+        Some("IFCLABEL"),
+        " ",
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(evaluation.not_evaluated_outcomes().len(), 1);
 }

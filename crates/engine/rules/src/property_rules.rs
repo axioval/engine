@@ -175,16 +175,107 @@ impl RuleCapability for PropertyRequired {
             };
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
-                    let value = &resolved.property().value;
-                    if matches!(value, PropertyValue::Null)
-                        || matches!(value, PropertyValue::String(text) if text.trim().is_empty())
-                    {
+                    if is_empty_value(&resolved.property().value) {
                         evaluation.push_finding(finding(
                             rule,
                             object,
                             format!("missing required property {name}"),
                             resolved.property().evidence.clone().into_iter().collect(),
                         ));
+                    }
+                }
+                Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
+                    rule,
+                    object,
+                    format!("missing required property {name}"),
+                    vec![proof.evidence().clone()],
+                )),
+                Err(error) => resolve_error(&mut evaluation, object, error),
+            }
+        }
+        evaluation
+    }
+}
+
+/// Whether a resolved value counts as empty for a required property.
+fn is_empty_value(value: &PropertyValue) -> bool {
+    matches!(value, PropertyValue::Null)
+        || matches!(value, PropertyValue::String(text) if text.trim().is_empty())
+}
+
+/// Requires a non-empty property whose source-declared type is `data_type`.
+///
+/// Absence, `null` and blank text are violations as for `property-required`.
+/// A present value of another declared type is a violation. A present value
+/// whose type the source did not report is not evaluated: an unknown type is
+/// never taken to match. Type names compare ASCII case-insensitively, since
+/// STEP-based sources do not distinguish case.
+pub struct PropertyDataType;
+impl RuleCapability for PropertyDataType {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-data-type"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![
+            ParameterDescriptor::required("property", ParameterType::PropertyReference),
+            ParameterDescriptor::required("data_type", ParameterType::String),
+        ]
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        let (Some((set, name)), Some(expected)) = (
+            property_reference(rule, "property"),
+            string(rule, "data_type").filter(|value| !value.trim().is_empty()),
+        ) else {
+            return CapabilityEvaluation::not_evaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                "property-data-type parameters are invalid",
+            );
+        };
+        let (selected, mut evaluation) = select_objects(context, &rule.selector);
+        let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
+            return unavailable_selected(
+                &selected,
+                &NotEvaluatedReason::MissingService,
+                "property-resolution service is not registered",
+                evaluation,
+            );
+        };
+        for object in selected {
+            let request = match bound_property_request(context, object, set, name) {
+                Ok(request) => request,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                    continue;
+                }
+            };
+            match service.resolve(&request) {
+                Ok(PropertyResolution::Present(resolved)) => {
+                    let property = resolved.property();
+                    let evidence = property.evidence.clone().into_iter().collect();
+                    if is_empty_value(&property.value) {
+                        evaluation.push_finding(finding(
+                            rule,
+                            object,
+                            format!("missing required property {name}"),
+                            evidence,
+                        ));
+                    } else {
+                        match property.data_type() {
+                            Some(actual) if actual.eq_ignore_ascii_case(expected) => {}
+                            Some(actual) => evaluation.push_finding(finding(
+                                rule,
+                                object,
+                                format!("property {name} is {actual}, not {expected}"),
+                                evidence,
+                            )),
+                            None => evaluation.push_object_not_evaluated(
+                                object.id.clone(),
+                                NotEvaluatedReason::IncompleteEvidence,
+                                format!("the source does not report the type of property {name}"),
+                            ),
+                        }
                     }
                 }
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(

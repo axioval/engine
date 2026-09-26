@@ -131,3 +131,22 @@ fn objects_without_external_ids_keep_their_serialized_shape() {
     let back: Object = serde_json::from_str(&json).unwrap();
     assert!(back.external_ids.is_empty());
 }
+
+#[test]
+fn a_property_carries_its_declared_data_type_only_when_reported() {
+    let untyped = Property::new("Pset", "Code", PropertyValue::String("A".into())).unwrap();
+    let json = serde_json::to_string(&untyped).unwrap();
+    // Properties without a reported type keep their serialized shape.
+    assert!(!json.contains("data_type"), "{json}");
+    assert_eq!(untyped.data_type(), None);
+
+    let typed = untyped.with_data_type("IFCLABEL").unwrap();
+    let back: Property = serde_json::from_str(&serde_json::to_string(&typed).unwrap()).unwrap();
+    assert_eq!(back.data_type(), Some("IFCLABEL"));
+    assert_eq!(back, typed);
+
+    let blank = Property::new("Pset", "Code", PropertyValue::Null)
+        .unwrap()
+        .with_data_type(" ");
+    assert!(matches!(blank, Err(IrError::Blank { .. })));
+}

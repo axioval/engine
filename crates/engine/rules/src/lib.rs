@@ -32,7 +32,7 @@ pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
 pub use property_comparison::PropertyComparison;
 pub use property_rules::{
-    BooleanPropertyEquals, PropertyExists, PropertyPredicate, PropertyRequired,
+    BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyPredicate, PropertyRequired,
 };
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
@@ -47,6 +47,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
     registry
         .register(PropertyExists)
         .and_then(|registry| registry.register(PropertyRequired))
+        .and_then(|registry| registry.register(PropertyDataType))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

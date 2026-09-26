@@ -242,19 +242,140 @@ impl Operator {
     }
 }
 
-/// Requires a ratio between two related populations at each anchor.
+/// Requires enough provided objects for the required ones at each anchor.
 ///
-/// With `provided_unit` p and `required_unit` r, the anchor passes when
-/// `provided / p` stands in `operator` to `required / r`: "one washbasin
-/// (provided, p = 1) per four workplaces (required, r = 4), at least" is
-/// `washbasins * 4 >= workplaces * 1`. Integer arithmetic keeps it exact.
+/// **Ratio mode.** With `provided_unit` p and `required_unit` r, the anchor
+/// passes when `provided / p` stands in `operator` (`equal`, `not_equal`,
+/// `greater`, `at_least`, `less`, `at_most`) to `required / r`: "one
+/// washbasin (provided, p = 1) per four workplaces (required, r = 4), at
+/// least" is `washbasins * 4 >= workplaces * 1`. Integer arithmetic keeps it
+/// exact.
+///
+/// **Table mode.** `table` lists rows `R:P`, "from R required objects on, at
+/// least P provided". The row with the largest R not above the required
+/// count applies. Beyond the last row, each further `additional_required`
+/// required objects need `additional_provided` more; below the first row
+/// the same increments apply from zero, and without increments nothing is
+/// required there. Parameters have no table type, so a row is written as
+/// text and a malformed one is a declaration error.
+///
 /// Anchors and the relationship work as in `related-count`; with no
 /// relationship an anchor's whole source is counted, so selecting the
-/// building checks the ratio for the whole model and selecting storeys
-/// checks it storey by storey.
-///
+/// building checks the whole model and selecting storeys checks each storey.
 /// An anchor with any undecided member is not evaluated.
 pub struct RelativeCount;
+
+enum Mode<'a> {
+    Ratio {
+        provided_unit: i64,
+        required_unit: i64,
+        operator: Operator,
+        word: &'a str,
+    },
+    Table {
+        /// `(required from, provided at least)`, sorted by `required from`.
+        rows: Vec<(u64, u64)>,
+        /// `(additional required, additional provided)`, both positive.
+        increment: Option<(u64, u64)>,
+    },
+}
+
+impl Mode<'_> {
+    /// Whether the counts pass, and the requirement as a reviewer reads it.
+    fn judge(&self, provided: u64, required: u64) -> (bool, String) {
+        match self {
+            Self::Ratio {
+                provided_unit,
+                required_unit,
+                operator,
+                word,
+            } => (
+                operator.holds(
+                    i128::from(provided) * i128::from(*required_unit),
+                    i128::from(required) * i128::from(*provided_unit),
+                ),
+                format!("{provided}/{provided_unit} {word} {required}/{required_unit}"),
+            ),
+            Self::Table { rows, increment } => {
+                let row = rows.iter().rev().find(|(from, _)| required >= *from);
+                let minimum = match (row, increment) {
+                    (Some((from, at_least)), Some((step, extra))) if row == rows.last() => {
+                        at_least.saturating_add(((required - from) / step).saturating_mul(*extra))
+                    }
+                    (Some((_, at_least)), _) => *at_least,
+                    (None, Some((step, extra))) => (required / step).saturating_mul(*extra),
+                    (None, None) => 0,
+                };
+                (
+                    provided >= minimum,
+                    format!("at least {minimum} provided for {required} required"),
+                )
+            }
+        }
+    }
+}
+
+fn parse_mode<'a>(parameters: &Parameters<'a>) -> Result<Mode<'a>, Unavailable> {
+    let Some(table) = parameters.strings("table")? else {
+        let unit = |name| match parameters.integer(name)? {
+            Some(value) if value > 0 => Ok(value),
+            _ => Err(invalid(format!("{name} must be a positive integer"))),
+        };
+        let word = parameters.required_string("operator")?;
+        return Ok(Mode::Ratio {
+            provided_unit: unit("provided_unit")?,
+            required_unit: unit("required_unit")?,
+            operator: Operator::parse(word)
+                .ok_or_else(|| invalid(format!("operator `{word}` is unsupported")))?,
+            word,
+        });
+    };
+    for ratio in ["provided_unit", "required_unit", "operator"] {
+        if parameters.0.parameters.contains_key(ratio) {
+            return Err(invalid(format!("`{ratio}` does not apply in table mode")));
+        }
+    }
+    let count = |text: &str| {
+        let text = text.trim();
+        if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        text.parse::<u64>().ok()
+    };
+    let mut rows = table
+        .iter()
+        .map(|row| {
+            row.split_once(':')
+                .and_then(|(from, at_least)| Some((count(from)?, count(at_least)?)))
+                .ok_or_else(|| invalid(format!("table row `{row}` is not `required:provided`")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    rows.sort_unstable();
+    if rows.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+        return Err(invalid("two table rows start at the same required count"));
+    }
+    let positive = |name| match parameters.integer(name)? {
+        None => Ok(None),
+        Some(value) if value > 0 => Ok(Some(value.unsigned_abs())),
+        Some(_) => Err(invalid(format!("{name} must be positive"))),
+    };
+    let increment = match (
+        positive("additional_required")?,
+        positive("additional_provided")?,
+    ) {
+        (Some(step), Some(extra)) => Some((step, extra)),
+        (None, None) => None,
+        _ => {
+            return Err(invalid(
+                "additional_required and additional_provided go together",
+            ));
+        }
+    };
+    if rows.is_empty() && increment.is_none() {
+        return Err(invalid("the table needs rows or increments"));
+    }
+    Ok(Mode::Table { rows, increment })
+}
 
 impl RuleCapability for RelativeCount {
     fn id(&self) -> &'static str {
@@ -265,9 +386,12 @@ impl RuleCapability for RelativeCount {
         vec![
             ParameterDescriptor::required("provided_selector", ParameterType::Selector),
             ParameterDescriptor::required("required_selector", ParameterType::Selector),
-            ParameterDescriptor::required("provided_unit", ParameterType::Integer),
-            ParameterDescriptor::required("required_unit", ParameterType::Integer),
-            ParameterDescriptor::required("operator", ParameterType::String),
+            ParameterDescriptor::optional("provided_unit", ParameterType::Integer),
+            ParameterDescriptor::optional("required_unit", ParameterType::Integer),
+            ParameterDescriptor::optional("operator", ParameterType::String),
+            ParameterDescriptor::optional("table", ParameterType::StringList),
+            ParameterDescriptor::optional("additional_required", ParameterType::Integer),
+            ParameterDescriptor::optional("additional_provided", ParameterType::Integer),
         ]
         .into_iter()
         .chain(crate::support::traversal_parameters())
@@ -277,32 +401,22 @@ impl RuleCapability for RelativeCount {
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         let parameters = Parameters(rule);
         let parsed = (|| {
-            let unit = |name| match parameters.integer(name)? {
-                Some(value) if value > 0 => Ok(value),
-                _ => Err(invalid(format!("{name} must be a positive integer"))),
-            };
-            let operator = parameters.required_string("operator")?;
             Ok::<_, Unavailable>((
                 parameters.required_selector("provided_selector")?,
                 parameters.required_selector("required_selector")?,
-                unit("provided_unit")?,
-                unit("required_unit")?,
-                Operator::parse(operator)
-                    .ok_or_else(|| invalid(format!("operator `{operator}` is unsupported")))?,
-                operator,
+                parse_mode(&parameters)?,
                 parameters.traversal()?,
             ))
         })();
-        let (provided, required, provided_unit, required_unit, operator, word, traversal) =
-            match parsed {
-                Ok(parsed) => parsed,
-                Err((reason, message)) => {
-                    return CapabilityEvaluation::not_evaluated(
-                        reason,
-                        format!("relative-count: {message}"),
-                    );
-                }
-            };
+        let (provided, required, mode, traversal) = match parsed {
+            Ok(parsed) => parsed,
+            Err((reason, message)) => {
+                return CapabilityEvaluation::not_evaluated(
+                    reason,
+                    format!("relative-count: {message}"),
+                );
+            }
+        };
         let provided = Population::of(context, provided);
         let required = Population::of(context, required);
         let (anchors, mut evaluation) = select_objects(context, &rule.selector);
@@ -329,11 +443,7 @@ impl RuleCapability for RelativeCount {
                 continue;
             }
             let (n_provided, n_required) = (provided.decided.len(), required.decided.len());
-            #[allow(clippy::cast_possible_wrap)]
-            let holds = operator.holds(
-                n_provided as i128 * i128::from(required_unit),
-                n_required as i128 * i128::from(provided_unit),
-            );
+            let (holds, requirement) = mode.judge(n_provided as u64, n_required as u64);
             if !holds {
                 let mut evidence = provided.evidence;
                 evidence.extend(required.evidence);
@@ -342,7 +452,7 @@ impl RuleCapability for RelativeCount {
                     &anchor.id,
                     format!(
                         "{n_provided} provided and {n_required} required object(s) {via}; \
-                         required {n_provided}/{provided_unit} {word} {n_required}/{required_unit}"
+                         required {requirement}"
                     ),
                     evidence,
                     provided

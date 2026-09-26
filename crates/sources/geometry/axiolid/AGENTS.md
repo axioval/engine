@@ -74,6 +74,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 
 ## Pitfall
 
-`axiolid-measure` 0.1.0 does **not** export `mesh_distance`; that exists only in
-unpublished local work. Fold separations from `closest_points_on_triangles`
-rather than depending on an API the registry does not have.
+Depend only on what the registry publishes. The workspace pins `axiolid-*`
+0.3.0. `mesh_distance` is published there, but certified exact-B-rep distance
+(`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
+branch. Check the registry source, not the kernel checkout, before relying on
+an API.

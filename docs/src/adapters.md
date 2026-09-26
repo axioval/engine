@@ -19,16 +19,17 @@ A value is carried when its defined type's base in the file's release maps witho
 loss: every `STRING`-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...),
 `INTEGER`- and `NUMBER`-based integers (`IfcTimeStamp`, `IfcCountMeasure`),
 `IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
-measures stay refused until unit handling lands.
+measures are converted to SI through their unit (see *Measures*).
 
-Exact absence covers what the resolver reads: `IfcPropertySet` members.
-Quantity sets (`IfcElementQuantity`) and predefined property sets
-(`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused
-as incomplete when the requested set is one of them, or, for a request that
-names no set, when one of them has a member of the requested name (a
-quantity, a nested quantity, or a predefined set's attribute). The index is
-built once per session over the whole file; it can make an answer not
-evaluated, never change a present value.
+Quantity sets (`IfcElementQuantity`) resolve like property sets
+(`ifc-properties` 0.4.0, openbimrs/ifc#66): `Qto_SpaceBaseQuantities.NetFloorArea`
+is an area quantity in SI. The request is refused, never answered as absent, when:
+- a complex quantity or two quantities carry the requested name;
+- a property set and a quantity set share the requested set name;
+- the requested name is an attribute of a predefined property set such as
+  `IfcDoorLiningProperties`, which is not read.
+
+Any other absence is exact.
 
 Direct-property completeness does not imply relationship completeness. The IFC
 session registers an exact relationship-selection service: a relationship

@@ -15,7 +15,6 @@ mod layers;
 mod measure;
 mod relationships;
 mod release;
-mod unread;
 pub use identity::IFC_GLOBAL_ID;
 pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{

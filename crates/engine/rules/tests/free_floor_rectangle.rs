@@ -4,11 +4,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, ClearanceShape, CompiledRule,
+    ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, CompiledRule,
     CompletePlacementEvidence, CompleteSupportEvidence, FreeAreaEvidence, FreeAreaRequest,
     FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
-    MetricPoint, NotEvaluatedReason, PlacementDomain, PlacementOutcome, PlacementRequest,
-    RuleCapability, RuleContext, ServiceRegistry,
+    MetricPoint, NotEvaluatedReason, PlacementDomain, PlacementOrientation, PlacementOutcome,
+    PlacementRequest, PlacementShape, RuleCapability, RuleContext, ServiceRegistry,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -38,6 +38,12 @@ fn rule() -> CompiledRule {
             (
                 "height_metres".into(),
                 ParameterValue::Number { value: 2.0 },
+            ),
+            (
+                "orientation".into(),
+                ParameterValue::String {
+                    value: "any".into(),
+                },
             ),
         ]),
     }
@@ -101,9 +107,10 @@ impl FreeSpaceService for FakeService {
             &[ObjectId::new(source(), "chair").unwrap()]
         );
 
-        let ClearanceShape::Box(shape) = request.shape() else {
+        let PlacementShape::Box { shape, orientation } = request.shape() else {
             panic!("expected box")
         };
+        assert_eq!(orientation, &PlacementOrientation::Any);
         assert!(shape.width_metres().total_cmp(&1.8).is_eq());
         assert!(shape.depth_metres().total_cmp(&1.5).is_eq());
         assert!(shape.height_metres().total_cmp(&2.0).is_eq());
@@ -209,4 +216,54 @@ fn unusable_proofs_remain_not_evaluated() {
         assert!(outcome.findings().is_empty());
         assert_eq!(outcome.not_evaluated_outcomes()[0].reason(), &expected);
     }
+}
+
+fn evaluate_rule(rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
+    let project = Project::new(vec![
+        Object::new(ObjectId::new(source(), "room").unwrap(), "space"),
+        Object::new(ObjectId::new(source(), "chair").unwrap(), "furniture"),
+    ])
+    .unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(
+            Answer::NoPlacement,
+        ))))
+        .unwrap();
+    FreeFloorRectangle.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        rule,
+    )
+}
+
+#[test]
+fn a_rule_without_an_orientation_is_an_invalid_declaration() {
+    let mut rule = rule();
+    rule.parameters.remove("orientation");
+    let outcome = evaluate_rule(&rule);
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+#[test]
+fn an_orientation_without_a_frame_source_is_refused() {
+    let mut rule = rule();
+    rule.parameters.insert(
+        "orientation".into(),
+        ParameterValue::String {
+            value: "fixed-to-room".into(),
+        },
+    );
+    let outcome = evaluate_rule(&rule);
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
 }

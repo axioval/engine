@@ -1,9 +1,9 @@
 //! Exact source-neutral free-floor-rectangle capability.
 
 use axioval_engine::{
-    BoxClearance, CapabilityEvaluation, ClearanceShape, CompiledRule, FreeSpaceError,
-    FreeSpaceServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PlacementDomain, PlacementOutcome, PlacementRequest, RuleCapability, RuleContext,
+    BoxClearance, CapabilityEvaluation, CompiledRule, FreeSpaceError, FreeSpaceServiceHandle,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlacementDomain, PlacementOrientation,
+    PlacementOutcome, PlacementRequest, PlacementShape, RuleCapability, RuleContext,
     SupportedPlacement,
 };
 use axioval_ir::contract::ParameterValue;
@@ -23,6 +23,10 @@ impl RuleCapability for FreeFloorRectangle {
             ParameterDescriptor::required("width_metres", ParameterType::Number),
             ParameterDescriptor::required("length_metres", ParameterType::Number),
             ParameterDescriptor::required("height_metres", ParameterType::Number),
+            // Optional in the signature so that a rule without it is reported
+            // per object as an invalid declaration, not rejected with its whole
+            // package.
+            ParameterDescriptor::optional("orientation", ParameterType::String),
         ]
     }
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -40,6 +44,23 @@ impl RuleCapability for FreeFloorRectangle {
                 "free-floor rectangle dimensions must be positive and finite",
                 evaluation,
             );
+        };
+        let orientation = match rule.parameters.get("orientation") {
+            Some(ParameterValue::String { value }) if value == "any" => PlacementOrientation::Any,
+            Some(ParameterValue::String { value }) => {
+                let message = format!(
+                    "free-floor rectangle orientation `{value}` is not supported; \
+                     only `any` has a frame source"
+                );
+                return invalid_parameters(selected, &message, evaluation);
+            }
+            _ => {
+                return invalid_parameters(
+                    selected,
+                    "free-floor rectangle needs an explicit `orientation`",
+                    evaluation,
+                );
+            }
         };
         let Some(service) = context.services.get::<FreeSpaceServiceHandle>() else {
             return unavailable(
@@ -73,7 +94,10 @@ impl RuleCapability for FreeFloorRectangle {
             };
             let request = match PlacementRequest::new_in_domain(
                 space.id.clone(),
-                ClearanceShape::Box(shape),
+                PlacementShape::Box {
+                    shape,
+                    orientation: orientation.clone(),
+                },
                 obstacles,
                 PlacementDomain::Supported(support),
             ) {

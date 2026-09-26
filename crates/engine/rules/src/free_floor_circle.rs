@@ -1,10 +1,9 @@
 //! Exact source-neutral free-floor-circle capability.
 
 use axioval_engine::{
-    CapabilityEvaluation, ClearanceShape, CompiledRule, CylinderClearance, FreeSpaceError,
-    FreeSpaceServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PlacementDomain, PlacementOutcome, PlacementRequest, RuleCapability, RuleContext,
-    SupportedPlacement,
+    CapabilityEvaluation, CompiledRule, CylinderClearance, FreeSpaceError, FreeSpaceServiceHandle,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlacementDomain, PlacementOutcome,
+    PlacementRequest, PlacementShape, RuleCapability, RuleContext, SupportedPlacement,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Finding, Object, Severity};
@@ -72,7 +71,7 @@ impl RuleCapability for FreeFloorCircle {
             };
             let request = match PlacementRequest::new_in_domain(
                 space.id.clone(),
-                ClearanceShape::Cylinder(shape),
+                PlacementShape::Cylinder(shape),
                 obstacles,
                 PlacementDomain::Supported(support),
             ) {

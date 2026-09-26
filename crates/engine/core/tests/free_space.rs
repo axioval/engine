@@ -3,10 +3,11 @@
 use axioval_engine::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
-    FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
-    ObstructionEvidence, PlacementDomain, PlacementOutcome, PlacementRequest, ServiceRegistry,
-    SignedDistanceInterval, SupportedPlacement, ThresholdVerdict,
+    CylinderClearance, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
+    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint,
+    MobilityProfile, ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome,
+    PlacementRequest, PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportedPlacement,
+    ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -41,13 +42,92 @@ fn request(doc: &str, local: &str) -> ClearanceRequest {
 fn placement_request(doc: &str, local: &str) -> PlacementRequest {
     PlacementRequest::new(
         object(doc, local),
-        ClearanceShape::Box(BoxClearance::try_new(1.5, 1.2, 2.0).unwrap()),
+        placement_shape(),
         vec![object(doc, "wall")],
     )
 }
 
-fn placement_shape() -> ClearanceShape {
-    ClearanceShape::Box(BoxClearance::try_new(1.5, 1.2, 2.0).unwrap())
+/// A box fixed to the identity axes, which every anchor in these tests uses.
+fn placement_shape() -> PlacementShape {
+    PlacementShape::Box {
+        shape: BoxClearance::try_new(1.5, 1.2, 2.0).unwrap(),
+        orientation: PlacementOrientation::Fixed(placement_frame("cad", "door")),
+    }
+}
+
+fn any_box() -> PlacementShape {
+    PlacementShape::Box {
+        shape: BoxClearance::try_new(1.5, 1.2, 2.0).unwrap(),
+        orientation: PlacementOrientation::Any,
+    }
+}
+
+fn quarter_turn(doc: &str, local: &str) -> MetricFrame {
+    MetricFrame::try_new(
+        point(doc, local),
+        direction([0.0, 1.0, 0.0]),
+        direction([-1.0, 0.0, 0.0]),
+        direction([0.0, 0.0, 1.0]),
+    )
+    .unwrap()
+}
+
+#[test]
+fn fixed_orientation_witness_must_follow_the_fixed_axes() {
+    let r = placement_request("cad", "room");
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(
+            r.clone(),
+            quarter_turn("cad", "room"),
+            evidence("rotated")
+        ),
+        Err(FreeSpaceError::PlacementOrientationMismatch)
+    );
+    assert!(
+        ClearancePlacementEvidence::try_new(r, placement_frame("cad", "room"), evidence("aligned"))
+            .is_ok()
+    );
+}
+
+#[test]
+fn any_orientation_accepts_a_rotated_witness() {
+    let r = PlacementRequest::new(object("cad", "room"), any_box(), vec![]);
+    assert!(
+        ClearancePlacementEvidence::try_new(r, quarter_turn("cad", "room"), evidence("rotated"))
+            .is_ok()
+    );
+}
+
+#[test]
+fn cylinder_placement_carries_no_orientation() {
+    let shape = PlacementShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    assert_eq!(shape.orientation(), None);
+    let r = PlacementRequest::new(object("cad", "room"), shape, vec![]);
+    assert!(
+        ClearancePlacementEvidence::try_new(r, quarter_turn("cad", "room"), evidence("any"))
+            .is_ok()
+    );
+}
+
+#[test]
+fn frame_offset_box_must_be_fixed_to_the_anchor_axes() {
+    for shape in [
+        any_box(),
+        PlacementShape::Box {
+            shape: BoxClearance::try_new(1.5, 1.2, 2.0).unwrap(),
+            orientation: PlacementOrientation::Fixed(quarter_turn("cad", "door")),
+        },
+    ] {
+        assert_eq!(
+            PlacementRequest::new_in_domain(
+                object("cad", "room"),
+                shape,
+                vec![],
+                relative_domain("cad"),
+            ),
+            Err(FreeSpaceError::OrientationDomainConflict)
+        );
+    }
 }
 
 fn direction(components: [f64; 3]) -> MetricDirection {

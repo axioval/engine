@@ -45,6 +45,10 @@ pub enum FreeSpaceError {
     PlacementScopeMismatch,
     #[error("placement witness falls outside its requested search domain")]
     PlacementDomainMismatch,
+    #[error("placement witness does not follow the requested orientation")]
+    PlacementOrientationMismatch,
+    #[error("frame-offset placement of a box needs a fixed orientation along the anchor axes")]
+    OrientationDomainConflict,
     #[error("free-space backend returned evidence for another request")]
     ResponseRequestMismatch,
     #[error("free-space geometry is unavailable for `{0}`")]
@@ -403,16 +407,61 @@ fn requested_support(domain: &PlacementDomain) -> Option<&SupportedPlacement> {
     }
 }
 
+/// Which rotations of a box placement count as a fit.
+///
+/// Answers differ by orientation: a box that fits only diagonally has no
+/// placement along a fixed frame but has one at some angle. Evidence for a
+/// fixed orientation says nothing about other angles.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlacementOrientation {
+    /// The box width follows the frame's right axis and its depth the forward
+    /// axis. Only the axes are binding; the frame origin is not a location.
+    Fixed(MetricFrame),
+    /// Every rotation about the vertical axis counts.
+    Any,
+}
+
+/// A clearance shape together with the rotations a placement may use.
+///
+/// A box carries an explicit orientation so that a request cannot leave open
+/// which question it asks. A cylinder is rotation-invariant and carries none.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlacementShape {
+    Box {
+        shape: BoxClearance,
+        orientation: PlacementOrientation,
+    },
+    Cylinder(CylinderClearance),
+}
+impl PlacementShape {
+    pub fn clearance(&self) -> ClearanceShape {
+        match self {
+            Self::Box { shape, .. } => ClearanceShape::Box(*shape),
+            Self::Cylinder(shape) => ClearanceShape::Cylinder(*shape),
+        }
+    }
+    pub fn orientation(&self) -> Option<&PlacementOrientation> {
+        match self {
+            Self::Box { orientation, .. } => Some(orientation),
+            Self::Cylinder(_) => None,
+        }
+    }
+}
+
+fn same_axes(a: &MetricFrame, b: &MetricFrame) -> bool {
+    a.right() == b.right() && a.forward() == b.forward() && a.up() == b.up()
+}
+
 /// Searches an object-grounded scope for any placement of a clearance shape.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacementRequest {
     scope: ObjectId,
-    shape: ClearanceShape,
+    shape: PlacementShape,
     obstacles: Vec<ObjectId>,
     domain: PlacementDomain,
 }
 impl PlacementRequest {
-    pub fn new(scope: ObjectId, shape: ClearanceShape, mut obstacles: Vec<ObjectId>) -> Self {
+    pub fn new(scope: ObjectId, shape: PlacementShape, mut obstacles: Vec<ObjectId>) -> Self {
         obstacles.sort();
         obstacles.dedup();
         Self {
@@ -424,7 +473,7 @@ impl PlacementRequest {
     }
     pub fn new_in_domain(
         scope: ObjectId,
-        shape: ClearanceShape,
+        shape: PlacementShape,
         mut obstacles: Vec<ObjectId>,
         domain: PlacementDomain,
     ) -> Result<Self, FreeSpaceError> {
@@ -435,6 +484,14 @@ impl PlacementRequest {
         };
         if offsets.is_some_and(|offsets| offsets.anchor().origin().subject() != &scope) {
             return Err(FreeSpaceError::PlacementScopeMismatch);
+        }
+        // Offset witnesses must align with the anchor, so a box searched there
+        // can only be asked about the anchor's own orientation.
+        if let (Some(offsets), Some(orientation)) = (offsets, shape.orientation()) {
+            match orientation {
+                PlacementOrientation::Fixed(frame) if same_axes(frame, offsets.anchor()) => {}
+                _ => return Err(FreeSpaceError::OrientationDomainConflict),
+            }
         }
         obstacles.sort();
         obstacles.dedup();
@@ -448,8 +505,8 @@ impl PlacementRequest {
     pub fn scope(&self) -> &ObjectId {
         &self.scope
     }
-    pub fn shape(&self) -> ClearanceShape {
-        self.shape
+    pub fn shape(&self) -> &PlacementShape {
+        &self.shape
     }
     pub fn obstacles(&self) -> &[ObjectId] {
         &self.obstacles
@@ -594,6 +651,11 @@ fn validate_placement_witness(
     };
     if offsets.is_some_and(|offsets| !offsets.contains_frame(frame)) {
         return Err(FreeSpaceError::PlacementDomainMismatch);
+    }
+    if let Some(PlacementOrientation::Fixed(fixed)) = request.shape().orientation() {
+        if !same_axes(fixed, frame) {
+            return Err(FreeSpaceError::PlacementOrientationMismatch);
+        }
     }
     if !reviewable_exact_evidence(evidence) {
         return Err(FreeSpaceError::InexactPlacementEvidence);

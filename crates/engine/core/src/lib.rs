@@ -381,8 +381,8 @@ pub use free_space::{
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
     CylinderClearance, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
     FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
-    PlacementDomain, PlacementOutcome, PlacementRequest, SignedDistanceInterval,
-    SupportedPlacement,
+    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    SignedDistanceInterval, SupportedPlacement,
 };
 pub use guard::{
     ClimbableCandidate, GuardCandidate, GuardEdge, GuardError, GuardEvidence, GuardSearch,

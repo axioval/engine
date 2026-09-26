@@ -22,12 +22,21 @@ Partial geometry therefore cannot produce a false clear result.
 
 ## Placement search
 
-`PlacementRequest` asks whether a box or cylinder can fit in a source-qualified search scope. A `PlacementDomain` makes the admissible candidate set explicit:
+`PlacementRequest` asks whether a box or cylinder can fit in a source-qualified search scope. Its `PlacementShape` states which rotations count, because "fits" depends on it: a box that fits only diagonally has no placement along a fixed frame but has one at some angle.
+
+- A box carries a `PlacementOrientation`. `Fixed(frame)` binds the box width to the frame's right axis and its depth to the forward axis; only the axes are binding, not the frame origin. The frame comes from the rule's context, such as a door leaf, a fixture or a declared room axis, and never defaults silently to the model's world axes. `Any` quantifies over every rotation about the vertical axis.
+- A cylinder is rotation-invariant and carries no orientation.
+
+A `Found` witness for a fixed orientation must use exactly the fixed axes; any other frame is rejected as `PlacementOrientationMismatch`. Evidence for a fixed orientation answers only that orientation: "no 1.80 × 1.80 m area aligned with the corridor" does not mean "no area at any angle".
+
+A `PlacementDomain` makes the admissible candidate set explicit:
 
 - `Unconstrained` preserves generic searches without implying support;
 - `Supported` requires the whole candidate base on a source-qualified support object within a maximum gap;
 - `FrameOffsets` limits right/forward/up translation in an anchor frame;
 - `SupportedFrameOffsets` requires both support and anchor-relative bounds.
+
+Frame-offset witnesses keep the anchor's axes, so a box searched in a frame-offset domain must be `Fixed` to those axes. Any other orientation is refused as `OrientationDomainConflict` when the request is built.
 
 - `Found` carries one exact, scope-grounded placement frame. Supported domains additionally require exact evidence that the whole candidate base is supported by the requested source-qualified object at that exact frame and within the requested gap.
 - `NoPlacement` requires complete exact search evidence.

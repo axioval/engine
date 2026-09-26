@@ -6,7 +6,7 @@ use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
     BoxClearance, ClearanceOutcome, ClearanceRequest, ClearanceShape, FreeAreaRequest,
     FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
-    PlacementRequest,
+    PlacementOrientation, PlacementRequest, PlacementShape,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -172,7 +172,11 @@ fn placement_refuses_rather_than_claiming_an_exhaustive_search() {
     let geometry =
         AxiolidGeometry::new().with_mesh(id("room"), body(0.0, 10.0, 0.0, 10.0, 0.0, 0.1));
     let service = AxiolidFreeSpaceService::new(geometry, source());
-    let request = PlacementRequest::new(id("room"), box_shape(0.8, 0.8, 2.0), Vec::new());
+    let shape = PlacementShape::Box {
+        shape: BoxClearance::try_new(0.8, 0.8, 2.0).unwrap(),
+        orientation: PlacementOrientation::Any,
+    };
+    let request = PlacementRequest::new(id("room"), shape, Vec::new());
     assert!(
         matches!(
             service.find_placement(&request),

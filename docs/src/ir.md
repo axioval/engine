@@ -34,7 +34,7 @@ Every imported fact and computed evidence can reference its source record, adapt
 
 ## Reports
 
-`Report` keeps conclusive `findings` separate from `not_evaluated` outcomes. Every not-evaluated record identifies its rule, optionally identifies the affected object, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist.
+`Report` keeps conclusive `findings` separate from `not_evaluated` outcomes. Every not-evaluated record identifies its rule, optionally identifies the affected object, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist. `rule_findings` holds conclusive outcomes about a rule's population as a whole, such as "no applicable object exists", which have no subject object; each names its rule, severity and any participating objects. `Report::has_findings` counts both kinds, and consumers deciding pass or fail must use it.
 
 ## No source leakage
 

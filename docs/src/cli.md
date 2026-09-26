@@ -69,6 +69,8 @@ partial report or archive behind.
 
 ### Exit status
 
+Findings are counted whether they concern an object or a rule's whole population (`report.rule_findings`, such as "no applicable object exists"); either kind exits 3, and the summary counts them together.
+
 | Status | Meaning |
 |---|---|
 | 0 | Every rule was evaluated and nothing was found |

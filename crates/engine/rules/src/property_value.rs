@@ -341,13 +341,18 @@ pub(crate) fn finding(
         rule_id: rule.id.clone(),
         object_id: object.id.clone(),
         related: Vec::new(),
-        severity: match rule.severity {
-            axioval_ir::contract::Severity::Error => Severity::Error,
-            axioval_ir::contract::Severity::Warning => Severity::Warning,
-            axioval_ir::contract::Severity::Info => Severity::Info,
-        },
+        severity: severity_of(rule),
         message,
         evidence,
+    }
+}
+
+/// The report severity a rule's declared severity stands for.
+pub(crate) fn severity_of(rule: &CompiledRule) -> Severity {
+    match rule.severity {
+        axioval_ir::contract::Severity::Error => Severity::Error,
+        axioval_ir::contract::Severity::Warning => Severity::Warning,
+        axioval_ir::contract::Severity::Info => Severity::Info,
     }
 }
 

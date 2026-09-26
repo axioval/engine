@@ -44,6 +44,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   `DecompositionService` / `DecompositionServiceHandle` the wholes it is part
   of per relation. The IFC session registers both (materials IFC4 only, via
   `ifc-material`).
+- **Findings about populations.** `Report::rule_findings` (`RuleFinding`)
+  holds conclusive outcomes about a rule's population rather than one
+  object, such as "no applicable object exists"; `Report::has_findings`
+  counts both kinds. `axioval:capability.population` requires `min`/`max`
+  selected objects. The BCF sink writes rule findings as topics and
+  `axioval check` counts them for status 3 and in its summary and listings.
+  Reports without rule findings serialize as before; code building
+  `Report` with a struct literal must set the new field.
 - **Requirement capabilities.** `axioval:capability.classification`,
   `axioval:capability.material`, `axioval:capability.part-of` and
   `axioval:capability.entity`; `property-value` and `attribute-value` take

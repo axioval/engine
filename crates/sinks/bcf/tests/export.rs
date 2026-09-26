@@ -6,7 +6,7 @@ use std::io::{Cursor, Read};
 use axioval_bcf::{ExportError, IFC_GLOBAL_ID_SCHEME, NOT_EVALUATED_TOPIC_TYPE, Options, export};
 use axioval_ir::{
     Evidence, ExternalId, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, Project,
-    Report, RuleId, Severity, SourceId,
+    Report, RuleFinding, RuleId, Severity, SourceId,
 };
 
 const WALL: &str = "2O2Fr$t4X7Zf8NOew3FLOH";
@@ -42,6 +42,7 @@ fn id(document: &str, local: u64) -> ObjectId {
 fn report(document: &str, first: u64) -> Report {
     let source = SourceId::new("ifc-step", document).unwrap();
     Report {
+        rule_findings: vec![],
         findings: vec![
             Finding {
                 rule_id: RuleId::new("slab-contact").unwrap(),
@@ -237,4 +238,47 @@ fn related_objects_alone_are_never_selected() {
     let export = export(&report, &model("a.ifc", 1), &options()).unwrap();
     assert!(export.document.topics[0].viewpoints.is_empty());
     assert_eq!(export.unanchored, [id("a.ifc", 3)]);
+}
+
+#[test]
+fn rule_findings_become_topics_selecting_every_anchored_participant() {
+    let report = Report {
+        rule_findings: vec![
+            RuleFinding {
+                rule_id: RuleId::new("walls-exist").unwrap(),
+                severity: Severity::Error,
+                message: "0 applicable object(s); at least 1 required".into(),
+                related: vec![],
+                evidence: vec![],
+            },
+            RuleFinding {
+                rule_id: RuleId::new("at-most-one").unwrap(),
+                severity: Severity::Warning,
+                message: "3 applicable objects; at most 1 allowed".into(),
+                related: vec![id("a.ifc", 1), id("a.ifc", 2), id("a.ifc", 3)],
+                evidence: vec![],
+            },
+        ],
+        ..Report::default()
+    };
+    let export = export(&report, &model("a.ifc", 1), &options()).unwrap();
+    // The door has no GlobalId; it is named but cannot be selected.
+    assert_eq!(export.unanchored, [id("a.ifc", 3)]);
+    let bytes = export.to_bytes().unwrap();
+    let archive = openbim_bcf::read_slice(&bytes).unwrap();
+    assert!(
+        archive.diagnostics().is_empty(),
+        "{:?}",
+        archive.diagnostics()
+    );
+    assert_eq!(archive.topic_count(), 2);
+    // Only the population with participants has a viewpoint, selecting both
+    // anchored objects although neither is a subject.
+    let views = viewpoints(&bytes);
+    assert_eq!(views.len(), 1);
+    assert!(
+        views[0].contains(WALL) && views[0].contains(SLAB),
+        "{}",
+        views[0]
+    );
 }

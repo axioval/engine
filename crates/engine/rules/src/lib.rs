@@ -17,6 +17,7 @@ mod horizontal_guard;
 mod material_requirement;
 mod pairs;
 mod part_of;
+mod population;
 mod predefined_type;
 mod property_comparison;
 mod property_rules;
@@ -43,6 +44,7 @@ pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
 pub use material_requirement::MaterialRequirement;
 pub use part_of::PartOfRequirement;
+pub use population::PopulationRequirement;
 pub use predefined_type::PredefinedTypeRequirement;
 pub use property_comparison::PropertyComparison;
 pub use property_rules::{
@@ -70,6 +72,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(MaterialRequirement))
         .and_then(|registry| registry.register(PartOfRequirement))
         .and_then(|registry| registry.register(EntityRequirement))
+        .and_then(|registry| registry.register(PopulationRequirement))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

@@ -18,7 +18,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use axioval::ir::{Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Severity};
+use axioval::ir::{
+    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, RuleFinding, Severity,
+};
 use serde::{Deserialize, Serialize};
 
 /// Scheme of the GlobalId alias shown next to an object.
@@ -95,6 +97,9 @@ impl CheckOutput {
             named.insert(&finding.object_id);
             named.extend(&finding.related);
         }
+        for finding in report.rule_findings() {
+            named.extend(&finding.related);
+        }
         named.extend(
             report
                 .not_evaluated()
@@ -135,6 +140,12 @@ impl CheckOutput {
             .findings()
             .iter()
             .flat_map(|f| std::iter::once(&f.object_id).chain(&f.related))
+            .chain(
+                self.report
+                    .rule_findings()
+                    .iter()
+                    .flat_map(|f| f.related.iter()),
+            )
             .chain(
                 self.report
                     .not_evaluated()
@@ -239,7 +250,7 @@ pub struct Summary {
 }
 
 pub fn status(report: &Report) -> &'static str {
-    if !report.findings().is_empty() {
+    if report.has_findings() {
         "findings"
     } else if !report.not_evaluated().is_empty() {
         "incomplete"
@@ -360,6 +371,22 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
                 Some(output.describe(&finding.object_id, qualify)),
             );
     }
+    // A finding about a whole population fires on the rule, not an object;
+    // its participants, when it has any, are the examples.
+    for finding in output.report.rule_findings() {
+        let tally = tallies
+            .entry((
+                Section::Findings,
+                finding.rule_id.to_string(),
+                severity(&finding.severity).to_owned(),
+            ))
+            .or_default();
+        let mut related = finding.related.iter();
+        tally.add(
+            &finding.message,
+            related.next().map(|id| output.describe(id, qualify)),
+        );
+    }
     for outcome in output.report.not_evaluated() {
         tallies
             .entry((
@@ -453,7 +480,7 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
     }
     Summary {
         status: status(&output.report),
-        findings: output.report.findings().len(),
+        findings: output.report.findings().len() + output.report.rule_findings().len(),
         not_evaluated: output.report.not_evaluated().len(),
         integrity: output.integrity.len(),
         geometry: output.geometry.as_ref().map(|g| GeometryCounts {
@@ -636,6 +663,13 @@ pub fn list(
                     })
             });
             matched.extend(findings.map(|f| finding_entry(output, f, qualify, evidence)));
+            let populations = output.report.rule_findings().iter().filter(|finding| {
+                rule_ok(&finding.rule_id.to_string())
+                    && filter.object.as_deref().is_none_or(|query| {
+                        finding.related.iter().any(|id| output.names(id, query))
+                    })
+            });
+            matched.extend(populations.map(|f| rule_finding_entry(output, f, qualify, evidence)));
         }
         if wants(Section::NotEvaluated) {
             let outcomes = output.report.not_evaluated().iter().filter(|outcome| {
@@ -706,6 +740,32 @@ pub fn list(
         offset,
         entries,
         next,
+    }
+}
+
+/// A finding about a whole population: no object is at fault.
+fn rule_finding_entry(
+    output: &CheckOutput,
+    finding: &RuleFinding,
+    qualify: bool,
+    evidence: bool,
+) -> Entry {
+    Entry {
+        section: Section::Findings,
+        key: finding.rule_id.to_string(),
+        level: severity(&finding.severity).to_owned(),
+        object: None,
+        related: finding
+            .related
+            .iter()
+            .map(|id| output.describe(id, qualify))
+            .collect(),
+        message: finding.message.trim().to_owned(),
+        evidence: if evidence {
+            finding.evidence.iter().map(|e| e.locator.clone()).collect()
+        } else {
+            vec![]
+        },
     }
 }
 

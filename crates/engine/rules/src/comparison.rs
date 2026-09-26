@@ -414,6 +414,7 @@ impl ModelComparison {
         });
         not_evaluated.sort();
         Report {
+            rule_findings: Vec::new(),
             findings,
             not_evaluated,
         }

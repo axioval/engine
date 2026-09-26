@@ -135,7 +135,7 @@ enum Outcome {
 }
 impl Outcome {
     fn of(report: &Report) -> Self {
-        if !report.findings().is_empty() {
+        if report.has_findings() {
             Self::Findings
         } else if !report.not_evaluated().is_empty() {
             Self::Incomplete
@@ -339,7 +339,7 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&axioval::ir::Obje
         }
         eprintln!(
             "{} finding(s), {} not evaluated, {} integrity issue(s)",
-            output.report.findings().len(),
+            output.report.findings().len() + output.report.rule_findings().len(),
             output.report.not_evaluated().len(),
             output.integrity.len()
         );

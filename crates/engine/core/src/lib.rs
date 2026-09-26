@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
-use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId};
+use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleFinding, RuleId};
 use thiserror::Error;
 
 mod session;
@@ -182,6 +182,7 @@ pub struct RuleContext<'a> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CapabilityEvaluation {
     findings: Vec<Finding>,
+    rule_findings: Vec<RuleFinding>,
     not_evaluated: Vec<CapabilityNotEvaluated>,
 }
 /// A not-evaluated outcome before the runtime binds its compiled rule ID.
@@ -212,6 +213,11 @@ impl CapabilityEvaluation {
     pub fn findings(&self) -> &[Finding] {
         &self.findings
     }
+    /// Conclusive findings about the rule's population as a whole.
+    #[must_use]
+    pub fn rule_findings(&self) -> &[RuleFinding] {
+        &self.rule_findings
+    }
     /// Explicit fail-closed outcomes emitted by this capability.
     #[must_use]
     pub fn not_evaluated_outcomes(&self) -> &[CapabilityNotEvaluated] {
@@ -222,6 +228,7 @@ impl CapabilityEvaluation {
     pub fn evaluated(findings: Vec<Finding>) -> Self {
         Self {
             findings,
+            rule_findings: Vec::new(),
             not_evaluated: Vec::new(),
         }
     }
@@ -235,6 +242,10 @@ impl CapabilityEvaluation {
     /// Adds a conclusive finding.
     pub fn push_finding(&mut self, finding: Finding) {
         self.findings.push(finding);
+    }
+    /// Adds a conclusive finding about the rule's population as a whole.
+    pub fn push_rule_finding(&mut self, finding: RuleFinding) {
+        self.rule_findings.push(finding);
     }
     /// Adds a rule-level not-evaluated outcome.
     pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
@@ -554,6 +565,7 @@ impl Runtime {
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
+        let mut rule_findings = Vec::new();
         let mut not_evaluated: Vec<NotEvaluated> = plan
             .deferred
             .into_iter()
@@ -572,6 +584,14 @@ impl Runtime {
             let rule_id = rule.id.clone();
             let evaluation = capability.evaluate(&context, &rule);
             findings.extend(evaluation.findings);
+            // A capability states its own rule id; the compiled one is bound
+            // here so a rule finding can never name another rule.
+            rule_findings.extend(evaluation.rule_findings.into_iter().map(|mut finding| {
+                finding.rule_id = rule_id.clone();
+                finding.related.sort();
+                finding.related.dedup();
+                finding
+            }));
             not_evaluated.extend(collapse_unbound(&rule_id, evaluation.not_evaluated));
         }
         findings.sort_by(|a, b| {
@@ -580,9 +600,15 @@ impl Runtime {
                 .then_with(|| a.object_id.cmp(&b.object_id))
                 .then_with(|| a.message.cmp(&b.message))
         });
+        rule_findings.sort_by(|a: &RuleFinding, b: &RuleFinding| {
+            a.rule_id
+                .cmp(&b.rule_id)
+                .then_with(|| a.message.cmp(&b.message))
+        });
         not_evaluated.sort();
         Ok(Report {
             findings,
+            rule_findings,
             not_evaluated,
         })
     }

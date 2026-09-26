@@ -16,6 +16,8 @@
 - [Metric routing](./metric-routing.md)
 - [Free space and clearance](./free-space.md)
 - [Walkability topology](./walkability.md)
+- [Clash, interference and distance](./clash.md)
+- [Model comparison](./comparison.md)
 - [Typed host services](./services.md)
 - [Independent adapters](./adapters.md)
 - [Report sinks](./sinks.md)

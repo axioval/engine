@@ -3,11 +3,15 @@
 
 use axioval_engine::{CapabilityRegistry, EngineError};
 
+mod clash;
+mod comparison;
+mod distance;
 mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
 mod guard_diagnosis;
 mod horizontal_guard;
+mod pairs;
 mod property_comparison;
 mod property_rules;
 mod selection;
@@ -15,6 +19,12 @@ mod shelf_capacity;
 mod slab_contact;
 mod space_validation;
 
+pub use clash::Clash;
+pub use comparison::{
+    AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
+    Difference, ModelComparison, ObjectChange, Side, Unresolved, compare_sessions,
+};
+pub use distance::Distance;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
@@ -47,4 +57,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(HorizontalGuard))
         .and_then(|registry| registry.register(FreeFloorCircle))
         .and_then(|registry| registry.register(FreeFloorRectangle))
+        .and_then(|registry| registry.register(Clash))
+        .and_then(|registry| registry.register(Distance))
 }

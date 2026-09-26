@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Clash and distance checks.** New capabilities
+  `axioval:capability.clash` (hard clashes beyond a penetration tolerance,
+  containment, optional clearance) and `axioval:capability.distance` (the
+  nearest counterpart within a minimum and/or maximum). They are built on a new
+  engine contract, `ProximityService` / `ProximityServiceHandle`, and a
+  complete sweep-and-prune broad phase, `candidate_pairs`. A pair the broad
+  phase drops is proven farther apart than the margin, tessellation deviation
+  included. `AxiolidProximityService` measures separation with
+  `closest_points_on_triangles`, plan overlap with `axiolid-overlay`, and
+  penetration by testing sampled points against winding numbers. Curved parts
+  registered with `AxiolidGeometry::with_tessellated_mesh` produce approximate
+  evidence, which is never marked exact.
+- **Model comparison.** `compare_sessions` diffs two evidence sessions matched
+  by an external identity scheme, such as IFC GlobalIds. It covers kind,
+  classifications, carried and requested properties, and relationships named
+  by target identity. Unidentified objects, ambiguous identities and facets
+  that cannot be read are reported, never dropped. `ModelComparison::report`
+  projects the result into a `Report` for any sink.
+
 - **BCF export.** New crate `axioval-bcf` (facade feature `bcf`) writes a
   report as a BCF 2.1 archive through `openbim-bcf` 0.3: one topic per finding
   and per not-evaluated outcome, viewpoints selecting objects by GlobalId, and

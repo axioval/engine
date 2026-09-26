@@ -31,6 +31,13 @@ consume the engine.
   deliberately fail-closed. The legacy property-comparison cutover consumes
   `0.1.0`; required-property consumer cutover remains open.
 
+- Clash, distance and model comparison: `ProximityService` plus a complete
+  broad-phase candidate search in the engine, Axiolid pairwise measurement with
+  approximate evidence for tessellated parts, the `clash` and `distance`
+  capabilities, and a semantic session diff matched by external identity. None
+  of these is a migration parity claim; the pending ledger entries stay pending
+  until oracle parity is shown.
+
 Unchecked workstream boxes below denote incomplete families, not an absence of
 all supporting primitives.
 

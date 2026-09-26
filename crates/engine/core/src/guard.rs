@@ -35,14 +35,18 @@ pub enum GuardError {
     InvalidSearch,
 }
 
-/// How far to look for candidates, and how finely to sample an edge.
+/// How far to look for candidates, how finely to sample an edge, and which
+/// walking surfaces to measure.
 ///
 /// Measurement inputs, not thresholds: these bound the search, they do not
-/// judge what is found.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// judge what is found. The surfaces come from the rule's selection, so which
+/// edges are checked for fall protection is stated in the ruleset rather than
+/// guessed by a host.
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuardSearch {
     candidate_radius_metres: f64,
     sample_spacing_metres: f64,
+    surfaces: Vec<ObjectId>,
 }
 
 impl GuardSearch {
@@ -57,7 +61,20 @@ impl GuardSearch {
         Ok(Self {
             candidate_radius_metres,
             sample_spacing_metres,
+            surfaces: Vec::new(),
         })
+    }
+    /// Asks for these walking surfaces to be measured, in canonical order.
+    #[must_use]
+    pub fn with_surfaces(mut self, mut surfaces: Vec<ObjectId>) -> Self {
+        surfaces.sort();
+        surfaces.dedup();
+        self.surfaces = surfaces;
+        self
+    }
+    /// Walking surfaces the caller asks to be measured.
+    pub fn surfaces(&self) -> &[ObjectId] {
+        &self.surfaces
     }
     pub fn candidate_radius_metres(&self) -> f64 {
         self.candidate_radius_metres

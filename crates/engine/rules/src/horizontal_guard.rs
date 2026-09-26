@@ -20,7 +20,7 @@ use axioval_ir::{Finding, Severity};
 use crate::guard_diagnosis::{GuardDefect, GuardDiagnosis};
 use crate::selection::select_objects;
 use axioval_ir::ObjectId;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Tolerance for comparing measured lengths, in metres.
 const EPSILON_M: f64 = 1.0e-6;
@@ -88,6 +88,10 @@ impl RuleCapability for HorizontalGuard {
             .max(policy.maximum_platform_gap_metres)
             .max(policy.maximum_landing_gap_metres)
             .max(policy.climbable_barrier_distance_metres);
+        // The selection is the walking-surface profile: the ruleset, not the
+        // host, says which edges are checked for fall protection.
+        let surfaces: BTreeSet<ObjectId> =
+            selected.iter().map(|object| object.id.clone()).collect();
         let Ok(search) = GuardSearch::try_new(radius, sample_spacing(&policy)) else {
             evaluation.push_not_evaluated(
                 NotEvaluatedReason::InvalidDeclaration,
@@ -96,6 +100,7 @@ impl RuleCapability for HorizontalGuard {
             return evaluation;
         };
 
+        let search = search.with_surfaces(surfaces.iter().cloned().collect());
         let measured = match service.measure_guard_edges(search) {
             Ok(measured) => measured,
             Err(error) => {
@@ -117,8 +122,25 @@ impl RuleCapability for HorizontalGuard {
         // not only the worst. Edges are sample points along the boundary, so a
         // slab with a short rail on one side and no rail on another has two
         // separate problems and a reviewer must see both.
+        let measured_surfaces: BTreeSet<&ObjectId> = measured
+            .edges()
+            .iter()
+            .map(axioval_engine::GuardEdge::surface)
+            .collect();
+        for surface in &surfaces {
+            if !measured_surfaces.contains(surface) {
+                evaluation.push_object_not_evaluated(
+                    surface.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "no edge was measured for this walking surface; it has no measurable body",
+                );
+            }
+        }
         let mut grouped: BTreeMap<(ObjectId, GuardDefect), Vec<ObjectId>> = BTreeMap::new();
         for edge in measured.edges() {
+            if !surfaces.contains(edge.surface()) {
+                continue;
+            }
             let Some(diagnosis) = edge_diagnosis(edge, &policy) else {
                 continue;
             };

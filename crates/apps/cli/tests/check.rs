@@ -869,3 +869,155 @@ fn without_an_envelope_zone_envelope_rules_are_not_evaluated() {
         stderr(&unknown)
     );
 }
+
+/// Slab #16 (4 m × 4 m, 0.2 m thick) walled in on every side by 3 m walls,
+/// and slab #26 of the same size standing alone 20 m away.
+fn landings() -> String {
+    let body = |first: u32, x: f64, y: f64, length: f64, width: f64, depth: f64, product: &str| {
+        let [p, pos, profile, solid, shape, definition, object] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        format!(
+            "#{p}=IFCCARTESIANPOINT(({x},{y}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},{width});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth});\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{object}={};\n",
+            product.replace("REP", &format!("#{definition}")),
+        )
+    };
+    let slab = |first: u32, x: f64| {
+        let id = first + 6;
+        body(
+            first,
+            x,
+            2.0,
+            4.0,
+            4.0,
+            0.2,
+            &format!("IFCSLAB('00000000000000000000{id}',$,$,$,$,#3,REP,$,.LANDING.)"),
+        )
+    };
+    let wall = |first: u32, x: f64, y: f64, length: f64, width: f64| {
+        let id = first + 6;
+        body(
+            first,
+            x,
+            y,
+            length,
+            width,
+            3.0,
+            &format!("IFCWALL('00000000000000000000{id}',$,$,$,$,#3,REP,$,$)"),
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        slab(10, 2.0),
+        slab(20, 22.0),
+        wall(30, 2.0, 0.0, 4.2, 0.2),
+        wall(40, 2.0, 4.0, 4.2, 0.2),
+        wall(50, 0.0, 2.0, 0.2, 4.2),
+        wall(60, 4.0, 2.0, 0.2, 4.2),
+    )
+}
+
+#[test]
+fn with_geometry_an_unguarded_landing_edge_is_found() {
+    let case = Case::new("geometry-guard");
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    definitions["objectTypes"]["axioval:example.ifc.slab"] = json!({
+        "id": "axioval:example.ifc.slab",
+        "name": {"default": "Slab", "translations": {}},
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IfcSlab"}],
+        "citations": [],
+    });
+    let numbers = [
+        ("minimum_barrier_height_metres", 1.0),
+        ("maximum_barrier_gap_metres", 0.1),
+        ("maximum_platform_gap_metres", 0.1),
+        ("maximum_landing_gap_metres", 0.3),
+        ("maximum_fall_height_metres", 0.5),
+        ("minimum_landing_width_metres", 1.0),
+        ("climbable_barrier_distance_metres", 0.3),
+        ("maximum_climbable_height_metres", 0.6),
+        ("minimum_climbable_side_length_metres", 0.1),
+    ];
+    let declare = |id: &str, kind: &str| {
+        json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": true, "allowedValues": [], "citations": []})
+    };
+    let mut parameters: serde_json::Map<String, Value> = numbers
+        .iter()
+        .map(|(id, _)| ((*id).to_owned(), declare(id, "number")))
+        .collect();
+    parameters.insert(
+        "measure_barrier_from_curb".into(),
+        declare("measure_barrier_from_curb", "boolean"),
+    );
+    definitions["definitions"]["axioval:example.guard"] = json!({
+        "id": "axioval:example.guard",
+        "name": {"default": "Fall protection", "translations": {}},
+        "description": {"default": "Walking surface edges are guarded.", "translations": {}},
+        "capability": "axioval:capability.horizontal-guard",
+        "parameters": parameters,
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("landings-guarded");
+    rule["definitionId"] = json!("axioval:example.guard");
+    let mut values: serde_json::Map<String, Value> = numbers
+        .iter()
+        .map(|(id, value)| ((*id).to_owned(), json!({"type": "number", "value": value})))
+        .collect();
+    values.insert(
+        "measure_barrier_from_curb".into(),
+        json!({"type": "boolean", "value": false}),
+    );
+    rule["parameters"] = values.into();
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!("axioval:example.ifc.slab");
+    let model = case.write("model.ifc", &landings());
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert!(!findings.is_empty(), "{result:#}");
+    assert!(
+        findings
+            .iter()
+            .all(|finding| finding["object_id"]["local_id"] == "#26"),
+        "only the bare slab is unguarded: {result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

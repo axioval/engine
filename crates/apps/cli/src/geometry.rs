@@ -28,11 +28,12 @@ use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidContactService, AxiolidEnvelopeMembershipService, AxiolidFreeSpaceService,
-    AxiolidGeometry, AxiolidLinearQuantityService, AxiolidProximityService, AxiolidSpaceService,
+    AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService, AxiolidProximityService,
+    AxiolidSpaceService,
 };
 use axioval::engine::{
     ContactServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession, FreeSpaceServiceHandle,
-    LinearQuantityServiceHandle, PropertyRequest, PropertyResolution,
+    GuardServiceHandle, LinearQuantityServiceHandle, PropertyRequest, PropertyResolution,
     PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
     RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
     SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
@@ -207,6 +208,15 @@ fn register(
             bound,
         )?
         .with_host_service(SpaceServiceHandle::new(Arc::new(space)), bound)?
+        // Walking surfaces are the guard rule's selection, carried in each
+        // request; the host declares none of its own.
+        .with_host_service(
+            GuardServiceHandle::new(Arc::new(AxiolidGuardService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
         .with_host_service(
             LinearQuantityServiceHandle::new(Arc::new(AxiolidLinearQuantityService::new(
                 geometry.clone(),

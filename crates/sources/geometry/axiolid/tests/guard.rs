@@ -256,3 +256,33 @@ fn a_closed_deck_has_edges() {
     assert_eq!(evidence.evaluated_surfaces(), 1);
     assert_eq!(evidence.edges()[0].barriers().len(), 1);
 }
+
+/// A surface the request names is measured without a host declaration, so
+/// the ruleset's selection decides which edges are checked.
+#[test]
+fn requested_surfaces_are_measured() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("deck"), body(0.0, 4.0, 0.0, 4.0, 0.0, 0.2))
+        .with_mesh(id("railing"), body(0.0, 4.0, 3.95, 4.05, 0.2, 1.2));
+    let service = AxiolidGuardService::new(geometry, source());
+    let evidence = service
+        .measure_guard_edges(search().with_surfaces(vec![id("deck")]))
+        .expect("measurable");
+    assert_eq!(evidence.edges().len(), 1);
+    assert_eq!(evidence.edges()[0].surface(), &id("deck"));
+    assert_eq!(evidence.edges()[0].barriers()[0].element(), &id("railing"));
+}
+
+/// A body that could not be meshed may be the rail guarding an edge, so the
+/// measurement refuses rather than report the edge unguarded.
+#[test]
+fn an_unmeasured_body_refuses_the_measurement() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("deck"), body(0.0, 4.0, 0.0, 4.0, 0.0, 0.2))
+        .with_unmeasured(id("railing"), "no body representation");
+    let service = AxiolidGuardService::new(geometry, source());
+    assert_eq!(
+        service.measure_guard_edges(search().with_surfaces(vec![id("deck")])),
+        Err(axioval_engine::GuardError::Unavailable)
+    );
+}

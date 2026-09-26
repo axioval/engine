@@ -56,6 +56,7 @@ impl AxiolidGuardService {
         barriers: &[GuardCandidate],
         walking_level: f64,
         radius: f64,
+        surfaces: &BTreeSet<ObjectId>,
     ) -> Result<Vec<ClimbableCandidate>, GuardError> {
         let mut aids = Vec::new();
         // A climbable is measured against a barrier, not against the edge:
@@ -67,7 +68,7 @@ impl AxiolidGuardService {
             };
             let barrier_points = plan_points(&triangles(barrier_mesh));
             for (candidate_id, candidate_mesh) in self.geometry.objects() {
-                if candidate_id == barrier.element() || self.surfaces.contains(candidate_id) {
+                if candidate_id == barrier.element() || surfaces.contains(candidate_id) {
                     continue;
                 }
                 let candidate_triangles = triangles(candidate_mesh);
@@ -210,11 +211,22 @@ impl GuardService for AxiolidGuardService {
         let tolerance =
             axiolid_core::Tolerance::new(1.0e-9, 1.0e-9).map_err(|_| GuardError::Unavailable)?;
         let radius = search.candidate_radius_metres();
+        // A body that could not be meshed may be exactly the rail that guards
+        // an edge, and its extent is unknown, so no edge answer is complete.
+        if self.geometry.unmeasured().next().is_some() {
+            return Err(GuardError::Unavailable);
+        }
+        let surfaces: BTreeSet<ObjectId> = self
+            .surfaces
+            .iter()
+            .chain(search.surfaces())
+            .cloned()
+            .collect();
 
         let mut edges = Vec::new();
         let mut evaluated = 0usize;
 
-        for surface in &self.surfaces {
+        for surface in &surfaces {
             let Some(mesh) = self.geometry.mesh(surface) else {
                 continue;
             };
@@ -237,7 +249,7 @@ impl GuardService for AxiolidGuardService {
                 || self
                     .geometry
                     .tessellated_near(&extent, 2.0 * radius, true, |object| {
-                        self.surfaces.contains(object)
+                        surfaces.contains(object)
                     })
                     .is_some()
             {
@@ -261,7 +273,7 @@ impl GuardService for AxiolidGuardService {
                 }
 
                 for (candidate_id, candidate_mesh) in self.geometry.objects() {
-                    if candidate_id == surface || self.surfaces.contains(candidate_id) {
+                    if candidate_id == surface || surfaces.contains(candidate_id) {
                         continue;
                     }
                     let candidate_triangles = triangles(candidate_mesh);
@@ -296,7 +308,7 @@ impl GuardService for AxiolidGuardService {
                 }
             }
 
-            let climbables = self.climbing_aids(&barriers, walking_level, radius)?;
+            let climbables = self.climbing_aids(&barriers, walking_level, radius, &surfaces)?;
 
             edges.push(GuardEdge::new(
                 surface.clone(),

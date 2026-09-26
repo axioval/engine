@@ -601,3 +601,50 @@ fn a_barrier_along_less_than_half_the_edge_is_absent_not_holed() {
         "a barrier covering 40% of the edge is not present on it"
     );
 }
+
+/// Measures slab-1 only and a stray surface outside the selection, after
+/// checking that the rule asked for exactly its selection.
+struct SelectionStub;
+
+impl GuardService for SelectionStub {
+    fn measure_guard_edges(&self, search: GuardSearch) -> Result<GuardEvidence, GuardError> {
+        assert_eq!(search.surfaces(), &[oid("slab-1"), oid("slab-2")]);
+        GuardEvidence::try_new(
+            vec![
+                GuardEdge::new(oid("slab-1"), vec![], vec![], vec![]),
+                GuardEdge::new(oid("roof"), vec![], vec![], vec![]),
+            ],
+            2,
+            Evidence::exact(source(), "guard:edges"),
+        )
+    }
+}
+
+/// The selection is the walking-surface profile. A selected surface with no
+/// measured edge is not evaluated rather than "nothing to guard", and an edge
+/// outside the selection is not this rule's finding.
+#[test]
+fn the_selection_is_the_walking_surface_profile() {
+    let project = Project::new(vec![
+        Object::new(oid("slab-1"), "slab"),
+        Object::new(oid("slab-2"), "slab"),
+        Object::new(oid("roof"), "roof"),
+    ])
+    .unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(GuardServiceHandle::new(Arc::new(SelectionStub)))
+        .unwrap();
+    let outcome = HorizontalGuard.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        &rule(),
+    );
+    assert_eq!(outcome.findings().len(), 1, "{:?}", outcome.findings());
+    assert_eq!(outcome.findings()[0].object_id, oid("slab-1"));
+    let not_evaluated = outcome.not_evaluated_outcomes();
+    assert_eq!(not_evaluated.len(), 1);
+    assert_eq!(not_evaluated[0].object_id(), Some(&oid("slab-2")));
+}

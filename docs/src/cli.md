@@ -205,6 +205,16 @@ groups no space, is an error (status 1).
   `IsExternal`, or with conflicting ones, is undeclared: its rule reports not
   evaluated, never "internal".
 
-Guard checks need to know which surfaces are walkable, which IFC does not
-state reliably. The guard service is therefore not registered, and its rules
-report `missing-service`.
+Guard checks need to know which surfaces are walkable, and IFC has no single
+concept for it: floor, landing and roof slabs, stair and ramp flights, space
+floors and balconies each carry a policy choice. The CLI does not guess.
+The walking-surface profile is the horizontal-guard rule's own selector, so
+it is visible and reviewable in the ruleset. For example, select `IfcSlab`
+with a `PredefinedType` of `FLOOR` or `LANDING`. Every selected object's
+exposed edges are measured:
+
+- A selected object without a measurable body is reported not evaluated, never
+  "no edge to guard".
+- Findings name only selected surfaces.
+- While any body in the model could not be meshed, guard rules are not
+  evaluated, since the unmeasured body may be the rail that guards an edge.

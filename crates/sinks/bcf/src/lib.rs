@@ -40,8 +40,8 @@ use uuid::Uuid;
 
 /// External id scheme whose values are IFC GlobalIds.
 ///
-/// Must equal the IFC adapter's `IFC_GLOBAL_ID`; a test pins the two together
-/// so this crate need not depend on the adapter.
+/// Must equal the IFC adapter's `IFC_GLOBAL_ID`; the facade's `ifc_bcf` test
+/// pins the two together so this crate need not depend on the adapter.
 pub const IFC_GLOBAL_ID_SCHEME: &str = "ifc-globalid";
 
 /// `TopicType` of a topic made from a not-evaluated outcome.

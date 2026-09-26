@@ -20,6 +20,7 @@ axioval-bcf = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+openbim-bcf.workspace = true
 
 # One feature per source adapter, named for the format or library it adapts.
 # A future geometry backend adds `cgal = ["dep:axioval-cgal"]` beside `axiolid`

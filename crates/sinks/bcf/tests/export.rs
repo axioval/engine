@@ -5,28 +5,28 @@ use std::io::{Cursor, Read};
 
 use axioval_bcf::{ExportError, IFC_GLOBAL_ID_SCHEME, NOT_EVALUATED_TOPIC_TYPE, Options, export};
 use axioval_ir::{
-    Evidence, Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, RuleId,
-    Severity, SourceId,
+    Evidence, ExternalId, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, Project,
+    Report, RuleId, Severity, SourceId,
 };
 
 const WALL: &str = "2O2Fr$t4X7Zf8NOew3FLOH";
 const SLAB: &str = "0000000000000000000001";
 
-/// A wall and a slab with GlobalIds, and a door whose GlobalId is malformed.
-/// `first` numbers the instances, so two numberings model two exports.
+/// A wall and a slab with GlobalId aliases, and a door without one, as the
+/// IFC adapter maps them. `first` numbers the objects, so two numberings model
+/// two exports of one model.
+///
+/// Built by hand rather than imported: a dev-dependency on the unpublished
+/// `axioval-ifc` breaks workspace package verification. The facade's
+/// `ifc_bcf` test runs the same path through the real adapter.
 fn model(document: &str, first: u64) -> Project {
-    let [wall, slab, door] = [first, first + 1, first + 2];
-    let step = format!(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
-         #{wall}=IFCWALL('{WALL}',$,$,$,$,$,$,$,$);\n\
-         #{slab}=IFCSLAB('{SLAB}',$,$,$,$,$,$,$,$);\n\
-         #{door}=IFCDOOR('bad',$,$,$,$,$,$,$,$,$,$,$,$);\n\
-         ENDSEC;\nEND-ISO-10303-21;\n"
-    );
-    axioval_ifc::import_ifc_session(document, step.as_bytes())
-        .unwrap()
-        .project()
-        .clone()
+    let alias = |value: &str| ExternalId::new(IFC_GLOBAL_ID_SCHEME, value).unwrap();
+    Project::new(vec![
+        Object::new(id(document, first), "IFCWALL").with_external_id(alias(WALL)),
+        Object::new(id(document, first + 1), "IFCSLAB").with_external_id(alias(SLAB)),
+        Object::new(id(document, first + 2), "IFCDOOR"),
+    ])
+    .unwrap()
 }
 
 fn id(document: &str, local: u64) -> ObjectId {
@@ -90,11 +90,6 @@ fn viewpoints(bytes: &[u8]) -> Vec<String> {
         }
     }
     texts
-}
-
-#[test]
-fn the_scheme_is_the_one_the_ifc_adapter_attaches() {
-    assert_eq!(IFC_GLOBAL_ID_SCHEME, axioval_ifc::IFC_GLOBAL_ID);
 }
 
 #[test]

@@ -146,6 +146,7 @@ dependencies = [
  "axioval-ifc",
  "axioval-ir",
  "axioval-rules",
+ "openbim-bcf",
  "serde_json",
 ]
 
@@ -166,7 +167,6 @@ dependencies = [
 name = "axioval-bcf"
 version = "0.2.0"
 dependencies = [
- "axioval-ifc",
  "axioval-ir",
  "openbim-bcf",
  "thiserror",

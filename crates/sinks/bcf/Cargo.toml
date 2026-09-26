@@ -10,8 +10,9 @@ authors.workspace = true
 repository.workspace = true
 
 # An output sink reads the report contract only: never the engine, never a
-# source adapter. The IFC adapter is a test-only dependency that pins the
-# GlobalId alias scheme both sides must agree on.
+# source adapter. The GlobalId scheme it shares with the IFC adapter is pinned
+# by the facade's `ifc_bcf` test, not by a dev-dependency here: a dev-dependency
+# on an unpublished sibling breaks workspace package verification.
 [dependencies]
 axioval-ir.workspace = true
 openbim-bcf.workspace = true
@@ -19,7 +20,6 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-axioval-ifc.workspace = true
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [lints]

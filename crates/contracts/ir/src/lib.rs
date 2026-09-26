@@ -121,12 +121,89 @@ impl fmt::Display for ExternalId {
 }
 
 /// Physical dimension of a canonical SI quantity.
+///
+/// The value of a quantity is always in the coherent SI unit of its
+/// dimension: metres, square metres, cubic metres, radians, and for
+/// [`QuantityDimension::Other`] the product of SI base units its exponents
+/// name (kilogram, second, kelvin, ...). Two quantities compare only when
+/// their dimensions are equal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuantityDimension {
     Length,
     Area,
     Volume,
+    /// Radians. Dimensionless in SI, but never compared with a plain ratio.
+    PlaneAngle,
+    /// Any other dimension, as SI base-unit exponents in the order length,
+    /// mass, time, electric current, temperature, amount of substance,
+    /// luminous intensity. A thermal transmittance in W/(m²·K) is
+    /// `[0, 1, -3, 0, -1, 0, 0]`.
+    Other {
+        exponents: [i8; 7],
+    },
+}
+
+impl QuantityDimension {
+    /// The dimension with these SI base-unit exponents, named when it has a name.
+    ///
+    /// All-zero exponents are not a dimension: a dimensionless value is a
+    /// plain number, and a plane angle must be named explicitly.
+    #[must_use]
+    pub fn from_exponents(exponents: [i8; 7]) -> Option<Self> {
+        Some(match exponents {
+            [0, 0, 0, 0, 0, 0, 0] => return None,
+            [1, 0, 0, 0, 0, 0, 0] => Self::Length,
+            [2, 0, 0, 0, 0, 0, 0] => Self::Area,
+            [3, 0, 0, 0, 0, 0, 0] => Self::Volume,
+            exponents => Self::Other { exponents },
+        })
+    }
+
+    /// The coherent SI unit symbol, e.g. `m²` or `kg·s⁻³·K⁻¹`.
+    #[must_use]
+    pub fn unit_symbol(self) -> String {
+        const BASE: [&str; 7] = ["m", "kg", "s", "A", "K", "mol", "cd"];
+        let exponents = match self {
+            Self::Length => return "m".into(),
+            Self::Area => return "m²".into(),
+            Self::Volume => return "m³".into(),
+            Self::PlaneAngle => return "rad".into(),
+            Self::Other { exponents } => exponents,
+        };
+        let superscript = |digit: char| match digit {
+            '-' => '⁻',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            _ => '⁰',
+        };
+        BASE.iter()
+            .zip(exponents)
+            .filter(|(_, exponent)| *exponent != 0)
+            .map(|(base, exponent)| {
+                if exponent == 1 {
+                    (*base).to_owned()
+                } else {
+                    format!(
+                        "{base}{}",
+                        exponent
+                            .to_string()
+                            .chars()
+                            .map(superscript)
+                            .collect::<String>()
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("·")
+    }
 }
 
 /// A value supplied by a source adapter.
@@ -178,6 +255,42 @@ impl Classification {
             code: required(code, "classification code")?,
         })
     }
+}
+
+/// Property set that names an object's own intrinsic attributes.
+///
+/// Sources describe an object partly through named property sets and partly
+/// through fields of the object itself: its name, its long name, its type
+/// label. A property request in this set asks for such a field by the
+/// source's own attribute name (`Name`, `LongName` for IFC), so rules can
+/// check both through one resolver. It is reserved: it names no property set
+/// of any source, and package concept binding passes it through unchanged.
+pub const ATTRIBUTE_SET: &str = "axioval:attributes";
+
+/// Property set that names the attributes of an object's type object.
+///
+/// Where a source types its occurrences by a shared type object (a door
+/// type, a space type), this set reads that object's attributes: `Name` in
+/// this set is the construction type name. An object with no type is exactly
+/// absent; an object with several is a conflict, not a choice. Reserved like
+/// [`ATTRIBUTE_SET`].
+pub const TYPE_ATTRIBUTE_SET: &str = "axioval:type-attributes";
+
+/// Property set that names how an object is presented in its source.
+///
+/// Its one property, [`PRESENTATION_LAYER`], is the name of the presentation
+/// (CAD) layer the object's shape is assigned to. An object on no layer has
+/// none (an exact absence); an object on several distinct layers is a
+/// conflict. Reserved like [`ATTRIBUTE_SET`].
+pub const PRESENTATION_SET: &str = "axioval:presentation";
+
+/// The layer property in [`PRESENTATION_SET`].
+pub const PRESENTATION_LAYER: &str = "Layer";
+
+/// Whether `set` is one of the reserved sets, which bind to themselves.
+#[must_use]
+pub fn is_reserved_set(set: &str) -> bool {
+    set == ATTRIBUTE_SET || set == TYPE_ATTRIBUTE_SET || set == PRESENTATION_SET
 }
 
 /// A named semantic property.

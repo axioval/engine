@@ -24,6 +24,23 @@ Objects expose canonical concepts, typed properties, classifications and directe
 
 Values distinguish null/unavailable from concrete values and preserve units where relevant. Adapters must not silently coerce malformed source values.
 
+A quantity is stated in the coherent SI unit of its `QuantityDimension`:
+- `Length`, `Area` and `Volume` in metres, square metres and cubic metres;
+- `PlaneAngle` in radians;
+- `Other { exponents }` for any other dimension, given as SI base-unit exponents. A thermal transmittance in W/(m²·K) is `[0, 1, -3, 0, -1, 0, 0]`.
+
+Quantities compare only when their dimensions are equal. A dimensionless measure, such as a ratio, is a plain decimal.
+
+### Attribute sets
+
+Some facts about an object are not in any property set but in fields of the object itself, such as a space's number and name, or the name of its construction type. Two reserved property-set names reach them through the same property resolver:
+
+- `ATTRIBUTE_SET` (`axioval:attributes`) names the object's own attributes, by the source's attribute name.
+- `TYPE_ATTRIBUTE_SET` (`axioval:type-attributes`) names the attributes of the type object the source assigns to the object. An object with no type has none (an exact absence). An object with several types is a conflict, not a choice.
+- `PRESENTATION_SET` (`axioval:presentation`) names how the object is presented. Its property `Layer` (`PRESENTATION_LAYER`) is the presentation (CAD) layer of the object's shape. An object on no layer has none; one on several distinct layers is a conflict.
+
+Both are engine vocabulary. They name no property set of any source, a package cannot redeclare them, and concept binding passes them through unchanged, while the property name inside them is still bound per source. A request without a set never searches attributes.
+
 ## Views and layers
 
 A project can expose raw source views and composed views. This supports today's single IFC model and ICDD federation as well as future IFCX-style layers without changing rule capability APIs.

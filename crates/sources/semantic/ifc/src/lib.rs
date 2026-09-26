@@ -6,10 +6,13 @@
 //! fingerprint-bound Axioval evidence session. The older importer trait remains
 //! available for host-defined OpenBIM sources.
 
+mod attributes;
 mod classifications;
 mod identity;
 mod ifc;
 mod integrity;
+mod layers;
+mod measure;
 mod relationships;
 mod release;
 mod unread;

@@ -81,6 +81,52 @@ the system itself. A file that chains references anyway is refused rather
 than flattened. An assignment whose system the file does not state is
 neither a match nor a mismatch, and the object is reported as not evaluated.
 
+### Attributes
+
+The property service answers the reserved attribute sets from the entity
+itself. In `axioval:attributes`, the property name is the attribute's name in
+the file's release schema, matched ignoring ASCII case: `Name` is an
+`IfcSpace`'s number, `LongName` its name, and `PredefinedType` its
+enumeration. `axioval:type-attributes` reads the same attributes from the
+type object `IfcRelDefinesByType` assigns, so `Name` there is the
+construction type. The evidence locator names the instance
+(`attribute:#12:LongName`), or the relationship and the type object
+(`type-attribute:#40:#30:Name`).
+
+- Text, enumeration, boolean, integer and unit-free real values are
+  answered.
+- An unset attribute (`$`), an attribute the entity does not declare, and an
+  object without a type are exact absences.
+- An object typed by two type objects is a conflict.
+- A measure such as `IfcBuildingStorey.Elevation` is converted to SI with
+  the project's default unit, as described under *Measures*. References,
+  aggregates and derived values are refused.
+
+### Measures
+
+A measure is a number in a unit: the explicit `Unit` of a property,
+otherwise the project's default unit of its kind. Property values and
+attributes of a measure type go through `ifc_properties::exact_unit`
+(0.3.0). It resolves the effective unit to an exact SI scale, with an offset
+for degrees Celsius, and follows conversion-based and derived units. The
+value becomes a quantity in SI (`240` mm reads as `0.24` m); a ratio or
+count becomes a plain decimal. A measure whose unit cannot be resolved is
+refused rather than read as a bare number, and so is a plain scalar
+(`IFCREAL`, `IFCINTEGER`) that carries a unit. Causes include no
+`IfcProject`, no project unit of the needed kind, or an ambiguous
+assignment.
+
+### Presentation layers
+
+`axioval:presentation.Layer` is read from `IfcPresentationLayerAssignment`.
+The adapter looks for layer assignments on:
+- the object's shape representations;
+- their items;
+- the representations that `IfcMappedItem`s map in, which is how a type's shared geometry reaches its occurrences.
+
+Several distinct layers are a conflict. An object without a shape, or with no assigned layer, has none. The locator names the object and the assignment
+(`layer:#1:#80`).
+
 ### Integrity warnings
 
 Besides relationship ends, the integrity scan reports two schema cardinality
@@ -107,6 +153,12 @@ are warnings: the object stays checkable and only loses its alias.
 ## Axiolid
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.
+
+`AxiolidPlanAreaService` measures plan footprints and footprint overlaps
+through the same plan overlay. A planar mesh measures exactly. A tessellated
+mesh with chord deviation `d` and footprint perimeter `P` measures within
+`2·P·d + π·d²`, the area of the band where the true and meshed boundaries can
+differ.
 
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 

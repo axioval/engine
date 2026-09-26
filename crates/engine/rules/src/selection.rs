@@ -7,7 +7,7 @@ use axioval_engine::{
     TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
-use axioval_ir::{Object, Property, PropertyValue};
+use axioval_ir::{Evidence, Object, Property, PropertyValue};
 use regex::Regex;
 
 pub(crate) fn select_objects<'a>(
@@ -17,7 +17,7 @@ pub(crate) fn select_objects<'a>(
     let mut selected = Vec::new();
     let mut evaluation = CapabilityEvaluation::default();
     for object in context.project.objects() {
-        match selector_matches(context, selector, object) {
+        match selector_matches(context, selector, object, &mut Vec::new()) {
             Selection::Match => selected.push(object),
             Selection::NoMatch => {}
             Selection::NotEvaluated(reason, message) => {
@@ -29,13 +29,19 @@ pub(crate) fn select_objects<'a>(
 }
 
 #[derive(Clone, Debug)]
-enum Selection {
+pub(crate) enum Selection {
     Match,
     NoMatch,
     NotEvaluated(NotEvaluatedReason, String),
 }
 
-fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Object) -> Selection {
+/// Whether `object` is selected; property facts consulted are added to `evidence`.
+pub(crate) fn selector_matches(
+    context: &RuleContext<'_>,
+    selector: &Selector,
+    object: &Object,
+    evidence: &mut Vec<Evidence>,
+) -> Selection {
     match selector {
         Selector::All => Selection::Match,
         Selector::EntityType {
@@ -50,14 +56,14 @@ fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Obj
         Selector::AllOf { operands } => all_of(
             operands
                 .iter()
-                .map(|item| selector_matches(context, item, object)),
+                .map(|item| selector_matches(context, item, object, evidence)),
         ),
         Selector::AnyOf { operands } => any_of(
             operands
                 .iter()
-                .map(|item| selector_matches(context, item, object)),
+                .map(|item| selector_matches(context, item, object, evidence)),
         ),
-        Selector::Not { operand } => match selector_matches(context, operand, object) {
+        Selector::Not { operand } => match selector_matches(context, operand, object, evidence) {
             Selection::Match => Selection::NoMatch,
             Selection::NoMatch => Selection::Match,
             unavailable @ Selection::NotEvaluated(..) => unavailable,
@@ -74,6 +80,7 @@ fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Obj
             property,
             operator,
             value.as_ref(),
+            evidence,
         ),
     }
 }
@@ -122,8 +129,16 @@ pub(crate) fn bound_property_request(
             let property = bindings
                 .property(name, source)
                 .map_err(|error| binding_error(&error))?;
+            // The attribute sets are engine vocabulary with one meaning in
+            // every source, so they bind to themselves.
             let property_set = set
-                .map(|set| bindings.property_set(set, source).map(ToOwned::to_owned))
+                .map(|set| {
+                    if axioval_ir::is_reserved_set(set) {
+                        Ok(set.to_owned())
+                    } else {
+                        bindings.property_set(set, source).map(ToOwned::to_owned)
+                    }
+                })
                 .transpose()
                 .map_err(|error| binding_error(&error))?;
             (property_set, property)
@@ -269,6 +284,7 @@ fn property_selector_matches(
     name: &str,
     operator: &ComparisonOperator,
     expected: Option<&ParameterValue>,
+    evidence: &mut Vec<Evidence>,
 ) -> Selection {
     if let Some(message) = selector_declaration_error(operator, expected) {
         return Selection::NotEvaluated(NotEvaluatedReason::InvalidDeclaration, message);
@@ -284,9 +300,13 @@ fn property_selector_matches(
         Err((reason, message)) => return Selection::NotEvaluated(reason, message),
     };
     match service.resolve(&request) {
-        Ok(PropertyResolution::Absent(_)) => Selection::NoMatch,
+        Ok(PropertyResolution::Absent(proof)) => {
+            evidence.push(proof.evidence().clone());
+            Selection::NoMatch
+        }
         Ok(PropertyResolution::Present(resolved)) => {
             let property = resolved.property();
+            evidence.extend(property.evidence.iter().cloned());
             if matches!(operator, ComparisonOperator::Exists) {
                 Selection::Match
             } else if let Some(expected) = expected {

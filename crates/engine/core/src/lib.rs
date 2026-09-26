@@ -351,6 +351,7 @@ mod integrity;
 mod linear_quantity;
 mod metric_routing;
 mod pairwise;
+mod plan_area;
 mod properties;
 mod proximity;
 mod relationships;
@@ -401,6 +402,7 @@ pub use metric_routing::{
     MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
 };
 pub use pairwise::{CandidatePair, CandidateSearchError, candidate_pairs};
+pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,

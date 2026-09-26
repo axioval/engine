@@ -38,6 +38,14 @@ findings and no not-evaluated outcomes. A caller reads that as a pass.
    - the concept has no name in any declared type system;
    - the concept has distinct names in two declared type systems.
 
+## Attribute sets
+
+The reserved sets `axioval:attributes` and `axioval:type-attributes` (see
+[IR](./ir.md#attribute-sets)) are not package concepts and bind to
+themselves in every source. The property inside them is an ordinary
+property concept: a package declares `space-number` with the IFC4 name
+`Name` and references it in `axioval:attributes`.
+
 ## Subtypes
 
 `includeSubtypes` is honoured through `TypeHierarchyServiceHandle`. An object

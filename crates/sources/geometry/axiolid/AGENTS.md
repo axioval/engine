@@ -79,3 +79,13 @@ Depend only on what the registry publishes. The workspace pins `axiolid-*`
 (`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
 branch. Check the registry source, not the kernel checkout, before relying on
 an API.
+
+## Waiting on upstream
+
+- axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
+  plan areas here are off by ~1.5e-8 of the extent while reported exact.
+- axiolid/kernel#174: publish certified `boundary_distance`/`boundary_clearance`,
+  so curved parts can get exact clearances instead of tessellated estimates.
+- axiolid/kernel discussion #175: winding numbers are O(n) per query; the
+  deepest-first ordering in `proximity.rs` hides it in practice but not in
+  the worst case.

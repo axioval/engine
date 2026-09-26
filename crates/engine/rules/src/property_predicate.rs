@@ -4,7 +4,7 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
     RuleContext,
 };
-use axioval_ir::PropertyValue;
+use axioval_ir::{PropertyValue, QuantityDimension};
 use regex::{Regex, RegexBuilder};
 
 use crate::selection::select_objects;
@@ -14,7 +14,8 @@ use crate::support::{
 
 /// Checks one property of each selected object against a declared predicate.
 ///
-/// The target is exactly one of `value` (integer), `number`, `text`, `texts`
+/// The target is exactly one of `value` (integer), `number`, `quantity`
+/// (a value with a unit such as `mm` or `m2`, compared in SI), `text`, `texts`
 /// (a list for `one_of`/`none_of`) or `boolean`; `is_defined` and
 /// `is_undefined` take none. Text comparisons are case-sensitive unless
 /// `case_sensitive` is `false`; `matches` is a regular expression that must
@@ -22,8 +23,9 @@ use crate::support::{
 ///
 /// A comparison presupposes a value: an exactly absent property fails every
 /// operator except `is_undefined`, and a value of another type than the
-/// target fails too. A quantity is never compared with a bare number, since
-/// the declaration states no unit; that object is not evaluated.
+/// target fails too. A quantity is compared only with a `quantity` target of
+/// the same dimension, never with a bare number; otherwise the object is not
+/// evaluated.
 pub struct PropertyPredicate;
 
 #[derive(Clone, Copy, Debug)]
@@ -52,6 +54,7 @@ impl Order {
 enum Predicate {
     Integer(Order, i64),
     Number(Order, f64),
+    Quantity(Order, f64, QuantityDimension),
     Text {
         equal: bool,
         text: String,
@@ -82,6 +85,7 @@ impl Predicate {
         let targets = [
             parameters.integer("value")?.is_some(),
             parameters.number("number")?.is_some(),
+            parameters.quantity("quantity")?.is_some(),
             parameters.string("text")?.is_some(),
             parameters.strings("texts")?.is_some(),
             parameters.boolean("boolean")?.is_some(),
@@ -128,6 +132,15 @@ impl Predicate {
                 .map(|order| Self::Number(order, value))
                 .ok_or_else(|| {
                     invalid(format!("operator `{operator}` does not apply to a number"))
+                });
+        }
+        if let Some((value, dimension)) = parameters.quantity("quantity")? {
+            return order
+                .map(|order| Self::Quantity(order, value, dimension))
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "operator `{operator}` does not apply to a quantity"
+                    ))
                 });
         }
         if let Some(value) = parameters.boolean("boolean")? {
@@ -189,8 +202,31 @@ impl Predicate {
         let Some(actual) = actual else {
             return Ok(false);
         };
-        if matches!(actual, PropertyValue::Quantity { .. }) {
-            return Err("a quantity cannot be compared with a unit-less target".into());
+        match (self, actual) {
+            (
+                Self::Quantity(order, expected, dimension),
+                PropertyValue::Quantity {
+                    value,
+                    dimension: held,
+                },
+            ) => {
+                return if held == dimension {
+                    Ok(compare(*order, *value, *expected))
+                } else {
+                    Err(format!(
+                        "a quantity in {} cannot be compared with one in {}",
+                        held.unit_symbol(),
+                        dimension.unit_symbol()
+                    ))
+                };
+            }
+            (Self::Quantity(..), PropertyValue::Integer(_) | PropertyValue::Decimal(_)) => {
+                return Err("a unit-less number cannot be compared with a quantity".into());
+            }
+            (_, PropertyValue::Quantity { .. }) => {
+                return Err("a quantity cannot be compared with a unit-less target".into());
+            }
+            _ => {}
         }
         let fold = |text: &str, fold: bool| {
             if fold {
@@ -252,12 +288,15 @@ fn exact_f64(value: i64) -> Option<f64> {
 
 fn target(parameters: &Parameters<'_>) -> String {
     let rule = parameters.0;
-    ["value", "number", "text", "texts", "boolean"]
+    ["value", "number", "quantity", "text", "texts", "boolean"]
         .iter()
         .find_map(|name| rule.parameters.get(*name))
         .map_or_else(String::new, |value| match value {
             axioval_ir::contract::ParameterValue::Integer { value } => format!(" {value}"),
             axioval_ir::contract::ParameterValue::Number { value } => format!(" {value}"),
+            axioval_ir::contract::ParameterValue::Quantity { value, unit } => {
+                format!(" {value} {unit}")
+            }
             axioval_ir::contract::ParameterValue::String { value } => format!(" `{value}`"),
             axioval_ir::contract::ParameterValue::StringList { value } => {
                 format!(" [{}]", value.join(", "))
@@ -279,6 +318,7 @@ impl RuleCapability for PropertyPredicate {
             ParameterDescriptor::required("operator", ParameterType::String),
             ParameterDescriptor::optional("value", ParameterType::Integer),
             ParameterDescriptor::optional("number", ParameterType::Number),
+            ParameterDescriptor::optional("quantity", ParameterType::Quantity),
             ParameterDescriptor::optional("text", ParameterType::String),
             ParameterDescriptor::optional("texts", ParameterType::StringList),
             ParameterDescriptor::optional("boolean", ParameterType::Boolean),

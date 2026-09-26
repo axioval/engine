@@ -5,18 +5,18 @@ use axioval_engine::{CapabilityRegistry, EngineError};
 
 mod clash;
 mod comparison;
-mod distance;
 mod conformance;
 mod consistent_value;
 mod counts;
+mod distance;
 mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
 mod guard_diagnosis;
 mod horizontal_guard;
-mod pairs;
 mod manual_issue;
 mod name_sequence;
+mod pairs;
 mod property_comparison;
 mod property_predicate;
 mod property_rules;
@@ -34,10 +34,10 @@ pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
     Difference, ModelComparison, ObjectChange, Side, Unresolved, compare_sessions,
 };
-pub use distance::Distance;
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
 pub use counts::{RelatedCount, RelativeCount};
+pub use distance::Distance;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
@@ -47,7 +47,9 @@ pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
-pub use property_rules::{BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyRequired};
+pub use property_rules::{
+    BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyRequired,
+};
 pub use property_value::PropertyValueConstraint;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;

@@ -69,9 +69,11 @@ fn string_and_integer_based_types_are_carried_with_their_declared_type() {
 }
 
 #[test]
-fn a_measure_with_a_unit_context_stays_refused() {
+fn a_measure_without_a_unit_to_convert_from_is_refused() {
+    // Measures convert to SI through their unit (tests/measures.rs); this
+    // file has no project, so there is no default length unit.
     assert!(matches!(
         resolve("Length"),
-        Err(PropertyResolutionError::InexactEvidence)
+        Err(PropertyResolutionError::Incomplete(message)) if message.contains("IFCLENGTHMEASURE")
     ));
 }

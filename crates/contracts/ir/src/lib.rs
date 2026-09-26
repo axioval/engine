@@ -121,12 +121,89 @@ impl fmt::Display for ExternalId {
 }
 
 /// Physical dimension of a canonical SI quantity.
+///
+/// The value of a quantity is always in the coherent SI unit of its
+/// dimension: metres, square metres, cubic metres, radians, and for
+/// [`QuantityDimension::Other`] the product of SI base units its exponents
+/// name (kilogram, second, kelvin, ...). Two quantities compare only when
+/// their dimensions are equal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuantityDimension {
     Length,
     Area,
     Volume,
+    /// Radians. Dimensionless in SI, but never compared with a plain ratio.
+    PlaneAngle,
+    /// Any other dimension, as SI base-unit exponents in the order length,
+    /// mass, time, electric current, temperature, amount of substance,
+    /// luminous intensity. A thermal transmittance in W/(m²·K) is
+    /// `[0, 1, -3, 0, -1, 0, 0]`.
+    Other {
+        exponents: [i8; 7],
+    },
+}
+
+impl QuantityDimension {
+    /// The dimension with these SI base-unit exponents, named when it has a name.
+    ///
+    /// All-zero exponents are not a dimension: a dimensionless value is a
+    /// plain number, and a plane angle must be named explicitly.
+    #[must_use]
+    pub fn from_exponents(exponents: [i8; 7]) -> Option<Self> {
+        Some(match exponents {
+            [0, 0, 0, 0, 0, 0, 0] => return None,
+            [1, 0, 0, 0, 0, 0, 0] => Self::Length,
+            [2, 0, 0, 0, 0, 0, 0] => Self::Area,
+            [3, 0, 0, 0, 0, 0, 0] => Self::Volume,
+            exponents => Self::Other { exponents },
+        })
+    }
+
+    /// The coherent SI unit symbol, e.g. `m²` or `kg·s⁻³·K⁻¹`.
+    #[must_use]
+    pub fn unit_symbol(self) -> String {
+        const BASE: [&str; 7] = ["m", "kg", "s", "A", "K", "mol", "cd"];
+        let exponents = match self {
+            Self::Length => return "m".into(),
+            Self::Area => return "m²".into(),
+            Self::Volume => return "m³".into(),
+            Self::PlaneAngle => return "rad".into(),
+            Self::Other { exponents } => exponents,
+        };
+        let superscript = |digit: char| match digit {
+            '-' => '⁻',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            _ => '⁰',
+        };
+        BASE.iter()
+            .zip(exponents)
+            .filter(|(_, exponent)| *exponent != 0)
+            .map(|(base, exponent)| {
+                if exponent == 1 {
+                    (*base).to_owned()
+                } else {
+                    format!(
+                        "{base}{}",
+                        exponent
+                            .to_string()
+                            .chars()
+                            .map(superscript)
+                            .collect::<String>()
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("·")
+    }
 }
 
 /// A value supplied by a source adapter.

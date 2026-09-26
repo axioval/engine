@@ -8,7 +8,9 @@ use axioval_engine::{
     SemanticRelationship, TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
-use axioval_ir::{Evidence, Finding, Object, ObjectId, Property, PropertyValue, Severity};
+use axioval_ir::{
+    Evidence, Finding, Object, ObjectId, Property, PropertyValue, QuantityDimension, Severity,
+};
 
 use crate::selection::{bound_property_request, property_error};
 
@@ -296,7 +298,9 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
         Some(PropertyValue::Boolean(value)) => value.to_string(),
         Some(PropertyValue::Integer(value)) => value.to_string(),
         Some(PropertyValue::Decimal(value)) => value.to_string(),
-        Some(PropertyValue::Quantity { value, dimension }) => format!("{value} {dimension:?}"),
+        Some(PropertyValue::Quantity { value, dimension }) => {
+            format!("{value} {}", dimension.unit_symbol())
+        }
         Some(PropertyValue::String(value)) => format!("`{value}`"),
     }
 }
@@ -352,5 +356,60 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
             format!("text:{text}")
         }
         other => format!("value:{}", display(Some(other))),
+    }
+}
+
+/// A declared quantity in canonical SI: the value and its dimension.
+///
+/// Units are the ones rule authors write for building checks: lengths
+/// (`m`, `cm`, `mm`, `km`), areas (`m2`, `cm2`, `mm2`), volumes (`m3`,
+/// `cm3`, `mm3`, `l`) and plane angles (`rad`, `deg`); `²`, `³` and `°` are
+/// accepted too. Anything else is a declaration error, never a guess.
+pub(crate) fn si_quantity(value: f64, unit: &str) -> Result<(f64, QuantityDimension), Unavailable> {
+    use QuantityDimension::{Area, Length, PlaneAngle, Volume};
+    let unit = unit
+        .trim()
+        .replace('²', "2")
+        .replace('³', "3")
+        .replace('°', "deg");
+    let (scale, dimension) = match unit.as_str() {
+        "m" => (1.0, Length),
+        "cm" => (1e-2, Length),
+        "mm" => (1e-3, Length),
+        "km" => (1e3, Length),
+        "m2" => (1.0, Area),
+        "cm2" => (1e-4, Area),
+        "mm2" => (1e-6, Area),
+        "m3" => (1.0, Volume),
+        "cm3" => (1e-6, Volume),
+        "mm3" => (1e-9, Volume),
+        "l" | "L" => (1e-3, Volume),
+        "rad" => (1.0, PlaneAngle),
+        "deg" => (std::f64::consts::PI / 180.0, PlaneAngle),
+        other => return Err(invalid(format!("unit `{other}` is not supported"))),
+    };
+    let si = value * scale;
+    if si.is_finite() {
+        Ok((si, dimension))
+    } else {
+        Err(invalid("quantity is not finite"))
+    }
+}
+
+impl Parameters<'_> {
+    /// A quantity parameter in canonical SI.
+    pub(crate) fn quantity(
+        &self,
+        name: &str,
+    ) -> Result<Option<(f64, QuantityDimension)>, Unavailable> {
+        match self.typed(name, |value| match value {
+            ParameterValue::Quantity { value, unit } => Some((*value, unit.as_str())),
+            _ => None,
+        })? {
+            Some((value, unit)) => si_quantity(value, unit)
+                .map(Some)
+                .map_err(|(reason, message)| (reason, format!("parameter `{name}`: {message}"))),
+            None => Ok(None),
+        }
     }
 }

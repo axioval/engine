@@ -20,7 +20,7 @@ use axioval_engine::{
     PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
-use axioval_ir::{Evidence, Finding, Object, Property, PropertyValue, Severity};
+use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
 
 use crate::selection::{bound_property_request, property_error, select_objects};
 use crate::xsd_pattern;
@@ -30,8 +30,8 @@ const EPSILON: f64 = 1.0e-6;
 
 /// The declared constraints of one rule.
 #[derive(Default)]
-struct Constraints<'r> {
-    data_type: Option<&'r str>,
+pub(crate) struct Constraints<'r> {
+    pub(crate) data_type: Option<&'r str>,
     values: &'r [String],
     patterns: &'r [String],
     min_inclusive: Option<&'r str>,
@@ -41,11 +41,15 @@ struct Constraints<'r> {
     length: Option<i64>,
     min_length: Option<i64>,
     max_length: Option<i64>,
-    optional: bool,
+    pub(crate) optional: bool,
+    /// Meeting the requirement is the violation.
+    pub(crate) prohibited: bool,
 }
 
 impl<'r> Constraints<'r> {
-    fn read(rule: &'r CompiledRule) -> Result<Self, String> {
+    /// Reads the constraints; `presence_suffices` admits a rule with none,
+    /// which then only requires a value to be there.
+    pub(crate) fn read(rule: &'r CompiledRule, presence_suffices: bool) -> Result<Self, String> {
         let text = |name: &str| match rule.parameters.get(name) {
             Some(ParameterValue::String { value }) => Some(value.as_str()),
             _ => None,
@@ -73,7 +77,14 @@ impl<'r> Constraints<'r> {
                 rule.parameters.get("optional"),
                 Some(ParameterValue::Boolean { value: true })
             ),
+            prohibited: matches!(
+                rule.parameters.get("prohibited"),
+                Some(ParameterValue::Boolean { value: true })
+            ),
         };
+        if constraints.optional && constraints.prohibited {
+            return Err("optional and prohibited exclude each other".into());
+        }
         if constraints
             .data_type
             .is_some_and(|value| value.trim().is_empty())
@@ -91,13 +102,17 @@ impl<'r> Constraints<'r> {
         {
             return Err("a length is negative".into());
         }
-        if constraints.data_type.is_none() && !constraints.constrains_value() {
+        if !presence_suffices
+            && !constraints.prohibited
+            && constraints.data_type.is_none()
+            && !constraints.constrains_value()
+        {
             return Err("no data type and no value constraint".into());
         }
         Ok(constraints)
     }
 
-    fn constrains_value(&self) -> bool {
+    pub(crate) fn constrains_value(&self) -> bool {
         !self.values.is_empty()
             || !self.patterns.is_empty()
             || self.has_bounds()
@@ -117,7 +132,7 @@ impl<'r> Constraints<'r> {
 }
 
 /// Whether a present value meets the constraints.
-enum Verdict {
+pub(crate) enum Verdict {
     Meets,
     Fails(String),
     /// The constraints cannot be applied to this value.
@@ -136,6 +151,10 @@ enum Verdict {
 /// empty text included, is checked.
 pub struct PropertyValueConstraint;
 impl RuleCapability for PropertyValueConstraint {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-value"
     }
@@ -163,10 +182,9 @@ impl RuleCapability for PropertyValueConstraint {
         for name in ["length", "min_length", "max_length"] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::Integer));
         }
-        parameters.push(ParameterDescriptor::optional(
-            "optional",
-            ParameterType::Boolean,
-        ));
+        for name in ["optional", "prohibited"] {
+            parameters.push(ParameterDescriptor::optional(name, ParameterType::Boolean));
+        }
         parameters
     }
 
@@ -181,7 +199,7 @@ impl RuleCapability for PropertyValueConstraint {
                 "property-value has no valid property reference",
             );
         };
-        let constraints = match Constraints::read(rule) {
+        let constraints = match Constraints::read(rule, false) {
             Ok(constraints) => constraints,
             Err(message) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -212,7 +230,14 @@ impl RuleCapability for PropertyValueConstraint {
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();
-                    match judge(property, name, &constraints) {
+                    let verdict = judge(
+                        &property.value,
+                        property.data_type(),
+                        "property",
+                        name,
+                        &constraints,
+                    );
+                    match forbid_if(&constraints, verdict, "property", name) {
                         Verdict::Meets => {}
                         Verdict::Fails(message) => evaluation.push_finding(finding(
                             rule,
@@ -230,7 +255,7 @@ impl RuleCapability for PropertyValueConstraint {
                     }
                 }
                 Ok(PropertyResolution::Absent(proof)) => {
-                    if !constraints.optional {
+                    if !constraints.optional && !constraints.prohibited {
                         evaluation.push_finding(finding(
                             rule,
                             object,
@@ -249,35 +274,59 @@ impl RuleCapability for PropertyValueConstraint {
     }
 }
 
-/// The verdict on a present property: emptiness, declared type, then value.
-fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verdict {
-    let value = &property.value;
+/// The verdict on a value that is there: emptiness, declared type, then
+/// the constraints. `kind` names what holds it (`property`, `attribute`).
+pub(crate) fn judge(
+    value: &PropertyValue,
+    declared: Option<&str>,
+    kind: &str,
+    name: &str,
+    constraints: &Constraints<'_>,
+) -> Verdict {
     if constraints.optional && matches!(value, PropertyValue::Null) {
         return Verdict::Meets;
     }
     if !constraints.optional && is_empty(value) {
-        return Verdict::Fails(format!("missing required property {name}"));
+        return Verdict::Fails(format!("missing required {kind} {name}"));
     }
     if let Some(expected) = constraints.data_type {
-        match property.data_type() {
+        match declared {
             Some(actual) if actual.eq_ignore_ascii_case(expected) => {}
             Some(actual) => {
-                return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
+                return Verdict::Fails(format!("{kind} {name} is {actual}, not {expected}"));
             }
             None => {
                 return Verdict::Inapplicable(
                     NotEvaluatedReason::IncompleteEvidence,
-                    format!("the source does not report the type of property {name}"),
+                    format!("the source does not report the type of {kind} {name}"),
                 );
             }
         }
     }
     match verdict(value, constraints) {
-        Verdict::Fails(why) => Verdict::Fails(format!("property {name} {why}")),
+        Verdict::Fails(why) => Verdict::Fails(format!("{kind} {name} {why}")),
         Verdict::Inapplicable(reason, message) => {
-            Verdict::Inapplicable(reason, format!("property {name}: {message}"))
+            Verdict::Inapplicable(reason, format!("{kind} {name}: {message}"))
         }
         Verdict::Meets => Verdict::Meets,
+    }
+}
+
+/// For a prohibited requirement, meeting it is the violation and failing it
+/// passes; a verdict that could not be reached stays undecided.
+pub(crate) fn forbid_if(
+    constraints: &Constraints<'_>,
+    verdict: Verdict,
+    kind: &str,
+    name: &str,
+) -> Verdict {
+    if !constraints.prohibited {
+        return verdict;
+    }
+    match verdict {
+        Verdict::Meets => Verdict::Fails(format!("{kind} {name} meets a prohibited requirement")),
+        Verdict::Fails(_) => Verdict::Meets,
+        undecided @ Verdict::Inapplicable(..) => undecided,
     }
 }
 
@@ -286,7 +335,7 @@ fn is_empty(value: &PropertyValue) -> bool {
         || matches!(value, PropertyValue::String(text) if text.trim().is_empty())
 }
 
-fn finding(
+pub(crate) fn finding(
     rule: &CompiledRule,
     object: &Object,
     message: String,
@@ -296,13 +345,18 @@ fn finding(
         rule_id: rule.id.clone(),
         object_id: object.id.clone(),
         related: Vec::new(),
-        severity: match rule.severity {
-            axioval_ir::contract::Severity::Error => Severity::Error,
-            axioval_ir::contract::Severity::Warning => Severity::Warning,
-            axioval_ir::contract::Severity::Info => Severity::Info,
-        },
+        severity: severity_of(rule),
         message,
         evidence,
+    }
+}
+
+/// The report severity a rule's declared severity stands for.
+pub(crate) fn severity_of(rule: &CompiledRule) -> Severity {
+    match rule.severity {
+        axioval_ir::contract::Severity::Error => Severity::Error,
+        axioval_ir::contract::Severity::Warning => Severity::Warning,
+        axioval_ir::contract::Severity::Info => Severity::Info,
     }
 }
 

@@ -33,6 +33,15 @@ pub enum Selector {
     Not {
         operand: Box<Selector>,
     },
+    /// Objects that meet a trusted capability's requirement on their own:
+    /// evaluated for the one object, it finds nothing and leaves nothing
+    /// undecided. Only capabilities that judge each object independently
+    /// may be named.
+    Meets {
+        capability: String,
+        #[serde(default)]
+        parameters: std::collections::BTreeMap<String, ParameterValue>,
+    },
 }
 impl Default for Selector {
     fn default() -> Self {

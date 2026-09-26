@@ -3,15 +3,22 @@
 
 use axioval_engine::{CapabilityRegistry, EngineError};
 
+mod attribute_value;
 mod clash;
+mod classification_requirement;
 mod comparison;
 mod distance;
+mod entity_requirement;
 mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
 mod guard_diagnosis;
 mod horizontal_guard;
+mod material_requirement;
 mod pairs;
+mod part_of;
+mod population;
+mod predefined_type;
 mod property_comparison;
 mod property_rules;
 mod property_value;
@@ -21,17 +28,24 @@ mod slab_contact;
 mod space_validation;
 mod xsd_pattern;
 
+pub use attribute_value::AttributeValueConstraint;
 pub use clash::Clash;
+pub use classification_requirement::ClassificationRequirement;
 pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
     Difference, ModelComparison, ObjectChange, Side, Unresolved, compare_sessions,
 };
 pub use distance::Distance;
+pub use entity_requirement::EntityRequirement;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
+pub use material_requirement::MaterialRequirement;
+pub use part_of::PartOfRequirement;
+pub use population::PopulationRequirement;
+pub use predefined_type::PredefinedTypeRequirement;
 pub use property_comparison::PropertyComparison;
 pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyPredicate, PropertyRequired,
@@ -52,6 +66,13 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PropertyRequired))
         .and_then(|registry| registry.register(PropertyDataType))
         .and_then(|registry| registry.register(PropertyValueConstraint))
+        .and_then(|registry| registry.register(AttributeValueConstraint))
+        .and_then(|registry| registry.register(PredefinedTypeRequirement))
+        .and_then(|registry| registry.register(ClassificationRequirement))
+        .and_then(|registry| registry.register(MaterialRequirement))
+        .and_then(|registry| registry.register(PartOfRequirement))
+        .and_then(|registry| registry.register(EntityRequirement))
+        .and_then(|registry| registry.register(PopulationRequirement))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

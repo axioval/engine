@@ -453,6 +453,23 @@ impl Finding {
         self
     }
 }
+/// A conclusive outcome about a rule's population as a whole rather than
+/// about one object: "no applicable object exists", "five exist where at
+/// most two may". It has no subject object, so it cannot be a [`Finding`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleFinding {
+    pub rule_id: RuleId,
+    pub severity: Severity,
+    pub message: String,
+    /// Objects that participate, sorted and unique; empty when the finding
+    /// is about their absence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related: Vec<ObjectId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<Evidence>,
+}
+
 /// Why an object or rule instance could not be evaluated conclusively.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -482,6 +499,10 @@ pub struct NotEvaluated {
 #[serde(deny_unknown_fields)]
 pub struct Report {
     pub findings: Vec<Finding>,
+    /// Findings about a rule's population as a whole. Absent from reports
+    /// that have none, so older reports read unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rule_findings: Vec<RuleFinding>,
     #[serde(default)]
     pub not_evaluated: Vec<NotEvaluated>,
 }
@@ -489,6 +510,16 @@ impl Report {
     /// Findings in deterministic order.
     pub fn findings(&self) -> &[Finding] {
         &self.findings
+    }
+    /// Findings about whole populations, in deterministic order.
+    pub fn rule_findings(&self) -> &[RuleFinding] {
+        &self.rule_findings
+    }
+    /// Whether any finding, about an object or a population, was reported.
+    /// A report without findings may still be incomplete; see
+    /// [`Report::not_evaluated`].
+    pub fn has_findings(&self) -> bool {
+        !self.findings.is_empty() || !self.rule_findings.is_empty()
     }
     /// Fail-closed rule or object evaluations in deterministic order.
     pub fn not_evaluated(&self) -> &[NotEvaluated] {

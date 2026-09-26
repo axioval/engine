@@ -563,3 +563,72 @@ fn without_geometry_geometric_rules_are_not_evaluated_and_say_why() {
     let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
     assert!(result.get("geometry").is_none());
 }
+
+/// A package requiring at least one beam, bound to IFC4.
+fn population_packages(case: &Case) -> (PathBuf, PathBuf) {
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    let package = |id: &str| json!({"id": id, "name": text(id), "version": "1.0.0", "authors": []});
+    let definitions = json!({
+        "schemaVersion": "0.1.0",
+        "package": package("test:definitions"),
+        "objectTypes": {"test:beam": {
+            "id": "test:beam",
+            "name": text("Beam"),
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IFCBEAM"}]
+        }},
+        "definitions": {"test:population": {
+            "id": "test:population",
+            "name": text("Population"),
+            "capability": "axioval:capability.population",
+            "parameters": {
+                "min": {"id": "min", "name": text("min"), "kind": "integer", "required": false},
+                "max": {"id": "max", "name": text("max"), "kind": "integer", "required": false}
+            }
+        }}
+    });
+    let ruleset = json!({
+        "schemaVersion": "0.1.0",
+        "package": package("test:ruleset"),
+        "definitionPackages": ["test:definitions"],
+        "root": {"id": "root", "name": text("Root"), "rules": [{
+            "id": "beams-exist",
+            "definitionId": "test:population",
+            "name": text("Beams exist"),
+            "parameters": {"min": {"type": "integer", "value": 1}},
+            "applicability": {"kind": "entityType", "objectType": "test:beam", "includeSubtypes": false}
+        }]}
+    });
+    (
+        case.write("population-definitions.json", &definitions.to_string()),
+        case.write("population-ruleset.json", &ruleset.to_string()),
+    )
+}
+
+#[test]
+fn a_finding_about_a_whole_population_exits_3() {
+    let case = Case::new("population");
+    let (definitions, ruleset) = population_packages(&case);
+    let model = case.write("model.ifc", &ifc("0000000000000000000002", true));
+    let bcf = case.path("issues.bcfzip");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--bcf", bcf.to_str().unwrap()])
+        .env("SOURCE_DATE_EPOCH", "1790416800")
+        .output()
+        .unwrap();
+    // No object is at fault, yet the check failed: never a clean exit.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert!(result["report"]["findings"].as_array().unwrap().is_empty());
+    let populations = result["report"]["rule_findings"].as_array().unwrap();
+    assert_eq!(populations.len(), 1, "{result:#}");
+    assert_eq!(populations[0]["rule_id"], "beams-exist");
+    assert!(stderr(&output).contains("1 finding(s), 0 not evaluated"));
+    assert_eq!(openbim_bcf::read_path(&bcf).unwrap().topic_count(), 1);
+}

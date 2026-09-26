@@ -13,6 +13,7 @@ repository.workspace = true
 axioval-engine.workspace = true
 axioval-ir.workspace = true
 ifc-classification.workspace = true
+ifc-material.workspace = true
 ifc-model.workspace = true
 ifc-properties.workspace = true
 ifc-schema.workspace = true

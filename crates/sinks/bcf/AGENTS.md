@@ -10,6 +10,7 @@ BCF 2.1 issue archives from a `Report` and the `Project` it was computed over.
 - Every finding and, unless the host opts out, every not-evaluated outcome is a
   topic. Dropping not-evaluated outcomes by default would make an incomplete
   check read as a pass.
+- A rule finding (about a whole population) is a topic too; it has no subject, so its viewpoint selects every anchored participant, and none when it names no object.
 - A viewpoint selects the subject first. Never write a viewpoint of related
   objects alone: it would highlight the wrong element. An object without a
   GlobalId alias keeps its topic and is listed in `Export::unanchored`.

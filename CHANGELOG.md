@@ -29,6 +29,38 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates instead of refusing them. Contact and space measurements refuse
   while an unmeasured object could change them, where they previously
   measured as if it were not there.
+- **Attributes.** `AttributeService` / `AttributeServiceHandle` read an
+  object's own attributes (unset, a typed scalar, or structured), and the IFC
+  session registers one for IFC2X3 and IFC4. The capability
+  `axioval:capability.attribute-value` requires an attribute to hold a value
+  and, optionally, to meet the constraints of `property-value`.
+- **Predefined types.** `AttributeServiceHandle::predefined_type` resolves an
+  object's predefined type; the IFC session follows IDS (type object first,
+  user-defined designations by their text). The capability
+  `axioval:capability.predefined-type` checks it against values, patterns or
+  "user-defined".
+- **Materials and decomposition.** `MaterialService` / `MaterialServiceHandle`
+  report the names an object's material is known by, and
+  `DecompositionService` / `DecompositionServiceHandle` the wholes it is part
+  of per relation. The IFC session registers both (materials IFC4 only, via
+  `ifc-material`).
+- **`meets` selectors.** `Selector::Meets` selects the objects that meet a
+  selectable capability's requirement on their own. Capabilities opt in with
+  `RuleCapability::selectable`; the compiler checks the capability and its
+  parameters, and the runtime evaluates it with the plan's registry. Adding
+  the variant breaks exhaustive matches on `Selector`.
+- **Findings about populations.** `Report::rule_findings` (`RuleFinding`)
+  holds conclusive outcomes about a rule's population rather than one
+  object, such as "no applicable object exists"; `Report::has_findings`
+  counts both kinds. `axioval:capability.population` requires `min`/`max`
+  selected objects. The BCF sink writes rule findings as topics and
+  `axioval check` counts them for status 3 and in its summary and listings.
+  Reports without rule findings serialize as before; code building
+  `Report` with a struct literal must set the new field.
+- **Requirement capabilities.** `axioval:capability.classification`,
+  `axioval:capability.material`, `axioval:capability.part-of` and
+  `axioval:capability.entity`; `property-value` and `attribute-value` take
+  `prohibited`.
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.

@@ -21,6 +21,26 @@ loss: every `STRING`-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...),
 `IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
 measures stay refused until unit handling lands.
 
+The session registers an attribute service that reads an object's own instance, in the file's
+release, by the name the schema gives the slot; nothing is inherited from a type object. `$`, an
+empty aggregate and a logical `.U.` are unset; text, enumeration items (as their text), booleans
+and integers are scalars with their declared type; references and non-empty aggregates are
+structured. Measures that need a unit, derived (`*`) and binary values are refused.
+
+Its predefined type resolves as IDS reads it: the type object's designation first (its
+`PredefinedType`, or `ElementType`/`ProcessType` when that is user-defined or unset) unless it is
+`NOTDEFINED` or empty, then the occurrence's (`PredefinedType`, or `ObjectType` when user-defined
+or unset). An occurrence typed by two type objects is refused.
+
+Materials come from `ifc-material` for IFC4: the occurrence's `IfcRelAssociatesMaterial`, else
+its type's, with a usage standing for its set. IFC2X3 materials are refused until the upstream
+crate binds to the release (openbimrs/ifc#77).
+
+Wholes are walked over the relationship service's edge indexes: aggregation and nesting
+upwards, containment and grouping directly, voiding through a filled opening, and any kind
+(container, aggregate, nest, filled opening, voided element, then group) upwards. Two wholes of
+one kind at a step are refused as ambiguous; a cycle is refused as malformed.
+
 Exact absence covers what the resolver reads: `IfcPropertySet` members.
 Quantity sets (`IfcElementQuantity`) and predefined property sets
 (`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused

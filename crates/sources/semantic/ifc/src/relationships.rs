@@ -105,6 +105,30 @@ impl IfcRelationshipService {
             .clone()
     }
 
+    /// The relating ends of every `relationship` (and subtype) instance that
+    /// names `part` as a related end, in file order of the instances.
+    ///
+    /// Refused while any instance of the type leaves a required end empty:
+    /// its missing edge could involve `part`.
+    pub(crate) fn relating_of(
+        &self,
+        relationship: &str,
+        part: EntityId,
+    ) -> Result<Vec<EntityId>, RelationshipSelectionError> {
+        let index = self.index(relationship)?;
+        if let Some(absent) = index.absent.first() {
+            return Err(malformed(
+                absent.instance,
+                &format!("leaves the required end `{}` empty", absent.attribute),
+            ));
+        }
+        Ok(index
+            .backward
+            .get(&part)
+            .map(|edges| edges.iter().map(|(relating, _)| *relating).collect())
+            .unwrap_or_default())
+    }
+
     fn entity(&self, object: &ObjectId) -> Result<EntityId, RelationshipSelectionError> {
         if object.source != *self.snapshots[0].source() {
             return Err(unavailable(format!(

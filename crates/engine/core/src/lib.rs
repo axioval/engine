@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
-use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId};
+use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleFinding, RuleId};
 use thiserror::Error;
 
 mod session;
@@ -182,6 +182,7 @@ pub struct RuleContext<'a> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CapabilityEvaluation {
     findings: Vec<Finding>,
+    rule_findings: Vec<RuleFinding>,
     not_evaluated: Vec<CapabilityNotEvaluated>,
 }
 /// A not-evaluated outcome before the runtime binds its compiled rule ID.
@@ -212,6 +213,11 @@ impl CapabilityEvaluation {
     pub fn findings(&self) -> &[Finding] {
         &self.findings
     }
+    /// Conclusive findings about the rule's population as a whole.
+    #[must_use]
+    pub fn rule_findings(&self) -> &[RuleFinding] {
+        &self.rule_findings
+    }
     /// Explicit fail-closed outcomes emitted by this capability.
     #[must_use]
     pub fn not_evaluated_outcomes(&self) -> &[CapabilityNotEvaluated] {
@@ -222,6 +228,7 @@ impl CapabilityEvaluation {
     pub fn evaluated(findings: Vec<Finding>) -> Self {
         Self {
             findings,
+            rule_findings: Vec::new(),
             not_evaluated: Vec::new(),
         }
     }
@@ -235,6 +242,10 @@ impl CapabilityEvaluation {
     /// Adds a conclusive finding.
     pub fn push_finding(&mut self, finding: Finding) {
         self.findings.push(finding);
+    }
+    /// Adds a conclusive finding about the rule's population as a whole.
+    pub fn push_rule_finding(&mut self, finding: RuleFinding) {
+        self.rule_findings.push(finding);
     }
     /// Adds a rule-level not-evaluated outcome.
     pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
@@ -271,6 +282,12 @@ pub trait RuleCapability: Send + Sync {
     fn parameters(&self) -> Vec<ParameterDescriptor>;
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
+    /// Whether the capability judges each selected object on its own, so a
+    /// `meets` selector may use it to select objects. A capability that
+    /// counts or compares objects never is.
+    fn selectable(&self) -> bool {
+        false
+    }
 }
 
 /// Host-controlled registry of trusted capabilities.
@@ -340,15 +357,18 @@ impl ExecutionPlan {
     }
 }
 
+mod attributes;
 mod classifications;
 mod compiler;
 mod concepts;
 mod contact;
+mod decomposition;
 mod envelope_membership;
 mod free_space;
 mod guard;
 mod integrity;
 mod linear_quantity;
+mod materials;
 mod metric_routing;
 mod pairwise;
 mod properties;
@@ -358,6 +378,10 @@ mod services;
 mod space;
 mod topology;
 mod walkability;
+pub use attributes::{
+    AttributeError, AttributeService, AttributeServiceHandle, AttributeValue, ResolvedAttribute,
+    ResolvedPredefinedType,
+};
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,
@@ -370,6 +394,10 @@ pub use concepts::{
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
+};
+pub use decomposition::{
+    Decomposition, DecompositionError, DecompositionService, DecompositionServiceHandle,
+    ResolvedWholes, Whole,
 };
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,
@@ -395,6 +423,7 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
+pub use materials::{MaterialError, MaterialService, MaterialServiceHandle, ResolvedMaterial};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
     MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
@@ -539,9 +568,13 @@ impl Runtime {
         // trusted, because it could bind concepts the packages never declared.
         let mut services = services.clone();
         services.replace(ConceptBindings::new(plan.concepts.clone(), type_systems));
+        // `meets` selectors evaluate registered capabilities; the plan was
+        // checked against this registry, so it is the one they may use.
+        services.replace(self.registry.clone());
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
+        let mut rule_findings = Vec::new();
         let mut not_evaluated: Vec<NotEvaluated> = plan
             .deferred
             .into_iter()
@@ -560,6 +593,14 @@ impl Runtime {
             let rule_id = rule.id.clone();
             let evaluation = capability.evaluate(&context, &rule);
             findings.extend(evaluation.findings);
+            // A capability states its own rule id; the compiled one is bound
+            // here so a rule finding can never name another rule.
+            rule_findings.extend(evaluation.rule_findings.into_iter().map(|mut finding| {
+                finding.rule_id = rule_id.clone();
+                finding.related.sort();
+                finding.related.dedup();
+                finding
+            }));
             not_evaluated.extend(collapse_unbound(&rule_id, evaluation.not_evaluated));
         }
         findings.sort_by(|a, b| {
@@ -568,9 +609,15 @@ impl Runtime {
                 .then_with(|| a.object_id.cmp(&b.object_id))
                 .then_with(|| a.message.cmp(&b.message))
         });
+        rule_findings.sort_by(|a: &RuleFinding, b: &RuleFinding| {
+            a.rule_id
+                .cmp(&b.rule_id)
+                .then_with(|| a.message.cmp(&b.message))
+        });
         not_evaluated.sort();
         Ok(Report {
             findings,
+            rule_findings,
             not_evaluated,
         })
     }

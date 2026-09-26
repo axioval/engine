@@ -32,7 +32,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use axioval_ir::{Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Severity};
+use axioval_ir::{
+    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, RuleFinding, Severity,
+};
 use openbim_bcf::Component;
 use openbim_bcf::write::{self, Document, TargetVersion, Topic, Viewpoint, WriteError};
 use thiserror::Error;
@@ -125,6 +127,9 @@ pub fn export(
     for finding in report.findings() {
         entries.push(Entry::finding(finding, project)?);
     }
+    for finding in report.rule_findings() {
+        entries.push(Entry::rule_finding(finding, project)?);
+    }
     if options.include_not_evaluated {
         for outcome in report.not_evaluated() {
             entries.push(Entry::not_evaluated(outcome, project)?);
@@ -185,7 +190,7 @@ impl Entry {
     fn finding(finding: &Finding, project: &Project) -> Result<Self, ExportError> {
         let mut objects = vec![&finding.object_id];
         objects.extend(&finding.related);
-        let resolved = Resolved::new(&objects, project)?;
+        let resolved = Resolved::new(&objects, project, true)?;
         let mut description = vec![
             finding.message.trim().to_owned(),
             format!("Rule: {}", finding.rule_id),
@@ -213,9 +218,44 @@ impl Entry {
         })
     }
 
+    /// A finding about a whole population: every participating object is
+    /// an offender, so each anchored one is selected; with none, the topic
+    /// has no viewpoint.
+    fn rule_finding(finding: &RuleFinding, project: &Project) -> Result<Self, ExportError> {
+        let objects: Vec<&ObjectId> = finding.related.iter().collect();
+        let resolved = Resolved::new(&objects, project, false)?;
+        let mut description = vec![
+            finding.message.trim().to_owned(),
+            format!("Rule: {}", finding.rule_id),
+        ];
+        if finding.related.is_empty() {
+            description
+                .push("Objects: none; the finding is about the rule's population".to_owned());
+        } else {
+            description.push(format!("Objects: {}", join(&finding.related)));
+        }
+        for evidence in &finding.evidence {
+            let exactness = if evidence.exact { "exact" } else { "inexact" };
+            description.push(format!("Evidence ({exactness}): {}", evidence.locator));
+        }
+        Ok(Self {
+            title: title(&finding.message, &finding.rule_id.to_string()),
+            topic_type: severity(&finding.severity).to_owned(),
+            label: finding.rule_id.to_string(),
+            description: description.join("\n"),
+            key: format!(
+                "rule-finding\n{}\n{}\n{}",
+                finding.rule_id, resolved.key, finding.message
+            ),
+            sources: resolved.sources,
+            selection: resolved.selection,
+            unanchored: resolved.unanchored,
+        })
+    }
+
     fn not_evaluated(outcome: &NotEvaluated, project: &Project) -> Result<Self, ExportError> {
         let objects: Vec<&ObjectId> = outcome.object_id.iter().collect();
-        let resolved = Resolved::new(&objects, project)?;
+        let resolved = Resolved::new(&objects, project, true)?;
         let reason = reason(&outcome.reason);
         let mut description = vec![
             outcome.message.trim().to_owned(),
@@ -276,7 +316,13 @@ struct Resolved {
 }
 
 impl Resolved {
-    fn new(objects: &[&ObjectId], project: &Project) -> Result<Self, ExportError> {
+    /// With `subject_first`, the first object is the subject and nothing is
+    /// selected unless it can be; otherwise every anchored object is.
+    fn new(
+        objects: &[&ObjectId],
+        project: &Project,
+        subject_first: bool,
+    ) -> Result<Self, ExportError> {
         let mut keys = Vec::new();
         let mut sources = BTreeSet::new();
         let mut selection = Vec::new();
@@ -290,7 +336,7 @@ impl Resolved {
                 keys.push(global_id.to_owned());
                 // A viewpoint of only the related objects would show the
                 // reviewer the slab, not the wall that fails to rest on it.
-                if index == 0 || !selection.is_empty() {
+                if !subject_first || index == 0 || !selection.is_empty() {
                     selection.push(Component::ifc(global_id));
                 }
             } else {

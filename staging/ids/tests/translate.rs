@@ -142,43 +142,65 @@ fn a_presence_requirement_becomes_a_property_required_rule() {
 }
 
 #[test]
-fn applicability_bounds_other_than_optional_are_gaps() {
-    for (occurs, reason) in [
-        (
-            "",
-            Reason::Count {
-                min: 1,
-                max: Some(1),
-            },
-        ),
-        (r#"maxOccurs="unbounded""#, Reason::Existence),
-        (r#"minOccurs="0" maxOccurs="0""#, Reason::Prohibition),
-        (
-            r#"minOccurs="2" maxOccurs="5""#,
-            Reason::Count {
-                min: 2,
-                max: Some(5),
-            },
-        ),
+fn applicability_bounds_become_a_population_rule() {
+    let integer = |value: i64| ParameterValue::Integer { value };
+    for (occurs, min, max, rules) in [
+        ("", Some(1), Some(1), 2),
+        (r#"maxOccurs="unbounded""#, Some(1), None, 2),
+        (r#"minOccurs="2" maxOccurs="5""#, Some(2), Some(5), 2),
+        // A prohibited specification's requirements are not checked.
+        (r#"minOccurs="0" maxOccurs="0""#, None, Some(0), 1),
     ] {
         let translation = one("IFC4", occurs, WALL, &property("P", "N", ""));
+        assert!(
+            translation.is_complete(),
+            "{occurs}: {:?}",
+            reasons(&translation)
+        );
+        let specification = &translation.specifications[0];
+        assert_eq!(specification.rules.len(), rules, "{occurs}");
+        assert_eq!(specification.rules[0], "spec1.occurrence", "{occurs}");
+        let rule = &translation.ruleset.root.folders[0].rules[0];
         assert_eq!(
-            reasons(&translation),
-            [(Part::Occurrence, reason)],
+            translation.definitions.definitions[&rule.definition_id].capability,
+            "axioval:capability.population"
+        );
+        assert_eq!(
+            rule.parameters.get("min"),
+            min.map(integer).as_ref(),
             "{occurs}"
         );
-        // Requirements still hold for every applicable object.
-        assert_eq!(translation.specifications[0].rules.len(), 1, "{occurs}");
+        assert_eq!(
+            rule.parameters.get("max"),
+            max.map(integer).as_ref(),
+            "{occurs}"
+        );
     }
+    // Optional bounds ask for nothing about the population.
+    let optional = one("IFC4", OPTIONAL, WALL, &property("P", "N", ""));
+    assert_eq!(optional.specifications[0].rules, ["spec1.facet1"]);
+}
+
+#[test]
+fn a_required_specification_fails_a_model_without_applicable_objects() {
+    let translation = one(
+        "IFC4",
+        r#"maxOccurs="unbounded""#,
+        "<entity><name><simpleValue>IFCBEAM</simpleValue></name></entity>",
+        "",
+    );
+    let report = run(&translation, IFC4_MODEL);
+    assert!(report.findings().is_empty());
+    assert_eq!(report.rule_findings().len(), 1);
+    assert_eq!(
+        report.rule_findings()[0].rule_id.to_string(),
+        "spec1.occurrence"
+    );
 }
 
 #[test]
 fn an_untranslatable_applicability_skips_the_whole_specification() {
     for (applicability, reason) in [
-        (
-            "<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SHEAR</simpleValue></predefinedType></entity>".to_owned(),
-            Reason::PredefinedType,
-        ),
         (
             "<entity><name><simpleValue>IfcWall</simpleValue></name></entity>".to_owned(),
             Reason::EntityCase("IfcWall".into()),
@@ -187,9 +209,11 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             "<entity><name><xs:restriction base=\"xs:string\"><xs:pattern value=\"IFC.*\"/></xs:restriction></name></entity>".to_owned(),
             Reason::Restriction,
         ),
+        // Without an entity, IDS also applies to type objects.
+        ("<material/>".to_owned(), Reason::WithoutEntity),
         (
-            format!("{WALL}<material/>"),
-            Reason::FacetKind("material"),
+            format!("{WALL}<property><propertySet><xs:restriction base=\"xs:string\"><xs:pattern value=\"Pset_.*\"/></xs:restriction></propertySet><baseName><simpleValue>N</simpleValue></baseName></property>"),
+            Reason::Restriction,
         ),
     ] {
         let translation = one("IFC4", OPTIONAL, &applicability, &property("P", "N", ""));
@@ -203,6 +227,63 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             outcome.gaps
         );
     }
+}
+
+#[test]
+fn applicability_facets_become_meets_conditions() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &format!(
+            "<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SHEAR</simpleValue></predefinedType></entity>{}<material/>",
+            property("Pset_WallCommon", "FireRating", "")
+        ),
+        &property("P", "N", ""),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let rule = &translation.ruleset.root.folders[0].rules[0];
+    let RuleApplicability::Selector(Selector::AllOf { operands }) = &rule.applicability else {
+        panic!("{:?}", rule.applicability)
+    };
+    let capabilities: Vec<&str> = operands
+        .iter()
+        .filter_map(|operand| match operand {
+            Selector::Meets { capability, .. } => Some(capability.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(matches!(operands[0], Selector::EntityType { .. }));
+    assert_eq!(
+        capabilities,
+        [
+            "axioval:capability.predefined-type",
+            "axioval:capability.property-required",
+            "axioval:capability.material"
+        ]
+    );
+}
+
+#[test]
+fn applicability_conditions_select_on_a_real_model() {
+    // Only walls stating FireRating are applicable: #1. It has no IsExternal.
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &format!("{WALL}{}", property("Pset_WallCommon", "FireRating", "")),
+        &property("Pset_WallCommon", "IsExternal", ""),
+    );
+    let report = run(&translation, IFC4_MODEL);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let flagged: Vec<&str> = report
+        .findings()
+        .iter()
+        .map(|finding| finding.object_id.local_id.as_str())
+        .collect();
+    assert_eq!(flagged, ["#1"]);
 }
 
 #[test]
@@ -280,13 +361,19 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
         [
             (requirement(1), Reason::RestrictionFacet("totalDigits")),
             (requirement(2), Reason::EmptyRestriction),
-            (requirement(3), Reason::Prohibited),
-            (requirement(5), Reason::FacetKind("attribute")),
-            (requirement(6), Reason::EntityRequirement),
         ]
     );
-    // The optional value-less property and the redundant entity need no rule.
-    assert_eq!(translation.specifications[0].rules, ["spec1.facet8"]);
+    // The optional value-less property and the redundant entity need no rule;
+    // the prohibited property and the other class translate.
+    assert_eq!(
+        translation.specifications[0].rules,
+        [
+            "spec1.facet3",
+            "spec1.facet5",
+            "spec1.facet6",
+            "spec1.facet8"
+        ]
+    );
 }
 
 #[test]
@@ -591,6 +678,45 @@ fn value_rules_check_a_real_model() {
     // Optional: the absent #2 passes, the present #1 must still match.
     assert_eq!(flagged("cardinality=\"optional\"", "EI 60"), ["#1"]);
     assert!(flagged("cardinality=\"optional\"", "EI 90").is_empty());
+}
+
+#[test]
+fn attribute_rules_check_a_real_model() {
+    let flagged = |requirement: &str| {
+        let translation = one("IFC4", OPTIONAL, WALL, requirement);
+        let rule = &translation.ruleset.root.folders[0].rules[0];
+        assert_eq!(
+            translation.definitions.definitions[&rule.definition_id].capability,
+            "axioval:capability.attribute-value"
+        );
+        let report = run(&translation, IFC4_MODEL);
+        assert!(
+            report.not_evaluated().is_empty(),
+            "{:?}",
+            report.not_evaluated()
+        );
+        report
+            .findings()
+            .iter()
+            .map(|finding| finding.object_id.local_id.clone())
+            .collect::<Vec<_>>()
+    };
+    let attribute = |cardinality: &str, value: &str| {
+        let value = if value.is_empty() {
+            String::new()
+        } else {
+            format!("<value><simpleValue>{value}</simpleValue></value>")
+        };
+        format!(
+            "<attribute {cardinality}><name><simpleValue>GlobalId</simpleValue></name>{value}</attribute>"
+        )
+    };
+    // Every wall in the model has a GlobalId; only #1's is ...01.
+    assert!(flagged(&attribute("", "")).is_empty());
+    assert_eq!(flagged(&attribute("", "0000000000000000000001")), ["#2"]);
+    let name = "<attribute><name><simpleValue>Name</simpleValue></name></attribute>";
+    // No wall in the model is named.
+    assert_eq!(flagged(name), ["#1", "#2"]);
 }
 
 #[test]

@@ -21,6 +21,8 @@ axioval-ir = { path = "../../crates/contracts/ir" }
 #   [patch."https://github.com/openbimrs/ids"]
 #   openbim-ids = { path = "/path/to/ids/openbim-ids" }
 openbim-ids = { git = "https://github.com/openbimrs/ids", branch = "feat/ids-reader" }
+# Which IDS classes are IfcObject occurrences, per release.
+ifc-schema = "0.2.2"
 thiserror = "2.0.16"
 
 [dev-dependencies]

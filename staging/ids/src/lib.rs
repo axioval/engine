@@ -59,6 +59,7 @@ const SCHEMA_VERSION: &str = "0.1.0";
 
 const PROPERTY_REQUIRED: &str = "axioval:capability.property-required";
 const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
+const PROPERTY_VALUE: &str = "axioval:capability.property-value";
 
 /// Identity of the packages written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,17 +218,29 @@ pub enum Reason {
     EmptyApplicability,
     /// A facet kind no capability decides yet, named as IDS spells it.
     FacetKind(&'static str),
+    /// An applicability class the release does not define.
+    UnknownEntity {
+        /// The class as written.
+        entity: String,
+        /// The release that lacks it.
+        release: IfcVersion,
+    },
+    /// An applicability class whose instances are not `IfcObject`
+    /// occurrences (a type object, an IFC4 `IfcProject`, a resource), which
+    /// an IFC session does not make project objects of.
+    NotAnObject(String),
     /// An entity facet naming a predefined type.
     PredefinedType,
     /// An entity name that is not upper case, which IDS never matches.
     EntityCase(String),
-    /// A value given as an `xs:restriction` where only literals translate.
+    /// A class, property set or property name given as an `xs:restriction`;
+    /// only an enumeration of classes translates.
     Restriction,
-    /// A required value, which no capability compares as IDS does yet.
-    PropertyValue,
-    /// A `dataType` on an optional facet: the type binds only when the
-    /// property is present, which no capability checks.
-    OptionalDataType(String),
+    /// A restriction facet no capability applies, named as XML Schema
+    /// spells it (`totalDigits`, `fractionDigits`).
+    RestrictionFacet(&'static str),
+    /// A restriction with no facets, whose meaning IDS leaves open.
+    EmptyRestriction,
     /// A prohibited facet.
     Prohibited,
     /// An entity requirement naming a class other than the applicability's.
@@ -251,6 +264,13 @@ impl fmt::Display for Reason {
             },
             Reason::EmptyApplicability => f.write_str("the applicability has no facets"),
             Reason::FacetKind(kind) => write!(f, "no capability decides a {kind} facet"),
+            Reason::UnknownEntity { entity, release } => {
+                write!(f, "{release} defines no entity {entity}")
+            }
+            Reason::NotAnObject(entity) => write!(
+                f,
+                "{entity} is not an IfcObject occurrence, which is all a model session checks"
+            ),
             Reason::PredefinedType => f.write_str("no capability decides a predefined type"),
             Reason::EntityCase(name) => {
                 write!(
@@ -258,14 +278,13 @@ impl fmt::Display for Reason {
                     "entity name {name:?} is not upper case, which IDS never matches"
                 )
             }
-            Reason::Restriction => f.write_str("only simple values translate, not restrictions"),
-            Reason::PropertyValue => {
-                f.write_str("no capability compares a property value as IDS does yet")
-            }
-            Reason::OptionalDataType(data_type) => write!(
-                f,
-                "no capability checks dataType {data_type} only when an optional property is present"
+            Reason::Restriction => f.write_str(
+                "a class, property set or property name given as a restriction is not translated",
             ),
+            Reason::RestrictionFacet(facet) => {
+                write!(f, "no capability applies the restriction facet {facet}")
+            }
+            Reason::EmptyRestriction => f.write_str("a restriction without facets"),
             Reason::Prohibited => f.write_str("no capability decides a prohibited facet"),
             Reason::EntityRequirement => f.write_str(
                 "an entity requirement other than the applicability's own entity is not decided",
@@ -383,7 +402,7 @@ impl<'o> Writer<'o> {
         let mut gaps = Vec::new();
         let releases = releases(specification, &mut gaps);
         occurrence(specification, &mut gaps);
-        let applicability = applicability(specification, &mut gaps);
+        let applicability = applicability(specification, &releases, &mut gaps);
         let requirements = specification
             .requirements
             .iter()
@@ -449,17 +468,31 @@ impl<'o> Writer<'o> {
         selector: &Selector,
         releases: &[IfcVersion],
     ) -> RuleInstance {
-        let (set, name, data_type) = match check {
-            Check::PropertyRequired { set, name } => (set, name, None),
-            Check::PropertyDataType {
-                set,
-                name,
-                data_type,
-            } => (set, name, Some(data_type)),
-        };
-        let definition_id = self.property_definition(data_type.is_some());
+        let Check {
+            set,
+            name,
+            kind,
+            parameters: extra,
+        } = check;
+        let definition_id = self.definition(kind);
         let property = self.property(&set, &name, releases);
         let property_set = self.property_set(&set, releases);
+        let mut parameters = BTreeMap::from([(
+            "property".to_owned(),
+            ParameterValue::PropertyReference {
+                property,
+                property_set: Some(property_set),
+            },
+        )]);
+        parameters.extend(extra);
+        let title = match kind {
+            CheckKind::Required => format!("{set}.{name} is required"),
+            CheckKind::DataType => format!("{set}.{name} is required with a declared type"),
+            CheckKind::Value if parameters.contains_key("optional") => {
+                format!("{set}.{name}, where present, meets its value constraints")
+            }
+            CheckKind::Value => format!("{set}.{name} meets its value constraints"),
+        };
         let description = requirement
             .instructions
             .as_deref()
@@ -468,15 +501,12 @@ impl<'o> Writer<'o> {
         RuleInstance {
             id: format!("spec{number}.facet{facet}"),
             definition_id,
-            name: LocalizedText::plain(match &data_type {
-                Some(data_type) => format!("{set}.{name} is a required {data_type}"),
-                None => format!("{set}.{name} is required"),
-            }),
+            name: LocalizedText::plain(title),
             description,
             enabled: true,
             severity: Severity::Error,
             message: None,
-            parameters: rule_parameters(property, property_set, data_type),
+            parameters,
             applicability: RuleApplicability::Selector(selector.clone()),
             requirements: Vec::new(),
             citations: Vec::new(),
@@ -486,34 +516,59 @@ impl<'o> Writer<'o> {
         }
     }
 
-    /// The definition for a presence rule, typed or not, written once.
-    fn property_definition(&mut self, typed: bool) -> String {
-        let (suffix, name, description, capability) = if typed {
-            (
-                "property-data-type",
-                "Property is required with a data type",
-                "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
-                PROPERTY_DATA_TYPE,
-            )
-        } else {
-            (
+    /// The rule definition a kind of check uses, written once.
+    fn definition(&mut self, kind: CheckKind) -> String {
+        let (suffix, name, description, capability) = match kind {
+            CheckKind::Required => (
                 "property-required",
                 "Property is required",
                 "An IDS property facet without a value: the property must exist with a non-empty value.",
                 PROPERTY_REQUIRED,
-            )
+            ),
+            CheckKind::DataType => (
+                "property-data-type",
+                "Property is required with a data type",
+                "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
+                PROPERTY_DATA_TYPE,
+            ),
+            CheckKind::Value => (
+                "property-value",
+                "Property value meets constraints",
+                "An IDS property facet with a value, or an optional one with a dataType: literals and XML Schema facets cast to the property's value.",
+                PROPERTY_VALUE,
+            ),
         };
         let id = format!("{}.{suffix}", self.options.package_id);
         self.definitions.entry(id.clone()).or_insert_with(|| {
             let mut parameters = BTreeMap::from([(
                 "property".to_owned(),
-                parameter("property", "Property", ParameterKind::PropertyReference),
+                parameter("property", ParameterKind::PropertyReference, true),
             )]);
-            if typed {
-                parameters.insert(
-                    "data_type".to_owned(),
-                    parameter("data_type", "Data type", ParameterKind::String),
-                );
+            let optional: &[(&str, ParameterKind)] = match kind {
+                CheckKind::Required => &[],
+                CheckKind::DataType => {
+                    parameters.insert(
+                        "data_type".to_owned(),
+                        parameter("data_type", ParameterKind::String, true),
+                    );
+                    &[]
+                }
+                CheckKind::Value => &[
+                    ("data_type", ParameterKind::String),
+                    ("values", ParameterKind::StringList),
+                    ("patterns", ParameterKind::StringList),
+                    ("min_inclusive", ParameterKind::String),
+                    ("max_inclusive", ParameterKind::String),
+                    ("min_exclusive", ParameterKind::String),
+                    ("max_exclusive", ParameterKind::String),
+                    ("length", ParameterKind::Integer),
+                    ("min_length", ParameterKind::Integer),
+                    ("max_length", ParameterKind::Integer),
+                    ("optional", ParameterKind::Boolean),
+                ],
+            };
+            for (id, kind) in optional {
+                parameters.insert((*id).to_owned(), parameter(id, kind.clone(), false));
             }
             RuleDefinition {
                 id: id.clone(),
@@ -603,15 +658,15 @@ impl<'o> Writer<'o> {
     }
 }
 
-/// A required parameter without default or allowed values.
-fn parameter(id: &str, name: &str, kind: ParameterKind) -> ParameterDefinition {
+/// A parameter without default or allowed values.
+fn parameter(id: &str, kind: ParameterKind, required: bool) -> ParameterDefinition {
     ParameterDefinition {
         id: id.to_owned(),
-        name: LocalizedText::plain(name),
+        name: LocalizedText::plain(id),
         description: None,
         kind,
         referenced_value_kind: None,
-        required: true,
+        required,
         default_value: None,
         allowed_values: Vec::new(),
         unit_dimension: None,
@@ -619,34 +674,24 @@ fn parameter(id: &str, name: &str, kind: ParameterKind) -> ParameterDefinition {
     }
 }
 
-fn rule_parameters(
-    property: String,
-    property_set: String,
-    data_type: Option<String>,
-) -> BTreeMap<String, ParameterValue> {
-    let mut parameters = BTreeMap::from([(
-        "property".to_owned(),
-        ParameterValue::PropertyReference {
-            property,
-            property_set: Some(property_set),
-        },
-    )]);
-    if let Some(value) = data_type {
-        parameters.insert("data_type".to_owned(), ParameterValue::String { value });
-    }
-    parameters
+/// One exactly translatable requirement.
+struct Check {
+    set: String,
+    name: String,
+    kind: CheckKind,
+    /// Parameters besides the property reference.
+    parameters: BTreeMap<String, ParameterValue>,
 }
 
-/// One exactly translatable requirement.
-enum Check {
-    /// The property must exist with a non-empty value.
-    PropertyRequired { set: String, name: String },
-    /// As `PropertyRequired`, and the source must declare `data_type`.
-    PropertyDataType {
-        set: String,
-        name: String,
-        data_type: String,
-    },
+/// Which capability decides a check.
+#[derive(Clone, Copy)]
+enum CheckKind {
+    /// `property-required`.
+    Required,
+    /// `property-data-type`.
+    DataType,
+    /// `property-value`.
+    Value,
 }
 
 /// The supported releases, recording a gap for each unsupported one.
@@ -714,6 +759,7 @@ fn occurrence(specification: &Specification, gaps: &mut Vec<Gap>) {
 /// `None` when any facet is untranslatable; the gaps say which.
 fn applicability<'s>(
     specification: &'s Specification,
+    releases: &[IfcVersion],
     gaps: &mut Vec<Gap>,
 ) -> Option<(Vec<String>, &'s Entity)> {
     let facets = &specification.applicability.facets;
@@ -728,9 +774,9 @@ fn applicability<'s>(
     for (index, facet) in facets.iter().enumerate() {
         let part = Part::Applicability { facet: index + 1 };
         let result = match facet {
-            Facet::Entity(entity) => {
-                entity_names(entity).map(|names| selected = Some((names, entity)))
-            }
+            Facet::Entity(entity) => entity_names(entity)
+                .and_then(|names| occurrences(names, releases))
+                .map(|names| selected = Some((names, entity))),
             other => Err(Reason::FacetKind(other.kind())),
         };
         if let Err(reason) = result {
@@ -741,6 +787,35 @@ fn applicability<'s>(
         .iter()
         .any(|gap| matches!(gap.part, Part::Applicability { .. }));
     selected.filter(|_| translated)
+}
+
+/// Refuses a class whose instances are not checked objects.
+///
+/// An IFC session makes a project object of every `IfcObject` occurrence and
+/// of nothing else. A rule over a type object, an IFC4 `IfcProject` (an
+/// `IfcContext`) or a resource would select nothing and pass silently, so
+/// such a class, and one the release does not define, is a gap.
+fn occurrences(names: Vec<String>, releases: &[IfcVersion]) -> Result<Vec<String>, Reason> {
+    for release in releases {
+        let schema = match release {
+            IfcVersion::Ifc2x3 => ifc_schema::ifc2x3(),
+            IfcVersion::Ifc4 => ifc_schema::ifc4(),
+            // No type system either; reported as a release gap.
+            IfcVersion::Ifc4x3Add2 => continue,
+        };
+        for name in &names {
+            if schema.entity(name).is_none() {
+                return Err(Reason::UnknownEntity {
+                    entity: name.clone(),
+                    release: *release,
+                });
+            }
+            if !schema.is_a(name, "IFCOBJECT") {
+                return Err(Reason::NotAnObject(name.clone()));
+            }
+        }
+    }
+    Ok(names)
 }
 
 /// The class names an entity facet matches exactly.
@@ -810,23 +885,117 @@ fn property_check(property: &Property, occurrence: Occurrence) -> Result<Option<
     else {
         return Err(Reason::Restriction);
     };
-    if property.value.is_some() {
-        return Err(Reason::PropertyValue);
+    let optional = match occurrence {
+        Occurrence::Required => false,
+        Occurrence::Optional => true,
+        Occurrence::Prohibited => return Err(Reason::Prohibited),
+    };
+    let mut parameters = BTreeMap::new();
+    if let Some(data_type) = &property.data_type {
+        parameters.insert(
+            "data_type".to_owned(),
+            ParameterValue::String {
+                value: data_type.clone(),
+            },
+        );
     }
-    let (set, name) = (set.clone(), name.clone());
-    match (occurrence, &property.data_type) {
-        (Occurrence::Required, None) => Ok(Some(Check::PropertyRequired { set, name })),
-        (Occurrence::Required, Some(data_type)) => Ok(Some(Check::PropertyDataType {
-            set,
-            name,
-            data_type: data_type.clone(),
-        })),
+    let kind = match (&property.value, optional, &property.data_type) {
+        (None, false, None) => CheckKind::Required,
+        (None, false, Some(_)) => CheckKind::DataType,
         // Without a value or type, an optional property is satisfied
         // whether or not it is there.
-        (Occurrence::Optional, None) => Ok(None),
-        (Occurrence::Optional, Some(data_type)) => Err(Reason::OptionalDataType(data_type.clone())),
-        (Occurrence::Prohibited, _) => Err(Reason::Prohibited),
+        (None, true, None) => return Ok(None),
+        (None, true, Some(_)) => CheckKind::Value,
+        (Some(value), ..) => {
+            value_parameters(value, &mut parameters)?;
+            CheckKind::Value
+        }
+    };
+    if optional {
+        parameters.insert(
+            "optional".to_owned(),
+            ParameterValue::Boolean { value: true },
+        );
     }
+    Ok(Some(Check {
+        set: set.clone(),
+        name: name.clone(),
+        kind,
+        parameters,
+    }))
+}
+
+/// The `property-value` parameters an IDS value stands for.
+fn value_parameters(
+    value: &Value,
+    parameters: &mut BTreeMap<String, ParameterValue>,
+) -> Result<(), Reason> {
+    let restriction = match value {
+        Value::Simple(literal) => {
+            parameters.insert(
+                "values".to_owned(),
+                ParameterValue::StringList {
+                    value: vec![literal.clone()],
+                },
+            );
+            return Ok(());
+        }
+        Value::Restriction(restriction) => restriction,
+    };
+    if restriction.total_digits.is_some() {
+        return Err(Reason::RestrictionFacet("totalDigits"));
+    }
+    if restriction.fraction_digits.is_some() {
+        return Err(Reason::RestrictionFacet("fractionDigits"));
+    }
+    let before = parameters.len();
+    let mut add = |name: &str, value: ParameterValue| {
+        parameters.insert(name.to_owned(), value);
+    };
+    for (name, list) in [
+        ("values", &restriction.enumeration),
+        ("patterns", &restriction.patterns),
+    ] {
+        if !list.is_empty() {
+            add(
+                name,
+                ParameterValue::StringList {
+                    value: list.clone(),
+                },
+            );
+        }
+    }
+    for (name, bound) in [
+        ("min_inclusive", &restriction.min_inclusive),
+        ("max_inclusive", &restriction.max_inclusive),
+        ("min_exclusive", &restriction.min_exclusive),
+        ("max_exclusive", &restriction.max_exclusive),
+    ] {
+        if let Some(bound) = bound {
+            add(
+                name,
+                ParameterValue::String {
+                    value: bound.clone(),
+                },
+            );
+        }
+    }
+    for (name, count) in [
+        ("length", restriction.length),
+        ("min_length", restriction.min_length),
+        ("max_length", restriction.max_length),
+    ] {
+        if let Some(count) = count {
+            // A length beyond `i64` cannot be met by any value; `MAX` keeps
+            // that meaning for `max_length` and fails every `length`.
+            let value = i64::try_from(count).unwrap_or(i64::MAX);
+            add(name, ParameterValue::Integer { value });
+        }
+    }
+    if parameters.len() == before {
+        return Err(Reason::EmptyRestriction);
+    }
+    Ok(())
 }
 
 /// `scheme:rest` with a lower-case scheme, as MCS qualified ids are.

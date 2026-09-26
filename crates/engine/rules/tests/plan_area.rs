@@ -163,6 +163,86 @@ mod area_ratio {
     }
 }
 
+mod window_ratio {
+    use super::*;
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    use common::property;
+
+    fn glazing(area: f64) -> PropertyValue {
+        PropertyValue::Quantity {
+            value: area,
+            dimension: QuantityDimension::Area,
+        }
+    }
+
+    #[test]
+    fn stated_window_areas_are_related_to_measured_floor_area() {
+        // One eighth of the floor area must be glazed: 5 m² of 50 m² is not.
+        let model = Model::default()
+            .object("st", "storey")
+            .object("room", "space")
+            .object("w1", "window")
+            .object("w2", "window")
+            .edge("contains", "st", "room")
+            .edge("contains", "st", "w1")
+            .edge("contains", "st", "w2")
+            .value("w1", "Qto", "Area", glazing(3.0))
+            .value("w2", "Qto", "Area", glazing(2.0));
+        let rectangles = Rectangles::default().with("room", [0.0, 0.0, 10.0, 5.0], 0.0);
+        let parameters = vec![
+            ("numerator_selector", selector(kind("window"))),
+            ("numerator_property", property(Some("Qto"), "Area")),
+            ("denominator_selector", selector(kind("space"))),
+            ("minimum", number(0.125)),
+            ("relationship", string("contains")),
+        ];
+        let evaluation = run(
+            model,
+            rectangles,
+            &AreaRatio,
+            &rule("axioval:capability.area-ratio", kind("storey"), parameters),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "st".into(),
+                "plan area ratio is 0.1 (5 m² of 50 m²); required at least 0.125".into()
+            )]
+        );
+    }
+
+    #[test]
+    fn a_window_without_a_stated_area_leaves_the_storey_unjudged() {
+        let model = Model::default()
+            .object("st", "storey")
+            .object("room", "space")
+            .object("w1", "window")
+            .edge("contains", "st", "room")
+            .edge("contains", "st", "w1");
+        let rectangles = Rectangles::default().with("room", [0.0, 0.0, 10.0, 5.0], 0.0);
+        let evaluation = run(
+            model,
+            rectangles,
+            &AreaRatio,
+            &rule(
+                "axioval:capability.area-ratio",
+                kind("storey"),
+                vec![
+                    ("numerator_selector", selector(kind("window"))),
+                    ("numerator_property", property(Some("Qto"), "Area")),
+                    ("denominator_selector", selector(kind("space"))),
+                    ("minimum", number(0.125)),
+                    ("relationship", string("contains")),
+                ],
+            ),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("st".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+}
+
 mod plan_coverage {
     use super::*;
 

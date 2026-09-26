@@ -35,8 +35,12 @@ Development is hot on `main`: use scoped Conventional Commits, keep history
 linear, and stage explicit paths only.
 
 The public documentation system is mdBook plus workspace rustdoc, deployed by
-`.github/workflows/pages.yml`. Update the relevant page with every public
-contract or architecture change and keep `docs/src/SUMMARY.md` complete.
+`.github/workflows/pages.yml` on minor and major release tags (`v0.3.0`,
+`v1.0.0`), never on patch or pre-release tags, or by hand. The `github-pages`
+environment allows `v*` tags to deploy. Update the relevant page with every
+public contract or architecture change and keep `docs/src/SUMMARY.md`
+complete; `./scripts/check.sh` builds the book on every commit, so a broken
+page still fails before release.
 
 ## Direct children
 

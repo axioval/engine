@@ -33,6 +33,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use axioval_ir::ATTRIBUTE_SET;
 use axioval_ir::contract::{
     DefinitionPackage, ExternalName, LocalizedText, ObjectTypeDefinition, PackageMetadata,
     ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition, PropertySetDefinition,
@@ -61,7 +62,6 @@ const SCHEMA_VERSION: &str = "0.1.0";
 const PROPERTY_REQUIRED: &str = "axioval:capability.property-required";
 const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
 const PROPERTY_VALUE: &str = "axioval:capability.property-value";
-const ATTRIBUTE_VALUE: &str = "axioval:capability.attribute-value";
 const PREDEFINED_TYPE: &str = "axioval:capability.predefined-type";
 const CLASSIFICATION: &str = "axioval:capability.classification";
 const MATERIAL: &str = "axioval:capability.material";
@@ -482,8 +482,19 @@ impl<'o> Writer<'o> {
             parameters: extra,
         } = check;
         let mut parameters = BTreeMap::new();
-        let subject = match (kind.reference(), &set) {
-            (None, _) => name,
+        let subject = match (kind.reference(), set.as_deref()) {
+            // A direct attribute: a property concept in the reserved
+            // attribute set, which binds to itself.
+            (Some(reference), Some(ATTRIBUTE_SET)) => {
+                parameters.insert(
+                    reference.to_owned(),
+                    ParameterValue::PropertyReference {
+                        property: self.attribute(&name, releases),
+                        property_set: Some(ATTRIBUTE_SET.to_owned()),
+                    },
+                );
+                format!("attribute {name}")
+            }
             (Some(reference), Some(set)) => {
                 parameters.insert(
                     reference.to_owned(),
@@ -494,16 +505,7 @@ impl<'o> Writer<'o> {
                 );
                 format!("{set}.{name}")
             }
-            (Some(reference), None) => {
-                parameters.insert(
-                    reference.to_owned(),
-                    ParameterValue::PropertyReference {
-                        property: self.attribute(&name, releases),
-                        property_set: None,
-                    },
-                );
-                format!("attribute {name}")
-            }
+            (None, _) | (Some(_), None) => name,
         };
         parameters.extend(extra);
         (kind.catalog().3, parameters, subject)
@@ -532,13 +534,14 @@ impl<'o> Writer<'o> {
             CheckKind::PartOf => format!("part of {name}"),
             CheckKind::Entity => format!("is a {name}"),
             CheckKind::Population => name.clone(),
-            CheckKind::Required => format!("{subject} is required"),
+            CheckKind::Required | CheckKind::AttributeRequired => format!("{subject} is required"),
             CheckKind::DataType => format!("{subject} is required with a declared type"),
-            CheckKind::Value | CheckKind::Attribute if optional => {
+            CheckKind::Value | CheckKind::AttributeValue if optional => {
                 format!("{subject}, where present, meets its constraints")
             }
-            CheckKind::Attribute if parameters.len() == 1 => format!("{subject} is required"),
-            CheckKind::Value | CheckKind::Attribute => format!("{subject} meets its constraints"),
+            CheckKind::Value | CheckKind::AttributeValue => {
+                format!("{subject} meets its constraints")
+            }
         };
         let description = requirement
             .and_then(|requirement| requirement.instructions.as_deref())
@@ -711,7 +714,8 @@ fn parameter(id: &str, kind: ParameterKind, required: bool) -> ParameterDefiniti
 
 /// One exactly translatable requirement.
 struct Check {
-    /// The property set; `None` for a direct attribute.
+    /// The property set: [`ATTRIBUTE_SET`] for a direct attribute, `None`
+    /// for a check that names no property.
     set: Option<String>,
     name: String,
     kind: CheckKind,
@@ -728,8 +732,10 @@ enum CheckKind {
     DataType,
     /// `property-value`.
     Value,
-    /// `attribute-value`.
-    Attribute,
+    /// `property-required` on a direct attribute.
+    AttributeRequired,
+    /// `property-value` on a direct attribute.
+    AttributeValue,
     /// `predefined-type`.
     PredefinedType,
     /// `classification`.
@@ -811,11 +817,17 @@ impl CheckKind {
                 "An IDS entity requirement with a predefinedType on the applicability's own class.",
                 PREDEFINED_TYPE,
             ),
-            CheckKind::Attribute => (
+            CheckKind::AttributeRequired => (
+                "attribute-required",
+                "Attribute is required",
+                "An IDS attribute facet without a value: the attribute, read in the reserved attribute set, must hold a non-empty value.",
+                PROPERTY_REQUIRED,
+            ),
+            CheckKind::AttributeValue => (
                 "attribute-value",
                 "Attribute meets constraints",
-                "An IDS attribute facet: the attribute must hold a value, and meet the value constraints if any.",
-                ATTRIBUTE_VALUE,
+                "An IDS attribute facet with a value, or an optional or prohibited one: the attribute, read in the reserved attribute set, meets the value constraints.",
+                PROPERTY_VALUE,
             ),
             CheckKind::Value => (
                 "property-value",
@@ -829,8 +841,11 @@ impl CheckKind {
     /// The reference parameter naming what is checked, if any.
     fn reference(self) -> Option<&'static str> {
         match self {
-            CheckKind::Attribute => Some("attribute"),
-            CheckKind::Required | CheckKind::DataType | CheckKind::Value => Some("property"),
+            CheckKind::Required
+            | CheckKind::DataType
+            | CheckKind::Value
+            | CheckKind::AttributeRequired
+            | CheckKind::AttributeValue => Some("property"),
             CheckKind::PredefinedType
             | CheckKind::Classification
             | CheckKind::Material
@@ -843,9 +858,9 @@ impl CheckKind {
     /// The other parameters: name, kind, and whether required.
     fn parameters(self) -> &'static [(&'static str, ParameterKind, bool)] {
         match self {
-            CheckKind::Required => &[],
+            CheckKind::Required | CheckKind::AttributeRequired => &[],
             CheckKind::DataType => &[("data_type", ParameterKind::String, true)],
-            CheckKind::Value | CheckKind::Attribute => VALUE_PARAMETERS,
+            CheckKind::Value | CheckKind::AttributeValue => VALUE_PARAMETERS,
             CheckKind::PredefinedType => &[
                 ("values", ParameterKind::StringList, false),
                 ("patterns", ParameterKind::StringList, false),
@@ -1191,19 +1206,23 @@ fn attribute_check(attribute: &Attribute, occurrence: Occurrence) -> Result<Opti
     let Value::Simple(name) = &attribute.name else {
         return Err(Reason::Restriction);
     };
-    let optional = occurrence == Occurrence::Optional;
     let mut parameters = BTreeMap::new();
-    match &attribute.value {
-        Some(value) => value_parameters(value, &mut parameters)?,
+    let kind = match (&attribute.value, occurrence) {
+        (Some(value), _) => {
+            value_parameters(value, &mut parameters)?;
+            CheckKind::AttributeValue
+        }
         // An optional attribute with no value passes whether or not it is set.
-        None if optional => return Ok(None),
-        None => {}
-    }
+        (None, Occurrence::Optional) => return Ok(None),
+        (None, Occurrence::Required) => CheckKind::AttributeRequired,
+        // A prohibited one is the required one inverted.
+        (None, Occurrence::Prohibited) => CheckKind::AttributeValue,
+    };
     occurrence_flag(occurrence, &mut parameters);
     Ok(Some(Check {
-        set: None,
+        set: Some(ATTRIBUTE_SET.to_owned()),
         name: name.clone(),
-        kind: CheckKind::Attribute,
+        kind,
         parameters,
     }))
 }

@@ -1,9 +1,16 @@
-//! Predefined types resolve as IDS reads them: type object first.
+//! Predefined types resolve in the reserved set as IDS reads them: type
+//! object first.
 #![allow(missing_docs)]
 
-use axioval_engine::{AttributeError, AttributeServiceHandle, EvidenceSession};
+use axioval_engine::{
+    EvidenceSession, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionServiceHandle,
+};
 use axioval_ifc::import_ifc_session;
-use axioval_ir::{ObjectId, SourceId};
+use axioval_ir::{
+    ObjectId, PREDEFINED_TYPE, PREDEFINED_TYPE_SET, PREDEFINED_TYPE_USER_DEFINED, PropertyValue,
+    SourceId,
+};
 
 fn session(data: &str) -> EvidenceSession {
     let bytes = format!(
@@ -12,19 +19,45 @@ fn session(data: &str) -> EvidenceSession {
     import_ifc_session("model.ifc", bytes.as_bytes()).unwrap()
 }
 
+fn read(
+    session: &EvidenceSession,
+    local: &str,
+    name: &str,
+) -> Result<Option<PropertyValue>, PropertyResolutionError> {
+    let id = ObjectId::new(SourceId::new("ifc-step", "model.ifc").unwrap(), local).unwrap();
+    let request = PropertyRequest::try_new(id, Some(PREDEFINED_TYPE_SET.into()), name).unwrap();
+    let resolution = session
+        .service::<PropertyResolutionServiceHandle>()
+        .unwrap()
+        .resolve(&request)?;
+    Ok(match resolution {
+        PropertyResolution::Present(resolved) => {
+            assert!(resolved.property().evidence.iter().all(|e| e.exact));
+            Some(resolved.property().value.clone())
+        }
+        PropertyResolution::Absent(proof) => {
+            assert!(proof.evidence().exact);
+            None
+        }
+    })
+}
+
+/// The designation and whether it is user-defined.
 fn resolve(
     session: &EvidenceSession,
     local: &str,
-) -> Result<(Option<String>, bool), AttributeError> {
-    let id = ObjectId::new(SourceId::new("ifc-step", "model.ifc").unwrap(), local).unwrap();
-    session
-        .service::<AttributeServiceHandle>()
-        .unwrap()
-        .predefined_type(&id)
-        .map(|resolved| {
-            assert!(resolved.evidence.exact);
-            (resolved.value, resolved.user_defined)
-        })
+) -> Result<(Option<String>, bool), PropertyResolutionError> {
+    let value = match read(session, local, PREDEFINED_TYPE)? {
+        None => None,
+        Some(PropertyValue::String(text)) => Some(text),
+        Some(other) => panic!("not text: {other:?}"),
+    };
+    let Some(PropertyValue::Boolean(user_defined)) =
+        read(session, local, PREDEFINED_TYPE_USER_DEFINED)?
+    else {
+        panic!("UserDefined is always a boolean");
+    };
+    Ok((value, user_defined))
 }
 
 #[test]
@@ -71,6 +104,12 @@ fn an_occurrence_with_two_type_objects_is_refused() {
     );
     assert!(matches!(
         resolve(&session, "#1"),
-        Err(AttributeError::Unreadable(_))
+        Err(PropertyResolutionError::Conflicting(_))
     ));
+}
+
+#[test]
+fn other_names_in_the_reserved_set_are_absent() {
+    let session = session("#1=IFCWALL('0000000000000000000001',$,$,$,$,$,$,$,.SOLIDWALL.);\n");
+    assert_eq!(read(&session, "#1", "Nonsense"), Ok(None));
 }

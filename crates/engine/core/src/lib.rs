@@ -357,7 +357,6 @@ impl ExecutionPlan {
     }
 }
 
-mod attributes;
 mod classifications;
 mod compiler;
 mod concepts;
@@ -371,6 +370,7 @@ mod linear_quantity;
 mod materials;
 mod metric_routing;
 mod pairwise;
+mod plan_area;
 mod properties;
 mod proximity;
 mod relationships;
@@ -378,10 +378,6 @@ mod services;
 mod space;
 mod topology;
 mod walkability;
-pub use attributes::{
-    AttributeError, AttributeService, AttributeServiceHandle, AttributeValue, ResolvedAttribute,
-    ResolvedPredefinedType,
-};
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,
@@ -430,6 +426,7 @@ pub use metric_routing::{
     MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
 };
 pub use pairwise::{CandidatePair, CandidateSearchError, candidate_pairs};
+pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,

@@ -1,92 +1,194 @@
-//! Direct IFC attributes (`Name`, `Tag`, `PredefinedType`, ...) of an object.
+//! Entity attributes read as properties in the reserved attribute sets.
 //!
-//! An attribute is read from the object's own instance, in the one release
-//! the file declares, by the name that release's schema gives its slot.
-//! Nothing is inherited from a type object: an occurrence's `Name` is the
-//! occurrence's.
+//! Much of what a checker asks about an IFC object is not in a property set
+//! but in the entity itself: a space's number is `IfcSpace.Name`, its name is
+//! `LongName`, a door's construction type is the `Name` of its
+//! `IfcDoorType`. A request in [`ATTRIBUTE_SET`] reads the object's own
+//! attribute by its schema name; one in [`TYPE_ATTRIBUTE_SET`] reads the
+//! attribute of the type object assigned through `IfcRelDefinesByType`.
 //!
-//! What a slot holds is mapped without guessing:
+//! Only scalar values that mean the same in every file are answered: text,
+//! enumerations, booleans, integers, unit-free reals, and measures
+//! (`IfcLengthMeasure`, ...) converted from the project's default unit to SI.
+//! A measure whose unit cannot be resolved exactly is refused, as is a
+//! reference or an aggregate. An unset
+//! attribute (`$`), an attribute the entity does not declare, and an object
+//! with no type are exact absences; an object typed twice is a conflict.
 //!
-//! - `$`, an empty aggregate, and a logical `.U.` are unset;
-//! - text, enumeration items, booleans and integers are scalars carrying the
-//!   declared type (a `SELECT` value carries the type it was written with);
-//! - reals are scalars only when their type needs no unit (`IfcReal`,
-//!   dimensionless `NUMBER` types); a measure is refused until unit context
-//!   is read, since its number means nothing without it;
-//! - references and non-empty aggregates are present but structured;
-//! - derived (`*`) and binary values are refused.
-
-use std::sync::Arc;
+//! [`PREDEFINED_TYPE_SET`] answers the designation that narrows an object's
+//! class, resolved as IDS reads it: the type object's (its `PredefinedType`,
+//! or its `ElementType`/`ProcessType` when that is user-defined or unset)
+//! unless that is `NOTDEFINED` or empty, then the occurrence's (its
+//! `PredefinedType`, or its `ObjectType` when that is user-defined or unset).
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
-use axioval_engine::{
-    AttributeError, AttributeService, AttributeValue, ResolvedAttribute, ResolvedPredefinedType,
-    SourceSnapshot,
+use axioval_engine::PropertyResolutionError;
+use axioval_ir::{
+    ATTRIBUTE_SET, PREDEFINED_TYPE, PREDEFINED_TYPE_SET, PREDEFINED_TYPE_USER_DEFINED,
+    PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, TYPE_ATTRIBUTE_SET,
 };
-use axioval_ir::{Evidence, ObjectId, PropertyValue};
 use ifc_model::{EntityId, Model, Value};
+use ifc_schema::{Schema, TypeKind};
 
+use crate::layers::{self, LayerIndex};
+use crate::measure::si_value;
 use crate::release::Release;
 
-pub(crate) struct IfcAttributeService {
-    release: Release,
-    model: Arc<Model>,
-    snapshots: Arc<[SourceSnapshot]>,
-    /// Type objects by occurrence, from every `IfcRelDefinesByType`.
-    types: BTreeMap<EntityId, Vec<EntityId>>,
+/// A present attribute value and the locator detail that proves it.
+pub(crate) struct AttributeValue {
+    pub(crate) value: PropertyValue,
+    pub(crate) detail: String,
 }
 
-impl IfcAttributeService {
-    pub(crate) fn new(
-        release: Release,
-        model: Arc<Model>,
-        snapshots: Arc<[SourceSnapshot]>,
-    ) -> Self {
-        let types = type_index(release, &model);
+/// An object's predefined type and whether it is user-defined.
+pub(crate) struct PredefinedType {
+    pub(crate) value: Option<String>,
+    pub(crate) user_defined: bool,
+    /// The type object whose designation was used, if any.
+    type_object: Option<EntityId>,
+}
+
+/// Type objects assigned to each object, with the assigning relationship.
+type TypeIndex = BTreeMap<EntityId, Vec<(EntityId, EntityId)>>;
+
+/// Answers attribute requests for one model.
+pub(crate) struct Attributes {
+    release: Release,
+    types: OnceLock<Result<TypeIndex, String>>,
+    layers: OnceLock<Result<LayerIndex, String>>,
+}
+
+impl Attributes {
+    pub(crate) fn new(release: Release) -> Self {
         Self {
             release,
-            model,
-            snapshots,
-            types,
+            types: OnceLock::new(),
+            layers: OnceLock::new(),
         }
     }
 
-    fn entity_id(object: &ObjectId) -> Result<EntityId, AttributeError> {
-        object
-            .local_id
-            .strip_prefix('#')
-            .and_then(|digits| digits.parse::<u64>().ok())
-            .map(EntityId)
-            .ok_or_else(|| AttributeError::UnknownObject(object.clone()))
+    /// Reads `name` in the reserved `set` for `object`; `Ok(None)` is exact absence.
+    pub(crate) fn resolve(
+        &self,
+        model: &Model,
+        object: EntityId,
+        set: &str,
+        name: &str,
+    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        let schema = self.release.schema;
+        if set == ATTRIBUTE_SET {
+            return read(schema, model, object, name).map(|value| {
+                value.map(|value| AttributeValue {
+                    value,
+                    detail: format!("attribute:{object}:{name}"),
+                })
+            });
+        }
+        if set == PRESENTATION_SET {
+            return self.layer(model, object, name);
+        }
+        if set == PREDEFINED_TYPE_SET {
+            return self.designation_property(model, object, name);
+        }
+        debug_assert_eq!(set, TYPE_ATTRIBUTE_SET);
+        match self.type_objects(model, object)? {
+            [] => Ok(None),
+            [(type_object, relationship)] => read(schema, model, *type_object, name).map(|value| {
+                value.map(|value| AttributeValue {
+                    value,
+                    detail: format!("type-attribute:{relationship}:{type_object}:{name}"),
+                })
+            }),
+            several => Err(PropertyResolutionError::Conflicting(format!(
+                "{object} is typed by {} type objects ({})",
+                several.len(),
+                several
+                    .iter()
+                    .map(|(type_object, _)| type_object.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))),
+        }
+    }
+}
+
+impl Attributes {
+    /// The type objects assigned to `object`, with the assigning relationships.
+    fn type_objects(
+        &self,
+        model: &Model,
+        object: EntityId,
+    ) -> Result<&[(EntityId, EntityId)], PropertyResolutionError> {
+        let types = self
+            .types
+            .get_or_init(|| index_types(self.release.schema, model))
+            .as_ref()
+            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        Ok(types.get(&object).map_or(&[], Vec::as_slice))
     }
 
-    /// The predefined type of any instance, and whether it is user-defined;
-    /// see [`AttributeService::predefined_type`] for the resolution order.
-    pub(crate) fn predefined_of(
+    /// `name` in [`PREDEFINED_TYPE_SET`] for `object`.
+    fn designation_property(
         &self,
-        id: EntityId,
-    ) -> Result<(Option<String>, bool), AttributeError> {
-        let own = |name| self.designation(id, name).ok().flatten();
-        let type_object = match self.types.get(&id).map(Vec::as_slice) {
-            None | Some([]) => None,
-            Some([single]) => Some(*single),
-            Some(_) => {
-                return Err(AttributeError::Unreadable(format!(
-                    "#{} is typed by more than one type object",
-                    id.0
+        model: &Model,
+        object: EntityId,
+        name: &str,
+    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        let is = |wanted: &str| name.eq_ignore_ascii_case(wanted);
+        if !is(PREDEFINED_TYPE) && !is(PREDEFINED_TYPE_USER_DEFINED) {
+            return Ok(None);
+        }
+        let resolved = self.predefined_type(model, object)?;
+        let detail = match resolved.type_object {
+            Some(type_object) => format!("predefined-type:{object}:{type_object}"),
+            None => format!("predefined-type:{object}"),
+        };
+        let value = if is(PREDEFINED_TYPE_USER_DEFINED) {
+            Some(PropertyValue::Boolean(resolved.user_defined))
+        } else {
+            resolved.value.map(PropertyValue::String)
+        };
+        Ok(value.map(|value| AttributeValue { value, detail }))
+    }
+
+    /// The predefined type of any instance, as [`PREDEFINED_TYPE_SET`]
+    /// resolves it.
+    pub(crate) fn predefined_type(
+        &self,
+        model: &Model,
+        object: EntityId,
+    ) -> Result<PredefinedType, PropertyResolutionError> {
+        if model.get(object).is_none() {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let schema = self.release.schema;
+        let own = |name| designation(schema, model, object, name).ok().flatten();
+        let type_object = match self.type_objects(model, object)? {
+            [] => None,
+            [(single, _)] => Some(*single),
+            several => {
+                return Err(PropertyResolutionError::Conflicting(format!(
+                    "{object} is typed by {} type objects",
+                    several.len()
                 )));
             }
         };
         let mut value = None;
         let mut user_defined = None;
+        let mut used = None;
         if let Some(type_id) = type_object {
-            let declared = self.designation(type_id, "PredefinedType").ok().flatten();
-            let custom = || match self.designation(type_id, "ElementType") {
+            let declared = designation(schema, model, type_id, "PredefinedType")
+                .ok()
+                .flatten();
+            let custom = || match designation(schema, model, type_id, "ElementType") {
                 Ok(text) => text,
-                Err(()) => self.designation(type_id, "ProcessType").ok().flatten(),
+                Err(()) => designation(schema, model, type_id, "ProcessType")
+                    .ok()
+                    .flatten(),
             };
-            let (designation, custom_used) = match declared.as_deref() {
+            let (stated, custom_used) = match declared.as_deref() {
                 Some("USERDEFINED") => (custom(), true),
                 None => {
                     let text = custom();
@@ -98,8 +200,9 @@ impl IfcAttributeService {
             if declared.as_deref() == Some("USERDEFINED") || custom_used {
                 user_defined = Some(true);
             }
-            if let Some(designation) = designation.filter(|d| !d.is_empty() && d != "NOTDEFINED") {
-                value = Some(designation);
+            if let Some(stated) = stated.filter(|d| !d.is_empty() && d != "NOTDEFINED") {
+                value = Some(stated);
+                used = Some(type_id);
                 user_defined.get_or_insert(false);
             }
         }
@@ -117,196 +220,211 @@ impl IfcAttributeService {
                 });
             }
         }
-        Ok((value, user_defined.unwrap_or(false)))
-    }
-
-    /// The text of an enumeration or string attribute: `Err` when the class
-    /// has no such attribute, `Ok(None)` when it is unset.
-    fn designation(&self, id: EntityId, name: &str) -> Result<Option<String>, ()> {
-        let entity = self.model.get(id).ok_or(())?;
-        let slot = self
-            .release
-            .schema
-            .attribute_names(&entity.type_name)
-            .iter()
-            .position(|attribute| *attribute == name)
-            .ok_or(())?;
-        Ok(match entity.attribute(slot) {
-            Some(Value::Text(text) | Value::Enum(text)) => Some(text.to_string()),
-            _ => None,
-        })
-    }
-
-    fn scalar(&self, value: &Value, declared: &str) -> Result<AttributeValue, AttributeError> {
-        let data_type = Some(declared.to_ascii_uppercase()).filter(|name| !name.is_empty());
-        let scalar = |value| {
-            Ok(AttributeValue::Scalar {
-                value,
-                data_type: data_type.clone(),
-            })
-        };
-        match value {
-            Value::Null | Value::LogicalUnknown => Ok(AttributeValue::Unset),
-            Value::List(items) if items.is_empty() => Ok(AttributeValue::Unset),
-            Value::List(_) | Value::Ref(_) => Ok(AttributeValue::Structured),
-            Value::Derived => Err(AttributeError::Unsupported(
-                "a derived attribute has no stated value".into(),
-            )),
-            Value::Binary(_) => Err(AttributeError::Unsupported(
-                "binary values are not represented".into(),
-            )),
-            Value::Integer(_) | Value::Real(_) if self.needs_unit(declared) => Err(unit(declared)),
-            Value::Bool(value) => scalar(PropertyValue::Boolean(*value)),
-            Value::Integer(value) => scalar(PropertyValue::Integer(*value)),
-            Value::Text(text) => scalar(PropertyValue::String(text.to_string())),
-            Value::Enum(item) => scalar(PropertyValue::String(item.to_string())),
-            Value::Real(real) => scalar(PropertyValue::Decimal(*real)),
-            // A SELECT slot names the member type it was written with.
-            Value::Typed { type_name, value } => self.scalar(value, type_name),
-        }
-    }
-
-    /// Whether a number of this declared type means nothing without a unit:
-    /// a `REAL`-based defined type other than `IfcReal` itself.
-    fn needs_unit(&self, declared: &str) -> bool {
-        self.base(declared) == "REAL"
-            && !declared.eq_ignore_ascii_case("IFCREAL")
-            && !declared.eq_ignore_ascii_case("REAL")
-    }
-
-    fn base(&self, declared: &str) -> String {
-        let base = self
-            .release
-            .schema
-            .resolve_defined(declared)
-            .to_ascii_uppercase();
-        base.split('(').next().unwrap_or_default().trim().to_owned()
-    }
-
-    fn locator(&self, detail: impl std::fmt::Display) -> String {
-        format!("ifc:{}:{detail}", self.snapshots[0].fingerprint())
-    }
-}
-
-impl AttributeService for IfcAttributeService {
-    fn source_snapshots(&self) -> &[SourceSnapshot] {
-        &self.snapshots
-    }
-
-    /// Resolved as IDS reads it: the type object's designation first (its
-    /// `PredefinedType`, or its `ElementType`/`ProcessType` when that is
-    /// user-defined or unset) unless that is `NOTDEFINED` or empty, then the
-    /// occurrence's (its `PredefinedType`, or its `ObjectType` when that is
-    /// user-defined or unset).
-    fn predefined_type(&self, object: &ObjectId) -> Result<ResolvedPredefinedType, AttributeError> {
-        let id = Self::entity_id(object)?;
-        if self.model.get(id).is_none() {
-            return Err(AttributeError::UnknownObject(object.clone()));
-        }
-        let (value, user_defined) = self.predefined_of(id)?;
-        Ok(ResolvedPredefinedType {
+        Ok(PredefinedType {
             value,
-            user_defined,
-            evidence: Evidence::exact(
-                self.snapshots[0].source().clone(),
-                self.locator(format_args!("predefined-type:#{}", id.0)),
-            ),
+            user_defined: user_defined.unwrap_or(false),
+            type_object: used,
         })
     }
 
-    fn attribute(
+    /// The one presentation layer of `object`; several distinct ones conflict.
+    fn layer(
         &self,
-        object: &ObjectId,
+        model: &Model,
+        object: EntityId,
         name: &str,
-    ) -> Result<ResolvedAttribute, AttributeError> {
-        let id = object
-            .local_id
-            .strip_prefix('#')
-            .and_then(|digits| digits.parse::<u64>().ok())
-            .map(EntityId)
-            .ok_or_else(|| AttributeError::UnknownObject(object.clone()))?;
-        let entity = self
-            .model
-            .get(id)
-            .ok_or_else(|| AttributeError::UnknownObject(object.clone()))?;
-        let class = entity.type_name.as_ref();
-        let definitions = self.release.schema.attributes(class);
-        let Some(slot) = definitions
-            .iter()
-            .position(|attribute| attribute.name == name)
-        else {
-            return Err(AttributeError::UnknownAttribute {
-                class: class.to_owned(),
-                attribute: name.to_owned(),
-            });
-        };
-        let raw = entity.attribute(slot).ok_or_else(|| {
-            AttributeError::Unreadable(format!("#{} has no slot for `{name}`", id.0))
-        })?;
-        let definition = definitions[slot];
-        let value = if definition.aggregate {
-            match raw {
-                Value::Null => AttributeValue::Unset,
-                Value::List(items) if items.is_empty() => AttributeValue::Unset,
-                Value::List(_) => AttributeValue::Structured,
-                Value::Derived => {
-                    return Err(AttributeError::Unsupported(
-                        "a derived attribute has no stated value".into(),
-                    ));
-                }
-                _ => {
-                    return Err(AttributeError::Unreadable(format!(
-                        "#{} states a non-aggregate for aggregate `{name}`",
-                        id.0
-                    )));
-                }
+    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        if !name.eq_ignore_ascii_case(PRESENTATION_LAYER) {
+            return Ok(None);
+        }
+        let schema = self.release.schema;
+        let index = self
+            .layers
+            .get_or_init(|| layers::index(schema, model))
+            .as_ref()
+            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        let found = layers::layers_of(schema, model, index, object)
+            .map_err(PropertyResolutionError::Incomplete)?;
+        let mut found = found.into_iter();
+        match (found.next(), found.next()) {
+            (None, _) => Ok(None),
+            (Some((layer, assignment)), None) => Ok(Some(AttributeValue {
+                value: PropertyValue::String(layer),
+                detail: format!("layer:{object}:{assignment}"),
+            })),
+            (Some((first, _)), Some((second, _))) => {
+                Err(PropertyResolutionError::Conflicting(format!(
+                    "{object} is on {} layers ({first}, {second}{})",
+                    2 + found.len(),
+                    if found.len() > 0 { ", ..." } else { "" }
+                )))
             }
-        } else {
-            self.scalar(raw, &definition.type_name)?
-        };
-        Ok(ResolvedAttribute {
-            value,
-            evidence: Evidence::exact(
-                self.snapshots[0].source().clone(),
-                self.locator(format_args!("attribute:#{}.{name}", id.0)),
-            ),
-        })
+        }
     }
 }
 
-fn unit(declared: &str) -> AttributeError {
-    AttributeError::Unsupported(format!("{declared} is a measure; its unit is not read"))
+/// The text of an enumeration or string attribute: `Err` when the entity
+/// declares no such attribute, `Ok(None)` when it is unset.
+fn designation(
+    schema: &Schema,
+    model: &Model,
+    id: EntityId,
+    name: &str,
+) -> Result<Option<String>, ()> {
+    let entity = model.get(id).ok_or(())?;
+    let slot = schema
+        .attribute_names(&entity.type_name)
+        .iter()
+        .position(|attribute| *attribute == name)
+        .ok_or(())?;
+    Ok(match entity.attribute(slot) {
+        Some(Value::Text(text) | Value::Enum(text)) => Some(text.to_string()),
+        _ => None,
+    })
 }
 
-/// Type objects of every occurrence named by an `IfcRelDefinesByType`.
-fn type_index(release: Release, model: &Model) -> BTreeMap<EntityId, Vec<EntityId>> {
-    let schema = release.schema;
-    let names = schema.attribute_names("IfcRelDefinesByType");
-    let slot = |wanted: &str| names.iter().position(|name| *name == wanted);
-    let (Some(objects), Some(relating)) = (slot("RelatedObjects"), slot("RelatingType")) else {
-        return BTreeMap::new();
+/// One attribute of one entity, by schema name (ASCII case-insensitive).
+fn read(
+    schema: &Schema,
+    model: &Model,
+    id: EntityId,
+    name: &str,
+) -> Result<Option<PropertyValue>, PropertyResolutionError> {
+    let entity = model
+        .get(id)
+        .ok_or(PropertyResolutionError::InvalidRequest)?;
+    let attributes = schema.attributes(&entity.type_name);
+    let Some((slot, attribute)) = attributes
+        .iter()
+        .enumerate()
+        .find(|(_, attribute)| attribute.name.eq_ignore_ascii_case(name))
+    else {
+        // The entity type declares no such attribute: it cannot have it.
+        return Ok(None);
     };
-    let mut index: BTreeMap<EntityId, Vec<EntityId>> = BTreeMap::new();
-    for (_, relationship) in model.iter() {
-        if !relationship
-            .type_name
-            .eq_ignore_ascii_case("IFCRELDEFINESBYTYPE")
-        {
-            continue;
+    let unsupported = |why: &str| {
+        Err(PropertyResolutionError::Unavailable(format!(
+            "{id}.{} {why}",
+            attribute.name
+        )))
+    };
+    if attribute.aggregate {
+        return unsupported("is an aggregate, not a scalar value");
+    }
+    match entity.attribute(slot) {
+        None => Err(PropertyResolutionError::Incomplete(format!(
+            "{id} has no slot for {}",
+            attribute.name
+        ))),
+        Some(Value::Null) => Ok(None),
+        Some(Value::Derived) => unsupported("is derived and holds no stated value"),
+        Some(Value::Typed { type_name, value }) => {
+            typed(schema, model, type_name, value).and_then(|value| match value {
+                Some(value) => Ok(Some(value)),
+                None => unsupported("holds a value this adapter cannot read exactly"),
+            })
         }
-        let Some(Value::Ref(type_id)) = relationship.attribute(relating) else {
-            continue;
+        Some(value) => {
+            typed(schema, model, &attribute.type_name, value).and_then(|value| match value {
+                Some(value) => Ok(Some(value)),
+                None => unsupported("holds a value this adapter cannot read exactly"),
+            })
+        }
+    }
+}
+
+/// A value of declared type `type_name`: a measure in SI, or a plain scalar.
+fn typed(
+    schema: &Schema,
+    model: &Model,
+    type_name: &str,
+    value: &Value,
+) -> Result<Option<PropertyValue>, PropertyResolutionError> {
+    if type_name.to_ascii_uppercase().ends_with("MEASURE") {
+        #[allow(clippy::cast_precision_loss)]
+        let number = match value {
+            Value::Real(number) => *number,
+            Value::Integer(number) if number.unsigned_abs() <= 1 << 53 => *number as f64,
+            _ => return Ok(None),
         };
-        if let Some(Value::List(related)) = relationship.attribute(objects) {
-            for item in related {
-                if let Value::Ref(occurrence) = item {
-                    let types = index.entry(*occurrence).or_default();
-                    if !types.contains(type_id) {
-                        types.push(*type_id);
-                    }
-                }
+        // Attributes carry no explicit unit: the project default applies.
+        return si_value(model, type_name, None, number);
+    }
+    Ok(scalar(schema, type_name, value))
+}
+
+/// A scalar value of declared type `type_name`, when it reads the same in every file.
+fn scalar(schema: &Schema, type_name: &str, value: &Value) -> Option<PropertyValue> {
+    if schema.entity(type_name).is_some() {
+        return None;
+    }
+    let kind = schema
+        .type_def(type_name)
+        .map(|definition| &definition.kind);
+    if let Some(TypeKind::Enumeration(_)) = kind {
+        return match value {
+            Value::Enum(item) => Some(PropertyValue::String(item.to_string())),
+            _ => None,
+        };
+    }
+    if let Some(TypeKind::Select(_)) = kind {
+        // A select value is written typed; an untyped one cannot be placed.
+        return None;
+    }
+    let base = schema.resolve_defined(type_name).to_ascii_uppercase();
+    match value {
+        Value::Text(text) if base.starts_with("STRING") => {
+            Some(PropertyValue::String(text.to_string()))
+        }
+        Value::Bool(flag) if base == "BOOLEAN" || base == "LOGICAL" => {
+            Some(PropertyValue::Boolean(*flag))
+        }
+        Value::Integer(number) if base == "INTEGER" => Some(PropertyValue::Integer(*number)),
+        Value::Real(number) if base == "REAL" && number.is_finite() => {
+            Some(PropertyValue::Decimal(*number))
+        }
+        #[allow(clippy::cast_precision_loss)]
+        Value::Integer(number) if base == "REAL" && number.unsigned_abs() <= 1 << 53 => {
+            Some(PropertyValue::Decimal(*number as f64))
+        }
+        _ => None,
+    }
+}
+
+/// Every `IfcRelDefinesByType` edge, object to (type object, relationship).
+fn index_types(schema: &Schema, model: &Model) -> Result<TypeIndex, String> {
+    let names = schema.attribute_names("IfcRelDefinesByType");
+    let slot = |name: &str| {
+        names
+            .iter()
+            .position(|candidate| *candidate == name)
+            .ok_or_else(|| format!("IfcRelDefinesByType declares no {name}"))
+    };
+    let (related, relating) = (slot("RelatedObjects")?, slot("RelatingType")?);
+    let mut index = TypeIndex::new();
+    for relationship in model.ids_of_type("IfcRelDefinesByType") {
+        let malformed = |what: &str| format!("{relationship} (IfcRelDefinesByType) {what}");
+        let entity = model
+            .get(*relationship)
+            .ok_or_else(|| malformed("is indexed but absent"))?;
+        let Some(Value::Ref(type_object)) = entity.attribute(relating) else {
+            return Err(malformed("has no RelatingType reference"));
+        };
+        if model.get(*type_object).is_none() {
+            return Err(malformed("references a missing type object"));
+        }
+        let Some(Value::List(objects)) = entity.attribute(related) else {
+            return Err(malformed("has no RelatedObjects list"));
+        };
+        for object in objects {
+            let Value::Ref(object) = object else {
+                return Err(malformed("lists a related object that is not a reference"));
+            };
+            let entry = index.entry(*object).or_default();
+            if !entry.iter().any(|(held, _)| held == type_object) {
+                entry.push((*type_object, *relationship));
             }
         }
     }
-    index
+    Ok(index)
 }

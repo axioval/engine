@@ -1,33 +1,34 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    AttributeServiceHandle, ClassificationServiceHandle, CompletePropertyAbsenceEvidence,
-    DecompositionServiceHandle, EvidenceSession, EvidenceSessionError, MaterialServiceHandle,
-    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, DecompositionServiceHandle,
+    EvidenceSession, EvidenceSessionError, MaterialServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
     PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
     SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
     TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
+    is_reserved_set,
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
-    ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
+    ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
 };
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::attributes::IfcAttributeService;
+use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
 use crate::decomposition::IfcDecompositionService;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
 use crate::materials::IfcMaterialService;
+use crate::measure::si_value;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
-use crate::unread::UnreadDefinitions;
 
 /// Production IFC import/session construction failure.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -82,12 +83,11 @@ impl TypeHierarchyService for IfcTypeHierarchy {
     }
 }
 
-#[derive(Clone)]
 struct IfcPropertyService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
-    unread: Arc<UnreadDefinitions>,
+    attributes: Arc<Attributes>,
 }
 
 impl IfcPropertyService {
@@ -115,9 +115,9 @@ impl IfcPropertyService {
     /// Decided by the type's base in this release's schema, so every
     /// string-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...) and every
     /// integer-based one (`IfcTimeStamp`, `IfcCountMeasure` as written) is
-    /// carried with its declared type. Real-valued measures stay refused: their
-    /// number means nothing without the unit context, which is not read yet.
-    /// `IFCREAL` and dimensionless `NUMBER` types have no unit.
+    /// carried with its declared type. Real-valued measures are not carried
+    /// here: `pset_value` converts them through their unit. `IFCREAL` and
+    /// dimensionless `NUMBER` types have no unit.
     fn carries_exactly(&self, value: &ExactValue, value_type: &str) -> bool {
         let base = self
             .release
@@ -131,6 +131,82 @@ impl IfcPropertyService {
             ExactValue::Real(_) => value_type.eq_ignore_ascii_case("IFCREAL") || base == "NUMBER",
             ExactValue::Text(_) => base == "STRING",
             _ => false,
+        }
+    }
+
+    /// The value of an `IfcPropertySingleValue` or physical quantity,
+    /// measures converted to SI.
+    ///
+    /// A value its declared type carries exactly (see `carries_exactly`) is
+    /// read as stated and must carry no unit. Any other number must be a
+    /// measure whose effective unit resolves exactly.
+    fn pset_value(&self, exact: &ExactProperty) -> Result<PropertyValue, PropertyResolutionError> {
+        let plain = match (&exact.value, exact.value_type.as_deref()) {
+            (ExactValue::Null, None) => Some(PropertyValue::Null),
+            (value, Some(value_type)) if self.carries_exactly(value, value_type) => match value {
+                ExactValue::Bool(value) => Some(PropertyValue::Boolean(*value)),
+                ExactValue::Integer(value) => Some(PropertyValue::Integer(*value)),
+                ExactValue::Real(value) => Some(PropertyValue::Decimal(*value)),
+                ExactValue::Text(value) => Some(PropertyValue::String(value.to_string())),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(value) = plain {
+            return if exact.unit_id.is_some() {
+                Err(PropertyResolutionError::InexactEvidence)
+            } else {
+                Ok(value)
+            };
+        }
+        let number = match exact.value {
+            ExactValue::Real(value) => value,
+            #[allow(clippy::cast_precision_loss)]
+            ExactValue::Integer(value) if value.unsigned_abs() <= 1 << 53 => value as f64,
+            _ => return Err(PropertyResolutionError::InexactEvidence),
+        };
+        let Some(value_type) = exact.value_type.as_deref() else {
+            return Err(PropertyResolutionError::InexactEvidence);
+        };
+        si_value(&self.model, value_type, exact.unit_id, number)?
+            .ok_or(PropertyResolutionError::InexactEvidence)
+    }
+
+    fn resolve_attribute(
+        &self,
+        request: &PropertyRequest,
+        object: EntityId,
+        set: &str,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        if self.model.get(object).is_none() {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let source = self.snapshots[0].source().clone();
+        match self
+            .attributes
+            .resolve(&self.model, object, set, request.property())?
+        {
+            Some(found) => {
+                let property = Property::new(set, request.property(), found.value)
+                    .map_err(|_| PropertyResolutionError::InvalidRequest)?
+                    .with_evidence(Evidence::exact(source, self.locator(found.detail)));
+                Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                    request.clone(),
+                    property,
+                )?))
+            }
+            None => Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(
+                    request.clone(),
+                    Evidence::exact(
+                        source,
+                        self.locator(format_args!(
+                            "absence:{object}:{set}:{}",
+                            request.property()
+                        )),
+                    ),
+                )?,
+            )),
         }
     }
 }
@@ -148,6 +224,9 @@ impl PropertyResolutionService for IfcPropertyService {
             return Err(PropertyResolutionError::InvalidRequest);
         }
         let object = Self::entity_id(request)?;
+        if let Some(set) = request.property_set().filter(|set| is_reserved_set(set)) {
+            return self.resolve_attribute(request, object, set);
+        }
         match exact_property(
             &self.model,
             object,
@@ -160,25 +239,7 @@ impl PropertyResolutionService for IfcPropertyService {
                     ExactSource::Type(type_id) => format!("type:{type_id}"),
                     _ => return Err(PropertyResolutionError::InexactEvidence),
                 };
-                if exact.unit_id.is_some() {
-                    return Err(PropertyResolutionError::InexactEvidence);
-                }
-                let compatible_type = match (&exact.value, exact.value_type.as_deref()) {
-                    (ExactValue::Null, None) => true,
-                    (value, Some(value_type)) => self.carries_exactly(value, value_type),
-                    _ => false,
-                };
-                if !compatible_type {
-                    return Err(PropertyResolutionError::InexactEvidence);
-                }
-                let value = match exact.value {
-                    ExactValue::Null => PropertyValue::Null,
-                    ExactValue::Bool(value) => PropertyValue::Boolean(value),
-                    ExactValue::Integer(value) => PropertyValue::Integer(value),
-                    ExactValue::Real(value) => PropertyValue::Decimal(value),
-                    ExactValue::Text(value) => PropertyValue::String(value.to_string()),
-                    _ => return Err(PropertyResolutionError::InexactEvidence),
-                };
+                let value = self.pset_value(&exact)?;
                 let mut property =
                     Property::new(exact.property_set.as_ref(), request.property(), value)
                         .map_err(|_| PropertyResolutionError::InvalidRequest)?;
@@ -201,28 +262,19 @@ impl PropertyResolutionService for IfcPropertyService {
                     property,
                 )?))
             }
-            Ok(ExactResolution::Absent) => {
-                // Upstream proves absence from property sets only.
-                if let Some(reason) = self
-                    .unread
-                    .obscures(request.property_set(), request.property())
-                {
-                    return Err(PropertyResolutionError::Incomplete(reason));
-                }
-                Ok(PropertyResolution::Absent(
-                    CompletePropertyAbsenceEvidence::try_new(
-                        request.clone(),
-                        Evidence::exact(
-                            self.snapshots[0].source().clone(),
-                            self.locator(format_args!(
-                                "absence:{object}:{}:{}",
-                                request.property_set().unwrap_or("*"),
-                                request.property()
-                            )),
-                        ),
-                    )?,
-                ))
-            }
+            Ok(ExactResolution::Absent) => Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(
+                    request.clone(),
+                    Evidence::exact(
+                        self.snapshots[0].source().clone(),
+                        self.locator(format_args!(
+                            "absence:{object}:{}:{}",
+                            request.property_set().unwrap_or("*"),
+                            request.property()
+                        )),
+                    ),
+                )?,
+            )),
             Ok(_) => Err(PropertyResolutionError::InexactEvidence),
             Err(error) => Err(map_resolution_error(&error)),
         }
@@ -309,11 +361,14 @@ pub fn import_ifc_session(
             .map_err(|error| session_error(&error))?;
     let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
     let model = Arc::new(model);
+    // One attribute reader, so the type index is built once for properties
+    // and for the predefined types of wholes.
+    let attributes = Arc::new(Attributes::new(release));
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
         release,
         model: model.clone(),
         snapshots: snapshots.clone(),
-        unread: Arc::new(UnreadDefinitions::read(release, &model)),
+        attributes: attributes.clone(),
     }));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,
@@ -321,12 +376,6 @@ pub fn import_ifc_session(
         global_ids,
         snapshots.clone(),
     )));
-    let attribute_service = Arc::new(IfcAttributeService::new(
-        release,
-        model.clone(),
-        snapshots.clone(),
-    ));
-    let attributes = AttributeServiceHandle::new(attribute_service.clone());
     let materials = MaterialServiceHandle::new(Arc::new(IfcMaterialService::new(
         release,
         model.clone(),
@@ -345,7 +394,7 @@ pub fn import_ifc_session(
         model,
         snapshots.clone(),
         relationship_service.clone(),
-        attribute_service,
+        attributes,
     )));
     let relationships = RelationshipSelectionServiceHandle::new(relationship_service);
     let hierarchy =
@@ -357,7 +406,6 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(hierarchy))
         .and_then(|session| session.with_service(integrity))
         .and_then(|session| session.with_service(classifications))
-        .and_then(|session| session.with_service(attributes))
         .and_then(|session| session.with_service(materials))
         .and_then(|session| session.with_service(decomposition))
         .map_err(|error| session_error(&error))

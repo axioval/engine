@@ -353,7 +353,7 @@ fn an_entity_requirement_checks_the_object_class() {
         check("IFCWALL", &[list("class_patterns", &["IFCW.*"])]),
         Outcome::Meets
     );
-    // A predefined type needs the attribute service.
+    // A predefined type needs the property service that resolves it.
     assert_eq!(
         check(
             "IFCWALL",

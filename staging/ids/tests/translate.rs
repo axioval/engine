@@ -682,13 +682,21 @@ fn value_rules_check_a_real_model() {
 
 #[test]
 fn attribute_rules_check_a_real_model() {
-    let flagged = |requirement: &str| {
+    // Attributes are read as properties of the reserved attribute set, by
+    // the property rules: `property-required` without a value,
+    // `property-value` with one.
+    let flagged = |requirement: &str, capability: &str| {
         let translation = one("IFC4", OPTIONAL, WALL, requirement);
         let rule = &translation.ruleset.root.folders[0].rules[0];
         assert_eq!(
             translation.definitions.definitions[&rule.definition_id].capability,
-            "axioval:capability.attribute-value"
+            format!("axioval:capability.{capability}")
         );
+        let ParameterValue::PropertyReference { property_set, .. } = &rule.parameters["property"]
+        else {
+            panic!("{:?}", rule.parameters);
+        };
+        assert_eq!(property_set.as_deref(), Some(axioval::ir::ATTRIBUTE_SET));
         let report = run(&translation, IFC4_MODEL);
         assert!(
             report.not_evaluated().is_empty(),
@@ -712,11 +720,22 @@ fn attribute_rules_check_a_real_model() {
         )
     };
     // Every wall in the model has a GlobalId; only #1's is ...01.
-    assert!(flagged(&attribute("", "")).is_empty());
-    assert_eq!(flagged(&attribute("", "0000000000000000000001")), ["#2"]);
+    assert!(flagged(&attribute("", ""), "property-required").is_empty());
+    assert_eq!(
+        flagged(&attribute("", "0000000000000000000001"), "property-value"),
+        ["#2"]
+    );
+    // Prohibited: every wall has one, so every wall is flagged.
+    assert_eq!(
+        flagged(
+            &attribute("cardinality=\"prohibited\"", ""),
+            "property-value"
+        ),
+        ["#1", "#2"]
+    );
     let name = "<attribute><name><simpleValue>Name</simpleValue></name></attribute>";
     // No wall in the model is named.
-    assert_eq!(flagged(name), ["#1", "#2"]);
+    assert_eq!(flagged(name, "property-required"), ["#1", "#2"]);
 }
 
 #[test]

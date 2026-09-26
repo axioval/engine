@@ -4,30 +4,49 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    AttributeError, AttributeService, AttributeServiceHandle, CompiledRule, ResolvedAttribute,
-    ResolvedPredefinedType, RuleCapability, RuleContext, ServiceRegistry, SourceSnapshot,
+    CompiledRule, CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    ResolvedProperty, RuleCapability, RuleContext, ServiceRegistry, SourceSnapshot,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
-use axioval_ir::{Evidence, NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
+use axioval_ir::{
+    Evidence, NotEvaluatedReason, Object, ObjectId, PREDEFINED_TYPE, PREDEFINED_TYPE_SET,
+    PREDEFINED_TYPE_USER_DEFINED, Project, Property, PropertyValue, RuleId, SourceId,
+};
 use axioval_rules::PredefinedTypeRequirement;
 
 fn source() -> SourceId {
     SourceId::new("cad", "native-model").unwrap()
 }
 
+/// A source answering the reserved predefined-type set, and nothing else.
 struct Fixed(Option<&'static str>, bool, Vec<SourceSnapshot>);
-impl AttributeService for Fixed {
+impl PropertyResolutionService for Fixed {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &self.2
     }
-    fn attribute(&self, _: &ObjectId, _: &str) -> Result<ResolvedAttribute, AttributeError> {
-        Err(AttributeError::Unsupported("not used".into()))
-    }
-    fn predefined_type(&self, _: &ObjectId) -> Result<ResolvedPredefinedType, AttributeError> {
-        Ok(ResolvedPredefinedType {
-            value: self.0.map(str::to_owned),
-            user_defined: self.1,
-            evidence: Evidence::exact(source(), "native wall type"),
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        assert_eq!(request.property_set(), Some(PREDEFINED_TYPE_SET));
+        let value = match request.property() {
+            PREDEFINED_TYPE => self.0.map(|text| PropertyValue::String(text.into())),
+            PREDEFINED_TYPE_USER_DEFINED => Some(PropertyValue::Boolean(self.1)),
+            other => panic!("unexpected {other}"),
+        };
+        let evidence = Evidence::exact(source(), "native wall type");
+        Ok(match value {
+            Some(value) => PropertyResolution::Present(ResolvedProperty::try_new(
+                request.clone(),
+                Property::new(PREDEFINED_TYPE_SET, request.property(), value)
+                    .unwrap()
+                    .with_evidence(evidence),
+            )?),
+            None => PropertyResolution::Absent(CompletePropertyAbsenceEvidence::try_new(
+                request.clone(),
+                evidence,
+            )?),
         })
     }
 }
@@ -52,7 +71,7 @@ fn check(
     let snapshot = SourceSnapshot::try_new(source(), "r1", "sha256:1").unwrap();
     let mut services = ServiceRegistry::new();
     services
-        .register(AttributeServiceHandle::new(Arc::new(Fixed(
+        .register(PropertyResolutionServiceHandle::new(Arc::new(Fixed(
             value,
             user_defined,
             vec![snapshot],
@@ -136,6 +155,37 @@ fn user_defined_asks_only_whether_it_is() {
     assert_eq!(
         check(Some("SHEAR"), false, &[user_defined()]),
         Outcome::Fails
+    );
+}
+
+#[test]
+fn without_a_property_service_nothing_is_decided() {
+    let project = Project::new(vec![Object::new(
+        ObjectId::new(source(), "wall-1").unwrap(),
+        "wall",
+    )])
+    .unwrap();
+    let rule = CompiledRule {
+        id: RuleId::new("predefined").unwrap(),
+        capability: "axioval:capability.predefined-type".into(),
+        severity: Severity::Error,
+        selector: Selector::All,
+        parameters: BTreeMap::from([list("values", &["X"])])
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    };
+    let evaluation = PredefinedTypeRequirement.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &ServiceRegistry::new(),
+        },
+        &rule,
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::MissingService
     );
 }
 

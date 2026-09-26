@@ -19,18 +19,7 @@ A value is carried when its defined type's base in the file's release maps witho
 loss: every `STRING`-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...),
 `INTEGER`- and `NUMBER`-based integers (`IfcTimeStamp`, `IfcCountMeasure`),
 `IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
-measures stay refused until unit handling lands.
-
-The session registers an attribute service that reads an object's own instance, in the file's
-release, by the name the schema gives the slot; nothing is inherited from a type object. `$`, an
-empty aggregate and a logical `.U.` are unset; text, enumeration items (as their text), booleans
-and integers are scalars with their declared type; references and non-empty aggregates are
-structured. Measures that need a unit, derived (`*`) and binary values are refused.
-
-Its predefined type resolves as IDS reads it: the type object's designation first (its
-`PredefinedType`, or `ElementType`/`ProcessType` when that is user-defined or unset) unless it is
-`NOTDEFINED` or empty, then the occurrence's (`PredefinedType`, or `ObjectType` when user-defined
-or unset). An occurrence typed by two type objects is refused.
+measures are converted to SI through their unit (see *Measures*).
 
 Materials come from `ifc-material` for IFC4: the occurrence's `IfcRelAssociatesMaterial`, else
 its type's, with a usage standing for its set. IFC2X3 materials are refused until the upstream
@@ -41,14 +30,15 @@ upwards, containment and grouping directly, voiding through a filled opening, an
 (container, aggregate, nest, filled opening, voided element, then group) upwards. Two wholes of
 one kind at a step are refused as ambiguous; a cycle is refused as malformed.
 
-Exact absence covers what the resolver reads: `IfcPropertySet` members.
-Quantity sets (`IfcElementQuantity`) and predefined property sets
-(`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused
-as incomplete when the requested set is one of them, or, for a request that
-names no set, when one of them has a member of the requested name (a
-quantity, a nested quantity, or a predefined set's attribute). The index is
-built once per session over the whole file; it can make an answer not
-evaluated, never change a present value.
+Quantity sets (`IfcElementQuantity`) resolve like property sets
+(`ifc-properties` 0.4.0, openbimrs/ifc#66): `Qto_SpaceBaseQuantities.NetFloorArea`
+is an area quantity in SI. The request is refused, never answered as absent, when:
+- a complex quantity or two quantities carry the requested name;
+- a property set and a quantity set share the requested set name;
+- the requested name is an attribute of a predefined property set such as
+  `IfcDoorLiningProperties`, which is not read.
+
+Any other absence is exact.
 
 Direct-property completeness does not imply relationship completeness. The IFC
 session registers an exact relationship-selection service: a relationship
@@ -101,6 +91,64 @@ the system itself. A file that chains references anyway is refused rather
 than flattened. An assignment whose system the file does not state is
 neither a match nor a mismatch, and the object is reported as not evaluated.
 
+### Attributes
+
+The property service answers the reserved attribute sets from the entity
+itself. In `axioval:attributes`, the property name is the attribute's name in
+the file's release schema, matched ignoring ASCII case: `Name` is an
+`IfcSpace`'s number, `LongName` its name, and `PredefinedType` its
+enumeration. `axioval:type-attributes` reads the same attributes from the
+type object `IfcRelDefinesByType` assigns, so `Name` there is the
+construction type. The evidence locator names the instance
+(`attribute:#12:LongName`), or the relationship and the type object
+(`type-attribute:#40:#30:Name`).
+
+- Text, enumeration, boolean, integer and unit-free real values are
+  answered.
+- An unset attribute (`$`), an attribute the entity does not declare, and an
+  object without a type are exact absences.
+- An object typed by two type objects is a conflict.
+- A measure such as `IfcBuildingStorey.Elevation` is converted to SI with
+  the project's default unit, as described under *Measures*. References,
+  aggregates and derived values are refused.
+
+### Predefined types
+
+`axioval:predefined-type` answers the designation that narrows an object's
+class, resolved as IDS reads it: the type object's (its `PredefinedType`, or
+`ElementType`/`ProcessType` when that is user-defined or unset) unless it is
+`NOTDEFINED` or empty, then the occurrence's (`PredefinedType`, or
+`ObjectType` when user-defined or unset). `PredefinedType` is that text,
+exactly absent when nothing is stated; `UserDefined` is always a boolean. An
+occurrence typed by two type objects is a conflict. The locator names the
+object and, when its designation was used, the type object
+(`predefined-type:#4:#5`).
+
+### Measures
+
+A measure is a number in a unit: the explicit `Unit` of a property,
+otherwise the project's default unit of its kind. Property values and
+attributes of a measure type go through `ifc_properties::exact_unit`
+(0.3.0). It resolves the effective unit to an exact SI scale, with an offset
+for degrees Celsius, and follows conversion-based and derived units. The
+value becomes a quantity in SI (`240` mm reads as `0.24` m); a ratio or
+count becomes a plain decimal. A measure whose unit cannot be resolved is
+refused rather than read as a bare number, and so is a plain scalar
+(`IFCREAL`, `IFCINTEGER`) that carries a unit. Causes include no
+`IfcProject`, no project unit of the needed kind, or an ambiguous
+assignment.
+
+### Presentation layers
+
+`axioval:presentation.Layer` is read from `IfcPresentationLayerAssignment`.
+The adapter looks for layer assignments on:
+- the object's shape representations;
+- their items;
+- the representations that `IfcMappedItem`s map in, which is how a type's shared geometry reaches its occurrences.
+
+Several distinct layers are a conflict. An object without a shape, or with no assigned layer, has none. The locator names the object and the assignment
+(`layer:#1:#80`).
+
 ### Integrity warnings
 
 Besides relationship ends, the integrity scan reports two schema cardinality
@@ -137,6 +185,12 @@ candidate obstacle. An unmeasured one has an unknown extent, so contact and
 space measurements refuse while one exists that could affect them, and
 free-space checks refuse it as an obstacle. Treating an unmeasured slab as
 absent would make a wall above it look unsupported, exactly.
+
+`AxiolidPlanAreaService` measures plan footprints and footprint overlaps
+through the same plan overlay. A planar mesh measures exactly. A tessellated
+mesh with chord deviation `d` and footprint perimeter `P` measures within
+`2·P·d + π·d²`, the area of the band where the true and meshed boundaries can
+differ.
 
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 

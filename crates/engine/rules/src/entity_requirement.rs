@@ -1,19 +1,21 @@
 //! Requirements on an object's own class.
 
 use axioval_engine::{
-    AttributeServiceHandle, CapabilityEvaluation, CompiledRule, NotEvaluatedReason,
-    ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    RuleCapability, RuleContext,
 };
 use axioval_ir::Evidence;
 
 use crate::classification_requirement::Matcher;
+use crate::predefined_type::designation;
 use crate::property_value::finding;
 use crate::selection::select_objects;
 
 /// Requires each selected object's class (its kind, compared upper case) to
 /// be one of `classes` or match `class_patterns`, and, if given, its
 /// predefined type to be one of `predefined_types` or match
-/// `predefined_patterns`, as the source's attribute service resolves it.
+/// `predefined_patterns`, as the source resolves it in the reserved
+/// predefined-type set.
 pub struct EntityRequirement;
 impl RuleCapability for EntityRequirement {
     fn selectable(&self) -> bool {
@@ -52,7 +54,6 @@ impl RuleCapability for EntityRequirement {
             }
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let service = context.services.get::<AttributeServiceHandle>();
         for object in selected {
             let kind = object.kind().to_ascii_uppercase();
             if !class.matches(&kind) {
@@ -69,15 +70,7 @@ impl RuleCapability for EntityRequirement {
             if predefined.is_none() {
                 continue;
             }
-            let Some(service) = service else {
-                evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    NotEvaluatedReason::MissingService,
-                    "attribute service is not registered",
-                );
-                continue;
-            };
-            match service.predefined_type(&object.id) {
+            match designation(context, object) {
                 Ok(resolved) => {
                     let met = resolved
                         .value
@@ -91,15 +84,13 @@ impl RuleCapability for EntityRequirement {
                                 "the predefined type {:?} is not a required one",
                                 resolved.value.as_deref().unwrap_or("none")
                             ),
-                            vec![resolved.evidence],
+                            resolved.evidence,
                         ));
                     }
                 }
-                Err(error) => evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    NotEvaluatedReason::InvalidEvidence,
-                    error.to_string(),
-                ),
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                }
             }
         }
         evaluation

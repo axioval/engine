@@ -25,7 +25,7 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId};
 use ifc_model::{EntityId, Model};
 
-use crate::attributes::IfcAttributeService;
+use crate::attributes::Attributes;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
 
@@ -41,7 +41,7 @@ pub(crate) struct IfcDecompositionService {
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     relationships: Arc<IfcRelationshipService>,
-    attributes: Arc<IfcAttributeService>,
+    attributes: Arc<Attributes>,
 }
 
 impl IfcDecompositionService {
@@ -50,7 +50,7 @@ impl IfcDecompositionService {
         model: Arc<Model>,
         snapshots: Arc<[SourceSnapshot]>,
         relationships: Arc<IfcRelationshipService>,
-        attributes: Arc<IfcAttributeService>,
+        attributes: Arc<Attributes>,
     ) -> Self {
         Self {
             release,
@@ -119,10 +119,11 @@ impl IfcDecompositionService {
             DecompositionError::Unreadable(format!("#{} is not in the model", id.0))
         })?;
         let class = entity.type_name.to_ascii_uppercase();
-        let (predefined_type, _) = self
+        let predefined_type = self
             .attributes
-            .predefined_of(id)
-            .map_err(|error| DecompositionError::Unreadable(error.to_string()))?;
+            .predefined_type(&self.model, id)
+            .map_err(|error| DecompositionError::Unreadable(error.to_string()))?
+            .value;
         let object = self
             .release
             .schema

@@ -29,16 +29,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates instead of refusing them. Contact and space measurements refuse
   while an unmeasured object could change them, where they previously
   measured as if it were not there.
-- **Attributes.** `AttributeService` / `AttributeServiceHandle` read an
-  object's own attributes (unset, a typed scalar, or structured), and the IFC
-  session registers one for IFC2X3 and IFC4. The capability
-  `axioval:capability.attribute-value` requires an attribute to hold a value
-  and, optionally, to meet the constraints of `property-value`.
-- **Predefined types.** `AttributeServiceHandle::predefined_type` resolves an
-  object's predefined type; the IFC session follows IDS (type object first,
+- **Predefined types.** The reserved set `axioval:predefined-type`
+  (`PREDEFINED_TYPE_SET`) answers an object's predefined type through the
+  property resolver: `PredefinedType` is the designation, `UserDefined`
+  whether it is user-defined. The IFC session follows IDS (type object first,
   user-defined designations by their text). The capability
   `axioval:capability.predefined-type` checks it against values, patterns or
-  "user-defined".
+  "user-defined", and `axioval:capability.entity` against its
+  `predefined_types`. Direct attributes need no capability of their own: IDS
+  attribute facets become `property-required` / `property-value` rules in the
+  reserved attribute set.
 - **Materials and decomposition.** `MaterialService` / `MaterialServiceHandle`
   report the names an object's material is known by, and
   `DecompositionService` / `DecompositionServiceHandle` the wholes it is part
@@ -59,8 +59,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   `Report` with a struct literal must set the new field.
 - **Requirement capabilities.** `axioval:capability.classification`,
   `axioval:capability.material`, `axioval:capability.part-of` and
-  `axioval:capability.entity`; `property-value` and `attribute-value` take
-  `prohibited`.
+  `axioval:capability.entity`; `property-value` takes `prohibited`.
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.
@@ -118,6 +117,57 @@ All notable changes are documented here. This project follows Semantic Versionin
   and per not-evaluated outcome, viewpoints selecting objects by GlobalId, and
   topic GUIDs that survive re-export of the model. It depends on `axioval-ir`
   only. See the *Report sinks* page.
+- **Attribute sets.** Two reserved property sets,
+  `axioval:attributes` (`ATTRIBUTE_SET`) and `axioval:type-attributes`
+  (`TYPE_ATTRIBUTE_SET`), read an object's own attributes and those of its
+  type object through the property resolver. They bind to themselves in
+  every source, so packages reference them without declaring a concept. The
+  IFC adapter answers them from the entity and from its
+  `IfcRelDefinesByType` type object: a space's number (`Name`), name
+  (`LongName`) and type name. Measures such as a storey's `Elevation` are
+  refused until units are converted.
+- **Quantity sets.** With `ifc-properties` 0.4.0, `IfcElementQuantity`
+  members resolve like properties and convert to SI:
+  `Qto_SpaceBaseQuantities.NetFloorArea` is an area quantity. Complex
+  quantities, predefined-set attributes, and a property set and a quantity
+  set sharing a name are refused, never answered as absent.
+- **Measured values in SI.** `ifc-properties` 0.3.0 resolves a measure's
+  effective unit exactly. The IFC adapter converts measure-typed property
+  values and attributes to SI quantities, or refuses when no unit applies.
+  `QuantityDimension` gains `PlaneAngle` and `Other { exponents }`, which is a
+  breaking change for exhaustive matches.
+- **Presentation layers.** The reserved `axioval:presentation` set's `Layer`
+  is the presentation layer of an object's shape. The IFC adapter reads it
+  through representations, items and mapped representations.
+- **Plan areas.** `PlanAreaService` measures footprints and footprint
+  overlaps as intervals; `AxiolidPlanAreaService` implements it. The
+  capabilities `area-ratio` and `plan-coverage` judge them, and
+  `level-spacing` checks storey heights from elevations.
+- **Relationship paths and relative-count tables.** Relationship-scoped
+  capabilities accept a `path` of relationship steps. `relative-count`
+  gains a table mode.
+- **Semantic capabilities.** These read exact properties, classifications
+  and relationships and need no geometry:
+  - `selector-conformance` checks agreed value lists.
+  - `unique-value` checks identifiers per source or per related scope.
+  - `consistent-value` checks that objects sharing a key share a value.
+  - `related-count` and `relative-count` check absolute and relative counts
+    of related objects.
+  - `name-sequence` checks consecutive numbering in a declared order.
+  - `manual-issue` records checks owed by hand.
+- **`property-predicate`** compares text (`equal`, `not_equal`, `contains`,
+  whole-value regex `matches`), text lists (`one_of`, `none_of`), numbers,
+  booleans and presence (`is_defined`, `is_undefined`), with optional case
+  folding. `value` became optional beside the new target parameters, so a
+  definition declaring it required no longer matches; integer rules behave
+  as before. Findings now name the actual
+  value.
+- **`property-comparison`** accepts constant targets (`target_number`,
+  `target_text`, `target_texts`, `target_boolean`), `one_of`/`none_of`, and
+  the `count` and `sum` quantifiers. `target_property` and
+  `compared_property` are now optional parameters: a definition package
+  declaring them required no longer matches the signature.
+
 - **External identities.** `ExternalId` (scheme plus value) lets an object
   carry aliases beside its source-qualified `ObjectId`, read with
   `Object::external_id`. `Project::new` rejects an object with two ids in one
@@ -184,6 +234,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   when one of them has a member of that name. The check is model-wide, so it
   can only turn an absence into not evaluated. Found by running translated
   buildingSMART IDS test cases.
+  `ifc-properties` 0.4.0 resolves quantity sets itself (openbimrs/ifc#66),
+  so this local guard is gone: see *Quantity sets* above.
 - **Classification selectors silently passed over sources.** A
   `classification` selector read the project's inline classification list,
   which no production adapter fills. Over an IFC model every classification

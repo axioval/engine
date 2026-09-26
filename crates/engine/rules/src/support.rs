@@ -309,3 +309,48 @@ pub(crate) fn undefined(value: Option<&PropertyValue>) -> bool {
         Some(_) => false,
     }
 }
+
+/// The group an object is judged in: its source, and optionally the objects a
+/// declared relationship reaches from it (a storey, a zone).
+///
+/// Several reached objects form one combined group; reaching none forms the
+/// group of everything in the source that reaches nothing.
+pub(crate) fn scope_key(
+    context: &RuleContext<'_>,
+    traversal: Option<&Traversal<'_>>,
+    across_sources: bool,
+    object: &Object,
+) -> Result<(String, Vec<Evidence>), Unavailable> {
+    let mut key = if across_sources {
+        String::new()
+    } else {
+        object.id.source.to_string()
+    };
+    let mut evidence = Vec::new();
+    if let Some(traversal) = traversal {
+        let universe: Vec<&Object> = context.project.objects().collect();
+        let (reached, found) = traversal.related(context, &object.id, &universe)?;
+        evidence = found;
+        for id in reached {
+            key.push('\n');
+            key.push_str(&id.to_string());
+        }
+    }
+    Ok((key, evidence))
+}
+
+/// A value as a grouping key: text trimmed and folded as declared.
+pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool) -> String {
+    match value {
+        PropertyValue::String(text) => {
+            let text = if trim { text.trim() } else { text.as_str() };
+            let text = if case_sensitive {
+                text.to_owned()
+            } else {
+                text.to_lowercase()
+            };
+            format!("text:{text}")
+        }
+        other => format!("value:{}", display(Some(other))),
+    }
+}

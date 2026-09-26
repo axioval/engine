@@ -340,6 +340,7 @@ impl ExecutionPlan {
     }
 }
 
+mod attributes;
 mod classifications;
 mod compiler;
 mod concepts;
@@ -358,6 +359,9 @@ mod services;
 mod space;
 mod topology;
 mod walkability;
+pub use attributes::{
+    AttributeError, AttributeService, AttributeServiceHandle, AttributeValue, ResolvedAttribute,
+};
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,

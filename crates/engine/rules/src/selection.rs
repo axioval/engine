@@ -138,6 +138,25 @@ pub(crate) fn bound_property_request(
         .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))
 }
 
+/// A property concept's name in the checked object's source vocabulary.
+///
+/// Used for names that are not looked up in property sets, such as direct
+/// attributes. As for property requests, an unbindable concept is never
+/// passed through verbatim.
+pub(crate) fn bound_name(
+    context: &RuleContext<'_>,
+    object: &Object,
+    concept: &str,
+) -> Result<String, (NotEvaluatedReason, String)> {
+    match vocabulary(context) {
+        Vocabulary::Native => Ok(concept.to_owned()),
+        Vocabulary::Package(bindings) => bindings
+            .property(concept, &object.id.source)
+            .map(ToOwned::to_owned)
+            .map_err(|error| binding_error(&error)),
+    }
+}
+
 /// Whether an object is an instance of an object type.
 ///
 /// A kind always matches itself. Beyond that, `include_subtypes` needs the

@@ -21,6 +21,12 @@ loss: every `STRING`-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...),
 `IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
 measures stay refused until unit handling lands.
 
+The session registers an attribute service that reads an object's own instance, in the file's
+release, by the name the schema gives the slot; nothing is inherited from a type object. `$`, an
+empty aggregate and a logical `.U.` are unset; text, enumeration items (as their text), booleans
+and integers are scalars with their declared type; references and non-empty aggregates are
+structured. Measures that need a unit, derived (`*`) and binary values are refused.
+
 Exact absence covers what the resolver reads: `IfcPropertySet` members.
 Quantity sets (`IfcElementQuantity`) and predefined property sets
 (`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused

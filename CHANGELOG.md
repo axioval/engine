@@ -29,6 +29,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates instead of refusing them. Contact and space measurements refuse
   while an unmeasured object could change them, where they previously
   measured as if it were not there.
+- **Attributes.** `AttributeService` / `AttributeServiceHandle` read an
+  object's own attributes (unset, a typed scalar, or structured), and the IFC
+  session registers one for IFC2X3 and IFC4. The capability
+  `axioval:capability.attribute-value` requires an attribute to hold a value
+  and, optionally, to meet the constraints of `property-value`.
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.

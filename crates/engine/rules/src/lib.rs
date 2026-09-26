@@ -3,6 +3,7 @@
 
 use axioval_engine::{CapabilityRegistry, EngineError};
 
+mod attribute_value;
 mod clash;
 mod comparison;
 mod distance;
@@ -21,6 +22,7 @@ mod slab_contact;
 mod space_validation;
 mod xsd_pattern;
 
+pub use attribute_value::AttributeValueConstraint;
 pub use clash::Clash;
 pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
@@ -52,6 +54,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PropertyRequired))
         .and_then(|registry| registry.register(PropertyDataType))
         .and_then(|registry| registry.register(PropertyValueConstraint))
+        .and_then(|registry| registry.register(AttributeValueConstraint))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

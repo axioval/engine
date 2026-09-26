@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, EvidenceSession,
-    EvidenceSessionError, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
-    ResolvedProperty, SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError,
-    TypeHierarchyService, TypeHierarchyServiceHandle,
+    AttributeServiceHandle, ClassificationServiceHandle, CompletePropertyAbsenceEvidence,
+    EvidenceSession, EvidenceSessionError, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RelationshipSelectionServiceHandle, ResolvedProperty, SourceIntegrityServiceHandle,
+    SourceSnapshot, TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
@@ -18,6 +18,7 @@ use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::attributes::IfcAttributeService;
 use crate::classifications::IfcClassificationService;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
@@ -317,6 +318,11 @@ pub fn import_ifc_session(
         global_ids,
         snapshots.clone(),
     )));
+    let attributes = AttributeServiceHandle::new(Arc::new(IfcAttributeService::new(
+        release,
+        model.clone(),
+        snapshots.clone(),
+    )));
     let classifications = ClassificationServiceHandle::new(Arc::new(
         IfcClassificationService::new(model.clone(), snapshots.clone()),
     ));
@@ -332,6 +338,7 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(hierarchy))
         .and_then(|session| session.with_service(integrity))
         .and_then(|session| session.with_service(classifications))
+        .and_then(|session| session.with_service(attributes))
         .map_err(|error| session_error(&error))
 }
 

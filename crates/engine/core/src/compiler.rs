@@ -242,6 +242,21 @@ fn require_concept(
     }
 }
 
+/// A property-set qualifier is a declared concept, or a reserved attribute set.
+///
+/// The attribute sets are engine vocabulary, not package concepts: they bind
+/// to the same meaning in every source, so a package cannot redeclare them.
+fn require_set_concept(
+    concepts: &ConceptCatalog,
+    rule: &str,
+    set: &str,
+) -> Result<(), EngineError> {
+    if axioval_ir::is_attribute_set(set) {
+        return Ok(());
+    }
+    require_concept(concepts, rule, ConceptKind::PropertySet, set)
+}
+
 fn validate_selector_concepts(
     concepts: &ConceptCatalog,
     rule: &str,
@@ -260,7 +275,7 @@ fn validate_selector_concepts(
         } => {
             require_concept(concepts, rule, ConceptKind::Property, property)?;
             if let Some(set) = property_set {
-                require_concept(concepts, rule, ConceptKind::PropertySet, set)?;
+                require_set_concept(concepts, rule, set)?;
             }
             value
                 .iter()
@@ -289,7 +304,7 @@ fn validate_parameter_concepts(
             require_concept(concepts, rule, ConceptKind::Property, property)?;
             property_set
                 .iter()
-                .try_for_each(|set| require_concept(concepts, rule, ConceptKind::PropertySet, set))
+                .try_for_each(|set| require_set_concept(concepts, rule, set))
         }
         ParameterValue::Selector { value } => validate_selector_concepts(concepts, rule, value),
         _ => Ok(()),

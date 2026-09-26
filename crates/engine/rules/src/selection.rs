@@ -122,8 +122,16 @@ pub(crate) fn bound_property_request(
             let property = bindings
                 .property(name, source)
                 .map_err(|error| binding_error(&error))?;
+            // The attribute sets are engine vocabulary with one meaning in
+            // every source, so they bind to themselves.
             let property_set = set
-                .map(|set| bindings.property_set(set, source).map(ToOwned::to_owned))
+                .map(|set| {
+                    if axioval_ir::is_attribute_set(set) {
+                        Ok(set.to_owned())
+                    } else {
+                        bindings.property_set(set, source).map(ToOwned::to_owned)
+                    }
+                })
                 .transpose()
                 .map_err(|error| binding_error(&error))?;
             (property_set, property)

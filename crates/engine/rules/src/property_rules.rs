@@ -31,13 +31,6 @@ fn string<'a>(rule: &'a CompiledRule, name: &str) -> Option<&'a str> {
     }
 }
 
-fn integer(rule: &CompiledRule, name: &str) -> Option<i64> {
-    match rule.parameters.get(name)? {
-        ParameterValue::Integer { value } => Some(*value),
-        _ => None,
-    }
-}
-
 fn finding(
     rule: &CompiledRule,
     object: &Object,
@@ -361,125 +354,6 @@ impl RuleCapability for BooleanPropertyEquals {
                     rule,
                     object,
                     format!("property {name} does not equal {expected}"),
-                    vec![proof.evidence().clone()],
-                )),
-                Err(error) => resolve_error(&mut evaluation, object, error),
-            }
-        }
-        evaluation
-    }
-}
-
-#[derive(Clone, Copy)]
-enum IntegerOperator {
-    Equal,
-    NotEqual,
-    GreaterThan,
-    GreaterOrEqual,
-    LessThan,
-    LessOrEqual,
-}
-impl IntegerOperator {
-    fn parse(value: &str) -> Option<Self> {
-        match value {
-            "equal" => Some(Self::Equal),
-            "not_equal" => Some(Self::NotEqual),
-            "greater_than" => Some(Self::GreaterThan),
-            "greater_or_equal" => Some(Self::GreaterOrEqual),
-            "less_than" => Some(Self::LessThan),
-            "less_or_equal" => Some(Self::LessOrEqual),
-            _ => None,
-        }
-    }
-    fn passes(self, actual: i64, expected: i64) -> bool {
-        match self {
-            Self::Equal => actual == expected,
-            Self::NotEqual => actual != expected,
-            Self::GreaterThan => actual > expected,
-            Self::GreaterOrEqual => actual >= expected,
-            Self::LessThan => actual < expected,
-            Self::LessOrEqual => actual <= expected,
-        }
-    }
-}
-
-/// Compares an exact integer property with a declarative integer literal.
-pub struct PropertyPredicate;
-impl RuleCapability for PropertyPredicate {
-    fn id(&self) -> &'static str {
-        "axioval:capability.property-predicate"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("property_set", ParameterType::String),
-            ParameterDescriptor::required("property", ParameterType::String),
-            ParameterDescriptor::required("operator", ParameterType::String),
-            ParameterDescriptor::required("value", ParameterType::Integer),
-        ]
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let (Some(set), Some(name), Some(operator), Some(expected)) = (
-            string(rule, "property_set"),
-            string(rule, "property"),
-            string(rule, "operator"),
-            integer(rule, "value"),
-        ) else {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::InvalidDeclaration,
-                "property-predicate parameters are invalid",
-            );
-        };
-        let Some(operator) = IntegerOperator::parse(operator) else {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::InvalidDeclaration,
-                "property-predicate operator is unsupported",
-            );
-        };
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
-            return unavailable_selected(
-                &selected,
-                &NotEvaluatedReason::MissingService,
-                "property-resolution service is not registered",
-                evaluation,
-            );
-        };
-        for object in selected {
-            let request = match bound_property_request(context, object, Some(set), name) {
-                Ok(request) => request,
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                    continue;
-                }
-            };
-            match service.resolve(&request) {
-                Ok(PropertyResolution::Present(resolved)) => {
-                    let property = resolved.property();
-                    let actual = match &property.value {
-                        PropertyValue::Integer(value) => Some(*value),
-                        _ => None,
-                    };
-                    if !actual.is_some_and(|actual| operator.passes(actual, expected)) {
-                        evaluation.push_finding(finding(
-                            rule,
-                            object,
-                            format!(
-                                "property {set}.{name} does not satisfy {} {expected}",
-                                string(rule, "operator").unwrap_or("invalid")
-                            ),
-                            property.evidence.clone().into_iter().collect(),
-                        ));
-                    }
-                }
-                Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
-                    rule,
-                    object,
-                    format!(
-                        "property {set}.{name} does not satisfy {} {expected}",
-                        string(rule, "operator").unwrap_or("invalid")
-                    ),
                     vec![proof.evidence().clone()],
                 )),
                 Err(error) => resolve_error(&mut evaluation, object, error),

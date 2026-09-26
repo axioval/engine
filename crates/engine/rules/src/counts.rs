@@ -121,11 +121,10 @@ impl RuleCapability for RelatedCount {
             ParameterDescriptor::optional("related_selector", ParameterType::Selector),
             ParameterDescriptor::optional("minimum", ParameterType::Integer),
             ParameterDescriptor::optional("maximum", ParameterType::Integer),
-            ParameterDescriptor::optional("relationship", ParameterType::String),
-            ParameterDescriptor::optional("direction", ParameterType::String),
-            ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
-            ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::traversal_parameters())
+        .collect()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -269,11 +268,10 @@ impl RuleCapability for RelativeCount {
             ParameterDescriptor::required("provided_unit", ParameterType::Integer),
             ParameterDescriptor::required("required_unit", ParameterType::Integer),
             ParameterDescriptor::required("operator", ParameterType::String),
-            ParameterDescriptor::optional("relationship", ParameterType::String),
-            ParameterDescriptor::optional("direction", ParameterType::String),
-            ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
-            ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::traversal_parameters())
+        .collect()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {

@@ -2,10 +2,10 @@
 //! the semantic capabilities.
 
 use axioval_engine::{
-    AbsentEndPolicy, CompiledRule, NotEvaluatedReason, PropertyResolution,
-    PropertyResolutionServiceHandle, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, RuleContext,
-    SemanticRelationship, TraversalDirection,
+    AbsentEndPolicy, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
+    RuleContext, SemanticRelationship, TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{
@@ -125,30 +125,6 @@ impl<'a> Parameters<'a> {
         let value = self.property(name)?;
         Self::required(name, value)
     }
-
-    /// An optional relationship traversal declared by the `relationship`,
-    /// `direction`, `follow_chain` and `skip_absent_relationship_ends` parameters.
-    pub(crate) fn traversal(&self) -> Result<Option<Traversal<'a>>, Unavailable> {
-        let Some(relationship) = self.string("relationship")? else {
-            return Ok(None);
-        };
-        let direction = match self.string("direction")? {
-            None | Some("forward") => TraversalDirection::Forward,
-            Some("backward") => TraversalDirection::Backward,
-            Some("either") => TraversalDirection::Either,
-            Some(other) => return Err(invalid(format!("direction `{other}` is unsupported"))),
-        };
-        Ok(Some(Traversal {
-            relationship,
-            direction,
-            follow_chain: self.boolean("follow_chain")?.unwrap_or(false),
-            absent_ends: if self.boolean("skip_absent_relationship_ends")? == Some(true) {
-                AbsentEndPolicy::Skip
-            } else {
-                AbsentEndPolicy::Refuse
-            },
-        }))
-    }
 }
 
 /// A property reference: optional set qualifier and name.
@@ -213,12 +189,100 @@ pub(crate) fn resolve(
     }
 }
 
+/// One step of a relationship path.
+pub(crate) struct Step<'a> {
+    relationship: &'a str,
+    direction: TraversalDirection,
+}
+
 /// A declared relationship traversal from each anchor.
+///
+/// Either one `relationship` (with `direction` and `follow_chain`) or a
+/// `path` of steps, each `Relationship` or `Relationship:direction`, walked
+/// one after another: `IfcRelVoidsElement:forward` then
+/// `IfcRelFillsElement:forward` goes from a wall through its openings to the
+/// doors and windows filling them. Intermediate objects may be anything; the
+/// objects the last step reaches are restricted to the caller's universe.
 pub(crate) struct Traversal<'a> {
-    pub(crate) relationship: &'a str,
-    pub(crate) direction: TraversalDirection,
-    pub(crate) follow_chain: bool,
-    pub(crate) absent_ends: AbsentEndPolicy,
+    /// How messages name the traversal: the relationship, or the steps.
+    pub(crate) relationship: String,
+    steps: Vec<Step<'a>>,
+    follow_chain: bool,
+    absent_ends: AbsentEndPolicy,
+}
+
+impl<'a> Parameters<'a> {
+    /// An optional relationship traversal declared by the `relationship`,
+    /// `direction`, `follow_chain`, `path` and `skip_absent_relationship_ends`
+    /// parameters.
+    pub(crate) fn traversal(&self) -> Result<Option<Traversal<'a>>, Unavailable> {
+        let direction = |value: Option<&str>| match value {
+            None | Some("forward") => Ok(TraversalDirection::Forward),
+            Some("backward") => Ok(TraversalDirection::Backward),
+            Some("either") => Ok(TraversalDirection::Either),
+            Some(other) => Err(invalid(format!("direction `{other}` is unsupported"))),
+        };
+        let relationship = self.string("relationship")?;
+        let path = self.strings("path")?;
+        let follow_chain = self.boolean("follow_chain")?.unwrap_or(false);
+        let steps = match (relationship, path) {
+            (None, None) => return Ok(None),
+            (Some(_), Some(_)) => {
+                return Err(invalid("declare either `relationship` or `path`, not both"));
+            }
+            (Some(relationship), None) => vec![Step {
+                relationship,
+                direction: direction(self.string("direction")?)?,
+            }],
+            (None, Some(path)) => {
+                if path.is_empty() {
+                    return Err(invalid("`path` has no steps"));
+                }
+                if self.string("direction")?.is_some() || follow_chain {
+                    return Err(invalid(
+                        "a `path` states each step's direction and cannot follow chains",
+                    ));
+                }
+                path.iter()
+                    .map(|step| {
+                        let (relationship, stated) = match step.split_once(':') {
+                            Some((relationship, stated)) => (relationship, Some(stated)),
+                            None => (step.as_str(), None),
+                        };
+                        Ok(Step {
+                            relationship: relationship.trim(),
+                            direction: direction(stated.map(str::trim))?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Unavailable>>()?
+            }
+        };
+        Ok(Some(Traversal {
+            relationship: steps
+                .iter()
+                .map(|step| step.relationship)
+                .collect::<Vec<_>>()
+                .join(" then "),
+            steps,
+            follow_chain,
+            absent_ends: if self.boolean("skip_absent_relationship_ends")? == Some(true) {
+                AbsentEndPolicy::Skip
+            } else {
+                AbsentEndPolicy::Refuse
+            },
+        }))
+    }
+}
+
+/// Descriptors of the traversal parameters every relationship-scoped capability takes.
+pub(crate) fn traversal_parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::optional("relationship", ParameterType::String),
+        ParameterDescriptor::optional("direction", ParameterType::String),
+        ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
+        ParameterDescriptor::optional("path", ParameterType::StringList),
+        ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
+    ]
 }
 
 impl Traversal<'_> {
@@ -235,33 +299,43 @@ impl Traversal<'_> {
                 "relationship-selection service is not registered".into(),
             ));
         };
-        let relationship = SemanticRelationship::try_new(self.relationship)
-            .map_err(|error| invalid(error.to_string()))?;
-        let request = RelationshipSelectionRequest::try_new(
-            anchor.clone(),
-            universe.iter().map(|object| object.id.clone()).collect(),
-            RelationshipQuery::Related {
-                relationship,
-                direction: self.direction,
-                follow_chain: self.follow_chain,
-            },
-        )
-        .map_err(|error| invalid(error.to_string()))?
-        .with_absent_ends(self.absent_ends);
-        service
-            .select(&request)
-            .map(|selection| {
-                (
-                    selection.candidates().to_vec(),
-                    selection.evidence().to_vec(),
+        let everything: Vec<&Object> = context.project.objects().collect();
+        let mut frontier = vec![anchor.clone()];
+        let mut evidence = Vec::new();
+        for (index, step) in self.steps.iter().enumerate() {
+            let last = index + 1 == self.steps.len();
+            let scope = if last { universe } else { &everything[..] };
+            let relationship = SemanticRelationship::try_new(step.relationship)
+                .map_err(|error| invalid(error.to_string()))?;
+            let mut reached = std::collections::BTreeSet::new();
+            for from in &frontier {
+                let request = RelationshipSelectionRequest::try_new(
+                    from.clone(),
+                    scope.iter().map(|object| object.id.clone()).collect(),
+                    RelationshipQuery::Related {
+                        relationship: relationship.clone(),
+                        direction: step.direction,
+                        follow_chain: self.follow_chain,
+                    },
                 )
-            })
-            .map_err(|error| match error {
-                RelationshipSelectionError::Unavailable(message) => {
-                    (NotEvaluatedReason::BackendUnavailable, message)
-                }
-                other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
-            })
+                .map_err(|error| invalid(error.to_string()))?
+                .with_absent_ends(self.absent_ends);
+                let selection = service.select(&request).map_err(|error| match error {
+                    RelationshipSelectionError::Unavailable(message) => {
+                        (NotEvaluatedReason::BackendUnavailable, message)
+                    }
+                    other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
+                })?;
+                reached.extend(selection.candidates().iter().cloned());
+                evidence.extend(selection.evidence().iter().cloned());
+            }
+            // The anchor is never its own relative, even through a round trip.
+            reached.remove(anchor);
+            frontier = reached.into_iter().collect();
+        }
+        evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
+        evidence.dedup();
+        Ok((frontier, evidence))
     }
 }
 

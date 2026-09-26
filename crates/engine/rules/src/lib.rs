@@ -14,6 +14,7 @@ mod free_floor_circle;
 mod free_floor_rectangle;
 mod guard_diagnosis;
 mod horizontal_guard;
+mod level_spacing;
 mod manual_issue;
 mod name_sequence;
 mod pairs;
@@ -43,6 +44,7 @@ pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
+pub use level_spacing::LevelSpacing;
 pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
 pub use property_comparison::PropertyComparison;
@@ -86,4 +88,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(RelativeCount))
         .and_then(|registry| registry.register(NameSequence))
         .and_then(|registry| registry.register(ManualIssue))
+        .and_then(|registry| registry.register(LevelSpacing))
 }

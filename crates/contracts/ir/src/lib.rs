@@ -180,6 +180,31 @@ impl Classification {
     }
 }
 
+/// Property set that names an object's own intrinsic attributes.
+///
+/// Sources describe an object partly through named property sets and partly
+/// through fields of the object itself: its name, its long name, its type
+/// label. A property request in this set asks for such a field by the
+/// source's own attribute name (`Name`, `LongName` for IFC), so rules can
+/// check both through one resolver. It is reserved: it names no property set
+/// of any source, and package concept binding passes it through unchanged.
+pub const ATTRIBUTE_SET: &str = "axioval:attributes";
+
+/// Property set that names the attributes of an object's type object.
+///
+/// Where a source types its occurrences by a shared type object (a door
+/// type, a space type), this set reads that object's attributes: `Name` in
+/// this set is the construction type name. An object with no type is exactly
+/// absent; an object with several is a conflict, not a choice. Reserved like
+/// [`ATTRIBUTE_SET`].
+pub const TYPE_ATTRIBUTE_SET: &str = "axioval:type-attributes";
+
+/// Whether `set` is one of the reserved attribute sets.
+#[must_use]
+pub fn is_attribute_set(set: &str) -> bool {
+    set == ATTRIBUTE_SET || set == TYPE_ATTRIBUTE_SET
+}
+
 /// A named semantic property.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

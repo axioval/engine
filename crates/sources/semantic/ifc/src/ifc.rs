@@ -9,6 +9,7 @@ use axioval_engine::{
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
+    is_attribute_set,
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
@@ -18,6 +19,7 @@ use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
@@ -78,12 +80,12 @@ impl TypeHierarchyService for IfcTypeHierarchy {
     }
 }
 
-#[derive(Clone)]
 struct IfcPropertyService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     unread: Arc<UnreadDefinitions>,
+    attributes: Attributes,
 }
 
 impl IfcPropertyService {
@@ -129,6 +131,44 @@ impl IfcPropertyService {
             _ => false,
         }
     }
+
+    fn resolve_attribute(
+        &self,
+        request: &PropertyRequest,
+        object: EntityId,
+        set: &str,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        if self.model.get(object).is_none() {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let source = self.snapshots[0].source().clone();
+        match self
+            .attributes
+            .resolve(&self.model, object, set, request.property())?
+        {
+            Some(found) => {
+                let property = Property::new(set, request.property(), found.value)
+                    .map_err(|_| PropertyResolutionError::InvalidRequest)?
+                    .with_evidence(Evidence::exact(source, self.locator(found.detail)));
+                Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                    request.clone(),
+                    property,
+                )?))
+            }
+            None => Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(
+                    request.clone(),
+                    Evidence::exact(
+                        source,
+                        self.locator(format_args!(
+                            "absence:{object}:{set}:{}",
+                            request.property()
+                        )),
+                    ),
+                )?,
+            )),
+        }
+    }
 }
 
 impl PropertyResolutionService for IfcPropertyService {
@@ -144,6 +184,9 @@ impl PropertyResolutionService for IfcPropertyService {
             return Err(PropertyResolutionError::InvalidRequest);
         }
         let object = Self::entity_id(request)?;
+        if let Some(set) = request.property_set().filter(|set| is_attribute_set(set)) {
+            return self.resolve_attribute(request, object, set);
+        }
         match exact_property(
             &self.model,
             object,
@@ -310,6 +353,7 @@ pub fn import_ifc_session(
         model: model.clone(),
         snapshots: snapshots.clone(),
         unread: Arc::new(UnreadDefinitions::read(release, &model)),
+        attributes: Attributes::new(release),
     }));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,

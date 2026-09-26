@@ -123,11 +123,12 @@ fn two_type_objects_are_a_conflict_not_a_choice() {
 }
 
 #[test]
-fn a_measure_is_refused_until_units_are_converted() {
+fn a_measure_without_a_project_unit_is_refused_not_read_bare() {
+    // The fixture states no IfcProject, so 3000. has no unit to convert from.
     let session = session();
     assert!(matches!(
         resolve(&session, "#4", ATTRIBUTE_SET, "Elevation"),
-        Err(PropertyResolutionError::Unavailable(message)) if message.contains("Elevation")
+        Err(PropertyResolutionError::Incomplete(message)) if message.contains("IFCLENGTHMEASURE")
     ));
 }
 

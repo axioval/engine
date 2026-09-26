@@ -13,7 +13,7 @@ use axioval_ir::{
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
-    ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
+    ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
 };
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
@@ -23,6 +23,7 @@ use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
+use crate::measure::si_value;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
 use crate::unread::UnreadDefinitions;
@@ -113,9 +114,9 @@ impl IfcPropertyService {
     /// Decided by the type's base in this release's schema, so every
     /// string-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...) and every
     /// integer-based one (`IfcTimeStamp`, `IfcCountMeasure` as written) is
-    /// carried with its declared type. Real-valued measures stay refused: their
-    /// number means nothing without the unit context, which is not read yet.
-    /// `IFCREAL` and dimensionless `NUMBER` types have no unit.
+    /// carried with its declared type. Real-valued measures are not carried
+    /// here: `pset_value` converts them through their unit. `IFCREAL` and
+    /// dimensionless `NUMBER` types have no unit.
     fn carries_exactly(&self, value: &ExactValue, value_type: &str) -> bool {
         let base = self
             .release
@@ -130,6 +131,44 @@ impl IfcPropertyService {
             ExactValue::Text(_) => base == "STRING",
             _ => false,
         }
+    }
+
+    /// The value of an `IfcPropertySingleValue` or physical quantity,
+    /// measures converted to SI.
+    ///
+    /// A value its declared type carries exactly (see `carries_exactly`) is
+    /// read as stated and must carry no unit. Any other number must be a
+    /// measure whose effective unit resolves exactly.
+    fn pset_value(&self, exact: &ExactProperty) -> Result<PropertyValue, PropertyResolutionError> {
+        let plain = match (&exact.value, exact.value_type.as_deref()) {
+            (ExactValue::Null, None) => Some(PropertyValue::Null),
+            (value, Some(value_type)) if self.carries_exactly(value, value_type) => match value {
+                ExactValue::Bool(value) => Some(PropertyValue::Boolean(*value)),
+                ExactValue::Integer(value) => Some(PropertyValue::Integer(*value)),
+                ExactValue::Real(value) => Some(PropertyValue::Decimal(*value)),
+                ExactValue::Text(value) => Some(PropertyValue::String(value.to_string())),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(value) = plain {
+            return if exact.unit_id.is_some() {
+                Err(PropertyResolutionError::InexactEvidence)
+            } else {
+                Ok(value)
+            };
+        }
+        let number = match exact.value {
+            ExactValue::Real(value) => value,
+            #[allow(clippy::cast_precision_loss)]
+            ExactValue::Integer(value) if value.unsigned_abs() <= 1 << 53 => value as f64,
+            _ => return Err(PropertyResolutionError::InexactEvidence),
+        };
+        let Some(value_type) = exact.value_type.as_deref() else {
+            return Err(PropertyResolutionError::InexactEvidence);
+        };
+        si_value(&self.model, value_type, exact.unit_id, number)?
+            .ok_or(PropertyResolutionError::InexactEvidence)
     }
 
     fn resolve_attribute(
@@ -199,25 +238,7 @@ impl PropertyResolutionService for IfcPropertyService {
                     ExactSource::Type(type_id) => format!("type:{type_id}"),
                     _ => return Err(PropertyResolutionError::InexactEvidence),
                 };
-                if exact.unit_id.is_some() {
-                    return Err(PropertyResolutionError::InexactEvidence);
-                }
-                let compatible_type = match (&exact.value, exact.value_type.as_deref()) {
-                    (ExactValue::Null, None) => true,
-                    (value, Some(value_type)) => self.carries_exactly(value, value_type),
-                    _ => false,
-                };
-                if !compatible_type {
-                    return Err(PropertyResolutionError::InexactEvidence);
-                }
-                let value = match exact.value {
-                    ExactValue::Null => PropertyValue::Null,
-                    ExactValue::Bool(value) => PropertyValue::Boolean(value),
-                    ExactValue::Integer(value) => PropertyValue::Integer(value),
-                    ExactValue::Real(value) => PropertyValue::Decimal(value),
-                    ExactValue::Text(value) => PropertyValue::String(value.to_string()),
-                    _ => return Err(PropertyResolutionError::InexactEvidence),
-                };
+                let value = self.pset_value(&exact)?;
                 let mut property =
                     Property::new(exact.property_set.as_ref(), request.property(), value)
                         .map_err(|_| PropertyResolutionError::InvalidRequest)?;

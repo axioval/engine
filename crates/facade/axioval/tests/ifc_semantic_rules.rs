@@ -9,15 +9,15 @@
 
 use axioval::engine::{CapabilityRegistry, ParameterType, Runtime, compile};
 use axioval::ifc::{IFC4_TYPE_SYSTEM, import_ifc_session};
-use axioval::ir::{DefinitionPackage, NotEvaluatedReason, Report, RuleSetPackage};
+use axioval::ir::{DefinitionPackage, Report, RuleSetPackage};
 use axioval::rules::register_builtins;
 use serde_json::{Value, json};
 
-/// A building with one storey, three spaces and one zone.
+/// A building with two storeys, three spaces and one zone, in millimetres.
 ///
 /// Spaces #10 and #11 are both numbered `101`; #12 is not in the zone; #11
-/// is typed `KITCHEN`, which is not agreed. The storey's elevation is a
-/// length measure.
+/// is typed `KITCHEN`, which is not agreed. The storeys are named `1` and
+/// `3`, so the second does not follow the first.
 const IFC: &str = "ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION((''),'2;1');
@@ -27,7 +27,11 @@ ENDSEC;
 DATA;
 #1=IFCBUILDING('0000000000000000000001',$,'B',$,$,$,$,$,.ELEMENT.,$,$,$);
 #2=IFCBUILDINGSTOREY('0000000000000000000002',$,'1',$,$,$,$,$,.ELEMENT.,0.);
-#3=IFCRELAGGREGATES('0000000000000000000003',$,$,$,#1,(#2));
+#3=IFCRELAGGREGATES('0000000000000000000003',$,$,$,#1,(#2,#4));
+#4=IFCBUILDINGSTOREY('0000000000000000000004',$,'3',$,$,$,$,$,.ELEMENT.,3000.);
+#5=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#6=IFCUNITASSIGNMENT((#5));
+#7=IFCPROJECT('0000000000000000000007',$,'P',$,$,$,$,$,#6);
 #10=IFCSPACE('000000000000000000000A',$,'101',$,$,$,$,'Office',.ELEMENT.,.INTERNAL.,$);
 #11=IFCSPACE('000000000000000000000B',$,'101',$,$,$,$,'Kitchen',.ELEMENT.,.INTERNAL.,$);
 #12=IFCSPACE('000000000000000000000C',$,'102',$,$,$,$,'Office',.ELEMENT.,.INTERNAL.,$);
@@ -255,25 +259,28 @@ fn the_space_type_name_is_read_from_the_type_object() {
 }
 
 #[test]
-fn storey_order_by_a_length_measure_is_not_evaluated_yet() {
+fn storeys_are_ordered_by_their_elevation_in_si() {
     let report = report();
-    assert!(flagged(&report, "storey-names").is_empty());
-    let outcomes: Vec<_> = report
-        .not_evaluated()
+    let findings: Vec<_> = report
+        .findings()
         .iter()
-        .filter(|outcome| outcome.rule_id.to_string() == "storey-names")
+        .filter(|finding| finding.rule_id.to_string() == "storey-names")
+        .map(|finding| {
+            (
+                finding.object_id.local_id.as_str(),
+                finding.message.as_str(),
+            )
+        })
         .collect();
-    assert_eq!(outcomes.len(), 1, "{outcomes:?}");
-    assert_eq!(outcomes[0].reason, NotEvaluatedReason::BackendUnavailable);
-    assert!(
-        outcomes[0].message.contains("Elevation"),
-        "{}",
-        outcomes[0].message
-    );
-    // Nothing else in the report is undecided.
     assert_eq!(
-        report.not_evaluated().len(),
-        1,
+        findings,
+        [(
+            "#4",
+            "axioval:attributes.axioval:test.number 3 does not follow 1; expected 2"
+        )]
+    );
+    assert!(
+        report.not_evaluated().is_empty(),
         "{:?}",
         report.not_evaluated()
     );

@@ -66,6 +66,7 @@ impl RuleCapability for PropertyComparison {
             // Exactly one target: a property of the checked object or a constant.
             ParameterDescriptor::optional("target_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("target_number", ParameterType::Number),
+            ParameterDescriptor::optional("target_quantity", ParameterType::Quantity),
             ParameterDescriptor::optional("target_text", ParameterType::String),
             ParameterDescriptor::optional("target_texts", ParameterType::StringList),
             ParameterDescriptor::optional("target_boolean", ParameterType::Boolean),
@@ -309,6 +310,14 @@ impl<'a> Config<'a> {
             None => {}
             Some(ParameterValue::Number { value }) if value.is_finite() => {
                 targets.push(Target::Value(PropertyValue::Decimal(*value)));
+            }
+            Some(_) => return None,
+        }
+        match rule.parameters.get("target_quantity") {
+            None => {}
+            Some(ParameterValue::Quantity { value, unit }) => {
+                let (value, dimension) = crate::support::si_quantity(*value, unit).ok()?;
+                targets.push(Target::Value(PropertyValue::Quantity { value, dimension }));
             }
             Some(_) => return None,
         }

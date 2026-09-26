@@ -8,9 +8,10 @@
 //! attribute of the type object assigned through `IfcRelDefinesByType`.
 //!
 //! Only scalar values that mean the same in every file are answered: text,
-//! enumerations, booleans, integers and unit-free reals. A measure
-//! (`IfcLengthMeasure`, ...) is in the project's units and is refused until
-//! this adapter converts units, as is a reference or an aggregate. An unset
+//! enumerations, booleans, integers, unit-free reals, and measures
+//! (`IfcLengthMeasure`, ...) converted from the project's default unit to SI.
+//! A measure whose unit cannot be resolved exactly is refused, as is a
+//! reference or an aggregate. An unset
 //! attribute (`$`), an attribute the entity does not declare, and an object
 //! with no type are exact absences; an object typed twice is a conflict.
 
@@ -22,6 +23,7 @@ use axioval_ir::{ATTRIBUTE_SET, PropertyValue, TYPE_ATTRIBUTE_SET};
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
 
+use crate::measure::si_value;
 use crate::release::Release;
 
 /// A present attribute value and the locator detail that proves it.
@@ -128,24 +130,43 @@ fn read(
         ))),
         Some(Value::Null) => Ok(None),
         Some(Value::Derived) => unsupported("is derived and holds no stated value"),
-        Some(Value::Typed { type_name, value }) => scalar(schema, type_name, value).map_or_else(
-            || unsupported("holds a value this adapter cannot read exactly"),
-            |value| Ok(Some(value)),
-        ),
-        Some(value) => scalar(schema, &attribute.type_name, value).map_or_else(
-            || unsupported("holds a value this adapter cannot read exactly"),
-            |value| Ok(Some(value)),
-        ),
+        Some(Value::Typed { type_name, value }) => {
+            typed(schema, model, type_name, value).and_then(|value| match value {
+                Some(value) => Ok(Some(value)),
+                None => unsupported("holds a value this adapter cannot read exactly"),
+            })
+        }
+        Some(value) => {
+            typed(schema, model, &attribute.type_name, value).and_then(|value| match value {
+                Some(value) => Ok(Some(value)),
+                None => unsupported("holds a value this adapter cannot read exactly"),
+            })
+        }
     }
+}
+
+/// A value of declared type `type_name`: a measure in SI, or a plain scalar.
+fn typed(
+    schema: &Schema,
+    model: &Model,
+    type_name: &str,
+    value: &Value,
+) -> Result<Option<PropertyValue>, PropertyResolutionError> {
+    if type_name.to_ascii_uppercase().ends_with("MEASURE") {
+        #[allow(clippy::cast_precision_loss)]
+        let number = match value {
+            Value::Real(number) => *number,
+            Value::Integer(number) if number.unsigned_abs() <= 1 << 53 => *number as f64,
+            _ => return Ok(None),
+        };
+        // Attributes carry no explicit unit: the project default applies.
+        return si_value(model, type_name, None, number);
+    }
+    Ok(scalar(schema, type_name, value))
 }
 
 /// A scalar value of declared type `type_name`, when it reads the same in every file.
 fn scalar(schema: &Schema, type_name: &str, value: &Value) -> Option<PropertyValue> {
-    // Measures are stated in the project's units; reading them as bare
-    // numbers would compare millimetres with metres.
-    if type_name.to_ascii_uppercase().ends_with("MEASURE") {
-        return None;
-    }
     if schema.entity(type_name).is_some() {
         return None;
     }

@@ -608,6 +608,6 @@ fn a_rule_for_another_release_is_not_evaluated_never_passed() {
         report
             .not_evaluated()
             .iter()
-            .all(|outcome| outcome.reason == NotEvaluatedReason::InvalidDeclaration)
+            .all(|outcome| outcome.reason == NotEvaluatedReason::UnboundConcept)
     );
 }

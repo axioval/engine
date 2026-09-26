@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Unbound concepts are reported once.** A package concept the source's
+  declared vocabulary cannot express is now `NotEvaluatedReason::UnboundConcept`
+  (it was `InvalidDeclaration`) and is reported once per rule, source and
+  cause, with the number of affected objects and a few examples, instead of
+  once per object. A 2,040-object IFC2X3 model checked against an IFC4-only
+  package now yields one outcome and one BCF topic, not 2,040.
 - **Geometry for `axioval check`.** `--geometry` meshes the model's net
   bodies (openings subtracted) with `ifc-geometry` and registers the Axiolid
   contact, free-space, space and proximity services, so clash, distance,

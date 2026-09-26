@@ -82,6 +82,13 @@ fn wall(kind: &str) -> Object {
     Object::new(ObjectId::new(source(), "#1").unwrap(), kind)
 }
 
+fn wall_numbered(number: usize) -> Object {
+    Object::new(
+        ObjectId::new(source(), format!("#{number:03}")).unwrap(),
+        "IFCWALL",
+    )
+}
+
 /// Records every request, so a test can prove which source names were asked for.
 struct Recording {
     snapshots: Vec<SourceSnapshot>,
@@ -173,7 +180,7 @@ fn unbound_type_system_is_not_evaluated_never_a_clean_pass() {
     assert_eq!(report.not_evaluated().len(), 1);
     assert_eq!(
         report.not_evaluated()[0].reason,
-        NotEvaluatedReason::InvalidDeclaration
+        NotEvaluatedReason::UnboundConcept
     );
     assert!(
         seen.is_empty(),
@@ -387,4 +394,30 @@ fn a_concept_with_two_names_for_one_source_is_ambiguous_not_first_wins() {
         report.not_evaluated()[0].message
     );
     assert!(seen.is_empty());
+}
+
+#[test]
+fn an_unbound_concept_is_reported_once_per_source_not_per_object() {
+    let (definitions, _) = packages();
+    let walls = (1..=50).map(wall_numbered).collect();
+    let (report, _) = run(definitions, walls, snapshot(None), true);
+    assert!(report.findings().is_empty());
+    assert_eq!(
+        report.not_evaluated().len(),
+        1,
+        "{:?}",
+        report.not_evaluated()
+    );
+    let outcome = &report.not_evaluated()[0];
+    assert_eq!(outcome.reason, NotEvaluatedReason::UnboundConcept);
+    assert_eq!(
+        outcome.object_id, None,
+        "a source-level cause names no object"
+    );
+    assert!(
+        outcome.message.contains("50 object(s) of source"),
+        "{}",
+        outcome.message
+    );
+    assert!(outcome.message.contains("+47 more"), "{}", outcome.message);
 }

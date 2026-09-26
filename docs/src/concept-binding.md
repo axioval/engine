@@ -32,11 +32,17 @@ findings and no not-evaluated outcomes. A caller reads that as a pass.
    session. Selection and property resolution translate each concept through
    the one external name whose type system the object's source declared.
 4. **Failing closed.** Binding never passes a concept through verbatim.
-   Each of these is reported as not evaluated (`InvalidDeclaration`), never
-   as a non-match or an absence:
+   Each of these is reported as not evaluated (`UnboundConcept`), never as a
+   non-match or an absence:
    - the source declares no type system;
    - the concept has no name in any declared type system;
    - the concept has distinct names in two declared type systems.
+
+   These depend on the package and the source, never on one object, so the
+   runtime reports each once per rule, source and cause. The outcome names no
+   object; its message gives the source, how many objects it affected and a
+   few of them. A model of 2,040 objects checked against a package with no
+   name for its release yields one outcome, not 2,040.
 
 ## Subtypes
 

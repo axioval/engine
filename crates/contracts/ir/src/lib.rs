@@ -463,6 +463,10 @@ pub enum NotEvaluatedReason {
     InvalidEvidence,
     InvalidDeclaration,
     ResourceLimit,
+    /// The package names a concept the source's declared vocabulary cannot
+    /// express. A fact about the package and the source, never about one
+    /// object, so the runtime reports it once per rule and source.
+    UnboundConcept,
 }
 /// Explicit fail-closed evaluation outcome. This is not a compliance finding.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]

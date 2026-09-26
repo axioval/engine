@@ -98,8 +98,13 @@ fn vocabulary<'a>(context: &RuleContext<'a>) -> Vocabulary<'a> {
 
 fn binding_error(error: &BindingError) -> (NotEvaluatedReason, String) {
     // An unbound concept is a property of the package/source pairing, not of
-    // the evidence: the package names nothing this source can express.
-    (NotEvaluatedReason::InvalidDeclaration, error.to_string())
+    // the evidence: the package names nothing this source can express. A
+    // concept no package declares is a broken declaration instead.
+    let reason = match error {
+        BindingError::UnknownConcept { .. } => NotEvaluatedReason::InvalidDeclaration,
+        _ => NotEvaluatedReason::UnboundConcept,
+    };
+    (reason, error.to_string())
 }
 
 /// Builds a property request in the checked object's own source vocabulary.

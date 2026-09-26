@@ -97,11 +97,23 @@ fn unbound_package_over_ifc4_is_not_evaluated_never_an_empty_pass() {
         !report.not_evaluated().is_empty(),
         "an unbindable package must never produce an empty report"
     );
+    // One cause, reported once: the concept fails to bind for the source,
+    // not separately for each of the model's three objects.
+    assert_eq!(
+        report.not_evaluated().len(),
+        1,
+        "{:?}",
+        report.not_evaluated()
+    );
+    let outcome = &report.not_evaluated()[0];
+    assert_eq!(outcome.reason, NotEvaluatedReason::UnboundConcept);
+    assert_eq!(outcome.object_id, None);
     assert!(
-        report
-            .not_evaluated()
-            .iter()
-            .all(|outcome| outcome.reason == NotEvaluatedReason::InvalidDeclaration)
+        outcome
+            .message
+            .contains("3 object(s) of source `ifc-step:model.ifc` not evaluated (e.g. #1, #2, #3)"),
+        "{}",
+        outcome.message
     );
 }
 

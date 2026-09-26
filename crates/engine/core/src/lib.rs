@@ -429,6 +429,59 @@ pub use walkability::{
     WalkabilitySnapshot,
 };
 
+/// Binds a rule's outcomes to it, reporting each unbound concept once.
+///
+/// An unbound concept depends on the package and the source, never on the
+/// object, so every object of that source fails identically. Listing each one
+/// buries the single cause under thousands of copies. Object-level outcomes
+/// with that reason are merged per source and message into one rule-level
+/// outcome that names the source, the count and a few examples. Every other
+/// outcome keeps its object.
+fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> Vec<NotEvaluated> {
+    const EXAMPLES: usize = 3;
+    let mut merged: BTreeMap<(axioval_ir::SourceId, String), Vec<ObjectId>> = BTreeMap::new();
+    let mut kept = Vec::new();
+    for outcome in outcomes {
+        match (outcome.reason, outcome.object_id) {
+            (NotEvaluatedReason::UnboundConcept, Some(object)) => merged
+                .entry((object.source.clone(), outcome.message))
+                .or_default()
+                .push(object),
+            (reason, object_id) => kept.push(NotEvaluated {
+                rule_id: rule_id.clone(),
+                object_id,
+                reason,
+                message: outcome.message,
+            }),
+        }
+    }
+    kept.extend(merged.into_iter().map(|((source, message), mut objects)| {
+        objects.sort();
+        let examples: Vec<&str> = objects
+            .iter()
+            .take(EXAMPLES)
+            .map(|object| object.local_id.as_str())
+            .collect();
+        let more = objects.len().saturating_sub(EXAMPLES);
+        let tail = if more > 0 {
+            format!(", +{more} more")
+        } else {
+            String::new()
+        };
+        NotEvaluated {
+            rule_id: rule_id.clone(),
+            object_id: None,
+            reason: NotEvaluatedReason::UnboundConcept,
+            message: format!(
+                "{message}; {} object(s) of source `{source}` not evaluated (e.g. {}{tail})",
+                objects.len(),
+                examples.join(", ")
+            ),
+        }
+    }));
+    kept
+}
+
 /// Deterministic runtime that invokes only registered trusted capabilities.
 pub struct Runtime {
     registry: CapabilityRegistry,
@@ -507,14 +560,7 @@ impl Runtime {
             let rule_id = rule.id.clone();
             let evaluation = capability.evaluate(&context, &rule);
             findings.extend(evaluation.findings);
-            not_evaluated.extend(evaluation.not_evaluated.into_iter().map(|outcome| {
-                NotEvaluated {
-                    rule_id: rule_id.clone(),
-                    object_id: outcome.object_id,
-                    reason: outcome.reason,
-                    message: outcome.message,
-                }
-            }));
+            not_evaluated.extend(collapse_unbound(&rule_id, evaluation.not_evaluated));
         }
         findings.sort_by(|a, b| {
             a.rule_id

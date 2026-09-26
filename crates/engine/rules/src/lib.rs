@@ -14,10 +14,12 @@ mod horizontal_guard;
 mod pairs;
 mod property_comparison;
 mod property_rules;
+mod property_value;
 mod selection;
 mod shelf_capacity;
 mod slab_contact;
 mod space_validation;
+mod xsd_pattern;
 
 pub use clash::Clash;
 pub use comparison::{
@@ -34,6 +36,7 @@ pub use property_comparison::PropertyComparison;
 pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyPredicate, PropertyRequired,
 };
+pub use property_value::PropertyValueConstraint;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
 pub use space_validation::SpaceValidation;
@@ -48,6 +51,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .register(PropertyExists)
         .and_then(|registry| registry.register(PropertyRequired))
         .and_then(|registry| registry.register(PropertyDataType))
+        .and_then(|registry| registry.register(PropertyValueConstraint))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

@@ -15,6 +15,11 @@ unsupported values fail closed.
 
 A present property reports the IFC type its value was written with (`IFCLABEL`,
 `IFCBOOLEAN`, ...) as `Property::data_type`, upper case whatever the file used.
+A value is carried when its defined type's base in the file's release maps without
+loss: every `STRING`-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...),
+`INTEGER`- and `NUMBER`-based integers (`IfcTimeStamp`, `IfcCountMeasure`),
+`IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
+measures stay refused until unit handling lands.
 
 Exact absence covers what the resolver reads: `IfcPropertySet` members.
 Quantity sets (`IfcElementQuantity`) and predefined property sets

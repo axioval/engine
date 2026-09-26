@@ -150,3 +150,35 @@ fn spaces_present_but_nothing_else_derives_an_empty_envelope() {
         "nothing bounds a lone space, got {derived:?}"
     );
 }
+
+/// A closed, outward-oriented box, as real exports produce: its bottom face
+/// winds opposite to its top when seen from above.
+fn closed_box(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> TriMesh {
+    TriMesh::new(
+        vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z0),
+            Point3::new(x1, y1, z0),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z1),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z1),
+        ],
+        vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ],
+    )
+}
+
+/// A closed wall body overlapping a closed space in plan is on the envelope.
+#[test]
+fn closed_bodies_are_measured_by_their_footprint() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), closed_box(0.0, 10.0, 0.0, 10.0, 0.0, 3.0))
+        .with_mesh(id("wall"), closed_box(0.0, 10.0, -0.2, 0.2, 0.0, 3.0));
+    let service = AxiolidEnvelopeMembershipService::new(geometry, source()).with_space(id("space"));
+    let derived = measure(&service, EnvelopeDerivation::AllSpaces).expect("measurable");
+    assert_eq!(derived, vec!["wall".to_string()]);
+}

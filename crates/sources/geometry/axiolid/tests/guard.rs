@@ -223,3 +223,36 @@ fn a_distant_object_is_not_a_climbing_aid() {
         "an object 3 m from the railing is not a step up to it"
     );
 }
+
+/// A closed, outward-oriented box, as real exports produce.
+fn closed_box(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> TriMesh {
+    TriMesh::new(
+        vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z0),
+            Point3::new(x1, y1, z0),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z1),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z1),
+        ],
+        vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ],
+    )
+}
+
+/// A closed deck slab still has an edge. Its caps project with opposite
+/// windings, and cancelling them would leave no boundary to guard.
+#[test]
+fn a_closed_deck_has_edges() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("deck"), closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 0.2))
+        .with_mesh(id("railing"), closed_box(0.0, 4.0, 3.95, 4.05, 0.2, 1.2));
+    let service = AxiolidGuardService::new(geometry, source()).with_walking_surface(id("deck"));
+    let evidence = service.measure_guard_edges(search()).expect("measurable");
+    assert_eq!(evidence.evaluated_surfaces(), 1);
+    assert_eq!(evidence.edges()[0].barriers().len(), 1);
+}

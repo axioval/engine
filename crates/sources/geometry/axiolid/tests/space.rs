@@ -394,3 +394,42 @@ fn a_fully_walled_space_has_no_gaps() {
         "an enclosed boundary has no gaps: {gaps:?}"
     );
 }
+
+/// A closed, outward-oriented box, as real exports produce: its bottom face
+/// winds opposite to its top when seen from above.
+fn closed_box(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> TriMesh {
+    TriMesh::new(
+        vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z0),
+            Point3::new(x1, y1, z0),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z1),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z1),
+        ],
+        vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ],
+    )
+}
+
+/// Closed, outward-oriented bodies must be measured by their footprint too;
+/// opposite cap windings cancelling would erase every space.
+#[test]
+fn closed_coincident_spaces_are_duplicates() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("copy"), closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 3.0));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_space(id("copy"));
+    assert_eq!(
+        service
+            .measure_duplicates(&id("space"))
+            .expect("measurable"),
+        vec![id("copy")]
+    );
+}

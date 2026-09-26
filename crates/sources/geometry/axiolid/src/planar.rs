@@ -18,22 +18,33 @@ pub(crate) fn plan_frame() -> Frame2 {
     }
 }
 
-/// Triangles projected to xy as overlay polygons, dropping degenerate ones.
+/// Triangles projected to xy as counter-clockwise overlay polygons, dropping
+/// degenerate ones.
 ///
 /// A triangle seen edge-on in plan has no plan area and cannot contribute
 /// coverage, so dropping it is a measurement decision, not a shortcut.
+///
+/// Every triangle is wound counter-clockwise. A closed solid's top and bottom
+/// faces project onto the same area with opposite windings; under the
+/// non-zero fill rule every service here uses, they would cancel and the solid
+/// would have no footprint at all. Orienting them first makes the fill their
+/// union, which is what a footprint is.
 pub(crate) fn projected_polygons(triangles: &[Triangle]) -> Vec<Polygon> {
     triangles
         .iter()
         .filter_map(|[a, b, c]| {
-            let ring = Ring {
+            let mut ring = Ring {
                 points: vec![
                     Point2::new(a.x, a.y),
                     Point2::new(b.x, b.y),
                     Point2::new(c.x, c.y),
                 ],
             };
-            (ring_area(&ring).abs() > f64::EPSILON).then_some(Polygon {
+            let area = ring_area(&ring);
+            if area < 0.0 {
+                ring.points.reverse();
+            }
+            (area.abs() > f64::EPSILON).then_some(Polygon {
                 outer: ring,
                 holes: Vec::new(),
             })
@@ -114,22 +125,6 @@ pub(crate) fn ring_perimeter(ring: &Ring) -> f64 {
         .sum()
 }
 
-/// Projected triangles, every one wound counter-clockwise.
-///
-/// A closed solid's top and bottom faces project onto the same area with
-/// opposite windings. Under the non-zero fill rule they cancel, and the solid
-/// would have no footprint at all; orienting them first makes the fill their
-/// union.
-fn footprint_polygons(triangles: &[Triangle]) -> Vec<Polygon> {
-    let mut polygons = projected_polygons(triangles);
-    for polygon in &mut polygons {
-        if ring_area(&polygon.outer) < 0.0 {
-            polygon.outer.points.reverse();
-        }
-    }
-    polygons
-}
-
 /// Area of the overlap of two triangle sets' footprints.
 ///
 /// `None` when the overlay cannot be computed; an empty footprint overlaps
@@ -141,11 +136,11 @@ pub(crate) fn plan_overlap_area(
 ) -> Option<f64> {
     let first = OverlayInput {
         frame: plan_frame(),
-        polygons: footprint_polygons(first),
+        polygons: projected_polygons(first),
     };
     let second = OverlayInput {
         frame: plan_frame(),
-        polygons: footprint_polygons(second),
+        polygons: projected_polygons(second),
     };
     if first.polygons.is_empty() || second.polygons.is_empty() {
         return Some(0.0);

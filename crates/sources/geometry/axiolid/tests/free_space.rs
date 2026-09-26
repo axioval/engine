@@ -221,3 +221,41 @@ fn free_area_is_an_upper_bound_not_an_exact_value() {
         "an unrefined plan measurement is a bound, not a value"
     );
 }
+
+/// A closed, outward-oriented box, as real exports produce: its bottom face
+/// winds opposite to its top when seen from above.
+fn closed_box(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> TriMesh {
+    TriMesh::new(
+        vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z0),
+            Point3::new(x1, y1, z0),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z1),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z1),
+        ],
+        vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+        ],
+    )
+}
+
+/// A closed solid's top and bottom faces project with opposite windings. The
+/// footprint must be their union, not their cancellation.
+#[test]
+fn closed_bodies_keep_their_footprint() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), closed_box(0.0, 10.0, 0.0, 10.0, 0.0, 0.1))
+        .with_mesh(id("island"), closed_box(0.0, 2.0, 0.0, 10.0, 0.0, 1.0));
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let request = FreeAreaRequest::new(id("room"), profile(), vec![id("island")]);
+    let evidence = service.measure_free_area(&request).expect("measurable");
+    assert!(
+        (evidence.available_area().upper_square_metres() - 80.0).abs() < 1e-6,
+        "got {}",
+        evidence.available_area().upper_square_metres()
+    );
+}

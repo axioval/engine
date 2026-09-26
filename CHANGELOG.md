@@ -84,6 +84,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Closed solids lost their footprint in plan.** The Axiolid free-space,
+  space, envelope-membership and guard services, and the new proximity service,
+  projected triangles without orienting them. A closed, outward-oriented
+  body's top and bottom faces project with opposite windings, and the non-zero
+  overlay cancelled them to no area. Free area read zero, coincident spaces were
+  not duplicates, a wall overlapping a space was not on the envelope, and a
+  closed deck had no edges to guard. Existing tests used same-winding caps and
+  never saw it; each service now has a closed-body regression test.
 - **Classification selectors silently passed over sources.** A
   `classification` selector read the project's inline classification list,
   which no production adapter fills. Over an IFC model every classification

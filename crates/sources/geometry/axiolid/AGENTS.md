@@ -41,9 +41,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   two-manifold meshes have an inside; open ones report no penetration.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`; only this
   service honours it so far.
-- `plan_overlap_area` orients projected triangles before the non-zero overlay:
-  a closed solid's top and bottom faces project with opposite windings and
-  otherwise cancel to no footprint.
+- `projected_polygons` winds every projected triangle counter-clockwise. A
+  closed solid's top and bottom faces project with opposite windings and,
+  under the non-zero fill every service uses, cancel to no footprint at all.
+  Test fixtures with same-winding caps hid this; use closed, outward-oriented
+  boxes when testing plan measurements.
 - `src/lib.rs` keeps the source-scoping contracts and the in-memory conformance
   double. `UnavailableGeometryBackend` remains the explicit "no kernel linked"
   placeholder.

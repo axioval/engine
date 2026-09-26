@@ -4,6 +4,7 @@
 //! asserts the status first.
 #![allow(missing_docs)]
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -252,4 +253,169 @@ fn bcf_options_without_bcf_output_are_usage_errors() {
         &["--bcf-author", "x"],
     );
     assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+}
+
+fn report(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("report")
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn stdout(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// Walls #1..#n, none with a reference: n findings of one rule.
+fn many_walls(n: usize) -> String {
+    let mut walls = String::new();
+    for i in 1..=n {
+        let _ = writeln!(walls, "#{i}=IFCWALL('{i:0>22}',$,$,$,$,$,$,$,$);");
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{walls}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+#[test]
+fn a_summary_stays_small_and_names_the_next_command() {
+    let case = Case::new("summary");
+    let saved = case.path("result.json");
+    let output = case.check(
+        &many_walls(200),
+        true,
+        &["--summary", "--report", saved.to_str().unwrap()],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let summary = stdout(&output);
+    assert!(
+        summary.starts_with("status: findings · 200 finding(s)"),
+        "{summary}"
+    );
+    assert!(summary.contains("wall-reference-required"), "{summary}");
+    assert!(
+        summary.contains("e.g. #1 IFCWALL 0000000000000000000001;"),
+        "{summary}"
+    );
+    assert!(summary.contains("+197 more"), "{summary}");
+    let rule_step = format!(
+        "axioval report {} --rule wall-reference-required",
+        saved.display()
+    );
+    assert!(summary.contains(&rule_step), "{summary}");
+    // Bounded by distinct rules, not by findings.
+    assert!(summary.len() < 1_000, "{} bytes:\n{summary}", summary.len());
+    assert!(
+        std::fs::metadata(&saved).unwrap().len() > 20 * summary.len() as u64,
+        "the full result is on disk, not on stdout"
+    );
+    // The stderr count line would repeat the summary's status line.
+    assert!(
+        !stderr(&output).contains("finding(s)"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn a_summary_without_a_saved_result_says_how_to_get_one() {
+    let case = Case::new("summary-unsaved");
+    let output = case.check(&many_walls(2), true, &["--summary"]);
+    assert_eq!(output.status.code(), Some(3));
+    assert!(
+        stdout(&output).contains("rerun with --report <file>"),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn a_saved_result_can_be_summarized_and_paged_without_rerunning() {
+    let case = Case::new("drill");
+    let saved = case.path("result.json");
+    let output = case.check(&many_walls(5), true, &["--report", saved.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3));
+    let saved = saved.to_str().unwrap();
+
+    // The result names what each object is, not just its STEP number.
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(saved).unwrap()).unwrap();
+    assert_eq!(
+        result["objects"]["ifc-step:model.ifc/#2"],
+        json!({"kind": "IFCWALL", "global_id": "0000000000000000000002"})
+    );
+
+    let summary = report(&[saved, "--json"]);
+    assert_eq!(summary.status.code(), Some(0), "{}", stderr(&summary));
+    let summary: Value = serde_json::from_slice(&summary.stdout).unwrap();
+    assert_eq!(summary["status"], "findings");
+    assert_eq!(summary["groups"][0]["count"], 5);
+
+    let first = report(&[saved, "--rule", "wall-reference-required", "--limit", "2"]);
+    let text = stdout(&first);
+    assert!(text.contains("showing 1–2 of 5"), "{text}");
+    let next = text
+        .lines()
+        .find_map(|line| line.strip_prefix("next: axioval report "))
+        .unwrap_or_else(|| panic!("no next-page hint in:\n{text}"));
+    // The hint is a runnable command that continues where the page ended.
+    let args: Vec<&str> = next.split(' ').collect();
+    let second = stdout(&report(&args));
+    assert!(second.contains("showing 3–4 of 5"), "{second}");
+    assert!(second.contains("#3 IFCWALL"), "{second}");
+
+    let by_global_id = report(&[saved, "--object", "0000000000000000000004", "--json"]);
+    let listing: Value = serde_json::from_slice(&by_global_id.stdout).unwrap();
+    assert_eq!(listing["total"], 1);
+    assert_eq!(
+        listing["entries"][0]["object"],
+        "#4 IFCWALL 0000000000000000000004"
+    );
+    assert!(listing["entries"][0].get("evidence").is_none());
+
+    let with_evidence = report(&[saved, "--object", "#4", "--evidence", "--json"]);
+    let listing: Value = serde_json::from_slice(&with_evidence.stdout).unwrap();
+    assert!(
+        listing["entries"][0]["evidence"][0]
+            .as_str()
+            .unwrap()
+            .contains("sha256:")
+    );
+
+    let none = stdout(&report(&[saved, "--code", "identity.invalid-global-id"]));
+    assert_eq!(none, "no matching entries\n");
+}
+
+#[test]
+fn reading_a_missing_result_exits_1() {
+    let output = report(&["/nonexistent/result.json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("/nonexistent/result.json"));
+}
+
+#[test]
+fn every_hint_runs_unchanged_in_a_shell() {
+    // Ids start with `#`, which an unquoted shell word turns into a comment:
+    // `--object #1` would silently become `--object` with no value.
+    let case = Case::new("shell");
+    let saved = case.path("result.json");
+    let output = case.check(
+        &many_walls(3),
+        true,
+        &["--summary", "--report", saved.to_str().unwrap()],
+    );
+    let summary = stdout(&output);
+    let hint = summary
+        .lines()
+        .map(str::trim)
+        .find(|line| line.contains("--object"))
+        .unwrap_or_else(|| panic!("no --object hint in:\n{summary}"));
+    assert!(hint.contains("'#1'"), "{hint}");
+    let command = hint.replacen("axioval", env!("CARGO_BIN_EXE_axioval"), 1);
+    let ran = Command::new("sh").arg("-c").arg(&command).output().unwrap();
+    assert_eq!(ran.status.code(), Some(0), "{}", stderr(&ran));
+    let listing = stdout(&ran);
+    assert!(listing.contains("#1 IFCWALL"), "{listing}");
+    assert!(listing.contains("evidence: "), "{listing}");
+    assert!(listing.contains("showing 1–1 of 1"), "{listing}");
 }

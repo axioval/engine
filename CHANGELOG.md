@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Bounded views of a check result.** `axioval check --summary` prints one
+  line per rule, not-evaluated reason and integrity code, with counts, the
+  most frequent message, example objects and the next command to run.
+  `axioval report <result.json>` reads a saved result back as that summary,
+  or with `--rule`, `--code`, `--object` or `--section` as a paged listing.
+  Results now carry an `objects` index (kind and GlobalId of every object the
+  report names). On a real model the summary is 712 bytes against 271 KB of
+  JSON, so an agent can read the shape first and fetch entries on demand.
 - **`axioval check`.** Runs a ruleset over an IFC2X3 or IFC4 model and writes
   the report and the model's integrity issues as JSON, and optionally a BCF
   2.1 archive (`--bcf`). Exit status separates a clean pass (0), findings (3)

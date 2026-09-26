@@ -86,6 +86,27 @@ fn a_tessellated_footprint_is_an_interval_around_the_measured_area() {
 }
 
 #[test]
+fn a_bodiless_object_covers_nothing_but_an_unmeasured_one_is_unknown() {
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("space"), cuboid(0.0, 0.0, 4.0, 3.0, 2.5))
+            .with_no_body(id("zone"))
+            .with_unmeasured(id("slab"), "meshing failed"),
+    );
+    let footprint = areas.measure_footprint(&id("zone")).unwrap();
+    assert!(footprint.is_exact());
+    assert!(footprint.upper_square_metres().abs() < f64::EPSILON);
+    let overlap = areas
+        .measure_plan_overlap(&id("space"), &id("zone"))
+        .unwrap();
+    assert!(overlap.upper_square_metres().abs() < f64::EPSILON);
+    assert!(matches!(
+        areas.measure_footprint(&id("slab")),
+        Err(PlanAreaError::Unavailable(message)) if message.contains("meshing failed")
+    ));
+}
+
+#[test]
 fn an_object_without_geometry_is_unknown_not_zero() {
     let areas = service(AxiolidGeometry::new());
     assert_eq!(

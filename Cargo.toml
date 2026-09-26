@@ -4,6 +4,7 @@ resolver = "2"
 #   contracts/  source-neutral vocabulary, depends on nothing in this tree
 #   engine/     capability execution over those contracts
 #   sources/    adapters that feed the engine, one directory per port kind
+#   sinks/      writers that turn a finished report into an exchange format
 #   facade/     batteries-included re-export surface
 #   apps/       executables
 # A new geometry backend (CGAL, manifold3d) is a sibling under
@@ -12,6 +13,7 @@ members = [
     "crates/contracts/*",
     "crates/engine/*",
     "crates/sources/*/*",
+    "crates/sinks/*",
     "crates/facade/*",
     "crates/apps/*",
 ]
@@ -35,6 +37,7 @@ axioval-rules = { path = "crates/engine/rules", version = "0.2.0" }
 axioval-ifc = { path = "crates/sources/semantic/ifc", version = "0.2.0" }
 axioval-axiolid = { path = "crates/sources/geometry/axiolid", version = "0.2.0" }
 axioval-icdd = { path = "crates/sources/assembly/icdd", version = "0.2.0" }
+axioval-bcf = { path = "crates/sinks/bcf", version = "0.2.0" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"
@@ -47,6 +50,7 @@ axiolid-core = "0.3.0"
 axiolid-mesh = "0.3.0"
 axiolid-measure = "0.3.0"
 axiolid-overlay = "0.3.0"
+openbim-bcf = "0.3.0"
 ifc-classification = "0.2.1"
 ifc-model = "0.2.2"
 ifc-properties = "0.2.1"

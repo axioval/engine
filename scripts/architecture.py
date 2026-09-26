@@ -12,11 +12,18 @@ import sys
 import tomllib
 from pathlib import Path
 
-# Crates that must stay source-neutral. Adapters and the facade are exempt by
-# name; everything else is core by default, so a newly added crate is guarded
+# Crates that must stay source-neutral. Adapters, output sinks and the facade
+# are exempt by name; everything else is core by default, so a newly added crate is guarded
 # from its first commit rather than whenever someone remembers to list it.
 ADAPTER_CRATES = frozenset(
-    {"axioval-ifc", "axioval-axiolid", "axioval-icdd", "axioval", "axioval-cli"}
+    {
+        "axioval-ifc",
+        "axioval-axiolid",
+        "axioval-icdd",
+        "axioval-bcf",
+        "axioval",
+        "axioval-cli",
+    }
 )
 
 # Crates live in category directories (`contracts/`, `engine/`, `sources/…`),

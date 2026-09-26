@@ -18,6 +18,7 @@
 - [Walkability topology](./walkability.md)
 - [Typed host services](./services.md)
 - [Independent adapters](./adapters.md)
+- [Report sinks](./sinks.md)
 
 # Operations
 

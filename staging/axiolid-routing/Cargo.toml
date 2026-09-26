@@ -1,5 +1,5 @@
 # Standalone: NOT a member of the engine workspace. The publish gate asserts
-# exactly nine workspace crates, and this one cannot be published at all while
+# exactly ten workspace crates, and this one cannot be published at all while
 # it carries a path dependency.
 [workspace]
 

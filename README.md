@@ -25,6 +25,7 @@ There is deliberately no combined OpenBIM–Axiolid adapter. `axioval-ifc` maps 
 | `axioval-ifc` | Independent IFC semantic source adapter |
 | `axioval-axiolid` | Independent Axiolid geometry evidence adapter |
 | `axioval-icdd` | ICDD project assembly adapter |
+| `axioval-bcf` | BCF 2.1 issue archives from validation reports |
 | `axioval` | Batteries-included facade |
 | `axioval-cli` | Portable command-line runner |
 

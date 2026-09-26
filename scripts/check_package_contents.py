@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
     "axioval",
     "axioval-axiolid",
+    "axioval-bcf",
     "axioval-cli",
     "axioval-engine",
     "axioval-icdd",

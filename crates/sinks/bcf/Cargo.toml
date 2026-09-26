@@ -1,0 +1,26 @@
+[package]
+name = "axioval-bcf"
+description = "BCF issue archives from Axioval validation reports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# An output sink reads the report contract only: never the engine, never a
+# source adapter. The IFC adapter is a test-only dependency that pins the
+# GlobalId alias scheme both sides must agree on.
+[dependencies]
+axioval-ir.workspace = true
+openbim-bcf.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+axioval-ifc.workspace = true
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

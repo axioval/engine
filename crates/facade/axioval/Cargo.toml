@@ -16,6 +16,7 @@ axioval-rules.workspace = true
 axioval-ifc = { workspace = true, optional = true }
 axioval-axiolid = { workspace = true, optional = true }
 axioval-icdd = { workspace = true, optional = true }
+axioval-bcf = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -28,6 +29,8 @@ default = []
 ifc = ["dep:axioval-ifc"]
 axiolid = ["dep:axioval-axiolid"]
 icdd = ["dep:axioval-icdd"]
+# Output sinks follow the same rule: one feature per exchange format.
+bcf = ["dep:axioval-bcf"]
 
 [lints]
 workspace = true

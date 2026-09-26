@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **BCF export.** New crate `axioval-bcf` (facade feature `bcf`) writes a
+  report as a BCF 2.1 archive through `openbim-bcf` 0.3: one topic per finding
+  and per not-evaluated outcome, viewpoints selecting objects by GlobalId, and
+  topic GUIDs that survive re-export of the model. It depends on `axioval-ir`
+  only. See the *Report sinks* page.
 - **External identities.** `ExternalId` (scheme plus value) lets an object
   carry aliases beside its source-qualified `ObjectId`, read with
   `Object::external_id`. `Project::new` rejects an object with two ids in one

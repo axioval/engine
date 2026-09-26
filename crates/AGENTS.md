@@ -8,6 +8,7 @@ you what it contains.
 contracts/   source-neutral vocabulary — depends on nothing else in this tree
 engine/      capability execution over those contracts
 sources/     adapters that feed the engine, one directory per port kind
+sinks/       writers that turn a finished report into an exchange format
 facade/      feature-gated re-export surface
 apps/        executables
 ```
@@ -35,20 +36,29 @@ Adapters are peers. They must not depend on each other: a combined
 `ifc`-plus-`axiolid` adapter would re-couple the two halves this layout
 separates. The host composes them.
 
+## sinks/
+
+One subdirectory per exchange format. A sink reads `axioval-ir` reports and
+projects only: never the engine, never a source adapter. It must not depend on
+an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
+
+- `bcf` (`axioval-bcf`) — BCF 2.1 issue archives.
+
 ## facade/ and apps/
 
-- `axioval` — feature-gated facade. One feature per source adapter, named for
-  the format or library it adapts (`ifc`, `axiolid`, `icdd`).
+- `axioval` — feature-gated facade. One feature per source adapter or sink,
+  named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`).
 - `cli` (`axioval-cli`) — command-line frontend.
 
-## Adding a source adapter
+## Adding a source adapter or sink
 
-1. Create `sources/<port-kind>/<content-name>/` — name it for the format or
-   library, never for the ecosystem it was found in.
+1. Create `sources/<port-kind>/<content-name>/` or `sinks/<format>/` — name
+   it for the format or library, never for the ecosystem it was found in.
 2. Add a matching optional dependency and same-named feature to
    `facade/axioval/Cargo.toml`, and a `#[cfg(feature = "…")]` re-export.
 3. Add the crate name to `ADAPTER_CRATES` in `scripts/architecture.py` and to
-   `EXPECTED` in `scripts/check_package_contents.py`.
+   `EXPECTED` in `scripts/check_package_contents.py`, and bump
+   `EXPECTED_MEMBERS` in `scripts/staging_isolation.py`.
 
 Crates not listed in `ADAPTER_CRATES` are treated as core and must stay
 source-neutral; the architecture gate enforces that by package name, so a crate

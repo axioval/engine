@@ -12,6 +12,7 @@ crates/
   sources/semantic/ifc         one adapter per format
   sources/geometry/axiolid     one adapter per kernel
   sources/assembly/icdd        one adapter per container
+  sinks/bcf                    one writer per exchange format
   facade/axioval               feature-gated re-exports
   apps/cli                     executables
 ```
@@ -33,7 +34,12 @@ engine/core  <-  engine/rules
     +- sources/assembly/icdd
               ^
         facade/axioval
+
+contracts/ir  <-  sinks/bcf
 ```
+
+A sink reads finished reports. It depends on the IR alone, so any host can
+write BCF from any source's report without linking the engine or an adapter.
 
 `axioval-ir`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
 

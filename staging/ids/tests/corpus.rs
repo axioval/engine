@@ -173,14 +173,17 @@ fn run() {
     }
     for (class, cases) in &classes {
         println!("{class:?}: {}", cases.len());
-        if matches!(
-            class,
-            Class::CaughtFail
-                | Class::ExactPass
-                | Class::NotEvaluated
-                | Class::ExistenceFail
-                | Class::ModelRefused
-        ) {
+        // IDS_CORPUS_VERBOSE lists every case, not only the notable classes.
+        if std::env::var_os("IDS_CORPUS_VERBOSE").is_some()
+            || matches!(
+                class,
+                Class::CaughtFail
+                    | Class::ExactPass
+                    | Class::NotEvaluated
+                    | Class::ExistenceFail
+                    | Class::ModelRefused
+            )
+        {
             for case in cases {
                 println!("    {case}");
             }

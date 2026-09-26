@@ -280,14 +280,13 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
         [
             (requirement(1), Reason::RestrictionFacet("totalDigits")),
             (requirement(2), Reason::EmptyRestriction),
-            (requirement(3), Reason::Prohibited),
-            (requirement(6), Reason::EntityRequirement),
         ]
     );
-    // The optional value-less property and the redundant entity need no rule.
+    // The optional value-less property and the redundant entity need no rule;
+    // the prohibited property and the other class translate.
     assert_eq!(
         translation.specifications[0].rules,
-        ["spec1.facet5", "spec1.facet8"]
+        ["spec1.facet3", "spec1.facet5", "spec1.facet6", "spec1.facet8"]
     );
 }
 

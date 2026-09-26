@@ -40,8 +40,8 @@ use axioval_ir::contract::{
     Selector, Severity,
 };
 use openbim_ids::{
-    Attribute, Entity, Facet, Ids, IfcVersion, Occurrence, Property, Requirement, Specification,
-    Value,
+    Attribute, Classification, Entity, Facet, Ids, IfcVersion, Material, Occurrence, PartOf,
+    Property, Relation, Requirement, Specification, Value,
 };
 use thiserror::Error;
 
@@ -63,6 +63,10 @@ const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
 const PROPERTY_VALUE: &str = "axioval:capability.property-value";
 const ATTRIBUTE_VALUE: &str = "axioval:capability.attribute-value";
 const PREDEFINED_TYPE: &str = "axioval:capability.predefined-type";
+const CLASSIFICATION: &str = "axioval:capability.classification";
+const MATERIAL: &str = "axioval:capability.material";
+const PART_OF: &str = "axioval:capability.part-of";
+const ENTITY: &str = "axioval:capability.entity";
 
 /// Identity of the packages written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -244,8 +248,6 @@ pub enum Reason {
     RestrictionFacet(&'static str),
     /// A restriction with no facets, whose meaning IDS leaves open.
     EmptyRestriction,
-    /// A prohibited facet.
-    Prohibited,
     /// An entity requirement naming a class other than the applicability's.
     EntityRequirement,
 }
@@ -288,7 +290,6 @@ impl fmt::Display for Reason {
                 write!(f, "no capability applies the restriction facet {facet}")
             }
             Reason::EmptyRestriction => f.write_str("a restriction without facets"),
-            Reason::Prohibited => f.write_str("no capability decides a prohibited facet"),
             Reason::EntityRequirement => f.write_str(
                 "an entity requirement other than the applicability's own entity is not decided",
             ),
@@ -479,7 +480,7 @@ impl<'o> Writer<'o> {
         } = check;
         let definition_id = self.definition(kind);
         let (reference, subject) = match &set {
-            _ if matches!(kind, CheckKind::PredefinedType) => (
+            _ if kind.reference().is_none() => (
                 ("", ParameterValue::Boolean { value: false }),
                 String::new(),
             ),
@@ -512,6 +513,10 @@ impl<'o> Writer<'o> {
         let optional = parameters.contains_key("optional");
         let title = match kind {
             CheckKind::PredefinedType => format!("{name} has the required predefined type"),
+            CheckKind::Classification => format!("classification {name}"),
+            CheckKind::Material => format!("material {name}"),
+            CheckKind::PartOf => format!("part of {name}"),
+            CheckKind::Entity => format!("is a {name}"),
             CheckKind::Required => format!("{subject} is required"),
             CheckKind::DataType => format!("{subject} is required with a declared type"),
             CheckKind::Value | CheckKind::Attribute if optional => {
@@ -545,82 +550,21 @@ impl<'o> Writer<'o> {
 
     /// The rule definition a kind of check uses, written once.
     fn definition(&mut self, kind: CheckKind) -> String {
-        let (suffix, name, description, capability) = match kind {
-            CheckKind::Required => (
-                "property-required",
-                "Property is required",
-                "An IDS property facet without a value: the property must exist with a non-empty value.",
-                PROPERTY_REQUIRED,
-            ),
-            CheckKind::DataType => (
-                "property-data-type",
-                "Property is required with a data type",
-                "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
-                PROPERTY_DATA_TYPE,
-            ),
-            CheckKind::PredefinedType => (
-                "predefined-type",
-                "Predefined type",
-                "An IDS entity requirement with a predefinedType on the applicability's own class.",
-                PREDEFINED_TYPE,
-            ),
-            CheckKind::Attribute => (
-                "attribute-value",
-                "Attribute meets constraints",
-                "An IDS attribute facet: the attribute must hold a value, and meet the value constraints if any.",
-                ATTRIBUTE_VALUE,
-            ),
-            CheckKind::Value => (
-                "property-value",
-                "Property value meets constraints",
-                "An IDS property facet with a value, or an optional one with a dataType: literals and XML Schema facets cast to the property's value.",
-                PROPERTY_VALUE,
-            ),
-        };
+        let (suffix, name, description, capability) = kind.catalog();
         let id = format!("{}.{suffix}", self.options.package_id);
         self.definitions.entry(id.clone()).or_insert_with(|| {
-            let reference = if matches!(kind, CheckKind::Attribute) {
-                "attribute"
-            } else {
-                "property"
-            };
             let mut parameters = BTreeMap::new();
-            if !matches!(kind, CheckKind::PredefinedType) {
+            if let Some(reference) = kind.reference() {
                 parameters.insert(
                     reference.to_owned(),
                     parameter(reference, ParameterKind::PropertyReference, true),
                 );
             }
-            let optional: &[(&str, ParameterKind)] = match kind {
-                CheckKind::Required => &[],
-                CheckKind::PredefinedType => &[
-                    ("values", ParameterKind::StringList),
-                    ("patterns", ParameterKind::StringList),
-                    ("user_defined", ParameterKind::Boolean),
-                ],
-                CheckKind::DataType => {
-                    parameters.insert(
-                        "data_type".to_owned(),
-                        parameter("data_type", ParameterKind::String, true),
-                    );
-                    &[]
-                }
-                CheckKind::Value | CheckKind::Attribute => &[
-                    ("data_type", ParameterKind::String),
-                    ("values", ParameterKind::StringList),
-                    ("patterns", ParameterKind::StringList),
-                    ("min_inclusive", ParameterKind::String),
-                    ("max_inclusive", ParameterKind::String),
-                    ("min_exclusive", ParameterKind::String),
-                    ("max_exclusive", ParameterKind::String),
-                    ("length", ParameterKind::Integer),
-                    ("min_length", ParameterKind::Integer),
-                    ("max_length", ParameterKind::Integer),
-                    ("optional", ParameterKind::Boolean),
-                ],
-            };
-            for (id, kind) in optional {
-                parameters.insert((*id).to_owned(), parameter(id, kind.clone(), false));
+            for (id, parameter_kind, required) in kind.parameters() {
+                parameters.insert(
+                    (*id).to_owned(),
+                    parameter(id, parameter_kind.clone(), *required),
+                );
             }
             RuleDefinition {
                 id: id.clone(),
@@ -771,6 +715,146 @@ enum CheckKind {
     Attribute,
     /// `predefined-type`.
     PredefinedType,
+    /// `classification`.
+    Classification,
+    /// `material`.
+    Material,
+    /// `part-of`.
+    PartOf,
+    /// `entity`.
+    Entity,
+}
+
+const VALUE_PARAMETERS: &[(&str, ParameterKind, bool)] = &[
+    ("data_type", ParameterKind::String, false),
+    ("values", ParameterKind::StringList, false),
+    ("patterns", ParameterKind::StringList, false),
+    ("min_inclusive", ParameterKind::String, false),
+    ("max_inclusive", ParameterKind::String, false),
+    ("min_exclusive", ParameterKind::String, false),
+    ("max_exclusive", ParameterKind::String, false),
+    ("length", ParameterKind::Integer, false),
+    ("min_length", ParameterKind::Integer, false),
+    ("max_length", ParameterKind::Integer, false),
+    ("optional", ParameterKind::Boolean, false),
+    ("prohibited", ParameterKind::Boolean, false),
+];
+
+impl CheckKind {
+    /// Definition id suffix, name, description and capability.
+    fn catalog(self) -> (&'static str, &'static str, &'static str, &'static str) {
+        match self {
+            CheckKind::Required => (
+                "property-required",
+                "Property is required",
+                "An IDS property facet without a value: the property must exist with a non-empty value.",
+                PROPERTY_REQUIRED,
+            ),
+            CheckKind::DataType => (
+                "property-data-type",
+                "Property is required with a data type",
+                "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
+                PROPERTY_DATA_TYPE,
+            ),
+            CheckKind::Entity => (
+                "entity",
+                "Entity",
+                "An IDS entity requirement: the object's class (and predefined type) given as literals or patterns.",
+                ENTITY,
+            ),
+            CheckKind::PartOf => (
+                "part-of",
+                "Part of",
+                "An IDS partOf requirement: a whole of a class (and predefined type) through a relation.",
+                PART_OF,
+            ),
+            CheckKind::Material => (
+                "material",
+                "Material",
+                "An IDS material requirement: a material, known by a name or category given as a literal or patterns.",
+                MATERIAL,
+            ),
+            CheckKind::Classification => (
+                "classification",
+                "Classification",
+                "An IDS classification requirement: codes (with their ancestors) and systems as literals or patterns.",
+                CLASSIFICATION,
+            ),
+            CheckKind::PredefinedType => (
+                "predefined-type",
+                "Predefined type",
+                "An IDS entity requirement with a predefinedType on the applicability's own class.",
+                PREDEFINED_TYPE,
+            ),
+            CheckKind::Attribute => (
+                "attribute-value",
+                "Attribute meets constraints",
+                "An IDS attribute facet: the attribute must hold a value, and meet the value constraints if any.",
+                ATTRIBUTE_VALUE,
+            ),
+            CheckKind::Value => (
+                "property-value",
+                "Property value meets constraints",
+                "An IDS property facet with a value, or an optional one with a dataType: literals and XML Schema facets cast to the property's value.",
+                PROPERTY_VALUE,
+            ),
+        }
+    }
+
+    /// The reference parameter naming what is checked, if any.
+    fn reference(self) -> Option<&'static str> {
+        match self {
+            CheckKind::Attribute => Some("attribute"),
+            CheckKind::Required | CheckKind::DataType | CheckKind::Value => Some("property"),
+            CheckKind::PredefinedType
+            | CheckKind::Classification
+            | CheckKind::Material
+            | CheckKind::PartOf
+            | CheckKind::Entity => None,
+        }
+    }
+
+    /// The other parameters: name, kind, and whether required.
+    fn parameters(self) -> &'static [(&'static str, ParameterKind, bool)] {
+        match self {
+            CheckKind::Required => &[],
+            CheckKind::DataType => &[("data_type", ParameterKind::String, true)],
+            CheckKind::Value | CheckKind::Attribute => VALUE_PARAMETERS,
+            CheckKind::PredefinedType => &[
+                ("values", ParameterKind::StringList, false),
+                ("patterns", ParameterKind::StringList, false),
+                ("user_defined", ParameterKind::Boolean, false),
+            ],
+            CheckKind::Entity => &[
+                ("classes", ParameterKind::StringList, false),
+                ("class_patterns", ParameterKind::StringList, false),
+                ("predefined_types", ParameterKind::StringList, false),
+                ("predefined_patterns", ParameterKind::StringList, false),
+            ],
+            CheckKind::PartOf => &[
+                ("relation", ParameterKind::String, false),
+                ("classes", ParameterKind::StringList, false),
+                ("class_patterns", ParameterKind::StringList, false),
+                ("predefined_types", ParameterKind::StringList, false),
+                ("predefined_patterns", ParameterKind::StringList, false),
+                ("prohibited", ParameterKind::Boolean, false),
+            ],
+            CheckKind::Material => &[
+                ("values", ParameterKind::StringList, false),
+                ("patterns", ParameterKind::StringList, false),
+                ("optional", ParameterKind::Boolean, false),
+                ("prohibited", ParameterKind::Boolean, false),
+            ],
+            CheckKind::Classification => &[
+                ("codes", ParameterKind::StringList, false),
+                ("code_patterns", ParameterKind::StringList, false),
+                ("systems", ParameterKind::StringList, false),
+                ("system_patterns", ParameterKind::StringList, false),
+                ("optional", ParameterKind::Boolean, false),
+                ("prohibited", ParameterKind::Boolean, false),
+            ],
+        }
+    }
 }
 
 /// The supported releases, recording a gap for each unsupported one.
@@ -942,6 +1026,11 @@ fn check(
     match &requirement.facet {
         Facet::Property(property) => property_check(property, requirement.occurrence),
         Facet::Attribute(attribute) => attribute_check(attribute, requirement.occurrence),
+        Facet::Classification(classification) => {
+            classification_check(classification, requirement.occurrence)
+        }
+        Facet::Material(material) => material_check(material, requirement.occurrence),
+        Facet::PartOf(part_of) => part_of_check(part_of, requirement.occurrence),
         Facet::Entity(entity) => {
             // Requiring the class the applicability already selected always
             // holds; a predefined type on it is checked on its own.
@@ -950,7 +1039,7 @@ fn check(
                     && matches!((&applicable.name, &entity.name), (Value::Simple(a), Value::Simple(b)) if a == b)
             });
             if !same {
-                return Err(Reason::EntityRequirement);
+                return entity_check(entity).map(Some);
             }
             let Some(designation) = &entity.predefined_type else {
                 return Ok(None);
@@ -965,7 +1054,6 @@ fn check(
                 parameters: predefined_type_parameters(designation)?,
             }))
         }
-        other => Err(Reason::FacetKind(other.kind())),
     }
 }
 
@@ -974,10 +1062,10 @@ fn property_check(property: &Property, occurrence: Occurrence) -> Result<Option<
     else {
         return Err(Reason::Restriction);
     };
-    let optional = match occurrence {
-        Occurrence::Required => false,
-        Occurrence::Optional => true,
-        Occurrence::Prohibited => return Err(Reason::Prohibited),
+    let (optional, prohibited) = match occurrence {
+        Occurrence::Required => (false, false),
+        Occurrence::Optional => (true, false),
+        Occurrence::Prohibited => (false, true),
     };
     let mut parameters = BTreeMap::new();
     if let Some(data_type) = &property.data_type {
@@ -989,6 +1077,8 @@ fn property_check(property: &Property, occurrence: Occurrence) -> Result<Option<
         );
     }
     let kind = match (&property.value, optional, &property.data_type) {
+        // A prohibited facet is the required one inverted.
+        (None, false, _) if prohibited => CheckKind::Value,
         (None, false, None) => CheckKind::Required,
         (None, false, Some(_)) => CheckKind::DataType,
         // Without a value or type, an optional property is satisfied
@@ -1000,12 +1090,7 @@ fn property_check(property: &Property, occurrence: Occurrence) -> Result<Option<
             CheckKind::Value
         }
     };
-    if optional {
-        parameters.insert(
-            "optional".to_owned(),
-            ParameterValue::Boolean { value: true },
-        );
-    }
+    occurrence_flag(occurrence, &mut parameters);
     Ok(Some(Check {
         set: Some(set.clone()),
         name: name.clone(),
@@ -1018,11 +1103,7 @@ fn attribute_check(attribute: &Attribute, occurrence: Occurrence) -> Result<Opti
     let Value::Simple(name) = &attribute.name else {
         return Err(Reason::Restriction);
     };
-    let optional = match occurrence {
-        Occurrence::Required => false,
-        Occurrence::Optional => true,
-        Occurrence::Prohibited => return Err(Reason::Prohibited),
-    };
+    let optional = occurrence == Occurrence::Optional;
     let mut parameters = BTreeMap::new();
     match &attribute.value {
         Some(value) => value_parameters(value, &mut parameters)?,
@@ -1030,12 +1111,7 @@ fn attribute_check(attribute: &Attribute, occurrence: Occurrence) -> Result<Opti
         None if optional => return Ok(None),
         None => {}
     }
-    if optional {
-        parameters.insert(
-            "optional".to_owned(),
-            ParameterValue::Boolean { value: true },
-        );
-    }
+    occurrence_flag(occurrence, &mut parameters);
     Ok(Some(Check {
         set: None,
         name: name.clone(),
@@ -1050,18 +1126,33 @@ fn attribute_check(attribute: &Attribute, occurrence: Occurrence) -> Result<Opti
 /// IDS reads it; any other literal, an enumeration and patterns name the
 /// designation itself.
 fn predefined_type_parameters(value: &Value) -> Result<BTreeMap<String, ParameterValue>, Reason> {
+    if value.as_simple() == Some("USERDEFINED") {
+        return Ok(BTreeMap::from([(
+            "user_defined".to_owned(),
+            ParameterValue::Boolean { value: true },
+        )]));
+    }
+    let mut parameters = BTreeMap::new();
+    name_parameters(value, "values", "patterns", &mut parameters)?;
+    Ok(parameters)
+}
+
+/// A name given as a literal, an enumeration or patterns, as the literal and
+/// pattern lists a capability takes. Any other restriction facet is a gap.
+fn name_parameters(
+    value: &Value,
+    literals: &str,
+    patterns: &str,
+    parameters: &mut BTreeMap<String, ParameterValue>,
+) -> Result<(), Reason> {
     let strings = |values: &[String]| ParameterValue::StringList {
         value: values.to_vec(),
     };
     match value {
-        Value::Simple(literal) if literal == "USERDEFINED" => Ok(BTreeMap::from([(
-            "user_defined".to_owned(),
-            ParameterValue::Boolean { value: true },
-        )])),
-        Value::Simple(literal) => Ok(BTreeMap::from([(
-            "values".to_owned(),
-            strings(std::slice::from_ref(literal)),
-        )])),
+        Value::Simple(literal) => {
+            parameters.insert(literals.to_owned(), strings(std::slice::from_ref(literal)));
+            Ok(())
+        }
         Value::Restriction(restriction) => {
             let only_names = restriction.min_inclusive.is_none()
                 && restriction.max_inclusive.is_none()
@@ -1071,21 +1162,145 @@ fn predefined_type_parameters(value: &Value) -> Result<BTreeMap<String, Paramete
                 && restriction.min_length.is_none()
                 && restriction.max_length.is_none()
                 && restriction.total_digits.is_none()
-                && restriction.fraction_digits.is_none();
-            let mut parameters = BTreeMap::new();
+                && restriction.fraction_digits.is_none()
+                && !(restriction.enumeration.is_empty() && restriction.patterns.is_empty());
+            if !only_names {
+                return Err(Reason::Restriction);
+            }
             if !restriction.enumeration.is_empty() {
-                parameters.insert("values".to_owned(), strings(&restriction.enumeration));
+                parameters.insert(literals.to_owned(), strings(&restriction.enumeration));
             }
             if !restriction.patterns.is_empty() {
-                parameters.insert("patterns".to_owned(), strings(&restriction.patterns));
+                parameters.insert(patterns.to_owned(), strings(&restriction.patterns));
             }
-            if only_names && !parameters.is_empty() {
-                Ok(parameters)
-            } else {
-                Err(Reason::Restriction)
-            }
+            Ok(())
         }
     }
+}
+
+/// An entity requirement other than the applicability's own class.
+fn entity_check(entity: &Entity) -> Result<Check, Reason> {
+    let mut parameters = BTreeMap::new();
+    name_parameters(&entity.name, "classes", "class_patterns", &mut parameters)?;
+    if let Some(predefined) = &entity.predefined_type {
+        name_parameters(
+            predefined,
+            "predefined_types",
+            "predefined_patterns",
+            &mut parameters,
+        )?;
+    }
+    Ok(Check {
+        set: None,
+        name: entity
+            .name
+            .as_simple()
+            .unwrap_or("a required class")
+            .to_owned(),
+        kind: CheckKind::Entity,
+        parameters,
+    })
+}
+
+fn part_of_check(part_of: &PartOf, occurrence: Occurrence) -> Result<Option<Check>, Reason> {
+    let relation = match part_of.relation {
+        None => "any",
+        Some(Relation::Aggregates) => "aggregation",
+        Some(Relation::AssignsToGroup) => "grouping",
+        Some(Relation::ContainedInSpatialStructure) => "containment",
+        Some(Relation::Nests) => "nesting",
+        Some(Relation::VoidsElementFillsElement) => "voiding",
+    };
+    let mut parameters = BTreeMap::from([(
+        "relation".to_owned(),
+        ParameterValue::String {
+            value: relation.to_owned(),
+        },
+    )]);
+    name_parameters(
+        &part_of.entity.name,
+        "classes",
+        "class_patterns",
+        &mut parameters,
+    )?;
+    if let Some(predefined) = &part_of.entity.predefined_type {
+        name_parameters(
+            predefined,
+            "predefined_types",
+            "predefined_patterns",
+            &mut parameters,
+        )?;
+    }
+    occurrence_flag(occurrence, &mut parameters);
+    Ok(Some(Check {
+        set: None,
+        name: part_of
+            .entity
+            .name
+            .as_simple()
+            .unwrap_or("a whole")
+            .to_owned(),
+        kind: CheckKind::PartOf,
+        parameters,
+    }))
+}
+
+fn material_check(material: &Material, occurrence: Occurrence) -> Result<Option<Check>, Reason> {
+    let mut parameters = BTreeMap::new();
+    if let Some(value) = &material.value {
+        name_parameters(value, "values", "patterns", &mut parameters)?;
+    }
+    occurrence_flag(occurrence, &mut parameters);
+    let name = material
+        .value
+        .as_ref()
+        .and_then(Value::as_simple)
+        .unwrap_or("requirement")
+        .to_owned();
+    Ok(Some(Check {
+        set: None,
+        name,
+        kind: CheckKind::Material,
+        parameters,
+    }))
+}
+
+/// `optional` or `prohibited` for a facet's occurrence; required sets none.
+fn occurrence_flag(occurrence: Occurrence, parameters: &mut BTreeMap<String, ParameterValue>) {
+    let flag = match occurrence {
+        Occurrence::Required => return,
+        Occurrence::Optional => "optional",
+        Occurrence::Prohibited => "prohibited",
+    };
+    parameters.insert(flag.to_owned(), ParameterValue::Boolean { value: true });
+}
+
+fn classification_check(
+    classification: &Classification,
+    occurrence: Occurrence,
+) -> Result<Option<Check>, Reason> {
+    let mut parameters = BTreeMap::new();
+    name_parameters(
+        &classification.system,
+        "systems",
+        "system_patterns",
+        &mut parameters,
+    )?;
+    if let Some(value) = &classification.value {
+        name_parameters(value, "codes", "code_patterns", &mut parameters)?;
+    }
+    occurrence_flag(occurrence, &mut parameters);
+    let name = match (&classification.system, &classification.value) {
+        (Value::Simple(system), Some(Value::Simple(code))) => format!("{system} {code}"),
+        (Value::Simple(system), _) => system.clone(),
+        _ => "requirement".to_owned(),
+    };
+    Ok(Some(Check {
+        set: None,
+        name,
+        kind: CheckKind::Classification,
+        parameters,
+    }))
 }
 
 /// The `property-value` parameters an IDS value stands for.

@@ -39,8 +39,8 @@ The public documentation system is mdBook plus workspace rustdoc, deployed by
 `v1.0.0`), never on patch or pre-release tags, or by hand. The `github-pages`
 environment allows `v*` tags to deploy. Update the relevant page with every
 public contract or architecture change and keep `docs/src/SUMMARY.md`
-complete; `./scripts/check.sh` builds the book on every commit, so a broken
-page still fails before release.
+complete; CI builds the book on every commit (`./scripts/check.sh docs`), so
+a broken page still fails before release.
 
 ## Direct children
 
@@ -58,3 +58,9 @@ Run `./scripts/check.sh`. It formats, lints, tests, checks architecture
 boundaries, builds rustdoc, and builds the mdBook. The architecture gate is
 mutation-proven and binds to `scripts/rule_vocabulary.json`; a capability is
 never marked migrated without its parity evidence and cutover reference.
+
+The gate has four sections, `deny`, `lint`, `test` and `docs`;
+`./scripts/check.sh test` runs one, no argument runs them all. CI runs each
+section as its own parallel job (with the package check beside them), and its
+`check` job passes only when every one does. Pages does not re-run the gate:
+it requires CI to have passed on the commit and builds only `docs`.

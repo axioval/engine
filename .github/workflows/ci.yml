@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # A release tag gets its own run, so the Pages workflow always finds a
+    # CI verdict for the tagged commit instead of re-running the gate.
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -14,8 +17,25 @@ env:
   RUSTFLAGS: ""
 
 jobs:
-  check:
+  # The `deny` section of scripts/check.sh, run by the pinned action.
+  deny:
+    name: Gate (deny)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Audit dependency policy
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+
+  # The remaining sections of scripts/check.sh, one parallel job each. With
+  # `deny` above they are the whole gate: the union of these jobs is exactly
+  # `./scripts/check.sh` with no argument.
+  gate:
+    name: Gate (${{ matrix.section }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        section: [lint, test, docs]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-31
@@ -23,9 +43,14 @@ jobs:
           toolchain: 1.88.0
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - name: Audit dependency policy
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          # One cache per section: each builds a different profile mix, so a
+          # shared cache would thrash. Only main saves, so a branch or pull
+          # request can read the cache but never write into it.
+          key: ${{ matrix.section }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install verified mdBook
+        if: matrix.section == 'docs'
         env:
           MDBOOK_VERSION: "0.5.4"
           MDBOOK_SHA256: "3f28de05dafca9d0f2eab99c662116b0e37b89b1d96a08f8f430b9eeae958cd7"
@@ -35,15 +60,40 @@ jobs:
             --output mdbook.tar.gz
           echo "${MDBOOK_SHA256}  mdbook.tar.gz" | sha256sum --check --strict
           tar -xzf mdbook.tar.gz -C "$HOME/.cargo/bin"
-      - name: Full repository gate
+      - name: Gate section
         env:
-          # The immediately preceding pinned action already ran cargo-deny.
-          AXIOVAL_DEPENDENCY_AUDIT_COMPLETE: "1"
           RUSTDOCFLAGS: "-D warnings"
-        run: ./scripts/check.sh
+        run: ./scripts/check.sh ${{ matrix.section }}
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-31
+        with:
+          toolchain: 1.88.0
       - name: Verify publishable workspace archives
         # Structure only: the forbidden-term denylist is private and untracked,
         # so a public runner cannot perform that scan. The maintainer's
         # release run calls ./scripts/package.sh with no flag, where the
-        # denylist is present and the scan is enforced.
+        # denylist is present and the scan is enforced. package.sh builds in
+        # a fresh temporary target directory, so a build cache cannot help.
         run: ./scripts/package.sh --structure-only
+
+  # The one check that means "the whole gate passed", under the name the
+  # single-job gate had. The Pages workflow requires this workflow's run on
+  # the commit it publishes to have succeeded.
+  check:
+    needs: [deny, gate, package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every gate job to pass
+        env:
+          RESULTS: ${{ needs.deny.result }} ${{ needs.gate.result }} ${{ needs.package.result }}
+        run: |
+          for result in $RESULTS; do
+            [ "$result" = success ] \
+              || { echo "::error::gate jobs did not all pass: $RESULTS"; exit 1; }
+          done

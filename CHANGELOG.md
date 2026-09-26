@@ -63,6 +63,37 @@ All notable changes are documented here. This project follows Semantic Versionin
   and per not-evaluated outcome, viewpoints selecting objects by GlobalId, and
   topic GUIDs that survive re-export of the model. It depends on `axioval-ir`
   only. See the *Report sinks* page.
+- **Attribute sets.** Two reserved property sets,
+  `axioval:attributes` (`ATTRIBUTE_SET`) and `axioval:type-attributes`
+  (`TYPE_ATTRIBUTE_SET`), read an object's own attributes and those of its
+  type object through the property resolver. They bind to themselves in
+  every source, so packages reference them without declaring a concept. The
+  IFC adapter answers them from the entity and from its
+  `IfcRelDefinesByType` type object: a space's number (`Name`), name
+  (`LongName`) and type name. Measures such as a storey's `Elevation` are
+  refused until units are converted.
+- **Semantic capabilities.** These read exact properties, classifications
+  and relationships and need no geometry:
+  - `selector-conformance` checks agreed value lists.
+  - `unique-value` checks identifiers per source or per related scope.
+  - `consistent-value` checks that objects sharing a key share a value.
+  - `related-count` and `relative-count` check absolute and relative counts
+    of related objects.
+  - `name-sequence` checks consecutive numbering in a declared order.
+  - `manual-issue` records checks owed by hand.
+- **`property-predicate`** compares text (`equal`, `not_equal`, `contains`,
+  whole-value regex `matches`), text lists (`one_of`, `none_of`), numbers,
+  booleans and presence (`is_defined`, `is_undefined`), with optional case
+  folding. `value` became optional beside the new target parameters, so a
+  definition declaring it required no longer matches; integer rules behave
+  as before. Findings now name the actual
+  value.
+- **`property-comparison`** accepts constant targets (`target_number`,
+  `target_text`, `target_texts`, `target_boolean`), `one_of`/`none_of`, and
+  the `count` and `sum` quantifiers. `target_property` and
+  `compared_property` are now optional parameters: a definition package
+  declaring them required no longer matches the signature.
+
 - **External identities.** `ExternalId` (scheme plus value) lets an object
   carry aliases beside its source-qualified `ObjectId`, read with
   `Object::external_id`. `Project::new` rejects an object with two ids in one

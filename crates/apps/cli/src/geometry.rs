@@ -27,16 +27,17 @@ use axiolid_primitive::Primitive;
 use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
-    AxiolidContactService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidLinearQuantityService,
-    AxiolidProximityService, AxiolidSpaceService,
+    AxiolidContactService, AxiolidEnvelopeMembershipService, AxiolidFreeSpaceService,
+    AxiolidGeometry, AxiolidLinearQuantityService, AxiolidProximityService, AxiolidSpaceService,
 };
 use axioval::engine::{
-    ContactServiceHandle, EvidenceSession, FreeSpaceServiceHandle, LinearQuantityServiceHandle,
-    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, SpaceServiceHandle,
-    TraversalDirection, TypeHierarchyServiceHandle,
+    ContactServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession, FreeSpaceServiceHandle,
+    LinearQuantityServiceHandle, PropertyRequest, PropertyResolution,
+    PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
 };
-use axioval::ir::{ObjectId, SourceId};
+use axioval::ir::{ATTRIBUTE_SET, ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
 use ifc_model::{Codec, EntityId, Model};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
@@ -76,15 +77,28 @@ pub struct GeometryReport {
     pub unmeasured: Vec<(ObjectId, String)>,
 }
 
+/// Policy choices IFC does not state, supplied explicitly by the caller.
+///
+/// Each one decides what a geometric service treats as given. A service whose
+/// profile is missing is not registered, so its rules report
+/// `missing-service` instead of acting on a guess.
+#[derive(Debug, Default)]
+pub struct Profiles {
+    /// Name of the `IfcZone` whose spaces make up the building's envelope.
+    pub envelope_zone: Option<String>,
+}
+
 /// Meshes the model in `bytes` and registers geometry services for `session`.
 ///
 /// # Errors
 ///
 /// Returns an error when the bytes do not parse (the session already parsed
-/// them, so this means they changed) or a service cannot be registered.
+/// them, so this means they changed), a service cannot be registered, or a
+/// profile names something the model does not contain.
 pub fn attach(
     session: EvidenceSession,
     bytes: &[u8],
+    profiles: &Profiles,
 ) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error>> {
     let model = StepCodec.read_bytes(bytes)?;
     let snapshots: Vec<_> = session.snapshots().cloned().collect();
@@ -156,7 +170,26 @@ pub fn attach(
             geometry = geometry.with_doorways(space, count);
         }
     }
+    let envelope = match &profiles.envelope_zone {
+        Some(zone) => Some(envelope_service(
+            &session, &geometry, &source, &kinds, &is_a, zone,
+        )?),
+        None => None,
+    };
     let space = space_service(&model, &geometry, &source, &kinds, &is_a);
+    let session = register(session, snapshot, geometry, space, envelope)?;
+    Ok((session, report))
+}
+
+/// Registers every geometry service over `geometry` for `snapshot`.
+fn register(
+    session: EvidenceSession,
+    snapshot: &SourceSnapshot,
+    geometry: AxiolidGeometry,
+    space: AxiolidSpaceService,
+    envelope: Option<AxiolidEnvelopeMembershipService>,
+) -> Result<EvidenceSession, Box<dyn Error>> {
+    let source = snapshot.source().clone();
     let bound = std::slice::from_ref(snapshot);
     let session = session
         .with_host_service(
@@ -185,7 +218,14 @@ pub fn attach(
             ProximityServiceHandle::new(Arc::new(AxiolidProximityService::new(geometry))),
             bound,
         )?;
-    Ok((session, report))
+    let session = match envelope {
+        Some(envelope) => session.with_host_service(
+            EnvelopeMembershipServiceHandle::new(Arc::new(envelope)),
+            bound,
+        )?,
+        None => session,
+    };
+    Ok(session)
 }
 
 /// Doorways per space, from the space boundaries the model states.
@@ -253,6 +293,92 @@ fn doorways(
         .into_iter()
         .filter_map(|space| count(&space).map(|n| (space, n)))
         .collect()
+}
+
+/// Envelope membership over the spaces of one named `IfcZone`.
+///
+/// The zone is the only envelope statement IFC makes explicitly, so the caller
+/// names it rather than this bridge guessing which spaces are conditioned.
+/// Its spaces bound both derivations. Each other object's `IsExternal`, from
+/// whichever property set states it, is its declaration: `true` external,
+/// `false` internal. An object without exactly one such boolean stays
+/// undeclared and its rule reports not evaluated; absent is not internal.
+fn envelope_service(
+    session: &EvidenceSession,
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&str, &str) -> bool,
+    zone_name: &str,
+) -> Result<AxiolidEnvelopeMembershipService, Box<dyn Error>> {
+    let properties = session
+        .service::<PropertyResolutionServiceHandle>()
+        .ok_or("the session has no property service to read declarations with")?;
+    let relationships = session
+        .service::<RelationshipSelectionServiceHandle>()
+        .ok_or("the session has no relationship service to read zones with")?;
+    let value = |object: &ObjectId, set: Option<&str>, name: &str| -> Option<PropertyValue> {
+        let request =
+            PropertyRequest::try_new(object.clone(), set.map(str::to_owned), name).ok()?;
+        match properties.resolve(&request).ok()? {
+            PropertyResolution::Present(resolved) => Some(resolved.property().value.clone()),
+            PropertyResolution::Absent(_) => None,
+        }
+    };
+
+    let zones: Vec<&ObjectId> = kinds
+        .iter()
+        .filter(|(id, kind)| {
+            is_a(kind, "IfcZone")
+                && value(id, Some(ATTRIBUTE_SET), "Name")
+                    == Some(PropertyValue::String(zone_name.to_owned()))
+        })
+        .map(|(id, _)| id)
+        .collect();
+    let [zone] = zones.as_slice() else {
+        return Err(format!(
+            "--envelope-zone names {} IfcZone(s) called `{zone_name}`, not exactly one",
+            zones.len()
+        )
+        .into());
+    };
+    let spaces: Vec<ObjectId> = kinds
+        .iter()
+        .filter(|(_, kind)| is_a(kind, "IfcSpace"))
+        .map(|(id, _)| id.clone())
+        .collect();
+    let query = RelationshipQuery::Related {
+        relationship: SemanticRelationship::try_new("IfcRelAssignsToGroup")?,
+        direction: TraversalDirection::Forward,
+        follow_chain: false,
+    };
+    let request = RelationshipSelectionRequest::try_new((*zone).clone(), spaces, query)?;
+    let members = relationships
+        .select(&request)
+        .map_err(|error| format!("zone `{zone_name}`: {error}"))?;
+    if members.candidates().is_empty() {
+        return Err(format!("zone `{zone_name}` groups no IfcSpace").into());
+    }
+
+    let mut service = AxiolidEnvelopeMembershipService::new(geometry.clone(), source.clone());
+    for space in members.candidates() {
+        service = service.with_gross_area_space(space.clone());
+    }
+    for object in kinds.keys() {
+        if geometry.mesh(object).is_none() || members.candidates().contains(object) {
+            continue;
+        }
+        match value(object, None, "IsExternal") {
+            Some(PropertyValue::Boolean(true)) => {
+                service = service.with_declared_external(object.clone());
+            }
+            Some(PropertyValue::Boolean(false)) => {
+                service = service.with_declared_internal(object.clone());
+            }
+            _ => {}
+        }
+    }
+    Ok(service)
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {

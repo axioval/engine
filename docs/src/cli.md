@@ -18,7 +18,7 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise.
 ```bash
 axioval check --model building.ifc \
   --definitions definitions.json --ruleset ruleset.json \
-  [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
+  [--geometry [--envelope-zone NAME]] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
 ```
 
@@ -188,6 +188,23 @@ assuming zero doorways, when:
 - the model has a space boundary without a required end, which makes every
   boundary answer refuse.
 
-Services that need facts IFC does not state reliably are not registered, so
-their rules report `missing-service`: guard checks (which surfaces are
-walkable) and envelope membership (which spaces bound the envelope).
+External-wall validation compares the objects a model declares external with
+the objects on the envelope of a set of bounding spaces. IFC does not say which
+spaces make up the conditioned volume, so `--envelope-zone NAME` names the
+`IfcZone` whose grouped spaces (`IfcRelAssignsToGroup`) do. Without it, the
+envelope service is not registered and envelope rules report
+`missing-service`. A name that matches no zone, or several, or a zone that
+groups no space, is an error (status 1).
+
+- The zone's spaces bound both derivations, `all-spaces` and
+  `gross-area-groups`. They must reach the envelope's outer faces, as
+  gross-area spaces do. An object is on the envelope when its plan footprint
+  overlaps them and reaches their outline, so a wall wholly inside is internal.
+- An object's declaration is its `IsExternal`, from whichever property set
+  states it: `true` is external, `false` internal. An object with no
+  `IsExternal`, or with conflicting ones, is undeclared: its rule reports not
+  evaluated, never "internal".
+
+Guard checks need to know which surfaces are walkable, which IFC does not
+state reliably. The guard service is therefore not registered, and its rules
+report `missing-service`.

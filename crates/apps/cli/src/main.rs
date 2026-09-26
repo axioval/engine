@@ -81,6 +81,10 @@ struct CheckArgs {
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
     geometry: bool,
+    /// The `IfcZone` whose spaces make up the building envelope. Without it,
+    /// envelope rules report `missing-service`.
+    #[arg(long, requires = "geometry")]
+    envelope_zone: Option<String>,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -195,7 +199,10 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         fs::read(&args.model).map_err(|error| format!("{}: {error}", args.model.display()))?;
     let session = import(&args.model, &bytes)?;
     let (session, meshed) = if args.geometry {
-        let (session, report) = geometry::attach(session, &bytes)
+        let profiles = geometry::Profiles {
+            envelope_zone: args.envelope_zone.clone(),
+        };
+        let (session, report) = geometry::attach(session, &bytes, &profiles)
             .map_err(|error| format!("{}: geometry: {error}", args.model.display()))?;
         (session, Some(report))
     } else {

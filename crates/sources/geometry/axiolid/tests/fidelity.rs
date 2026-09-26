@@ -114,6 +114,7 @@ fn envelope(column_x: f64) -> Result<usize, EnvelopeMembershipError> {
         );
     AxiolidEnvelopeMembershipService::new(geometry, source())
         .with_space(id("space"))
+        .with_declared_internal(id("wall"))
         .measure_envelope_membership(&EnvelopeMembershipRequest::new(
             EnvelopeDerivation::AllSpaces,
         ))

@@ -693,3 +693,179 @@ fn with_geometry_shelf_capacity_counts_doorways_from_space_boundaries() {
         "{result:#}"
     );
 }
+
+/// A 10 m × 10 m gross-area space #16 in zone #90 `Envelope`, with walls:
+/// #26 along the south edge declared internal, #36 across the middle declared
+/// external, #46 along the north edge declared external, and #56 along the
+/// west edge with no `IsExternal` at all.
+fn envelope_model() -> String {
+    let body = |first: u32, x: f64, y: f64, length: f64, width: f64, product: &str| {
+        let [p, pos, profile, solid, shape, definition, object] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        format!(
+            "#{p}=IFCCARTESIANPOINT(({x},{y}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},{width});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{object}={product};\n",
+            product = product.replace("REP", &format!("#{definition}")),
+        )
+    };
+    let wall = |first: u32, x: f64, y: f64, length: f64, width: f64| {
+        let id = first + 6;
+        body(
+            first,
+            x,
+            y,
+            length,
+            width,
+            &format!("IFCWALL('00000000000000000000{id}',$,$,$,$,#3,REP,$,$)"),
+        )
+    };
+    let external = |value: &str, first: u32, wall: u32| {
+        let [single, set, rel] = [0, 1, 2].map(|offset| first + offset);
+        format!(
+            "#{single}=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({value}),$);\n\
+             #{set}=IFCPROPERTYSET('00000000000000000000{set}',$,'Pset_WallCommon',$,(#{single}));\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('00000000000000000000{rel}',$,$,$,(#{wall}),#{set});\n"
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}{}{}{}{}{}\
+         #90=IFCZONE('0000000000000000000090',$,'Envelope',$,$,$);\n\
+         #91=IFCRELASSIGNSTOGROUP('0000000000000000000091',$,$,$,(#16),$,#90);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        body(
+            10,
+            5.0,
+            5.0,
+            10.0,
+            10.0,
+            "IFCSPACE('0000000000000000000016',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)"
+        ),
+        wall(20, 5.0, 0.15, 10.0, 0.3),
+        wall(30, 5.0, 5.0, 9.4, 0.2),
+        wall(40, 5.0, 9.85, 10.0, 0.3),
+        wall(50, 0.15, 5.0, 0.3, 9.4),
+        external(".F.", 60, 26),
+        external(".T.", 70, 36),
+        external(".T.", 80, 46),
+    )
+}
+
+impl Case {
+    fn envelope_check(&self, extra: &[&str]) -> Output {
+        let definitions = self.definitions(true);
+        let mut definitions: Value =
+            serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+        definitions["definitions"]["axioval:example.envelope"] = json!({
+            "id": "axioval:example.envelope",
+            "name": {"default": "External walls", "translations": {}},
+            "description": {"default": "Declared external walls form the envelope.",
+                            "translations": {}},
+            "capability": "axioval:capability.external-wall-validation",
+            "parameters": {"envelope_derivation": {
+                "id": "envelope_derivation",
+                "name": {"default": "envelope_derivation", "translations": {}},
+                "kind": "string", "required": true, "allowedValues": [], "citations": []}},
+            "citations": [],
+            "tags": [],
+        });
+        let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let rule = &mut ruleset["root"]["rules"][0];
+        rule["id"] = json!("external-walls");
+        rule["definitionId"] = json!("axioval:example.envelope");
+        rule["parameters"] = json!({
+            "envelope_derivation": {"type": "string", "value": "gross-area-groups"},
+        });
+        let model = self.write("model.ifc", &envelope_model());
+        let definitions = self.write("definitions.json", &definitions.to_string());
+        let ruleset = self.write("ruleset.json", &ruleset.to_string());
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .arg("check")
+            .arg("--model")
+            .arg(model)
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(extra)
+            .output()
+            .unwrap()
+    }
+}
+
+#[test]
+fn with_an_envelope_zone_declared_external_walls_are_checked_against_it() {
+    let case = Case::new("geometry-envelope");
+    let saved = case.path("result.json");
+    let output = case.envelope_check(&[
+        "--geometry",
+        "--envelope-zone",
+        "Envelope",
+        "--report",
+        saved.to_str().unwrap(),
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let mut findings: Vec<(String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            (
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    findings.sort();
+    assert_eq!(
+        findings,
+        [
+            (
+                "#26".to_owned(),
+                "on the gross-area-groups envelope but not declared external".to_owned()
+            ),
+            (
+                "#36".to_owned(),
+                "declared external but not on the gross-area-groups envelope".to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(not_evaluated[0]["object_id"]["local_id"], "#56");
+}
+
+#[test]
+fn without_an_envelope_zone_envelope_rules_are_not_evaluated() {
+    let case = Case::new("geometry-envelope-off");
+    let output = case.envelope_check(&["--geometry", "--summary"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("missing-service"),
+        "{}",
+        stdout(&output)
+    );
+    let unknown = case.envelope_check(&["--geometry", "--envelope-zone", "Nowhere"]);
+    assert_eq!(unknown.status.code(), Some(1), "{}", stderr(&unknown));
+    assert!(
+        stderr(&unknown).contains("`Nowhere`"),
+        "{}",
+        stderr(&unknown)
+    );
+}

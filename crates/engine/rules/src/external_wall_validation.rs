@@ -15,7 +15,8 @@ use axioval_engine::{
     ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
-use axioval_ir::{Finding, Severity};
+use axioval_ir::{Finding, ObjectId, Severity};
+use std::collections::BTreeSet;
 
 use crate::selection::select_objects;
 
@@ -61,12 +62,28 @@ impl RuleCapability for ExternalWallValidation {
         let request = EnvelopeMembershipRequest::new(derivation);
         match service.measure_envelope_membership(&request) {
             Ok(measured) => {
+                // The derivation spans the whole model; the selector says
+                // which objects this rule is about.
+                let selected: BTreeSet<&ObjectId> = selected.iter().map(|o| &o.id).collect();
+                for object_id in measured.undeclared() {
+                    if selected.contains(object_id) {
+                        evaluation.push_object_not_evaluated(
+                            object_id.clone(),
+                            NotEvaluatedReason::IncompleteEvidence,
+                            "the model states neither external nor internal",
+                        );
+                    }
+                }
                 if measured.agrees() {
                     return evaluation;
                 }
                 // Report each disagreeing wall against itself, so a reviewer
                 // opens the element rather than a whole-model message.
-                for object_id in measured.declared_only() {
+                for object_id in measured
+                    .declared_only()
+                    .into_iter()
+                    .filter(|id| selected.contains(id))
+                {
                     evaluation.push_finding(Finding {
                         rule_id: rule.id.clone(),
                         object_id,
@@ -79,7 +96,11 @@ impl RuleCapability for ExternalWallValidation {
                         evidence: vec![measured.evidence().clone()],
                     });
                 }
-                for object_id in measured.derived_only() {
+                for object_id in measured
+                    .derived_only()
+                    .into_iter()
+                    .filter(|id| selected.contains(id))
+                {
                     evaluation.push_finding(Finding {
                         rule_id: rule.id.clone(),
                         object_id,

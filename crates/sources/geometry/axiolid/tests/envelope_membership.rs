@@ -36,7 +36,10 @@ fn model() -> AxiolidEnvelopeMembershipService {
         .with_mesh(id("space"), quad(0.0, 10.0, 0.0, 10.0, 0.0))
         .with_mesh(id("wall-touching"), quad(0.0, 10.0, -0.2, 0.2, 0.0))
         .with_mesh(id("wall-remote"), quad(50.0, 60.0, 50.0, 60.0, 0.0));
-    AxiolidEnvelopeMembershipService::new(geometry, source()).with_space(id("space"))
+    AxiolidEnvelopeMembershipService::new(geometry, source())
+        .with_space(id("space"))
+        .with_declared_internal(id("wall-touching"))
+        .with_declared_internal(id("wall-remote"))
 }
 
 fn measure(
@@ -94,7 +97,8 @@ fn the_two_derivations_use_different_bounding_sets() {
         .with_mesh(id("wall-by-plain"), quad(40.0, 50.0, 39.8, 40.2, 0.0));
     let service = AxiolidEnvelopeMembershipService::new(geometry, source())
         .with_gross_area_space(id("space-gross"))
-        .with_space(id("space-plain"));
+        .with_space(id("space-plain"))
+        .with_declared_internal(id("wall-by-plain"));
 
     let all = measure(&service, EnvelopeDerivation::AllSpaces).expect("measurable");
     let gross = measure(&service, EnvelopeDerivation::GrossAreaGroups).expect("measurable");
@@ -178,7 +182,42 @@ fn closed_bodies_are_measured_by_their_footprint() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("space"), closed_box(0.0, 10.0, 0.0, 10.0, 0.0, 3.0))
         .with_mesh(id("wall"), closed_box(0.0, 10.0, -0.2, 0.2, 0.0, 3.0));
-    let service = AxiolidEnvelopeMembershipService::new(geometry, source()).with_space(id("space"));
+    let service = AxiolidEnvelopeMembershipService::new(geometry, source())
+        .with_space(id("space"))
+        .with_declared_internal(id("wall"));
     let derived = measure(&service, EnvelopeDerivation::AllSpaces).expect("measurable");
     assert_eq!(derived, vec!["wall".to_string()]);
+}
+
+/// A gross-area space drawn to the outer faces, with an external wall inside
+/// it along its edge and an internal wall across its middle.
+fn gross_area_model() -> AxiolidEnvelopeMembershipService {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), quad(0.0, 10.0, 0.0, 10.0, 0.0))
+        .with_mesh(id("wall-edge"), quad(0.0, 10.0, 0.0, 0.3, 0.0))
+        .with_mesh(id("wall-inner"), quad(0.3, 9.7, 4.9, 5.1, 0.0));
+    AxiolidEnvelopeMembershipService::new(geometry, source()).with_gross_area_space(id("space"))
+}
+
+/// Being inside the covered region is not being on its envelope: a wall
+/// wholly inside is internal, and a wall that reaches the outline from inside
+/// is external. A mutation that drops the outline test derives both.
+#[test]
+fn only_objects_reaching_the_outline_are_on_the_envelope() {
+    let service = gross_area_model()
+        .with_declared_internal(id("wall-edge"))
+        .with_declared_internal(id("wall-inner"));
+    let derived = measure(&service, EnvelopeDerivation::GrossAreaGroups).expect("measurable");
+    assert_eq!(derived, vec!["wall-edge".to_string()]);
+}
+
+/// An object the model declares neither way is reported undeclared, and
+/// takes no part in the comparison: absent is not internal.
+#[test]
+fn undeclared_objects_are_reported_not_compared() {
+    let service = gross_area_model().with_declared_internal(id("wall-inner"));
+    let request = EnvelopeMembershipRequest::new(EnvelopeDerivation::GrossAreaGroups);
+    let measured = service.measure_envelope_membership(&request).unwrap();
+    assert!(measured.agrees(), "{measured:?}");
+    assert_eq!(measured.undeclared(), &[id("wall-edge")]);
 }

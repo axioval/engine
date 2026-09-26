@@ -199,3 +199,53 @@ fn unknown_derivation_is_an_invalid_declaration() {
         &NotEvaluatedReason::InvalidDeclaration
     );
 }
+
+struct Undeclared;
+
+impl EnvelopeMembershipService for Undeclared {
+    fn measure_envelope_membership(
+        &self,
+        request: &EnvelopeMembershipRequest,
+    ) -> Result<EnvelopeMembershipEvidence, EnvelopeMembershipError> {
+        // w1 agrees, w2 is undeclared, and the slab is outside the selection.
+        Ok(EnvelopeMembershipEvidence::try_new(
+            *request,
+            vec![oid("w1")],
+            vec![oid("w1"), oid("w2"), oid("slab")],
+            4,
+            Evidence::exact(source(), "envelope:all-spaces"),
+        )?
+        .with_undeclared(vec![oid("w2")]))
+    }
+}
+
+/// An undeclared wall is not evaluated, never read as internal, and a
+/// disagreement outside the selection is not this rule's finding.
+#[test]
+fn undeclared_walls_are_not_evaluated_and_unselected_objects_are_ignored() {
+    let project = Project::new(vec![
+        Object::new(oid("w1"), "wall"),
+        Object::new(oid("w2"), "wall"),
+        Object::new(oid("slab"), "slab"),
+    ])
+    .unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(EnvelopeMembershipServiceHandle::new(Arc::new(Undeclared)))
+        .unwrap();
+    let outcome = ExternalWallValidation.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        &rule(),
+    );
+    assert!(outcome.findings().is_empty(), "{:?}", outcome.findings());
+    let not_evaluated = outcome.not_evaluated_outcomes();
+    assert_eq!(not_evaluated.len(), 1);
+    assert_eq!(not_evaluated[0].object_id(), Some(&oid("w2")));
+    assert_eq!(
+        not_evaluated[0].reason(),
+        &NotEvaluatedReason::IncompleteEvidence
+    );
+}

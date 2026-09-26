@@ -77,6 +77,7 @@ pub struct EnvelopeMembershipEvidence {
     request: EnvelopeMembershipRequest,
     declared: Vec<ObjectId>,
     derived: Vec<ObjectId>,
+    undeclared: Vec<ObjectId>,
     evaluated_objects: usize,
     evidence: Evidence,
 }
@@ -102,9 +103,25 @@ impl EnvelopeMembershipEvidence {
             request,
             declared,
             derived,
+            undeclared: Vec::new(),
             evaluated_objects,
             evidence,
         })
+    }
+
+    /// Records objects whose model states neither external nor internal.
+    ///
+    /// An unstated declaration is unknown, not internal, so these objects
+    /// leave both sets: comparing them would report a discrepancy the model
+    /// never made.
+    #[must_use]
+    pub fn with_undeclared(mut self, mut undeclared: Vec<ObjectId>) -> Self {
+        undeclared.sort();
+        undeclared.dedup();
+        self.declared = difference(&self.declared, &undeclared);
+        self.derived = difference(&self.derived, &undeclared);
+        self.undeclared = undeclared;
+        self
     }
 
     pub fn request(&self) -> EnvelopeMembershipRequest {
@@ -117,6 +134,10 @@ impl EnvelopeMembershipEvidence {
     /// Objects geometry places on the envelope.
     pub fn derived(&self) -> &[ObjectId] {
         &self.derived
+    }
+    /// Objects whose declaration is unknown, excluded from both sets.
+    pub fn undeclared(&self) -> &[ObjectId] {
+        &self.undeclared
     }
     /// How many objects the derivation considered.
     pub fn evaluated_objects(&self) -> usize {
@@ -241,6 +262,17 @@ mod tests {
         assert!(!measured.agrees());
         assert_eq!(measured.derived_only(), vec![oid("w1"), oid("w2")]);
         assert!(measured.declared_only().is_empty());
+    }
+
+    /// An object the model does not declare either way cannot disagree.
+    #[test]
+    fn undeclared_objects_leave_both_sets() {
+        let measured = build(&["w1"], &["w1", "w2"]).with_undeclared(vec![oid("w2")]);
+        assert!(measured.agrees());
+        assert_eq!(measured.undeclared(), &[oid("w2")]);
+        let measured = build(&["w3"], &[]).with_undeclared(vec![oid("w3")]);
+        assert!(measured.agrees());
+        assert!(measured.declared().is_empty());
     }
 
     #[test]

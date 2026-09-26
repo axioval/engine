@@ -18,7 +18,8 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::AxiolidGeometry;
-use crate::planar::{plan_frame, polygon_area, projected_polygons};
+use crate::planar::{plan_frame, polygon_area, projected_polygons, ring_segments};
+use axiolid_core::Point2;
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, overlay};
 
 /// How far outside the space hull an object may sit and still bound it.
@@ -30,14 +31,25 @@ const HULL_TOLERANCE_METRES: f64 = 1.0e-6;
 /// Derives envelope membership from supplied geometry and declarations.
 ///
 /// The host registers which objects are spaces, which spaces belong to
-/// gross-area groups, and which objects the model declares external. Geometry
-/// then decides, per derivation, which objects actually bound that envelope.
+/// gross-area groups, and which objects the model declares external or
+/// internal. An object declared neither way is undeclared: its declaration is
+/// unknown, never taken as internal. Geometry then decides, per derivation,
+/// which objects actually bound that envelope.
+///
+/// An object is on the envelope when its plan footprint overlaps the region
+/// the bounding spaces cover and also reaches that region's outline, by
+/// crossing it or touching it from inside. An object wholly inside, such as an
+/// internal wall within a gross-area space, is not on the envelope. The
+/// bounding spaces must therefore reach the envelope's outer faces, as
+/// gross-area spaces do; net rooms that stop at the inner wall face do not
+/// overlap the external walls at all.
 pub struct AxiolidEnvelopeMembershipService {
     geometry: AxiolidGeometry,
     source: SourceId,
     spaces: BTreeSet<ObjectId>,
     gross_area_spaces: BTreeSet<ObjectId>,
     declared_external: BTreeSet<ObjectId>,
+    declared_internal: BTreeSet<ObjectId>,
 }
 
 impl AxiolidEnvelopeMembershipService {
@@ -50,6 +62,7 @@ impl AxiolidEnvelopeMembershipService {
             spaces: BTreeSet::new(),
             gross_area_spaces: BTreeSet::new(),
             declared_external: BTreeSet::new(),
+            declared_internal: BTreeSet::new(),
         }
     }
 
@@ -78,38 +91,56 @@ impl AxiolidEnvelopeMembershipService {
         self.declared_external.insert(object);
         self
     }
+
+    /// Records that the model declares this object not to be on the envelope.
+    #[must_use]
+    pub fn with_declared_internal(mut self, object: ObjectId) -> Self {
+        self.declared_internal.insert(object);
+        self
+    }
 }
 
-/// Plan area shared by two objects' footprints.
-///
-/// Zero when either projects to nothing in plan, so an object seen edge-on
-/// cannot bound an envelope it merely grazes.
-fn shared_plan_area(
-    subject: &[crate::geometry::Triangle],
-    other: &[crate::geometry::Triangle],
-    tolerance: axiolid_core::Tolerance,
-) -> Result<f64, EnvelopeMembershipError> {
-    let frame = plan_frame();
-    let subject_input = OverlayInput {
-        frame,
-        polygons: projected_polygons(subject),
+/// Shortest distance between two plan segments.
+fn segment_distance(a: (Point2, Point2), b: (Point2, Point2)) -> f64 {
+    let point_to_segment = |p: Point2, (s, e): (Point2, Point2)| {
+        let (dx, dy) = (e.x - s.x, e.y - s.y);
+        let length = dx * dx + dy * dy;
+        let t = if length > 0.0 {
+            (((p.x - s.x) * dx + (p.y - s.y) * dy) / length).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        ((p.x - s.x - t * dx).powi(2) + (p.y - s.y - t * dy).powi(2)).sqrt()
     };
-    let other_input = OverlayInput {
-        frame,
-        polygons: projected_polygons(other),
-    };
-    if subject_input.polygons.is_empty() || other_input.polygons.is_empty() {
-        return Ok(0.0);
+    let cross =
+        |o: Point2, p: Point2, q: Point2| (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
+    let (d1, d2) = (cross(b.0, b.1, a.0), cross(b.0, b.1, a.1));
+    let (d3, d4) = (cross(a.0, a.1, b.0), cross(a.0, a.1, b.1));
+    if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+        return 0.0;
     }
-    let result = overlay(
-        &subject_input,
-        &other_input,
-        OverlayOperation::Intersection,
-        FillRule::NonZero,
-        tolerance,
-    )
-    .map_err(|_| EnvelopeMembershipError::Unavailable)?;
-    Ok(result.polygons.iter().map(polygon_area).sum())
+    point_to_segment(a.0, b)
+        .min(point_to_segment(a.1, b))
+        .min(point_to_segment(b.0, a))
+        .min(point_to_segment(b.1, a))
+}
+
+/// Whether any footprint edge of `triangles` comes within the hull tolerance
+/// of the region outline `outline`.
+fn reaches_outline(triangles: &[crate::geometry::Triangle], outline: &[(Point2, Point2)]) -> bool {
+    triangles.iter().any(|[a, b, c]| {
+        let corners = [
+            Point2::new(a.x, a.y),
+            Point2::new(b.x, b.y),
+            Point2::new(c.x, c.y),
+        ];
+        (0..3).any(|i| {
+            let edge = (corners[i], corners[(i + 1) % 3]);
+            outline
+                .iter()
+                .any(|segment| segment_distance(edge, *segment) <= HULL_TOLERANCE_METRES)
+        })
+    })
 }
 
 impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
@@ -127,9 +158,10 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
         let tolerance = axiolid_core::Tolerance::new(1.0e-9, 1.0e-9)
             .map_err(|_| EnvelopeMembershipError::Unavailable)?;
 
-        let space_triangles: Vec<Vec<crate::geometry::Triangle>> = bounding
+        let space_triangles: Vec<crate::geometry::Triangle> = bounding
             .iter()
             .filter_map(|space| self.geometry.mesh(space).map(crate::geometry::triangles))
+            .flatten()
             .collect();
         // No measurable bounding geometry means there is no envelope to compare
         // against -- whether because no space was declared, or because the
@@ -156,19 +188,62 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
             }
         }
 
+        // The covered region and its outline, holes (courtyards) included.
+        let region = OverlayInput {
+            frame: plan_frame(),
+            polygons: projected_polygons(&space_triangles),
+        };
+        let region = overlay(
+            &region,
+            &region,
+            OverlayOperation::Union,
+            FillRule::NonZero,
+            tolerance,
+        )
+        .map_err(|_| EnvelopeMembershipError::Unavailable)?;
+        let outline: Vec<(Point2, Point2)> = region
+            .polygons
+            .iter()
+            .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+            .flat_map(ring_segments)
+            .collect();
+        let region = OverlayInput {
+            frame: plan_frame(),
+            polygons: region.polygons,
+        };
+
         let mut derived = Vec::new();
+        let mut undeclared = Vec::new();
         let mut evaluated = 0usize;
         for (object, mesh) in self.geometry.objects() {
             if bounding.contains(object) {
                 continue;
             }
             evaluated += 1;
+            if !self.declared_external.contains(object) && !self.declared_internal.contains(object)
+            {
+                undeclared.push(object.clone());
+            }
             let candidate = crate::geometry::triangles(mesh);
-            for space in &space_triangles {
-                if shared_plan_area(&candidate, space, tolerance)? > HULL_TOLERANCE_METRES {
-                    derived.push(object.clone());
-                    break;
-                }
+            let footprint = OverlayInput {
+                frame: plan_frame(),
+                polygons: projected_polygons(&candidate),
+            };
+            if footprint.polygons.is_empty() {
+                continue;
+            }
+            let area = |operation| -> Result<f64, EnvelopeMembershipError> {
+                overlay(&footprint, &region, operation, FillRule::NonZero, tolerance)
+                    .map(|result| result.polygons.iter().map(polygon_area).sum())
+                    .map_err(|_| EnvelopeMembershipError::Unavailable)
+            };
+            if area(OverlayOperation::Intersection)? <= HULL_TOLERANCE_METRES {
+                continue;
+            }
+            if area(OverlayOperation::Difference)? > HULL_TOLERANCE_METRES
+                || reaches_outline(&candidate, &outline)
+            {
+                derived.push(object.clone());
             }
         }
 
@@ -182,5 +257,6 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
                 format!("envelope:{}", request.derivation().as_str()),
             ),
         )
+        .map(|evidence| evidence.with_undeclared(undeclared))
     }
 }

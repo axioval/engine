@@ -1,0 +1,36 @@
+# Standalone: NOT a member of the engine workspace. It cannot be published
+# while the `openbim-ids` reader is unreleased (openbimrs/ids#5). See
+# staging/AGENTS.md for the rewiring steps.
+[workspace]
+
+[package]
+name = "axioval-ids"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-or-later"
+description = "Staging: Axioval rule packages from buildingSMART IDS documents"
+publish = false
+
+[dependencies]
+# The package contracts this importer writes.
+axioval-ir = { path = "../../crates/contracts/ir" }
+# UNPUBLISHED reader: a git dependency until a release carrying
+# `openbim_ids::read` lands on crates.io. To build against a local checkout,
+# add to staging/ids/.cargo/config.toml (untracked):
+#   [patch."https://github.com/openbimrs/ids"]
+#   openbim-ids = { path = "/path/to/ids/openbim-ids" }
+openbim-ids = { git = "https://github.com/openbimrs/ids", branch = "feat/ids-reader" }
+thiserror = "2.0.16"
+
+[dev-dependencies]
+axioval = { path = "../../crates/facade/axioval", features = ["ifc"] }
+serde_json = "1.0.143"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }

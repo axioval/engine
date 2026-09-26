@@ -80,6 +80,7 @@ impl TypeHierarchyService for IfcTypeHierarchy {
 
 #[derive(Clone)]
 struct IfcPropertyService {
+    release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     unread: Arc<UnreadDefinitions>,
@@ -100,6 +101,33 @@ impl IfcPropertyService {
 
     fn locator(&self, detail: impl std::fmt::Display) -> String {
         format!("ifc:{}:{detail}", self.snapshots[0].fingerprint())
+    }
+}
+
+impl IfcPropertyService {
+    /// Whether a value of the declared defined type maps onto a property
+    /// value without loss.
+    ///
+    /// Decided by the type's base in this release's schema, so every
+    /// string-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...) and every
+    /// integer-based one (`IfcTimeStamp`, `IfcCountMeasure` as written) is
+    /// carried with its declared type. Real-valued measures stay refused: their
+    /// number means nothing without the unit context, which is not read yet.
+    /// `IFCREAL` and dimensionless `NUMBER` types have no unit.
+    fn carries_exactly(&self, value: &ExactValue, value_type: &str) -> bool {
+        let base = self
+            .release
+            .schema
+            .resolve_defined(value_type)
+            .to_ascii_uppercase();
+        let base = base.split('(').next().unwrap_or_default().trim();
+        match value {
+            ExactValue::Bool(_) => base == "BOOLEAN",
+            ExactValue::Integer(_) => base == "INTEGER" || base == "NUMBER",
+            ExactValue::Real(_) => value_type.eq_ignore_ascii_case("IFCREAL") || base == "NUMBER",
+            ExactValue::Text(_) => base == "STRING",
+            _ => false,
+        }
     }
 }
 
@@ -133,20 +161,7 @@ impl PropertyResolutionService for IfcPropertyService {
                 }
                 let compatible_type = match (&exact.value, exact.value_type.as_deref()) {
                     (ExactValue::Null, None) => true,
-                    (ExactValue::Bool(_), Some(value_type)) => {
-                        value_type.eq_ignore_ascii_case("IFCBOOLEAN")
-                    }
-                    (ExactValue::Integer(_), Some(value_type)) => {
-                        value_type.eq_ignore_ascii_case("IFCINTEGER")
-                    }
-                    (ExactValue::Real(_), Some(value_type)) => {
-                        value_type.eq_ignore_ascii_case("IFCREAL")
-                    }
-                    (ExactValue::Text(_), Some(value_type)) => {
-                        ["IFCTEXT", "IFCLABEL", "IFCIDENTIFIER"]
-                            .iter()
-                            .any(|candidate| value_type.eq_ignore_ascii_case(candidate))
-                    }
+                    (value, Some(value_type)) => self.carries_exactly(value, value_type),
                     _ => false,
                 };
                 if !compatible_type {
@@ -291,6 +306,7 @@ pub fn import_ifc_session(
     let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
     let model = Arc::new(model);
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
+        release,
         model: model.clone(),
         snapshots: snapshots.clone(),
         unread: Arc::new(UnreadDefinitions::read(release, &model)),

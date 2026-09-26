@@ -23,6 +23,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   an unreported type is not evaluated. Measure-typed IFC values
   (`IFCLENGTHMEASURE`, ...) stay not evaluated while the adapter refuses them
   pending unit handling.
+- **`axioval:capability.property-value`.** Values, XML Schema patterns,
+  numeric bounds and lengths, written as lexical strings and cast to the
+  resolved value's kind; decimals compare with the IDS tolerance, bounds
+  exactly. An `optional` rule passes absent and `null` properties. Anything
+  that cannot be applied to a value is not evaluated.
+- **More IFC property types.** The IFC session carries every value whose
+  defined type is `STRING`-, `INTEGER`- or `NUMBER`-based (`IfcDate`,
+  `IfcDuration`, `IfcTimeStamp`, `IfcCountMeasure`, ...) with its declared type,
+  instead of refusing it. Unit-bearing real measures are still refused.
 - **`axioval check`.** Runs a ruleset over an IFC2X3 or IFC4 model and writes
   the report and the model's integrity issues as JSON, and optionally a BCF
   2.1 archive (`--bcf`). Exit status separates a clean pass (0), findings (3)

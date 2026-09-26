@@ -81,6 +81,27 @@ the system itself. A file that chains references anyway is refused rather
 than flattened. An assignment whose system the file does not state is
 neither a match nor a mismatch, and the object is reported as not evaluated.
 
+### Attributes
+
+The property service answers the reserved attribute sets from the entity
+itself. In `axioval:attributes`, the property name is the attribute's name in
+the file's release schema, matched ignoring ASCII case: `Name` is an
+`IfcSpace`'s number, `LongName` its name, and `PredefinedType` its
+enumeration. `axioval:type-attributes` reads the same attributes from the
+type object `IfcRelDefinesByType` assigns, so `Name` there is the
+construction type. The evidence locator names the instance
+(`attribute:#12:LongName`), or the relationship and the type object
+(`type-attribute:#40:#30:Name`).
+
+- Text, enumeration, boolean, integer and unit-free real values are
+  answered.
+- An unset attribute (`$`), an attribute the entity does not declare, and an
+  object without a type are exact absences.
+- An object typed by two type objects is a conflict.
+- A measure such as `IfcBuildingStorey.Elevation` is refused, because it is
+  stated in the project's units and this adapter does not convert units
+  yet. So are references, aggregates and derived values.
+
 ### Integrity warnings
 
 Besides relationship ends, the integrity scan reports two schema cardinality

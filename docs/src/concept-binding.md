@@ -44,6 +44,14 @@ findings and no not-evaluated outcomes. A caller reads that as a pass.
    few of them. A model of 2,040 objects checked against a package with no
    name for its release yields one outcome, not 2,040.
 
+## Attribute sets
+
+The reserved sets `axioval:attributes` and `axioval:type-attributes` (see
+[IR](./ir.md#attribute-sets)) are not package concepts and bind to
+themselves in every source. The property inside them is an ordinary
+property concept: a package declares `space-number` with the IFC4 name
+`Name` and references it in `axioval:attributes`.
+
 ## Subtypes
 
 `includeSubtypes` is honoured through `TypeHierarchyServiceHandle`. An object

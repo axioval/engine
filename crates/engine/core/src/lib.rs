@@ -345,11 +345,13 @@ mod classifications;
 mod compiler;
 mod concepts;
 mod contact;
+mod decomposition;
 mod envelope_membership;
 mod free_space;
 mod guard;
 mod integrity;
 mod linear_quantity;
+mod materials;
 mod metric_routing;
 mod pairwise;
 mod properties;
@@ -376,6 +378,10 @@ pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
 };
+pub use decomposition::{
+    Decomposition, DecompositionError, DecompositionService, DecompositionServiceHandle,
+    ResolvedWholes, Whole,
+};
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,
     EnvelopeMembershipRequest, EnvelopeMembershipService, EnvelopeMembershipServiceHandle,
@@ -400,6 +406,7 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
+pub use materials::{MaterialError, MaterialService, MaterialServiceHandle, ResolvedMaterial};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
     MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,

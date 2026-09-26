@@ -8,9 +8,11 @@
 
 mod attributes;
 mod classifications;
+mod decomposition;
 mod identity;
 mod ifc;
 mod integrity;
+mod materials;
 mod relationships;
 mod release;
 mod unread;

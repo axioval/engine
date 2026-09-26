@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use axioval_engine::{
     AttributeServiceHandle, ClassificationServiceHandle, CompletePropertyAbsenceEvidence,
-    EvidenceSession, EvidenceSessionError, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
-    RelationshipSelectionServiceHandle, ResolvedProperty, SourceIntegrityServiceHandle,
-    SourceSnapshot, TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
+    DecompositionServiceHandle, EvidenceSession, EvidenceSessionError, MaterialServiceHandle,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
+    TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
@@ -20,8 +21,10 @@ use thiserror::Error;
 
 use crate::attributes::IfcAttributeService;
 use crate::classifications::IfcClassificationService;
+use crate::decomposition::IfcDecompositionService;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
+use crate::materials::IfcMaterialService;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
 use crate::unread::UnreadDefinitions;
@@ -318,7 +321,13 @@ pub fn import_ifc_session(
         global_ids,
         snapshots.clone(),
     )));
-    let attributes = AttributeServiceHandle::new(Arc::new(IfcAttributeService::new(
+    let attribute_service = Arc::new(IfcAttributeService::new(
+        release,
+        model.clone(),
+        snapshots.clone(),
+    ));
+    let attributes = AttributeServiceHandle::new(attribute_service.clone());
+    let materials = MaterialServiceHandle::new(Arc::new(IfcMaterialService::new(
         release,
         model.clone(),
         snapshots.clone(),
@@ -326,9 +335,19 @@ pub fn import_ifc_session(
     let classifications = ClassificationServiceHandle::new(Arc::new(
         IfcClassificationService::new(model.clone(), snapshots.clone()),
     ));
-    let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
-        IfcRelationshipService::new(release, model, snapshots.clone()),
+    let relationship_service = Arc::new(IfcRelationshipService::new(
+        release,
+        model.clone(),
+        snapshots.clone(),
     ));
+    let decomposition = DecompositionServiceHandle::new(Arc::new(IfcDecompositionService::new(
+        release,
+        model,
+        snapshots.clone(),
+        relationship_service.clone(),
+        attribute_service,
+    )));
+    let relationships = RelationshipSelectionServiceHandle::new(relationship_service);
     let hierarchy =
         TypeHierarchyServiceHandle::new(Arc::new(IfcTypeHierarchy { release, snapshots }));
     EvidenceSession::try_new(project, [snapshot])
@@ -339,6 +358,8 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(integrity))
         .and_then(|session| session.with_service(classifications))
         .and_then(|session| session.with_service(attributes))
+        .and_then(|session| session.with_service(materials))
+        .and_then(|session| session.with_service(decomposition))
         .map_err(|error| session_error(&error))
 }
 

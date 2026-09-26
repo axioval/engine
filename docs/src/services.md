@@ -17,6 +17,10 @@ Property resolution is exposed through `PropertyResolutionServiceHandle`. A pres
 
 An object's own attributes (an IFC element's `Name`, `Tag`, `PredefinedType`) are exposed through `AttributeServiceHandle`. An answer is unset, a scalar with the source-declared type, or structured (a reference or non-empty aggregate: present, but nothing to compare), always with exact evidence from the object's source. An attribute the object's class does not have is an error, never an absence. The same handle answers an object's predefined type: the designation narrowing its class as the source resolves it, and whether it is user-defined; a source without the notion refuses.
 
+An object's material is exposed through `MaterialServiceHandle`: every non-empty name and category its assignment states (a composition's name, each part's, and each part material's), or no material at all.
+
+The wholes an object is part of are exposed through `DecompositionServiceHandle`: for aggregation, grouping, containment, nesting, voiding or any of them, the wholes nearest first with their class and predefined type. A whole need not be a checked object. Two wholes where one is expected are refused as ambiguous rather than chosen.
+
 Relationship-based comparison candidates are exposed through `RelationshipSelectionServiceHandle`. A request binds the checked object, the complete selector-derived candidate universe, and either a shared-group or directional traversal query. Successful responses must stay inside that universe, use canonical unique object IDs and evidence, and prove exact completeness. Source adapters interpret native containment, hosting, and relationship structures; the engine does not read `Object.relationships` as authoritative source semantics.
 
 Metric routing is exposed as `MetricRoutingServiceHandle`. The concrete handle wraps a backend-neutral trait object so it remains type-indexable in `ServiceRegistry`. Engine capabilities consume validated metric requests and bounded evidence; adapters keep native mesh and B-rep types behind the service.

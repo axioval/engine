@@ -61,6 +61,65 @@ impl IfcAttributeService {
             .ok_or_else(|| AttributeError::UnknownObject(object.clone()))
     }
 
+    /// The predefined type of any instance, and whether it is user-defined;
+    /// see [`AttributeService::predefined_type`] for the resolution order.
+    pub(crate) fn predefined_of(
+        &self,
+        id: EntityId,
+    ) -> Result<(Option<String>, bool), AttributeError> {
+        let own = |name| self.designation(id, name).ok().flatten();
+        let type_object = match self.types.get(&id).map(Vec::as_slice) {
+            None | Some([]) => None,
+            Some([single]) => Some(*single),
+            Some(_) => {
+                return Err(AttributeError::Unreadable(format!(
+                    "#{} is typed by more than one type object",
+                    id.0
+                )));
+            }
+        };
+        let mut value = None;
+        let mut user_defined = None;
+        if let Some(type_id) = type_object {
+            let declared = self.designation(type_id, "PredefinedType").ok().flatten();
+            let custom = || match self.designation(type_id, "ElementType") {
+                Ok(text) => text,
+                Err(()) => self.designation(type_id, "ProcessType").ok().flatten(),
+            };
+            let (designation, custom_used) = match declared.as_deref() {
+                Some("USERDEFINED") => (custom(), true),
+                None => {
+                    let text = custom();
+                    let used = text.as_deref().is_some_and(|text| !text.is_empty());
+                    (text, used)
+                }
+                Some(_) => (declared.clone(), false),
+            };
+            if declared.as_deref() == Some("USERDEFINED") || custom_used {
+                user_defined = Some(true);
+            }
+            if let Some(designation) = designation.filter(|d| !d.is_empty() && d != "NOTDEFINED") {
+                value = Some(designation);
+                user_defined.get_or_insert(false);
+            }
+        }
+        if value.is_none() {
+            let declared = own("PredefinedType");
+            value = match declared.as_deref() {
+                Some("USERDEFINED") | None => own("ObjectType"),
+                Some(_) => declared.clone(),
+            };
+            if user_defined.is_none() {
+                user_defined = Some(match declared.as_deref() {
+                    Some("USERDEFINED") => true,
+                    None => own("ObjectType").is_some_and(|text| !text.is_empty()),
+                    Some(_) => false,
+                });
+            }
+        }
+        Ok((value, user_defined.unwrap_or(false)))
+    }
+
     /// The text of an enumeration or string attribute: `Err` when the class
     /// has no such attribute, `Ok(None)` when it is unset.
     fn designation(&self, id: EntityId, name: &str) -> Result<Option<String>, ()> {
@@ -144,59 +203,10 @@ impl AttributeService for IfcAttributeService {
         if self.model.get(id).is_none() {
             return Err(AttributeError::UnknownObject(object.clone()));
         }
-        let own = |name| self.designation(id, name).ok().flatten();
-        let type_object = match self.types.get(&id).map(Vec::as_slice) {
-            None | Some([]) => None,
-            Some([single]) => Some(*single),
-            Some(_) => {
-                return Err(AttributeError::Unreadable(format!(
-                    "#{} is typed by more than one type object",
-                    id.0
-                )));
-            }
-        };
-        let mut value = None;
-        let mut user_defined = None;
-        if let Some(type_id) = type_object {
-            let declared = self.designation(type_id, "PredefinedType").ok().flatten();
-            let custom = || match self.designation(type_id, "ElementType") {
-                Ok(text) => text,
-                Err(()) => self.designation(type_id, "ProcessType").ok().flatten(),
-            };
-            let (designation, custom_used) = match declared.as_deref() {
-                Some("USERDEFINED") => (custom(), true),
-                None => {
-                    let text = custom();
-                    let used = text.as_deref().is_some_and(|text| !text.is_empty());
-                    (text, used)
-                }
-                Some(_) => (declared.clone(), false),
-            };
-            if declared.as_deref() == Some("USERDEFINED") || custom_used {
-                user_defined = Some(true);
-            }
-            if let Some(designation) = designation.filter(|d| !d.is_empty() && d != "NOTDEFINED") {
-                value = Some(designation);
-                user_defined.get_or_insert(false);
-            }
-        }
-        if value.is_none() {
-            let declared = own("PredefinedType");
-            value = match declared.as_deref() {
-                Some("USERDEFINED") | None => own("ObjectType"),
-                Some(_) => declared.clone(),
-            };
-            if user_defined.is_none() {
-                user_defined = Some(match declared.as_deref() {
-                    Some("USERDEFINED") => true,
-                    None => own("ObjectType").is_some_and(|text| !text.is_empty()),
-                    Some(_) => false,
-                });
-            }
-        }
+        let (value, user_defined) = self.predefined_of(id)?;
         Ok(ResolvedPredefinedType {
             value,
-            user_defined: user_defined.unwrap_or(false),
+            user_defined,
             evidence: Evidence::exact(
                 self.snapshots[0].source().clone(),
                 self.locator(format_args!("predefined-type:#{}", id.0)),

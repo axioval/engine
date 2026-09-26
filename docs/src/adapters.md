@@ -32,6 +32,15 @@ Its predefined type resolves as IDS reads it: the type object's designation firs
 `NOTDEFINED` or empty, then the occurrence's (`PredefinedType`, or `ObjectType` when user-defined
 or unset). An occurrence typed by two type objects is refused.
 
+Materials come from `ifc-material` for IFC4: the occurrence's `IfcRelAssociatesMaterial`, else
+its type's, with a usage standing for its set. IFC2X3 materials are refused until the upstream
+crate binds to the release (openbimrs/ifc#77).
+
+Wholes are walked over the relationship service's edge indexes: aggregation and nesting
+upwards, containment and grouping directly, voiding through a filled opening, and any kind
+(container, aggregate, nest, filled opening, voided element, then group) upwards. Two wholes of
+one kind at a step are refused as ambiguous; a cycle is refused as malformed.
+
 Exact absence covers what the resolver reads: `IfcPropertySet` members.
 Quantity sets (`IfcElementQuantity`) and predefined property sets
 (`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused

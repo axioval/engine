@@ -6,7 +6,7 @@ use axioval_engine::{
 };
 use axioval_ir::contract::ParameterValue;
 
-use crate::property_value::{self, Constraints, Verdict, finding, judge};
+use crate::property_value::{self, Constraints, Verdict, finding, forbid_if, judge};
 use crate::selection::{bound_name, select_objects};
 
 /// Requires an attribute to be set, and optionally to meet value constraints.
@@ -82,7 +82,9 @@ impl RuleCapability for AttributeValueConstraint {
                 }
             };
             let verdict = match &resolved.value {
-                AttributeValue::Unset if constraints.optional => Verdict::Meets,
+                AttributeValue::Unset if constraints.optional || constraints.prohibited => {
+                    Verdict::Meets
+                }
                 AttributeValue::Unset => {
                     Verdict::Fails(format!("missing required attribute {name}"))
                 }
@@ -96,13 +98,20 @@ impl RuleCapability for AttributeValueConstraint {
                         ),
                     )
                 }
-                AttributeValue::Structured => Verdict::Meets,
-                AttributeValue::Scalar { value, data_type } => judge(
-                    value,
-                    data_type.as_deref(),
+                AttributeValue::Structured => {
+                    forbid_if(&constraints, Verdict::Meets, "attribute", &name)
+                }
+                AttributeValue::Scalar { value, data_type } => forbid_if(
+                    &constraints,
+                    judge(
+                        value,
+                        data_type.as_deref(),
+                        "attribute",
+                        &name,
+                        &constraints,
+                    ),
                     "attribute",
                     &name,
-                    &constraints,
                 ),
             };
             match verdict {

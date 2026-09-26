@@ -339,3 +339,50 @@ fn the_capability_is_registered() {
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
     assert!(registry.get("axioval:capability.property-value").is_some());
 }
+
+fn prohibited() -> (&'static str, ParameterValue) {
+    ("prohibited", ParameterValue::Boolean { value: true })
+}
+
+#[test]
+fn a_prohibited_requirement_fails_exactly_when_the_required_one_holds() {
+    // Presence alone: a non-empty value is the violation.
+    assert!(fails(&check(string("x"), None, &[prohibited()])));
+    for absent in [None, Some(PropertyValue::Null), string(" ")] {
+        assert!(meets(&check(absent, None, &[prohibited()])));
+    }
+    // With a value: only a matching one is the violation.
+    assert!(fails(&check(
+        string("x"),
+        None,
+        &[values(&["x"]), prohibited()]
+    )));
+    assert!(meets(&check(
+        string("y"),
+        None,
+        &[values(&["x"]), prohibited()]
+    )));
+    // With a type: only that type is the violation.
+    let label = text("data_type", "IFCLABEL");
+    assert!(fails(&check(
+        string("x"),
+        Some("IFCLABEL"),
+        &[label.clone(), prohibited()]
+    )));
+    assert!(meets(&check(
+        string("x"),
+        Some("IFCTEXT"),
+        &[label, prohibited()]
+    )));
+    // Undecidable stays undecided.
+    assert!(invalid(&check(
+        string("x"),
+        None,
+        &[values(&[]), text("min_inclusive", "1"), prohibited()]
+    )));
+    assert!(invalid(&check(
+        string("x"),
+        None,
+        &[optional(), prohibited()]
+    )));
+}

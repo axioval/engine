@@ -39,6 +39,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   user-defined designations by their text). The capability
   `axioval:capability.predefined-type` checks it against values, patterns or
   "user-defined".
+- **Materials and decomposition.** `MaterialService` / `MaterialServiceHandle`
+  report the names an object's material is known by, and
+  `DecompositionService` / `DecompositionServiceHandle` the wholes it is part
+  of per relation. The IFC session registers both (materials IFC4 only, via
+  `ifc-material`).
+- **Requirement capabilities.** `axioval:capability.classification`,
+  `axioval:capability.material`, `axioval:capability.part-of` and
+  `axioval:capability.entity`; `property-value` and `attribute-value` take
+  `prohibited`.
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.

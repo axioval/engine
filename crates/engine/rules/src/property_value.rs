@@ -42,6 +42,8 @@ pub(crate) struct Constraints<'r> {
     min_length: Option<i64>,
     max_length: Option<i64>,
     pub(crate) optional: bool,
+    /// Meeting the requirement is the violation.
+    pub(crate) prohibited: bool,
 }
 
 impl<'r> Constraints<'r> {
@@ -75,7 +77,14 @@ impl<'r> Constraints<'r> {
                 rule.parameters.get("optional"),
                 Some(ParameterValue::Boolean { value: true })
             ),
+            prohibited: matches!(
+                rule.parameters.get("prohibited"),
+                Some(ParameterValue::Boolean { value: true })
+            ),
         };
+        if constraints.optional && constraints.prohibited {
+            return Err("optional and prohibited exclude each other".into());
+        }
         if constraints
             .data_type
             .is_some_and(|value| value.trim().is_empty())
@@ -93,7 +102,10 @@ impl<'r> Constraints<'r> {
         {
             return Err("a length is negative".into());
         }
-        if !presence_suffices && constraints.data_type.is_none() && !constraints.constrains_value()
+        if !presence_suffices
+            && !constraints.prohibited
+            && constraints.data_type.is_none()
+            && !constraints.constrains_value()
         {
             return Err("no data type and no value constraint".into());
         }
@@ -166,10 +178,9 @@ impl RuleCapability for PropertyValueConstraint {
         for name in ["length", "min_length", "max_length"] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::Integer));
         }
-        parameters.push(ParameterDescriptor::optional(
-            "optional",
-            ParameterType::Boolean,
-        ));
+        for name in ["optional", "prohibited"] {
+            parameters.push(ParameterDescriptor::optional(name, ParameterType::Boolean));
+        }
         parameters
     }
 
@@ -215,13 +226,14 @@ impl RuleCapability for PropertyValueConstraint {
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();
-                    match judge(
+                    let verdict = judge(
                         &property.value,
                         property.data_type(),
                         "property",
                         name,
                         &constraints,
-                    ) {
+                    );
+                    match forbid_if(&constraints, verdict, "property", name) {
                         Verdict::Meets => {}
                         Verdict::Fails(message) => evaluation.push_finding(finding(
                             rule,
@@ -239,7 +251,7 @@ impl RuleCapability for PropertyValueConstraint {
                     }
                 }
                 Ok(PropertyResolution::Absent(proof)) => {
-                    if !constraints.optional {
+                    if !constraints.optional && !constraints.prohibited {
                         evaluation.push_finding(finding(
                             rule,
                             object,
@@ -293,6 +305,24 @@ pub(crate) fn judge(
             Verdict::Inapplicable(reason, format!("{kind} {name}: {message}"))
         }
         Verdict::Meets => Verdict::Meets,
+    }
+}
+
+/// For a prohibited requirement, meeting it is the violation and failing it
+/// passes; a verdict that could not be reached stays undecided.
+pub(crate) fn forbid_if(
+    constraints: &Constraints<'_>,
+    verdict: Verdict,
+    kind: &str,
+    name: &str,
+) -> Verdict {
+    if !constraints.prohibited {
+        return verdict;
+    }
+    match verdict {
+        Verdict::Meets => Verdict::Fails(format!("{kind} {name} meets a prohibited requirement")),
+        Verdict::Fails(_) => Verdict::Meets,
+        undecided @ Verdict::Inapplicable(..) => undecided,
     }
 }
 

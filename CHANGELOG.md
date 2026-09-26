@@ -100,6 +100,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   not duplicates, a wall overlapping a space was not on the envelope, and a
   closed deck had no edges to guard. Existing tests used same-winding caps and
   never saw it; each service now has a closed-body regression test.
+- **A quantity was reported as an exact absence.** `ifc-properties` resolves
+  `IfcPropertySet` members only and skips quantity sets
+  (`IfcElementQuantity`) and predefined property sets
+  (`IfcDoorLiningProperties`, ...), yet the IFC property service turned its
+  "absent" into complete absence evidence. A rule requiring `Foo` in a
+  quantity set `Foo_Bar` therefore reported a wall as missing a quantity it
+  carried. Absence is now refused as incomplete (not evaluated) when the
+  requested set is one of those definitions, or, for an unqualified request,
+  when one of them has a member of that name. The check is model-wide, so it
+  can only turn an absence into not evaluated. Found by running translated
+  buildingSMART IDS test cases.
 - **Classification selectors silently passed over sources.** A
   `classification` selector read the project's inline classification list,
   which no production adapter fills. Over an IFC model every classification

@@ -23,6 +23,7 @@ use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
+use crate::unread::UnreadDefinitions;
 
 /// Production IFC import/session construction failure.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -81,6 +82,7 @@ impl TypeHierarchyService for IfcTypeHierarchy {
 struct IfcPropertyService {
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
+    unread: Arc<UnreadDefinitions>,
 }
 
 impl IfcPropertyService {
@@ -173,19 +175,28 @@ impl PropertyResolutionService for IfcPropertyService {
                     property,
                 )?))
             }
-            Ok(ExactResolution::Absent) => Ok(PropertyResolution::Absent(
-                CompletePropertyAbsenceEvidence::try_new(
-                    request.clone(),
-                    Evidence::exact(
-                        self.snapshots[0].source().clone(),
-                        self.locator(format_args!(
-                            "absence:{object}:{}:{}",
-                            request.property_set().unwrap_or("*"),
-                            request.property()
-                        )),
-                    ),
-                )?,
-            )),
+            Ok(ExactResolution::Absent) => {
+                // Upstream proves absence from property sets only.
+                if let Some(reason) = self
+                    .unread
+                    .obscures(request.property_set(), request.property())
+                {
+                    return Err(PropertyResolutionError::Incomplete(reason));
+                }
+                Ok(PropertyResolution::Absent(
+                    CompletePropertyAbsenceEvidence::try_new(
+                        request.clone(),
+                        Evidence::exact(
+                            self.snapshots[0].source().clone(),
+                            self.locator(format_args!(
+                                "absence:{object}:{}:{}",
+                                request.property_set().unwrap_or("*"),
+                                request.property()
+                            )),
+                        ),
+                    )?,
+                ))
+            }
             Ok(_) => Err(PropertyResolutionError::InexactEvidence),
             Err(error) => Err(map_resolution_error(&error)),
         }
@@ -275,6 +286,7 @@ pub fn import_ifc_session(
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
         model: model.clone(),
         snapshots: snapshots.clone(),
+        unread: Arc::new(UnreadDefinitions::read(release, &model)),
     }));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,

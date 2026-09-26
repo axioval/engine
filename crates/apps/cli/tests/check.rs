@@ -419,3 +419,147 @@ fn every_hint_runs_unchanged_in_a_shell() {
     assert!(listing.contains("evidence: "), "{listing}");
     assert!(listing.contains("showing 1–1 of 1"), "{listing}");
 }
+
+/// Two 4 m × 0.2 m × 3 m walls crossing at right angles, so each penetrates
+/// the other by half its thickness (0.1 m), and a proxy with no body at all.
+fn crossing_walls() -> String {
+    let wall = |first: u32, x: f64, y: f64, length: f64, width: f64, global: &str| {
+        let [p, pos, profile, solid, shape, product, wall] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        format!(
+            "#{p}=IFCCARTESIANPOINT(({x},{y}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},{width});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{wall}=IFCWALL('{global}',$,$,$,$,#3,#{product},$,$);\n"
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}\
+         #30=IFCBUILDINGELEMENTPROXY('0000000000000000000030',$,$,$,$,#3,$,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        wall(10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000016"),
+        wall(20, 2.0, 0.0, 0.2, 4.0, "0000000000000000000026"),
+    )
+}
+
+impl Case {
+    /// The fixture packages with the rule swapped for a wall/wall clash check.
+    fn clash_packages(&self) -> (PathBuf, PathBuf) {
+        let definitions = self.definitions(true);
+        let mut definitions: Value =
+            serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+        let parameter = |id: &str, kind: &str, required: bool| {
+            json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+                   "required": required, "allowedValues": [], "citations": []})
+        };
+        definitions["definitions"]["axioval:example.clash"] = json!({
+            "id": "axioval:example.clash",
+            "name": {"default": "Clash", "translations": {}},
+            "description": {"default": "Bodies must not interpenetrate.", "translations": {}},
+            "capability": "axioval:capability.clash",
+            "parameters": {
+                "counterparts": parameter("counterparts", "selector", true),
+                "penetration_tolerance_metres":
+                    parameter("penetration_tolerance_metres", "number", true),
+                "clearance_metres": parameter("clearance_metres", "number", false),
+            },
+            "citations": [],
+            "tags": [],
+        });
+        let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let rule = &mut ruleset["root"]["rules"][0];
+        rule["id"] = json!("walls-clash");
+        rule["definitionId"] = json!("axioval:example.clash");
+        rule["parameters"] = json!({
+            "counterparts": {"type": "selector", "value": {
+                "kind": "entityType", "objectType": "axioval:example.ifc.wall",
+                "includeSubtypes": true}},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+        });
+        (
+            self.write("definitions.json", &definitions.to_string()),
+            self.write("ruleset.json", &ruleset.to_string()),
+        )
+    }
+
+    fn clash_check(&self, extra: &[&str]) -> Output {
+        let model = self.write("model.ifc", &crossing_walls());
+        let (definitions, ruleset) = self.clash_packages();
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .arg("check")
+            .arg("--model")
+            .arg(model)
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(extra)
+            .output()
+            .unwrap()
+    }
+}
+
+#[test]
+fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
+    let case = Case::new("geometry-clash");
+    let saved = case.path("result.json");
+    let output = case.clash_check(&["--geometry", "--report", saved.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(message.contains("penetration 0.1000 m"), "{message}");
+
+    // Both walls are rectangular extrusions: exact, not tessellated. The
+    // proxy has no body representation, so it is unmeasured, not ignored.
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["exact"], 2, "{geometry:#}");
+    assert_eq!(geometry["tessellated"], 0);
+    assert_eq!(geometry["unmeasured"][0]["object"]["local_id"], "#30");
+    assert_eq!(
+        geometry["unmeasured"][0]["reason"],
+        "no body representation"
+    );
+    assert!(
+        stderr(&output).contains("#30 was not meshed: no body representation"),
+        "{}",
+        stderr(&output)
+    );
+
+    let summary = stdout(&report(&[saved.to_str().unwrap()]));
+    assert!(
+        summary.contains("geometry: 2 exact · 0 tessellated"),
+        "{summary}"
+    );
+    assert!(summary.contains("--section geometry"), "{summary}");
+    let listing = stdout(&report(&[saved.to_str().unwrap(), "--section", "geometry"]));
+    assert!(
+        listing.contains("#30 IFCBUILDINGELEMENTPROXY 0000000000000000000030"),
+        "{listing}"
+    );
+}
+
+#[test]
+fn without_geometry_geometric_rules_are_not_evaluated_and_say_why() {
+    let case = Case::new("geometry-off");
+    let saved = case.path("result.json");
+    let output = case.clash_check(&["--summary", "--report", saved.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let summary = stdout(&output);
+    assert!(summary.contains("missing-service"), "{summary}");
+    assert!(summary.contains("with --geometry"), "{summary}");
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    assert!(result.get("geometry").is_none());
+}

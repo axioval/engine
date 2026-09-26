@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Geometry for `axioval check`.** `--geometry` meshes the model's net
+  bodies (openings subtracted) with `ifc-geometry` and registers the Axiolid
+  contact, free-space, space and proximity services, so clash, distance,
+  contact, space and free-space rules run on real IFC files. Each body is
+  exact (planar faces), tessellated (within 1 mm), without body, or
+  unmeasured. Unmeasured bodies are listed in the result's new `geometry`
+  field and make the measurements they could affect not evaluated. On a real
+  6 MiB model, 951 bodies mesh exactly, 20 as tessellations and none fail.
+- **Host-built services.** `EvidenceSession::with_host_service` registers a
+  service the host built from the session's own source, bound to the
+  snapshots the host names and checked like any other binding.
 - **Bodiless and unmeasured objects.** `AxiolidGeometry::with_no_body` and
   `with_unmeasured` let a host say that an object occupies no volume, or that
   its body exists but could not be meshed. Free-space checks skip bodiless

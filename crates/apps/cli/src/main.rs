@@ -16,6 +16,7 @@ use std::{
 };
 
 mod digest;
+mod geometry;
 
 use axioval::{
     bcf,
@@ -76,6 +77,10 @@ struct CheckArgs {
     /// when set, else the current time, in UTC.
     #[arg(long, requires = "bcf")]
     bcf_date: Option<String>,
+    /// Mesh the model's bodies so geometric rules can run. Off by default:
+    /// meshing costs time and purely semantic rulesets do not need it.
+    #[arg(long)]
+    geometry: bool,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -186,11 +191,30 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let (definitions, ruleset) = packages(&args.definitions, &args.ruleset)?;
     let registry = axioval::default_registry()?;
     let plan = compile(&registry, &definitions, &ruleset)?;
-    let session = import(&args.model)?;
+    let bytes =
+        fs::read(&args.model).map_err(|error| format!("{}: {error}", args.model.display()))?;
+    let session = import(&args.model, &bytes)?;
+    let (session, meshed) = if args.geometry {
+        let (session, report) = geometry::attach(session, &bytes)
+            .map_err(|error| format!("{}: geometry: {error}", args.model.display()))?;
+        (session, Some(report))
+    } else {
+        (session, None)
+    };
     let result = Runtime::new(registry).run_session(&session, plan)?;
     let integrity = integrity(&session)?;
 
-    let output = CheckOutput::new(result, integrity, session.project());
+    let geometry = meshed.map(|report| digest::GeometryRecord {
+        exact: report.exact,
+        tessellated: report.tessellated,
+        no_body: report.no_body,
+        unmeasured: report
+            .unmeasured
+            .into_iter()
+            .map(|(object, reason)| digest::Unmeasured { object, reason })
+            .collect(),
+    });
+    let output = CheckOutput::new(result, integrity, geometry, session.project());
     let result = &output.report;
     let json = serde_json::to_string_pretty(&output)? + "\n";
     // Everything is built before anything is written, so a run that fails
@@ -233,31 +257,7 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         .iter()
         .flat_map(|(_, _, unanchored)| unanchored)
         .collect();
-    if summary.is_some() {
-        // The summary already groups integrity issues and states the counts;
-        // one line each would repeat it at the size it exists to avoid.
-        if !unanchored.is_empty() {
-            eprintln!(
-                "warning: {} object(s) have no valid unique GlobalId; their BCF topics select no component",
-                unanchored.len()
-            );
-        }
-    } else {
-        for record in &output.integrity {
-            eprintln!("{}: {}: {}", record.severity, record.code, record.message);
-        }
-        for object in unanchored {
-            eprintln!(
-                "warning: {object} has no valid unique GlobalId; its BCF topic selects no component"
-            );
-        }
-        eprintln!(
-            "{} finding(s), {} not evaluated, {} integrity issue(s)",
-            result.findings().len(),
-            result.not_evaluated().len(),
-            output.integrity.len()
-        );
-    }
+    warn(&output, summary.is_some(), &unanchored);
     Ok(Outcome::of(result))
 }
 
@@ -301,6 +301,51 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Diagnostics for stderr. A summary already groups integrity issues and
+/// states the counts, so with one only what it cannot show is repeated.
+fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&axioval::ir::ObjectId]) {
+    if summarized {
+        // The summary already groups integrity issues and states the counts;
+        // one line each would repeat it at the size it exists to avoid.
+        if !unanchored.is_empty() {
+            eprintln!(
+                "warning: {} object(s) have no valid unique GlobalId; their BCF topics select no component",
+                unanchored.len()
+            );
+        }
+    } else {
+        for record in &output.integrity {
+            eprintln!("{}: {}: {}", record.severity, record.code, record.message);
+        }
+        for object in unanchored {
+            eprintln!(
+                "warning: {object} has no valid unique GlobalId; its BCF topic selects no component"
+            );
+        }
+        if let Some(geometry) = &output.geometry {
+            eprintln!(
+                "geometry: {} exact, {} tessellated, {} without body, {} unmeasured",
+                geometry.exact,
+                geometry.tessellated,
+                geometry.no_body,
+                geometry.unmeasured.len()
+            );
+            for unmeasured in &geometry.unmeasured {
+                eprintln!(
+                    "warning: {} was not meshed: {}",
+                    unmeasured.object, unmeasured.reason
+                );
+            }
+        }
+        eprintln!(
+            "{} finding(s), {} not evaluated, {} integrity issue(s)",
+            output.report.findings().len(),
+            output.report.not_evaluated().len(),
+            output.integrity.len()
+        );
+    }
+}
+
 /// The `report` invocation that repeats a listing, for its next-page hint.
 fn listing_command(path: &str, args: &ReportArgs) -> String {
     let mut command = format!("axioval report {}", digest::shell_quote(path));
@@ -331,13 +376,12 @@ fn listing_command(path: &str, args: &ReportArgs) -> String {
 
 /// Imports the model, named by its file name so a report does not depend on
 /// where the file was checked from.
-fn import(model: &Path) -> Result<EvidenceSession, Box<dyn Error>> {
-    let bytes = fs::read(model).map_err(|error| format!("{}: {error}", model.display()))?;
+fn import(model: &Path, bytes: &[u8]) -> Result<EvidenceSession, Box<dyn Error>> {
     let document = model
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("{}: model path has no UTF-8 file name", model.display()))?;
-    Ok(import_ifc_session(document, &bytes)
+    Ok(import_ifc_session(document, bytes)
         .map_err(|error| format!("{}: {error}", model.display()))?)
 }
 

@@ -18,7 +18,7 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise.
 ```bash
 axioval check --model building.ifc \
   --definitions definitions.json --ruleset ruleset.json \
-  [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
+  [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
 ```
 
@@ -136,8 +136,46 @@ axioval report result.json --rule RULE
 axioval report result.json --object '#42' --evidence
 ```
 
-### What runs today
+### Geometry
 
-Only semantic evidence is wired: properties, relationships, classifications
-and the type hierarchy. No geometry backend is attached, so rules that need
-geometry report not evaluated (status 4), never pass.
+Semantic evidence (properties, relationships, classifications, the type
+hierarchy) is always available. `--geometry` also meshes the model, so
+geometric rules (clash, distance, contact, space and free-space checks) can
+run. It is off by default because meshing costs time a purely semantic ruleset
+does not need. Without it, geometric rules report `missing-service` (status 4),
+never pass, and the summary suggests `--geometry`.
+
+The CLI meshes each product's net body, with openings subtracted, using
+`ifc-geometry` and hands the meshes to the Axiolid geometry services. That
+bridge lives in the CLI, not in an adapter, because the IFC and Axiolid
+adapters must not depend on each other. Every object ends in one of four
+states:
+
+| State | Meaning | Effect on geometric rules |
+|---|---|---|
+| exact | every face is planar (polygonal extrusions, faceted B-reps, meshes, booleans of these), so the mesh is the shape | measured as exact |
+| tessellated | some face is curved; the mesh is within 1 mm of it | measured as approximate, never exact |
+| no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
+| unmeasured | a physical product that could not be meshed, including one without a Body representation | measurements it could affect are not evaluated |
+
+The planarity check is conservative. Anything it does not recognise counts as
+tessellated, which only loses exactness, never presents an approximation as
+exact.
+
+Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
+and `IfcBuilding` give roles, and the spatial tree gives each object's storey.
+An element the file places twice, or anything under a structure aggregated
+twice, gets no storey rather than a guessed one.
+
+The result's `geometry` field records the counts and every unmeasured object
+with its reason. The summary prints a `geometry:` line and groups unmeasured
+objects by reason; `axioval report result.json --section geometry` lists them.
+
+On a real 6 MiB IFC4 model, 951 bodies mesh exactly, 20 as tessellations
+(round columns) and none fail, and a wall-against-wall clash check finds the
+overlapping wall joints (0.05 m and 0.10 m) in under a second.
+
+Services that need facts IFC does not state reliably are not registered, so
+their rules report `missing-service`: guard checks (which surfaces are
+walkable), envelope membership (which spaces bound the envelope) and shelf
+capacity (doorways per room).

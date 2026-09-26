@@ -10,4 +10,6 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
 - Never read the clock for BCF output when `--bcf-date` or `SOURCE_DATE_EPOCH` is given.
 - `src/digest.rs` owns the saved result format (`CheckOutput`) and its two views. The summary must stay bounded by distinct groups, never by entry count; the listing must page. Every "next" hint must run unchanged in a POSIX shell: quote through `shell_quote`, which quotes `#` because an unquoted `#` starts a comment.
 - The result's `objects` field is additive (`serde(default)`), so results saved before it existed still load.
+- `src/geometry.rs` is the IFC→Axiolid bridge. It belongs here and nowhere else: the adapters must not depend on each other. Every object must end in exactly one state: exact mesh, tessellated mesh, no body, or unmeasured. Never declare a physical product bodiless because meshing failed; that makes it vanish from contact and free-space checks. The planarity check may only grow by structures proven planar; anything unrecognised stays tessellated.
+- Register a geometry service only when every role it needs can be read from IFC; otherwise leave it unregistered so its rules report `missing-service`.
 - `tests/check.rs` runs the real binary; keep a case for every exit status. Update `docs/src/cli.md` with any change to arguments, output or status.

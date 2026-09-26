@@ -16,7 +16,23 @@ doc = false
 
 [dependencies]
 # The CLI is the host that composes a source adapter with a report sink.
-axioval = { path = "../../facade/axioval", version = "0.2.0", features = ["ifc", "bcf"] }
+axioval = { path = "../../facade/axioval", version = "0.2.0", features = ["ifc", "bcf", "axiolid"] }
+# `--geometry`: the CLI meshes IFC bodies itself and hands the meshes to the
+# Axiolid services. Neither adapter may depend on the other, so this bridge
+# lives in the host.
+axiolid-contracts.workspace = true
+axiolid-core.workspace = true
+axiolid-curve.workspace = true
+axiolid-mesh.workspace = true
+axiolid-mesh-compile-contract.workspace = true
+axiolid-model.workspace = true
+axiolid-primitive.workspace = true
+axiolid-profile.workspace = true
+axiolid-surface.workspace = true
+ifc-geometry = { workspace = true, features = ["compile-reference-backend"] }
+ifc-model.workspace = true
+ifc-spatial.workspace = true
+ifc-step.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

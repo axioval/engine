@@ -38,6 +38,29 @@ pub struct CheckOutput {
     /// tell what `#4711` is without the model at hand.
     #[serde(default)]
     pub objects: BTreeMap<String, ObjectInfo>,
+    /// How the model's bodies were meshed, when `check --geometry` ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<GeometryRecord>,
+}
+
+/// Outcome of meshing, so a reader can tell "no finding" from "not measured".
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GeometryRecord {
+    /// Meshed with every face planar: the mesh is the shape.
+    pub exact: usize,
+    /// Meshed from curved faces, within the compiler's chord budget.
+    pub tessellated: usize,
+    /// Occupying no material, e.g. storeys, zones, openings.
+    pub no_body: usize,
+    /// Physical objects that could not be meshed. Geometric measurements
+    /// they could affect are not evaluated.
+    pub unmeasured: Vec<Unmeasured>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Unmeasured {
+    pub object: ObjectId,
+    pub reason: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -56,8 +79,18 @@ pub struct ObjectInfo {
 }
 
 impl CheckOutput {
-    pub fn new(report: Report, integrity: Vec<IntegrityRecord>, project: &Project) -> Self {
+    pub fn new(
+        report: Report,
+        integrity: Vec<IntegrityRecord>,
+        geometry: Option<GeometryRecord>,
+        project: &Project,
+    ) -> Self {
         let mut named: BTreeSet<&ObjectId> = BTreeSet::new();
+        named.extend(
+            geometry
+                .iter()
+                .flat_map(|g| g.unmeasured.iter().map(|u| &u.object)),
+        );
         for finding in report.findings() {
             named.insert(&finding.object_id);
             named.extend(&finding.related);
@@ -85,6 +118,7 @@ impl CheckOutput {
             report,
             integrity,
             objects,
+            geometry,
         }
     }
 
@@ -106,6 +140,11 @@ impl CheckOutput {
                     .not_evaluated()
                     .iter()
                     .filter_map(|n| n.object_id.as_ref()),
+            )
+            .chain(
+                self.geometry
+                    .iter()
+                    .flat_map(|g| g.unmeasured.iter().map(|u| &u.object)),
             )
     }
 
@@ -145,6 +184,8 @@ pub enum Section {
     Findings,
     NotEvaluated,
     Integrity,
+    /// Objects `check --geometry` could not mesh.
+    Geometry,
 }
 
 impl Section {
@@ -153,6 +194,7 @@ impl Section {
             Self::Findings => "finding",
             Self::NotEvaluated => "not-evaluated",
             Self::Integrity => "integrity",
+            Self::Geometry => "geometry",
         }
     }
 }
@@ -173,6 +215,14 @@ pub struct Group {
     pub examples: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct GeometryCounts {
+    pub exact: usize,
+    pub tessellated: usize,
+    pub no_body: usize,
+    pub unmeasured: usize,
+}
+
 /// A bounded digest of a result.
 #[derive(Debug, Serialize)]
 pub struct Summary {
@@ -180,6 +230,8 @@ pub struct Summary {
     pub findings: usize,
     pub not_evaluated: usize,
     pub integrity: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<GeometryCounts>,
     pub groups: Vec<Group>,
     /// Groups left out by the `top` limit, per section.
     pub omitted_groups: BTreeMap<&'static str, usize>,
@@ -290,7 +342,8 @@ impl Tally {
 ///
 /// `saved` is where the full result is, for the drill-down hints; `None` when
 /// it was not written to a file and so cannot be queried.
-pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summary {
+/// Tallies every entry of `output` by section, key and level.
+fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
     let qualify = output.several_documents();
     let mut tallies: BTreeMap<(Section, String, String), Tally> = BTreeMap::new();
     for finding in output.report.findings() {
@@ -332,7 +385,29 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             .or_default()
             .add(&record.message, None);
     }
+    for unmeasured in output.geometry.iter().flat_map(|g| &g.unmeasured) {
+        // Grouped by the kind of failure, the text before any detail.
+        let class = unmeasured
+            .reason
+            .split(':')
+            .next()
+            .unwrap_or(&unmeasured.reason)
+            .trim()
+            .to_owned();
+        tallies
+            .entry((Section::Geometry, class, "unmeasured".to_owned()))
+            .or_default()
+            .add(
+                &unmeasured.reason,
+                Some(output.describe(&unmeasured.object, qualify)),
+            );
+    }
 
+    tallies
+}
+
+pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summary {
+    let tallies = tally(output);
     let mut groups: Vec<Group> = tallies
         .into_iter()
         .map(|((section, key, level), tally)| tally.into_group(section, key, level))
@@ -363,12 +438,29 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
         }
     }
 
-    let next = next_steps(&kept, &omitted_groups, top, saved);
+    let mut next = next_steps(&kept, &omitted_groups, top, saved);
+    let missing_service = output
+        .report
+        .not_evaluated()
+        .iter()
+        .any(|n| n.reason == NotEvaluatedReason::MissingService);
+    if output.geometry.is_none() && missing_service {
+        next.push(
+            "some rules lack an evidence service; if they are geometric, rerun `axioval check` with --geometry"
+                .into(),
+        );
+    }
     Summary {
         status: status(&output.report),
         findings: output.report.findings().len(),
         not_evaluated: output.report.not_evaluated().len(),
         integrity: output.integrity.len(),
+        geometry: output.geometry.as_ref().map(|g| GeometryCounts {
+            exact: g.exact,
+            tessellated: g.tessellated,
+            no_body: g.no_body,
+            unmeasured: g.unmeasured.len(),
+        }),
         groups: kept,
         omitted_groups,
         next,
@@ -391,15 +483,22 @@ fn next_steps(
     let quoted = shell_quote(path);
     let mut next = Vec::new();
     if let Some(group) = groups.first() {
-        let flag = if group.section == Section::Integrity {
-            "--code"
-        } else {
-            "--rule"
-        };
-        next.push(format!(
-            "axioval report {quoted} {flag} {}",
-            shell_quote(&group.key)
-        ));
+        next.push(match group.section {
+            Section::Integrity => {
+                format!("axioval report {quoted} --code {}", shell_quote(&group.key))
+            }
+            Section::Geometry => format!("axioval report {quoted} --section geometry"),
+            _ => format!("axioval report {quoted} --rule {}", shell_quote(&group.key)),
+        });
+    }
+    // Unmeasured bodies qualify every geometric answer, so they get their own
+    // step even when a larger group comes first.
+    if groups
+        .first()
+        .is_some_and(|g| g.section != Section::Geometry)
+        && groups.iter().any(|g| g.section == Section::Geometry)
+    {
+        next.push(format!("axioval report {quoted} --section geometry"));
     }
     if let Some(example) = groups.iter().flat_map(|g| &g.examples).next() {
         let id = example.split(' ').next().unwrap_or(example);
@@ -432,6 +531,13 @@ pub fn render_summary(summary: &Summary) -> String {
         "status: {} · {} finding(s) · {} not evaluated · {} integrity issue(s)\n",
         summary.status, summary.findings, summary.not_evaluated, summary.integrity
     );
+    if let Some(geometry) = &summary.geometry {
+        let _ = writeln!(
+            out,
+            "geometry: {} exact · {} tessellated · {} without body · {} unmeasured",
+            geometry.exact, geometry.tessellated, geometry.no_body, geometry.unmeasured
+        );
+    }
     let mut section = None;
     for group in &summary.groups {
         if section != Some(group.section) {
@@ -566,6 +672,27 @@ pub fn list(
             } else {
                 vec![]
             },
+        }));
+    }
+    if filter.rule.is_none() && filter.code.is_none() && wants(Section::Geometry) {
+        let unmeasured = output
+            .geometry
+            .iter()
+            .flat_map(|g| &g.unmeasured)
+            .filter(|u| {
+                filter
+                    .object
+                    .as_deref()
+                    .is_none_or(|query| output.names(&u.object, query))
+            });
+        matched.extend(unmeasured.map(|u| Entry {
+            section: Section::Geometry,
+            key: "unmeasured".to_owned(),
+            level: "unmeasured".to_owned(),
+            object: Some(output.describe(&u.object, qualify)),
+            related: vec![],
+            message: u.reason.clone(),
+            evidence: vec![],
         }));
     }
 

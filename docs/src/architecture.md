@@ -38,6 +38,11 @@ engine/core  <-  engine/rules
 contracts/ir  <-  sinks/bcf
 ```
 
+A host composes adapters. The CLI, for instance, meshes IFC bodies with
+`ifc-geometry` and registers them with the Axiolid services under the IFC
+session's object identities, which no adapter may do because neither may
+depend on the other.
+
 A sink reads finished reports. It depends on the IR alone, so any host can
 write BCF from any source's report without linking the engine or an adapter.
 

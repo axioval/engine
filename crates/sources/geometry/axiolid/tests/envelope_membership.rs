@@ -221,3 +221,30 @@ fn undeclared_objects_are_reported_not_compared() {
     assert!(measured.agrees(), "{measured:?}");
     assert_eq!(measured.undeclared(), &[id("wall-edge")]);
 }
+
+/// An unmeasured wall has no known membership, so it is reported, never
+/// silently dropped; an unmeasured bounding space leaves no region at all.
+#[test]
+fn unmeasured_bodies_are_not_compared() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), quad(0.0, 10.0, 0.0, 10.0, 0.0))
+        .with_unmeasured(id("wall"), "no body representation");
+    let service = AxiolidEnvelopeMembershipService::new(geometry.clone(), source())
+        .with_gross_area_space(id("space"))
+        .with_declared_external(id("wall"));
+    let request = EnvelopeMembershipRequest::new(EnvelopeDerivation::GrossAreaGroups);
+    let measured = service.measure_envelope_membership(&request).unwrap();
+    assert!(measured.agrees());
+    assert_eq!(measured.undeclared(), &[id("wall")]);
+
+    let service = AxiolidEnvelopeMembershipService::new(
+        geometry.with_unmeasured(id("other-space"), "no body representation"),
+        source(),
+    )
+    .with_gross_area_space(id("space"))
+    .with_gross_area_space(id("other-space"));
+    assert_eq!(
+        service.measure_envelope_membership(&request),
+        Err(EnvelopeMembershipError::Unavailable)
+    );
+}

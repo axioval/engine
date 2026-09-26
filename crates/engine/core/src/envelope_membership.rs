@@ -109,11 +109,12 @@ impl EnvelopeMembershipEvidence {
         })
     }
 
-    /// Records objects whose model states neither external nor internal.
+    /// Records objects that cannot be compared: the model states neither
+    /// external nor internal, or their body could not be measured.
     ///
-    /// An unstated declaration is unknown, not internal, so these objects
-    /// leave both sets: comparing them would report a discrepancy the model
-    /// never made.
+    /// An unstated declaration is unknown, not internal, and an unmeasured
+    /// body is not known to be off the envelope, so these objects leave both
+    /// sets: comparing them would report a discrepancy nobody established.
     #[must_use]
     pub fn with_undeclared(mut self, mut undeclared: Vec<ObjectId>) -> Self {
         undeclared.sort();
@@ -135,7 +136,7 @@ impl EnvelopeMembershipEvidence {
     pub fn derived(&self) -> &[ObjectId] {
         &self.derived
     }
-    /// Objects whose declaration is unknown, excluded from both sets.
+    /// Objects that cannot be compared, excluded from both sets.
     pub fn undeclared(&self) -> &[ObjectId] {
         &self.undeclared
     }

@@ -143,6 +143,39 @@ fn reaches_outline(triangles: &[crate::geometry::Triangle], outline: &[(Point2, 
     })
 }
 
+/// The plan region `triangles` cover, and its outline with holes
+/// (courtyards) included.
+fn covered_region(
+    triangles: &[crate::geometry::Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Result<(OverlayInput, Vec<(Point2, Point2)>), EnvelopeMembershipError> {
+    let region = OverlayInput {
+        frame: plan_frame(),
+        polygons: projected_polygons(triangles),
+    };
+    let region = overlay(
+        &region,
+        &region,
+        OverlayOperation::Union,
+        FillRule::NonZero,
+        tolerance,
+    )
+    .map_err(|_| EnvelopeMembershipError::Unavailable)?;
+    let outline = region
+        .polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .flat_map(ring_segments)
+        .collect();
+    Ok((
+        OverlayInput {
+            frame: plan_frame(),
+            polygons: region.polygons,
+        },
+        outline,
+    ))
+}
+
 impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
     fn measure_envelope_membership(
         &self,
@@ -188,32 +221,23 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
             }
         }
 
-        // The covered region and its outline, holes (courtyards) included.
-        let region = OverlayInput {
-            frame: plan_frame(),
-            polygons: projected_polygons(&space_triangles),
-        };
-        let region = overlay(
-            &region,
-            &region,
-            OverlayOperation::Union,
-            FillRule::NonZero,
-            tolerance,
-        )
-        .map_err(|_| EnvelopeMembershipError::Unavailable)?;
-        let outline: Vec<(Point2, Point2)> = region
-            .polygons
+        let (region, outline) = covered_region(&space_triangles, tolerance)?;
+        // A bounding space without a body leaves the region unknown.
+        if bounding
             .iter()
-            .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
-            .flat_map(ring_segments)
-            .collect();
-        let region = OverlayInput {
-            frame: plan_frame(),
-            polygons: region.polygons,
-        };
-
+            .any(|space| self.geometry.is_unmeasured(space))
+        {
+            return Err(EnvelopeMembershipError::Unavailable);
+        }
         let mut derived = Vec::new();
-        let mut undeclared = Vec::new();
+        // An object whose body could not be measured has no known membership,
+        // so it cannot be compared either way, whatever it declares.
+        let mut undeclared: Vec<ObjectId> = self
+            .geometry
+            .unmeasured()
+            .map(|(object, _)| object.clone())
+            .filter(|object| !bounding.contains(object))
+            .collect();
         let mut evaluated = 0usize;
         for (object, mesh) in self.geometry.objects() {
             if bounding.contains(object) {

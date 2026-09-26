@@ -203,7 +203,9 @@ groups no space, is an error (status 1).
 - An object's declaration is its `IsExternal`, from whichever property set
   states it: `true` is external, `false` internal. An object with no
   `IsExternal`, or with conflicting ones, is undeclared: its rule reports not
-  evaluated, never "internal".
+  evaluated, never "internal". So is an object whose body could not be
+  meshed, since its membership is unknown. A zone space without a body makes
+  the whole envelope unavailable.
 
 Guard checks need to know which surfaces are walkable, and IFC has no single
 concept for it: floor, landing and roof slabs, stair and ramp flights, space

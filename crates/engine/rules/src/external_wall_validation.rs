@@ -70,7 +70,7 @@ impl RuleCapability for ExternalWallValidation {
                         evaluation.push_object_not_evaluated(
                             object_id.clone(),
                             NotEvaluatedReason::IncompleteEvidence,
-                            "the model states neither external nor internal",
+                            "not compared: the model states neither external nor internal, or its body could not be measured",
                         );
                     }
                 }

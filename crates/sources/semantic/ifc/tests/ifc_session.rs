@@ -88,12 +88,18 @@ fn unsupported_source_neutral_scalars_fail_closed() {
         .get::<PropertyResolutionServiceHandle>()
         .unwrap();
 
-    for name in ["Logical", "Bits", "Length", "UnitReal"] {
+    for name in ["Logical", "Bits", "UnitReal"] {
         assert_eq!(
             service.resolve(&request(name)),
             Err(PropertyResolutionError::InexactEvidence)
         );
     }
+    // A measure is converted through its unit; this file has no project to
+    // take a default length unit from, so the length is refused.
+    assert!(matches!(
+        service.resolve(&request("Length")),
+        Err(PropertyResolutionError::Incomplete(message)) if message.contains("IFCLENGTHMEASURE")
+    ));
 }
 
 #[test]

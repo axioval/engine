@@ -64,7 +64,7 @@ ifc-classification = "0.2.1"
 ifc-geometry = { version = "0.3.1", default-features = false }
 ifc-spatial = "0.2.1"
 ifc-model = "0.2.2"
-ifc-properties = "0.2.1"
+ifc-properties = "0.3.0"
 ifc-schema = "0.2.2"
 ifc-step = "0.2.1"
 ifc-systems = "0.2.1"

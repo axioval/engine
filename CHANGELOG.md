@@ -44,6 +44,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   `DecompositionService` / `DecompositionServiceHandle` the wholes it is part
   of per relation. The IFC session registers both (materials IFC4 only, via
   `ifc-material`).
+- **`meets` selectors.** `Selector::Meets` selects the objects that meet a
+  selectable capability's requirement on their own. Capabilities opt in with
+  `RuleCapability::selectable`; the compiler checks the capability and its
+  parameters, and the runtime evaluates it with the plan's registry. Adding
+  the variant breaks exhaustive matches on `Selector`.
 - **Findings about populations.** `Report::rule_findings` (`RuleFinding`)
   holds conclusive outcomes about a rule's population rather than one
   object, such as "no applicable object exists"; `Report::has_findings`

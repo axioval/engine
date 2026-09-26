@@ -1,13 +1,17 @@
 //! Deterministic, fail-closed selector evaluation.
 
+use std::collections::BTreeMap;
+
 use axioval_engine::{
-    BindingError, CapabilityEvaluation, ClassificationError, ClassificationServiceHandle,
-    ConceptBindings, NotEvaluatedReason, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, TypeHierarchyError,
-    TypeHierarchyServiceHandle,
+    BindingError, CapabilityEvaluation, CapabilityRegistry, ClassificationError,
+    ClassificationServiceHandle, CompiledRule, ConceptBindings, NotEvaluatedReason,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    RuleContext, TypeHierarchyError, TypeHierarchyServiceHandle,
 };
-use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
-use axioval_ir::{Object, Property, PropertyValue};
+use axioval_ir::contract::{
+    ComparisonOperator, ParameterValue, Selector, Severity as RuleSeverity,
+};
+use axioval_ir::{Object, Project, Property, PropertyValue, RuleId};
 use regex::Regex;
 
 pub(crate) fn select_objects<'a>(
@@ -62,6 +66,10 @@ fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Obj
             Selection::NoMatch => Selection::Match,
             unavailable @ Selection::NotEvaluated(..) => unavailable,
         },
+        Selector::Meets {
+            capability,
+            parameters,
+        } => meets(context, object, capability, parameters),
         Selector::Property {
             property_set,
             property,
@@ -75,6 +83,67 @@ fn selector_matches(context: &RuleContext<'_>, selector: &Selector, object: &Obj
             operator,
             value.as_ref(),
         ),
+    }
+}
+
+/// Whether `object` meets a selectable capability's requirement on its own.
+///
+/// The capability is evaluated over a project of just this object: any
+/// finding is a non-match, any undecided outcome leaves membership
+/// undecided, and only a clean evaluation is a match.
+fn meets(
+    context: &RuleContext<'_>,
+    object: &Object,
+    capability: &str,
+    parameters: &BTreeMap<String, ParameterValue>,
+) -> Selection {
+    let Some(registry) = context.services.get::<CapabilityRegistry>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "no capability registry is available to evaluate a meets selector".into(),
+        );
+    };
+    let Some(trusted) = registry
+        .get(capability)
+        .filter(|trusted| trusted.selectable())
+    else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::InvalidDeclaration,
+            format!("`{capability}` is not a registered selectable capability"),
+        );
+    };
+    let project = match Project::new(vec![object.clone()]) {
+        Ok(project) => project,
+        Err(error) => {
+            return Selection::NotEvaluated(NotEvaluatedReason::InvalidEvidence, error.to_string());
+        }
+    };
+    let Ok(id) = RuleId::new("meets") else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::InvalidDeclaration,
+            "selector rule id".into(),
+        );
+    };
+    let rule = CompiledRule {
+        id,
+        capability: capability.to_owned(),
+        severity: RuleSeverity::Error,
+        selector: Selector::All,
+        parameters: parameters.clone(),
+    };
+    let evaluation = trusted.evaluate(
+        &RuleContext {
+            project: &project,
+            services: context.services,
+        },
+        &rule,
+    );
+    if !evaluation.findings().is_empty() || !evaluation.rule_findings().is_empty() {
+        Selection::NoMatch
+    } else if let Some(outcome) = evaluation.not_evaluated_outcomes().first() {
+        Selection::NotEvaluated(outcome.reason().clone(), outcome.message().to_owned())
+    } else {
+        Selection::Match
     }
 }
 

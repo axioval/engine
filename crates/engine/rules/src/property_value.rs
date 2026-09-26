@@ -151,6 +151,10 @@ pub(crate) enum Verdict {
 /// empty text included, is checked.
 pub struct PropertyValueConstraint;
 impl RuleCapability for PropertyValueConstraint {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-value"
     }

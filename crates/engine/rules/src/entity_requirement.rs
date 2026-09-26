@@ -16,6 +16,10 @@ use crate::selection::select_objects;
 /// `predefined_patterns`, as the source's attribute service resolves it.
 pub struct EntityRequirement;
 impl RuleCapability for EntityRequirement {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.entity"
     }

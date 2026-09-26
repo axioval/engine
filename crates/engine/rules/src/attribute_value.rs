@@ -20,6 +20,10 @@ use crate::selection::{bound_name, select_objects};
 /// rule that constrains it is not evaluated.
 pub struct AttributeValueConstraint;
 impl RuleCapability for AttributeValueConstraint {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.attribute-value"
     }

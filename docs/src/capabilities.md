@@ -45,6 +45,10 @@ A capability may return findings and not-evaluated outcomes together when only p
 
 `axioval:capability.clash` and `axioval:capability.distance` check selected subjects against a selector-valued `counterparts` group through `ProximityServiceHandle`, after the engine's complete broad-phase candidate search. A hard clash is a witnessed penetration beyond `penetration_tolerance_metres`, or containment. A clearance clash is a separation below the optional `clearance_metres`. Distance bounds the nearest counterpart with `minimum_metres` and/or `maximum_metres`. Findings on tessellated geometry carry inexact evidence and say so. See [Clash, interference and distance](./clash.md).
 
+## Selecting with a capability
+
+A `meets` selector (`{"kind": "meets", "capability": ..., "parameters": {...}}`) selects the objects that meet a capability's requirement on their own: the capability is evaluated over a project of just that object, and a finding is a non-match while an undecided outcome leaves membership undecided. Only capabilities that judge each object independently declare themselves `selectable` (the property, attribute, predefined-type, classification, material, part-of and entity capabilities); counting ones such as `population` never are. The compiler checks the capability and binds its parameters as for a rule, and the runtime evaluates it against the registry the plan was compiled with. It is how an IDS applicability facet other than the entity is expressed.
+
 ## Adding a capability
 
 1. Define or reuse canonical schema concepts and parameters.

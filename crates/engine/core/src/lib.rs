@@ -282,6 +282,12 @@ pub trait RuleCapability: Send + Sync {
     fn parameters(&self) -> Vec<ParameterDescriptor>;
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
+    /// Whether the capability judges each selected object on its own, so a
+    /// `meets` selector may use it to select objects. A capability that
+    /// counts or compares objects never is.
+    fn selectable(&self) -> bool {
+        false
+    }
 }
 
 /// Host-controlled registry of trusted capabilities.
@@ -562,6 +568,9 @@ impl Runtime {
         // trusted, because it could bind concepts the packages never declared.
         let mut services = services.clone();
         services.replace(ConceptBindings::new(plan.concepts.clone(), type_systems));
+        // `meets` selectors evaluate registered capabilities; the plan was
+        // checked against this registry, so it is the one they may use.
+        services.replace(self.registry.clone());
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();

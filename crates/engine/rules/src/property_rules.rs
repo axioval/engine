@@ -138,6 +138,10 @@ impl RuleCapability for PropertyExists {
 /// values satisfy the requirement; adapter failures remain not-evaluated.
 pub struct PropertyRequired;
 impl RuleCapability for PropertyRequired {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-required"
     }
@@ -212,6 +216,10 @@ fn is_empty_value(value: &PropertyValue) -> bool {
 /// STEP-based sources do not distinguish case.
 pub struct PropertyDataType;
 impl RuleCapability for PropertyDataType {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-data-type"
     }

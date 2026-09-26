@@ -22,6 +22,10 @@ use crate::selection::select_objects;
 /// requirement is the violation.
 pub struct PartOfRequirement;
 impl RuleCapability for PartOfRequirement {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.part-of"
     }

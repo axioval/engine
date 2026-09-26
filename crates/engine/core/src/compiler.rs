@@ -52,6 +52,7 @@ pub fn compile(
         for value in parameters.values() {
             validate_parameter_concepts(&concepts, &rule.id, value)?;
         }
+        validate_meets(registry, &rule.id, &rule.applicability)?;
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
         match applicability_selector(&concepts, rule)? {
@@ -270,6 +271,86 @@ fn validate_selector_concepts(
             .iter()
             .try_for_each(|operand| validate_selector_concepts(concepts, rule, operand)),
         Selector::Not { operand } => validate_selector_concepts(concepts, rule, operand),
+        Selector::Meets { parameters, .. } => parameters
+            .values()
+            .try_for_each(|value| validate_parameter_concepts(concepts, rule, value)),
+    }
+}
+
+/// Every `meets` selector names a registered, selectable capability and
+/// binds its parameters as a rule would.
+fn validate_meets(
+    registry: &CapabilityRegistry,
+    rule: &str,
+    applicability: &RuleApplicability,
+) -> Result<(), EngineError> {
+    match applicability {
+        RuleApplicability::Selector(selector) => validate_meets_selector(registry, rule, selector),
+        RuleApplicability::Groups(groups) => groups
+            .groups
+            .values()
+            .try_for_each(|group| validate_meets_selector(registry, rule, &group.selector)),
+    }
+}
+
+fn validate_meets_selector(
+    registry: &CapabilityRegistry,
+    rule: &str,
+    selector: &Selector,
+) -> Result<(), EngineError> {
+    match selector {
+        Selector::Meets {
+            capability,
+            parameters,
+        } => {
+            let trusted = registry
+                .get(capability)
+                .ok_or_else(|| EngineError::UnknownCapability(capability.clone()))?;
+            let contract = |detail: String| EngineError::CapabilityContract {
+                definition: rule.to_owned(),
+                capability: capability.clone(),
+                detail,
+            };
+            if !trusted.selectable() {
+                return Err(contract("capability cannot select objects".into()));
+            }
+            let descriptors = trusted.parameters();
+            for descriptor in &descriptors {
+                if descriptor.required && !parameters.contains_key(&descriptor.name) {
+                    return Err(EngineError::MissingParameter {
+                        capability: capability.clone(),
+                        parameter: descriptor.name.clone(),
+                    });
+                }
+            }
+            for (name, value) in parameters {
+                let descriptor = descriptors
+                    .iter()
+                    .find(|descriptor| &descriptor.name == name)
+                    .ok_or_else(|| EngineError::UnknownParameter {
+                        capability: capability.clone(),
+                        parameter: name.clone(),
+                    })?;
+                if !descriptor.parameter_type.accepts(value) {
+                    return Err(EngineError::InvalidParameterType {
+                        capability: capability.clone(),
+                        parameter: name.clone(),
+                    });
+                }
+                if let ParameterValue::Selector { value } = value {
+                    validate_meets_selector(registry, rule, value)?;
+                }
+            }
+            Ok(())
+        }
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => operands
+            .iter()
+            .try_for_each(|operand| validate_meets_selector(registry, rule, operand)),
+        Selector::Not { operand } => validate_meets_selector(registry, rule, operand),
+        Selector::All
+        | Selector::EntityType { .. }
+        | Selector::Property { .. }
+        | Selector::Classification { .. } => Ok(()),
     }
 }
 

@@ -18,6 +18,10 @@ use crate::xsd_pattern;
 /// requirement. `user_defined` cannot be combined with values or patterns.
 pub struct PredefinedTypeRequirement;
 impl RuleCapability for PredefinedTypeRequirement {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.predefined-type"
     }

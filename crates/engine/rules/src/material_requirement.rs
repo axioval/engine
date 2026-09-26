@@ -20,6 +20,10 @@ use crate::selection::select_objects;
 /// violation.
 pub struct MaterialRequirement;
 impl RuleCapability for MaterialRequirement {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.material"
     }

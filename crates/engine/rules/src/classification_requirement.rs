@@ -28,6 +28,10 @@ use crate::xsd_pattern;
 /// object is not evaluated.
 pub struct ClassificationRequirement;
 impl RuleCapability for ClassificationRequirement {
+    fn selectable(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.classification"
     }

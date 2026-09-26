@@ -4,6 +4,8 @@ name: Docs (GitHub Pages)
 # minor or major release tag (v0.3.0, v1.0.0) and never on a patch release
 # (v0.3.1) or a pre-release (v0.4.0-rc.1). Run it by hand to publish between
 # releases. The github-pages environment must allow `v*` tags to deploy.
+# The gate is CI's: the build requires CI to have passed on the commit and
+# then builds only rustdoc and the book (`./scripts/check.sh docs`).
 on:
   push:
     tags:
@@ -12,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # read CI's verdict on the published commit
   pages: write
   id-token: write
 
@@ -33,8 +36,6 @@ jobs:
         with:
           toolchain: 1.88.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked --version 0.20.2
       - name: Install mdBook
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -44,8 +45,33 @@ jobs:
           echo "${MDBOOK_SHA256}  mdbook.tar.gz" | sha256sum --check --strict
           tar -xzf mdbook.tar.gz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Full repository gate
-        run: ./scripts/check.sh
+      - name: Require CI to have passed on this commit
+        # The full gate already runs in CI on this exact commit (on the push
+        # to main and again on the release tag); running it here a second
+        # time proved nothing new. Wait for a push-event run of ci.yml on
+        # this commit and require its verdict; a pull_request run tests a
+        # merge with its base, not the commit, so it does not count.
+        # Re-running a failed CI run and then this workflow picks up the new
+        # result.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 120); do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+              --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion)"')"
+            if grep -q ' completed success$' <<<"$runs"; then
+              echo "CI passed on $GITHUB_SHA:"; echo "$runs"; exit 0
+            fi
+            if [ -n "$runs" ] && ! grep -qv ' completed ' <<<"$runs"; then
+              echo "::error::CI did not pass on $GITHUB_SHA; re-run it, then re-run this workflow"
+              echo "$runs"; exit 1
+            fi
+            echo "waiting for CI on $GITHUB_SHA: ${runs:-no run yet}"
+            sleep 30
+          done
+          echo "::error::no finished CI run on $GITHUB_SHA after 60 minutes"; exit 1
+      - name: Build rustdoc and the book
+        run: ./scripts/check.sh docs
       - name: Add API reference
         run: |
           mkdir -p docs/book/api

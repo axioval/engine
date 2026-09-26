@@ -251,7 +251,7 @@ fn require_set_concept(
     rule: &str,
     set: &str,
 ) -> Result<(), EngineError> {
-    if axioval_ir::is_attribute_set(set) {
+    if axioval_ir::is_reserved_set(set) {
         return Ok(());
     }
     require_concept(concepts, rule, ConceptKind::PropertySet, set)

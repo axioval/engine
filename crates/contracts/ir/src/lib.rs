@@ -276,10 +276,21 @@ pub const ATTRIBUTE_SET: &str = "axioval:attributes";
 /// [`ATTRIBUTE_SET`].
 pub const TYPE_ATTRIBUTE_SET: &str = "axioval:type-attributes";
 
-/// Whether `set` is one of the reserved attribute sets.
+/// Property set that names how an object is presented in its source.
+///
+/// Its one property, [`PRESENTATION_LAYER`], is the name of the presentation
+/// (CAD) layer the object's shape is assigned to. An object on no layer has
+/// none (an exact absence); an object on several distinct layers is a
+/// conflict. Reserved like [`ATTRIBUTE_SET`].
+pub const PRESENTATION_SET: &str = "axioval:presentation";
+
+/// The layer property in [`PRESENTATION_SET`].
+pub const PRESENTATION_LAYER: &str = "Layer";
+
+/// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
-pub fn is_attribute_set(set: &str) -> bool {
-    set == ATTRIBUTE_SET || set == TYPE_ATTRIBUTE_SET
+pub fn is_reserved_set(set: &str) -> bool {
+    set == ATTRIBUTE_SET || set == TYPE_ATTRIBUTE_SET || set == PRESENTATION_SET
 }
 
 /// A named semantic property.

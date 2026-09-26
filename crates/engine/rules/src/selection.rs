@@ -133,7 +133,7 @@ pub(crate) fn bound_property_request(
             // every source, so they bind to themselves.
             let property_set = set
                 .map(|set| {
-                    if axioval_ir::is_attribute_set(set) {
+                    if axioval_ir::is_reserved_set(set) {
                         Ok(set.to_owned())
                     } else {
                         bindings.property_set(set, source).map(ToOwned::to_owned)

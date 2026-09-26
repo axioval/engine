@@ -9,7 +9,7 @@ use axioval_engine::{
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
-    is_attribute_set,
+    is_reserved_set,
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
@@ -223,7 +223,7 @@ impl PropertyResolutionService for IfcPropertyService {
             return Err(PropertyResolutionError::InvalidRequest);
         }
         let object = Self::entity_id(request)?;
-        if let Some(set) = request.property_set().filter(|set| is_attribute_set(set)) {
+        if let Some(set) = request.property_set().filter(|set| is_reserved_set(set)) {
             return self.resolve_attribute(request, object, set);
         }
         match exact_property(

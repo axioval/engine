@@ -19,10 +19,13 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use axioval_engine::PropertyResolutionError;
-use axioval_ir::{ATTRIBUTE_SET, PropertyValue, TYPE_ATTRIBUTE_SET};
+use axioval_ir::{
+    ATTRIBUTE_SET, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, TYPE_ATTRIBUTE_SET,
+};
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
 
+use crate::layers::{self, LayerIndex};
 use crate::measure::si_value;
 use crate::release::Release;
 
@@ -39,6 +42,7 @@ type TypeIndex = BTreeMap<EntityId, Vec<(EntityId, EntityId)>>;
 pub(crate) struct Attributes {
     release: Release,
     types: OnceLock<Result<TypeIndex, String>>,
+    layers: OnceLock<Result<LayerIndex, String>>,
 }
 
 impl Attributes {
@@ -46,6 +50,7 @@ impl Attributes {
         Self {
             release,
             types: OnceLock::new(),
+            layers: OnceLock::new(),
         }
     }
 
@@ -65,6 +70,9 @@ impl Attributes {
                     detail: format!("attribute:{object}:{name}"),
                 })
             });
+        }
+        if set == PRESENTATION_SET {
+            return self.layer(model, object, name);
         }
         debug_assert_eq!(set, TYPE_ATTRIBUTE_SET);
         let types = self
@@ -91,6 +99,43 @@ impl Attributes {
                     .collect::<Vec<_>>()
                     .join(", ")
             ))),
+        }
+    }
+}
+
+impl Attributes {
+    /// The one presentation layer of `object`; several distinct ones conflict.
+    fn layer(
+        &self,
+        model: &Model,
+        object: EntityId,
+        name: &str,
+    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        if !name.eq_ignore_ascii_case(PRESENTATION_LAYER) {
+            return Ok(None);
+        }
+        let schema = self.release.schema;
+        let index = self
+            .layers
+            .get_or_init(|| layers::index(schema, model))
+            .as_ref()
+            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        let found = layers::layers_of(schema, model, index, object)
+            .map_err(PropertyResolutionError::Incomplete)?;
+        let mut found = found.into_iter();
+        match (found.next(), found.next()) {
+            (None, _) => Ok(None),
+            (Some((layer, assignment)), None) => Ok(Some(AttributeValue {
+                value: PropertyValue::String(layer),
+                detail: format!("layer:{object}:{assignment}"),
+            })),
+            (Some((first, _)), Some((second, _))) => {
+                Err(PropertyResolutionError::Conflicting(format!(
+                    "{object} is on {} layers ({first}, {second}{})",
+                    2 + found.len(),
+                    if found.len() > 0 { ", ..." } else { "" }
+                )))
+            }
         }
     }
 }

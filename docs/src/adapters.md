@@ -13,6 +13,15 @@ snapshot registered by the session; mismatched service composition is rejected.
 Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
 unsupported values fail closed.
 
+Exact absence covers what the resolver reads: `IfcPropertySet` members.
+Quantity sets (`IfcElementQuantity`) and predefined property sets
+(`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused
+as incomplete when the requested set is one of them, or, for a request that
+names no set, when one of them has a member of the requested name (a
+quantity, a nested quantity, or a predefined set's attribute). The index is
+built once per session over the whole file; it can make an answer not
+evaluated, never change a present value.
+
 Direct-property completeness does not imply relationship completeness. The IFC
 session registers an exact relationship-selection service: a relationship
 identity is the entity name, in the source's own release, of an objectified relationship type (for

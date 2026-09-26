@@ -100,29 +100,7 @@ fn applicable_objects(
         .count()
 }
 
-/// Drops `dataType` from value-less property requirements.
-///
-/// The probe the exact translation cannot run: without the type check the
-/// rule is weaker than IDS, so it may miss a failure but must never report
-/// one where IDS passes. That still tests presence semantics (null, empty,
-/// inherited from the type, quantities) against the corpus.
-fn relax(ids: &mut openbim_ids::Ids) {
-    for specification in &mut ids.specifications {
-        for requirement in specification
-            .requirements
-            .iter_mut()
-            .flat_map(|requirements| requirements.facets.iter_mut())
-        {
-            if let openbim_ids::Facet::Property(property) = &mut requirement.facet
-                && property.value.is_none()
-            {
-                property.data_type = None;
-            }
-        }
-    }
-}
-
-fn classify(case: &Path, relaxed: bool) -> Option<(Class, String)> {
+fn classify(case: &Path) -> Option<(Class, String)> {
     let stem = case.file_stem()?.to_str()?;
     let expected_pass = if stem.starts_with("pass-") {
         true
@@ -131,10 +109,7 @@ fn classify(case: &Path, relaxed: bool) -> Option<(Class, String)> {
     } else {
         return None;
     };
-    let mut ids = openbim_ids::from_slice(&std::fs::read(case).ok()?).expect("corpus IDS reads");
-    if relaxed {
-        relax(&mut ids);
-    }
+    let ids = openbim_ids::from_slice(&std::fs::read(case).ok()?).expect("corpus IDS reads");
     let options = Options {
         package_id: "ids:corpus".into(),
         version: "1.0.0".into(),
@@ -172,8 +147,6 @@ fn classify(case: &Path, relaxed: bool) -> Option<(Class, String)> {
         _ if !report.not_evaluated().is_empty() => Class::NotEvaluated,
         (true, false) if translation.is_complete() => Class::ExactPass,
         (true, false) => Class::SoundPass,
-        // A relaxed rule is weaker than IDS: a miss is expected, not a bug.
-        (false, false) if relaxed => Class::UnjudgedFail,
         (false, false) if translation.is_complete() => Class::Mismatch,
         (false, false) if only_existence(&translation) => {
             if applicable_objects(&translation, &session) == 0 {
@@ -187,10 +160,10 @@ fn classify(case: &Path, relaxed: bool) -> Option<(Class, String)> {
     Some((class, detail))
 }
 
-fn run(relaxed: bool) {
+fn run() {
     let mut classes: BTreeMap<Class, Vec<String>> = BTreeMap::new();
     for case in cases() {
-        if let Some((class, detail)) = classify(&case, relaxed) {
+        if let Some((class, detail)) = classify(&case) {
             let name = case.file_stem().unwrap().to_string_lossy().into_owned();
             classes
                 .entry(class)
@@ -224,11 +197,5 @@ fn run(relaxed: bool) {
 #[test]
 #[ignore = "needs a local buildingSMART IDS checkout in IDS_TEST_CASES"]
 fn corpus_translations_never_contradict_the_expected_verdict() {
-    run(false);
-}
-
-#[test]
-#[ignore = "needs a local buildingSMART IDS checkout in IDS_TEST_CASES"]
-fn corpus_presence_rules_without_type_checks_never_fail_a_passing_model() {
-    run(true);
+    run();
 }

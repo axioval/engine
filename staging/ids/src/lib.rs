@@ -58,6 +58,7 @@ pub const IFC4_TYPE_SYSTEM: &str = "https://identifier.buildingsmart.org/uri/bui
 const SCHEMA_VERSION: &str = "0.1.0";
 
 const PROPERTY_REQUIRED: &str = "axioval:capability.property-required";
+const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
 
 /// Identity of the packages written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,11 +223,11 @@ pub enum Reason {
     EntityCase(String),
     /// A value given as an `xs:restriction` where only literals translate.
     Restriction,
-    /// A required value. Comparing it the way IDS does needs the property's
-    /// IFC defined type, which resolved properties do not carry.
+    /// A required value, which no capability compares as IDS does yet.
     PropertyValue,
-    /// A `dataType`, which needs the property's IFC defined type.
-    DataType(String),
+    /// A `dataType` on an optional facet: the type binds only when the
+    /// property is present, which no capability checks.
+    OptionalDataType(String),
     /// A prohibited facet.
     Prohibited,
     /// An entity requirement naming a class other than the applicability's.
@@ -252,15 +253,18 @@ impl fmt::Display for Reason {
             Reason::FacetKind(kind) => write!(f, "no capability decides a {kind} facet"),
             Reason::PredefinedType => f.write_str("no capability decides a predefined type"),
             Reason::EntityCase(name) => {
-                write!(f, "entity name {name:?} is not upper case, which IDS never matches")
+                write!(
+                    f,
+                    "entity name {name:?} is not upper case, which IDS never matches"
+                )
             }
             Reason::Restriction => f.write_str("only simple values translate, not restrictions"),
-            Reason::PropertyValue => f.write_str(
-                "comparing a value as IDS does needs the property's IFC type, which evidence does not carry",
-            ),
-            Reason::DataType(data_type) => write!(
+            Reason::PropertyValue => {
+                f.write_str("no capability compares a property value as IDS does yet")
+            }
+            Reason::OptionalDataType(data_type) => write!(
                 f,
-                "dataType {data_type} needs the property's IFC type, which evidence does not carry"
+                "no capability checks dataType {data_type} only when an optional property is present"
             ),
             Reason::Prohibited => f.write_str("no capability decides a prohibited facet"),
             Reason::EntityRequirement => f.write_str(
@@ -445,8 +449,15 @@ impl<'o> Writer<'o> {
         selector: &Selector,
         releases: &[IfcVersion],
     ) -> RuleInstance {
-        let Check::PropertyRequired { set, name } = check;
-        let definition_id = self.property_required_definition();
+        let (set, name, data_type) = match check {
+            Check::PropertyRequired { set, name } => (set, name, None),
+            Check::PropertyDataType {
+                set,
+                name,
+                data_type,
+            } => (set, name, Some(data_type)),
+        };
+        let definition_id = self.property_definition(data_type.is_some());
         let property = self.property(&set, &name, releases);
         let property_set = self.property_set(&set, releases);
         let description = requirement
@@ -457,18 +468,15 @@ impl<'o> Writer<'o> {
         RuleInstance {
             id: format!("spec{number}.facet{facet}"),
             definition_id,
-            name: LocalizedText::plain(format!("{set}.{name} is required")),
+            name: LocalizedText::plain(match &data_type {
+                Some(data_type) => format!("{set}.{name} is a required {data_type}"),
+                None => format!("{set}.{name} is required"),
+            }),
             description,
             enabled: true,
             severity: Severity::Error,
             message: None,
-            parameters: BTreeMap::from([(
-                "property".to_owned(),
-                ParameterValue::PropertyReference {
-                    property,
-                    property_set: Some(property_set),
-                },
-            )]),
+            parameters: rule_parameters(property, property_set, data_type),
             applicability: RuleApplicability::Selector(selector.clone()),
             requirements: Vec::new(),
             citations: Vec::new(),
@@ -478,35 +486,45 @@ impl<'o> Writer<'o> {
         }
     }
 
-    fn property_required_definition(&mut self) -> String {
-        let id = format!("{}.property-required", self.options.package_id);
-        self.definitions
-            .entry(id.clone())
-            .or_insert_with(|| RuleDefinition {
+    /// The definition for a presence rule, typed or not, written once.
+    fn property_definition(&mut self, typed: bool) -> String {
+        let (suffix, name, description, capability) = if typed {
+            (
+                "property-data-type",
+                "Property is required with a data type",
+                "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
+                PROPERTY_DATA_TYPE,
+            )
+        } else {
+            (
+                "property-required",
+                "Property is required",
+                "An IDS property facet without a value: the property must exist with a non-empty value.",
+                PROPERTY_REQUIRED,
+            )
+        };
+        let id = format!("{}.{suffix}", self.options.package_id);
+        self.definitions.entry(id.clone()).or_insert_with(|| {
+            let mut parameters = BTreeMap::from([(
+                "property".to_owned(),
+                parameter("property", "Property", ParameterKind::PropertyReference),
+            )]);
+            if typed {
+                parameters.insert(
+                    "data_type".to_owned(),
+                    parameter("data_type", "Data type", ParameterKind::String),
+                );
+            }
+            RuleDefinition {
                 id: id.clone(),
-                name: LocalizedText::plain("Property is required"),
-                description: Some(LocalizedText::plain(
-                    "An IDS property facet without a value: the property must exist with a non-empty value.",
-                )),
-                capability: PROPERTY_REQUIRED.to_owned(),
-                parameters: BTreeMap::from([(
-                    "property".to_owned(),
-                    ParameterDefinition {
-                        id: "property".to_owned(),
-                        name: LocalizedText::plain("Property"),
-                        description: None,
-                        kind: ParameterKind::PropertyReference,
-                        referenced_value_kind: None,
-                        required: true,
-                        default_value: None,
-                        allowed_values: Vec::new(),
-                        unit_dimension: None,
-                        citations: Vec::new(),
-                    },
-                )]),
+                name: LocalizedText::plain(name),
+                description: Some(LocalizedText::plain(description)),
+                capability: capability.to_owned(),
+                parameters,
                 tags: vec!["ids".to_owned()],
                 citations: Vec::new(),
-            });
+            }
+        });
         id
     }
 
@@ -585,10 +603,50 @@ impl<'o> Writer<'o> {
     }
 }
 
+/// A required parameter without default or allowed values.
+fn parameter(id: &str, name: &str, kind: ParameterKind) -> ParameterDefinition {
+    ParameterDefinition {
+        id: id.to_owned(),
+        name: LocalizedText::plain(name),
+        description: None,
+        kind,
+        referenced_value_kind: None,
+        required: true,
+        default_value: None,
+        allowed_values: Vec::new(),
+        unit_dimension: None,
+        citations: Vec::new(),
+    }
+}
+
+fn rule_parameters(
+    property: String,
+    property_set: String,
+    data_type: Option<String>,
+) -> BTreeMap<String, ParameterValue> {
+    let mut parameters = BTreeMap::from([(
+        "property".to_owned(),
+        ParameterValue::PropertyReference {
+            property,
+            property_set: Some(property_set),
+        },
+    )]);
+    if let Some(value) = data_type {
+        parameters.insert("data_type".to_owned(), ParameterValue::String { value });
+    }
+    parameters
+}
+
 /// One exactly translatable requirement.
 enum Check {
     /// The property must exist with a non-empty value.
     PropertyRequired { set: String, name: String },
+    /// As `PropertyRequired`, and the source must declare `data_type`.
+    PropertyDataType {
+        set: String,
+        name: String,
+        data_type: String,
+    },
 }
 
 /// The supported releases, recording a gap for each unsupported one.
@@ -752,21 +810,22 @@ fn property_check(property: &Property, occurrence: Occurrence) -> Result<Option<
     else {
         return Err(Reason::Restriction);
     };
-    if let Some(data_type) = &property.data_type {
-        return Err(Reason::DataType(data_type.clone()));
-    }
     if property.value.is_some() {
         return Err(Reason::PropertyValue);
     }
-    match occurrence {
-        Occurrence::Required => Ok(Some(Check::PropertyRequired {
-            set: set.clone(),
-            name: name.clone(),
+    let (set, name) = (set.clone(), name.clone());
+    match (occurrence, &property.data_type) {
+        (Occurrence::Required, None) => Ok(Some(Check::PropertyRequired { set, name })),
+        (Occurrence::Required, Some(data_type)) => Ok(Some(Check::PropertyDataType {
+            set,
+            name,
+            data_type: data_type.clone(),
         })),
-        // Without a value, an optional property is satisfied whether or not
-        // it is there.
-        Occurrence::Optional => Ok(None),
-        Occurrence::Prohibited => Err(Reason::Prohibited),
+        // Without a value or type, an optional property is satisfied
+        // whether or not it is there.
+        (Occurrence::Optional, None) => Ok(None),
+        (Occurrence::Optional, Some(data_type)) => Err(Reason::OptionalDataType(data_type.clone())),
+        (Occurrence::Prohibited, _) => Err(Reason::Prohibited),
     }
 }
 

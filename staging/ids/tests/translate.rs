@@ -206,7 +206,7 @@ fn an_entity_enumeration_selects_any_of_its_classes() {
 #[test]
 fn requirement_gaps_leave_the_other_requirements_translated() {
     let requirements = [
-        property("P", "Typed", "dataType=\"IFCLABEL\""),
+        property("P", "Typed", "dataType=\"IFCLABEL\" cardinality=\"optional\""),
         "<property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>Valued</simpleValue></baseName><value><simpleValue>x</simpleValue></value></property>".to_owned(),
         property("P", "Banned", "cardinality=\"prohibited\""),
         property("P", "Maybe", "cardinality=\"optional\""),
@@ -222,7 +222,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     assert_eq!(
         reasons(&translation),
         [
-            (requirement(1), Reason::DataType("IFCLABEL".into())),
+            (requirement(1), Reason::OptionalDataType("IFCLABEL".into())),
             (requirement(2), Reason::PropertyValue),
             (requirement(3), Reason::Prohibited),
             (requirement(5), Reason::FacetKind("attribute")),
@@ -340,6 +340,73 @@ fn translated_rules_check_a_real_model() {
         .map(|finding| finding.object_id.local_id.as_str())
         .collect();
     assert_eq!(flagged, ["#2"]);
+}
+
+#[test]
+fn a_typed_presence_requirement_becomes_a_property_data_type_rule() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        WALL,
+        &property("Pset_WallCommon", "FireRating", "dataType=\"IFCLABEL\""),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let rule = &translation.ruleset.root.folders[0].rules[0];
+    assert_eq!(
+        translation.definitions.definitions[&rule.definition_id].capability,
+        "axioval:capability.property-data-type"
+    );
+    assert_eq!(
+        rule.parameters["data_type"],
+        axioval::ir::contract::ParameterValue::String {
+            value: "IFCLABEL".into()
+        }
+    );
+}
+
+#[test]
+fn typed_rules_check_the_declared_type_of_a_real_model() {
+    let flagged = |data_type: &str| {
+        let attributes = format!("dataType=\"{data_type}\"");
+        let translation = one(
+            "IFC4",
+            OPTIONAL,
+            WALL,
+            &property("Pset_WallCommon", "FireRating", &attributes),
+        );
+        let report = run(&translation, IFC4_MODEL);
+        assert!(
+            report.not_evaluated().is_empty(),
+            "{:?}",
+            report.not_evaluated()
+        );
+        report
+            .findings()
+            .iter()
+            .map(|finding| (finding.object_id.local_id.clone(), finding.message.clone()))
+            .collect::<Vec<_>>()
+    };
+    // #1 states an IFCLABEL; #2 has no FireRating at all.
+    assert_eq!(
+        flagged("IFCLABEL"),
+        [(
+            "#2".into(),
+            "missing required property ids:test.property-1".into()
+        )]
+    );
+    assert_eq!(
+        flagged("IFCTEXT"),
+        [
+            (
+                "#1".into(),
+                "property ids:test.property-1 is IFCLABEL, not IFCTEXT".into()
+            ),
+            (
+                "#2".into(),
+                "missing required property ids:test.property-1".into()
+            ),
+        ]
+    );
 }
 
 #[test]

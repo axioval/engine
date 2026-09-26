@@ -1,7 +1,8 @@
 # `staging/`
 
-Work that depends on **unpublished** Axiolid crates, kept deliberately outside
-the shipping workspace and outside every release.
+Work that depends on **unpublished** crates (Axiolid kernel crates, the
+`openbim-bcf` writer), kept deliberately outside the shipping workspace and
+outside every release.
 
 ## Why this exists
 
@@ -59,3 +60,11 @@ All four scenarios were verified to fail the gate before it was trusted.
 - `axiolid-routing/` — `MetricRoutingService` / `WalkabilityService` groundwork
   over `axiolid-route`. Proven working locally: 8.0000 m direct vs 8.2462 m
   around a barrier, with a visibility graph of 6 and 8 vertices.
+- `bcf/` — `axioval-bcf`, the BCF output sink: maps a `Report` over a
+  `Project` onto BCF 2.1 topics, selecting components by the `ifc-globalid`
+  alias. Depends only on `axioval-ir` and the `openbim-bcf` writer, which is
+  unpublished (openbimrs/bcf#1), and never on an adapter at runtime.
+  `check.sh` does not build staging crates and CI has no sibling checkout, so
+  run `cargo test` and `cargo clippy --all-targets` in `staging/bcf/` by hand.
+  When the writer is published, move it to `crates/sinks/bcf/` and give the
+  facade a `bcf` feature, following the steps above.

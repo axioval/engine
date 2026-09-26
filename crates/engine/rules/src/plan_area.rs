@@ -4,11 +4,13 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     PlanArea, PlanAreaError, PlanAreaServiceHandle, RuleCapability, RuleContext,
 };
-use axioval_ir::{Evidence, Object, ObjectId};
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
 use crate::counts::{Population, relation_text, tally};
 use crate::selection::select_objects;
-use crate::support::{Parameters, Unavailable, finding, invalid, traversal_parameters};
+use crate::support::{
+    Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve, traversal_parameters,
+};
 
 fn service<'a>(context: &RuleContext<'a>) -> Result<&'a PlanAreaServiceHandle, Unavailable> {
     context.services.get::<PlanAreaServiceHandle>().ok_or((
@@ -52,6 +54,43 @@ impl Sum {
         let mut sum = Self::default();
         for object in objects {
             sum.add(&service.measure_footprint(object).map_err(unavailable)?);
+        }
+        Ok(sum)
+    }
+
+    /// The summed areas of `objects`: stated by `property` when declared,
+    /// otherwise measured as plan footprints.
+    fn areas(
+        context: &RuleContext<'_>,
+        property: Option<PropertyRef<'_>>,
+        objects: &[ObjectId],
+    ) -> Result<Self, Unavailable> {
+        let Some(property) = property else {
+            return Self::footprints(service(context)?, objects);
+        };
+        let mut sum = Self::default();
+        for id in objects {
+            let object = context
+                .project
+                .object(id)
+                .ok_or_else(|| invalid(format!("{id} is not in the project")))?;
+            let resolved = resolve(context, object, property)?;
+            let Some(PropertyValue::Quantity {
+                value,
+                dimension: QuantityDimension::Area,
+            }) = resolved.value()
+            else {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "{id} states no area {property} ({})",
+                        display(resolved.value())
+                    ),
+                ));
+            };
+            sum.lower += value;
+            sum.upper += value;
+            sum.evidence.extend(resolved.evidence());
         }
         Ok(sum)
     }
@@ -106,6 +145,10 @@ fn judge(lower: f64, upper: f64, minimum: Option<f64>, maximum: Option<f64>) -> 
 /// required. Footprints are summed, so overlapping members count twice;
 /// select members that do not overlap, such as spaces.
 ///
+/// `numerator_property` or `denominator_property` takes that population's
+/// areas from an area-quantity property instead of geometry: a window's
+/// glazing area is not its plan footprint.
+///
 /// Areas are intervals, so the ratio is too. An anchor is judged only when
 /// the whole interval is on one side of a bound; one straddling it, an
 /// undecided member, or a zero denominator is not evaluated.
@@ -122,6 +165,8 @@ impl RuleCapability for AreaRatio {
             ParameterDescriptor::optional("denominator_selector", ParameterType::Selector),
             ParameterDescriptor::optional("minimum", ParameterType::Number),
             ParameterDescriptor::optional("maximum", ParameterType::Number),
+            ParameterDescriptor::optional("numerator_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("denominator_property", ParameterType::PropertyReference),
         ]
         .into_iter()
         .chain(traversal_parameters())
@@ -143,27 +188,29 @@ impl RuleCapability for AreaRatio {
             Ok::<_, Unavailable>((
                 parameters.required_selector("numerator_selector")?,
                 parameters.selector("denominator_selector")?,
+                parameters.property("numerator_property")?,
+                parameters.property("denominator_property")?,
                 minimum,
                 maximum,
                 parameters.traversal()?,
             ))
         })();
-        let (numerator, denominator, minimum, maximum, traversal) = match parsed {
-            Ok(parsed) => parsed,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("area-ratio: {message}"),
-                );
-            }
-        };
+        let (numerator, denominator, top_area, bottom_area, minimum, maximum, traversal) =
+            match parsed {
+                Ok(parsed) => parsed,
+                Err((reason, message)) => {
+                    return CapabilityEvaluation::not_evaluated(
+                        reason,
+                        format!("area-ratio: {message}"),
+                    );
+                }
+            };
         let numerator = Population::of(context, numerator);
         let denominator = denominator.map(|selector| Population::of(context, selector));
         let (anchors, mut evaluation) = select_objects(context, &rule.selector);
         let via = relation_text(traversal.as_ref());
         for anchor in anchors {
             let judged = (|| {
-                let service = service(context)?;
                 let over = tally(context, traversal.as_ref(), anchor, &numerator)?;
                 let under = match &denominator {
                     Some(population) => {
@@ -178,11 +225,11 @@ impl RuleCapability for AreaRatio {
                         format!("{undecided} related object(s) {via} cannot be assigned"),
                     ));
                 }
-                let mut top = Sum::footprints(service, &over.decided)?;
+                let mut top = Sum::areas(context, top_area, &over.decided)?;
                 top.evidence.extend(over.evidence);
                 let mut bottom = match &under {
-                    Some(under) => Sum::footprints(service, &under.decided)?,
-                    None => Sum::footprints(service, std::slice::from_ref(&anchor.id))?,
+                    Some(under) => Sum::areas(context, bottom_area, &under.decided)?,
+                    None => Sum::areas(context, bottom_area, std::slice::from_ref(&anchor.id))?,
                 };
                 if let Some(under) = under {
                     bottom.evidence.extend(under.evidence);

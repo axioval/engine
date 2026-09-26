@@ -14,6 +14,9 @@
 //! quantities included) and the attributes a predefined set declares. It is
 //! model-wide, not per object, so it can only turn an absence into "not
 //! evaluated", never hide a present value.
+//!
+//! A workaround until upstream resolves or refuses these definitions itself
+//! (openbimrs/ifc#66); remove it then.
 
 use std::collections::BTreeSet;
 

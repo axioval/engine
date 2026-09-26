@@ -50,11 +50,10 @@ impl RuleCapability for NameSequence {
             ParameterDescriptor::required("order", ParameterType::PropertyReference),
             ParameterDescriptor::optional("first", ParameterType::Integer),
             ParameterDescriptor::optional("increment", ParameterType::Integer),
-            ParameterDescriptor::optional("relationship", ParameterType::String),
-            ParameterDescriptor::optional("direction", ParameterType::String),
-            ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
-            ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::traversal_parameters())
+        .collect()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {

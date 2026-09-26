@@ -48,11 +48,10 @@ impl RuleCapability for ConsistentValue {
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
             ParameterDescriptor::optional("same_kind", ParameterType::Boolean),
             ParameterDescriptor::optional("across_sources", ParameterType::Boolean),
-            ParameterDescriptor::optional("relationship", ParameterType::String),
-            ParameterDescriptor::optional("direction", ParameterType::String),
-            ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
-            ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::traversal_parameters())
+        .collect()
     }
 
     #[allow(clippy::too_many_lines)]

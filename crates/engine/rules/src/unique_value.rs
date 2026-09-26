@@ -42,11 +42,10 @@ impl RuleCapability for UniqueValue {
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
             ParameterDescriptor::optional("require_value", ParameterType::Boolean),
             ParameterDescriptor::optional("across_sources", ParameterType::Boolean),
-            ParameterDescriptor::optional("relationship", ParameterType::String),
-            ParameterDescriptor::optional("direction", ParameterType::String),
-            ParameterDescriptor::optional("follow_chain", ParameterType::Boolean),
-            ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::traversal_parameters())
+        .collect()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {

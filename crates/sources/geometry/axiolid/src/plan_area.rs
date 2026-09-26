@@ -50,6 +50,20 @@ impl AxiolidPlanAreaService {
         &self,
         object: &ObjectId,
     ) -> Result<(Vec<crate::geometry::Triangle>, f64, f64, f64), PlanAreaError> {
+        // A declared bodiless object (a storey, a zone) covers nothing, exactly.
+        if self.geometry.has_no_body(object) {
+            return Ok((Vec::new(), 0.0, 0.0, 0.0));
+        }
+        // An unmeasured body exists with an unknown extent: never zero.
+        if let Some((_, reason)) = self
+            .geometry
+            .unmeasured()
+            .find(|(unmeasured, _)| *unmeasured == object)
+        {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{object} has a body that was not measured: {reason}"
+            )));
+        }
         let mesh = self
             .geometry
             .mesh(object)

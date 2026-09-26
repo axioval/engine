@@ -42,6 +42,19 @@ pub struct ResolvedAttribute {
     pub evidence: Evidence,
 }
 
+/// An object's predefined type: the designation that narrows its class,
+/// resolved the way its source defines it (for IFC: the type object's
+/// designation first, then the occurrence's, a user-defined one by its text).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedPredefinedType {
+    /// The designation, or `None` when the object states none.
+    pub value: Option<String>,
+    /// Whether the designation is user-defined rather than enumerated.
+    pub user_defined: bool,
+    /// Where it was read.
+    pub evidence: Evidence,
+}
+
 /// Failure to read an attribute conclusively.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum AttributeError {
@@ -75,6 +88,13 @@ pub trait AttributeService: Send + Sync {
     /// The attribute `name` of `object`, in the source's own vocabulary.
     fn attribute(&self, object: &ObjectId, name: &str)
     -> Result<ResolvedAttribute, AttributeError>;
+    /// The predefined type of `object`. Sources without the notion refuse.
+    fn predefined_type(&self, object: &ObjectId) -> Result<ResolvedPredefinedType, AttributeError> {
+        let _ = object;
+        Err(AttributeError::Unsupported(
+            "this source defines no predefined types".into(),
+        ))
+    }
 }
 
 /// Cloneable, type-erased attribute service registered by an adapter.
@@ -95,21 +115,44 @@ impl AttributeServiceHandle {
         object: &ObjectId,
         name: &str,
     ) -> Result<ResolvedAttribute, AttributeError> {
-        if !self
+        self.covers(object)?;
+        let resolved = self.0.attribute(object, name)?;
+        Self::check_evidence(object, &resolved.evidence)?;
+        Ok(resolved)
+    }
+
+    /// The predefined type of one object, with the same guards.
+    pub fn predefined_type(
+        &self,
+        object: &ObjectId,
+    ) -> Result<ResolvedPredefinedType, AttributeError> {
+        self.covers(object)?;
+        let resolved = self.0.predefined_type(object)?;
+        Self::check_evidence(object, &resolved.evidence)?;
+        Ok(resolved)
+    }
+
+    fn covers(&self, object: &ObjectId) -> Result<(), AttributeError> {
+        if self
             .0
             .source_snapshots()
             .iter()
             .any(|snapshot| *snapshot.source() == object.source)
         {
-            return Err(AttributeError::UncoveredSource(object.source.clone()));
+            Ok(())
+        } else {
+            Err(AttributeError::UncoveredSource(object.source.clone()))
         }
-        let resolved = self.0.attribute(object, name)?;
-        if resolved.evidence.source != object.source || !resolved.evidence.exact {
-            return Err(AttributeError::Unreadable(
+    }
+
+    fn check_evidence(object: &ObjectId, evidence: &Evidence) -> Result<(), AttributeError> {
+        if evidence.source == object.source && evidence.exact {
+            Ok(())
+        } else {
+            Err(AttributeError::Unreadable(
                 "attribute evidence is not exact evidence from the object's source".into(),
-            ));
+            ))
         }
-        Ok(resolved)
     }
 }
 

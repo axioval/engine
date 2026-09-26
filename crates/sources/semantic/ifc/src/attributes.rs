@@ -18,8 +18,11 @@
 
 use std::sync::Arc;
 
+use std::collections::BTreeMap;
+
 use axioval_engine::{
-    AttributeError, AttributeService, AttributeValue, ResolvedAttribute, SourceSnapshot,
+    AttributeError, AttributeService, AttributeValue, ResolvedAttribute, ResolvedPredefinedType,
+    SourceSnapshot,
 };
 use axioval_ir::{Evidence, ObjectId, PropertyValue};
 use ifc_model::{EntityId, Model, Value};
@@ -30,6 +33,8 @@ pub(crate) struct IfcAttributeService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
+    /// Type objects by occurrence, from every `IfcRelDefinesByType`.
+    types: BTreeMap<EntityId, Vec<EntityId>>,
 }
 
 impl IfcAttributeService {
@@ -38,11 +43,39 @@ impl IfcAttributeService {
         model: Arc<Model>,
         snapshots: Arc<[SourceSnapshot]>,
     ) -> Self {
+        let types = type_index(release, &model);
         Self {
             release,
             model,
             snapshots,
+            types,
         }
+    }
+
+    fn entity_id(object: &ObjectId) -> Result<EntityId, AttributeError> {
+        object
+            .local_id
+            .strip_prefix('#')
+            .and_then(|digits| digits.parse::<u64>().ok())
+            .map(EntityId)
+            .ok_or_else(|| AttributeError::UnknownObject(object.clone()))
+    }
+
+    /// The text of an enumeration or string attribute: `Err` when the class
+    /// has no such attribute, `Ok(None)` when it is unset.
+    fn designation(&self, id: EntityId, name: &str) -> Result<Option<String>, ()> {
+        let entity = self.model.get(id).ok_or(())?;
+        let slot = self
+            .release
+            .schema
+            .attribute_names(&entity.type_name)
+            .iter()
+            .position(|attribute| *attribute == name)
+            .ok_or(())?;
+        Ok(match entity.attribute(slot) {
+            Some(Value::Text(text) | Value::Enum(text)) => Some(text.to_string()),
+            _ => None,
+        })
     }
 
     fn scalar(&self, value: &Value, declared: &str) -> Result<AttributeValue, AttributeError> {
@@ -99,6 +132,76 @@ impl IfcAttributeService {
 impl AttributeService for IfcAttributeService {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &self.snapshots
+    }
+
+    /// Resolved as IDS reads it: the type object's designation first (its
+    /// `PredefinedType`, or its `ElementType`/`ProcessType` when that is
+    /// user-defined or unset) unless that is `NOTDEFINED` or empty, then the
+    /// occurrence's (its `PredefinedType`, or its `ObjectType` when that is
+    /// user-defined or unset).
+    fn predefined_type(&self, object: &ObjectId) -> Result<ResolvedPredefinedType, AttributeError> {
+        let id = Self::entity_id(object)?;
+        if self.model.get(id).is_none() {
+            return Err(AttributeError::UnknownObject(object.clone()));
+        }
+        let own = |name| self.designation(id, name).ok().flatten();
+        let type_object = match self.types.get(&id).map(Vec::as_slice) {
+            None | Some([]) => None,
+            Some([single]) => Some(*single),
+            Some(_) => {
+                return Err(AttributeError::Unreadable(format!(
+                    "#{} is typed by more than one type object",
+                    id.0
+                )));
+            }
+        };
+        let mut value = None;
+        let mut user_defined = None;
+        if let Some(type_id) = type_object {
+            let declared = self.designation(type_id, "PredefinedType").ok().flatten();
+            let custom = || match self.designation(type_id, "ElementType") {
+                Ok(text) => text,
+                Err(()) => self.designation(type_id, "ProcessType").ok().flatten(),
+            };
+            let (designation, custom_used) = match declared.as_deref() {
+                Some("USERDEFINED") => (custom(), true),
+                None => {
+                    let text = custom();
+                    let used = text.as_deref().is_some_and(|text| !text.is_empty());
+                    (text, used)
+                }
+                Some(_) => (declared.clone(), false),
+            };
+            if declared.as_deref() == Some("USERDEFINED") || custom_used {
+                user_defined = Some(true);
+            }
+            if let Some(designation) = designation.filter(|d| !d.is_empty() && d != "NOTDEFINED") {
+                value = Some(designation);
+                user_defined.get_or_insert(false);
+            }
+        }
+        if value.is_none() {
+            let declared = own("PredefinedType");
+            value = match declared.as_deref() {
+                Some("USERDEFINED") | None => own("ObjectType"),
+                Some(_) => declared.clone(),
+            };
+            if user_defined.is_none() {
+                user_defined = Some(match declared.as_deref() {
+                    Some("USERDEFINED") => true,
+                    None => own("ObjectType").is_some_and(|text| !text.is_empty()),
+                    Some(_) => false,
+                });
+            }
+        }
+        Ok(ResolvedPredefinedType {
+            value,
+            user_defined: user_defined.unwrap_or(false),
+            evidence: Evidence::exact(
+                self.snapshots[0].source().clone(),
+                self.locator(format_args!("predefined-type:#{}", id.0)),
+            ),
+        })
     }
 
     fn attribute(
@@ -163,4 +266,37 @@ impl AttributeService for IfcAttributeService {
 
 fn unit(declared: &str) -> AttributeError {
     AttributeError::Unsupported(format!("{declared} is a measure; its unit is not read"))
+}
+
+/// Type objects of every occurrence named by an `IfcRelDefinesByType`.
+fn type_index(release: Release, model: &Model) -> BTreeMap<EntityId, Vec<EntityId>> {
+    let schema = release.schema;
+    let names = schema.attribute_names("IfcRelDefinesByType");
+    let slot = |wanted: &str| names.iter().position(|name| *name == wanted);
+    let (Some(objects), Some(relating)) = (slot("RelatedObjects"), slot("RelatingType")) else {
+        return BTreeMap::new();
+    };
+    let mut index: BTreeMap<EntityId, Vec<EntityId>> = BTreeMap::new();
+    for (_, relationship) in model.iter() {
+        if !relationship
+            .type_name
+            .eq_ignore_ascii_case("IFCRELDEFINESBYTYPE")
+        {
+            continue;
+        }
+        let Some(Value::Ref(type_id)) = relationship.attribute(relating) else {
+            continue;
+        };
+        if let Some(Value::List(related)) = relationship.attribute(objects) {
+            for item in related {
+                if let Value::Ref(occurrence) = item {
+                    let types = index.entry(*occurrence).or_default();
+                    if !types.contains(type_id) {
+                        types.push(*type_id);
+                    }
+                }
+            }
+        }
+    }
+    index
 }

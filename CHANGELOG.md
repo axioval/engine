@@ -34,6 +34,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   session registers one for IFC2X3 and IFC4. The capability
   `axioval:capability.attribute-value` requires an attribute to hold a value
   and, optionally, to meet the constraints of `property-value`.
+- **Predefined types.** `AttributeServiceHandle::predefined_type` resolves an
+  object's predefined type; the IFC session follows IDS (type object first,
+  user-defined designations by their text). The capability
+  `axioval:capability.predefined-type` checks it against values, patterns or
+  "user-defined".
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.

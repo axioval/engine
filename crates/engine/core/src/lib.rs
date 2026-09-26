@@ -361,6 +361,7 @@ mod topology;
 mod walkability;
 pub use attributes::{
     AttributeError, AttributeService, AttributeServiceHandle, AttributeValue, ResolvedAttribute,
+    ResolvedPredefinedType,
 };
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,

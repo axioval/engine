@@ -13,6 +13,7 @@ mod free_floor_rectangle;
 mod guard_diagnosis;
 mod horizontal_guard;
 mod pairs;
+mod predefined_type;
 mod property_comparison;
 mod property_rules;
 mod property_value;
@@ -34,6 +35,7 @@ pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
+pub use predefined_type::PredefinedTypeRequirement;
 pub use property_comparison::PropertyComparison;
 pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyPredicate, PropertyRequired,
@@ -55,6 +57,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PropertyDataType))
         .and_then(|registry| registry.register(PropertyValueConstraint))
         .and_then(|registry| registry.register(AttributeValueConstraint))
+        .and_then(|registry| registry.register(PredefinedTypeRequirement))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))

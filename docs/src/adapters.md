@@ -27,6 +27,11 @@ empty aggregate and a logical `.U.` are unset; text, enumeration items (as their
 and integers are scalars with their declared type; references and non-empty aggregates are
 structured. Measures that need a unit, derived (`*`) and binary values are refused.
 
+Its predefined type resolves as IDS reads it: the type object's designation first (its
+`PredefinedType`, or `ElementType`/`ProcessType` when that is user-defined or unset) unless it is
+`NOTDEFINED` or empty, then the occurrence's (`PredefinedType`, or `ObjectType` when user-defined
+or unset). An occurrence typed by two type objects is refused.
+
 Exact absence covers what the resolver reads: `IfcPropertySet` members.
 Quantity sets (`IfcElementQuantity`) and predefined property sets
 (`IfcDoorLiningProperties` and its kin) are not read, so an absence is refused

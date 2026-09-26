@@ -3,7 +3,7 @@
 //! Shared by every service in this crate: the store maps a source-qualified
 //! object to its mesh and knows nothing about what will be measured from it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axiolid_core::Point3;
 use axiolid_mesh::{TriMesh, TriangleMeshView};
@@ -14,22 +14,68 @@ use axioval_ir::ObjectId;
 ///
 /// Holding meshes by `ObjectId` is what keeps this adapter source-neutral:
 /// the host decides how its native elements map onto identities.
+///
+/// Besides a mesh, the host can state two facts about an object. It has **no
+/// body** ([`Self::with_no_body`]): a storey or a zone occupies no volume, so
+/// it obstructs nothing. Or its body is **unmeasured**
+/// ([`Self::with_unmeasured`]): it exists but could not be meshed. The two
+/// must not be confused. Treating an unmeasured slab as bodiless would let a
+/// wall above it look unsupported, or a room look free where it is not, and
+/// still report the result as exact. Services therefore refuse whenever an
+/// unmeasured object could have changed their answer.
 #[derive(Clone, Debug, Default)]
 pub struct AxiolidGeometry {
     meshes: BTreeMap<ObjectId, TriMesh>,
     doorways: BTreeMap<ObjectId, usize>,
     chord_deviations: BTreeMap<ObjectId, f64>,
+    bodiless: BTreeSet<ObjectId>,
+    unmeasured: BTreeMap<ObjectId, String>,
 }
 
 impl AxiolidGeometry {
     /// Creates an empty geometry set.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            meshes: BTreeMap::new(),
-            doorways: BTreeMap::new(),
-            chord_deviations: BTreeMap::new(),
-        }
+        Self::default()
+    }
+
+    /// Declares that an object occupies no volume, e.g. a storey or a zone.
+    ///
+    /// Services skip it where they would otherwise need its mesh, such as
+    /// when every other object is a candidate obstacle.
+    #[must_use]
+    pub fn with_no_body(mut self, object: ObjectId) -> Self {
+        self.bodiless.insert(object);
+        self
+    }
+
+    /// Declares that an object has a body this host could not mesh.
+    ///
+    /// Its extent is unknown, so any measurement it could affect is refused
+    /// rather than taken as if the object were not there.
+    #[must_use]
+    pub fn with_unmeasured(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
+        self.unmeasured.insert(object, reason.into());
+        self
+    }
+
+    /// Whether the host declared the object bodiless.
+    #[must_use]
+    pub fn has_no_body(&self, object: &ObjectId) -> bool {
+        self.bodiless.contains(object)
+    }
+
+    /// Whether the host declared the object's body unmeasured.
+    #[must_use]
+    pub fn is_unmeasured(&self, object: &ObjectId) -> bool {
+        self.unmeasured.contains_key(object)
+    }
+
+    /// Every object whose body could not be measured, with the host's reason.
+    pub fn unmeasured(&self) -> impl Iterator<Item = (&ObjectId, &str)> {
+        self.unmeasured
+            .iter()
+            .map(|(object, reason)| (object, reason.as_str()))
     }
 
     /// Registers one object's mesh, asserting every face is planar so the

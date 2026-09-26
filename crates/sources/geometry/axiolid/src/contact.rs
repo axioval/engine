@@ -119,6 +119,12 @@ impl ContactService for AxiolidContactService {
         if self.geometry.is_tessellated(request.subject()) {
             return Err(ContactError::InexactEvidence);
         }
+        // Counterparts are the measured objects. One whose body could not be
+        // measured may be exactly what the subject rests on, and its extent is
+        // unknown, so no answer about counterparts is complete.
+        if self.geometry.unmeasured().next().is_some() {
+            return Err(ContactError::Unavailable);
+        }
         let tolerance =
             axiolid_core::Tolerance::new(AUDIT_LINEAR_TOLERANCE, AUDIT_ANGULAR_TOLERANCE)
                 .map_err(|_| ContactError::Unavailable)?;

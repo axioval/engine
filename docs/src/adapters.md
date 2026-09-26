@@ -108,6 +108,16 @@ are warnings: the object stays checkable and only loses its alias.
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.
 
+A host states one of three things about each object: its mesh (`with_mesh`, or
+`with_tessellated_mesh` for curved parts), that it has **no body**
+(`with_no_body`, e.g. a storey or zone), or that its body is **unmeasured**
+(`with_unmeasured`: it exists but could not be meshed). The last two differ on
+purpose. A bodiless object is skipped wherever every other object is a
+candidate obstacle. An unmeasured one has an unknown extent, so contact and
+space measurements refuse while one exists that could affect them, and
+free-space checks refuse it as an obstacle. Treating an unmeasured slab as
+absent would make a wall above it look unsupported, exactly.
+
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 
 ## ICDD

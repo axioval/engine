@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Bodiless and unmeasured objects.** `AxiolidGeometry::with_no_body` and
+  `with_unmeasured` let a host say that an object occupies no volume, or that
+  its body exists but could not be meshed. Free-space checks skip bodiless
+  candidates instead of refusing them. Contact and space measurements refuse
+  while an unmeasured object could change them, where they previously
+  measured as if it were not there.
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.

@@ -433,3 +433,28 @@ fn closed_coincident_spaces_are_duplicates() {
         vec![id("copy")]
     );
 }
+
+/// A declared slab that could not be measured would silently drop out of
+/// every scan, so every space measurement refuses instead.
+#[test]
+fn an_unmeasured_declared_object_makes_space_measurements_unavailable() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.7))
+        .with_unmeasured(id("slab"), "unsupported representation");
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_slab(id("slab"));
+    assert_eq!(
+        service
+            .measure_clear_height(&id("space"))
+            .map(|m| m.metres()),
+        Err(SpaceError::Unavailable)
+    );
+    assert!(service.measure_storey_residuals().is_err());
+    // An unmeasured object with no role or storey does not concern spaces.
+    let unrelated = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.7))
+        .with_unmeasured(id("railing"), "unsupported representation");
+    let service = AxiolidSpaceService::new(unrelated, source()).with_space(id("space"));
+    assert!(service.measure_clear_height(&id("space")).is_ok());
+}

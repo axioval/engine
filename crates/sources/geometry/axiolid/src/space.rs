@@ -114,6 +114,21 @@ impl AxiolidSpaceService {
         self
     }
 
+    /// Refuses while a declared space, slab, roof or storey member could
+    /// not be measured: every measurement here scans those objects, and one
+    /// missing would change clear heights, overlaps, coverage or residuals.
+    fn complete(&self) -> Result<(), SpaceError> {
+        if self
+            .roles
+            .keys()
+            .chain(self.storeys.keys())
+            .any(|object| self.geometry.is_unmeasured(object))
+        {
+            return Err(SpaceError::Unavailable);
+        }
+        Ok(())
+    }
+
     fn role(&self, object: &ObjectId) -> Option<Role> {
         self.roles.get(object).copied()
     }
@@ -237,6 +252,7 @@ fn containment(subject_area: f64, other_area: f64, shared: f64) -> Containment {
 
 impl SpaceService for AxiolidSpaceService {
     fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError> {
+        self.complete()?;
         let subject = self.triangles_of(space)?;
         self.require_exact(space, 0.0, false, |candidate| self.is_space(candidate))?;
         let tolerance = tolerance()?;
@@ -271,6 +287,7 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
+        self.complete()?;
         let subject = self.triangles_of(space)?;
         self.require_exact(space, 0.0, false, |_| false)?;
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
@@ -281,6 +298,7 @@ impl SpaceService for AxiolidSpaceService {
         &self,
         space: &ObjectId,
     ) -> Result<Vec<axioval_engine::BoundaryGap>, SpaceError> {
+        self.complete()?;
         let subject = self.triangles_of(space)?;
         // Any footprint touching the boundary in plan may cover it.
         self.require_exact(space, 0.0, true, |_| true)?;
@@ -332,6 +350,7 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_overlaps(&self, space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError> {
+        self.complete()?;
         let subject = self.triangles_of(space)?;
         self.require_exact(space, 0.0, false, |_| true)?;
         let tolerance = tolerance()?;
@@ -369,6 +388,7 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_cap_coverage(&self, space: &ObjectId, cap: Cap) -> Result<CapCoverage, SpaceError> {
+        self.complete()?;
         let subject = self.triangles_of(space)?;
         self.require_exact(space, CAP_PLANE_TOLERANCE_M, false, |candidate| {
             matches!(self.role(candidate), Some(Role::Slab | Role::Roof))
@@ -459,6 +479,7 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_storey_residuals(&self) -> Result<Vec<StoreyResidual>, SpaceError> {
+        self.complete()?;
         let tolerance = tolerance()?;
         // Residuals sum every storey-assigned body, so any tessellated one
         // makes them estimates.
@@ -513,6 +534,7 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
+        self.complete()?;
         let mut slabs = 0usize;
         let mut roofs = 0usize;
         for role in self.roles.values() {

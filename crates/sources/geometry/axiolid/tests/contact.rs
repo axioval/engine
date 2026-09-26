@@ -249,3 +249,18 @@ fn an_overlap_below_the_minimum_polygon_area_is_discarded() {
     );
     assert!(measured.touching().is_empty(), "nothing bears on the slab");
 }
+
+/// An object whose body could not be measured may be exactly what the
+/// subject rests on, so no contact answer is complete while one exists.
+#[test]
+fn an_unmeasured_object_makes_contact_unavailable() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), quad(0.0, 2.0))
+        .with_mesh(id("wall"), quad(0.005, 2.0))
+        .with_unmeasured(id("beam"), "unsupported representation");
+    let service = AxiolidContactService::new(geometry, source());
+    assert_eq!(
+        service.measure_contact(&request("slab", ContactSide::Above)),
+        Err(ContactError::Unavailable)
+    );
+}

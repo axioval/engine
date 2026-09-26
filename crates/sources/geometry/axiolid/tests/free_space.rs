@@ -259,3 +259,37 @@ fn closed_bodies_keep_their_footprint() {
         evidence.available_area().upper_square_metres()
     );
 }
+
+/// A storey or zone names no volume; declaring it bodiless lets a clearance
+/// be assessed around it, where an undeclared one refuses (above).
+#[test]
+fn a_bodiless_candidate_is_no_obstacle() {
+    let geometry = AxiolidGeometry::new().with_no_body(id("storey"));
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let request = ClearanceRequest::new(
+        frame_at(1.0, 1.0, 0.0),
+        box_shape(0.8, 0.8, 2.0),
+        vec![id("storey")],
+    );
+    assert!(
+        service.assess_clearance(&request).is_ok(),
+        "a bodiless candidate obstructs nothing"
+    );
+}
+
+/// An unmeasured obstacle is not bodiless: it still refuses.
+#[test]
+fn an_unmeasured_obstacle_still_refuses() {
+    let geometry =
+        AxiolidGeometry::new().with_unmeasured(id("column"), "unsupported representation");
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let request = ClearanceRequest::new(
+        frame_at(1.0, 1.0, 0.0),
+        box_shape(0.8, 0.8, 2.0),
+        vec![id("column")],
+    );
+    assert!(matches!(
+        service.assess_clearance(&request),
+        Err(FreeSpaceError::MissingGeometry(_))
+    ));
+}

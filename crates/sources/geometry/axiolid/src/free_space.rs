@@ -156,6 +156,9 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
 
         let mut blockers = Vec::new();
         for obstacle in request.obstacles() {
+            if self.geometry.has_no_body(obstacle) {
+                continue;
+            }
             // A named obstacle without geometry cannot be shown to be clear of
             // the volume, and `Clear` asserts that nothing obstructs it.
             let mesh = self
@@ -265,6 +268,9 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         // subtract their shared area twice and understate what is free.
         let mut obstacle_polygons = Vec::new();
         for obstacle in request.obstacles() {
+            if self.geometry.has_no_body(obstacle) {
+                continue;
+            }
             let mesh = self
                 .geometry
                 .mesh(obstacle)

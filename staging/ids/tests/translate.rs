@@ -202,10 +202,6 @@ fn a_required_specification_fails_a_model_without_applicable_objects() {
 fn an_untranslatable_applicability_skips_the_whole_specification() {
     for (applicability, reason) in [
         (
-            "<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SHEAR</simpleValue></predefinedType></entity>".to_owned(),
-            Reason::PredefinedType,
-        ),
-        (
             "<entity><name><simpleValue>IfcWall</simpleValue></name></entity>".to_owned(),
             Reason::EntityCase("IfcWall".into()),
         ),
@@ -213,9 +209,11 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             "<entity><name><xs:restriction base=\"xs:string\"><xs:pattern value=\"IFC.*\"/></xs:restriction></name></entity>".to_owned(),
             Reason::Restriction,
         ),
+        // Without an entity, IDS also applies to type objects.
+        ("<material/>".to_owned(), Reason::WithoutEntity),
         (
-            format!("{WALL}<material/>"),
-            Reason::FacetKind("material"),
+            format!("{WALL}<property><propertySet><xs:restriction base=\"xs:string\"><xs:pattern value=\"Pset_.*\"/></xs:restriction></propertySet><baseName><simpleValue>N</simpleValue></baseName></property>"),
+            Reason::Restriction,
         ),
     ] {
         let translation = one("IFC4", OPTIONAL, &applicability, &property("P", "N", ""));
@@ -229,6 +227,63 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             outcome.gaps
         );
     }
+}
+
+#[test]
+fn applicability_facets_become_meets_conditions() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &format!(
+            "<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SHEAR</simpleValue></predefinedType></entity>{}<material/>",
+            property("Pset_WallCommon", "FireRating", "")
+        ),
+        &property("P", "N", ""),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let rule = &translation.ruleset.root.folders[0].rules[0];
+    let RuleApplicability::Selector(Selector::AllOf { operands }) = &rule.applicability else {
+        panic!("{:?}", rule.applicability)
+    };
+    let capabilities: Vec<&str> = operands
+        .iter()
+        .filter_map(|operand| match operand {
+            Selector::Meets { capability, .. } => Some(capability.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(matches!(operands[0], Selector::EntityType { .. }));
+    assert_eq!(
+        capabilities,
+        [
+            "axioval:capability.predefined-type",
+            "axioval:capability.property-required",
+            "axioval:capability.material"
+        ]
+    );
+}
+
+#[test]
+fn applicability_conditions_select_on_a_real_model() {
+    // Only walls stating FireRating are applicable: #1. It has no IsExternal.
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &format!("{WALL}{}", property("Pset_WallCommon", "FireRating", "")),
+        &property("Pset_WallCommon", "IsExternal", ""),
+    );
+    let report = run(&translation, IFC4_MODEL);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let flagged: Vec<&str> = report
+        .findings()
+        .iter()
+        .map(|finding| finding.object_id.local_id.as_str())
+        .collect();
+    assert_eq!(flagged, ["#1"]);
 }
 
 #[test]

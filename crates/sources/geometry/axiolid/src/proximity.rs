@@ -18,9 +18,9 @@
 //!   edges cross both wall faces and the midpoint between the crossings lies
 //!   half a wall deep. The deepest witness is a lower bound on the true depth.
 //!
-//! Winding numbers need an inside, so penetration and containment are measured
-//! only between closed two-manifold meshes. An open surface reports `None`
-//! rather than a depth of zero.
+//! Winding numbers need an inside, so points are only tested against a closed
+//! two-manifold mesh. A surface reaching into a solid is measured; two open
+//! surfaces share no volume and report `None` rather than a depth of zero.
 
 use axiolid_core::{Point3, Ray3, Tolerance};
 use axiolid_measure::{WindingMesh, closest_point_on_triangle, closest_points_on_triangles};
@@ -251,6 +251,51 @@ fn contained(inner: &Body<'_>, outer: &Body<'_>) -> Result<bool, ProximityError>
     inside(&winding, inner.triangles[0][0])
 }
 
+/// Witnessed penetration and containment between two bodies.
+///
+/// Only a closed body has an inside, so only points reaching into a closed
+/// body are tested. That is still complete when the other body is an open
+/// surface: a surface has no volume for anything to reach into, so the
+/// surface entering the solid is the whole of their overlap. Two open
+/// surfaces share no volume to measure, and report `None`.
+fn penetration(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    separation: f64,
+) -> Result<(Option<f64>, Option<BodyContainment>), ProximityError> {
+    if !subject.solid && !counterpart.solid {
+        return Ok((None, None));
+    }
+    if separation > 0.0 {
+        // Apart at the surface: one body is wholly inside the other or they
+        // share nothing. Only a closed body can hold the other.
+        if counterpart.solid && contained(subject, counterpart)? {
+            return Ok((
+                Some(deepest_inside(subject, counterpart)?),
+                Some(BodyContainment::SubjectInsideCounterpart),
+            ));
+        }
+        if subject.solid && contained(counterpart, subject)? {
+            return Ok((
+                Some(deepest_inside(counterpart, subject)?),
+                Some(BodyContainment::CounterpartInsideSubject),
+            ));
+        }
+        return Ok((Some(0.0), None));
+    }
+    let into_counterpart = if counterpart.solid {
+        deepest_inside(subject, counterpart)?
+    } else {
+        0.0
+    };
+    let into_subject = if subject.solid {
+        deepest_inside(counterpart, subject)?
+    } else {
+        0.0
+    };
+    Ok((Some(into_counterpart.max(into_subject)), None))
+}
+
 impl ProximityService for AxiolidProximityService {
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.body(object)?;
@@ -273,27 +318,7 @@ impl ProximityService for AxiolidProximityService {
             plan_overlap_area(&subject.triangles, &counterpart.triangles, tolerance()?)
                 .ok_or(ProximityError::Unavailable)?;
 
-        let (penetration, containment) = if !(subject.solid && counterpart.solid) {
-            (None, None)
-        } else if separation > 0.0 {
-            if contained(&subject, &counterpart)? {
-                (
-                    Some(deepest_inside(&subject, &counterpart)?),
-                    Some(BodyContainment::SubjectInsideCounterpart),
-                )
-            } else if contained(&counterpart, &subject)? {
-                (
-                    Some(deepest_inside(&counterpart, &subject)?),
-                    Some(BodyContainment::CounterpartInsideSubject),
-                )
-            } else {
-                (Some(0.0), None)
-            }
-        } else {
-            let depth = deepest_inside(&subject, &counterpart)?
-                .max(deepest_inside(&counterpart, &subject)?);
-            (Some(depth), None)
-        };
+        let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
 
         ProximityEvidence::try_new(
             request.clone(),

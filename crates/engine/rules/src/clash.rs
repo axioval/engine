@@ -11,9 +11,9 @@
 //! - A **clearance clash** is two bodies coming closer than the declared
 //!   clearance without a hard clash.
 //!
-//! When a body is an open surface there is no inside to measure, so surfaces
-//! that meet cannot be classified: the pair is reported not evaluated rather
-//! than passed. Measurements on tessellated geometry are reported, and marked
+//! When neither body is a closed solid there is no inside to measure, so
+//! surfaces that meet cannot be classified: the pair is reported not
+//! evaluated rather than passed. Measurements on tessellated geometry are reported, and marked
 //! approximate in both the message and the evidence.
 
 use axioval_engine::{
@@ -117,7 +117,7 @@ impl RuleCapability for Clash {
                             subject.clone(),
                             NotEvaluatedReason::IncompleteEvidence,
                             format!(
-                                "surfaces meet {counterpart}, but an open surface has no inside to tell touching from penetrating"
+                                "surfaces meet {counterpart}, but neither body is a closed solid, so touching cannot be told from crossing"
                             ),
                         );
                         continue;

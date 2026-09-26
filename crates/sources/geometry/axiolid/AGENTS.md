@@ -38,7 +38,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the oriented footprint overlay in `planar.rs`, and penetration witnessed by
   sampling points (including midpoints between an edge's crossings of the
   other surface, via `axiolid-ray-mesh`) against winding numbers. Only closed
-  two-manifold meshes have an inside; open ones report no penetration.
+  two-manifold meshes have an inside; a pair with one is measured, two open
+  surfaces report no penetration.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`; only this
   service honours it so far.
 - `projected_polygons` winds every projected triangle counter-clockwise. A

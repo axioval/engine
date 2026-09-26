@@ -18,6 +18,6 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `walkability.rs` owns complete source-neutral walkable-region snapshots and deterministic three-valued width-constrained routes. Derived region IDs are evidence-local, not model objects. Reject unrequested object mappings, relation-only portals, duplicate passages, incomplete coverage, and backend geometry types.
 
-`proximity.rs` owns pairwise proximity contracts: extents with geometry fidelity, and separation, plan overlap, witnessed penetration and containment per pair. Evidence exactness must equal fidelity; a tessellation is never exact. Penetration is a lower bound and `None` without a closed solid, never zero by default. No clash verdict crosses this seam.
+`proximity.rs` owns pairwise proximity contracts: extents with geometry fidelity, and separation, plan overlap, witnessed penetration and containment per pair. Evidence exactness must equal fidelity; a tessellation is never exact. Penetration is a lower bound and `None` only when neither body is a closed solid, never zero by default. No clash verdict crosses this seam.
 
 `pairwise.rs` owns the broad-phase candidate search. It must stay complete: discard only by the gap between enclosing boxes (mesh extent grown by chord deviation), and keep it proven against the exhaustive search in its tests.

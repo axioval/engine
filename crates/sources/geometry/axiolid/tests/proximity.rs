@@ -227,14 +227,49 @@ fn bounds_carry_fidelity() {
     assert!(column.enclosing().max()[0] >= 0.2);
 }
 
-/// An open surface has no inside, so whether it penetrates is unknown -- not
-/// zero.
+/// A sheet crossing a wall is measured against the wall's inside: a surface
+/// has no volume, so the sheet entering the wall is the whole overlap.
 #[test]
-fn an_open_surface_has_no_penetration_measurement() {
+fn an_open_surface_crossing_a_solid_penetrates_it() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("wall"), wall())
         .with_mesh(id("sheet"), quad(1.0));
     let measured = measure(geometry, "sheet", "wall");
+    assert!(measured.separation_metres().abs() < f64::EPSILON);
+    let depth = measured.penetration_metres().expect("the wall is closed");
+    assert!((depth - 0.1).abs() < 1e-9, "depth {depth}");
+}
+
+#[test]
+fn an_open_surface_lying_on_a_solid_touches_it() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_mesh(id("membrane"), quad(3.0));
+    let measured = measure(geometry, "membrane", "wall");
+    assert!(measured.separation_metres().abs() < f64::EPSILON);
+    assert_eq!(measured.penetration_metres(), Some(0.0));
+}
+
+#[test]
+fn an_open_surface_inside_a_solid_is_contained() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([-1.0, -1.0, 0.0], [2.0, 2.0, 3.0]))
+        .with_mesh(id("sheet"), quad(1.0));
+    let measured = measure(geometry, "room", "sheet");
+    assert_eq!(
+        measured.containment(),
+        Some(BodyContainment::CounterpartInsideSubject)
+    );
+}
+
+/// Two surfaces share no volume. Whether meeting sheets touch or cross is not
+/// a penetration depth, so none is reported -- not zero.
+#[test]
+fn two_open_surfaces_have_no_penetration_measurement() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), quad(1.0))
+        .with_mesh(id("b"), quad(1.0));
+    let measured = measure(geometry, "a", "b");
     assert!(measured.separation_metres().abs() < f64::EPSILON);
     assert_eq!(measured.penetration_metres(), None);
 }

@@ -44,8 +44,10 @@ explicit in the contract:
 - **Zero separation is ambiguous.** A slab resting on a wall and a pipe
   through it both have surfaces that meet. Penetration tells them apart. It is
   the depth of the deepest point the adapter found inside the other body: a
-  lower bound on the true depth, never an overestimate. An open surface has no
-  inside, so it reports `None` rather than zero.
+  lower bound on the true depth, never an overestimate. Only a closed solid
+  has an inside. A sheet entering a wall is measured against the wall, since a
+  surface has no volume of its own. Two open surfaces report `None` rather
+  than zero.
 - **Tessellation is approximate.** A mesh registered as a tessellation of
   curved faces carries a chord deviation. The evidence for a pair combines the
   deviations of both bodies, sets `Evidence::exact` to `false`, and offers
@@ -70,8 +72,8 @@ primitives:
   no vertex inside the wall, but the midpoint of each long edge's crossings
   lies half a wall deep. An exact duplicate is found through its centre.
 
-Penetration and containment are measured only between closed two-manifold
-meshes. Hosts declare curved parts with
+Points are tested only against closed two-manifold meshes. A pair needs at
+least one of them to report a penetration. Hosts declare curved parts with
 `AxiolidGeometry::with_tessellated_mesh(object, mesh, chord_deviation_metres)`.
 A mesh registered with `with_mesh` asserts planar faces.
 

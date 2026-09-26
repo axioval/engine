@@ -28,7 +28,9 @@ All notable changes are documented here. This project follows Semantic Versionin
   phase drops is proven farther apart than the margin, tessellation deviation
   included. `AxiolidProximityService` measures separation with
   `closest_points_on_triangles`, plan overlap with `axiolid-overlay`, and
-  penetration by testing sampled points against winding numbers. Curved parts
+  penetration by testing sampled points against winding numbers. A pair with
+  one closed solid is measured, including a sheet crossing a wall; only two
+  open surfaces report no penetration. Curved parts
   registered with `AxiolidGeometry::with_tessellated_mesh` produce approximate
   evidence, which is never marked exact.
 - **Model comparison.** `compare_sessions` diffs two evidence sessions matched

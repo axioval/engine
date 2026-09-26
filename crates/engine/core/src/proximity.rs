@@ -15,8 +15,9 @@
 //! - **Penetration is witnessed, not computed.** Zero separation does not say
 //!   whether two bodies touch or interpenetrate. The adapter reports the
 //!   deepest point it found inside the other body. That is a lower bound on
-//!   the true depth, and `None` when a body is not a closed solid and has no
-//!   inside to test.
+//!   the true depth. Only a closed solid has an inside; a surface entering a
+//!   solid is measured against the solid, and two open surfaces, which share
+//!   no volume, report `None`.
 
 use std::sync::Arc;
 
@@ -229,7 +230,7 @@ impl ProximityEvidence {
     ///
     /// - `separation_metres`: shortest distance between the two surfaces.
     /// - `penetration_metres`: depth of the deepest witnessed point of either
-    ///   body inside the other; `None` when a body is not a closed solid.
+    ///   body inside the other; `None` when neither body is a closed solid.
     /// - `plan_overlap_square_metres`: area of the two footprints' overlap.
     pub fn try_new(
         request: ProximityRequest,

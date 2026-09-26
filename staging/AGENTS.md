@@ -1,8 +1,9 @@
 # `staging/`
 
-Work that depends on **unpublished** crates, kept deliberately outside the
-shipping workspace and outside every release. `axioval-bcf` graduated from
-here to `crates/sinks/bcf/` once the `openbim-bcf` writer was published.
+Work that depends on **unpublished** crates (Axiolid kernel crates, the
+`openbim-ids` reader), kept deliberately outside the shipping workspace and
+outside every release. `axioval-bcf` graduated from here to
+`crates/sinks/bcf/` once the `openbim-bcf` writer was published.
 
 ## Why this exists
 
@@ -60,3 +61,20 @@ All four scenarios were verified to fail the gate before it was trusted.
 - `axiolid-routing/` — `MetricRoutingService` / `WalkabilityService` groundwork
   over `axiolid-route`. Proven working locally: 8.0000 m direct vs 8.2462 m
   around a barrier, with a visibility graph of 6 and 8 vertices.
+- `ids/` — `axioval-ids`, the IDS package importer: translates a
+  buildingSMART IDS 1.0 document into a definition package and a ruleset, and
+  reports every facet it cannot translate exactly as a `Gap` instead of
+  dropping it. An untranslatable applicability facet leaves its whole
+  specification without rules, because dropping it would widen the checked
+  population. Depends on `axioval-ir` and the `openbim-ids` reader, which is
+  unreleased (openbimrs/ids#5) and is taken from its `feat/ids-reader` branch;
+  to build against a local checkout, add a `[patch]` for it in an untracked
+  `staging/ids/.cargo/config.toml`. The conformance harness needs the
+  buildingSMART corpus, which is CC BY-ND 4.0 and not vendored:
+  `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -- --ignored corpus`.
+  It asserts that no translated rule fails a `pass-` case and that every
+  unflagged `fail-` case is explained by a reported gap.
+  `cargo run --example coverage -- *.ids` ranks the gaps of real documents.
+  When the reader is published, switch to a version requirement, move the
+  crate to `crates/packages/ids/` (it produces packages and adapts no
+  source), and add it to the gate lists.

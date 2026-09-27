@@ -335,3 +335,114 @@ fn an_ifc2x3_beam_is_read_in_its_own_release() {
         Some(PropertyValue::Quantity { value, .. }) if (value - 0.2).abs() < 1e-12
     ));
 }
+
+/// Millimetres. Wall #10 is extruded up from a mitred plan outline, a
+/// polyline; slab #30 from an indexed outline with a square void; slab #50
+/// from an outline with an arc, which no vertex list states.
+const OUTLINES: &str = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#4=IFCDIRECTION((0.,0.,1.));
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#6=IFCLOCALPLACEMENT($,#2);
+#11=IFCCARTESIANPOINT((0.,0.));
+#12=IFCCARTESIANPOINT((5000.,0.));
+#13=IFCCARTESIANPOINT((5200.,200.));
+#14=IFCCARTESIANPOINT((0.,200.));
+#15=IFCPOLYLINE((#11,#12,#13,#14,#11));
+#16=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,'mitre',#15);
+#17=IFCEXTRUDEDAREASOLID(#16,#2,#4,3000.);
+#18=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#17));
+#19=IFCPRODUCTDEFINITIONSHAPE($,$,(#18));
+#10=IFCWALL('0000000000000000000010',$,'W1',$,$,#6,#19,$,.STANDARD.);
+#31=IFCCARTESIANPOINTLIST2D(((0.,0.),(4000.,0.),(4000.,3000.),(0.,3000.)));
+#32=IFCINDEXEDPOLYCURVE(#31,(IFCLINEINDEX((1,2,3,4,1))),$);
+#33=IFCCARTESIANPOINTLIST2D(((1000.,1000.),(2000.,1000.),(2000.,2000.),(1000.,2000.)));
+#34=IFCINDEXEDPOLYCURVE(#33,$,$);
+#35=IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,#32,(#34));
+#36=IFCEXTRUDEDAREASOLID(#35,#2,#4,200.);
+#37=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#36));
+#38=IFCPRODUCTDEFINITIONSHAPE($,$,(#37));
+#30=IFCSLAB('0000000000000000000030',$,'S1',$,$,#6,#38,$,.FLOOR.);
+#51=IFCCARTESIANPOINTLIST2D(((0.,0.),(1000.,0.),(1500.,500.),(1000.,1000.),(0.,1000.)));
+#52=IFCINDEXEDPOLYCURVE(#51,(IFCLINEINDEX((1,2)),IFCARCINDEX((2,3,4)),IFCLINEINDEX((4,5,1))),$);
+#53=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#52);
+#54=IFCEXTRUDEDAREASOLID(#53,#2,#4,200.);
+#55=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#54));
+#56=IFCPRODUCTDEFINITIONSHAPE($,$,(#55));
+#50=IFCSLAB('0000000000000000000050',$,'S2',$,$,#6,#56,$,.FLOOR.);
+";
+
+fn lengths(values: &[f64]) -> PropertyValue {
+    PropertyValue::List(
+        values
+            .iter()
+            .map(|value| PropertyValue::Quantity {
+                value: *value,
+                dimension: QuantityDimension::Length,
+            })
+            .collect(),
+    )
+}
+
+#[test]
+fn an_arbitrary_outline_states_its_vertices_and_voids() {
+    let outline = |local: &str, name: &str| value_in("IFC4", OUTLINES, local, name);
+    assert_eq!(
+        outline("#10", "Profile.Type"),
+        Some(PropertyValue::String("arbitrary-closed".into()))
+    );
+    // The polyline's closing vertex is not repeated.
+    assert_eq!(
+        outline("#10", "Profile.OutlineX"),
+        Some(lengths(&[0.0, 5.0, 5.2, 0.0]))
+    );
+    assert_eq!(
+        outline("#10", "Item1.Profile.OutlineY"),
+        Some(lengths(&[0.0, 0.0, 0.2, 0.2]))
+    );
+    assert_eq!(outline("#10", "Profile.Void1.OutlineX"), None);
+    assert_eq!(
+        outline("#30", "Profile.OutlineX"),
+        Some(lengths(&[0.0, 4.0, 4.0, 0.0]))
+    );
+    assert_eq!(
+        outline("#30", "Profile.VoidCount"),
+        Some(PropertyValue::Integer(1))
+    );
+    assert_eq!(
+        outline("#30", "Profile.Void1.OutlineX"),
+        Some(lengths(&[1.0, 2.0, 2.0, 1.0]))
+    );
+    assert_eq!(
+        outline("#30", "Profile.Void1.OutlineY"),
+        Some(lengths(&[1.0, 1.0, 2.0, 2.0]))
+    );
+    assert_eq!(outline("#30", "Profile.Void2.OutlineX"), None);
+    // Parameterised families state no outline.
+    assert_eq!(value("#50", "Profile.OutlineX"), None);
+}
+
+#[test]
+fn a_curved_outline_is_refused_and_the_rest_of_the_profile_stands() {
+    for name in ["Profile.OutlineX", "Profile.OutlineY"] {
+        assert!(
+            matches!(
+                resolve_in("IFC4", OUTLINES, "#50", name),
+                Err(PropertyResolutionError::Unavailable(message)) if message.contains("vertices")
+            ),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        value_in("IFC4", OUTLINES, "#50", "Profile.Type"),
+        Some(PropertyValue::String("arbitrary-closed".into()))
+    );
+    assert!(matches!(
+        value_in("IFC4", OUTLINES, "#50", "Extrusion.Depth"),
+        Some(PropertyValue::Quantity { value, .. }) if (value - 0.2).abs() < 1e-12
+    ));
+}

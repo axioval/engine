@@ -128,6 +128,25 @@ impl<'a> BodyFacts<'a> {
         self.quantity(name, QuantityDimension::PlaneAngle, "a plane angle")
     }
 
+    /// A list of lengths the body must state, such as an outline's
+    /// coordinates; every element a finite length.
+    pub(crate) fn required_lengths(&mut self, name: &str) -> Result<Vec<f64>, Unavailable> {
+        match self.value(name)? {
+            None => Err(missing(name)),
+            Some(PropertyValue::List(values)) => values
+                .iter()
+                .map(|value| match value {
+                    PropertyValue::Quantity {
+                        value,
+                        dimension: QuantityDimension::Length,
+                    } if value.is_finite() => Ok(*value),
+                    other => Err(Self::wrong(name, other, "a list of lengths")),
+                })
+                .collect(),
+            Some(other) => Err(Self::wrong(name, &other, "a list of lengths")),
+        }
+    }
+
     /// A length the body must state: its absence is a gap in the source's
     /// description, not a fact about the object.
     pub(crate) fn required_length(&mut self, name: &str) -> Result<f64, Unavailable> {

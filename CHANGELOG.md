@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Openings in free outlines.** (#65) The body set states an arbitrary
+  profile's outline as `Profile.OutlineX` and `Profile.OutlineY`, lists of
+  vertex coordinates in the profile's plane, and each void's as
+  `Profile.Void<n>.OutlineX` and `.OutlineY`; the IFC adapter reads them
+  through `ifc-geometry`'s `profile_outline` (openbimrs/ifc#166) from
+  polylines and line-only indexed poly curves, and refuses them for an
+  outline with an arc. `opening-zone` and `opening-area` read hosts,
+  openings and supports of such outlines exactly: an opening's extent is
+  its outline's reach, its area the outline's less its voids, and against
+  a host of a free outline (a wall mitred at its end) an opening must lie
+  inside the outline over the depth at which it passes through, its
+  distance from the ends and edges measured to the outline there. Only an
+  opening extruded straight through the host is placed there exactly;
+  another can pass but never be found. An outline that is not one region,
+  or states no vertices because an edge is curved, is not evaluated.
 - **Openings beside supports, and gross against net wall area.** (#65)
   `opening-zone` finds each host's supports and connecting members by
   `support_path` (with IFC, `IfcRelConnectsElements:either`, which takes
@@ -25,7 +40,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   exact area of its section where it crosses the wall's middle plane. A
   wall with an opening it cannot place, openings that may overlap, or
   only one area stated is not evaluated; one stating neither is not
-  checked. Openings of free outlines are not placed yet. **Breaking:**
+  checked. **Breaking:**
   definitions bound to `opening-zone` must declare the new optional
   parameters `support_path`, `support_selector`, `support_gap`,
   `support_distance` and `support_clearance`.

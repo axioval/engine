@@ -303,7 +303,8 @@ fn a_wall_opening_is_placed_in_the_walls_plan_outline_and_height() {
 
 #[test]
 fn hosts_and_openings_it_cannot_bound_are_not_evaluated() {
-    // An arbitrary outline bounds nothing the body set states.
+    // An arbitrary profile whose outline the body set does not state (a
+    // curved one) bounds nothing.
     let model = extrusion(
         Model::default(),
         "b",
@@ -679,4 +680,340 @@ fn supports_are_found_by_contact_and_an_undecided_contact_is_not_ignored() {
         unevaluated(&model.evaluate(&OpeningZone, &rule)),
         [("o".into(), NotEvaluatedReason::MissingService)]
     );
+}
+
+fn lengths(values: impl IntoIterator<Item = f64>) -> PropertyValue {
+    PropertyValue::List(values.into_iter().map(length).collect())
+}
+
+/// States `ring` as the outline of `local`'s profile.
+fn outlined(model: Model, local: &str, ring: &[[f64; 2]]) -> Model {
+    model
+        .value(
+            local,
+            BODY_SET,
+            "Profile.OutlineX",
+            lengths(ring.iter().map(|vertex| vertex[0])),
+        )
+        .value(
+            local,
+            BODY_SET,
+            "Profile.OutlineY",
+            lengths(ring.iter().map(|vertex| vertex[1])),
+        )
+}
+
+const UPRIGHT: [Vector; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// Wall `w`, 0.2 m thick (y 0 to 0.2), extruded 3 m up from a plan
+/// outline mitred at its far end: 5 m long on its face y = 0, 5.2 m on its
+/// face y = 0.2.
+fn mitred_wall() -> Model {
+    let model = extrusion(
+        Model::default(),
+        "w",
+        "wall",
+        [0.0; 3],
+        UPRIGHT,
+        3.0,
+        "arbitrary-closed",
+        &[],
+    );
+    outlined(
+        model,
+        "w",
+        &[[0.0, 0.0], [5.0, 0.0], [5.2, 0.2], [0.0, 0.2]],
+    )
+}
+
+/// An opening in wall `w` extruded straight through it along -y (from
+/// y 0.3 to -0.1), its section's X along the wall and its Y up.
+fn through_wall(
+    model: Model,
+    local: &str,
+    origin: Vector,
+    family: &str,
+    dimensions: &[(&str, f64)],
+) -> Model {
+    extrusion(
+        model,
+        local,
+        "opening",
+        origin,
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+        0.4,
+        family,
+        dimensions,
+    )
+    .edge("voids", "w", local)
+}
+
+/// A 1 m x 1.2 m window through wall `w`, centred at `x` and 1.5 m up.
+fn wall_window(model: Model, local: &str, x: f64) -> Model {
+    through_wall(
+        model,
+        local,
+        [x, 0.3, 1.5],
+        "rectangle",
+        &[("XDim", 1.0), ("YDim", 1.2)],
+    )
+}
+
+fn wall_check(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> CapabilityEvaluation {
+    let mut parameters = vec![
+        ("host_path", strings(&["voids:backward"])),
+        ("host_selector", selector(kind("wall"))),
+        ("length_axis", string("profile-x")),
+        ("height_axis", string("extrusion")),
+    ];
+    parameters.extend(extra);
+    model.evaluate(&OpeningZone, &rule(ID, kind("opening"), parameters))
+}
+
+#[test]
+fn openings_near_a_mitred_wall_end_are_bounded_by_its_outline() {
+    let model = wall_window(mitred_wall(), "middle", 2.5);
+    // 0.5 m from the end of the short face, though 0.7 m from the long one.
+    let model = wall_window(model, "near-mitre", 4.0);
+    // Inside the box around the outline, but through the mitre.
+    let model = wall_window(model, "across-mitre", 4.6);
+    let model = wall_window(model, "past-end", 5.5);
+    // Extruded along the wall rather than through it (x 4.3 to 4.8, y 0.05
+    // to 0.15): only its box is known in the plan, which comes within
+    // 0.25 m of the mitre.
+    let model = extrusion(
+        model,
+        "along",
+        "opening",
+        [4.3, 0.1, 1.5],
+        [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        0.5,
+        "rectangle",
+        &[("XDim", 0.1), ("YDim", 1.0)],
+    )
+    .edge("voids", "w", "along");
+    let evaluation = wall_check(
+        model,
+        vec![
+            ("end_distance", metres(0.6)),
+            ("edge_distance", metres(0.2)),
+        ],
+    );
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "across-mitre".into(),
+                "opening lies partly outside its host w: it crosses the edge of the host's \
+                 outline"
+                    .into()
+            ),
+            (
+                "near-mitre".into(),
+                "opening is 0.5 m from an end of its host w; 0.6 m required".into()
+            ),
+            (
+                "past-end".into(),
+                "opening lies partly outside its host w: along its length it spans 5 m to \
+                 6 m, the host 0 m to 5.2 m"
+                    .into()
+            ),
+        ]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("along".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // Without an end distance the opening along the wall lies inside it.
+    let evaluation = wall_check(wall_window(mitred_wall(), "w1", 2.5), vec![]);
+    assert!(findings(&evaluation).is_empty());
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_mitred_wall_end_reached_only_part_way_through_is_further_away() {
+    // A recess 0.1 m deep into the wall's long face (y 0.1 to 0.2) at x
+    // 4.4 to 4.6 meets the mitre at x 5.1 at the earliest: 0.5 m away.
+    let model = || {
+        extrusion(
+            mitred_wall(),
+            "recess",
+            "opening",
+            [4.5, 0.2, 1.5],
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+            0.1,
+            "rectangle",
+            &[("XDim", 0.2), ("YDim", 0.5)],
+        )
+        .edge("voids", "w", "recess")
+    };
+    let evaluation = wall_check(model(), vec![("end_distance", metres(0.5))]);
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    assert_eq!(
+        findings(&wall_check(model(), vec![("end_distance", metres(0.55))])),
+        [(
+            "recess".into(),
+            "opening is 0.5 m from an end of its host w; 0.55 m required".into()
+        )]
+    );
+}
+
+#[test]
+fn an_l_shaped_opening_reaches_as_far_as_its_outline() {
+    // An L: a 1 m x 0.5 m foot with a 0.5 m x 1 m leg on its left, placed
+    // at x 3.8 and 0.5 m up, so it spans x 3.8 to 4.8 and z 0.5 to 2.
+    let model = through_wall(mitred_wall(), "l", [3.8, 0.3, 0.5], "arbitrary-closed", &[]);
+    let model = outlined(
+        model,
+        "l",
+        &[
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [1.0, 0.5],
+            [0.5, 0.5],
+            [0.5, 1.5],
+            [0.0, 1.5],
+        ],
+    );
+    let evaluation = wall_check(
+        model,
+        vec![
+            ("end_distance", metres(0.3)),
+            ("edge_distance", metres(0.6)),
+        ],
+    );
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "l".into(),
+                "opening is 0.2 m from an end of its host w; 0.3 m required".into()
+            ),
+            (
+                "l".into(),
+                "opening is 0.5 m from an edge of its host w; 0.6 m clear required".into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_free_outline_that_is_not_one_region_or_is_curved_is_not_evaluated() {
+    // The outline crosses itself.
+    let model = outlined(
+        extrusion(
+            Model::default(),
+            "w",
+            "wall",
+            [0.0; 3],
+            UPRIGHT,
+            3.0,
+            "arbitrary-closed",
+            &[],
+        ),
+        "w",
+        &[[0.0, 0.0], [5.0, 0.0], [5.0, 0.2], [3.0, -0.1], [0.0, 0.2]],
+    );
+    let evaluation = wall_check(wall_window(model, "o", 2.5), vec![]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("o".into(), NotEvaluatedReason::InvalidEvidence)]
+    );
+    // An outline the source states no vertices for (a curved one) bounds
+    // nothing.
+    let model = extrusion(
+        Model::default(),
+        "w",
+        "wall",
+        [0.0; 3],
+        UPRIGHT,
+        3.0,
+        "arbitrary-closed",
+        &[],
+    );
+    let evaluation = wall_check(wall_window(model, "o", 2.5), vec![]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("o".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_shaft_through_a_notched_slab_keeps_clear_of_the_notch() {
+    // Slab `s`, 0.2 m thick, of a 4 m x 3 m outline with a 2 m x 1 m
+    // notch out of its corner at x 2 to 4, y 2 to 3.
+    let model = outlined(
+        extrusion(
+            Model::default(),
+            "s",
+            "slab",
+            [0.0; 3],
+            UPRIGHT,
+            0.2,
+            "arbitrary-closed",
+            &[],
+        ),
+        "s",
+        &[
+            [0.0, 0.0],
+            [4.0, 0.0],
+            [4.0, 2.0],
+            [2.0, 2.0],
+            [2.0, 3.0],
+            [0.0, 3.0],
+        ],
+    );
+    let shaft = |model: Model, local: &str, x: f64, y: f64| {
+        extrusion(
+            model,
+            local,
+            "opening",
+            [x, y, -0.1],
+            UPRIGHT,
+            0.4,
+            "rectangle",
+            &[("XDim", 0.5), ("YDim", 0.5)],
+        )
+        .edge("voids", "s", local)
+    };
+    // 0.15 m below the notch, though 1.15 m from the slab's far edge.
+    let model = shaft(model, "below-notch", 3.0, 1.6);
+    let model = shaft(model, "in-notch", 2.2, 2.2);
+    let model = shaft(model, "clear", 1.0, 1.0);
+    let evaluation = model.evaluate(
+        &OpeningZone,
+        &rule(
+            ID,
+            kind("opening"),
+            vec![
+                ("host_path", strings(&["voids:backward"])),
+                ("host_selector", selector(kind("slab"))),
+                ("length_axis", string("profile-x")),
+                ("height_axis", string("profile-y")),
+                ("edge_distance", metres(0.3)),
+            ],
+        ),
+    );
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "below-notch".into(),
+                "opening is 0.15 m from an edge of its host s; 0.3 m clear required".into()
+            ),
+            (
+                "in-notch".into(),
+                "opening lies partly outside its host s: it crosses the edge of the host's \
+                 outline"
+                    .into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
 }

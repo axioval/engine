@@ -7589,3 +7589,106 @@ fn with_geometry_a_door_swinging_over_a_stair_landing_is_found() {
         "{result:#}"
     );
 }
+
+/// Metres. Wall #10, 0.2 m thick and 3 m high, is extruded up from a plan
+/// polyline mitred at its far end: 5 m long on its face y = 0, 5.2 m on
+/// y = 0.2. Windows of 1 m x 1.2 m run through it along -y at x 2 to 3
+/// (#100), 3.5 to 4.5 (#200, 0.5 m from the short face's end) and 4.1 to
+/// 5.1 (#300, through the mitre). #400 is an L-shaped opening, a 1 m x
+/// 0.5 m foot with a 0.5 m x 1 m leg, spanning x 0.7 to 1.7 and z 0.5 to 2.
+fn mitred_wall_with_openings() -> String {
+    let opening = |id: u32, profile: &str, x: f64, z: f64| {
+        format!(
+            "#{a}={profile};\n#{b}=IFCCARTESIANPOINT(({x},0.3,{z}));\n\
+             #{c}=IFCAXIS2PLACEMENT3D(#{b},#6,#7);\n\
+             #{d}=IFCEXTRUDEDAREASOLID(#{a},#{c},#4,0.4);\n\
+             #{e}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{d}));\n\
+             #{f}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{e}));\n\
+             #{id}=IFCOPENINGELEMENT('{id:022}',$,$,$,$,#3,#{f},$,.OPENING.);\n\
+             #{g}=IFCRELVOIDSELEMENT('{g:022}',$,$,$,#10,#{id});\n",
+            a = id + 1,
+            b = id + 2,
+            c = id + 3,
+            d = id + 4,
+            e = id + 5,
+            f = id + 6,
+            g = id + 7,
+        )
+    };
+    let window = |id: u32, x: f64| opening(id, "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,1.,1.2)", x, 1.5);
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCDIRECTION((0.,-1.,0.));\n\
+         #7=IFCDIRECTION((1.,0.,0.));\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #22=IFCUNITASSIGNMENT((#20,#21));\n\
+         #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
+         #30=IFCCARTESIANPOINT((0.,0.));\n\
+         #31=IFCCARTESIANPOINT((5.,0.));\n\
+         #32=IFCCARTESIANPOINT((5.2,0.2));\n\
+         #33=IFCCARTESIANPOINT((0.,0.2));\n\
+         #34=IFCPOLYLINE((#30,#31,#32,#33,#30));\n\
+         #13=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#34);\n\
+         #14=IFCEXTRUDEDAREASOLID(#13,#2,#4,3.);\n\
+         #15=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#14));\n\
+         #16=IFCPRODUCTDEFINITIONSHAPE($,$,(#15));\n\
+         #10=IFCWALL('0000000000000000000010',$,$,$,$,#3,#16,$,.STANDARD.);\n\
+         #40=IFCCARTESIANPOINTLIST2D(((0.,0.),(1.,0.),(1.,0.5),(0.5,0.5),(0.5,1.5),(0.,1.5)));\n\
+         #41=IFCINDEXEDPOLYCURVE(#40,$,$);\n\
+         {}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        window(100, 2.5),
+        window(200, 4.0),
+        window(300, 4.6),
+        opening(400, "IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#41)", 0.7, 0.5),
+    )
+}
+
+#[test]
+fn openings_near_a_mitred_wall_end_are_checked_against_its_plan_outline() {
+    let case = Case::new("opening-zone-mitre");
+    let metres = |value: f64| json!({"type": "quantity", "value": value, "unit": "m"});
+    let (output, result) = case.geometry_rule(
+        &mitred_wall_with_openings(),
+        &[("opening", "IfcOpeningElement"), ("wall", "IfcWall")],
+        "axioval:capability.opening-zone",
+        &registry_signature("axioval:capability.opening-zone"),
+        entity("opening"),
+        json!({
+            "host_path": {"type": "stringList", "value": ["IfcRelVoidsElement:backward"]},
+            "host_selector": {"type": "selector", "value": entity("wall")},
+            "length_axis": {"type": "string", "value": "profile-x"},
+            "height_axis": {"type": "string", "value": "extrusion"},
+            "end_distance": metres(0.6),
+            "edge_distance": metres(0.6),
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#200".to_owned(),
+                "opening is 0.5 m from an end of its host #10; 0.6 m required".to_owned()
+            ),
+            (
+                "#300".to_owned(),
+                "opening lies partly outside its host #10: it crosses the edge of the host's \
+                 outline"
+                    .to_owned()
+            ),
+            (
+                "#400".to_owned(),
+                "opening is 0.5 m from an edge of its host #10; 0.6 m clear required".to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

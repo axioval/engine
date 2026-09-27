@@ -547,6 +547,14 @@ pub const MATERIAL_KIND_LIST: &str = "list";
 ///   position, and the family's parameters under their dimension names
 ///   (`XDim`, `YDim`, `OverallWidth`, `OverallDepth`, `WebThickness`,
 ///   `FlangeThickness`, `FilletRadius`, `Radius`, `WallThickness`, …).
+///   An arbitrary closed profile states its outline as
+///   [`BODY_PROFILE_OUTLINE_X`] and [`BODY_PROFILE_OUTLINE_Y`]: two lists
+///   of lengths, the coordinates of its vertices in the profile's X-Y
+///   plane, in the order the source states them, the closing vertex not
+///   repeated. One with voids adds `VoidCount` and, per void,
+///   `Void<n>.OutlineX` and `Void<n>.OutlineY` alike. Only straight edges
+///   are stated this way: an outline with a curved segment is refused,
+///   never approximated by chords, and the profile's other facts stand.
 ///   A composite profile states `Count`, `Label` and `Member<n>.` facts; a
 ///   derived or mirrored one `Label` and `Parent.` facts. Every
 ///   parameterised section except the trapezium is centred on its position
@@ -573,6 +581,10 @@ pub const BODY_MAPPED: &str = "Mapped";
 pub const BODY_PROFILE_TYPE: &str = "Profile.Type";
 /// The profile's name (catalogue designation) in [`BODY_SET`].
 pub const BODY_PROFILE_NAME: &str = "Profile.Name";
+/// The x coordinates of an arbitrary profile's outline in [`BODY_SET`].
+pub const BODY_PROFILE_OUTLINE_X: &str = "Profile.OutlineX";
+/// The y coordinates of an arbitrary profile's outline in [`BODY_SET`].
+pub const BODY_PROFILE_OUTLINE_Y: &str = "Profile.OutlineY";
 /// [`BODY_KIND`] of a straight extrusion.
 pub const BODY_KIND_EXTRUSION: &str = "extrusion";
 

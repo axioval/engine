@@ -290,3 +290,135 @@ fn a_wall_stating_no_areas_is_not_checked_and_one_stating_one_is_not_evaluated()
         [("w".into(), NotEvaluatedReason::IncompleteEvidence)]
     );
 }
+
+fn lengths(values: impl IntoIterator<Item = f64>) -> PropertyValue {
+    PropertyValue::List(values.into_iter().map(length).collect())
+}
+
+/// States `ring` as the outline of `local`'s profile.
+fn outlined(model: Model, local: &str, ring: &[[f64; 2]]) -> Model {
+    model
+        .value(
+            local,
+            BODY_SET,
+            "Profile.OutlineX",
+            lengths(ring.iter().map(|vertex| vertex[0])),
+        )
+        .value(
+            local,
+            BODY_SET,
+            "Profile.OutlineY",
+            lengths(ring.iter().map(|vertex| vertex[1])),
+        )
+}
+
+/// An L of 1 m²: a 1 m x 0.5 m foot with a 0.5 m x 1 m leg on its left.
+const L_SHAPE: [[f64; 2]; 6] = [
+    [0.0, 0.0],
+    [1.0, 0.0],
+    [1.0, 0.5],
+    [0.5, 0.5],
+    [0.5, 1.5],
+    [0.0, 1.5],
+];
+
+#[test]
+fn an_l_shaped_opening_counts_with_the_area_of_its_outline() {
+    // The L's corner at x 1, z 0.5: it spans x 1 to 2, z 0.5 to 2.
+    let with_l = |net: f64| {
+        let model = opening(
+            window(wall(Some(net)), "o1", 3.5),
+            "l",
+            1.0,
+            0.5,
+            0.2,
+            "arbitrary-closed",
+            &[],
+        );
+        outlined(model, "l", &L_SHAPE)
+    };
+    let evaluation = check(with_l(12.8));
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    assert_eq!(
+        findings(&check(with_l(13.0))),
+        [(
+            "w".into(),
+            "its openings (l, o1) cover 2.2 m² of its face, but its gross side area 15 m² \
+             less its net side area 13 m² is 2 m²; they must agree within 0.01 m²"
+                .into()
+        )]
+    );
+}
+
+#[test]
+fn an_opening_through_a_mitred_wall_end_cannot_be_counted() {
+    // Wall `w`, 0.2 m thick (y 0 to 0.2) and 3 m high, 5 m long on its face
+    // y = 0 and 5.2 m on y = 0.2.
+    let wall = || {
+        outlined(
+            extrusion(
+                Model::default(),
+                "w",
+                "wall",
+                [0.0; 3],
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                3.0,
+                "arbitrary-closed",
+                &[],
+            ),
+            "w",
+            &[[0.0, 0.0], [5.0, 0.0], [5.2, 0.2], [0.0, 0.2]],
+        )
+        .value(
+            "w",
+            QTO,
+            "GrossSideArea",
+            quantity(15.3, QuantityDimension::Area),
+        )
+        .value(
+            "w",
+            QTO,
+            "NetSideArea",
+            quantity(14.1, QuantityDimension::Area),
+        )
+    };
+    let window_at = |model: Model, x: f64| {
+        extrusion(
+            model,
+            "o",
+            "opening",
+            [x, 0.2, 1.5],
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+            0.2,
+            "rectangle",
+            &[("XDim", 1.0), ("YDim", 1.2)],
+        )
+        .edge("voids", "w", "o")
+    };
+    let evaluation = check(window_at(wall(), 4.0));
+    assert!(findings(&evaluation).is_empty());
+    assert!(unevaluated(&evaluation).is_empty());
+    // Through the mitre, the part of it the wall loses is not known.
+    let evaluation = check(window_at(wall(), 4.6));
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("outline"),
+        "{}",
+        evaluation.not_evaluated_outcomes()[0].message()
+    );
+}

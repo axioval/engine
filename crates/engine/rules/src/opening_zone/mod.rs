@@ -17,6 +17,7 @@ use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
 pub(crate) mod face;
+mod outline;
 mod supports;
 
 use face::{Axis, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
@@ -38,14 +39,24 @@ use supports::{Opening, SupportConfig, Supports};
 /// from a mesh: the host must be one straight extrusion perpendicular to its
 /// profile, of a profile family whose outline the set bounds (rectangles,
 /// circles, ellipses and the I, T, U, C, Z and L sections, centred on their
-/// position); the opening one straight extrusion of a rectangle, rounded
-/// rectangle, circle or ellipse. The host's axes are named by the rule:
+/// position, and free outlines of straight edges, with or without voids);
+/// the opening one straight extrusion of a rectangle, rounded rectangle,
+/// circle, ellipse or free outline. The host's axes are named by the rule:
 /// `length_axis` and `height_axis` are two of `extrusion`, `profile-x` and
 /// `profile-y` (a beam: `extrusion` and `profile-y`; a wall extruded up
 /// from its plan outline: `profile-x` and `extrusion`), and the third runs
 /// through the host. The opening's extent along each face axis is exact:
 /// the support of its section swept along its extrusion. Anything else is
 /// not evaluated, never approximated.
+///
+/// A host of a free outline (a wall with a mitred end) has bounds that
+/// differ across it. Where the rule's face crosses the outline, the opening
+/// must lie inside the outline over the whole depth it passes through the
+/// host, and its distance from the host's ends and edges is the least over
+/// that depth, measured to the outline itself. Both are exact when the
+/// opening is extruded straight through the host; otherwise only the box
+/// its extents span is known there, which can pass an opening but never
+/// find one. An outline with a curved edge is not evaluated.
 ///
 /// Distances between openings are clear distances in the host's face.
 /// Between two rectangles whose sides run along the face axes and which are
@@ -205,9 +216,21 @@ struct Placed {
     /// origin.
     length: Span,
     height: Span,
+    /// Its extent across the host, from the host's section origin.
+    through: Span,
     /// Whether the face projection is exactly the extents' rectangle.
     exact: bool,
+    /// Whether the rectangle [`Host::section_rect`] builds is exactly
+    /// where the opening lies in the host's section plane: it is extruded
+    /// through a host whose face holds the extrusion, or it is `exact`.
+    section_exact: bool,
     evidence: Vec<Evidence>,
+}
+
+impl Placed {
+    fn section_rect(&self, host: &Host, axes: FaceAxes) -> [Span; 2] {
+        host.section_rect(axes, self.length, self.height, self.through)
+    }
 }
 
 /// Where an opening is: in a checked host, in none, or unknown.
@@ -288,13 +311,20 @@ impl Judge<'_, '_> {
             solid.aligned_rectangle(length_axis, height_axis) && solid.direction_along(through);
         let length = solid.extent(face.origin, length_axis).outer;
         let height = solid.extent(face.origin, height_axis).outer;
+        let across = solid.extent(face.origin, through).outer;
+        // Across a host extruded in its face, an opening extruded through
+        // it keeps one extent along the face's profile axis at every depth.
+        let section_exact = exact
+            || (self.config.axes.through() != Axis::Extrusion && solid.direction_along(through));
         evidence.extend(solid.evidence);
         evidence.extend(face.evidence.iter().cloned());
         Ok(Some(Placed {
             host,
             length,
             height,
+            through: across,
             exact,
+            section_exact,
             evidence,
         }))
     }
@@ -353,27 +383,31 @@ impl Judge<'_, '_> {
             )
         })
         .collect();
-        if !outside.is_empty() {
+        let axes = self.config.axes;
+        let rect = placed.section_rect(&host, axes);
+        let mut crosses_outline = false;
+        if outside.is_empty() {
+            crosses_outline = Self::crosses_outline(&host, placed, rect, &mut findings)
+                .unwrap_or_else(|(reason, message)| {
+                    evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
+                    true
+                });
+        } else {
             findings.push(format!(
                 "opening lies partly outside its host {}: {}",
                 placed.host.local_id,
                 outside.join("; ")
             ));
         }
-        if let Some(required) = self.config.end_distance
-            && !outside_length
+        if !outside_length
+            && !crosses_outline
+            && let Err((reason, message)) = self.ends(&host, placed, rect, &mut findings)
         {
-            let clear = (placed.length.0 - length_bounds.0).min(length_bounds.1 - placed.length.1);
-            if clear < required - ROUNDING {
-                findings.push(format!(
-                    "opening is {} from an end of its host {}; {} required",
-                    metres(clear.max(0.0)),
-                    placed.host.local_id,
-                    metres(required)
-                ));
-            }
+            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
         }
-        if !outside_height && let Err((reason, message)) = self.edges(&host, placed, &mut findings)
+        if !outside_height
+            && !crosses_outline
+            && let Err((reason, message)) = self.edges(&host, placed, rect, &mut findings)
         {
             evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
         }
@@ -395,17 +429,119 @@ impl Judge<'_, '_> {
         self.spacing(opening, placed, openings, findings, evaluation);
     }
 
+    /// Within the box that holds a free outline, whether the opening
+    /// crosses the outline itself; an error when it may.
+    fn crosses_outline(
+        host: &Host,
+        placed: &Placed,
+        rect: [Span; 2],
+        findings: &mut Vec<String>,
+    ) -> Result<bool, Unavailable> {
+        let Some(outline) = &host.outline else {
+            return Ok(false);
+        };
+        if outline.clearance(rect, 0).is_some() {
+            return Ok(false);
+        }
+        if !placed.section_exact {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "it may cross the edge of its host {}'s outline: it is not extruded \
+                     straight through the host, so where it lies in the host's section is \
+                     known only within bounds",
+                    placed.host.local_id
+                ),
+            ));
+        }
+        findings.push(format!(
+            "opening lies partly outside its host {}: it crosses the edge of the host's \
+             outline",
+            placed.host.local_id
+        ));
+        Ok(true)
+    }
+
+    /// Judges the distance from the host's ends.
+    fn ends(
+        &self,
+        host: &Host,
+        placed: &Placed,
+        rect: [Span; 2],
+        findings: &mut Vec<String>,
+    ) -> Result<(), Unavailable> {
+        let length = self.config.axes.length;
+        let Some(required) = self.config.end_distance else {
+            return Ok(());
+        };
+        let Some((low, high)) = host.clearance(length, placed.length, rect) else {
+            return Ok(());
+        };
+        let clear = low.min(high);
+        if clear >= required - ROUNDING {
+            return Ok(());
+        }
+        if !placed.section_exact && host.outlined(length) {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "its distance from an end of its host {}'s outline may be under {}: where \
+                     it lies in the host's section is known only within bounds",
+                    placed.host.local_id,
+                    metres(required)
+                ),
+            ));
+        }
+        findings.push(format!(
+            "opening is {} from an end of its host {}; {} required",
+            metres(clear.max(0.0)),
+            placed.host.local_id,
+            metres(required)
+        ));
+        Ok(())
+    }
+
     /// Judges the clearance from the host's edges, or from its flanges.
     fn edges(
         &self,
         host: &Host,
         placed: &Placed,
+        rect: [Span; 2],
         findings: &mut Vec<String>,
     ) -> Result<(), Unavailable> {
         if self.config.edge_distance.is_none() && !self.config.web {
             return Ok(());
         }
         let required = self.config.edge_distance.unwrap_or(0.0);
+        let height = self.config.axes.height;
+        if !self.config.web && host.outlined(height) {
+            // Across a free outline, the edges are where the outline is.
+            let Some((low, high)) = host.clearance(height, placed.height, rect) else {
+                return Ok(());
+            };
+            let clear = low.min(high);
+            if clear >= required - ROUNDING {
+                return Ok(());
+            }
+            if !placed.section_exact {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "its distance from an edge of its host {}'s outline may be under {}: \
+                         where it lies in the host's section is known only within bounds",
+                        placed.host.local_id,
+                        metres(required)
+                    ),
+                ));
+            }
+            findings.push(format!(
+                "opening is {} from an edge of its host {}; {} clear required",
+                metres(clear.max(0.0)),
+                placed.host.local_id,
+                metres(required)
+            ));
+            return Ok(());
+        }
         let (zone, what) = if self.config.web {
             let web = host.web.ok_or_else(|| {
                 (

@@ -1,9 +1,12 @@
 //! A host's face and the extrusions placed in it, read from the reserved
 //! body set: the geometry `opening-zone` and `opening-area` share.
 
+use std::rc::Rc;
+
 use axioval_engine::{NotEvaluatedReason, RuleContext};
 use axioval_ir::{Evidence, Object, ObjectId};
 
+use super::outline::Polygon;
 use crate::body_facts::BodyFacts;
 use crate::support::{Unavailable, invalid};
 
@@ -87,6 +90,16 @@ impl Axis {
             Self::ProfileY => 2,
         }
     }
+
+    /// The coordinate the axis is in the profile's plane: 0 for X, 1 for
+    /// Y, `None` for the extrusion.
+    fn profile(self) -> Option<usize> {
+        match self {
+            Self::Extrusion => None,
+            Self::ProfileX => Some(0),
+            Self::ProfileY => Some(1),
+        }
+    }
 }
 
 /// The face a rule names: the host's length and height axes, and the third
@@ -120,8 +133,12 @@ impl FaceAxes {
 pub(crate) struct Host {
     pub(crate) origin: Vector,
     axes: [Vector; 3],
-    /// Bounds along `Extrusion`, `ProfileX`, `ProfileY`.
+    /// Bounds along `Extrusion`, `ProfileX`, `ProfileY`: for a free
+    /// outline, the box that holds it.
     bounds: [Span; 3],
+    /// The section's outline where it is a free polygon; `None` for a
+    /// parameterised section, which fills its bounds.
+    pub(crate) outline: Option<Rc<Polygon>>,
     /// The part of `ProfileY` between the flanges, where the family has one.
     pub(crate) web: Option<Span>,
     pub(crate) family: String,
@@ -131,6 +148,52 @@ pub(crate) struct Host {
 impl Host {
     pub(crate) fn axis(&self, axis: Axis) -> (Vector, Span) {
         (self.axes[axis.index()], self.bounds[axis.index()])
+    }
+
+    /// The rectangle in the profile's plane an opening occupies, from its
+    /// extents along the face's axes and across the host: the part of its
+    /// extent `through` that lies within the host's bounds (all of them
+    /// when it lies beside the host).
+    pub(crate) fn section_rect(
+        &self,
+        axes: FaceAxes,
+        length: Span,
+        height: Span,
+        through: Span,
+    ) -> [Span; 2] {
+        let across = |axis: Axis| {
+            let bounds = self.bounds[axis.index()];
+            let (low, high) = (through.0.max(bounds.0), through.1.min(bounds.1));
+            if low < high { (low, high) } else { bounds }
+        };
+        [Axis::ProfileX, Axis::ProfileY].map(|axis| {
+            if axis == axes.length {
+                length
+            } else if axis == axes.height {
+                height
+            } else {
+                across(axis)
+            }
+        })
+    }
+
+    /// Whether `axis` crosses a free outline, so its bounds differ across
+    /// the host.
+    pub(crate) fn outlined(&self, axis: Axis) -> bool {
+        self.outline.is_some() && axis.profile().is_some()
+    }
+
+    /// The clear distance along `axis` from an opening's `extent` to the
+    /// host's boundary, towards lower and towards higher coordinates;
+    /// across a free outline, from the opening's `rect` in the profile's
+    /// plane, over its whole width. `None` when the outline passes through
+    /// `rect` or it lies outside the outline.
+    pub(crate) fn clearance(&self, axis: Axis, extent: Span, rect: [Span; 2]) -> Option<Span> {
+        if let (Some(outline), Some(index)) = (&self.outline, axis.profile()) {
+            return outline.clearance(rect, index);
+        }
+        let bounds = self.bounds[axis.index()];
+        Some((extent.0 - bounds.0, bounds.1 - extent.1))
     }
 }
 
@@ -151,11 +214,18 @@ pub(crate) fn read_host(context: &RuleContext<'_>, id: &ObjectId) -> Result<Host
             ));
         }
         let family = family(&mut body)?;
-        let ((half_x, half_y), web) = boxed_section(&mut body, &family, "host")?;
+        let (bounds, web, outline) = if ARBITRARY.contains(&family.as_str()) {
+            let outline = polygon(&mut body, &family, "host")?;
+            (outline.bounds(), None, Some(Rc::new(outline)))
+        } else {
+            let ((half_x, half_y), web) = boxed_section(&mut body, &family, "host")?;
+            ([(-half_x, half_x), (-half_y, half_y)], web, None)
+        };
         Ok(Host {
             origin: swept.origin,
             axes: [swept.direction, swept.x, swept.y],
-            bounds: [(0.0, swept.depth), (-half_x, half_x), (-half_y, half_y)],
+            bounds: [(0.0, swept.depth), bounds[0], bounds[1]],
+            outline,
             web,
             family,
             evidence: Vec::new(),
@@ -170,8 +240,9 @@ pub(crate) fn read_host(context: &RuleContext<'_>, id: &ObjectId) -> Result<Host
     }
 }
 
-/// A section outline known exactly, centred on its position.
-#[derive(Clone, Copy)]
+/// A section outline known exactly: a parameterised one centred on its
+/// position, or a free polygon in the profile's coordinates.
+#[derive(Clone)]
 pub(crate) enum Shape {
     Rectangle {
         half_x: f64,
@@ -189,26 +260,32 @@ pub(crate) enum Shape {
         semi_x: f64,
         semi_y: f64,
     },
+    Polygon(Rc<Polygon>),
 }
 
 impl Shape {
-    /// The furthest the outline reaches along `(p, q)` in its own frame.
-    fn support(self, p: f64, q: f64) -> f64 {
+    /// How far the outline reaches along `(p, q)` in its own frame, least
+    /// and most.
+    fn range(&self, p: f64, q: f64) -> Span {
+        let symmetric = |reach: f64| (-reach, reach);
         match self {
-            Self::Rectangle { half_x, half_y } => half_x * p.abs() + half_y * q.abs(),
+            Self::Rectangle { half_x, half_y } => symmetric(half_x * p.abs() + half_y * q.abs()),
             Self::Rounded {
                 half_x,
                 half_y,
                 radius,
-            } => (half_x - radius) * p.abs() + (half_y - radius) * q.abs() + radius * p.hypot(q),
-            Self::Circle { radius } => radius * p.hypot(q),
-            Self::Ellipse { semi_x, semi_y } => (semi_x * p).hypot(semi_y * q),
+            } => symmetric(
+                (half_x - radius) * p.abs() + (half_y - radius) * q.abs() + radius * p.hypot(q),
+            ),
+            Self::Circle { radius } => symmetric(radius * p.hypot(q)),
+            Self::Ellipse { semi_x, semi_y } => symmetric((semi_x * p).hypot(semi_y * q)),
+            Self::Polygon(polygon) => polygon.range(p, q),
         }
     }
 
-    /// The area the outline encloses.
-    pub(crate) fn area(self) -> f64 {
-        match self {
+    /// The area the outline encloses, less its voids.
+    pub(crate) fn area(&self) -> f64 {
+        match *self {
             Self::Rectangle { half_x, half_y } => 4.0 * half_x * half_y,
             Self::Rounded {
                 half_x,
@@ -217,6 +294,7 @@ impl Shape {
             } => 4.0 * half_x * half_y - (4.0 - std::f64::consts::PI) * radius * radius,
             Self::Circle { radius } => std::f64::consts::PI * radius * radius,
             Self::Ellipse { semi_x, semi_y } => std::f64::consts::PI * semi_x * semi_y,
+            Self::Polygon(ref polygon) => polygon.area(),
         }
     }
 }
@@ -224,7 +302,7 @@ impl Shape {
 /// A section's outline: known exactly, or only by its bounding box, which
 /// the section reaches on all four sides (every family the body set
 /// bounds is centred on its position with its full width and depth).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Outline {
     Exact(Shape),
     Boxed { half_x: f64, half_y: f64 },
@@ -236,15 +314,18 @@ impl Outline {
     /// A boxed section reaches its box's sides, somewhere along them: along
     /// `(p, q)` at least `half_x |p| - half_y |q|` and `half_y |q| -
     /// half_x |p|`, and at most the box's own reach.
-    fn reach(self, p: f64, q: f64) -> Span {
+    ///
+    /// Each is a range from the section's position, least and most.
+    fn reach(&self, p: f64, q: f64) -> (Span, Span) {
         match self {
             Self::Exact(shape) => {
-                let reach = shape.support(p, q);
-                (reach, reach)
+                let range = shape.range(p, q);
+                (range, range)
             }
             Self::Boxed { half_x, half_y } => {
                 let (x, y) = (half_x * p.abs(), half_y * q.abs());
-                ((x - y).abs(), x + y)
+                let inner = (x - y).abs();
+                ((-inner, inner), (-(x + y), x + y))
             }
         }
     }
@@ -286,12 +367,12 @@ pub(crate) struct Solid {
 
 impl Solid {
     /// Reads an opening: one straight extrusion of a rectangle, rounded
-    /// rectangle, circle or ellipse.
+    /// rectangle, circle, ellipse or free polygon.
     pub(crate) fn opening(context: &RuleContext<'_>, object: &Object) -> Result<Self, Unavailable> {
         let mut body = BodyFacts::of(context, object)?;
         let swept = swept(&mut body, "opening")?;
         let family = family(&mut body)?;
-        let shape = exact_shape(&mut body, &family)?.ok_or_else(|| {
+        let shape = exact_shape(&mut body, &family, "opening")?.ok_or_else(|| {
             (
                 NotEvaluatedReason::IncompleteEvidence,
                 format!("the opening's `{family}` profile has no outline its extent is known for"),
@@ -317,7 +398,7 @@ impl Solid {
         let read = (|| {
             let swept = swept(&mut body, role)?;
             let family = family(&mut body)?;
-            let outline = if let Some(shape) = exact_shape(&mut body, &family)? {
+            let outline = if let Some(shape) = exact_shape(&mut body, &family, role)? {
                 Outline::Exact(shape)
             } else {
                 let ((half_x, half_y), _) = boxed_section(&mut body, &family, role)?;
@@ -341,10 +422,10 @@ impl Solid {
         let centre = dot(w, minus(swept.origin, origin));
         let (inner, outer) = self.outline.reach(dot(w, swept.x), dot(w, swept.y));
         let sweep = swept.depth * dot(w, swept.direction);
-        let span = |reach: f64| {
+        let span = |reach: Span| {
             (
-                centre - reach + sweep.min(0.0),
-                centre + reach + sweep.max(0.0),
+                centre + reach.0 + sweep.min(0.0),
+                centre + reach.1 + sweep.max(0.0),
             )
         };
         Extent {
@@ -376,7 +457,7 @@ impl Solid {
     /// The area the section encloses, where its outline is exact and has
     /// no void.
     pub(crate) fn section_area(&self) -> Option<f64> {
-        match self.outline {
+        match &self.outline {
             Outline::Exact(shape) if !self.family.ends_with("-hollow") => Some(shape.area()),
             _ => None,
         }
@@ -510,10 +591,59 @@ fn boxed_section(
     })
 }
 
-/// The exact outline of a rectangle, rounded rectangle, circle or ellipse
-/// (a hollow one reaches as far as its outer outline); `None` for another
-/// family.
-fn exact_shape(body: &mut BodyFacts<'_>, family: &str) -> Result<Option<Shape>, Unavailable> {
+/// The profile families the body set states a free outline for.
+const ARBITRARY: &[&str] = &["arbitrary-closed", "arbitrary-with-voids"];
+
+/// A free outline and its voids, as the body set states them.
+fn polygon(body: &mut BodyFacts<'_>, family: &str, role: &str) -> Result<Polygon, Unavailable> {
+    let ring = |body: &mut BodyFacts<'_>, prefix: &str| {
+        let x = body.required_lengths(&format!("Profile.{prefix}OutlineX"))?;
+        let y = body.required_lengths(&format!("Profile.{prefix}OutlineY"))?;
+        if x.len() != y.len() {
+            return Err((
+                NotEvaluatedReason::InvalidEvidence,
+                format!(
+                    "the {role}'s `Profile.{prefix}OutlineX` has {} coordinates, \
+                     `Profile.{prefix}OutlineY` {}",
+                    x.len(),
+                    y.len()
+                ),
+            ));
+        }
+        Ok(x.into_iter()
+            .zip(y)
+            .map(|(x, y)| [x, y])
+            .collect::<Vec<_>>())
+    };
+    let outer = ring(body, "")?;
+    let mut voids = Vec::new();
+    if family == "arbitrary-with-voids" {
+        let count = body
+            .integer("Profile.VoidCount")?
+            .ok_or_else(|| invalid(format!("the {role}'s profile states no `VoidCount`")))?;
+        for void in 1..=count {
+            voids.push(ring(body, &format!("Void{void}."))?);
+        }
+    }
+    Polygon::new(outer, voids).map_err(|message| {
+        (
+            NotEvaluatedReason::InvalidEvidence,
+            format!("the {role}'s profile outline is not one region: {message}"),
+        )
+    })
+}
+
+/// The exact outline of a rectangle, rounded rectangle, circle, ellipse
+/// (a hollow one reaches as far as its outer outline) or free polygon;
+/// `None` for another family.
+fn exact_shape(
+    body: &mut BodyFacts<'_>,
+    family: &str,
+    role: &str,
+) -> Result<Option<Shape>, Unavailable> {
+    if ARBITRARY.contains(&family) {
+        return Ok(Some(Shape::Polygon(Rc::new(polygon(body, family, role)?))));
+    }
     Ok(Some(match family {
         "rectangle" | "rectangle-hollow" => Shape::Rectangle {
             half_x: required(body, "XDim")? / 2.0,

@@ -243,7 +243,13 @@ geometry reads as if its extrusion were authored in place, and `Mapped`
 says it was not. For every swept-area solid the adapter states its profile
 (`IfcProfileDef` families from rectangle to Z shape, with the IFC attribute
 names as dimension names), the solid's placement in world coordinates, and
-for an `IfcExtrudedAreaSolid` its depth and world direction.
+for an `IfcExtrudedAreaSolid` its depth and world direction. An
+`IfcArbitraryClosedProfileDef` and an `IfcArbitraryProfileDefWithVoids`
+state their outline and voids as vertices through `ifc-geometry`'s
+`profile_outline` (0.4.1, openbimrs/ifc#166), from `IfcPolyline` and
+line-only `IfcIndexedPolyCurve` boundaries in the exact length unit. An
+`IfcArcIndex` segment or any other curve family refuses the outline facts
+alone (`Unavailable`), never chorded; the rest of the profile stands.
 
 Lengths go through the project's exact length unit and angles through its
 plane-angle unit (`ifc_properties::exact_unit`), never through

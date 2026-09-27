@@ -28,8 +28,10 @@ use crate::support::{
 /// counts with the exact area of its section when it crosses that plane
 /// and not at all when it stops short of it (a recess). An opening's area is
 /// known only when it is one straight extrusion through the host of a
-/// rectangle, rounded rectangle, circle or ellipse lying in the face, wholly
-/// within the host's face and clear of the other openings.
+/// rectangle, rounded rectangle, circle, ellipse or free polygon (its voids
+/// subtracted) lying in the face, wholly within the host's face and clear
+/// of the other openings. A host of a free outline must hold the opening
+/// inside that outline, not only inside the box around it.
 ///
 /// A host stating neither area is not checked. One stating only one, an
 /// opening whose area cannot be placed, or an opening whose selection is
@@ -282,6 +284,17 @@ fn opening_area(
         ));
     }
     let depth = solid.extent(host.origin, through).outer;
+    if let Some(outline) = &host.outline
+        && outline
+            .clearance(host.section_rect(axes, length, height, depth), 0)
+            .is_none()
+    {
+        return Err(incomplete(
+            "it may reach past its host's outline, so the part of it the side area loses is \
+             not known"
+                .to_owned(),
+        ));
+    }
     let middle = f64::midpoint(through_bounds.0, through_bounds.1);
     if depth.1 < middle - ROUNDING || depth.0 > middle + ROUNDING {
         // A recess stopping short of the middle plane takes no side area.

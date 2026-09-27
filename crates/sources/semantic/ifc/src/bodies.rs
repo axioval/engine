@@ -24,7 +24,7 @@ use axioval_engine::PropertyResolutionError;
 use axioval_ir::{PropertyValue, QuantityDimension};
 use ifc_geometry::{
     BodyDescription, BodyItem, BodyKind, GeometryError, ProfileDescription, ProfileParameters,
-    SweepPath, SweptSolid, Transform, UnitScale, body_description,
+    SweepPath, SweptSolid, Transform, UnitScale, body_description, profile_outline,
 };
 use ifc_model::{EntityId, Model};
 use ifc_properties::exact_unit;
@@ -129,7 +129,7 @@ impl Bodies {
         else {
             return Ok(None);
         };
-        Ok(Some(Facts::of(object, &body, &units)))
+        Ok(Some(Facts::of(model, object, &body, &units)))
     }
 }
 
@@ -202,6 +202,7 @@ fn kind_name(kind: BodyKind) -> Option<&'static str> {
 
 /// Collects facts under one prefix and locator.
 struct Writer<'a> {
+    model: &'a Model,
     facts: &'a mut BTreeMap<String, Fact>,
     units: &'a Units,
     prefix: String,
@@ -211,6 +212,7 @@ struct Writer<'a> {
 impl Writer<'_> {
     fn nested(&mut self, prefix: &str, detail: String) -> Writer<'_> {
         Writer {
+            model: self.model,
             facts: self.facts,
             units: self.units,
             prefix: format!("{}{prefix}", self.prefix),
@@ -297,10 +299,11 @@ fn quantity(
 }
 
 impl Facts {
-    fn of(object: EntityId, body: &BodyDescription, units: &Units) -> Self {
+    fn of(model: &Model, object: EntityId, body: &BodyDescription, units: &Units) -> Self {
         let mut facts = BTreeMap::new();
         let detail = format!("body:{object}:{}", body.representation);
         let mut root = Writer {
+            model,
             facts: &mut facts,
             units,
             prefix: String::new(),
@@ -656,9 +659,13 @@ fn write_profile(writer: &mut Writer<'_>, profile: &ProfileDescription) {
             writer.length("TopXOffset", *top_x_offset);
             "trapezium"
         }
-        ProfileParameters::ArbitraryClosed { .. } => "arbitrary-closed",
+        ProfileParameters::ArbitraryClosed { .. } => {
+            write_outline(writer, profile.entity, 0);
+            "arbitrary-closed"
+        }
         ProfileParameters::ArbitraryWithVoids { inner_curves, .. } => {
             writer.integer("VoidCount", inner_curves.len());
+            write_outline(writer, profile.entity, inner_curves.len());
             "arbitrary-with-voids"
         }
         // A swept area never has an open profile: the description refuses it.
@@ -711,4 +718,59 @@ fn write_profile(writer: &mut Writer<'_>, profile: &ProfileDescription) {
         }
     };
     writer.text("Type", family);
+}
+
+/// An arbitrary profile's outline as `OutlineX` and `OutlineY`, and each of
+/// its `voids` as `Void<n>.OutlineX` and `Void<n>.OutlineY`: the vertices
+/// of each ring in the order the file states them, the closing vertex not
+/// repeated, in the profile's coordinates.
+///
+/// `ifc-geometry`'s `profile_outline` (openbimrs/ifc#166) reads them from
+/// polylines and line-only indexed poly curves. A curved segment, or any
+/// other curve family, cannot be stated as vertices: it refuses every
+/// outline fact of the profile, never a chorded polygon, and leaves the
+/// profile's other facts standing.
+fn write_outline(writer: &mut Writer<'_>, profile: EntityId, voids: usize) {
+    let mut names = vec![("OutlineX".to_owned(), "OutlineY".to_owned())];
+    names.extend((1..=voids).map(|n| (format!("Void{n}.OutlineX"), format!("Void{n}.OutlineY"))));
+    let outline = match profile_outline(writer.model, &writer.units.scale, profile) {
+        Ok(outline) if outline.inner.len() == voids => outline,
+        Ok(outline) => {
+            let error = PropertyResolutionError::Conflicting(format!(
+                "the outline of {profile} has {} voids, its description {voids}",
+                outline.inner.len()
+            ));
+            for (x, y) in names {
+                writer.put(&x, Err(error.clone()));
+                writer.put(&y, Err(error.clone()));
+            }
+            return;
+        }
+        Err(error) => {
+            let error = match error {
+                GeometryError::Unsupported { .. } => PropertyResolutionError::Unavailable(format!(
+                    "the outline cannot be stated as vertices: {error}"
+                )),
+                other => PropertyResolutionError::Incomplete(format!(
+                    "the outline cannot be read: {other}"
+                )),
+            };
+            for (x, y) in names {
+                writer.put(&x, Err(error.clone()));
+                writer.put(&y, Err(error.clone()));
+            }
+            return;
+        }
+    };
+    let rings = std::iter::once(&outline.outer).chain(&outline.inner);
+    for ((x, y), ring) in names.into_iter().zip(rings) {
+        let coordinates = |axis: usize| {
+            ring.iter()
+                .map(|vertex| quantity(vertex[axis], QuantityDimension::Length))
+                .collect::<Result<Vec<_>, _>>()
+                .map(PropertyValue::List)
+        };
+        writer.put(&x, coordinates(0));
+        writer.put(&y, coordinates(1));
+    }
 }

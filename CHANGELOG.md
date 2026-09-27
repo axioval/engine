@@ -24,6 +24,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   finding (`PRIORITY_HIGH`, `PRIORITY_NORMAL`, `PRIORITY_LOW`). A
   not-evaluated outcome's topic has none: no severity was decided. Every
   archive with findings gains the element; GUIDs are unchanged.
+- **Closest distance between space bodies.** (#120) A `space-distance`
+  row's `measure` takes `closest`: the shortest distance between the two
+  spaces' bodies through the proximity service (`minimum_3d`), judged pair
+  by pair as `straight` is. Two long rooms side by side, their centres 8 m
+  apart and their bodies 0.2 m, meet a 1 m maximum.
 - **Clash tolerance cases along the elements' own axes.** (#135)
   `ProximityService::measure_overlap_along` answers the extents of two
   bodies' intersection along stated directions (`OverlapAlongRequest`,

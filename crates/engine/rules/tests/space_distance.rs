@@ -11,11 +11,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ElevationInterval,
-    LengthInterval, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    Bounds3, CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ElevationInterval,
+    GeometryFidelity, LengthInterval, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
     MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, PlanCentre, PlanLength, PlanSpan, PlanSpanError, PlanSpanService,
-    PlanSpanServiceHandle, ServiceRegistry, UnreachableTargetsEvidence, VerticalExtent,
+    NearestTargetRequest, ObjectBounds, PlanCentre, PlanLength, PlanSpan, PlanSpanError,
+    PlanSpanService, PlanSpanServiceHandle, ProjectedDistanceEvidence, ProximityError,
+    ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle, ServiceRegistry, UnreachableTargetsEvidence, VerticalExtent,
     VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
@@ -56,12 +58,21 @@ struct Geometry {
     outside: Vec<String>,
     /// `(from, to)` -> how the route ends.
     routes: BTreeMap<(String, String), Route>,
+    /// Unordered pair -> closest distance between the bodies.
+    gaps: BTreeMap<(String, String), (f64, f64)>,
 }
 
 impl Geometry {
     fn span(mut self, a: &str, b: &str, lower: f64, upper: f64) -> Self {
         let key = if a < b { (a, b) } else { (b, a) };
         self.spans
+            .insert((key.0.into(), key.1.into()), (lower, upper));
+        self
+    }
+
+    fn gap(mut self, a: &str, b: &str, lower: f64, upper: f64) -> Self {
+        let key = if a < b { (a, b) } else { (b, a) };
+        self.gaps
             .insert((key.0.into(), key.1.into()), (lower, upper));
         self
     }
@@ -85,7 +96,10 @@ impl Geometry {
             .register(VerticalExtentServiceHandle::new(shared.clone()))
             .unwrap();
         services
-            .register(MetricRoutingServiceHandle::new(shared))
+            .register(MetricRoutingServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(ProximityServiceHandle::new(shared))
             .unwrap();
     }
 }
@@ -131,6 +145,52 @@ impl PlanSpanService for Geometry {
             0.0,
             placement,
             evidence(0.0, 0.0, format!("plan-centre:{}", object.local_id)),
+        )
+    }
+}
+
+impl ProximityService for Geometry {
+    fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        ObjectBounds::try_new(
+            object.clone(),
+            Bounds3::try_new([0.0; 3], [1.0; 3])?,
+            GeometryFidelity::Exact,
+        )
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        panic!("space distance measures through measure_distance")
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        assert!(matches!(
+            request.projection(),
+            ProximityProjection::Minimum3d
+        ));
+        let (a, b) = (
+            request.subject().local_id.clone(),
+            request.counterpart().local_id.clone(),
+        );
+        let key = if a < b { (a, b) } else { (b, a) };
+        let (lower, upper) = *self
+            .gaps
+            .get(&key)
+            .unwrap_or_else(|| panic!("unexpected closest distance {key:?}"));
+        #[allow(clippy::float_cmp)]
+        let fidelity = if lower == upper {
+            GeometryFidelity::Exact
+        } else {
+            GeometryFidelity::tessellated((upper - lower) / 2.0)?
+        };
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            lower,
+            upper,
+            fidelity,
+            evidence(lower, upper, format!("closest:{}:{}", key.0, key.1)),
         )
     }
 }
@@ -606,6 +666,87 @@ fn declarations_that_cannot_be_judged_are_refused() {
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)],
         );
     }
+}
+
+#[test]
+fn the_closest_distance_is_measured_between_the_bodies() {
+    // Two long rooms side by side: their centres lie 8 m apart, their bodies
+    // only the 0.2 m wall between them.
+    let rooms = || {
+        Model::default()
+            .object("o1", "office")
+            .object("t1", "toilet")
+    };
+    let geometry = || {
+        Geometry::default()
+            .span("o1", "t1", 8.0, 8.0)
+            .gap("o1", "t1", 0.2, 0.2)
+    };
+    let closest = run(
+        rooms(),
+        geometry(),
+        vec![toilets("closest", &[("maximum", 1.0)])],
+        Vec::new(),
+    );
+    assert!(
+        closest.findings().is_empty() && unevaluated(&closest).is_empty(),
+        "{closest:?}"
+    );
+    let straight = run(
+        rooms(),
+        geometry(),
+        vec![toilets("straight", &[("maximum", 1.0)])],
+        Vec::new(),
+    );
+    assert_eq!(
+        findings(&straight),
+        [(
+            "o1".into(),
+            format!(
+                "the nearest destination, {}, is 8 m away in a straight line between centres; \
+                 row 0 allows at most 1 m",
+                id("t1")
+            )
+        )]
+    );
+
+    // Too close for a minimum, citing the measurement.
+    let evaluation = run(
+        rooms(),
+        geometry(),
+        vec![toilets("closest", &[("minimum", 0.5)])],
+        Vec::new(),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "o1".into(),
+            format!(
+                "{} is 0.2 m away between the closest points of the bodies; row 0 requires at \
+                 least 0.5 m",
+                id("t1")
+            )
+        )]
+    );
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|item| item.locator == "closest:o1:t1")
+    );
+
+    // A tessellated gap straddling the maximum decides nothing.
+    let evaluation = run(
+        rooms(),
+        Geometry::default().gap("o1", "t1", 0.9, 1.1),
+        vec![toilets("closest", &[("maximum", 1.0)])],
+        Vec::new(),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("o1".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
 }
 
 #[test]

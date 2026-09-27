@@ -823,7 +823,7 @@ already decides it.
 | Column | Kind | Meaning |
 |---|---|---|
 | `from`, `to` | selector, required | the start spaces and their destinations |
-| `measure` | string | `straight` (default) or `walking` |
+| `measure` | string | `straight` (default), `closest` or `walking` |
 | `same_storey` | boolean | only destinations on the start's storey count |
 | `direct_access` | boolean | only destinations the start has direct access to count |
 | `minimum`, `maximum` | number | bounds in metres on the nearest destination's distance; at least one, minimum not above maximum |
@@ -838,8 +838,13 @@ already decides it.
 
 - **Straight** is the plan distance between the footprints' centroids
   (`PlanSpanService`, `centres`), an interval exact for planar meshes. Plan
-  rather than 3D, because storeys are what `same_storey` states; the closest
-  distance between footprints is `distance`'s `horizontal` projection.
+  rather than 3D, because storeys are what `same_storey` states.
+- **Closest** is the shortest distance between the two spaces' bodies in
+  space (`ProximityService::measure_distance`, the `minimum_3d` projection
+  `distance` measures), an interval widened by any tessellation. Two long
+  rooms side by side, their centroids 8 m apart, are as close as the wall
+  between them is thick. A pair the service cannot measure, or whose bodies
+  have no distance, is unknown.
 - **Walking** is the metric route (`MetricRoutingService`) from the
   space's representative point to the nearest destination's: the centroid
   of each footprint (`PlanSpanService::measure_centre`) at the bottom of

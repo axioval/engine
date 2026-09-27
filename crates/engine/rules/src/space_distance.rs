@@ -7,7 +7,8 @@ use axioval_engine::{
     CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, Deviation, MetricPoint,
     MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan, PlanSpanServiceHandle,
-    RuleCapability, RuleContext, TableColumn, VerticalExtentServiceHandle,
+    ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
+    TableColumn, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId};
@@ -39,7 +40,10 @@ const COLUMNS: &[TableColumn] = &[
 /// away; with a maximum, a space without any reachable destination is found.
 ///
 /// `measure` `straight` (the default) is the plan distance between the
-/// footprints' centres (the plan-span service). `walking` is the shortest
+/// footprints' centres (the plan-span service). `closest` is the shortest
+/// distance between the spaces' bodies in space (the proximity service's
+/// `minimum_3d` distance), so two long rooms side by side are as close as
+/// the wall between them is thick. `walking` is the shortest
 /// route (the metric-routing service) between representative points: the
 /// centre of each footprint, which must lie inside it, on the space's floor
 /// (the bottom of its vertical extent). A space whose centre lies outside
@@ -66,13 +70,26 @@ pub struct SpaceDistance;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Measure {
     Straight,
+    Closest,
     Walking,
 }
 
 impl Measure {
+    fn parse(row: &str, stated: Option<&str>) -> Result<Self, Unavailable> {
+        match stated.unwrap_or("straight") {
+            "straight" => Ok(Self::Straight),
+            "closest" => Ok(Self::Closest),
+            "walking" => Ok(Self::Walking),
+            other => Err(invalid(format!(
+                "{row}: measure `{other}` is unsupported (straight, closest, walking)"
+            ))),
+        }
+    }
+
     fn describe(self) -> &'static str {
         match self {
             Self::Straight => "in a straight line between centres",
+            Self::Closest => "between the closest points of the bodies",
             Self::Walking => "walking",
         }
     }
@@ -107,15 +124,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             Some(label) => format!("row {index} ({label})"),
             None => format!("row {index}"),
         };
-        let measure = match row.text("measure")?.unwrap_or("straight") {
-            "straight" => Measure::Straight,
-            "walking" => Measure::Walking,
-            other => {
-                return Err(invalid(format!(
-                    "{name}: measure `{other}` is unsupported (straight, walking)"
-                )));
-            }
-        };
+        let measure = Measure::parse(&name, row.text("measure")?)?;
         let bound = |column: &str| -> Result<Option<f64>, Unavailable> {
             match row.number(column)? {
                 Some(value) if value < 0.0 => {
@@ -382,7 +391,7 @@ struct Judge<'r, 'c> {
     climbed: BTreeMap<ObjectId, Climb>,
     partners: BTreeMap<ObjectId, Partners>,
     points: BTreeMap<ObjectId, Result<(MetricPoint, Vec<Evidence>), Unavailable>>,
-    lengths: BTreeMap<(ObjectId, ObjectId), Result<Distance, Unavailable>>,
+    lengths: BTreeMap<(Measure, ObjectId, ObjectId), Result<Distance, Unavailable>>,
 }
 
 fn missing(service: &str) -> Unavailable {
@@ -394,6 +403,52 @@ fn missing(service: &str) -> Unavailable {
 
 fn incomplete(message: String) -> Unavailable {
     (NotEvaluatedReason::IncompleteEvidence, message)
+}
+
+/// Measures one pair of spaces between centres or between the closest
+/// points of their bodies.
+fn measure_pair(
+    context: &RuleContext<'_>,
+    measure: Measure,
+    first: &ObjectId,
+    second: &ObjectId,
+) -> Result<Distance, Unavailable> {
+    let services = context.services;
+    match measure {
+        Measure::Straight => {
+            let spans = services
+                .get::<PlanSpanServiceHandle>()
+                .ok_or_else(|| missing("plan-span"))?;
+            let length = spans
+                .measure_span(first, second, PlanSpan::Centres)
+                .map_err(|error| incomplete(format!("{first} to {second}: {error}")))?;
+            Ok(Distance::Between(
+                length.lower_metres(),
+                length.upper_metres(),
+                length.evidence().clone(),
+            ))
+        }
+        Measure::Closest => {
+            let proximity = services
+                .get::<ProximityServiceHandle>()
+                .ok_or_else(|| missing("proximity"))?;
+            let distance = ProximityRequest::projected(
+                first.clone(),
+                second.clone(),
+                ProximityProjection::Minimum3d,
+            )
+            .and_then(|request| proximity.measure_distance(&request))
+            .map_err(|error| incomplete(format!("{first} to {second}: {error}")))?;
+            let (lower, upper) = distance.interval_metres();
+            if !(lower.is_finite() && upper.is_finite()) {
+                return Err(incomplete(format!(
+                    "{first} to {second}: the bodies have no closest distance"
+                )));
+            }
+            Ok(Distance::Between(lower, upper, distance.evidence().clone()))
+        }
+        Measure::Walking => unreachable!("walking is measured by nearest-target queries"),
+    }
 }
 
 /// An object's representative point for walking: the centre of its
@@ -557,31 +612,24 @@ impl Judge<'_, '_> {
         Ok(candidates)
     }
 
-    fn straight(&mut self, from: &ObjectId, to: &ObjectId) -> Result<Distance, Unavailable> {
-        // A straight line has no direction.
+    /// The distance between two spaces measured pair by pair: between
+    /// centres or between the closest points of the bodies.
+    fn pairwise(
+        &mut self,
+        measure: Measure,
+        from: &ObjectId,
+        to: &ObjectId,
+    ) -> Result<Distance, Unavailable> {
+        // Neither distance has a direction.
         let key = if to < from {
-            (to.clone(), from.clone())
+            (measure, to.clone(), from.clone())
         } else {
-            (from.clone(), to.clone())
+            (measure, from.clone(), to.clone())
         };
         if let Some(known) = self.lengths.get(&key) {
             return known.clone();
         }
-        let measured = (|| {
-            let spans = self
-                .context
-                .services
-                .get::<PlanSpanServiceHandle>()
-                .ok_or_else(|| missing("plan-span"))?;
-            let length = spans
-                .measure_span(&key.0, &key.1, PlanSpan::Centres)
-                .map_err(|error| incomplete(format!("{} to {}: {error}", key.0, key.1)))?;
-            Ok(Distance::Between(
-                length.lower_metres(),
-                length.upper_metres(),
-                length.evidence().clone(),
-            ))
-        })();
+        let measured = measure_pair(self.context, measure, &key.1, &key.2);
         self.lengths.insert(key, measured.clone());
         measured
     }
@@ -596,14 +644,20 @@ impl Judge<'_, '_> {
         located
     }
 
-    /// Bounds the nearest distance in a straight line, pair by pair.
-    fn nearest_straight(&mut self, space: &ObjectId, candidates: &[Candidate]) -> Nearest {
+    /// Bounds the nearest distance in a straight line or between bodies,
+    /// pair by pair.
+    fn nearest_pairwise(
+        &mut self,
+        measure: Measure,
+        space: &ObjectId,
+        candidates: &[Candidate],
+    ) -> Nearest {
         let mut nearest = Nearest::new();
         for candidate in candidates {
             if let Some(doubt) = &candidate.doubt {
                 nearest.doubts.push(doubt.clone());
             }
-            match self.straight(space, &candidate.id) {
+            match self.pairwise(measure, space, &candidate.id) {
                 Ok(distance) => {
                     if candidate.doubt.is_none() && distance.upper() < nearest.most {
                         nearest.most = distance.upper();
@@ -767,7 +821,9 @@ impl Judge<'_, '_> {
     ) -> Result<Option<(Finding, Deviation)>, Unavailable> {
         let candidates = self.candidates(space, index, row)?;
         let nearest = match row.measure {
-            Measure::Straight => self.nearest_straight(&space.id, &candidates),
+            Measure::Straight | Measure::Closest => {
+                self.nearest_pairwise(row.measure, &space.id, &candidates)
+            }
             Measure::Walking => self.nearest_walking(&space.id, &candidates),
         };
         let (most, least) = (nearest.most, nearest.least);

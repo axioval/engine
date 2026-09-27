@@ -5475,6 +5475,41 @@ fn with_geometry_a_walking_distance_too_long_is_found() {
     );
 }
 
+#[test]
+fn with_geometry_the_closest_distance_is_measured_between_bodies() {
+    let case = Case::new("geometry-space-distance-closest");
+    let row = |measure: &str| {
+        json!({"from": {"type": "selector", "value": entity("space")},
+               "to": {"type": "selector", "value": entity("space")},
+               "measure": {"type": "string", "value": measure},
+               "maximum": {"type": "number", "value": 1.0}})
+    };
+    let (output, result) = case.geometry_rule(
+        &rooms_through_an_opening(),
+        &[("space", "IfcSpace")],
+        "axioval:capability.space-distance",
+        &registry_signature("axioval:capability.space-distance"),
+        entity("space"),
+        json!({"distances": {"type": "table", "value": [row("closest"), row("straight")]}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The bodies lie 0.2 m apart, within 1 m; the centres 4.2 m.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    for (_, message) in &findings {
+        assert!(
+            message.contains(" m away in a straight line between centres; row 1 allows"),
+            "{result:#}"
+        );
+    }
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Two 3 x 3 m washrooms, #19 (x 0 to 3) and #49 (x 4 to 7), each with a
 /// WC against its south wall, 0.4 m wide, 0.7 m deep and 0.4 m high: #29
 /// at x 1 to 1.4 and #59 at x 5 to 5.4. Vanity unit #39 hangs 0.8 to 1 m

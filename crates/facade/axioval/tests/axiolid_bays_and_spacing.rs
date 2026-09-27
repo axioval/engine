@@ -406,6 +406,187 @@ fn an_undeclared_check_or_a_half_declared_one_is_refused() {
     }
 }
 
+/// A row of three perpendicular bays north of the aisle, 2.5 m wide and
+/// 4.8 m long (`p1` to `p3`, x 0 to 7.5), and a parallel bay `q` along the
+/// aisle's south side, 6 x 2.4 m, 5.5 m long; column `k` stands off the
+/// north-west corner of `p1`, beside its west side but only within 0.3 m of
+/// its far end.
+fn mixed_bays() -> Scene {
+    Scene::default()
+        .body("aisle", "aisle", &rect(-5.0, 0.0, 25.0, 6.0), 0.0, 2.5)
+        .body("p1", "bay", &rect(0.0, 6.0, 2.5, 10.8), 0.0, 2.2)
+        .body("p2", "bay", &rect(2.5, 6.0, 5.0, 10.8), 0.0, 2.2)
+        .body("p3", "bay", &rect(5.0, 6.0, 7.5, 10.8), 0.0, 2.2)
+        .body("q", "bay", &rect(10.0, -2.4, 15.5, 0.0), 0.0, 2.2)
+        .body("k", "column", &rect(-0.4, 10.5, -0.05, 11.0), 0.0, 3.0)
+}
+
+#[test]
+fn a_size_bound_applies_only_to_bays_in_the_selected_orientation() {
+    let filtered = |orientations: &[&str]| {
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+            ("orientations", path(orientations)),
+            ("aisles", selector(kind("aisle"))),
+            ("angle_tolerance", quantity(5.0, "deg")),
+        ]
+    };
+    // The perpendicular bays are 4.8 m long, short of 5 m; the parallel bay
+    // is 5.5 m long, and ignored anyway.
+    let outcome = mixed_bays().check(&ParkingBay, "bay", filtered(&["perpendicular"]));
+    let found = findings(&outcome);
+    assert_eq!(
+        found.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["p1", "p2", "p3"],
+        "{found:#?}"
+    );
+    assert!(
+        found[0].1.starts_with(
+            "length along the bay's own axes is 4.8 m; at least 5 m (a bay with orientation \
+             perpendicular)"
+        ),
+        "{found:#?}"
+    );
+    assert!(outcome.not_evaluated_outcomes().is_empty(), "{outcome:?}");
+    // Parallel bays alone: the one there is long enough.
+    let outcome = mixed_bays().check(&ParkingBay, "bay", filtered(&["parallel"]));
+    assert!(outcome.findings().is_empty(), "{outcome:?}");
+    assert!(outcome.not_evaluated_outcomes().is_empty(), "{outcome:?}");
+}
+
+#[test]
+fn without_an_aisle_the_orientation_is_inferred_from_neighbouring_bays() {
+    let filtered = |orientations: &[&str]| {
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+            ("orientations", path(orientations)),
+            ("neighbour_reach", metres(0.05)),
+            ("angle_tolerance", quantity(5.0, "deg")),
+        ]
+    };
+    // The row's bays stand side by side: perpendicular. `q` has no
+    // neighbour: unclear.
+    let found = findings(&mixed_bays().check(&ParkingBay, "bay", filtered(&["perpendicular"])));
+    assert_eq!(
+        found.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["p1", "p2", "p3"],
+        "{found:#?}"
+    );
+    let outcome = mixed_bays().check(&ParkingBay, "bay", filtered(&["unclear"]));
+    assert!(outcome.findings().is_empty(), "{outcome:?}");
+    assert!(outcome.not_evaluated_outcomes().is_empty(), "{outcome:?}");
+    // Two bays end to end are parallel.
+    let row = Scene::default()
+        .body("e1", "bay", &rect(0.0, 0.0, 4.8, 2.4), 0.0, 2.2)
+        .body("e2", "bay", &rect(4.8, 0.0, 9.6, 2.4), 0.0, 2.2);
+    let found = findings(&row.check(&ParkingBay, "bay", filtered(&["parallel"])));
+    assert_eq!(found.len(), 2, "{found:#?}");
+}
+
+#[test]
+fn a_corner_column_outside_the_side_zone_is_no_obstruction() {
+    let states = |zone: Option<f64>| {
+        let mut parameters = vec![
+            ("min_width", metres(2.6)),
+            ("applies_when", text("filter")),
+            ("side_states", path(&["none"])),
+            ("obstacles", selector(kind("column"))),
+            ("obstruction_reach", metres(0.1)),
+        ];
+        if let Some(zone) = zone {
+            parameters.push(("side_zone_length", metres(zone)));
+        }
+        parameters
+    };
+    // Along the whole side, `k` obstructs `p1`'s west side, so the 2.6 m
+    // width required of unobstructed bays applies to the others only.
+    let found = findings(&mixed_bays().check(&ParkingBay, "bay", states(None)));
+    assert_eq!(
+        found.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["p2", "p3", "q"],
+        "{found:#?}"
+    );
+    // Within the central 3 m of the side, it does not: `p1` is judged too.
+    let outcome = mixed_bays().check(&ParkingBay, "bay", states(Some(3.0)));
+    let found = findings(&outcome);
+    assert_eq!(
+        found.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["p1", "p2", "p3", "q"],
+        "{found:#?}"
+    );
+    assert!(outcome.not_evaluated_outcomes().is_empty(), "{outcome:?}");
+    // In findings mode the zone counts the same way.
+    let findings_mode = |zone: f64| {
+        vec![
+            ("obstacles", selector(kind("column"))),
+            ("obstruction_reach", metres(0.1)),
+            ("end_obstructions", text("both")),
+            ("side_obstructions", text("none")),
+            ("side_zone_length", metres(zone)),
+        ]
+    };
+    assert!(findings(&mixed_bays().check(&ParkingBay, "bay", findings_mode(3.0))).is_empty());
+    assert_eq!(
+        findings(&mixed_bays().check(&ParkingBay, "bay", findings_mode(4.8))).len(),
+        1
+    );
+}
+
+#[test]
+fn filter_declarations_are_checked() {
+    for parameters in [
+        vec![
+            ("min_length", metres(5.0)),
+            ("orientations", path(&["parallel"])),
+        ],
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+        ],
+        vec![
+            ("applies_when", text("filter")),
+            ("orientations", path(&["parallel"])),
+            ("aisles", selector(kind("aisle"))),
+            ("angle_tolerance", quantity(5.0, "deg")),
+        ],
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+            ("orientations", path(&["sideways"])),
+            ("aisles", selector(kind("aisle"))),
+            ("angle_tolerance", quantity(5.0, "deg")),
+        ],
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+            ("orientations", path(&["parallel"])),
+        ],
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+            ("end_states", path(&["none"])),
+        ],
+        vec![
+            ("min_length", metres(5.0)),
+            ("applies_when", text("filter")),
+            ("side_states", path(&["none"])),
+            ("obstacles", selector(kind("column"))),
+            ("obstruction_reach", metres(0.1)),
+            ("side_obstructions", text("none")),
+        ],
+    ] {
+        let outcome = mixed_bays().check(&ParkingBay, "bay", parameters.clone());
+        assert!(outcome.findings().is_empty(), "{parameters:?}");
+        assert_eq!(
+            outcome.not_evaluated_outcomes()[0].reason(),
+            &NotEvaluatedReason::InvalidDeclaration,
+            "{parameters:?}"
+        );
+    }
+}
+
 /// A storey over a 10 x 8 m slab, with walls 0.2 m thick along x: `s` at
 /// y 0..0.2, `m` at y 5..5.2 from x 2, `n` at y 5.6..5.8, and `x` across
 /// them at x 0..0.2.

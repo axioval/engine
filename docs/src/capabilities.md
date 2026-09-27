@@ -917,12 +917,24 @@ Without `axis_tolerance`, counterparts are not filtered by direction: a perpendi
 | `obstacles` | selector, optional | what obstructs a bay, such as columns and walls |
 | `obstruction_reach` | length | how far in plan from the bay an obstacle obstructs it |
 | `end_obstructions`, `side_obstructions` | strings | how many ends and sides may be obstructed: `none`, `one` or `both` |
+| `side_zone_length` | length, optional | a side counts as obstructed only by an obstacle overlapping its central stretch this long, so a column off a corner is none |
+| `applies_when` | string, optional | `findings` (the default): orientation and obstructions are findings; `filter`: they select the bays the size bounds apply to |
+| `orientations` | string list | with `filter`: the orientation states a bay must be in, any of `parallel`, `perpendicular`, `angled` and `unclear` |
+| `end_states`, `side_states` | string lists | with `filter`: how many ends and sides may be obstructed, any of `none`, `one` and `both` |
+| `neighbour_reach` | length, optional | with `orientations` and no `aisles`: infer the orientation from the neighbouring bays within this reach in plan |
 
 Declaring nothing to check, an orientation without aisles, or part of the obstruction parameters is an invalid declaration. Each declared check is its own finding or not-evaluated outcome:
 
 - **Size**: the width and length (and height) are intervals judged against the bounds; one straddling a bound is not evaluated. Sizes need a unique orientation: a footprint several rectangles of least area enclose, or a tessellated one, is not evaluated.
 - **Orientation**: the bay passes when a selected aisle surely within reach stands at the required angle; it is a finding ("not perpendicular to any aisle", or "no aisle lies within") when no aisle that may be within reach may stand so, relating the aisles found. A bay or aisle without a long axis (a square) leaves the angle undecided.
 - **Obstructions**: an obstacle within reach obstructs an end when it reaches past the end's line and overlaps the end's span across the bay; likewise a side. Positions come from each object's extent along the bay's axes (`VerticalExtentService::measure_directional_extent`), widened by how far the axes may be turned. More ends (or sides) surely obstructed than allowed is a finding naming the obstacles; an obstacle within the bay's rectangle, past none of its edges, is always one. An obstacle the selector cannot decide, whose extent cannot be read or whose position straddles an edge may obstruct any edge it could reach, so it leaves the count not evaluated when it could exceed the allowance. A square bay has no ends; with obstacles near it, the count is not evaluated.
+
+**Filters.** With `applies_when: filter`, the orientation and obstruction states of a bay are no findings: a size bound applies only to bays whose states lie in the declared sets, so one rule checks perpendicular bays against a 5 m length and ignores parallel ones, another parallel bays against 6 m. `orientation`, `end_obstructions` and `side_obstructions` belong to findings mode and are refused with `filter`; `obstacles` and `obstruction_reach` go with `end_states` or `side_states`, and at least one size bound is required.
+
+- A bay's orientation state is the alignment its long axis makes with every selected aisle surely within `aisle_reach`, within `angle_tolerance`. With `neighbour_reach` instead of `aisles`, it is read from its neighbouring bays (the rule's own selection) within reach whose long axes are parallel to its own: the direction from its centre to theirs, taken as an aisle running along the row, is perpendicular when they stand side by side, parallel when end to end, angled in between. No such aisle or neighbour, or ones that disagree, make the bay `unclear`.
+- Its obstruction states are the numbers of ends and sides obstructed, counted as in findings mode (with `side_zone_length` too).
+- Every state is three-valued: an aisle, neighbour or obstacle that is only possibly there, or whose angle or position straddles, leaves several states possible. A bound applies when every possible state is allowed, not when none is; otherwise its pass stands and its failure is not evaluated, saying which states are open. A finding names the states it was applied under.
+- An obstacle standing within the bay stays a finding in both modes.
 
 Angled bays drawn as parallelograms are enclosed by a rectangle that is not their own; their dimensions along the stall line wait on a parallelogram measurement.
 

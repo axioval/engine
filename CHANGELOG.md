@@ -24,6 +24,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   finding (`PRIORITY_HIGH`, `PRIORITY_NORMAL`, `PRIORITY_LOW`). A
   not-evaluated outcome's topic has none: no severity was decided. Every
   archive with findings gains the element; GUIDs are unchanged.
+- **Parking-bay states as filters, a mid-side zone and neighbour
+  orientation.** (#127) `parking-bay` takes `applies_when`: with `filter`,
+  orientation and obstruction states select the bays the size bounds apply
+  to, as sets `orientations` (`parallel`, `perpendicular`, `angled`,
+  `unclear`), `end_states` and `side_states` (`none`, `one`, `both`), so
+  one rule checks perpendicular bays against 5 m and ignores parallel ones.
+  Without `aisles`, `neighbour_reach` infers a bay's orientation from the
+  neighbouring bays parallel to it. `side_zone_length` counts a side
+  obstruction only within the side's central stretch, so a corner column
+  outside it is none. A state left open keeps a pass and leaves a failure
+  not evaluated. **Breaking:** definitions bound to `parking-bay` must
+  declare the six new optional parameters.
 - **Effective coverage through connected spaces, per-source multipliers,
   stated areas and missing values.** (#126) `effective-coverage` in
   `travel` and `visible` takes `access_path` with `door_selector`,

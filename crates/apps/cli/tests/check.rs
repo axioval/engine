@@ -5860,6 +5860,40 @@ fn car_park() -> String {
 }
 
 #[test]
+fn with_geometry_a_size_bound_applies_only_to_the_bays_its_states_select() {
+    let case = Case::new("geometry-parking-bay-filter");
+    let check = |orientations: &[&str]| {
+        case.geometry_rule(
+            &car_park(),
+            &[("space", "IfcSpace"), ("slab", "IfcSlab")],
+            "axioval:capability.parking-bay",
+            &registry_signature("axioval:capability.parking-bay"),
+            entity("space"),
+            json!({
+                "min_length": {"type": "quantity", "value": 5, "unit": "m"},
+                "applies_when": {"type": "string", "value": "filter"},
+                "orientations": {"type": "stringList", "value": orientations},
+                "aisles": {"type": "selector", "value": entity("slab")},
+                "aisle_reach": {"type": "quantity", "value": 0.1, "unit": "m"},
+                "angle_tolerance": {"type": "quantity", "value": 5, "unit": "deg"},
+            }),
+        )
+    };
+    // #40, at 45 degrees, is angled and 4.8 m long; #29 is perpendicular.
+    let (output, result) = check(&["angled"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#40", "{result:#}");
+    assert!(
+        found[0].1.ends_with("(a bay with orientation angled)"),
+        "{result:#}"
+    );
+    let (output, result) = check(&["perpendicular"]);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
+#[test]
 fn with_geometry_parking_spaces_are_checked_along_their_own_axes() {
     let case = Case::new("geometry-parking-bay");
     let (output, result) = case.geometry_rule(

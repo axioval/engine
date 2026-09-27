@@ -513,18 +513,20 @@ The `limits` table has the optional columns `key_1` … `key_4` (text patterns, 
 
 Whether a window sits at the end of a corridor is not decided: it needs the corridor's axis (a medial axis of its footprint), which no service provides yet.
 
-`clear-width` limits a door's clear width in metres, taken from the first of two steps that produces one:
+`clear-width` limits a door's clear width in metres, taken from the first of three steps that produces one:
 
 1. the length `quantity_property` states (a clear width the project records on the door or its type);
-2. else the length `overall_width` states (with IFC, `axioval:attributes.OverallWidth`) less `width_deduction`, a non-negative length the rule states for frame, lining and leaf.
+2. with `clear_width_from_leaves`, the door's overall width less its lining thickness at both jambs and the thickness of every hinged leaf, as the object-frame service states the door's leaves (with IFC, `OverallWidth`, `IfcDoorLiningProperties.LiningThickness` and each `IfcDoorPanelProperties.PanelDepth`): a leaf standing open at right angles stands its thickness into the opening;
+3. else the length `overall_width` states (with IFC, `axioval:attributes.OverallWidth`) less `width_deduction`, a non-negative length the rule states for frame, lining and leaf.
 
 | Parameter | Kind | Meaning |
 |---|---|---|
 | `quantity_property` | `propertyReference` | The stated clear width, a length. |
 | `overall_width` | `propertyReference` | The overall width the deduction is taken from, a length. |
 | `width_deduction` | `quantity` | The rule author's deduction, a length of at least zero; declared together with `overall_width`. |
+| `clear_width_from_leaves` | `boolean` | Derive the clear width from the door's lining and leaves before the deduction. |
 
-At least one step is declared; `overall_width` and `width_deduction` are refused with any other quantity, and `floor_path` with this one. As in the [light-opening fallback](#light-opening-area), only an exact absence moves to the next step: a stated value that is null, not a length or not positive leaves the door not evaluated rather than replaced by the approximation, and so does an absent overall width or a deduction that leaves no width. The deduction is a **declared approximation of the rule author**, not a measurement: the finding says so ("clear width (… 0.9 m less the rule's deduction 0.1 m, an approximation) is 0.8 m; required at least 0.9 m …") and cites the evidence entry `axioval:derived.clear-width:<door>:step=overall-width-less-deduction;deduction=<metres>`, marked inexact; a stated width cites `…:step=stated`, exact. A deduction that differs per door type is one rule per type. Widths are read as the decimals they display, so an end within a few units in the last binary place of a bound meets it: a 1 m door less 0.1 m meets a 0.9 m minimum. Deriving the clear width from the lining and panel properties the model states (lining offset, thickness, panel width) is not implemented: the IFC adapter reads those attributes as properties, but no step combines them.
+At least one step is declared; `overall_width` and `width_deduction` are refused with any other quantity, and `floor_path` with this one. As in the [light-opening fallback](#light-opening-area), only an exact absence moves to the next step: a stated value that is null, not a length or not positive leaves the door not evaluated rather than replaced by the approximation, and so does an absent overall width or a deduction that leaves no width. The deduction is a **declared approximation of the rule author**, not a measurement: the finding says so ("clear width (… 0.9 m less the rule's deduction 0.1 m, an approximation) is 0.8 m; required at least 0.9 m …") and cites the evidence entry `axioval:derived.clear-width:<door>:step=overall-width-less-deduction;deduction=<metres>`, marked inexact; a stated width cites `…:step=stated`, exact. A deduction that differs per door type is one rule per type. Widths are read as the decimals they display, so an end within a few units in the last binary place of a bound meets it: a 1 m door less 0.1 m meets a 0.9 m minimum. The leaves step moves on when the source states no leaves (`NotStated`), no lining thickness or a leaf without a thickness, or when a leaf slides, rolls or is fixed, which the derivation does not cover; leaves the source states but cannot place (`Refused`, `Unreadable`), a missing object-frame service and a derivation leaving no width are not evaluated. Its finding names the figures ("clear width (overall width 1 m less 2 × 0.05 m lining and 0.04 m of open leaf, as the door states them) is 0.86 m …") and cites `…:step=lining-and-leaves`, inexact: stops, rebates and hardware are not modelled. A definition bound to `keyed-limit` must declare `clear_width_from_leaves` as optional.
 
 ### Exit separation
 
@@ -932,13 +934,13 @@ Elevations and footprints are intervals, and a tessellated slab's are never poin
 | Parameter | Kind | Meaning |
 |---|---|---|
 | `side` | `string` | Required. `front`, `back`, `left` or `right` of the component's front; left and right as seen facing along the front (the component's own left and right). |
-| `front_axis` | `string` | Required. Which placement axis is the front: `forward`, `-forward`, `right` or `-right`, or `stated` for the front the source states. A source that states none leaves the component not evaluated; IFC states none. |
+| `front_axis` | `string` | Required. Which placement axis is the front: `forward`, `-forward`, `right` or `-right`, or `stated` for the front the source states. A source that states none leaves the component not evaluated; IFC states none. For a door, `swing` is the side its hinged leaves open towards and `-swing` the other side, as the door's leaves state them (see [Doors](#doors)). |
 | `both_sides` | `boolean` | Also check the opposite side, as its own finding. |
 | `width`, `depth` | `quantity` | A box: `width` across the side, `depth` away from it. |
 | `radius` | `quantity` | A cylinder instead of a box. |
 | `height` | `quantity` | Required. The volume's height. |
 | `offset` | `quantity` | Gap between the component's outermost point on the side and the volume (default 0; negative overlaps the component). |
-| `align` | `string` | `centre` (default) on the component, or flush with its `left` or `right` edge as seen looking out of the side. |
+| `align` | `string` | `centre` (default) on the component, or flush with its `left` or `right` edge as seen looking out of the side. For a door with one hinged leaf, `handle` or `hinge`: flush with the edge its handle (the closed leaf's free edge) or its hinge is at, on a front or back side. |
 | `lateral_offset` | `quantity` | Moves the volume across the side, to the right as seen looking out of it. |
 | `slide_from`, `slide_to` | `quantity` | Together: the volume floats, free when it is free at some offset between the two across the side, to the right as seen looking out of it, from where `align` and `lateral_offset` put it. Needs `space_path`. |
 | `size_mode` | `string` | `minimum` (default): the volume must be free. `maximum`: no volume `size_tolerance` larger in one dimension may be free. `fixed`: both, the first less `size_tolerance` in every dimension. |
@@ -1106,13 +1108,13 @@ Door accessibility checks are compositions of the capabilities above; no capabil
 | Sub-check | Rule |
 |---|---|
 | Clear width per door type | `keyed-limit` with `quantity: clear-width`, a `minimum` per type row: the clear width the door states, else its `OverallWidth` less the rule's `width_deduction`, a declared approximation (see [Keyed limits](#keyed-limits)). |
-| Clear width derived from panel width less frame and panel thickness | Not decided yet: the IFC adapter reads the lining and panel properties (`IfcDoorLiningProperties`, `IfcDoorPanelProperties`), but no step derives a width from them. The rule's deduction stands in for them until then. |
-| Threshold height | A stated length: `keyed-limit` with `quantity: property` and a `maximum` per type row, or a `property-requirements` row with `maximum` and `unit`. The threshold's body is not measured; models rarely carry one. |
+| Clear width derived from panel width less frame and panel thickness | `keyed-limit` `clear-width` with `clear_width_from_leaves`: the overall width less the lining on both jambs and every open leaf's thickness, as the door's leaves state them (with IFC, `LiningThickness` and each `PanelDepth`). |
+| Threshold height | A stated length: `keyed-limit` with `quantity: property` and a `maximum` per type row, or a `property-requirements` row with `maximum` and `unit`. With IFC the lining states one as `ThresholdThickness` of `IfcDoorLiningProperties`, read like any property. The threshold's body is not measured; models rarely carry one. |
 | Glazing ratio | A stated fraction, such as `GlazingAreaFraction` in `Pset_DoorCommon`: a `property-requirements` row with `minimum`/`maximum` and no `unit`, or `keyed-limit` with `quantity: property` per type. Deriving it from the panels is not implemented. |
 | Minimum distance to other doors | `distance` with `counterparts` the doors, `mode: none_closer_than`, `projection: horizontal` and `minimum_metres`. With `relationship: axioval:derived.adjacent-space`, only doors opening into a common space count. |
 | Which spaces a door connects, and their types | `opening-spaces`, or a key read along `axioval:derived.adjacent-space` (as for sill heights); the side facing `outside` is recorded in the adjacency evidence. |
 | Door width on an accessible route | Walkability (#76) with the clear widths the host states per portal; the CLI states none, since `OverallWidth` includes the lining. |
-| Clear areas in front of, behind and beside the leaf (handle side), with a floor under them | Not decided yet: they need the door's leaf, hinge side and front (upstream openbimrs/ifc#148) and rectangles fixed to the door. The placement search answers such frame-offset domains (#84), but `free-floor-rectangle` has no orientation that grounds one in a door's frame yet. Clearance zones around components are #83. |
+| Clear areas in front of, behind and beside the leaf (handle side), with a floor under them | `component-clearance` with `front_axis` `swing` (the side the leaf opens into) or `-swing`, one rule per side and size; `align` `handle` puts the area flush with the handle edge, and `lateral_offset` moves it beyond; `within_space` asks for the floor under it. A double-acting, sliding or multi-leaf door leaves what it cannot place not evaluated. |
 | Opening direction relative to the space type | Not decided yet: it needs the swing direction (upstream openbimrs/ifc#148). The spaces on each side are known; which way the leaf opens is not. |
 
 A clear width per door type, stated where the model records it and otherwise approximated with a 10 cm deduction:

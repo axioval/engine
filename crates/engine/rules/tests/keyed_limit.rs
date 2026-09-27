@@ -519,6 +519,10 @@ fn a_package_binds_the_limit_table() {
         parameter("propertyReference", false),
     );
     parameters.insert("width_deduction".into(), parameter("quantity", false));
+    parameters.insert(
+        "clear_width_from_leaves".into(),
+        parameter("boolean", false),
+    );
     for index in 1..=4 {
         parameters.insert(
             format!("key_{index}"),
@@ -1052,4 +1056,88 @@ fn a_clear_width_declaration_is_checked() {
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
+}
+
+/// With `clear_width_from_leaves`, a door's clear width is its overall width
+/// less its lining on both jambs and its open leaves, as the leaves state
+/// them; a door whose leaves slide or state no thickness moves on to the
+/// deduction, and one whose leaves cannot be read is not evaluated.
+#[test]
+fn a_clear_width_is_derived_from_the_lining_and_leaves() {
+    use common::doors::{Doors, hinged, sliding};
+    let leaf = |width: f64| hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], width, false);
+    let model = doors(&[
+        // 1 m less 2 × 0.05 m lining and a 0.04 m leaf: 0.86 m.
+        ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+        // 1.1 m less 0.1 m and 0.04 m: 0.96 m.
+        ("d2", "SINGLE_SWING_LEFT", Some(1.1), None),
+        // Two leaves open: 1.3 m less 0.1 m and 2 × 0.04 m: 1.12 m.
+        ("d3", "DOUBLE_DOOR_SINGLE_SWING", Some(1.3), None),
+        // Sliding: the deduction applies, 1 m less 0.2 m.
+        ("d4", "SINGLE_SWING_LEFT", Some(1.0), None),
+        // No lining thickness: the deduction applies, 1.2 m less 0.2 m.
+        ("d5", "SINGLE_SWING_LEFT", Some(1.2), None),
+        ("d6", "SINGLE_SWING_LEFT", Some(1.2), None),
+    ]);
+    let frames = Doors::default()
+        .door("d1", vec![leaf(0.9)], 1.0, Some(0.05))
+        .door("d2", vec![leaf(1.0)], 1.1, Some(0.05))
+        .door("d3", vec![leaf(0.6), leaf(0.6)], 1.3, Some(0.05))
+        .door(
+            "d4",
+            vec![sliding([0.0; 3], [1.0, 0.0, 0.0], 1.0)],
+            1.0,
+            Some(0.05),
+        )
+        .door("d5", vec![leaf(1.1)], 1.2, None)
+        .unknown(
+            "d6",
+            axioval_engine::DoorLeavesError::Refused("folding".into()),
+        )
+        .handle();
+    let mut parameters = door_keys(Some(0.2));
+    parameters.push(("clear_width_from_leaves", common::boolean(true)));
+    let evaluation = model.evaluate_with(
+        &KeyedLimit,
+        &rule(ID, kind("door"), parameters),
+        |services| {
+            services.register(frames).unwrap();
+        },
+    );
+    let found = findings(&evaluation);
+    assert_eq!(
+        found
+            .iter()
+            .map(|(door, _)| door.as_str())
+            .collect::<Vec<_>>(),
+        ["d1", "d3", "d4"],
+        "{found:?}"
+    );
+    assert_eq!(
+        found[0].1,
+        "clear width (overall width 1 m less 2 × 0.05 m lining and 0.04 m of open leaf, as the \
+         door states them) is 0.86 m; required at least 0.9 m (limit row 0: \
+         Attributes.OperationType `SINGLE_SWING_LEFT`)"
+    );
+    assert!(
+        found[1].1.contains("is 1.12 m; required at least 1.2 m"),
+        "{}",
+        found[1].1
+    );
+    assert!(
+        found[2].1.contains("the rule's deduction 0.2 m"),
+        "{}",
+        found[2].1
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d6".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let derived = evaluation.findings()[0]
+        .evidence
+        .iter()
+        .find(|evidence| evidence.locator.starts_with("axioval:derived.clear-width:"))
+        .unwrap();
+    assert!(derived.locator.ends_with("d1:step=lining-and-leaves"));
+    assert!(!derived.exact);
 }

@@ -147,6 +147,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Door clear widths from the lining and leaves, and door clearances by
+  swing side.** (Refs #82) `keyed-limit`'s `clear-width` gains a step
+  between the stated width and the rule's deduction:
+  with `clear_width_from_leaves`, the overall width less the lining on
+  both jambs and every hinged leaf's thickness, as the door's leaves state
+  them (with IFC, `LiningThickness` and `PanelDepth`), cited as the inexact
+  `…:step=lining-and-leaves`. It moves on when the source states no leaves
+  or thicknesses or a leaf does not swing. `component-clearance` takes
+  `front_axis` `swing` (the side a door's hinged leaves open into) and
+  `-swing`, and `align` `handle` and `hinge` (flush with the edge of a
+  single hinged leaf's handle or hinge), so the clear areas in front of,
+  behind and beside a door are rules; a double-acting, sliding or
+  multi-leaf door leaves what it cannot place not evaluated. A threshold is
+  the lining's `ThresholdThickness`, read as any property.
+  **Breaking:** definitions bound to `keyed-limit` must declare the new
+  optional parameter `clear_width_from_leaves`.
 - **Distances to door swings.** (Closes #60) `distance` gains
   `subject_extent` and `counterpart_extent`: `door_swing` measures that side
   by the floor sectors its doors' hinged leaves sweep instead of its body,

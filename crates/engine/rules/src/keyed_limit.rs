@@ -2,11 +2,13 @@
 //! values read from the object or from objects related to it.
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn, VerticalExtent,
+    CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeavesError, NotEvaluatedReason,
+    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
+    TableColumn, VerticalExtent,
 };
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
+use crate::door_swing;
 use crate::level_spacing::{extent, extents};
 use crate::light_area::{LightArea, length};
 use crate::plan_area::{Verdict, footprint, judge, shown};
@@ -76,6 +78,8 @@ enum Quantity<'a> {
 struct ClearWidth<'a> {
     /// The clear width the object states, tried first.
     stated: Option<PropertyRef<'a>>,
+    /// Whether to derive it next from the door's leaves and lining.
+    leaves: bool,
     /// The overall width and the deduction from it, in metres.
     derived: Option<(PropertyRef<'a>, f64)>,
 }
@@ -85,6 +89,7 @@ impl<'a> ClearWidth<'a> {
     /// deduction only together.
     fn declared(
         stated: Option<PropertyRef<'a>>,
+        leaves: bool,
         overall: Option<PropertyRef<'a>>,
         deduction: Option<f64>,
     ) -> Result<Self, Unavailable> {
@@ -97,13 +102,17 @@ impl<'a> ClearWidth<'a> {
                 ));
             }
         };
-        if stated.is_none() && derived.is_none() {
+        if stated.is_none() && !leaves && derived.is_none() {
             return Err(invalid(
-                "`quantity` `clear-width` needs `quantity_property`, or `overall_width` \
-                 with `width_deduction`, or both",
+                "`quantity` `clear-width` needs `quantity_property`, \
+                 `clear_width_from_leaves`, or `overall_width` with `width_deduction`",
             ));
         }
-        Ok(Self { stated, derived })
+        Ok(Self {
+            stated,
+            leaves,
+            derived,
+        })
     }
 
     /// The clear width of `object`: the stated one when present, else the
@@ -124,13 +133,22 @@ impl<'a> ClearWidth<'a> {
                 });
             }
         }
+        if self.leaves
+            && let Some(measured) = Self::from_leaves(context, object, &mut evidence)?
+        {
+            return Ok(measured);
+        }
         let Some((overall, deduction)) = self.derived else {
-            let stated = self
-                .stated
-                .map_or_else(String::new, |stated| stated.to_string());
+            let mut absent: Vec<String> = self.stated.iter().map(ToString::to_string).collect();
+            if self.leaves {
+                absent.push("the lining and leaf thicknesses".into());
+            }
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
-                format!("{stated} is absent and the rule states no deduction to derive it"),
+                format!(
+                    "{} absent and the rule states no deduction to derive it",
+                    absent.join(" and ")
+                ),
             ));
         };
         let Some(width) = LightArea::length(context, object, overall, &mut evidence)? else {
@@ -171,6 +189,81 @@ impl<'a> ClearWidth<'a> {
         })
     }
 
+    /// The clear width of a door whose leaves all swing, from what it
+    /// states: the overall width less the lining on both jambs and the
+    /// thickness of every hinged leaf standing open in the opening. `None`
+    /// (move on) when the source states no leaves, no lining thickness or
+    /// a leaf thickness, or when a leaf slides, rolls or is fixed, so that
+    /// this derivation does not apply.
+    fn from_leaves(
+        context: &RuleContext<'_>,
+        object: &Object,
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Option<Measured>, Unavailable> {
+        let Some(frames) = context.services.get::<ObjectFrameServiceHandle>() else {
+            return Err((
+                NotEvaluatedReason::MissingService,
+                "the object-frame service is not registered, so the door's leaves are unknown"
+                    .into(),
+            ));
+        };
+        let leaves = match frames.leaves(&object.id) {
+            Ok(leaves) => leaves,
+            Err(DoorLeavesError::NotStated(_)) => return Ok(None),
+            Err(error) => {
+                return Err((
+                    door_swing::reason(&error),
+                    format!("the door's leaves are unknown: {error}"),
+                ));
+            }
+        };
+        if leaves
+            .leaves()
+            .iter()
+            .any(|leaf| !leaf.motion().is_hinged())
+        {
+            return Ok(None);
+        }
+        let Some(lining) = leaves.lining_thickness_metres() else {
+            return Ok(None);
+        };
+        let mut depth = 0.0;
+        for leaf in leaves.hinged() {
+            let Some(leaf_depth) = leaf.depth_metres() else {
+                return Ok(None);
+            };
+            depth += leaf_depth;
+        }
+        let overall = leaves.overall_width_metres();
+        let deduction = 2.0 * lining + depth;
+        let (lower, upper) = difference(overall, deduction);
+        if upper <= 0.0 {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "the overall width {} m less its lining and leaves {} m leaves no clear width",
+                    shown(overall, overall),
+                    shown(deduction, deduction)
+                ),
+            ));
+        }
+        evidence.push(leaves.evidence().clone());
+        evidence.push(Self::record(&object.id, "lining-and-leaves", false));
+        Ok(Some(Measured {
+            lower,
+            upper,
+            unit: " m".into(),
+            what: format!(
+                "clear width (overall width {} m less 2 × {} m lining and {} m of open leaf, as \
+                 the door states them)",
+                shown(overall, overall),
+                shown(lining, lining),
+                shown(depth, depth)
+            ),
+            evidence: std::mem::take(evidence),
+        }))
+    }
+
     /// The evidence entry recording which step produced a clear width; the
     /// deduction step is an approximation and so never exact.
     fn record(object: &ObjectId, step: &str, exact: bool) -> Evidence {
@@ -207,8 +300,10 @@ enum Key {
 /// object's bottom elevation above the bottom of each object `floor_path`
 /// reaches from it (a window's spaces), in metres, or `clear-width`, a
 /// door's clear width in metres: the length `quantity_property` states,
-/// else, when that is exactly absent, the length `overall_width` states less
-/// the rule's `width_deduction`. The deduction is the rule author's declared
+/// else, with `clear_width_from_leaves`, the overall width less the lining
+/// on both jambs and every open hinged leaf's thickness as the door's
+/// leaves state them, else the length `overall_width` states less the
+/// rule's `width_deduction`; each step only after an exact absence. The deduction is the rule author's declared
 /// approximation of frame and lining; a width derived with it says so and
 /// cites an inexact `axioval:derived.clear-width` evidence entry.
 ///
@@ -240,6 +335,7 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::optional("floor_path", ParameterType::StringList),
             ParameterDescriptor::optional("overall_width", ParameterType::PropertyReference),
             ParameterDescriptor::optional("width_deduction", ParameterType::Quantity),
+            ParameterDescriptor::optional("clear_width_from_leaves", ParameterType::Boolean),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ];
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -334,9 +430,13 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
     let named = parameters.required_string("quantity")?;
     let overall = parameters.property("overall_width")?;
     let deduction = length(parameters, "width_deduction")?;
-    if named != "clear-width" && (overall.is_some() || deduction.is_some()) {
+    let from_leaves = parameters
+        .boolean("clear_width_from_leaves")?
+        .unwrap_or(false);
+    if named != "clear-width" && (overall.is_some() || deduction.is_some() || from_leaves) {
         return Err(invalid(format!(
-            "`overall_width` and `width_deduction` apply only to `clear-width`, not `{named}`"
+            "`overall_width`, `width_deduction` and `clear_width_from_leaves` apply only to \
+             `clear-width`, not `{named}`"
         )));
     }
     let quantity = match (named, property, floor) {
@@ -345,9 +445,12 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
                 "`floor_path` applies only to `sill-height`, not `clear-width`",
             ));
         }
-        ("clear-width", stated, None) => {
-            Quantity::ClearWidth(ClearWidth::declared(stated, overall, deduction)?)
-        }
+        ("clear-width", stated, None) => Quantity::ClearWidth(ClearWidth::declared(
+            stated,
+            from_leaves,
+            overall,
+            deduction,
+        )?),
         ("plan-area", None, None) => Quantity::PlanArea,
         ("property", Some(property), None) => Quantity::Property(property),
         ("sill-height", None, Some(path)) => Quantity::SillHeight(Traversal::path(path)?),

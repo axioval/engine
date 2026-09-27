@@ -8,7 +8,8 @@
 //! below and one to the inscribed one from above.
 
 use axioval_engine::{
-    ConvexPlanRegion, DoorLeaves, DoorLeavesError, NotEvaluatedReason, ObjectFrameServiceHandle,
+    ConvexPlanRegion, DoorLeaves, DoorLeavesError, LeafMotion, NotEvaluatedReason,
+    ObjectFrameServiceHandle,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -45,6 +46,78 @@ pub(crate) fn leaves(
             format!("the leaves of {door} are unknown: {error}"),
         )
     })
+}
+
+/// A horizontal unit direction is one whose z component is within this of
+/// zero.
+const LEVEL: f64 = 1.0e-9;
+
+/// The one direction a door's hinged leaves all open towards: the side
+/// they swing into. Refused for a door without a hinged leaf, with a
+/// double-acting leaf (it swings to both sides), with leaves opening
+/// different ways, or opening along a direction that is not horizontal.
+pub(crate) fn swing_side(leaves: &DoorLeaves) -> Result<[f64; 3], Unavailable> {
+    let door = leaves.door();
+    let incomplete = |message: String| (NotEvaluatedReason::IncompleteEvidence, message);
+    let mut side: Option<[f64; 3]> = None;
+    for leaf in leaves.hinged() {
+        if leaf.motion() == LeafMotion::DoubleSwing {
+            return Err(incomplete(format!(
+                "{door} has a double-acting leaf, which swings to both sides"
+            )));
+        }
+        let opening = leaf.opening().components();
+        if opening[2].abs() > LEVEL {
+            return Err(incomplete(format!("{door} does not open horizontally")));
+        }
+        match side {
+            None => side = Some(opening),
+            Some(known) => {
+                let agree = known[0] * opening[0] + known[1] * opening[1] + known[2] * opening[2];
+                if agree < 1.0 - LEVEL {
+                    return Err(incomplete(format!(
+                        "the leaves of {door} open towards different sides"
+                    )));
+                }
+            }
+        }
+    }
+    side.ok_or_else(|| {
+        incomplete(format!(
+            "{door} has no hinged leaf ({}), so it swings to no side",
+            leaves.operation()
+        ))
+    })
+}
+
+/// For a door with exactly one hinged leaf, the horizontal direction from
+/// its hinge towards its handle: along the closed leaf.
+pub(crate) fn handle(leaves: &DoorLeaves) -> Result<[f64; 3], Unavailable> {
+    let door = leaves.door();
+    let mut hinged = leaves.hinged();
+    match (hinged.next(), hinged.next()) {
+        (Some(leaf), None) => {
+            let closed = leaf.swing().map_or_else(
+                || unreachable!("a hinged leaf has a sector"),
+                |sector| sector.closed().components(),
+            );
+            if closed[2].abs() > LEVEL {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!("the leaf of {door} is not horizontal"),
+                ));
+            }
+            Ok(closed)
+        }
+        (None, _) => Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("{door} has no hinged leaf, so it has no handle side"),
+        )),
+        (Some(_), Some(_)) => Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("{door} has several hinged leaves, so its handle side is not one edge"),
+        )),
+    }
 }
 
 /// The plan footprint a door's hinged leaves sweep.

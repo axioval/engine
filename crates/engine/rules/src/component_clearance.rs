@@ -17,6 +17,7 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
 use crate::body_extent::{extent_error, frame_error};
+use crate::door_swing;
 use crate::level_spacing::{extent, metres};
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
@@ -27,7 +28,10 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 /// which frame axis is the component's front (`front_axis`: `forward`,
 /// `-forward`, `right` or `-right`, or `stated` for the front the source
 /// states), because a placement axis says nothing about which way a
-/// component faces; the engine never infers one. `side` is `front`, `back`,
+/// component faces; the engine never infers one. For a door, `swing` is the
+/// side its hinged leaves open towards and `-swing` the other, as its
+/// leaves state them; `align` `handle` or `hinge` puts the volume flush with
+/// the edge of its single hinged leaf's handle or hinge. `side` is `front`, `back`,
 /// `left` or `right` of that front, left and right as seen facing along it
 /// (the component's own left and right); `both_sides` adds the opposite
 /// side as a check of its own.
@@ -130,6 +134,10 @@ enum FrontAxis {
     Right,
     Left,
     Stated,
+    /// The side a door's leaves swing into.
+    Swing,
+    /// The side a door's leaves swing away from.
+    Push,
 }
 
 impl FrontAxis {
@@ -140,9 +148,11 @@ impl FrontAxis {
             "right" => Ok(Self::Right),
             "-right" => Ok(Self::Left),
             "stated" => Ok(Self::Stated),
+            "swing" => Ok(Self::Swing),
+            "-swing" => Ok(Self::Push),
             other => Err(invalid(format!(
                 "front_axis `{other}` is unsupported; use `forward`, `-forward`, `right`, \
-                 `-right` or `stated`"
+                 `-right`, `stated`, `swing` or `-swing`"
             ))),
         }
     }
@@ -163,7 +173,12 @@ impl FrontAxis {
                         .into(),
                 )),
             },
+            Self::Swing | Self::Push => unreachable!("a swing side comes from the leaves"),
         }
+    }
+
+    fn is_swing(self) -> bool {
+        matches!(self, Self::Swing | Self::Push)
     }
 }
 
@@ -172,6 +187,10 @@ enum Align {
     Centre,
     Left,
     Right,
+    /// Flush with the edge a door's single hinged leaf has its handle at.
+    Handle,
+    /// Flush with the edge that leaf is hinged at.
+    Hinge,
 }
 
 #[derive(Clone, Copy)]
@@ -433,9 +452,12 @@ impl<'a> Config<'a> {
             None | Some("centre") => Align::Centre,
             Some("left") => Align::Left,
             Some("right") => Align::Right,
+            Some("handle") => Align::Handle,
+            Some("hinge") => Align::Hinge,
             Some(other) => {
                 return Err(invalid(format!(
-                    "align `{other}` is unsupported; use `centre`, `left` or `right`"
+                    "align `{other}` is unsupported; use `centre`, `left`, `right`, `handle` or \
+                     `hinge`"
                 )));
             }
         };
@@ -682,7 +704,7 @@ fn check(
     };
     let mut results = Vec::new();
     for side in &config.sides {
-        let faces = placed.faces(services, object, *side);
+        let faces = placed.faces(config, services, object, *side);
         let free = |size: Size| -> Result<Freedom, Unavailable> {
             let volume = faces.as_ref().map_err(Clone::clone)?.volume(config, size);
             match config.slide {
@@ -747,6 +769,8 @@ struct Placement {
     base: (f64, f64),
     spaces: Vec<ObjectId>,
     evidence: Vec<Evidence>,
+    /// For a door with one hinged leaf: from its hinge towards its handle.
+    handle: Option<[f64; 3]>,
 }
 
 /// Axes of a vector within this of a unit vector's component count as it.
@@ -759,26 +783,54 @@ impl Placement {
         services: &Services<'_>,
         object: &Object,
     ) -> Result<Self, Unavailable> {
-        let frame = services
-            .frames
-            .object_frame(&object.id)
-            .map_err(|error| frame_error(&error))?;
-        let up = frame.frame().up().components();
-        if (up[2] - 1.0).abs() > AXIS_TOLERANCE {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                "the component's frame is tilted; clearances are measured in upright frames only"
-                    .into(),
-            ));
-        }
-        let front = config.front.of(&frame)?;
-        if dot(front, up).abs() > AXIS_TOLERANCE {
-            return Err((
-                NotEvaluatedReason::InvalidEvidence,
-                "the stated front is not horizontal".into(),
-            ));
-        }
-        let mut evidence = vec![frame.evidence().clone()];
+        let leaves =
+            if config.front.is_swing() || matches!(config.align, Align::Handle | Align::Hinge) {
+                Some(door_swing::leaves(services.frames, &object.id)?)
+            } else {
+                None
+            };
+        let swinging = leaves.as_ref().filter(|_| config.front.is_swing());
+        let (front, up, mut evidence) = if let Some(leaves) = swinging {
+            // The leaves open along a horizontal direction; the volume
+            // stands upright whatever way the door's axes point.
+            let opening = door_swing::swing_side(leaves)?;
+            let front = if matches!(config.front, FrontAxis::Swing) {
+                opening
+            } else {
+                negate(opening)
+            };
+            (front, [0.0, 0.0, 1.0], vec![leaves.evidence().clone()])
+        } else {
+            let frame = services
+                .frames
+                .object_frame(&object.id)
+                .map_err(|error| frame_error(&error))?;
+            let up = frame.frame().up().components();
+            if (up[2] - 1.0).abs() > AXIS_TOLERANCE {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "the component's frame is tilted; clearances are measured in upright \
+                         frames only"
+                        .into(),
+                ));
+            }
+            let front = config.front.of(&frame)?;
+            if dot(front, up).abs() > AXIS_TOLERANCE {
+                return Err((
+                    NotEvaluatedReason::InvalidEvidence,
+                    "the stated front is not horizontal".into(),
+                ));
+            }
+            let mut evidence = vec![frame.evidence().clone()];
+            if let Some(leaves) = &leaves {
+                evidence.push(leaves.evidence().clone());
+            }
+            (front, up, evidence)
+        };
+        let handle = match (&leaves, config.align) {
+            (Some(leaves), Align::Handle | Align::Hinge) => Some(door_swing::handle(leaves)?),
+            _ => None,
+        };
         let (spaces, cited) = match &config.spaces {
             Some(path) => {
                 let everything: Vec<&Object> = context.project.objects().collect();
@@ -824,6 +876,7 @@ impl Placement {
             base,
             spaces,
             evidence,
+            handle,
         })
     }
 
@@ -831,6 +884,7 @@ impl Placement {
     /// outermost point and its edges across the side are known to.
     fn faces(
         &self,
+        config: &Config<'_>,
         services: &Services<'_>,
         object: &Object,
         side: Side,
@@ -851,7 +905,29 @@ impl Placement {
         evidence.push(along.evidence().clone());
         evidence.push(beside.evidence().clone());
         let (low, high) = (beside.lower(), beside.upper());
+        let align = match (config.align, self.handle) {
+            (Align::Handle | Align::Hinge, Some(handle)) => {
+                // The handle lies where the closed leaf runs from its hinge.
+                let towards = dot(handle, across.components());
+                if towards.abs() < 0.5 {
+                    return Err((
+                        NotEvaluatedReason::InvalidDeclaration,
+                        format!(
+                            "the door's handle and hinge lie before and behind its {} side, \
+                             not beside it",
+                            side.name()
+                        ),
+                    ));
+                }
+                match (towards > 0.0, matches!(config.align, Align::Handle)) {
+                    (true, true) | (false, false) => Align::Right,
+                    _ => Align::Left,
+                }
+            }
+            (align, _) => align,
+        };
         Ok(Faces {
+            align,
             outward,
             across,
             up,
@@ -886,6 +962,8 @@ struct Faces {
     /// Elevation interval of the height reference.
     base: (f64, f64),
     evidence: Vec<Evidence>,
+    /// The alignment across the side, a door's handle or hinge resolved.
+    align: Align,
 }
 
 impl Faces {
@@ -897,8 +975,10 @@ impl Faces {
             Shape::Box { width, .. } => width / 2.0,
             Shape::Cylinder { radius } => radius,
         };
-        let centre_across = match config.align {
-            Align::Centre => (f64::midpoint(low.0, high.0), f64::midpoint(low.1, high.1)),
+        let centre_across = match self.align {
+            Align::Centre | Align::Handle | Align::Hinge => {
+                (f64::midpoint(low.0, high.0), f64::midpoint(low.1, high.1))
+            }
             Align::Left => (low.0 + half, low.1 + half),
             Align::Right => (high.0 - half, high.1 - half),
         };

@@ -6555,3 +6555,91 @@ fn with_geometry_a_column_within_a_door_swing_reach_is_found() {
         "{result:#}"
     );
 }
+
+/// Door #30 at the origin, 0.9 m wide, hinged at x 0 and opening north,
+/// with column #59 (x 0.65..0.75, y 0.35..0.45) on its swing side by the
+/// handle; sliding door #90 at x 5.
+fn door_with_a_column_by_its_handle() -> String {
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,$)";
+    model_with(&format!(
+        "{}{}{}",
+        swinging_door(
+            20,
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+        placed_box(50, [0.7, 0.4, 0.0], [0.1, 0.1, 2.0], column),
+        swinging_door(
+            80,
+            [5.0, 0.0, 0.0],
+            [1.0, 0.0],
+            0.9,
+            "SLIDING_TO_LEFT",
+            &[("SLIDING", "LEFT", "$")]
+        ),
+    ))
+}
+
+fn door_clearance(case: &Case, front: &str, align: &str, both: bool) -> (Output, Value) {
+    case.geometry_rule(
+        &door_with_a_column_by_its_handle(),
+        &[("door", "IfcDoor"), ("column", "IfcColumn")],
+        "axioval:capability.component-clearance",
+        &registry_signature("axioval:capability.component-clearance"),
+        entity("door"),
+        json!({
+            "side": {"type": "string", "value": "front"},
+            "both_sides": {"type": "boolean", "value": both},
+            "front_axis": {"type": "string", "value": front},
+            "width": {"type": "quantity", "value": 0.5, "unit": "m"},
+            "depth": {"type": "quantity", "value": 0.5, "unit": "m"},
+            "height": {"type": "quantity", "value": 2, "unit": "m"},
+            "align": {"type": "string", "value": align},
+            "height_reference": {"type": "string", "value": "bottom"},
+            "obstacles": {"type": "selector", "value": entity("column")},
+        }),
+    )
+}
+
+#[test]
+fn with_geometry_door_clearances_follow_the_swing_side_and_the_handle() {
+    let case = Case::new("geometry-door-clearance");
+    // On the swing side, flush with the handle edge (x 0.4..0.9), the box
+    // holds the column; the push side is clear.
+    let (output, result) = door_clearance(&case, "swing", "handle", true);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#30".to_owned(),
+            "front clearance (0.5 m wide, 0.5 m deep, 2 m high) is obstructed by \
+             ifc-step:model.ifc/#59"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(
+        open.len() == 2
+            && open
+                .iter()
+                .all(|outcome| outcome["object_id"]["local_id"] == "#90"
+                    && outcome["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("has no hinged leaf")),
+        "{result:#}"
+    );
+    // Flush with the hinge edge (x 0..0.5) the box misses the column, and
+    // so does the box on the push side.
+    for (front, align) in [("swing", "hinge"), ("-swing", "handle")] {
+        let (_, result) = door_clearance(&case, front, align, false);
+        assert!(
+            finding_messages(&result).is_empty(),
+            "{front} {align}: {result:#}"
+        );
+    }
+}

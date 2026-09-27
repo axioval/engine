@@ -361,17 +361,27 @@ pub const TYPE_ATTRIBUTE_SET: &str = "axioval:type-attributes";
 
 /// Property set that names how an object is presented in its source.
 ///
-/// Its one property, [`PRESENTATION_LAYER`], lists the names of the
-/// presentation (CAD) layers the object's shape is assigned to, as a
-/// [`PropertyValue::List`] of strings: every distinct layer, sorted. An
-/// object on no layer has none (an exact absence), unless its source assigns
-/// no layer to any object at all: then absence says nothing about the
-/// object, and the source answers that it records no layers
-/// ([`NotEvaluatedReason::NotRecorded`]). Reserved like [`ATTRIBUTE_SET`].
+/// Reserved like [`ATTRIBUTE_SET`]. Property names are matched ignoring
+/// ASCII case:
+///
+/// - [`PRESENTATION_LAYER`] lists the names of the presentation (CAD) layers
+///   the object's shape is assigned to, as a [`PropertyValue::List`] of
+///   strings: every distinct layer, sorted. An object on no layer has none
+///   (an exact absence), unless its source assigns no layer to any object at
+///   all: then absence says nothing about the object, and the source answers
+///   that it records no layers ([`NotEvaluatedReason::NotRecorded`]).
+/// - [`PRESENTATION_TRANSPARENCY`] lists how transparent the object's styled
+///   surfaces are, as a [`PropertyValue::List`] of decimals from `0.0`
+///   (opaque) to `1.0` (fully transparent): every distinct value, ascending.
+///   A comparison states whether `any` or `all` surfaces must satisfy it. An
+///   object with no styled surface has none (an exact absence).
 pub const PRESENTATION_SET: &str = "axioval:presentation";
 
 /// The layer list property in [`PRESENTATION_SET`].
 pub const PRESENTATION_LAYER: &str = "Layer";
+
+/// The surface transparency list property in [`PRESENTATION_SET`].
+pub const PRESENTATION_TRANSPARENCY: &str = "Transparency";
 
 /// Property set that names the material an object is made of.
 ///

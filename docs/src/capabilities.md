@@ -136,6 +136,20 @@ Integers and numbers compare with each other. A `quantity` value is written with
 
 A list value, such as the presentation layers of an object, is compared element by element under a `quantifier`: `any` selects when at least one element satisfies the operator, `all` when every element does. `all` never holds vacuously, so an empty list satisfies neither. A scalar value under a quantifier counts as a list of one. "Every layer is agreed" is `oneOf` with `quantifier: all`, "at least one layer is agreed" the same with `any`, and "no layer is forbidden" `noneOf` with `all`. An element that cannot be compared (an integer against text) leaves the object not evaluated unless the other elements already decide it.
 
+A selection that must leave out see-through objects, such as the objects that may block a view, reads `axioval:presentation.Transparency`: every distinct transparency of the object's styled surfaces, from `0.0` (opaque) to `1.0`. Keep an object unless all of its surfaces are at least half transparent:
+
+```json
+{ "kind": "not", "operand": {
+  "kind": "property", "propertySet": "axioval:presentation", "property": "Transparency",
+  "operator": "greaterThanOrEquals", "value": { "type": "number", "value": 0.5 },
+  "quantifier": "all"
+}}
+```
+
+Combine it with the element types that can block in an `allOf`.
+
+As a visibility rule's `blockers`, glazing (`[0.7]`) drops out; a window whose frame is tinted `0.2` (`[0.2, 0.7]`) and an opaque wall (`[0.0]`) still block. An object without any styled surface has no value, so `all` does not hold and the `not` keeps it: an unstyled object blocks. The positive form, `lessThan 0.5` with `quantifier: any`, selects the same styled objects but would drop every unstyled one.
+
 The selector fails closed:
 
 - an exactly absent property, or a `null` value, matches every operator but `exists` as "no", as a comparison presupposes a value;

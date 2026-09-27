@@ -141,7 +141,7 @@ fn slot_value<'m>(
     Ok(entity.attribute(slot))
 }
 
-fn reference(
+pub(crate) fn reference(
     schema: &Schema,
     model: &Model,
     id: EntityId,
@@ -154,7 +154,7 @@ fn reference(
     }
 }
 
-fn references(
+pub(crate) fn references(
     schema: &Schema,
     model: &Model,
     id: EntityId,

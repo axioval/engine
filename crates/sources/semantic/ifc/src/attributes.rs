@@ -20,8 +20,8 @@ use std::sync::OnceLock;
 
 use axioval_engine::PropertyResolutionError;
 use axioval_ir::{
-    ATTRIBUTE_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue,
-    TYPE_ATTRIBUTE_SET,
+    ATTRIBUTE_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET, PRESENTATION_TRANSPARENCY,
+    PropertyValue, TYPE_ATTRIBUTE_SET,
 };
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
@@ -30,6 +30,7 @@ use crate::layers::{self, LayerIndex};
 use crate::materials::Materials;
 use crate::measure::si_value;
 use crate::release::Release;
+use crate::styles::{self, StyleIndex};
 
 /// A present attribute value and the locator detail that proves it.
 pub(crate) struct AttributeValue {
@@ -45,6 +46,7 @@ pub(crate) struct Attributes {
     release: Release,
     types: OnceLock<Result<TypeIndex, String>>,
     layers: OnceLock<Result<LayerIndex, String>>,
+    styles: OnceLock<Result<StyleIndex, String>>,
     materials: Materials,
 }
 
@@ -54,6 +56,7 @@ impl Attributes {
             release,
             types: OnceLock::new(),
             layers: OnceLock::new(),
+            styles: OnceLock::new(),
             materials: Materials::new(release),
         }
     }
@@ -76,6 +79,9 @@ impl Attributes {
             });
         }
         if set == PRESENTATION_SET {
+            if name.eq_ignore_ascii_case(PRESENTATION_TRANSPARENCY) {
+                return self.transparency(model, object);
+            }
             return self.layer(model, object, name);
         }
         if set == MATERIAL_SET {
@@ -149,6 +155,66 @@ impl Attributes {
         Ok(Some(AttributeValue {
             value: PropertyValue::List(found.into_keys().map(PropertyValue::String).collect()),
             detail: format!("layer:{object}:{}", assignments.join(",")),
+        }))
+    }
+}
+
+impl Attributes {
+    /// Every distinct surface transparency of `object`'s body, ascending.
+    ///
+    /// Items styled themselves state their own; items without a surface
+    /// style are drawn with the styles of the object's material. An object
+    /// with no styled surface is exactly absent.
+    fn transparency(
+        &self,
+        model: &Model,
+        object: EntityId,
+    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        let schema = self.release.schema;
+        let index = self
+            .styles
+            .get_or_init(|| styles::index(schema, model))
+            .as_ref()
+            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        let surfaces = styles::surfaces_of(schema, model, index, object)?;
+        // The material is consulted only when an item needs it and some
+        // material in the model is styled at all.
+        let material = if surfaces.unstyled && index.styles_materials() {
+            let materials = self.materials.material_ids(model, object)?;
+            index.material_surfaces(schema, model, &materials)?
+        } else {
+            Vec::new()
+        };
+        if surfaces.items.is_empty() && material.is_empty() {
+            return Ok(None);
+        }
+        let mut values: Vec<f64> = surfaces
+            .items
+            .iter()
+            .chain(&material)
+            .map(|surface| surface.transparency)
+            .collect();
+        values.sort_by(f64::total_cmp);
+        values.dedup();
+        let ids = |surfaces: &[styles::Surface]| {
+            let mut ids: Vec<EntityId> = surfaces.iter().map(|surface| surface.style).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            ids.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let mut detail = format!("transparency:{object}");
+        if !surfaces.items.is_empty() {
+            detail = format!("{detail}:{}", ids(&surfaces.items));
+        }
+        if !material.is_empty() {
+            detail = format!("{detail}:material:{}", ids(&material));
+        }
+        Ok(Some(AttributeValue {
+            value: PropertyValue::List(values.into_iter().map(PropertyValue::Decimal).collect()),
+            detail,
         }))
     }
 }

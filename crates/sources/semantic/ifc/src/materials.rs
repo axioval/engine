@@ -41,10 +41,19 @@ use crate::release::Release;
 /// Every material property of one object, keyed by lower-case name.
 type Composition = BTreeMap<String, (PropertyValue, String)>;
 
+/// The material that applies to one object, as properties and as the
+/// `IfcMaterial` instances it is made of.
+struct Resolved {
+    properties: Composition,
+    /// Every `IfcMaterial` the resolved material names, in the source's
+    /// order and without repeats: the single material, or each member's.
+    materials: Vec<EntityId>,
+}
+
 /// Answers material requests for one model, each object resolved once.
 pub(crate) struct Materials {
     release: Release,
-    resolved: Mutex<BTreeMap<EntityId, Result<Arc<Composition>, PropertyResolutionError>>>,
+    resolved: Mutex<BTreeMap<EntityId, Result<Arc<Resolved>, PropertyResolutionError>>>,
 }
 
 impl Materials {
@@ -62,6 +71,31 @@ impl Materials {
         object: EntityId,
         name: &str,
     ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        let resolved = self.resolved(model, object)?;
+        Ok(resolved
+            .properties
+            .get(&name.to_ascii_lowercase())
+            .map(|(value, detail)| AttributeValue {
+                value: value.clone(),
+                detail: detail.clone(),
+            }))
+    }
+
+    /// Every `IfcMaterial` the material of `object` is made of; empty when
+    /// the object has no material.
+    pub(crate) fn material_ids(
+        &self,
+        model: &Model,
+        object: EntityId,
+    ) -> Result<Vec<EntityId>, PropertyResolutionError> {
+        Ok(self.resolved(model, object)?.materials.clone())
+    }
+
+    fn resolved(
+        &self,
+        model: &Model,
+        object: EntityId,
+    ) -> Result<Arc<Resolved>, PropertyResolutionError> {
         if self.release.label != "IFC4" {
             return Err(PropertyResolutionError::Unavailable(format!(
                 "materials are not read from {} files until ifc-material binds to the \
@@ -69,19 +103,11 @@ impl Materials {
                 self.release.label
             )));
         }
-        let composition = {
-            let mut resolved = self.resolved.lock().unwrap_or_else(PoisonError::into_inner);
-            resolved
-                .entry(object)
-                .or_insert_with(|| compose(self.release.schema, model, object).map(Arc::new))
-                .clone()?
-        };
-        Ok(composition
-            .get(&name.to_ascii_lowercase())
-            .map(|(value, detail)| AttributeValue {
-                value: value.clone(),
-                detail: detail.clone(),
-            }))
+        let mut resolved = self.resolved.lock().unwrap_or_else(PoisonError::into_inner);
+        resolved
+            .entry(object)
+            .or_insert_with(|| compose(self.release.schema, model, object).map(Arc::new))
+            .clone()
     }
 }
 
@@ -90,6 +116,7 @@ struct Writer<'s> {
     schema: &'s Schema,
     prefix: String,
     out: Composition,
+    materials: Vec<EntityId>,
 }
 
 impl Writer<'_> {
@@ -103,6 +130,13 @@ impl Writer<'_> {
     fn text(&mut self, name: &str, value: Option<&str>, holder: impl std::fmt::Display) {
         if let Some(value) = value {
             self.put(name, PropertyValue::String(value.to_owned()), holder);
+        }
+    }
+
+    /// Records that the material is made of `material`.
+    fn material(&mut self, material: EntityId) {
+        if !self.materials.contains(&material) {
+            self.materials.push(material);
         }
     }
 
@@ -141,10 +175,13 @@ fn compose(
     schema: &Schema,
     model: &Model,
     object: EntityId,
-) -> Result<Composition, PropertyResolutionError> {
+) -> Result<Resolved, PropertyResolutionError> {
     let view = MaterialView::new(model);
     let Some(resolved) = view.assigned_material(object).map_err(refusal)? else {
-        return Ok(Composition::new());
+        return Ok(Resolved {
+            properties: Composition::new(),
+            materials: Vec::new(),
+        });
     };
     let provenance = match resolved.source {
         AssignmentSource::Occurrence => "occurrence".to_owned(),
@@ -157,9 +194,11 @@ fn compose(
             resolved.assignment.id()
         ),
         out: Composition::new(),
+        materials: Vec::new(),
     };
     match resolved.material {
         ResolvedMaterialSelect::Definition(MaterialDefinition::Material(material)) => {
+            writer.material(material.id());
             writer.put(
                 MATERIAL_KIND,
                 PropertyValue::String(MATERIAL_KIND_SINGLE.into()),
@@ -224,7 +263,10 @@ fn compose(
             )));
         }
     }
-    Ok(writer.out)
+    Ok(Resolved {
+        properties: writer.out,
+        materials: writer.materials,
+    })
 }
 
 /// Layers in order, their thicknesses in metres, and the total thickness.
@@ -278,6 +320,7 @@ fn layer_set(
             _ => return Err(wrong(set.id(), id, "IfcMaterialLayer")),
         };
         if let Some(material) = material {
+            writer.material(material);
             let name = material_name(view, id, material)?;
             writer.text(
                 &format!("{member}.Material"),
@@ -326,6 +369,7 @@ fn constituent_set(
             writer.put(&format!("{member}.Fraction"), fraction, id);
         }
         let material = constituent.material_id().map_err(refusal)?;
+        writer.material(material);
         let name = material_name(view, id, material)?;
         writer.text(
             &format!("{member}.Material"),
@@ -378,6 +422,7 @@ fn profile_set(
             _ => return Err(wrong(set.id(), id, "IfcMaterialProfile")),
         };
         if let Some(material) = material {
+            writer.material(material);
             let name = material_name(view, id, material)?;
             writer.text(
                 &format!("{member}.Material"),
@@ -405,6 +450,7 @@ fn material_list(
     for (index, id) in materials.into_iter().enumerate() {
         let member = format!("Material{}", index + 1);
         let material = material(view, list.id(), id)?;
+        writer.material(id);
         writer.text(
             &format!("{member}.Name"),
             Some(material.name().map_err(refusal)?),

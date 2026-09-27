@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Surface transparency.** `axioval:presentation.Transparency`
+  (`axioval_ir::PRESENTATION_TRANSPARENCY`) lists every distinct
+  transparency of an object's styled body surfaces, ascending, from `0.0`
+  (opaque) to `1.0`, so a selector can leave see-through objects out of a
+  view's blockers: `not` `Transparency` `greaterThanOrEquals 0.5` with
+  `quantifier: all` keeps opaque and unstyled objects and drops glazing.
+  The IFC adapter reads it through `ifc-style` 0.3.0: an item's own
+  `IfcStyledItem`, else its `IfcPresentationLayerWithStyle`, is
+  authoritative; mapped representations are followed; an item with no
+  surface style of its own is drawn with the styles of its object's
+  material (`IfcMaterialDefinitionRepresentation`). An unset
+  `Transparency` is opaque, as the schema states. An object without a
+  styled surface is exactly absent; a surface style without shading, and
+  two styled items on one item, are refused; the material fallback in
+  IFC2X3 waits on openbimrs/ifc#77. (#71)
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m

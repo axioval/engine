@@ -593,6 +593,7 @@ dependencies = [
  "ifc-properties",
  "ifc-schema",
  "ifc-step",
+ "ifc-style",
  "ifc-systems",
  "sha2",
  "thiserror",
@@ -1090,6 +1091,17 @@ dependencies = [
  "ifc-model",
  "memmap2",
  "openbim-step 0.8.0",
+ "thiserror",
+]
+
+[[package]]
+name = "ifc-style"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c56a73c231f49a9e9f59e6abc8acc84b8caa75a1c00f7fa13c29717264ae2ac"
+dependencies = [
+ "ifc-model",
+ "ifc-schema",
  "thiserror",
 ]
 

@@ -141,6 +141,25 @@ The value lists every distinct layer, sorted by name (`["A-AXIS", "A-WALL"]`). A
 without any `IfcPresentationLayerAssignment` records no layers: every request is answered `NotRecorded`, never absent, so a layer rule is reported not
 applicable to that source. The locator names the object and each assignment, in the order of the layers (`layer:#4:#82,#80`).
 
+### Surface transparency
+
+`axioval:presentation.Transparency` is read from the presentation styles of the object's body through `ifc-style` (0.3.0). Only body representations count (`Body`, `Body-FallBack`, or no identifier), and within them each representation item:
+
+- takes the styles of its own `IfcStyledItem`, or, without one, those of the `IfcPresentationLayerWithStyle`s it is on. This is the cascade of `ifc-style`'s `resolve_item_style`, applied over an index built once per model, and a test pins the two to agree;
+- takes, when an `IfcMappedItem` has no surface style of its own, the styles of the items of the representation it maps in, which is how a type's shared geometry reaches its occurrences;
+- is drawn with the styles of the object's material when it has no surface style of its own: each `IfcMaterial` of the material that applies (as for `axioval:material`) carries them in its `IfcMaterialDefinitionRepresentation`.
+
+The item's own style is authoritative, as IFC defines it: a material style never overrides a styled item, it only draws the items nothing else styles. Only `IfcSurfaceStyle`s count; a curve, fill-area or text style says nothing about a surface. A surface style's transparency is the `Transparency` of its `IfcSurfaceStyleShading` or `IfcSurfaceStyleRendering`; unset, it is `0.0` (opaque), the value the schema states. IFC2X3 shading has no transparency and is opaque; its rendering has one, and its styles are unwrapped from `IfcPresentationStyleAssignment`.
+
+The value lists every distinct transparency, ascending (`[0.2, 0.7]` for tinted glazing in a tinted frame), so a selector states whether `any` or `all` surfaces must satisfy a comparison; several styles are never averaged or picked from. An object without a body, or whose body has no styled surface and whose material carries no style, has none (an exact absence). The locator names the object and the contributing surface styles, those of the material after `material:` (`transparency:#5:material:#56`).
+
+Refused rather than guessed:
+- a surface style without a shading element (only textures, lighting, refraction, or an externally defined style): it states no transparency;
+- two `IfcStyledItem`s on one item: a conflict;
+- a material fallback in IFC2X3, while `ifc-material` does not bind to that release (openbimrs/ifc#77); a model without any styled material needs no fallback and answers.
+
+An object whose styled glazing sits in an unstyled frame and has no styled material lists only the glazing: an unstyled item states nothing, and is not assumed opaque.
+
 ### Materials
 
 `axioval:material` is read from `IfcRelAssociatesMaterial` through

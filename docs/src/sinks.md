@@ -6,7 +6,7 @@ project the report was computed over, never the engine or a source adapter.
 
 ## BCF
 
-`axioval-bcf` writes BCF 2.1 archives through `openbim-bcf`.
+`axioval-bcf` writes BCF 2.1 or 3.0 archives through `openbim-bcf`.
 
 ```rust,ignore
 let export = axioval_bcf::export(
@@ -63,5 +63,49 @@ topics keep the GUIDs they had before scopes existed.
 the clock, and identical input writes identical bytes. Written archives are
 checked against the buildingSMART 2.1 schemas.
 
-BCF 3.0 is not written: it requires a camera on every viewpoint, and a report
-carries no geometry to place one.
+## Cameras
+
+A report carries no geometry, so the host passes what it measured:
+`Options::bounds` maps objects to their axis-aligned `Bounds` in model
+coordinates (metres).
+
+```rust,ignore
+let options = axioval_bcf::Options {
+    bounds: Some(bounds), // BTreeMap<ObjectId, axioval_bcf::Bounds>
+    ..axioval_bcf::Options::new("axioval", "2026-09-26T10:00:00Z")
+};
+```
+
+A topic whose subject and related objects are all bounded gets two
+viewpoints with the same selection: a perspective camera first, then an
+orthogonal one. Both frame the union of the objects' bounds: they look at
+its centre from above, south and east (direction `(-1, 1, -1)`, up
+`(-1, 1, 2)`), from where a sphere around the union (its radius scaled by
+`FRAME_MARGIN`, 1.2, and at least `MIN_FRAME_RADIUS_METRES`, 0.5 m) fits
+the 60° field of view. The orthogonal camera stands at the same point and
+shows the sphere's diameter. Coordinates are rounded to micrometres, so
+output stays deterministic. The first viewpoint keeps the GUID it has
+without a camera.
+
+**A missing bound leaves the viewpoint without a camera**, never a guessed
+one. With bounds supplied, such objects are listed in `Export::unframed`;
+without any bounds (`None`, the default) viewpoints are written exactly as
+before.
+
+## BCF 3.0
+
+`Options::version` selects `Version::V2_1` (default) or `Version::V3_0`.
+BCF 3.0 requires a camera on every viewpoint, so a 3.0 export is refused
+with `ExportError::MissingCamera`, naming an object without bounds, unless
+every viewpoint has one. Topics without a viewpoint (model-level topics,
+subjects without a GlobalId) need none. A 3.0 archive carries an
+`extensions.xml` listing the types, statuses, priorities and labels its
+topics use, and each camera an aspect ratio of 1.
+
+## Not written yet
+
+Visibility (everything hidden but the involved objects), colouring (subject
+and related objects in different colours) and clipping planes are not
+written: `openbim-bcf` 0.3 writes a selection and a camera only, and every
+viewpoint it writes shows the whole model. Snapshots are rendering and out
+of scope.

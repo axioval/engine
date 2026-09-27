@@ -1,6 +1,6 @@
 # `axioval-bcf`
 
-BCF 2.1 issue archives from a `Report` and the `Project` it was computed over.
+BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed over.
 
 - Depends on `axioval-ir` and `openbim-bcf` only. Never the engine, never a
   source adapter, not even as a dev-dependency: a dev-dependency on an
@@ -23,6 +23,14 @@ BCF 2.1 issue archives from a `Report` and the `Project` it was computed over.
 - A finding's `Priority` follows its severity; a not-evaluated outcome has
   none, because no severity was decided. Never invent one for it.
 - Never read the clock or invent GUIDs; the caller supplies author and date.
-- 2.1 only until a host can supply a camera, which 3.0 requires.
+- Cameras come only from host-supplied `Options::bounds`. A missing bound
+  leaves the viewpoint without a camera (listed in `Export::unframed`),
+  never a guessed one. The perspective viewpoint keeps the GUID of the
+  camera-less viewpoint; the orthogonal one is derived beside it. Without
+  bounds the archive is byte-identical to one written before cameras.
+- 3.0 requires a camera on every viewpoint: refuse the export with
+  `MissingCamera` rather than drop a viewpoint or write 2.1 instead.
+- Visibility, colouring and clipping planes wait on `openbim-bcf` writing
+  them; do not post-process the writer's XML.
 - Run `cargo test -p axioval-bcf` and `cargo test -p axioval --all-features`;
   `tests/export.rs` is the contract and reads every archive back.

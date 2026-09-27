@@ -33,10 +33,20 @@
 //! GlobalId survives re-export, rechecking a revised model reproduces the
 //! GUIDs of issues that are still there, and a BCF tool can track them.
 //!
+//! # Cameras
+//!
+//! A report carries no geometry. A host that measured the model passes each
+//! object's [`Bounds`] in [`Options::bounds`]; a topic whose objects are all
+//! bounded then gets two viewpoints, a perspective and an orthogonal camera
+//! fitted to the union of those bounds (see [`Bounds`] for the fit). A
+//! missing bound leaves the viewpoint without a camera rather than a guessed
+//! one, and the object is listed in [`Export::unframed`].
+//!
 //! # Version
 //!
-//! Only BCF 2.1 is written. BCF 3.0 requires a camera on every viewpoint, and
-//! a report carries no geometry to place one.
+//! BCF 2.1 by default. BCF 3.0 ([`Version::V3_0`]) requires a camera on every
+//! viewpoint, so it is written only when every viewpoint has one; otherwise
+//! the export is refused with [`ExportError::MissingCamera`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -44,7 +54,9 @@ use axioval_ir::{
     Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Scope, Severity,
 };
 use openbim_bcf::Component;
-use openbim_bcf::write::{self, Document, TargetVersion, Topic, Viewpoint, WriteError};
+use openbim_bcf::write::{
+    self, Camera, Document, Projection, TargetVersion, Topic, Vector3, Viewpoint, WriteError,
+};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -67,8 +79,92 @@ pub const PRIORITY_LOW: &str = "Low";
 /// Namespace of every GUID this crate derives. Changing it changes every GUID.
 const NAMESPACE: Uuid = Uuid::from_u128(0x6b1f_5a0e_2c3d_4e8f_9a71_0d2c_5e4b_8f13);
 
+/// Vertical field of view of every perspective camera, in degrees: the
+/// widest BCF 2.1 allows, and valid in 3.0.
+pub const FIELD_OF_VIEW_DEGREES: f64 = 60.0;
+
+/// Width over height of every BCF 3.0 camera. 2.1 has no aspect ratio.
+///
+/// Square, so the fit holds in both directions; a wider view only shows
+/// more around the objects.
+pub const ASPECT_RATIO: f64 = 1.0;
+
+/// How much room a fitted camera leaves around the objects: the bounding
+/// sphere's radius is scaled by this before it is framed.
+pub const FRAME_MARGIN: f64 = 1.2;
+
+/// Smallest radius a camera frames, in metres, so a point-like object is
+/// shown with some of its surroundings instead of filling the view.
+pub const MIN_FRAME_RADIUS_METRES: f64 = 0.5;
+
+/// Coordinates of fitted cameras are rounded to micrometres, so written
+/// numbers stay short and stable.
+const DECIMALS: f64 = 1e6;
+
+/// The BCF version written.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Version {
+    /// BCF 2.1; a camera is optional.
+    #[default]
+    V2_1,
+    /// BCF 3.0; every viewpoint needs a camera, so every object of a
+    /// selected topic needs bounds.
+    V3_0,
+}
+
+impl From<Version> for TargetVersion {
+    fn from(version: Version) -> Self {
+        match version {
+            Version::V2_1 => Self::V2_1,
+            Version::V3_0 => Self::V3_0,
+        }
+    }
+}
+
+/// The axis-aligned extent of one object in model coordinates, in metres,
+/// as the host measured it.
+///
+/// A topic's cameras frame the union of its objects' bounds: its centre is
+/// looked at from above, south and east (direction `(-1, 1, -1)`, up
+/// `(-1, 1, 2)`), from where a sphere around the union, its radius scaled by
+/// [`FRAME_MARGIN`] and at least [`MIN_FRAME_RADIUS_METRES`], just fits the
+/// [`FIELD_OF_VIEW_DEGREES`]. The orthogonal camera stands at the same point
+/// and shows the sphere's diameter.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bounds {
+    min: [f64; 3],
+    max: [f64; 3],
+}
+
+impl Bounds {
+    /// Bounds from their corners, `None` when a coordinate is not finite or
+    /// `min` exceeds `max` on an axis.
+    #[must_use]
+    pub fn new(min: [f64; 3], max: [f64; 3]) -> Option<Self> {
+        (0..3)
+            .all(|axis| min[axis].is_finite() && max[axis].is_finite() && min[axis] <= max[axis])
+            .then_some(Self { min, max })
+    }
+    /// The lowest corner.
+    #[must_use]
+    pub fn min(&self) -> [f64; 3] {
+        self.min
+    }
+    /// The highest corner.
+    #[must_use]
+    pub fn max(&self) -> [f64; 3] {
+        self.max
+    }
+    fn union(&self, other: &Self) -> Self {
+        Self {
+            min: [0, 1, 2].map(|axis| self.min[axis].min(other.min[axis])),
+            max: [0, 1, 2].map(|axis| self.max[axis].max(other.max[axis])),
+        }
+    }
+}
+
 /// What the caller decides about every topic.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Options {
     /// `CreationAuthor` of every topic, e.g. the checking tool or its operator.
     pub author: String,
@@ -79,6 +175,15 @@ pub struct Options {
     pub status: String,
     /// Whether not-evaluated outcomes become topics.
     pub include_not_evaluated: bool,
+    /// The BCF version written.
+    pub version: Version,
+    /// Each object's measured bounds, when the host measured the model.
+    ///
+    /// `None` writes viewpoints without cameras, exactly as before bounds
+    /// existed. `Some` fits cameras to every viewpoint whose objects are all
+    /// bounded; an object missing from the map leaves its viewpoint without
+    /// a camera and is listed in [`Export::unframed`].
+    pub bounds: Option<BTreeMap<ObjectId, Bounds>>,
 }
 
 impl Options {
@@ -89,6 +194,8 @@ impl Options {
             date: date.into(),
             status: "Open".to_owned(),
             include_not_evaluated: true,
+            version: Version::V2_1,
+            bounds: None,
         }
     }
 }
@@ -100,6 +207,13 @@ pub enum ExportError {
     /// report was not computed over this project.
     #[error("report names {0}, which is not in the project")]
     UnknownObject(ObjectId),
+    /// BCF 3.0 was asked for, but a viewpoint has no camera because one of
+    /// its objects has no bounds. Nothing was written.
+    #[error("BCF 3.0 needs a camera on every viewpoint, but {object} has no bounds to fit one to")]
+    MissingCamera {
+        /// An object of the viewpoint without bounds.
+        object: ObjectId,
+    },
     /// The BCF writer refused the document; nothing was written.
     #[error("BCF writer refused the document: {0}")]
     Write(#[from] WriteError),
@@ -113,6 +227,10 @@ pub struct Export {
     /// Objects named by the report that no viewpoint could select, because
     /// they carry no GlobalId alias. Sorted and deduplicated.
     pub unanchored: Vec<ObjectId>,
+    /// Objects whose viewpoint got no camera because [`Options::bounds`]
+    /// has none for them. Empty when no bounds were supplied at all. Sorted
+    /// and deduplicated.
+    pub unframed: Vec<ObjectId>,
 }
 
 impl Export {
@@ -127,12 +245,14 @@ impl Export {
     }
 }
 
-/// Maps `report`, computed over `project`, onto a BCF 2.1 document.
+/// Maps `report`, computed over `project`, onto a BCF document of
+/// [`Options::version`].
 ///
 /// # Errors
 ///
 /// Returns [`ExportError::UnknownObject`] when the report names an object the
-/// project does not contain.
+/// project does not contain, and [`ExportError::MissingCamera`] when BCF 3.0
+/// is asked for and a viewpoint has no camera.
 pub fn export(
     report: &Report,
     project: &Project,
@@ -161,26 +281,38 @@ pub fn export(
         .collect();
 
     let mut unanchored = BTreeSet::new();
-    let topics = entries
-        .iter()
-        .zip(qualified)
-        .map(|(entry, qualified)| {
-            let key = if qualified {
-                format!("{}\n{}", entry.key, entry.sources)
-            } else {
-                entry.key.clone()
-            };
-            unanchored.extend(entry.unanchored.iter().cloned());
-            entry.topic(&key, options)
-        })
-        .collect();
+    let mut unframed = BTreeSet::new();
+    let mut topics = Vec::with_capacity(entries.len());
+    for (entry, qualified) in entries.iter().zip(qualified) {
+        let key = if qualified {
+            format!("{}\n{}", entry.key, entry.sources)
+        } else {
+            entry.key.clone()
+        };
+        unanchored.extend(entry.unanchored.iter().cloned());
+        let (topic, uncamered) = entry.topic(&key, options);
+        match uncamered {
+            Uncamered::No => {}
+            Uncamered::NoBounds if options.version == Version::V2_1 => {}
+            Uncamered::Unbounded(object) if options.version == Version::V2_1 => {
+                unframed.insert(object);
+            }
+            Uncamered::NoBounds => {
+                let object = entry.framed[0].clone();
+                return Err(ExportError::MissingCamera { object });
+            }
+            Uncamered::Unbounded(object) => return Err(ExportError::MissingCamera { object }),
+        }
+        topics.push(topic);
+    }
     Ok(Export {
         document: Document {
-            version: TargetVersion::V2_1,
+            version: options.version.into(),
             extensions: None,
             topics,
         },
         unanchored: unanchored.into_iter().collect(),
+        unframed: unframed.into_iter().collect(),
     })
 }
 
@@ -196,7 +328,19 @@ struct Entry {
     /// Every source the entry touches, for disambiguating a repeated key.
     sources: String,
     selection: Vec<Component>,
+    /// Every object a camera frames: the subject and related objects.
+    framed: Vec<ObjectId>,
     unanchored: Vec<ObjectId>,
+}
+
+/// Why a topic's viewpoint has no camera, if it has one without.
+enum Uncamered {
+    /// Every viewpoint has a camera, or the topic has none.
+    No,
+    /// The host supplied no bounds at all.
+    NoBounds,
+    /// The host supplied bounds, but none for this object.
+    Unbounded(ObjectId),
 }
 
 impl Entry {
@@ -245,6 +389,7 @@ impl Entry {
             },
             sources: resolved.sources,
             selection: resolved.selection,
+            framed: objects.into_iter().cloned().collect(),
             unanchored: resolved.unanchored,
         })
     }
@@ -280,22 +425,38 @@ impl Entry {
             ),
             sources: resolved.sources,
             selection: resolved.selection,
+            framed: objects.into_iter().cloned().collect(),
             unanchored: resolved.unanchored,
         })
     }
 
-    fn topic(&self, key: &str, options: &Options) -> Topic {
+    /// The topic, and whether a viewpoint of it has no camera.
+    fn topic(&self, key: &str, options: &Options) -> (Topic, Uncamered) {
         let guid = Uuid::new_v5(&NAMESPACE, key.as_bytes());
+        let mut uncamered = Uncamered::No;
         let viewpoints = if self.selection.is_empty() {
             vec![]
         } else {
-            vec![Viewpoint {
-                guid: Uuid::new_v5(&guid, b"viewpoint").to_string(),
+            let viewpoint = |name: &[u8], camera| Viewpoint {
+                guid: Uuid::new_v5(&guid, name).to_string(),
                 selection: self.selection.clone(),
-                camera: None,
-            }]
+                camera,
+            };
+            match self.frame(options.bounds.as_ref()) {
+                Ok(frame) => vec![
+                    viewpoint(b"viewpoint", Some(frame.perspective(options.version))),
+                    viewpoint(
+                        b"viewpoint-orthogonal",
+                        Some(frame.orthogonal(options.version)),
+                    ),
+                ],
+                Err(why) => {
+                    uncamered = why;
+                    vec![viewpoint(b"viewpoint", None)]
+                }
+            }
         };
-        Topic {
+        let topic = Topic {
             guid: guid.to_string(),
             title: self.title.clone(),
             description: Some(self.description.clone()),
@@ -307,8 +468,93 @@ impl Entry {
             creation_author: options.author.clone(),
             viewpoints,
             ..Topic::default()
+        };
+        (topic, uncamered)
+    }
+
+    /// A sphere around the union of the framed objects' bounds.
+    fn frame(&self, bounds: Option<&BTreeMap<ObjectId, Bounds>>) -> Result<Frame, Uncamered> {
+        let bounds = bounds.ok_or(Uncamered::NoBounds)?;
+        let mut union: Option<Bounds> = None;
+        for object in &self.framed {
+            let found = bounds
+                .get(object)
+                .ok_or_else(|| Uncamered::Unbounded(object.clone()))?;
+            union = Some(union.map_or(*found, |union| union.union(found)));
+        }
+        // A selected topic always has its subject among the framed objects.
+        union.map(Frame::new).ok_or(Uncamered::NoBounds)
+    }
+}
+
+/// A sphere to fit cameras to.
+struct Frame {
+    centre: [f64; 3],
+    radius: f64,
+}
+
+impl Frame {
+    /// Looking down from above, south and east.
+    const DIRECTION: [f64; 3] = [-1.0, 1.0, -1.0];
+    /// World up, made perpendicular to [`Self::DIRECTION`].
+    const UP: [f64; 3] = [-1.0, 1.0, 2.0];
+
+    fn new(bounds: Bounds) -> Self {
+        let centre = [0, 1, 2].map(|axis| f64::midpoint(bounds.min[axis], bounds.max[axis]));
+        let diagonal = (0..3)
+            .map(|axis| (bounds.max[axis] - bounds.min[axis]).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        Self {
+            centre,
+            radius: (diagonal / 2.0 * FRAME_MARGIN).max(MIN_FRAME_RADIUS_METRES),
         }
     }
+
+    fn camera(&self, projection: Projection, version: Version) -> Camera {
+        let unit = |v: [f64; 3]| {
+            let length = v.iter().map(|c| c * c).sum::<f64>().sqrt();
+            v.map(|c| c / length)
+        };
+        let direction = unit(Self::DIRECTION);
+        // The sphere just fits the field of view from this distance.
+        let distance = self.radius / (FIELD_OF_VIEW_DEGREES / 2.0).to_radians().sin();
+        let view_point = [0, 1, 2].map(|axis| self.centre[axis] - direction[axis] * distance);
+        Camera {
+            projection,
+            view_point: vector(view_point),
+            direction: vector(direction),
+            up_vector: vector(unit(Self::UP)),
+            aspect_ratio: (version == Version::V3_0).then_some(ASPECT_RATIO),
+        }
+    }
+
+    fn perspective(&self, version: Version) -> Camera {
+        self.camera(
+            Projection::Perspective {
+                field_of_view: FIELD_OF_VIEW_DEGREES,
+            },
+            version,
+        )
+    }
+
+    fn orthogonal(&self, version: Version) -> Camera {
+        self.camera(
+            Projection::Orthogonal {
+                view_to_world_scale: round(2.0 * self.radius),
+            },
+            version,
+        )
+    }
+}
+
+fn vector(v: [f64; 3]) -> Vector3 {
+    Vector3::new(round(v[0]), round(v[1]), round(v[2]))
+}
+
+/// Rounded to micrometres, negative zero made positive.
+fn round(value: f64) -> f64 {
+    (value * DECIMALS).round() / DECIMALS + 0.0
 }
 
 /// The objects of one entry, subject first, mapped to BCF components.

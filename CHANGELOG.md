@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **BCF cameras and BCF 3.0.** (#109) `axioval_bcf::Options` gains
+  `bounds`, each object's measured `Bounds`, and `version`
+  (`Version::V2_1` or `Version::V3_0`). A topic whose objects are all
+  bounded gets a perspective and an orthogonal viewpoint, both framing the
+  union of their bounds from above; a missing bound leaves the viewpoint
+  without a camera and lists the object in `Export::unframed`. BCF 3.0 is
+  written when every viewpoint has a camera and refused with
+  `ExportError::MissingCamera` otherwise. Without bounds the archive is
+  byte-identical. Visibility and colouring are not written yet.
+  **Breaking:** `Options` and `Export` gain fields, `Options` is no longer
+  `Eq`, and `ExportError` gains `MissingCamera`.
 - **BCF priority from severity.** (#109) A finding's topic carries
   `Priority` `High`, `Normal` or `Low` for an error, warning or info
   finding (`PRIORITY_HIGH`, `PRIORITY_NORMAL`, `PRIORITY_LOW`). A

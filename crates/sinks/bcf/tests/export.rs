@@ -441,3 +441,247 @@ fn object_and_rule_level_topic_guids_are_unchanged_by_scopes() {
         ]
     );
 }
+
+mod cameras {
+    use std::collections::BTreeMap;
+
+    use axioval_bcf::{
+        Bounds, ExportError, FIELD_OF_VIEW_DEGREES, MIN_FRAME_RADIUS_METRES, Options, Version,
+        export,
+    };
+    use axioval_ir::ObjectId;
+    use openbim_bcf::write::{Camera, Projection};
+
+    use super::{SLAB, WALL, id, model, options, report, viewpoints};
+
+    /// The wall stands on the slab: together they span 0..4 x 0..2 x -0.2..3.
+    fn bounds() -> BTreeMap<ObjectId, Bounds> {
+        BTreeMap::from([
+            (
+                id("a.ifc", 1),
+                Bounds::new([1.0, 0.0, 0.0], [3.0, 0.2, 3.0]).unwrap(),
+            ),
+            (
+                id("a.ifc", 2),
+                Bounds::new([0.0, 0.0, -0.2], [4.0, 2.0, 0.0]).unwrap(),
+            ),
+        ])
+    }
+
+    /// Half the diagonal of the union of [`bounds`].
+    fn half_diagonal() -> f64 {
+        (4.0f64 * 4.0 + 2.0 * 2.0 + 3.2 * 3.2).sqrt() / 2.0
+    }
+
+    fn measured(version: Version) -> Options {
+        Options {
+            version,
+            bounds: Some(bounds()),
+            ..options()
+        }
+    }
+
+    /// The camera looks at `centre` from above, far enough for the union's
+    /// bounding sphere to fit its field of view, with a perpendicular up.
+    fn assert_frames(camera: &Camera, centre: [f64; 3]) {
+        let d = camera.direction;
+        let length = (d.x * d.x + d.y * d.y + d.z * d.z).sqrt();
+        let unit = [d.x / length, d.y / length, d.z / length];
+        let to_centre = [
+            centre[0] - camera.view_point.x,
+            centre[1] - camera.view_point.y,
+            centre[2] - camera.view_point.z,
+        ];
+        let along: f64 = (0..3).map(|axis| to_centre[axis] * unit[axis]).sum();
+        let off = (0..3)
+            .map(|axis| (to_centre[axis] - unit[axis] * along).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        assert!(off < 1e-5, "{camera:?} misses the centre by {off}");
+        assert!(d.z < 0.0 && camera.view_point.z > centre[2], "{camera:?}");
+        let half_angle = (FIELD_OF_VIEW_DEGREES / 2.0).to_radians();
+        assert!(along * half_angle.sin() >= half_diagonal(), "{camera:?}");
+        let u = camera.up_vector;
+        assert!(
+            (u.x * d.x + u.y * d.y + u.z * d.z).abs() < 1e-5,
+            "{camera:?}"
+        );
+        assert!(u.z > 0.0, "{camera:?}");
+    }
+
+    #[test]
+    fn bounded_objects_get_a_perspective_and_an_orthogonal_camera() {
+        let plain = export(&report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+        let export = export(
+            &report("a.ifc", 1),
+            &model("a.ifc", 1),
+            &measured(Version::V2_1),
+        )
+        .unwrap();
+        assert!(export.unframed.is_empty(), "{:?}", export.unframed);
+
+        let topic = &export.document.topics[0];
+        let [perspective, orthogonal] = topic.viewpoints.as_slice() else {
+            panic!("{:?}", topic.viewpoints);
+        };
+        // The first viewpoint keeps the GUID it had without a camera.
+        assert_eq!(
+            perspective.guid,
+            plain.document.topics[0].viewpoints[0].guid
+        );
+        assert_eq!(perspective.selection, orthogonal.selection);
+
+        let centre = [2.0, 1.0, 1.4];
+        let camera = perspective.camera.unwrap();
+        assert_eq!(
+            camera.projection,
+            Projection::Perspective {
+                field_of_view: FIELD_OF_VIEW_DEGREES
+            }
+        );
+        assert_eq!(camera.aspect_ratio, None, "2.1 has no aspect ratio");
+        assert_frames(&camera, centre);
+        let camera = orthogonal.camera.unwrap();
+        let Projection::Orthogonal {
+            view_to_world_scale,
+        } = camera.projection
+        else {
+            panic!("{camera:?}");
+        };
+        assert!(view_to_world_scale >= 2.0 * half_diagonal(), "{camera:?}");
+        assert_frames(&camera, centre);
+
+        let bytes = export.to_bytes().unwrap();
+        let archive = openbim_bcf::read_slice(&bytes).unwrap();
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        let views = viewpoints(&bytes);
+        assert_eq!(views.len(), 2, "{views:?}");
+        assert!(
+            views
+                .iter()
+                .any(|view| view.contains("<PerspectiveCamera>"))
+        );
+        assert!(views.iter().any(|view| view.contains("<OrthogonalCamera>")));
+        assert!(
+            views
+                .iter()
+                .all(|view| view.contains(WALL) && view.contains(SLAB))
+        );
+    }
+
+    #[test]
+    fn a_missing_bound_leaves_the_viewpoint_without_a_camera() {
+        let mut partial = bounds();
+        partial.remove(&id("a.ifc", 2));
+        let options = Options {
+            bounds: Some(partial),
+            ..options()
+        };
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+        let topic = &export.document.topics[0];
+        assert_eq!(topic.viewpoints.len(), 1);
+        assert_eq!(topic.viewpoints[0].camera, None);
+        assert_eq!(export.unframed, [id("a.ifc", 2)]);
+    }
+
+    #[test]
+    fn without_bounds_no_camera_is_written_and_nothing_is_unframed() {
+        let unmeasured = options();
+        assert_eq!(unmeasured.bounds, None);
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &unmeasured).unwrap();
+        assert!(export.unframed.is_empty());
+        let views = viewpoints(&export.to_bytes().unwrap());
+        assert_eq!(views.len(), 1);
+        assert!(!views[0].contains("Camera"), "{}", views[0]);
+    }
+
+    #[test]
+    fn bcf_3_is_written_when_every_viewpoint_has_a_camera() {
+        let export = export(
+            &report("a.ifc", 1),
+            &model("a.ifc", 1),
+            &measured(Version::V3_0),
+        )
+        .unwrap();
+        let camera = export.document.topics[0].viewpoints[0].camera.unwrap();
+        assert!(camera.aspect_ratio.is_some(), "3.0 requires it");
+        let bytes = export.to_bytes().unwrap();
+        let archive = openbim_bcf::read_slice(&bytes).unwrap();
+        assert_eq!(
+            archive.version().resolved(),
+            Some(openbim_bcf::BcfVersion::V3_0)
+        );
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        // The door (no GlobalId) and the project outcome have no viewpoint,
+        // so they need no camera.
+        assert_eq!(archive.topic_count(), 3);
+    }
+
+    #[test]
+    fn bcf_3_without_a_camera_is_refused() {
+        let error = export(
+            &report("a.ifc", 1),
+            &model("a.ifc", 1),
+            &Options {
+                version: Version::V3_0,
+                ..options()
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&error, ExportError::MissingCamera { object } if *object == id("a.ifc", 1)),
+            "{error}"
+        );
+
+        let mut partial = bounds();
+        partial.remove(&id("a.ifc", 2));
+        let error = export(
+            &report("a.ifc", 1),
+            &model("a.ifc", 1),
+            &Options {
+                bounds: Some(partial),
+                ..measured(Version::V3_0)
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&error, ExportError::MissingCamera { object } if *object == id("a.ifc", 2)),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn bounds_refuse_inverted_or_infinite_corners() {
+        assert!(Bounds::new([1.0, 0.0, 0.0], [0.0, 1.0, 1.0]).is_none());
+        assert!(Bounds::new([0.0, 0.0, f64::NAN], [1.0, 1.0, 1.0]).is_none());
+        assert!(Bounds::new([0.0; 3], [0.0; 3]).is_some());
+    }
+
+    #[test]
+    fn a_point_is_framed_with_its_surroundings() {
+        let point = Bounds::new([5.0; 3], [5.0; 3]).unwrap();
+        let options = Options {
+            bounds: Some(BTreeMap::from([
+                (id("a.ifc", 1), point),
+                (id("a.ifc", 2), point),
+            ])),
+            ..options()
+        };
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+        let camera = export.document.topics[0].viewpoints[1].camera.unwrap();
+        assert_eq!(
+            camera.projection,
+            Projection::Orthogonal {
+                view_to_world_scale: 2.0 * MIN_FRAME_RADIUS_METRES
+            }
+        );
+    }
+}

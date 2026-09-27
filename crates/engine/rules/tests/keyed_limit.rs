@@ -514,6 +514,11 @@ fn a_package_binds_the_limit_table() {
     );
     parameters.insert("case_sensitive".into(), parameter("boolean", false));
     parameters.insert("floor_path".into(), parameter("stringList", false));
+    parameters.insert(
+        "overall_width".into(),
+        parameter("propertyReference", false),
+    );
+    parameters.insert("width_deduction".into(), parameter("quantity", false));
     for index in 1..=4 {
         parameters.insert(
             format!("key_{index}"),
@@ -794,6 +799,254 @@ fn a_sill_height_needs_its_floor_path_and_nothing_else_takes_one() {
     both.push(("quantity_property", property(None, "Sill")));
     for parameters in [missing, stray, both] {
         let evaluation = sill(model(), floors(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+fn metres(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "m".into(),
+    }
+}
+
+fn length(value: f64) -> PropertyValue {
+    PropertyValue::Quantity {
+        value,
+        dimension: QuantityDimension::Length,
+    }
+}
+
+/// Single-swing doors need 0.9 m clear, double doors 1.2 m.
+fn door_limits() -> Vec<TableRow> {
+    vec![
+        row([Some("SINGLE_SWING_*"), None, None], Some(0.9), None),
+        row([Some("DOUBLE_DOOR_*"), None, None], Some(1.2), None),
+    ]
+}
+
+/// A clear width stated in `Pset.ClearWidth`, else `OverallWidth` less
+/// `deduction`, keyed by the door's `OperationType`.
+fn door_keys(deduction: Option<f64>) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        ("limits", table(door_limits())),
+        ("quantity", string("clear-width")),
+        ("quantity_property", property(Some("Pset"), "ClearWidth")),
+        ("key_1", property(Some("Attributes"), "OperationType")),
+    ];
+    if let Some(deduction) = deduction {
+        parameters.push((
+            "overall_width",
+            property(Some("Attributes"), "OverallWidth"),
+        ));
+        parameters.push(("width_deduction", metres(deduction)));
+    }
+    parameters
+}
+
+/// Doors `(name, operation type, overall width, stated clear width)`.
+type Door<'a> = (&'a str, &'a str, Option<f64>, Option<PropertyValue>);
+
+fn doors(doors: &[Door<'_>]) -> Model {
+    let mut model = Model::default();
+    for (door, operation, overall, stated) in doors {
+        model = model
+            .object(door, "door")
+            .text(door, "Attributes", "OperationType", operation);
+        if let Some(overall) = overall {
+            model = model.value(door, "Attributes", "OverallWidth", length(*overall));
+        }
+        if let Some(stated) = stated {
+            model = model.value(door, "Pset", "ClearWidth", stated.clone());
+        }
+    }
+    model
+}
+
+fn clear(model: Model, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    model.evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters))
+}
+
+#[test]
+fn a_door_too_narrow_after_the_deduction_is_found() {
+    let model = doors(&[
+        // 1 m less 0.1 m meets 0.9 m exactly, although the binary
+        // difference falls a rounding step short of it.
+        ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+        ("d2", "SINGLE_SWING_RIGHT", Some(0.9), None),
+        // A stated clear width is used before any deduction.
+        ("d3", "SINGLE_SWING_LEFT", Some(0.9), Some(length(0.95))),
+        ("d4", "DOUBLE_DOOR_SINGLE_SWING", Some(1.25), None),
+        ("d5", "SINGLE_SWING_LEFT", Some(2.0), Some(length(0.8))),
+    ]);
+    let evaluation = clear(model, door_keys(Some(0.1)));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "d2".into(),
+                "clear width (Attributes.OverallWidth 0.9 m less the rule's deduction 0.1 m, \
+                 an approximation) is 0.8 m; required at least 0.9 m (limit row 0: \
+                 Attributes.OperationType `SINGLE_SWING_RIGHT`)"
+                    .into()
+            ),
+            (
+                "d4".into(),
+                "clear width (Attributes.OverallWidth 1.25 m less the rule's deduction 0.1 m, \
+                 an approximation) is 1.15 m; required at least 1.2 m (limit row 1: \
+                 Attributes.OperationType `DOUBLE_DOOR_SINGLE_SWING`)"
+                    .into()
+            ),
+            (
+                "d5".into(),
+                "clear width (Pset.ClearWidth) is 0.8 m; required at least 0.9 m (limit row 0: \
+                 Attributes.OperationType `SINGLE_SWING_LEFT`)"
+                    .into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    // The derivation is recorded as the rule author's approximation.
+    let step = |index: usize| {
+        evaluation.findings()[index]
+            .evidence
+            .iter()
+            .find(|evidence| evidence.locator.starts_with("axioval:derived.clear-width:"))
+            .cloned()
+            .unwrap()
+    };
+    let derived = step(0);
+    assert!(
+        derived
+            .locator
+            .ends_with("d2:step=overall-width-less-deduction;deduction=0.1"),
+        "{}",
+        derived.locator
+    );
+    assert!(!derived.exact);
+    let stated = step(2);
+    assert!(
+        stated.locator.ends_with("d5:step=stated"),
+        "{}",
+        stated.locator
+    );
+    assert!(stated.exact);
+}
+
+#[test]
+fn only_an_exactly_absent_clear_width_falls_back_to_the_deduction() {
+    let model = doors(&[
+        (
+            "d1",
+            "SINGLE_SWING_LEFT",
+            Some(1.0),
+            Some(PropertyValue::Null),
+        ),
+        (
+            "d2",
+            "SINGLE_SWING_LEFT",
+            Some(1.0),
+            Some(PropertyValue::String("wide".into())),
+        ),
+        ("d3", "SINGLE_SWING_LEFT", None, None),
+        ("d4", "SINGLE_SWING_LEFT", Some(0.05), None),
+        (
+            "d5",
+            "SINGLE_SWING_LEFT",
+            Some(1.0),
+            Some(PropertyValue::Decimal(0.8)),
+        ),
+    ]);
+    let evaluation = clear(model, door_keys(Some(0.1)));
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        ["d1", "d2", "d3", "d4", "d5"]
+            .map(|door| (door.to_owned(), NotEvaluatedReason::IncompleteEvidence))
+    );
+    let message = |index: usize| evaluation.not_evaluated_outcomes()[index].message();
+    for index in [0, 1, 4] {
+        assert!(
+            message(index).contains("not a positive length"),
+            "{}",
+            message(index)
+        );
+    }
+    assert!(message(2).contains("are absent"), "{}", message(2));
+    assert!(
+        message(3).contains("leaves no clear width"),
+        "{}",
+        message(3)
+    );
+}
+
+#[test]
+fn without_a_deduction_only_a_stated_clear_width_is_judged() {
+    let model = doors(&[
+        ("d1", "SINGLE_SWING_LEFT", Some(0.8), None),
+        ("d2", "SINGLE_SWING_LEFT", Some(0.8), Some(length(0.85))),
+    ]);
+    let evaluation = clear(model, door_keys(None));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "d2".into(),
+            "clear width (Pset.ClearWidth) is 0.85 m; required at least 0.9 m (limit row 0: \
+             Attributes.OperationType `SINGLE_SWING_LEFT`)"
+                .into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d1".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // With a deduction and no stated property, the overall width alone counts.
+    let mut parameters = door_keys(Some(0.1));
+    parameters.retain(|(name, _)| *name != "quantity_property");
+    let evaluation = clear(
+        doors(&[("d1", "SINGLE_SWING_LEFT", Some(0.95), None)]),
+        parameters,
+    );
+    assert_eq!(findings(&evaluation).len(), 1);
+}
+
+#[test]
+fn a_clear_width_declaration_is_checked() {
+    let model = || doors(&[("d1", "SINGLE_SWING_LEFT", Some(1.0), None)]);
+    let without = |names: &[&str]| {
+        let mut parameters = door_keys(Some(0.1));
+        parameters.retain(|(name, _)| !names.contains(name));
+        parameters
+    };
+    let with = |extra: (&'static str, ParameterValue)| {
+        let mut parameters = door_keys(Some(0.1));
+        parameters.retain(|(name, _)| *name != extra.0);
+        parameters.push(extra);
+        parameters
+    };
+    let mut plan_area = fire_keys(fire_limits());
+    plan_area.push(("width_deduction", metres(0.1)));
+    for parameters in [
+        // Neither step.
+        without(&["quantity_property", "overall_width", "width_deduction"]),
+        // A deduction without the width it is taken from, and the reverse.
+        without(&["overall_width"]),
+        without(&["width_deduction"]),
+        with(("width_deduction", metres(-0.1))),
+        with((
+            "width_deduction",
+            ParameterValue::Quantity {
+                value: 0.1,
+                unit: "m2".into(),
+            },
+        )),
+        with(("floor_path", strings(&["adjacent"]))),
+        plan_area,
+    ] {
+        let evaluation = clear(model(), parameters);
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]

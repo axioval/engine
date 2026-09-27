@@ -453,7 +453,7 @@ The `limits` table has the optional columns `key_1` … `key_4` (text patterns, 
 - Rows tie for most specific: not evaluated as an invalid declaration, naming the rows; never broken by order.
 - The row has neither bound: no limit applies, and the object passes.
 
-`quantity` names what the row limits. `plan-area` is the object's measured footprint in square metres through `PlanAreaService` (a zone's is the union of its members); like `plan-area`, a footprint straddling a bound, or an empty one, is not evaluated. `property` is the number or quantity `quantity_property` states, compared in canonical SI units; an absent or non-numeric value is not evaluated. Bounds are inclusive. Key patterns are case-sensitive unless `case_sensitive` is `false`. A finding names the row (zero-based) and the key values, relates the objects the keys were read from, and cites the key, relationship and measurement evidence.
+`quantity` names what the row limits: `plan-area`, `property`, `sill-height` or `clear-width` (the last two below). `plan-area` is the object's measured footprint in square metres through `PlanAreaService` (a zone's is the union of its members); like `plan-area`, a footprint straddling a bound, or an empty one, is not evaluated. `property` is the number or quantity `quantity_property` states, compared in canonical SI units; an absent or non-numeric value is not evaluated. Bounds are inclusive. Key patterns are case-sensitive unless `case_sensitive` is `false`. A finding names the row (zero-based) and the key values, relates the objects the keys were read from, and cites the key, relationship and measurement evidence.
 
 `sill-height` limits a window's sill per space type: the object's bottom elevation above the floor of each object `floor_path` reaches from it, in metres, through `VerticalExtentService`. A floor is the reached object's own bottom, so `floor_path: ["axioval:derived.adjacent-space"]` measures a window against the spaces on each side of it, and `key_1_path` along the same path keys the table on those spaces' use. `floor_path` is required with `sill-height` and refused with any other quantity, as `quantity_property` is outside `property`.
 
@@ -463,6 +463,19 @@ The `limits` table has the optional columns `key_1` … `key_4` (text patterns, 
 - The keys must agree across the reached spaces, as for any key: a window between an office and a corridor, whose rows differ, is not evaluated rather than judged against either.
 
 Whether a window sits at the end of a corridor is not decided: it needs the corridor's axis (a medial axis of its footprint), which no service provides yet.
+
+`clear-width` limits a door's clear width in metres, taken from the first of two steps that produces one:
+
+1. the length `quantity_property` states (a clear width the project records on the door or its type);
+2. else the length `overall_width` states (with IFC, `axioval:attributes.OverallWidth`) less `width_deduction`, a non-negative length the rule states for frame, lining and leaf.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `quantity_property` | `propertyReference` | The stated clear width, a length. |
+| `overall_width` | `propertyReference` | The overall width the deduction is taken from, a length. |
+| `width_deduction` | `quantity` | The rule author's deduction, a length of at least zero; declared together with `overall_width`. |
+
+At least one step is declared; `overall_width` and `width_deduction` are refused with any other quantity, and `floor_path` with this one. As in the [light-opening fallback](#light-opening-area), only an exact absence moves to the next step: a stated value that is null, not a length or not positive leaves the door not evaluated rather than replaced by the approximation, and so does an absent overall width or a deduction that leaves no width. The deduction is a **declared approximation of the rule author**, not a measurement: the finding says so ("clear width (… 0.9 m less the rule's deduction 0.1 m, an approximation) is 0.8 m; required at least 0.9 m …") and cites the evidence entry `axioval:derived.clear-width:<door>:step=overall-width-less-deduction;deduction=<metres>`, marked inexact; a stated width cites `…:step=stated`, exact. A deduction that differs per door type is one rule per type. Widths are read as the decimals they display, so an end within a few units in the last binary place of a bound meets it: a 1 m door less 0.1 m meets a 0.9 m minimum. Deriving the clear width from the lining and panel properties the model states (lining offset, thickness, panel width) waits on openbimrs/ifc#149.
 
 ### Exit separation
 
@@ -588,6 +601,52 @@ A ramp limited to 1:12 and 0.76 m of rise per run, or allowed 1:10 over runs of 
 Every length and slope is an interval. Each check is judged on its own and each failing check is its own finding naming the values (`riser 3 of 4 is 0.21 m; at most 0.19 m required`) and citing the measurement; a check whose interval straddles its bound, widened by a few units in the last place for the binary rounding of decimal coordinates, is not evaluated while the others still decide. Headroom is the least vertical distance from the walking surface (treads, runs and landings) to a selected obstacle's body directly above it, measured from the surface, not from the pitch line; a finding names and relates the lowest obstacle. An obstacle `headroom_obstacles` cannot decide can only lower the headroom: too little stands, enough is not evaluated. An obstacle crossing the walking surface, an unmeasured or nearby tessellated one leaves headroom not evaluated.
 
 A flight or ramp the service cannot measure is not evaluated, never passed: a tessellated body, an open or inward-facing mesh, winders or a turning flight, a flight in several pieces (open risers), a flight with a sloped walking face, a ramp whose slopes meet without a landing, or a body with no tread or run. Not measured yet (#85): winders, open risers, headroom under a flight, landing sizes, clear width, handrails (height, extension, continuity, side), the slab connection, doors on landings, free space at a ramp's ends and a stair nearby.
+
+### Doors
+
+Door accessibility checks are compositions of the capabilities above; no capability is specific to doors. The door type is a key: with IFC, the door's `OperationType` (`axioval:attributes.OperationType`, such as `SINGLE_SWING_LEFT` or `DOUBLE_DOOR_SINGLE_SWING`) or its type object's name (`axioval:type-attributes.Name`). Each sub-check maps to one rule:
+
+| Sub-check | Rule |
+|---|---|
+| Clear width per door type | `keyed-limit` with `quantity: clear-width`, a `minimum` per type row: the clear width the door states, else its `OverallWidth` less the rule's `width_deduction`, a declared approximation (see [Keyed limits](#keyed-limits)). |
+| Clear width derived from panel width less frame and panel thickness | Not decided yet: the lining and panel properties are not exposed (upstream openbimrs/ifc#149). The rule's deduction stands in for them until then. |
+| Threshold height | A stated length: `keyed-limit` with `quantity: property` and a `maximum` per type row, or a `property-requirements` row with `maximum` and `unit`. The threshold's body is not measured; models rarely carry one. |
+| Glazing ratio | A stated fraction, such as `GlazingAreaFraction` in `Pset_DoorCommon`: a `property-requirements` row with `minimum`/`maximum` and no `unit`, or `keyed-limit` with `quantity: property` per type. Deriving it from the panels waits on openbimrs/ifc#149. |
+| Minimum distance to other doors | `distance` with `counterparts` the doors, `mode: none_closer_than`, `projection: horizontal` and `minimum_metres`. With `relationship: axioval:derived.adjacent-space`, only doors opening into a common space count. |
+| Which spaces a door connects, and their types | `opening-spaces`, or a key read along `axioval:derived.adjacent-space` (as for sill heights); the side facing `outside` is recorded in the adjacency evidence. |
+| Door width on an accessible route | Walkability (#76) with the clear widths the host states per portal; the CLI states none, since `OverallWidth` includes the lining. |
+| Clear areas in front of, behind and beside the leaf (handle side), with a floor under them | Not decided yet: they need the door's leaf, hinge side and front (upstream openbimrs/ifc#148) and rectangles fixed to the door, which `free-floor-rectangle` refuses until the placement search grounds them (#18, #23 to #25). Clearance zones around components are #83. |
+| Opening direction relative to the space type | Not decided yet: it needs the swing direction (upstream openbimrs/ifc#148). The spaces on each side are known; which way the leaf opens is not. |
+
+A clear width per door type, stated where the model records it and otherwise approximated with a 10 cm deduction:
+
+```json
+{"limits": {"type": "table", "value": [
+   {"key_1": {"type": "string", "value": "SINGLE_SWING_*"},
+    "minimum": {"type": "number", "value": 0.9}},
+   {"key_1": {"type": "string", "value": "DOUBLE_DOOR_*"},
+    "minimum": {"type": "number", "value": 1.2}}]},
+ "quantity": {"type": "string", "value": "clear-width"},
+ "quantity_property": {"type": "propertyReference", "propertySet": "…door-accessibility",
+                       "property": "…clear-width"},
+ "overall_width": {"type": "propertyReference", "propertySet": "axioval:attributes",
+                   "property": "…overall-width"},
+ "width_deduction": {"type": "quantity", "value": 0.1, "unit": "m"},
+ "key_1": {"type": "propertyReference", "propertySet": "axioval:attributes",
+           "property": "…operation-type"}}
+```
+
+A threshold of at most 2 cm is the same table with a `maximum` of `0.02`, `quantity: property` and `quantity_property` the threshold height; doors at least 1.5 m apart in plan:
+
+```json
+{"counterparts": {"type": "selector", "value": {"kind": "entityType",
+                  "objectType": "…door", "includeSubtypes": true}},
+ "mode": {"type": "string", "value": "none_closer_than"},
+ "projection": {"type": "string", "value": "horizontal"},
+ "minimum_metres": {"type": "number", "value": 1.5}}
+```
+
+Every door closer than the minimum to another is its own finding naming the nearest one, so a pair too close is reported from both sides. A door type no row matches is a "no limit defined" finding; a row keyed `*` catches the types without a limit of their own (`NOTDEFINED` is a type like any other). A door whose `OperationType` is unset is not evaluated, never judged by a general row, since any row keyed on the type might be the one that applies.
 
 ### Model quality
 

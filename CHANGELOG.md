@@ -30,6 +30,27 @@ All notable changes are documented here. This project follows Semantic Versionin
   opening's crossing by them. `WalkabilityError` gains
   `InvalidStatedClearWidth`; matching it exhaustively is a breaking change.
   (#77)
+- **Door clear widths in `keyed-limit`.** The new `quantity` `clear-width`
+  limits a door's clear width per door type: the length
+  `quantity_property` states, else, when that is exactly absent, the length
+  the new parameter `overall_width` states (with IFC,
+  `axioval:attributes.OverallWidth`) less the new `width_deduction`, a
+  non-negative length the rule states for frame and lining. The deduction
+  is the rule author's declared approximation: the finding says so and cites
+  the inexact evidence entry
+  `axioval:derived.clear-width:<door>:step=overall-width-less-deduction;deduction=<metres>`.
+  A stated value that is null, not a length or not positive, an absent
+  overall width and a deduction leaving no width are not evaluated, never
+  replaced by the next step. Widths are read as the decimals they display,
+  so a 1 m door less 0.1 m meets a 0.9 m minimum. The capability model's
+  new "Doors" section maps every door-accessibility sub-check to a rule:
+  clear width, threshold height and glazing ratio as stated values, the
+  distance between doors through `distance` (`none_closer_than`,
+  `horizontal`), and the clear areas beside the leaf and the opening
+  direction as not yet decidable (door leaves, openbimrs/ifc#148; lining
+  and panel properties, openbimrs/ifc#149; rectangles fixed to the door,
+  #18). **Breaking:** definitions bound to `keyed-limit` must declare the
+  new optional parameters `overall_width` and `width_deduction`. (#82)
 - **Walkability and metric routing from geometry.** `axioval-axiolid` now
   implements both contracts, and `--geometry` registers them.
   `AxiolidWalkabilityService` builds a region per selected surface (its floor

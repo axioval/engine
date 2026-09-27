@@ -8,6 +8,7 @@ use axioval_engine::{
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
 use crate::level_spacing::{extent, extents};
+use crate::light_area::{LightArea, length};
 use crate::plan_area::{Verdict, footprint, judge, shown};
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
@@ -61,6 +62,125 @@ enum Quantity<'a> {
     /// The object's bottom above the bottom of each object `floor_path`
     /// reaches from it.
     SillHeight(Traversal<'a>),
+    /// A door's clear width: stated, or its overall width less a deduction
+    /// the rule states.
+    ClearWidth(ClearWidth<'a>),
+}
+
+/// Where a clear width comes from, in the order the steps are tried.
+///
+/// The deduction is the rule author's declared approximation of the frame,
+/// lining and leaf that narrow the overall width, not a measurement: every
+/// width derived with it says so in its message and cites an inexact
+/// evidence entry naming the deduction.
+struct ClearWidth<'a> {
+    /// The clear width the object states, tried first.
+    stated: Option<PropertyRef<'a>>,
+    /// The overall width and the deduction from it, in metres.
+    derived: Option<(PropertyRef<'a>, f64)>,
+}
+
+impl<'a> ClearWidth<'a> {
+    /// The declared steps: at least one, the overall width and its
+    /// deduction only together.
+    fn declared(
+        stated: Option<PropertyRef<'a>>,
+        overall: Option<PropertyRef<'a>>,
+        deduction: Option<f64>,
+    ) -> Result<Self, Unavailable> {
+        let derived = match (overall, deduction) {
+            (Some(overall), Some(deduction)) => Some((overall, deduction)),
+            (None, None) => None,
+            _ => {
+                return Err(invalid(
+                    "`overall_width` and `width_deduction` are declared together",
+                ));
+            }
+        };
+        if stated.is_none() && derived.is_none() {
+            return Err(invalid(
+                "`quantity` `clear-width` needs `quantity_property`, or `overall_width` \
+                 with `width_deduction`, or both",
+            ));
+        }
+        Ok(Self { stated, derived })
+    }
+
+    /// The clear width of `object`: the stated one when present, else the
+    /// overall width less the deduction. Only an exact absence moves on to
+    /// the next step; a stated value that is not a positive length stops the
+    /// chain rather than being replaced by an approximation.
+    fn measure(&self, context: &RuleContext<'_>, object: &Object) -> Result<Measured, Unavailable> {
+        let mut evidence = Vec::new();
+        if let Some(stated) = self.stated {
+            if let Some(width) = LightArea::length(context, object, stated, &mut evidence)? {
+                evidence.push(Self::record(&object.id, "stated", true));
+                return Ok(Measured {
+                    lower: width,
+                    upper: width,
+                    unit: " m".into(),
+                    what: format!("clear width ({stated})"),
+                    evidence,
+                });
+            }
+        }
+        let Some((overall, deduction)) = self.derived else {
+            let stated = self
+                .stated
+                .map_or_else(String::new, |stated| stated.to_string());
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("{stated} is absent and the rule states no deduction to derive it"),
+            ));
+        };
+        let Some(width) = LightArea::length(context, object, overall, &mut evidence)? else {
+            let stated = self
+                .stated
+                .map_or_else(String::new, |stated| format!("{stated} and "));
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("{stated}{overall} are absent, so no clear width can be derived"),
+            ));
+        };
+        let (lower, upper) = difference(width, deduction);
+        if upper <= 0.0 {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "{overall} {} m less the deduction {} m leaves no clear width",
+                    shown(width, width),
+                    shown(deduction, deduction)
+                ),
+            ));
+        }
+        evidence.push(Self::record(
+            &object.id,
+            &format!("overall-width-less-deduction;deduction={deduction}"),
+            false,
+        ));
+        Ok(Measured {
+            lower,
+            upper,
+            unit: " m".into(),
+            what: format!(
+                "clear width ({overall} {} m less the rule's deduction {} m, an approximation)",
+                shown(width, width),
+                shown(deduction, deduction)
+            ),
+            evidence,
+        })
+    }
+
+    /// The evidence entry recording which step produced a clear width; the
+    /// deduction step is an approximation and so never exact.
+    fn record(object: &ObjectId, step: &str, exact: bool) -> Evidence {
+        let mut evidence = Evidence::exact(
+            object.source.clone(),
+            format!("axioval:derived.clear-width:{object}:step={step}"),
+        );
+        evidence.exact = exact;
+        evidence
+    }
 }
 
 /// A key value as rows match it, or why it is unknown.
@@ -85,7 +205,12 @@ enum Key {
 /// footprint in square metres, `property`, the number or quantity stated
 /// by `quantity_property`, in canonical SI units, or `sill-height`, the
 /// object's bottom elevation above the bottom of each object `floor_path`
-/// reaches from it (a window's spaces), in metres.
+/// reaches from it (a window's spaces), in metres, or `clear-width`, a
+/// door's clear width in metres: the length `quantity_property` states,
+/// else, when that is exactly absent, the length `overall_width` states less
+/// the rule's `width_deduction`. The deduction is the rule author's declared
+/// approximation of frame and lining; a width derived with it says so and
+/// cites an inexact `axioval:derived.clear-width` evidence entry.
 ///
 /// A sill height is judged per reached floor, each against the one row the
 /// keys select: a window too high above any one of its spaces' floors is a
@@ -113,6 +238,8 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::required("quantity", ParameterType::String),
             ParameterDescriptor::optional("quantity_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("floor_path", ParameterType::StringList),
+            ParameterDescriptor::optional("overall_width", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("width_deduction", ParameterType::Quantity),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ];
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -204,7 +331,23 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
     }
     let property = parameters.property("quantity_property")?;
     let floor = parameters.strings("floor_path")?;
-    let quantity = match (parameters.required_string("quantity")?, property, floor) {
+    let named = parameters.required_string("quantity")?;
+    let overall = parameters.property("overall_width")?;
+    let deduction = length(parameters, "width_deduction")?;
+    if named != "clear-width" && (overall.is_some() || deduction.is_some()) {
+        return Err(invalid(format!(
+            "`overall_width` and `width_deduction` apply only to `clear-width`, not `{named}`"
+        )));
+    }
+    let quantity = match (named, property, floor) {
+        ("clear-width", _, Some(_)) => {
+            return Err(invalid(
+                "`floor_path` applies only to `sill-height`, not `clear-width`",
+            ));
+        }
+        ("clear-width", stated, None) => {
+            Quantity::ClearWidth(ClearWidth::declared(stated, overall, deduction)?)
+        }
         ("plan-area", None, None) => Quantity::PlanArea,
         ("property", Some(property), None) => Quantity::Property(property),
         ("sill-height", None, Some(path)) => Quantity::SillHeight(Traversal::path(path)?),
@@ -216,7 +359,7 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
         }
         (other @ ("plan-area" | "sill-height"), Some(_), _) => {
             return Err(invalid(format!(
-                "`quantity_property` applies only to `property`, not `{other}`"
+                "`quantity_property` applies only to `property` and `clear-width`, not `{other}`"
             )));
         }
         (other @ ("plan-area" | "property"), _, Some(_)) => {
@@ -385,6 +528,7 @@ fn measure(
 ) -> Result<Measured, Unavailable> {
     match quantity {
         Quantity::SillHeight(_) => Err(invalid("a sill height is judged per floor")),
+        Quantity::ClearWidth(clear) => clear.measure(context, object),
         Quantity::PlanArea => {
             let area = footprint(context, &object.id)?;
             Ok(Measured {
@@ -484,7 +628,12 @@ fn check(
     }
     let measured = measure(context, quantity, subject)?;
     let unit = &measured.unit;
-    match judge(measured.lower, measured.upper, limit.minimum, limit.maximum) {
+    let verdict = if matches!(quantity, Quantity::ClearWidth(_)) {
+        judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
+    } else {
+        judge(measured.lower, measured.upper, limit.minimum, limit.maximum)
+    };
+    match verdict {
         Verdict::Pass => Ok(None),
         Verdict::Fail(bound) => {
             let described = keys.describe(declared);
@@ -527,6 +676,28 @@ fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
     } else {
         (rounded, rounded)
     }
+}
+
+/// Judges an interval of lengths read as the decimals they display: an end
+/// within a few units in the last place of a bound meets it, so a 1 m door
+/// less a 0.1 m deduction meets a 0.9 m minimum although the binary
+/// difference falls a rounding step short of it.
+fn judge_as_displayed(
+    lower: f64,
+    upper: f64,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+) -> Verdict {
+    let snap = |value: f64| {
+        [minimum, maximum]
+            .into_iter()
+            .flatten()
+            .find(|bound| {
+                (value - bound).abs() <= 4.0 * f64::EPSILON * value.abs().max(bound.abs())
+            })
+            .unwrap_or(value)
+    };
+    judge(snap(lower), snap(upper), minimum, maximum)
 }
 
 /// The sill height of `window` above the bottom of `floor`, as an interval.

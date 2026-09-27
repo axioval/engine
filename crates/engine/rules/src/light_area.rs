@@ -76,7 +76,8 @@ pub(crate) struct LightArea<'a> {
     frame: Option<f64>,
 }
 
-fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
+/// A non-negative length parameter in metres, `Ok(None)` when not declared.
+pub(crate) fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
     match parameters.quantity(name)? {
         None => Ok(None),
         Some((value, QuantityDimension::Length)) if value >= 0.0 => Ok(Some(value)),
@@ -250,7 +251,7 @@ fn round(value: f64) -> f64 {
 
 impl LightArea<'_> {
     /// A positive length stated by `property`, `Ok(None)` when exactly absent.
-    fn length(
+    pub(crate) fn length(
         context: &RuleContext<'_>,
         object: &Object,
         property: PropertyRef<'_>,

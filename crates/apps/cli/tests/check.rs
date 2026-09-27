@@ -3699,3 +3699,238 @@ fn with_geometry_an_accessible_route_finds_a_narrow_door_and_a_stairs_only_room(
         "{result:#}"
     );
 }
+
+/// Three 2.1 m doors in one wall line, 0.1 m thick at y 0: #19 at x 0..1
+/// (`OverallWidth` 1 m) and #29 at x 1.5..2.4 (0.9 m), both single swing;
+/// #39 at x 10..11, a double door stating a clear width of 1.15 m and a
+/// threshold of 3 cm in the project's `DoorAccessibility` set.
+fn doors_in_a_wall() -> String {
+    let door = |width: f64, operation: &str| {
+        format!("IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,{width:.2},.DOOR.,.{operation}.,$)")
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(1.15),$);\n\
+         #201=IFCPROPERTYSINGLEVALUE('ThresholdHeight',$,IFCLENGTHMEASURE(0.03),$);\n\
+         #202=IFCPROPERTYSET('0000000000000000000202',$,'DoorAccessibility',$,(#200,#201));\n\
+         #203=IFCRELDEFINESBYPROPERTIES('0000000000000000000203',$,$,$,(#39),#202);\n\
+         #210=IFCPROPERTYSINGLEVALUE('ThresholdHeight',$,IFCLENGTHMEASURE(0.),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'DoorAccessibility',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#19,#29),#211);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(
+            10,
+            [0.5, 0.0, 0.0],
+            [1.0, 0.1, 2.1],
+            &door(1.0, "SINGLE_SWING_LEFT")
+        ),
+        placed_box(
+            20,
+            [1.95, 0.0, 0.0],
+            [0.9, 0.1, 2.1],
+            &door(0.9, "SINGLE_SWING_RIGHT")
+        ),
+        placed_box(
+            30,
+            [10.5, 0.0, 0.0],
+            [1.0, 0.1, 2.1],
+            &door(1.25, "DOUBLE_DOOR_SINGLE_SWING"),
+        ),
+    )
+}
+
+/// The door compositions of the capability model's "Doors" section as
+/// packages: a clear width per door type from a stated property or the
+/// overall width less a stated deduction, a stated threshold height, and a
+/// minimum plan distance between doors. Returns the definitions and the
+/// ruleset.
+fn door_packages(case: &Case) -> (PathBuf, PathBuf) {
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    let concept = |name: &str| {
+        json!({"id": format!("axioval:example.ifc.{name}"), "name": text(name),
+               "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+               "citations": []})
+    };
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(case.definitions(true)).unwrap()).unwrap();
+    definitions["objectTypes"]["axioval:example.ifc.IfcDoor"] = concept("IfcDoor");
+    definitions["propertySets"]["axioval:example.ifc.DoorAccessibility"] =
+        concept("DoorAccessibility");
+    for (name, kind) in [
+        ("OverallWidth", "quantity"),
+        ("OperationType", "enum"),
+        ("ClearWidth", "quantity"),
+        ("ThresholdHeight", "quantity"),
+    ] {
+        let mut property = concept(name);
+        property["valueKind"] = json!(kind);
+        definitions["properties"][format!("axioval:example.ifc.{name}")] = property;
+    }
+    for (id, capability) in [
+        ("door-clear-width", "keyed-limit"),
+        ("door-threshold", "keyed-limit"),
+        ("door-spacing", "distance"),
+    ] {
+        let capability = format!("axioval:capability.{capability}");
+        definitions["definitions"][format!("axioval:example.{id}")] = json!({
+            "id": format!("axioval:example.{id}"), "name": text(id), "description": text(id),
+            "capability": capability, "parameters": registry_signature(&capability),
+            "citations": [], "tags": [],
+        });
+    }
+    let reference = |set: &str, name: &str| {
+        json!({"type": "propertyReference", "property": format!("axioval:example.ifc.{name}"),
+               "propertySet": set})
+    };
+    let accessibility = "axioval:example.ifc.DoorAccessibility";
+    let operation = reference("axioval:attributes", "OperationType");
+    let doors = entity("IfcDoor");
+    let text_file = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text_file).unwrap();
+    let template = ruleset["root"]["rules"][0].clone();
+    let rule = |id: &str, parameters: Value| {
+        let mut rule = template.clone();
+        rule["id"] = json!(id);
+        rule["definitionId"] = json!(format!("axioval:example.{id}"));
+        rule["parameters"] = parameters;
+        rule["applicability"]["groups"]["walls"]["selector"] = doors.clone();
+        rule
+    };
+    ruleset["root"]["rules"] = json!([
+        rule(
+            "door-clear-width",
+            json!({
+                "limits": {"type": "table", "value": [
+                    {"key_1": {"type": "string", "value": "SINGLE_SWING_*"},
+                     "minimum": {"type": "number", "value": 0.9}},
+                    {"key_1": {"type": "string", "value": "DOUBLE_DOOR_*"},
+                     "minimum": {"type": "number", "value": 1.2}},
+                ]},
+                "quantity": {"type": "string", "value": "clear-width"},
+                "quantity_property": reference(accessibility, "ClearWidth"),
+                "overall_width": reference("axioval:attributes", "OverallWidth"),
+                "width_deduction": {"type": "quantity", "value": 0.1, "unit": "m"},
+                "key_1": operation,
+            }),
+        ),
+        rule(
+            "door-threshold",
+            json!({
+                "limits": {"type": "table", "value": [
+                    {"key_1": {"type": "string", "value": "*"},
+                     "maximum": {"type": "number", "value": 0.02}},
+                ]},
+                "quantity": {"type": "string", "value": "property"},
+                "quantity_property": reference(accessibility, "ThresholdHeight"),
+                "key_1": operation,
+            }),
+        ),
+        rule(
+            "door-spacing",
+            json!({
+                "counterparts": {"type": "selector", "value": doors},
+                "mode": {"type": "string", "value": "none_closer_than"},
+                "projection": {"type": "string", "value": "horizontal"},
+                "minimum_metres": {"type": "number", "value": 1.5},
+            }),
+        ),
+    ]);
+    (
+        case.write("definitions.json", &definitions.to_string()),
+        case.write("ruleset.json", &ruleset.to_string()),
+    )
+}
+
+#[test]
+fn with_geometry_door_clear_widths_thresholds_and_spacing_are_checked() {
+    let case = Case::new("geometry-doors");
+    let (definitions, ruleset) = door_packages(&case);
+    let model = case.write("model.ifc", &doors_in_a_wall());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let mut findings: Vec<(String, String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            (
+                finding["rule_id"].as_str().unwrap().to_owned(),
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    findings.sort();
+    let found: Vec<(&str, &str)> = findings
+        .iter()
+        .map(|(rule, object, _)| (rule.as_str(), object.as_str()))
+        .collect();
+    // #29 is 0.8 m clear after the deduction; #19 meets 0.9 m exactly and
+    // #39's stated 1.15 m is judged instead of its 1.25 m overall width.
+    // #39's stated threshold is too high; #19 and #29 are 0.5 m apart.
+    assert_eq!(
+        found,
+        [
+            ("door-clear-width", "#29"),
+            ("door-clear-width", "#39"),
+            ("door-spacing", "#19"),
+            ("door-spacing", "#29"),
+            ("door-threshold", "#39"),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(
+        findings[0].2,
+        "clear width (axioval:attributes.axioval:example.ifc.OverallWidth 0.9 m less the rule's \
+         deduction 0.1 m, an approximation) is 0.8 m; required at least 0.9 m (limit row 0: \
+         axioval:attributes.axioval:example.ifc.OperationType `SINGLE_SWING_RIGHT`)",
+        "{result:#}"
+    );
+    assert!(
+        findings[1]
+            .2
+            .starts_with("clear width (axioval:example.ifc.DoorAccessibility.")
+            && findings[1].2.contains("is 1.15 m; required at least 1.2 m"),
+        "{result:#}"
+    );
+    assert!(
+        findings[2]
+            .2
+            .ends_with("/#29 at horizontal distance 0.5000 m"),
+        "{result:#}"
+    );
+    assert!(
+        findings[4].2.contains("is 0.03 m; required at most 0.02 m"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

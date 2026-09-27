@@ -155,6 +155,124 @@ fn an_undecided_container_leaves_every_door_open() {
     );
 }
 
+fn in_doc(document: &str, local: &str) -> axioval_ir::ObjectId {
+    axioval_ir::ObjectId::new(axioval_ir::SourceId::new("test", document).unwrap(), local).unwrap()
+}
+
+fn metres(value: f64) -> axioval_ir::PropertyValue {
+    axioval_ir::PropertyValue::Quantity {
+        value,
+        dimension: axioval_ir::QuantityDimension::Length,
+    }
+}
+
+/// A door `d` of the MEP model on storey `l1`, hosted by wall `w` of the
+/// architecture model on storey `og` at 3 m; `l1` stands at `elevation`.
+fn federated(elevation: Option<f64>) -> Model {
+    let model = Model::default()
+        .object_in("mep", "l1", "storey")
+        .object_in("mep", "d", "door")
+        .object_in("arch", "og", "storey")
+        .object_in("arch", "w", "wall")
+        .edge_of("contains", in_doc("mep", "l1"), in_doc("mep", "d"))
+        .edge_of("contains", in_doc("arch", "og"), in_doc("arch", "w"))
+        .edge_of("hosts", in_doc("arch", "w"), in_doc("mep", "d"))
+        .value_of(
+            in_doc("arch", "og"),
+            "axioval:attributes",
+            "Elevation",
+            metres(3.0),
+        );
+    match elevation {
+        Some(elevation) => model.value_of(
+            in_doc("mep", "l1"),
+            "axioval:attributes",
+            "Elevation",
+            metres(elevation),
+        ),
+        None => model,
+    }
+}
+
+fn run_levels(model: Model, levels: bool) -> CapabilityEvaluation {
+    let mut parameters = vec![
+        ("counterpart_path", strings(&["hosts:backward"])),
+        ("container_selector", selector(kind("storey"))),
+        ("relationship", string("contains")),
+        ("direction", string("backward")),
+    ];
+    if levels {
+        parameters.push((
+            "container_relationship",
+            string("axioval:derived.same-level;tolerance=0.01"),
+        ));
+        parameters.push((
+            "level_property",
+            common::property(Some("axioval:attributes"), "Elevation"),
+        ));
+    }
+    model.evaluate(&SameContainer, &rule(ID, kind("door"), parameters))
+}
+
+#[test]
+fn storeys_of_several_models_at_one_elevation_are_one_level() {
+    // Without the level match the MEP storey is not the architecture one.
+    let evaluation = run_levels(federated(Some(3.0)), false);
+    assert_eq!(evaluation.findings().len(), 1);
+    // With it they are one level.
+    let evaluation = run_levels(federated(Some(3.005)), true);
+    assert!(
+        evaluation.findings().is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes().is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    // A storey half a metre off is another level.
+    let evaluation = run_levels(federated(Some(3.5)), true);
+    assert_eq!(evaluation.findings().len(), 1);
+    // An unstated elevation leaves the door not evaluated.
+    let evaluation = run_levels(federated(None), true);
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_level_match_needs_its_property_and_a_valid_identity() {
+    for extra in [
+        vec![(
+            "container_relationship",
+            string("axioval:derived.same-level"),
+        )],
+        vec![(
+            "level_property",
+            common::property(Some("axioval:attributes"), "Elevation"),
+        )],
+        vec![
+            (
+                "container_relationship",
+                string("axioval:derived.contained-in-space"),
+            ),
+            (
+                "level_property",
+                common::property(Some("axioval:attributes"), "Elevation"),
+            ),
+        ],
+    ] {
+        let evaluation = run(storeys(), extra);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
 #[test]
 fn declarations_without_a_climb_or_path_are_refused() {
     for parameters in [

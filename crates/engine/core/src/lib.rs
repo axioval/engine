@@ -595,7 +595,7 @@ pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, W
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
-    DerivedRelationshipServiceHandle, adjacent_side,
+    DerivedRelationshipServiceHandle, LevelFacts, LevelMatch, adjacent_side,
 };
 pub use discipline_map::{
     DisciplineMap, DisciplineMapError, DisciplineOrigin, DisciplineRule, UnmappedReason,

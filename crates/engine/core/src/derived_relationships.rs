@@ -183,6 +183,119 @@ impl fmt::Display for Derivation {
     }
 }
 
+const SAME_LEVEL: &str = "same-level";
+
+/// `axioval:derived.same-level`: levels of different sources that stand for
+/// one federated level, such as the architecture model's and the MEP
+/// model's storeys at one elevation.
+///
+/// Unlike a [`Derivation`] it needs no geometry: a capability matches two
+/// containers it has already climbed to by what their sources state, their
+/// elevation or their name, so it is never routed to a geometry provider.
+/// Parameters follow the name as for a derivation: `by` is `elevation` (the
+/// default) or `name`, and `tolerance` (metres, default 0, elevation only)
+/// is the largest elevation difference of one level. A container is always
+/// on its own level; two containers of one source never share one.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LevelMatch {
+    /// Elevations at most `tolerance_metres` apart.
+    Elevation {
+        /// Largest elevation difference of one level, in metres.
+        tolerance_metres: f64,
+    },
+    /// Names that are equal as stated.
+    Name,
+}
+
+/// What a level states that [`LevelMatch`] compares.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LevelFacts {
+    /// The level's elevation in metres, when stated.
+    pub elevation_metres: Option<f64>,
+    /// The level's name, when stated.
+    pub name: Option<String>,
+}
+
+impl LevelMatch {
+    /// The level match a relationship identity names, `None` for any other
+    /// identity.
+    ///
+    /// # Errors
+    ///
+    /// [`RelationshipSelectionError::InvalidRequest`] for a malformed,
+    /// unknown or repeated parameter, a negative or non-finite tolerance, or
+    /// a tolerance with `by=name`.
+    pub fn parse(relationship: &str) -> Result<Option<Self>, RelationshipSelectionError> {
+        let Some(rest) = relationship.strip_prefix(DERIVED_RELATIONSHIP_PREFIX) else {
+            return Ok(None);
+        };
+        let mut parts = rest.split(';');
+        if parts.next() != Some(SAME_LEVEL) {
+            return Ok(None);
+        }
+        let (mut by, mut tolerance) = (None, None);
+        for part in parts {
+            let (key, value) = part
+                .split_once('=')
+                .ok_or(RelationshipSelectionError::InvalidRequest)?;
+            match (key.trim(), value.trim()) {
+                ("by", value) if by.is_none() => by = Some(value.to_owned()),
+                ("tolerance", value) if tolerance.is_none() => {
+                    let metres: f64 = value
+                        .parse()
+                        .map_err(|_| RelationshipSelectionError::InvalidRequest)?;
+                    if !metres.is_finite() || metres < 0.0 {
+                        return Err(RelationshipSelectionError::InvalidRequest);
+                    }
+                    tolerance = Some(metres);
+                }
+                _ => return Err(RelationshipSelectionError::InvalidRequest),
+            }
+        }
+        match (by.as_deref(), tolerance) {
+            (None | Some("elevation"), tolerance) => Ok(Some(Self::Elevation {
+                tolerance_metres: tolerance.unwrap_or(0.0),
+            })),
+            (Some("name"), None) => Ok(Some(Self::Name)),
+            _ => Err(RelationshipSelectionError::InvalidRequest),
+        }
+    }
+
+    /// Whether two levels of different sources are one level: `None` when
+    /// either does not state what the match compares.
+    ///
+    /// Elevations compare with the rounding of one unit conversion allowed
+    /// beyond the tolerance, so levels stated as `3000 mm` and `3 m` match
+    /// with none.
+    #[must_use]
+    pub fn same(&self, left: &LevelFacts, right: &LevelFacts) -> Option<bool> {
+        match self {
+            Self::Elevation { tolerance_metres } => {
+                let (left, right) = (left.elevation_metres?, right.elevation_metres?);
+                if !left.is_finite() || !right.is_finite() {
+                    return None;
+                }
+                let rounding = 1e-9 * left.abs().max(right.abs()).max(1.0);
+                Some((left - right).abs() <= tolerance_metres + rounding)
+            }
+            Self::Name => Some(left.name.as_ref()? == right.name.as_ref()?),
+        }
+    }
+}
+
+/// The canonical identity: the name and every parameter, defaults included.
+impl fmt::Display for LevelMatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{DERIVED_RELATIONSHIP_PREFIX}{SAME_LEVEL}")?;
+        match self {
+            Self::Elevation { tolerance_metres } => {
+                write!(f, ";by=elevation;tolerance={tolerance_metres}")
+            }
+            Self::Name => write!(f, ";by=name"),
+        }
+    }
+}
+
 /// The face of a door, window or opening an `adjacent-space` probe starts
 /// from: along the element's through-thickness normal (`+`) or against it
 /// (`-`).

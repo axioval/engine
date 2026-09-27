@@ -102,6 +102,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_bands` (omitted when empty, so packages are unchanged),
   `EngineError` gains `InvalidRefinement`, and
   `ExecutionPlan::refinement` exposes what a rule declares.
+- **Storeys of several models matched as one level.** (#105) The derived
+  relationship `axioval:derived.same-level` (`LevelMatch`) matches
+  containers of different sources as one federated level, by elevation
+  within a `tolerance` (default) or by name (`;by=name`), from what each
+  source states (`LevelMatch::same` over `LevelFacts`). `property-comparison`'s
+  container modes and `same-container` take it as `container_relationship`
+  with a `level_property` naming the compared property, so an MEP duct and
+  the architecture slab on the matching storey are same-level candidates.
+  A container is always on its own level and never shares one with another
+  container of its source; an unstated level property leaves the pair
+  undecided, never another level. **Breaking:** definitions bound to
+  `property-comparison` or `same-container` must declare the optional
+  `container_relationship` (`string`) and `level_property`
+  (`propertyReference`).
 - **Object counts among the sources of a discipline.** (#104)
   `object-count` takes `disciplines`, a string list: only the sources
   playing one of them are counted, so a per-source duct count limited to

@@ -12,6 +12,7 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Severity, TemporalPrecision};
 
+use crate::levels::Levels;
 use crate::selection::select_objects;
 use regex::{Regex, RegexBuilder};
 
@@ -42,6 +43,11 @@ use crate::support::{
 /// (`same_space`, `same_building`): those whose nearest `container_selector`
 /// object, climbed to along the declared relationship steps, is one of its
 /// own.
+/// With `container_relationship` `axioval:derived.same-level`, a candidate
+/// also shares the checked object's container when one of its containers is
+/// on one level with one of the object's in another source (an MEP model's
+/// storey and the architecture model's at one elevation); an undecided
+/// level leaves the object not evaluated.
 pub struct PropertyComparison;
 
 enum Mode<'a> {
@@ -52,6 +58,9 @@ enum Mode<'a> {
     SameContainer {
         traversal: Traversal<'a>,
         containers: &'a Selector,
+        /// Containers of other sources matched as one level
+        /// (`axioval:derived.same-level`) by a property, when declared.
+        levels: Option<(&'a str, PropertyRef<'a>)>,
     },
 }
 #[derive(Clone, Copy)]
@@ -157,6 +166,8 @@ impl RuleCapability for PropertyComparison {
             ParameterDescriptor::required("factor", ParameterType::Number),
             ParameterDescriptor::required("component_mode", ParameterType::String),
             ParameterDescriptor::optional("container_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("container_relationship", ParameterType::String),
+            ParameterDescriptor::optional("level_property", ParameterType::PropertyReference),
             ParameterDescriptor::required("quantifier", ParameterType::String),
             ParameterDescriptor::optional("category_property", ParameterType::PropertyReference),
         ]
@@ -215,6 +226,13 @@ impl RuleCapability for PropertyComparison {
             universe: &universe,
             containers: &containers,
             nearest: BTreeMap::new(),
+            levels: match &config.mode {
+                Mode::SameContainer {
+                    levels: Some((relationship, property)),
+                    ..
+                } => Levels::parse(relationship, *property).ok(),
+                _ => None,
+            },
         };
         for object in checked {
             let mut outcome = Outcome::default();
@@ -348,6 +366,11 @@ impl<'a> Config<'a> {
         }
         let traversal = parameters.traversal()?;
         let container_selector = parameters.selector("container_selector")?;
+        let container_relationship = parameters.string("container_relationship")?;
+        let levels = crate::levels::declared(
+            container_relationship,
+            parameters.property("level_property")?,
+        )?;
         let mode = match parameters.required_string("component_mode")? {
             "checked" => Mode::Checked,
             "shared" => {
@@ -382,15 +405,18 @@ impl<'a> Config<'a> {
                 }
                 Mode::SameContainer {
                     traversal,
+                    levels,
                     containers: container_selector
                         .ok_or_else(|| invalid("a container mode needs `container_selector`"))?,
                 }
             }
             other => return Err(invalid(format!("component mode `{other}` is unsupported"))),
         };
-        if container_selector.is_some() && !matches!(mode, Mode::SameContainer { .. }) {
+        if (container_selector.is_some() || container_relationship.is_some())
+            && !matches!(mode, Mode::SameContainer { .. })
+        {
             return Err(invalid(
-                "`container_selector` applies to `same_space` and `same_building` only",
+                "`container_selector` and `container_relationship` apply to `same_space` and `same_building` only",
             ));
         }
         let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
@@ -563,6 +589,8 @@ struct Judge<'r, 'c> {
     universe: &'r [&'c Object],
     containers: &'r BTreeSet<ObjectId>,
     nearest: BTreeMap<ObjectId, Containers>,
+    /// The level match of `container_relationship`, when declared.
+    levels: Option<Levels<'r>>,
 }
 
 impl Judge<'_, '_> {
@@ -633,7 +661,17 @@ impl Judge<'_, '_> {
                         continue;
                     }
                     let (theirs, cited) = self.containers_of(&candidate.id)?;
-                    if !theirs.is_disjoint(&mine) {
+                    let shared = match &mut self.levels {
+                        None => !theirs.is_disjoint(&mine),
+                        Some(levels) => {
+                            let (shared, matched) = levels.overlap(self.context, &mine, &theirs)?;
+                            if shared {
+                                evidence.extend(matched);
+                            }
+                            shared
+                        }
+                    };
+                    if shared {
                         chosen.push(candidate.id.clone());
                         evidence.extend(cited);
                     }

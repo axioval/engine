@@ -80,6 +80,27 @@ impl Model {
         self
     }
 
+    /// A value of an object of any source.
+    pub fn value_of(
+        mut self,
+        object: ObjectId,
+        set: &str,
+        name: &str,
+        value: PropertyValue,
+    ) -> Self {
+        self.values.insert((object, set.into(), name.into()), value);
+        self
+    }
+
+    /// An edge between objects of any sources.
+    pub fn edge_of(mut self, relationship: &str, relating: ObjectId, related: ObjectId) -> Self {
+        self.edges
+            .entry(relationship.into())
+            .or_default()
+            .push((relating, related));
+        self
+    }
+
     pub fn text(self, local: &str, set: &str, name: &str, value: &str) -> Self {
         self.value(local, set, name, PropertyValue::String(value.into()))
     }
@@ -99,18 +120,6 @@ impl Model {
             .entry(relationship.into())
             .or_default()
             .push((relating, related));
-        self
-    }
-
-    /// A value of an object of any source document.
-    pub fn value_of(
-        mut self,
-        object: ObjectId,
-        set: &str,
-        name: &str,
-        value: PropertyValue,
-    ) -> Self {
-        self.values.insert((object, set.into(), name.into()), value);
         self
     }
 

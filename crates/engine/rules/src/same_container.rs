@@ -10,8 +10,9 @@ use axioval_engine::{
 use axioval_ir::{Evidence, Finding, Object, ObjectId};
 
 use crate::counts::{Population, tally};
+use crate::levels::Levels;
 use crate::selection::select_objects;
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, finding, invalid};
 
 /// Requires each selected object to share its nearest containers with every
 /// counterpart `counterpart_path` reaches from it.
@@ -25,6 +26,12 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 /// times, stopping at each container reached. The object and each
 /// counterpart must reach the same set of containers; one in none while the
 /// other is in one differs too.
+///
+/// With `container_relationship` `axioval:derived.same-level` the containers
+/// of several models are matched as levels: the object and a counterpart
+/// agree when every container of each is on one level with a container of
+/// the other (by elevation within a tolerance, or by name). A level whose
+/// elevation or name is not stated leaves the pair undecided.
 ///
 /// `counterpart_selector` restricts which reached objects count (every
 /// object by default). An object reaching no counterpart has nothing to
@@ -40,6 +47,8 @@ struct Config<'a> {
     counterpart_selector: Option<&'a axioval_ir::contract::Selector>,
     containers: &'a axioval_ir::contract::Selector,
     climb: Traversal<'a>,
+    /// `container_relationship` and `level_property`, when declared.
+    levels: Option<(&'a str, PropertyRef<'a>)>,
 }
 
 impl<'a> Config<'a> {
@@ -56,7 +65,12 @@ impl<'a> Config<'a> {
                 "containers are climbed transitively; `follow_chain` does not apply",
             ));
         }
+        let levels = crate::levels::declared(
+            parameters.string("container_relationship")?,
+            parameters.property("level_property")?,
+        )?;
         Ok(Self {
+            levels,
             counterparts: Traversal::path(path)?,
             counterpart_selector: parameters.selector("counterpart_selector")?,
             containers: parameters.required_selector("container_selector")?,
@@ -75,6 +89,8 @@ impl RuleCapability for SameContainer {
             ParameterDescriptor::required("counterpart_path", ParameterType::StringList),
             ParameterDescriptor::optional("counterpart_selector", ParameterType::Selector),
             ParameterDescriptor::required("container_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("container_relationship", ParameterType::String),
+            ParameterDescriptor::optional("level_property", ParameterType::PropertyReference),
         ]
         .into_iter()
         .chain(crate::support::traversal_parameters())
@@ -121,6 +137,9 @@ impl RuleCapability for SameContainer {
             containers: &containers,
             population: &population,
             climbed: BTreeMap::new(),
+            levels: config
+                .levels
+                .and_then(|(relationship, property)| Levels::parse(relationship, property).ok()),
         };
         for object in selected {
             match judge.object(object) {
@@ -146,6 +165,8 @@ struct Judge<'c, 'a> {
     population: &'c Population,
     /// Each object is climbed from once per evaluation.
     climbed: BTreeMap<ObjectId, Climb>,
+    /// The level match of `container_relationship`, when declared.
+    levels: Option<Levels<'c>>,
 }
 
 impl Judge<'_, '_> {
@@ -188,7 +209,17 @@ impl Judge<'_, '_> {
         let mut differing = Vec::new();
         for counterpart in &reached.decided {
             let (theirs, cited) = self.nearest(counterpart)?;
-            if theirs != mine {
+            let same = match &mut self.levels {
+                None => theirs == mine,
+                Some(levels) => {
+                    let (same, matched) = levels.equivalent(self.context, &mine, &theirs)?;
+                    if same {
+                        evidence.extend(matched);
+                    }
+                    same
+                }
+            };
+            if !same {
                 evidence.extend(cited);
                 differing.push((counterpart.clone(), theirs));
             }

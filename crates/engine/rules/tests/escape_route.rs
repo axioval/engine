@@ -56,6 +56,7 @@ struct Geometry {
     traces: BTreeMap<(String, String), f64>,
     /// A backend that cannot walk around objects.
     plain: bool,
+    overlaps: BTreeMap<(String, String), f64>,
 }
 
 impl Geometry {
@@ -72,6 +73,12 @@ impl Geometry {
     fn rectangle(mut self, local: &str, width: f64, length: f64, unique: bool) -> Self {
         self.rectangles
             .insert(local.into(), (width, length, unique));
+        self
+    }
+
+    fn overlap(mut self, first: &str, second: &str, square_metres: f64) -> Self {
+        self.overlaps
+            .insert((first.into(), second.into()), square_metres);
         self
     }
 
@@ -157,8 +164,17 @@ impl PlanAreaService for Geometry {
         )
     }
 
-    fn measure_plan_overlap(&self, _: &ObjectId, _: &ObjectId) -> Result<PlanArea, PlanAreaError> {
-        panic!("escape routes measure no overlap")
+    fn measure_plan_overlap(
+        &self,
+        first: &ObjectId,
+        second: &ObjectId,
+    ) -> Result<PlanArea, PlanAreaError> {
+        let key = (first.local_id.clone(), second.local_id.clone());
+        let area = *self
+            .overlaps
+            .get(&key)
+            .unwrap_or_else(|| panic!("unexpected overlap {key:?}"));
+        PlanArea::try_new(area, area, exact(format!("overlap:{}:{}", key.0, key.1)))
     }
 }
 
@@ -1836,5 +1852,238 @@ fn the_farthest_point_stands_only_where_no_walk_reaches_what_it_avoids() {
         message.contains("measured on the plain walk only")
             && message.contains("at least 11.9 m walking"),
         "{message}"
+    );
+}
+
+/// Room `r` opens through `d1` onto corridor `c`, both in compartment `A`;
+/// fire door `fd` leads from the corridor to stair `s` in compartment `B`.
+/// The building exit `x1` serves the room.
+fn compartments() -> Model {
+    Model::default()
+        .object("r", "room")
+        .object("c", "corridor")
+        .object("s", "stair")
+        .object("d1", "door")
+        .object("fd", "door")
+        .object("x1", "exit")
+        .object("A", "compartment")
+        .object("B", "compartment")
+        .edge("bounds", "d1", "r")
+        .edge("bounds", "d1", "c")
+        .edge("bounds", "fd", "c")
+        .edge("bounds", "fd", "s")
+        .edge("serves", "x1", "r")
+        .edge("in", "r", "A")
+        .edge("in", "c", "A")
+        .edge("in", "s", "B")
+}
+
+fn in_compartments(
+    model: Model,
+    geometry: Geometry,
+    start: &str,
+    extra: Vec<(&'static str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    let mut row = use_row(&[("maximum_travel", number(30.0))]);
+    row.insert("spaces".into(), selector(kind("room")));
+    row.insert("route_start".into(), string(start));
+    let mut parameters = with(
+        doors_and_exits(),
+        vec![("uses", ParameterValue::Table { value: vec![row] })],
+    );
+    parameters.extend(extra);
+    model.evaluate_with(
+        &EscapeRoute,
+        &rule(CAPABILITY, kind("room"), parameters),
+        |services| geometry.register(services),
+    )
+}
+
+fn by_path() -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        ("compartment_selector", selector(kind("compartment"))),
+        ("compartment_path", strings(&["in:forward"])),
+    ]
+}
+
+#[test]
+fn travel_ends_at_the_door_out_of_the_compartment() {
+    // The building exit is 40 m away, the fire door out of the room's
+    // compartment 18 m: travel ends there.
+    let geometry = || {
+        Geometry::default()
+            .walk("r", "x1", Walk::Between(40.0, 40.0))
+            .walk("r", "fd,x1", Walk::Between(18.0, 18.0))
+    };
+    let evaluation = in_compartments(compartments(), geometry(), "farthest-point", Vec::new());
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "r".into(),
+            "its farthest point, around (19.00, 0.00), lies 40 m from the nearest exit walking; \
+             use 0 allows at most 30 m of travel"
+                .into()
+        )]
+    );
+    let evaluation = in_compartments(compartments(), geometry(), "farthest-point", by_path());
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+
+    // Compartments by footprint overlap: the room and the corridor lie in
+    // `A` (90 % and all of their footprints), the stair in `B`.
+    let evaluation = in_compartments(
+        compartments(),
+        geometry()
+            .area("r", 20.0, 20.0)
+            .area("c", 30.0, 30.0)
+            .area("s", 10.0, 10.0)
+            .overlap("r", "A", 18.0)
+            .overlap("r", "B", 0.0)
+            .overlap("c", "A", 30.0)
+            .overlap("c", "B", 0.0)
+            .overlap("s", "A", 0.0)
+            .overlap("s", "B", 10.0),
+        "farthest-point",
+        vec![
+            ("compartment_selector", selector(kind("compartment"))),
+            ("compartment_overlap", number(0.8)),
+        ],
+    );
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+
+    // Whether the stair lies in `A` is unknown (76 to 84 %): the fire door
+    // may lead out or not, so the travel lies between 18 and 40 m.
+    let evaluation = in_compartments(
+        compartments(),
+        geometry()
+            .area("r", 20.0, 20.0)
+            .area("c", 30.0, 30.0)
+            .area("s", 9.5, 10.5)
+            .overlap("r", "A", 18.0)
+            .overlap("r", "B", 0.0)
+            .overlap("c", "A", 30.0)
+            .overlap("c", "B", 0.0)
+            .overlap("s", "A", 8.0)
+            .overlap("s", "B", 2.0),
+        "farthest-point",
+        vec![
+            ("compartment_selector", selector(kind("compartment"))),
+            ("compartment_overlap", number(0.8)),
+        ],
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains(&format!(
+            "the longest travel to the nearest exit or door out of compartment {} is between \
+             18 and 40 m walking",
+            id("A")
+        )),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_walk_through_a_higher_ranked_zone_is_excluded() {
+    // Hazard `h` ranks above the room: the walk from the door keeps out of
+    // it and is 35 m long, where the walk through it is 10 m.
+    let geometry = || {
+        Geometry::default()
+            .walk("d1", "fd,x1", Walk::Between(10.0, 10.0))
+            .walk("d1", "fd,x1~h", Walk::Between(35.0, 35.0))
+    };
+    let zones = || {
+        let row = |objects: &str, rank: i64| -> TableRow {
+            [
+                ("objects".to_owned(), selector(kind(objects))),
+                ("rank".to_owned(), integer(rank)),
+            ]
+            .into_iter()
+            .collect()
+        };
+        (
+            "zones",
+            ParameterValue::Table {
+                value: vec![row("room", 1), row("hazard", 2)],
+            },
+        )
+    };
+    let model = || compartments().object("h", "hazard");
+    let evaluation = in_compartments(model(), geometry(), "door", by_path());
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    let evaluation = in_compartments(model(), geometry(), "door", with(by_path(), vec![zones()]));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "r".into(),
+            format!(
+                "door {} lies 35 m from the nearest exit or door out of compartment {} walking; \
+                 use 0 allows at most 30 m of travel",
+                id("d1"),
+                id("A")
+            )
+        )]
+    );
+    // A room no row ranks cannot tell what ranks above it.
+    let evaluation = in_compartments(
+        compartments().object("h", "hazard").object("r2", "room"),
+        geometry(),
+        "door",
+        with(
+            by_path(),
+            vec![(
+                "zones",
+                ParameterValue::Table {
+                    value: vec![
+                        [
+                            ("objects".to_owned(), selector(kind("hazard"))),
+                            ("rank".to_owned(), integer(2)),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ],
+                },
+            )],
+        ),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(message.contains("no row of `zones` ranks it"), "{message}");
+}
+
+#[test]
+fn a_model_without_compartments_is_inadequate_information() {
+    let model = Model::default()
+        .object("r", "room")
+        .object("d1", "door")
+        .object("x1", "exit")
+        .edge("bounds", "d1", "r")
+        .edge("serves", "x1", "r");
+    let evaluation = in_compartments(model, Geometry::default(), "farthest-point", by_path());
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "source".into(),
+            "inadequate information: no compartment is modelled (`compartment_selector` picks \
+             nothing), so where escape travel ends at a compartment boundary is unknown"
+                .into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("r".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("it lies in no compartment")
     );
 }

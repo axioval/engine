@@ -185,7 +185,10 @@ destinations, refusing a space whose centroid lies outside its footprint.
 Unreachable destinations are none; a refusal leaves the distance unknown.
 See [Distances and connections between spaces](./capabilities.md#distances-and-connections-between-spaces).
 
-`escape-route` measures travel to the nearest exit with `farthest_point`
+`escape-route` builds its targets from the exits and, with compartments,
+from the doors out of the start's compartment: each is a door standing in
+its portal, a target like an exit door, so a compartment boundary needs no
+target kind of its own. It measures travel to the nearest exit with `farthest_point`
 from a space's walkable area, or with `nearest_target` from its doors.
 Where metres on a stair or a shared section count several times, the
 multiplied travel from a door is bounded from above by the answer's own

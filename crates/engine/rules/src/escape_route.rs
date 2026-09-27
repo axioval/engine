@@ -82,6 +82,20 @@
 //! anything from below, and from above only where every avoided object lies
 //! surely farther from the space than that bound.
 //!
+//! **Compartments.** With `compartment_selector`, a space lies in the
+//! compartments `compartment_path` reaches from it, or in each covering at
+//! least `compartment_overlap` of its footprint. Travel ends at the nearest
+//! exit or door out of the start's one compartment: the doors out are found
+//! by walking the compartment's spaces through their doors (`door_path`,
+//! and back from each door to its spaces); a door reaching a space outside,
+//! or no other space, leads out. A project without any compartment is an
+//! inadequate-information finding per source of a checked space.
+//!
+//! **Zones.** Each object takes the rank of the first row of `zones`
+//! picking it, the start its space's or compartment's; every walk keeps out
+//! of what ranks above the start, as it keeps out of what is not usable for
+//! escape.
+//!
 //! Not checked: passages walked from the farthest point rather than the
 //! doors.
 
@@ -93,11 +107,11 @@ use axioval_engine::{
     FarthestPointRequest, FreeSpaceServiceHandle, LengthInterval, MetricPoint,
     MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
     NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor, ParameterType,
-    PathTraceRequest, PlanArea, PlanSpanServiceHandle, ProximityProjection, ProximityRequest,
-    ProximityServiceHandle, RuleCapability, RuleContext, TableColumn,
+    PathTraceRequest, PlanArea, PlanAreaServiceHandle, PlanSpanServiceHandle, ProximityProjection,
+    ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension, Scope};
 
 use crate::door_swing::{self, Relation};
 use crate::exit_separation::Candidates;
@@ -130,6 +144,12 @@ const SECTIONS: &[TableColumn] = &[
     TableColumn::required("objects", ColumnKind::Selector),
     TableColumn::required("factor", ColumnKind::Number),
     TableColumn::optional("shared_by", ColumnKind::Integer),
+];
+
+const ZONES: &[TableColumn] = &[
+    TableColumn::optional("label", ColumnKind::String),
+    TableColumn::required("objects", ColumnKind::Selector),
+    TableColumn::required("rank", ColumnKind::Integer),
 ];
 
 /// How narrow the farthest-point bracket is asked to become, in metres.
@@ -186,6 +206,26 @@ struct Passages<'a> {
     walked: bool,
 }
 
+/// How a space is assigned to its compartments.
+enum Membership<'a> {
+    /// The compartments the path reaches from the space.
+    Path(Traversal<'a>),
+    /// The compartments covering at least this share of its footprint.
+    Overlap(f64),
+}
+
+/// Fire compartments: travel ends at the start compartment's boundary.
+struct Compartments<'a> {
+    selector: &'a Selector,
+    membership: Membership<'a>,
+}
+
+/// One row of `zones`: objects of a rank.
+struct Zone<'a> {
+    objects: &'a Selector,
+    rank: i64,
+}
+
 struct Declaration<'a> {
     uses: Vec<Use<'a>>,
     /// By occupants.
@@ -202,6 +242,9 @@ struct Declaration<'a> {
     door_direction: bool,
     /// Objects not usable for escape: never exits, starts or passed.
     no_escape: Option<&'a Selector>,
+    compartments: Option<Compartments<'a>>,
+    /// By row; the first row picking an object ranks it.
+    zones: Vec<Zone<'a>>,
 }
 
 fn positive(name: &str, column: &str, value: Option<f64>) -> Result<Option<f64>, Unavailable> {
@@ -348,6 +391,21 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
              `walking_step`",
         ));
     }
+    let compartments = compartments(&parameters)?;
+    if compartments.is_some() && doors.is_none() {
+        return Err(invalid(
+            "`compartment_selector` needs `door_path` and `door_selector`, which lead out of \
+             the compartment",
+        ));
+    }
+    let zones = zones(&parameters)?;
+    if (compartments.is_some() || !zones.is_empty())
+        && uses.iter().all(|use_| use_.maximum_travel.is_none())
+    {
+        return Err(invalid(
+            "`compartment_selector` and `zones` need a use stating `maximum_travel`",
+        ));
+    }
     Ok(Declaration {
         uses,
         widths,
@@ -365,7 +423,61 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         profile,
         door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
         no_escape: parameters.selector("no_escape_selector")?,
+        compartments,
+        zones,
     })
+}
+
+fn compartments<'a>(parameters: &Parameters<'a>) -> Result<Option<Compartments<'a>>, Unavailable> {
+    let path = parameters.strings("compartment_path")?;
+    let overlap = parameters.number("compartment_overlap")?;
+    let Some(selector) = parameters.selector("compartment_selector")? else {
+        if path.is_some() || overlap.is_some() {
+            return Err(invalid(
+                "`compartment_path` and `compartment_overlap` need `compartment_selector`",
+            ));
+        }
+        return Ok(None);
+    };
+    let membership = match (path, overlap) {
+        (Some(path), None) => Membership::Path(Traversal::path(path)?),
+        (None, Some(share)) if share > 0.0 && share <= 1.0 => Membership::Overlap(share),
+        (None, Some(_)) => {
+            return Err(invalid(
+                "`compartment_overlap` must be a share above 0 and at most 1",
+            ));
+        }
+        _ => {
+            return Err(invalid(
+                "`compartment_selector` needs either `compartment_path` or \
+                 `compartment_overlap`",
+            ));
+        }
+    };
+    Ok(Some(Compartments {
+        selector,
+        membership,
+    }))
+}
+
+fn zones<'a>(parameters: &Parameters<'a>) -> Result<Vec<Zone<'a>>, Unavailable> {
+    let mut zones = Vec::new();
+    for (index, row) in parameters
+        .table("zones")?
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+    {
+        zones.push(Zone {
+            objects: row
+                .selector("objects")?
+                .ok_or_else(|| invalid(format!("zone {index} has no `objects`")))?,
+            rank: row
+                .integer("rank")?
+                .ok_or_else(|| invalid(format!("zone {index} has no `rank`")))?,
+        });
+    }
+    Ok(zones)
 }
 
 type Sections<'a> = (Vec<SectionKind<'a>>, Option<Traversal<'a>>);
@@ -492,9 +604,14 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("exit_door_direction", ParameterType::Boolean),
             ParameterDescriptor::optional("walked_passages", ParameterType::Boolean),
             ParameterDescriptor::optional("no_escape_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("compartment_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("compartment_path", ParameterType::StringList),
+            ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
+            ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
         ]
     }
 
+    #[allow(clippy::too_many_lines)]
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         let declared = match declaration(rule) {
             Ok(declared) => declared,
@@ -525,9 +642,20 @@ impl RuleCapability for EscapeRoute {
             no_escape: declared
                 .no_escape
                 .map(|selector| Candidates::select(context, selector)),
+            compartments: declared
+                .compartments
+                .as_ref()
+                .map(|compartments| Candidates::select(context, compartments.selector)),
+            zones: declared
+                .zones
+                .iter()
+                .map(|zone| Candidates::select(context, zone.objects))
+                .collect(),
+            membership: RefCell::new(BTreeMap::new()),
             walks: RefCell::new(BTreeMap::new()),
         };
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
+        judge.no_compartment(&spaces, &mut evaluation);
         let mut served = Served::default();
         let mut results: Vec<(ObjectId, String, Checked)> = Vec::new();
         for space in spaces {
@@ -833,6 +961,28 @@ impl Reached {
     }
 }
 
+impl Reached {
+    /// Adds `other`'s objects; an object sure in either is sure.
+    fn merge(&mut self, other: Self) {
+        for object in other.sure {
+            if !self.sure.contains(&object) {
+                self.sure.push(object);
+            }
+        }
+        for object in other.maybe {
+            if !self.sure.contains(&object) && !self.maybe.contains(&object) {
+                self.why.insert(object.clone(), other.why[&object].clone());
+                self.maybe.push(object);
+            }
+        }
+        let sure = &self.sure;
+        self.maybe.retain(|object| !sure.contains(object));
+        let maybe = &self.maybe;
+        self.why.retain(|object, _| maybe.contains(object));
+        self.evidence.extend(other.evidence);
+    }
+}
+
 /// Objects every walk from a start keeps out of: surely, and perhaps.
 #[derive(Clone, Default)]
 struct Avoid {
@@ -879,6 +1029,29 @@ enum Width {
     Unknown(String),
 }
 
+/// The compartments a space lies in: surely, and perhaps (with why).
+#[derive(Clone, Default)]
+struct Assigned {
+    sure: BTreeSet<ObjectId>,
+    maybe: BTreeMap<ObjectId, String>,
+}
+
+/// Whether a space lies in a compartment.
+enum Within {
+    Yes,
+    No,
+    Unknown(String),
+}
+
+/// The doors out of a compartment, found by walking its spaces through
+/// their doors.
+struct Boundary {
+    doors: Reached,
+    /// Whether no door out may be missing.
+    known: bool,
+    doubts: Vec<Unavailable>,
+}
+
 /// Where the walks out of one space end, and what they keep out of.
 struct Escape {
     /// The space's exits usable for escape.
@@ -889,6 +1062,20 @@ struct Escape {
     known: bool,
     placed: Placed,
     avoid: Avoid,
+    /// The compartment whose boundary also ends the walks.
+    compartment: Option<ObjectId>,
+}
+
+impl Escape {
+    /// Where the walks end, for messages.
+    fn goal(&self) -> String {
+        match &self.compartment {
+            None => "the nearest exit".to_owned(),
+            Some(compartment) => {
+                format!("the nearest exit or door out of compartment {compartment}")
+            }
+        }
+    }
 }
 
 /// A space's exits placed as walking targets.
@@ -949,6 +1136,12 @@ struct Judge<'r, 'c> {
     passages: Option<Candidates<'c>>,
     /// Objects not usable for escape.
     no_escape: Option<Candidates<'c>>,
+    /// Every compartment.
+    compartments: Option<Candidates<'c>>,
+    /// Per row of `zones`, what it picks.
+    zones: Vec<Candidates<'c>>,
+    /// The compartments of each space asked about.
+    membership: RefCell<BTreeMap<ObjectId, Result<Assigned, Unavailable>>>,
     /// Walks already measured: travel and walked passages share them.
     walks: RefCell<BTreeMap<WalkKey, Result<Travel, Unavailable>>>,
 }
@@ -1011,8 +1204,9 @@ impl Judge<'_, '_> {
     }
 
     /// What every walk out of `space` keeps out of: whatever is not usable
-    /// for escape, surely or perhaps. The space itself is never avoided.
-    fn avoid(&self, space: &ObjectId) -> Avoid {
+    /// for escape, and every zone ranked above the space's, surely or
+    /// perhaps. The space itself, and its compartment, are never avoided.
+    fn avoid(&self, space: &ObjectId) -> Result<Avoid, Unavailable> {
         let mut avoid = Avoid::default();
         if let Some(no_escape) = &self.no_escape {
             for object in &no_escape.universe {
@@ -1026,22 +1220,384 @@ impl Judge<'_, '_> {
                 }
             }
         }
-        avoid
+        if !self.zones.is_empty() {
+            let own = self.start_rank(space)?;
+            let compartment = self.compartment(space).ok();
+            let ranked: BTreeSet<&ObjectId> = self
+                .zones
+                .iter()
+                .flat_map(|zone| zone.universe.iter().map(|object| &object.id))
+                .collect();
+            for object in ranked {
+                if object == space || compartment.as_ref() == Some(object) {
+                    continue;
+                }
+                let (sure, possible) = self.rank(object);
+                let ranks: Vec<i64> = possible.iter().map(|(rank, _)| *rank).chain(sure).collect();
+                if sure.is_some() && ranks.iter().all(|rank| *rank > own) {
+                    avoid.sure.insert(object.clone());
+                } else if ranks.iter().any(|rank| *rank > own) {
+                    avoid.maybe.insert(object.clone());
+                }
+            }
+        }
+        let sure = &avoid.sure;
+        avoid.maybe.retain(|object| !sure.contains(object));
+        Ok(avoid)
+    }
+
+    /// The rank of the first row of `zones` surely picking `object`, if
+    /// any, and of every earlier row that may pick it, with why.
+    fn rank(&self, object: &ObjectId) -> (Option<i64>, Vec<(i64, String)>) {
+        let mut possible = Vec::new();
+        for (zone, candidates) in self.declared.zones.iter().zip(&self.zones) {
+            if !candidates.universe.iter().any(|known| known.id == *object) {
+                continue;
+            }
+            match candidates.undecided.get(object) {
+                Some(why) => possible.push((zone.rank, why.clone())),
+                None => return (Some(zone.rank), possible),
+            }
+        }
+        (None, possible)
+    }
+
+    /// The rank of the zone `space` lies in: its own, else its
+    /// compartment's.
+    fn start_rank(&self, space: &ObjectId) -> Result<i64, Unavailable> {
+        let mut ranked = self.rank(space);
+        if ranked.0.is_none()
+            && ranked.1.is_empty()
+            && let Ok(compartment) = self.compartment(space)
+        {
+            ranked = self.rank(&compartment);
+        }
+        match ranked {
+            (Some(rank), possible) if possible.is_empty() => Ok(rank),
+            (_, possible) if !possible.is_empty() => {
+                let why: Vec<&str> = possible.iter().map(|(_, why)| why.as_str()).collect();
+                Err(incomplete(format!(
+                    "the zone it lies in is undecided: {}",
+                    why.join("; ")
+                )))
+            }
+            _ => Err(incomplete("no row of `zones` ranks it".to_owned())),
+        }
+    }
+
+    /// The compartments `space` lies in, each space asked once.
+    fn assigned(&self, space: &ObjectId) -> Result<Assigned, Unavailable> {
+        if let Some(known) = self.membership.borrow().get(space) {
+            return known.clone();
+        }
+        let assigned = self.assign(space);
+        self.membership
+            .borrow_mut()
+            .insert(space.clone(), assigned.clone());
+        assigned
+    }
+
+    fn assign(&self, space: &ObjectId) -> Result<Assigned, Unavailable> {
+        let (Some(declared), Some(candidates)) = (
+            self.declared.compartments.as_ref(),
+            self.compartments.as_ref(),
+        ) else {
+            return Ok(Assigned::default());
+        };
+        let mut assigned = Assigned::default();
+        if candidates.universe.is_empty() {
+            return Ok(assigned);
+        }
+        let mut assign = |compartment: &ObjectId, doubt: Option<String>| match (
+            candidates.undecided.get(compartment),
+            doubt,
+        ) {
+            (None, None) => {
+                assigned.sure.insert(compartment.clone());
+            }
+            (Some(why), _) => {
+                assigned.maybe.insert(
+                    compartment.clone(),
+                    format!("whether {compartment} is a compartment is undecided: {why}"),
+                );
+            }
+            (None, Some(doubt)) => {
+                assigned.maybe.insert(compartment.clone(), doubt);
+            }
+        };
+        match &declared.membership {
+            Membership::Path(path) => {
+                let (reached, _) = path.related(self.context, space, &candidates.universe)?;
+                for compartment in &reached {
+                    assign(compartment, None);
+                }
+            }
+            Membership::Overlap(share) => {
+                let Some(areas) = self.context.services.get::<PlanAreaServiceHandle>() else {
+                    return Err(missing("plan-area"));
+                };
+                let area = footprint(self.context, space)?;
+                for compartment in &candidates.universe {
+                    let compartment = &compartment.id;
+                    if compartment == space {
+                        continue;
+                    }
+                    let overlap = match areas.measure_plan_overlap(space, compartment) {
+                        Ok(overlap) => overlap,
+                        Err(error) => {
+                            assign(
+                                compartment,
+                                Some(format!(
+                                    "its overlap with {compartment} is unknown: {error}"
+                                )),
+                            );
+                            continue;
+                        }
+                    };
+                    let least = overlap.lower_square_metres() / area.upper_square_metres();
+                    let most = if area.lower_square_metres() > 0.0 {
+                        overlap.upper_square_metres() / area.lower_square_metres()
+                    } else {
+                        f64::INFINITY
+                    };
+                    if most < *share {
+                        continue;
+                    }
+                    let doubt = (least < *share).then(|| {
+                        format!(
+                            "{compartment} covers between {} and {} of its footprint, and \
+                             {share} is asked",
+                            shown(least, least),
+                            shown(most, most)
+                        )
+                    });
+                    assign(compartment, doubt);
+                }
+            }
+        }
+        Ok(assigned)
+    }
+
+    /// Whether `space` lies in `compartment`.
+    fn within(&self, space: &ObjectId, compartment: &ObjectId) -> Within {
+        match self.assigned(space) {
+            Ok(assigned) if assigned.sure.contains(compartment) => Within::Yes,
+            Ok(assigned) => match assigned.maybe.get(compartment) {
+                Some(why) => Within::Unknown(format!(
+                    "whether {space} lies in {compartment} is undecided: {why}"
+                )),
+                None => Within::No,
+            },
+            Err((_, message)) => Within::Unknown(format!(
+                "the compartments of {space} cannot be read: {message}"
+            )),
+        }
+    }
+
+    /// The one compartment `space` surely lies in.
+    fn compartment(&self, space: &ObjectId) -> Result<ObjectId, Unavailable> {
+        let assigned = self.assigned(space)?;
+        if !assigned.maybe.is_empty() {
+            let why: Vec<&str> = assigned.maybe.values().map(String::as_str).collect();
+            return Err(incomplete(format!(
+                "the compartment it lies in is undecided: {}",
+                why.join("; ")
+            )));
+        }
+        let mut sure = assigned.sure.into_iter();
+        match (sure.next(), sure.next()) {
+            (Some(compartment), None) => Ok(compartment),
+            (None, _) => Err(incomplete("it lies in no compartment".to_owned())),
+            (Some(first), Some(second)) => Err(incomplete(format!(
+                "it lies in several compartments ({first}, {second})"
+            ))),
+        }
+    }
+
+    /// The doors out of `compartment`, walking its spaces from `space`
+    /// through their doors: a door reaching a space outside it, or no other
+    /// space (it leads outside), leads out, unless only into what every walk
+    /// avoids. Whatever is undecided on the way makes a door only a
+    /// possible one, and a door or space that cannot be read may hide more.
+    #[allow(clippy::too_many_lines)]
+    fn boundary(&self, space: &ObjectId, compartment: &ObjectId, avoid: &Avoid) -> Boundary {
+        let mut boundary = Boundary {
+            doors: Reached::default(),
+            known: true,
+            doubts: Vec::new(),
+        };
+        let (Some((path, _)), Some(candidates)) =
+            (self.declared.doors.as_ref(), self.doors.as_ref())
+        else {
+            boundary.known = false;
+            return boundary;
+        };
+        let back = path.reversed();
+        let everything: Vec<&Object> = self.context.project.objects().collect();
+        let mut seen = BTreeSet::from([space.clone()]);
+        let mut done = BTreeSet::new();
+        // Members surely in the compartment are walked first, so a door is
+        // first met from the surest side.
+        let mut surely = vec![space.clone()];
+        let mut perhaps: Vec<(ObjectId, String)> = Vec::new();
+        let mut sure = BTreeSet::new();
+        let mut maybe: BTreeMap<ObjectId, String> = BTreeMap::new();
+        loop {
+            let (member, doubt) = match surely.pop() {
+                Some(member) => (member, None),
+                None => match perhaps.pop() {
+                    Some((member, why)) => (member, Some(why)),
+                    None => break,
+                },
+            };
+            let doors = match self.reached(path, candidates, &member) {
+                Ok(doors) => doors,
+                Err((_, message)) => {
+                    boundary.known = false;
+                    boundary.doubts.push(incomplete(format!(
+                        "the doors of {member} cannot be read: {message}"
+                    )));
+                    continue;
+                }
+            };
+            boundary
+                .doors
+                .evidence
+                .extend(doors.evidence.iter().cloned());
+            for door in doors.sure.iter().chain(&doors.maybe) {
+                if !done.insert(door.clone()) {
+                    continue;
+                }
+                let mut why: Vec<String> = doubt.iter().cloned().collect();
+                if let Some(undecided) = doors.why.get(door) {
+                    why.push(format!(
+                        "whether {door} is a door is undecided: {undecided}"
+                    ));
+                }
+                let (spaces, cited) = match back.related(self.context, door, &everything) {
+                    Ok(found) => found,
+                    Err((_, message)) => {
+                        boundary.known = false;
+                        maybe.insert(
+                            door.clone(),
+                            format!("the spaces of {door} cannot be read: {message}"),
+                        );
+                        continue;
+                    }
+                };
+                boundary.doors.evidence.extend(cited);
+                let others: Vec<ObjectId> = spaces
+                    .into_iter()
+                    .filter(|other| other != &member && other != door)
+                    .collect();
+                let mut out = others.is_empty();
+                let mut open: Vec<String> = Vec::new();
+                for other in others {
+                    if avoid.sure.contains(&other) {
+                        continue;
+                    }
+                    let avoided = avoid
+                        .maybe
+                        .contains(&other)
+                        .then(|| format!("a walk may have to keep out of {other}"));
+                    match self.within(&other, compartment) {
+                        Within::Yes => {
+                            if seen.insert(other.clone()) {
+                                if why.is_empty() {
+                                    surely.push(other);
+                                } else {
+                                    perhaps.push((other, why.join("; ")));
+                                }
+                            }
+                        }
+                        Within::No => match avoided {
+                            None => out = true,
+                            Some(avoided) => open.push(avoided),
+                        },
+                        Within::Unknown(unknown) => {
+                            open.push(unknown.clone());
+                            if seen.insert(other.clone()) {
+                                let mut doubts = why.clone();
+                                doubts.push(unknown);
+                                perhaps.push((other, doubts.join("; ")));
+                            }
+                        }
+                    }
+                }
+                if out && why.is_empty() {
+                    sure.insert(door.clone());
+                } else if out || !open.is_empty() {
+                    why.extend(open);
+                    maybe.insert(door.clone(), why.join("; "));
+                }
+            }
+        }
+        maybe.retain(|door, _| !sure.contains(door));
+        boundary.doors.sure = sure.into_iter().collect();
+        boundary.doors.maybe = maybe.keys().cloned().collect();
+        boundary.doors.why = maybe;
+        boundary
+    }
+
+    /// A project without any compartment cannot say where travel ends: an
+    /// inadequate-information finding on every source of a checked space.
+    fn no_compartment(&self, spaces: &[&Object], evaluation: &mut CapabilityEvaluation) {
+        let Some(candidates) = &self.compartments else {
+            return;
+        };
+        if !candidates.universe.is_empty() {
+            return;
+        }
+        let mut done = BTreeSet::new();
+        for space in spaces {
+            if !done.insert(space.id.source.clone()) {
+                continue;
+            }
+            let mut found = finding(
+                self.rule,
+                &space.id,
+                "inadequate information: no compartment is modelled (`compartment_selector` \
+                 picks nothing), so where escape travel ends at a compartment boundary is unknown"
+                    .to_owned(),
+                Vec::new(),
+                Vec::new(),
+            );
+            found.scope = Scope::Source(space.id.source.clone());
+            evaluation.push_finding(found);
+        }
     }
 
     /// Where the walks out of `space` end, and what they keep out of.
     fn escape(&self, space: &ObjectId) -> Result<Escape, Unavailable> {
         let exits = self.exits_of(space)?;
-        let targets = exits.clone();
-        let known = true;
-        let mut placed = self.placed(&targets);
+        let avoid = self.avoid(space)?;
+        let mut targets = exits.clone();
+        let mut known = true;
+        let mut doubts = Vec::new();
+        let mut compartment = None;
+        let mut what = "an exit";
+        if self.declared.compartments.is_some() {
+            let inside = self.compartment(space)?;
+            let boundary = self.boundary(space, &inside, &avoid);
+            known = boundary.known;
+            doubts = boundary.doubts;
+            targets.merge(boundary.doors);
+            if let Some(no_escape) = &self.no_escape {
+                targets.without(no_escape, "not usable for escape");
+            }
+            compartment = Some(inside);
+            what = "an exit or a door out of its compartment";
+        }
+        let mut placed = self.placed(&targets, what);
         placed.complete &= known;
+        placed.doubts.extend(doubts);
         Ok(Escape {
             exits,
             targets,
             known,
             placed,
-            avoid: self.avoid(space),
+            avoid,
+            compartment,
         })
     }
 
@@ -1882,11 +2438,17 @@ impl Judge<'_, '_> {
         };
         let exits = &escape.exits;
         if escape.known && escape.targets.sure.is_empty() && escape.targets.maybe.is_empty() {
+            let door_out = escape
+                .compartment
+                .as_ref()
+                .map_or_else(String::new, |compartment| {
+                    format!(" and no door out of compartment {compartment}")
+                });
             checked.findings.push(finding(
                 self.rule,
                 &space.id,
                 format!(
-                    "has no exit via {} to walk to; {allows}",
+                    "has no exit via {}{door_out} to walk to; {allows}",
                     self.declared.exits.relationship
                 ),
                 escape.targets.evidence.clone(),
@@ -2029,21 +2591,26 @@ impl Judge<'_, '_> {
                 .at
                 .map(|[x, y]| format!(", around ({x:.2}, {y:.2}),"))
                 .unwrap_or_default();
+            let none = match &escape.compartment {
+                None => "no exit".to_owned(),
+                Some(compartment) => format!("no exit or door out of compartment {compartment}"),
+            };
             let message = if travel.lower.is_infinite() {
                 if start.is_none() {
-                    format!("part of it{place} reaches no exit walking; {allows}")
+                    format!("part of it{place} reaches {none} walking; {allows}")
                 } else {
-                    format!("{} reaches no exit walking; {allows}", from(start))
+                    format!("{} reaches {none} walking; {allows}", from(start))
                 }
             } else {
                 format!(
-                    "{}{place} lies {} m from the nearest exit walking; {allows}",
+                    "{}{place} lies {} m from {} walking; {allows}",
                     from(start),
                     if travel.upper.is_finite() {
                         shown(travel.lower, travel.upper)
                     } else {
                         format!("at least {}", shown(travel.lower, travel.lower))
-                    }
+                    },
+                    escape.goal()
                 )
             };
             let mut evidence = exits.evidence.clone();
@@ -2076,7 +2643,8 @@ impl Judge<'_, '_> {
         };
         checked.doubts.extend(doubts);
         checked.doubts.push(incomplete(format!(
-            "the longest travel to the nearest exit is {} m walking{counted}, and {allows}",
+            "the longest travel to {} is {} m walking{counted}, and {allows}",
+            escape.goal(),
             if most.is_finite() {
                 shown(least, most)
             } else {
@@ -2087,7 +2655,7 @@ impl Judge<'_, '_> {
 
     /// The representative points of `exits`: of the sure ones, of all, and
     /// whether every one has a point.
-    fn placed(&self, exits: &Reached) -> Placed {
+    fn placed(&self, exits: &Reached, what: &str) -> Placed {
         let mut placed = Placed {
             sure: Vec::new(),
             all: Vec::new(),
@@ -2110,7 +2678,7 @@ impl Judge<'_, '_> {
         }
         placed
             .doubts
-            .extend(exits.doubts("an exit").into_iter().map(incomplete));
+            .extend(exits.doubts(what).into_iter().map(incomplete));
         placed
     }
 

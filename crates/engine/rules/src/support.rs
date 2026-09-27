@@ -366,6 +366,27 @@ impl<'a> Traversal<'a> {
     pub(crate) fn path(path: &'a [String]) -> Result<Self, Unavailable> {
         Ok(Self::new(path_steps(path)?, false, AbsentEndPolicy::Refuse))
     }
+
+    /// The same path walked back: its steps in reverse order, each in the
+    /// other direction, so it leads from where this one ends to where it
+    /// starts.
+    pub(crate) fn reversed(&self) -> Self {
+        let steps = self
+            .steps
+            .iter()
+            .rev()
+            .map(|step| Step {
+                relationship: step.relationship,
+                direction: match step.direction {
+                    TraversalDirection::Forward => TraversalDirection::Backward,
+                    TraversalDirection::Backward => TraversalDirection::Forward,
+                    TraversalDirection::Either => TraversalDirection::Either,
+                },
+                chain: step.chain,
+            })
+            .collect();
+        Self::new(steps, self.follow_chain, self.absent_ends)
+    }
 }
 
 /// Descriptors of the traversal parameters every relationship-scoped capability takes.

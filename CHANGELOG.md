@@ -269,6 +269,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_overrides` (omitted when empty), `RuleRefinement` gains
   `severity_overrides`, and `CapabilityEvaluation` gains `take_findings`
   and `push_not_evaluated_about` for refiners.
+- **Escape travel ends at the fire-compartment boundary, and zones are
+  kept in order.** (#118) `escape-route` takes `compartment_selector` with
+  `compartment_path` (from a space to its compartments) or
+  `compartment_overlap` (the share of a space's footprint a compartment
+  must cover, 0.8 say): travel then ends at the nearest exit or door out
+  of the start's compartment, found by walking the compartment's spaces
+  through their doors and back from each door to the spaces it connects,
+  so a room 40 m from the building exit but 18 m from the fire door out of
+  its compartment passes a 30 m limit. A door is a routing target standing
+  in its portal, so no metric-routing contract changes. A project without
+  any compartment is an inadequate-information finding per source. `zones`
+  ranks objects (the first row picking each); every walk keeps out of
+  what ranks above the start, through the avoided objects. **Breaking:**
+  definitions bound to `escape-route` must declare `compartment_selector`,
+  `compartment_path`, `compartment_overlap` and `zones`.
 - **Escape routes keep out of doors not used for escape.** (#119)
   `escape-route` takes `no_escape_selector`: what it picks (a locked or
   staff-only door) is no exit and no start door, and every walk keeps out

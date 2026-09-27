@@ -8526,6 +8526,97 @@ fn with_geometry_a_corridor_every_walk_crosses_carries_the_office_behind_it() {
 }
 
 #[test]
+fn with_geometry_escape_travel_ends_at_the_door_out_of_the_compartment() {
+    // The office and the corridor are two fire compartments (zones #500
+    // and #510). Travel then ends at door #39 between them: the office's
+    // farthest corner lies about 4.6 m from it, and no point of the
+    // corridor lies 6 m from both #39 and its exit #49. Without the
+    // compartments, the office has no exit of its own and the corridor's
+    // far end lies about 10 m from #49.
+    let compartments = office_behind_a_corridor().replace(
+        "ENDSEC;\nEND-ISO",
+        "#500=IFCZONE('0000000000000000000500',$,'A',$,$,$);\n\
+         #501=IFCRELASSIGNSTOGROUP('0000000000000000000501',$,$,$,(#19),$,#500);\n\
+         #510=IFCZONE('0000000000000000000510',$,'B',$,$,$);\n\
+         #511=IFCRELASSIGNSTOGROUP('0000000000000000000511',$,$,$,(#29),$,#510);\n\
+         ENDSEC;\nEND-ISO",
+    );
+    let run = |name: &str, compartments_declared: bool| {
+        let case = Case::new(name);
+        let mut parameters = json!({
+            "uses": {"type": "table", "value": [
+                {"spaces": {"type": "selector", "value": entity("space")},
+                 "maximum_travel": {"type": "number", "value": 6.0}},
+            ]},
+            "exit_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:forward"]},
+            "exit_selector": {"type": "selector", "value":
+                {"kind": "allOf", "operands": [entity("door"),
+                    {"kind": "property",
+                     "propertySet": "axioval:example.ifc.pset-space-common",
+                     "property": "axioval:example.ifc.reference", "operator": "equals",
+                     "value": {"type": "string", "value": "Exit"}}]}},
+            "door_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:forward"]},
+            "door_selector": {"type": "selector", "value": entity("door")},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+        });
+        if compartments_declared {
+            parameters["compartment_selector"] =
+                json!({"type": "selector", "value": entity("zone")});
+            parameters["compartment_path"] =
+                json!({"type": "stringList", "value": ["IfcRelAssignsToGroup:backward"]});
+        }
+        case.geometry_rule(
+            &compartments,
+            &[
+                ("door", "IfcDoor"),
+                ("space", "IfcSpace"),
+                ("zone", "IfcZone"),
+            ],
+            "axioval:capability.escape-route",
+            &registry_signature("axioval:capability.escape-route"),
+            entity("space"),
+            parameters,
+        )
+    };
+    let (output, result) = run("geometry-escape-route-no-compartments", false);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(
+        findings
+            .iter()
+            .map(|(object, _)| object.as_str())
+            .collect::<Vec<_>>(),
+        ["#19", "#29"],
+        "{result:#}"
+    );
+    assert_eq!(
+        findings[0].1,
+        "has no exit via IfcRelSpaceBoundary to walk to; use 0 allows at most 6 m of travel",
+        "{result:#}"
+    );
+    assert!(
+        findings[1].1.contains("m from the nearest exit walking"),
+        "{result:#}"
+    );
+
+    let (output, result) = run("geometry-escape-route-compartments", true);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn with_geometry_exit_doors_opening_against_the_escape_are_found() {
     let case = Case::new("geometry-exit-door-direction");
     let (output, result) = case.geometry_rule(

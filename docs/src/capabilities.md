@@ -684,6 +684,10 @@ occupants.
 | `passage_width_property` | property reference | a passage's stated clear width, a length; needs `passage_selector` |
 | `exit_door_direction` | boolean | every exit door must open in the direction of escape, out of the space |
 | `no_escape_selector` | selector | objects not usable for escape (locked or staff-only doors): never an exit or a start, and every walk keeps out of them |
+| `compartment_selector` | selector | the fire compartments; travel ends at the start compartment's boundary. Needs `door_path`, `door_selector` and one of the two below |
+| `compartment_path` | string list | from a space to the compartments it lies in (a group membership, say) |
+| `compartment_overlap` | number | a space lies in each compartment covering at least this share (above 0, at most 1) of its footprint, 0.8 say |
+| `zones` | table | ranks of zones (`objects`, a selector; `rank`, an integer; `label`); every walk keeps out of what ranks above the start |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
 - **Travel** follows the walking line of a point through the metric-routing
@@ -728,6 +732,35 @@ occupants.
   the walk around the avoided objects from below, and from above only when
   every avoided object lies surely farther from the space in plan than the
   plain walk's upper bound, beyond the reach of any such walk.
+- **Compartments** (`compartment_selector`): travel is measured on the
+  safe route only and ends where it leaves the start space's compartment.
+  A space lies in the compartments `compartment_path` reaches from it, or
+  in each whose plan overlap (`PlanAreaService::measure_plan_overlap`)
+  covers at least `compartment_overlap` of its footprint; the overlap is an
+  interval, and a share straddling the threshold leaves the membership
+  undecided. The start must lie surely in exactly one compartment, else its
+  travel is not evaluated. The doors out of it are found by walking its
+  spaces through their doors (`door_path`, and the same path walked back
+  from each door to the spaces it connects): a door reaching a space
+  outside the compartment, or no other space (it leads outside), is a door
+  out, and walks end at the nearest exit or door out, each a target
+  standing in its portal like an exit door. So `door_selector` must pick
+  every door and opening a walk may pass. Anything undecided on the way (a
+  door's selection, a neighbour's membership) makes a door out only
+  possible; a door or space whose relationships cannot be read may hide
+  more doors out, and the travel then has no lower bound. A project in
+  which `compartment_selector` picks nothing is an inadequate-information
+  finding on each source holding a checked space, and every space's travel
+  is not evaluated.
+- **Zones** (`zones`): each object takes the rank of the first row
+  picking it; the start takes its own space's rank, else its compartment's,
+  and one no row ranks, or whose row is undecided, is not evaluated. Every
+  walk keeps out of whatever surely ranks above the start (its upper bound
+  also out of what may), as it keeps out of doors not used for escape; a
+  door out of the compartment leading only into such a zone is no door out.
+  Zone objects need a body to walk around; the farthest point measures them
+  as it measures every avoided object, so zones are best walked from the
+  doors (`route_start: door`).
 - **Exits** are counted as `exit-separation`'s `minimum_exits` counts them.
 - **Widths**: the occupant load is the space's footprint (`PlanAreaService`)
   divided by `area_per_occupant`, rounded up. Each exit's stated clear width

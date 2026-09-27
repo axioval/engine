@@ -41,6 +41,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
             related: vec![],
             evidence: vec![],
             location: None,
+            categories: Vec::new(),
         }
         .with_related([id(related)])
     };

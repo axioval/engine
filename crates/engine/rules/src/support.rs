@@ -533,6 +533,7 @@ pub(crate) fn finding(
         message,
         evidence,
         location: None,
+        categories: Vec::new(),
     }
     .with_related(related)
 }
@@ -632,7 +633,8 @@ fn heading(value: Option<&PropertyValue>) -> Option<String> {
 }
 
 /// The nested headings a rule's `categories` put before a finding about
-/// `object`, outermost first (`[F90] [Office] `), and the evidence they
+/// `object`, outermost first (`F90`, `Office`; the caller brackets them as
+/// `[F90] [Office] `), and the evidence they
 /// cite.
 ///
 /// Each level reads its property on the object or, with a `path`, on every
@@ -646,8 +648,8 @@ pub(crate) fn category_headings(
     context: &RuleContext<'_>,
     object: &Object,
     levels: &[CategoryLevel],
-) -> Result<(String, Vec<Evidence>), Unavailable> {
-    let mut headings = String::new();
+) -> Result<(Vec<String>, Vec<Evidence>), Unavailable> {
+    let mut headings = Vec::new();
     let mut evidence = Vec::new();
     for level in levels {
         let property = PropertyRef {
@@ -677,9 +679,7 @@ pub(crate) fn category_headings(
         } else {
             values.into_iter().collect::<Vec<_>>().join(", ")
         };
-        headings.push('[');
-        headings.push_str(&text);
-        headings.push_str("] ");
+        headings.push(text);
     }
     sort_evidence(&mut evidence);
     Ok((headings, evidence))

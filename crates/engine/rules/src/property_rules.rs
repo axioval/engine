@@ -49,6 +49,7 @@ fn finding(
         message,
         evidence,
         location: None,
+        categories: Vec::new(),
     }
 }
 

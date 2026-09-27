@@ -113,7 +113,9 @@ fn categorised(
     };
     match category_headings(context, subject, levels) {
         Ok((headings, mut cited)) => {
-            finding.message.insert_str(0, &headings);
+            let prefix: String = headings.iter().flat_map(|text| ["[", text, "] "]).collect();
+            finding.message.insert_str(0, &prefix);
+            finding.categories = headings;
             cited.extend(std::mem::take(&mut finding.evidence));
             Ok(finding.with_evidence(cited))
         }

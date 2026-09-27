@@ -814,6 +814,7 @@ impl Projection<'_> {
                 exact: true,
             }],
             location: None,
+            categories: Vec::new(),
         }
         .with_related(related.cloned());
         self.findings.push(finding);

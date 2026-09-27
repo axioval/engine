@@ -31,7 +31,9 @@ adds labels per rule after it (before any location labels), and
 ruleset: `Folder: <path>` for a rule inside folders (folder names joined by
 ` / `, the root left out), then the rule's tags, trimmed, each once. Labels
 never enter the GUID key. The CLI labels every check this way; with several
-rulesets the keys are qualified by package as the rule ids are.
+rulesets the keys are qualified by package as the rule ids are. A finding
+with `categories` is labelled `Category: <outermost> / ... / <innermost>`
+next, before its location's `Storey:` and `Space:` labels.
 
 Every topic's description repeats the message, the rule, the source-qualified
 object ids and each evidence locator with its exactness.

@@ -217,6 +217,26 @@ mod scope {
     }
 
     #[test]
+    fn a_categorised_finding_writes_its_levels_and_reads_back() {
+        let object = ObjectId::new(source(), "#1").unwrap();
+        let plain = finding(Scope::Object(object));
+        assert!(
+            serde_json::to_value(&plain)
+                .unwrap()
+                .get("categories")
+                .is_none()
+        );
+        let mut categorised = plain;
+        categorised.categories = vec!["F90".into(), "Office".into()];
+        let value = serde_json::to_value(&categorised).unwrap();
+        assert_eq!(value["categories"], json!(["F90", "Office"]));
+        assert_eq!(
+            serde_json::from_value::<Finding>(value).unwrap(),
+            categorised
+        );
+    }
+
+    #[test]
     fn source_and_project_findings_round_trip() {
         for scope in [Scope::Source(source()), Scope::Project] {
             let original = finding(scope);

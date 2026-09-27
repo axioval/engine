@@ -23,8 +23,8 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
 - A finding's `Priority` follows its severity; a not-evaluated outcome has
   none, because no severity was decided. Never invent one for it.
 - Labels are the rule id first, then the host's `rule_labels` for that
-  rule (`ruleset_labels`: folder path, tags), then the location's, each
-  once. Labels never enter the GUID key: relabelling a rule must not change
+  rule (`ruleset_labels`: folder path, tags), then `Category: a / b` from
+  `Finding::categories`, then the location's, each once. Labels never enter the GUID key: relabelling a rule must not change
   its topics' GUIDs.
 - Never read the clock or invent GUIDs; the caller supplies author and date.
 - Cameras come only from host-supplied `Options::bounds`. A missing bound

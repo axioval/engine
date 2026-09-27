@@ -136,6 +136,7 @@ impl RuleCapability for ExternalWallValidation {
                                 message,
                                 evidence: vec![measured.evidence().clone()],
                                 location: None,
+                                categories: Vec::new(),
                             });
                         }
                     }

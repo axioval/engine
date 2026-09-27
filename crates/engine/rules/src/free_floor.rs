@@ -248,6 +248,7 @@ pub(crate) fn evaluate(
                 },
                 evidence: absent.evidence,
                 location: None,
+                categories: Vec::new(),
             }),
             Err((reason, message)) => {
                 evaluation.push_object_not_evaluated(space.id.clone(), reason, message);

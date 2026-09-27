@@ -55,6 +55,7 @@ fn report(document: &str, first: u64) -> Report {
                 related: vec![],
                 evidence: vec![Evidence::exact(source, "contact:wall")],
                 location: None,
+                categories: Vec::new(),
             }
             .with_related([id(document, first + 1)]),
             Finding {
@@ -65,6 +66,7 @@ fn report(document: &str, first: u64) -> Report {
                 related: vec![],
                 evidence: vec![],
                 location: None,
+                categories: Vec::new(),
             },
         ],
         not_evaluated: vec![NotEvaluated {
@@ -160,6 +162,23 @@ fn a_located_entry_is_labelled_by_storey_and_space_under_the_same_guid() {
         topic.labels,
         ["slab-contact", "Folder: Structure", "Storey: Level 1"]
     );
+
+    // Its categories come after the rule's labels, before the location.
+    both.findings[0].categories = vec!["F90".into(), "Office".into()];
+    let topic = &export(&both, &model("a.ifc", 1), &labelled)
+        .unwrap()
+        .document
+        .topics[0];
+    assert_eq!(
+        topic.labels,
+        [
+            "slab-contact",
+            "Folder: Structure",
+            "Category: F90 / Office",
+            "Storey: Level 1"
+        ]
+    );
+    assert_eq!(topic.guid, located[0].guid);
 }
 
 #[test]
@@ -332,6 +351,7 @@ fn related_objects_alone_are_never_selected() {
             related: vec![],
             evidence: vec![],
             location: None,
+            categories: Vec::new(),
         }
         .with_related([id("a.ifc", 1)]),
     ];

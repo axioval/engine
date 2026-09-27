@@ -6477,6 +6477,8 @@ fn with_geometry_a_column_with_too_little_side_cover_is_found() {
 #[test]
 fn with_geometry_containment_findings_are_nested_by_two_properties() {
     let case = Case::new("containment-categories");
+    let bcf = case.path("issues.bcfzip");
+    let case = Case::new("containment-categories");
     let named = columns_in_a_wall().replace(
         "IFCCOLUMN('0000000000000000000029',$,$,$,$,",
         "IFCCOLUMN('0000000000000000000029',$,'C1',$,'Precast',",
@@ -6498,7 +6500,7 @@ fn with_geometry_containment_findings_are_nested_by_two_properties() {
             "cover": {"type": "table", "value": [cover_row("side", 0.04)]},
         }),
         &json!({"categories": [attribute("name"), attribute("object-type")]}),
-        &[],
+        &["--bcf", bcf.to_str().unwrap()],
     );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let findings = sorted_findings(&result);
@@ -6507,6 +6509,18 @@ fn with_geometry_containment_findings_are_nested_by_two_properties() {
     assert!(
         findings[0].1.starts_with("[C1] [Precast] side cover"),
         "{findings:?}"
+    );
+    // The levels are data too, and label the BCF topic.
+    assert_eq!(
+        result["report"]["findings"][0]["categories"],
+        json!(["C1", "Precast"]),
+        "{result:#}"
+    );
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    let labels = &archive.topics().next().unwrap().topic.labels;
+    assert!(
+        labels.contains(&"Category: C1 / Precast".to_owned()),
+        "{labels:?}"
     );
 }
 

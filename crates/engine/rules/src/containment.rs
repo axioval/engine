@@ -606,6 +606,7 @@ impl Run<'_> {
                 related: Vec::new(),
                 evidence,
                 location: None,
+                categories: Vec::new(),
             }
             .with_related(related),
         );

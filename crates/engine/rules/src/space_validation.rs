@@ -235,6 +235,7 @@ fn finding(
         message,
         evidence: vec![evidence.clone()],
         location: None,
+        categories: Vec::new(),
     }
 }
 

@@ -462,6 +462,21 @@ mod categories {
                 ("d3".into(), "[Exhaust] [Lab, Office] ".into()),
             ]
         );
+        // The levels are kept as data too, for sinks that label by them.
+        let categories: Vec<&[String]> = report
+            .findings()
+            .iter()
+            .map(|finding| finding.categories.as_slice())
+            .collect();
+        assert_eq!(
+            categories,
+            [
+                &["Supply".to_owned(), "Office".to_owned()][..],
+                &["-".to_owned(), "-".to_owned()][..],
+                &["Exhaust".to_owned(), "Lab, Office".to_owned()][..],
+            ]
+        );
+        assert!(plain.findings().iter().all(|f| f.categories.is_empty()));
         // The values heading a finding are cited beside it.
         assert!(
             report.findings()[0]

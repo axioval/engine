@@ -188,6 +188,7 @@ impl RuleCapability for HorizontalGuard {
                 message: defect.code().to_string(),
                 evidence: vec![measured.evidence().clone()],
                 location: None,
+                categories: Vec::new(),
             });
         }
         evaluation

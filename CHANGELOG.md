@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Categories as data and BCF category labels.** (#109) A finding
+  carries `categories`, the nested category levels its rule read,
+  outermost first, beside the bracketed headings in its message; empty and
+  absent on the wire without categories. BCF topics are labelled
+  `Category: F90 / Office` after the rule's labels. **Breaking:** `Finding`
+  gains `categories`.
 - **BCF labels from rulesets.** (#109) `axioval_bcf::Options` gains
   `rule_labels`, labels written after each topic's rule id, and
   `ruleset_labels` derives them from a ruleset: `Folder: <path>` for a rule

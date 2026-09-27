@@ -110,6 +110,14 @@ of it could not be derived. Only a host asking for it gets one (see
 [Locations](./refinement.md#locations)); otherwise the field is absent and a
 report serializes exactly as before.
 
+### Categories
+
+A finding carries `categories`, the nested category levels its rule's
+`categories` read on its subject, outermost first (see
+[Nested categories](./refinement.md#nested-categories)). Empty and absent on
+the wire when the rule declares none, so a report serializes exactly as
+before.
+
 ### Rule status
 
 `Report::rules` holds one `RuleSummary` per rule when the host asked for

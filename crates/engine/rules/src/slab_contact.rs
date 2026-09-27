@@ -443,6 +443,7 @@ fn judge(
                     related: Vec::new(),
                     evidence: vec![measured.evidence().clone()],
                     location: None,
+                    categories: Vec::new(),
                 }
                 // What the face rests on, so a reviewer can open it.
                 .with_related(measured.touching().iter().cloned()),

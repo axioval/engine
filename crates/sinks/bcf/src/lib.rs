@@ -377,7 +377,14 @@ impl Entry {
             title: title(&finding.message, &finding.rule_id.to_string()),
             topic_type: severity(&finding.severity).to_owned(),
             priority: Some(priority(&finding.severity)),
-            labels: labels(&finding.rule_id.to_string(), finding.location.as_ref()),
+            labels: {
+                let mut labels = labels(&finding.rule_id.to_string(), finding.location.as_ref());
+                if !finding.categories.is_empty() {
+                    let path = finding.categories.join(" / ");
+                    labels.insert(1, format!("Category: {path}"));
+                }
+                labels
+            },
             description: description.join("\n"),
             // An object finding's key is unchanged from before scopes
             // existed, so its GUID is too. A scoped one is marked, never
@@ -688,7 +695,8 @@ pub fn ruleset_labels(ruleset: &RuleSetPackage) -> BTreeMap<String, Vec<String>>
 }
 
 /// A topic's labels: the rule id, then the host's labels for the rule
-/// (folder path, tags), then the location's, each once. Labels never enter
+/// (folder path, tags), then the finding's category path and location,
+/// each once. Labels never enter
 /// the GUID key.
 fn merged_labels(located: &[String], rule_labels: &BTreeMap<String, Vec<String>>) -> Vec<String> {
     let Some((rule, places)) = located.split_first() else {

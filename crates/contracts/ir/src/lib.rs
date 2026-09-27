@@ -981,6 +981,11 @@ pub struct Finding {
     /// The storeys and spaces the finding lies in, when the host located
     /// it. `None` (and absent on the wire) unless it asked.
     pub location: Option<Location>,
+    /// The finding's nested categories, outermost first, as the rule's
+    /// `categories` read them on its subject: each level's values joined by
+    /// `, `, `-` when none. The same levels head the message in brackets.
+    /// Empty (and absent on the wire) when the rule declares none.
+    pub categories: Vec<String>,
 }
 
 impl Finding {
@@ -1000,6 +1005,7 @@ impl Finding {
             related: Vec::new(),
             evidence: Vec::new(),
             location: None,
+            categories: Vec::new(),
         }
     }
     /// The object the finding is reported against, if it is about one.
@@ -1050,6 +1056,8 @@ struct FindingWire {
     evidence: Vec<Evidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     location: Option<Location>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    categories: Vec<String>,
 }
 
 impl From<Finding> for FindingWire {
@@ -1064,6 +1072,7 @@ impl From<Finding> for FindingWire {
             related: finding.related,
             evidence: finding.evidence,
             location: finding.location,
+            categories: finding.categories,
         }
     }
 }
@@ -1079,6 +1088,7 @@ impl TryFrom<FindingWire> for Finding {
             related: wire.related,
             evidence: wire.evidence,
             location: wire.location,
+            categories: wire.categories,
         })
     }
 }

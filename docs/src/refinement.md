@@ -114,6 +114,11 @@ is not categorised. A level's property must be a declared concept (or a
 reserved set such as `axioval:attributes`); paths take the steps of a
 `related` selector, derived relationships included.
 
+The levels are also kept as data: the finding's `categories` lists each
+level's heading text outermost first (`["F90", "Office"]`, `-` for no
+value), so a sink can file it without parsing the message. BCF labels the
+topic `Category: F90 / Office`.
+
 Categories apply to every capability. `property-comparison` and
 `property-requirements` keep their own `category_property`, which heads one
 property and adds nothing for no value; declared together, the rule's

@@ -1337,5 +1337,6 @@ fn make_finding(
         message,
         evidence,
         location: None,
+        categories: Vec::new(),
     }
 }

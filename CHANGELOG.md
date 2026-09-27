@@ -18,6 +18,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   leaves the candidate not evaluated unless the others settle the verdict.
   **Breaking:** `Selector` has the new variant `Related`, beside the new
   enum `RelatedQuantifier`; existing packages serialize unchanged.
+- **Table allocation.** The new capability `table-allocation` assigns each
+  selected object to exactly one row of a `rows` table, by the first or the
+  most specific matching row (`mode`), and checks each row per anchor
+  (`anchor_selector` and the traversal parameters, such as per storey), per
+  source or across the project: exactly `count` objects, and a summed plan
+  area within `area` ± `area_tolerance` square metres, measured or stated
+  by `area_property`. Rows key on text patterns over up to three properties
+  the rule declares as `key_1` to `key_3`. Objects no row matches and rows
+  that matched nothing are findings; ties, undecided keys and straddling
+  areas are not evaluated.
 - **Every presentation layer of an object, and models without layers.**
   `axioval:presentation.Layer` now lists all distinct layers of an object,
   sorted by name, as the new `PropertyValue::List` (scalar elements only;

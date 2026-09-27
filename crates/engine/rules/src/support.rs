@@ -806,7 +806,10 @@ impl Parameters<'_> {
 pub(crate) mod table {
     #![cfg_attr(
         not(test),
-        allow(dead_code, reason = "shared helper; no built-in reads a table yet")
+        allow(
+            dead_code,
+            reason = "shared helper; built-ins read only some cell kinds and selections yet"
+        )
     )]
 
     use axioval_ir::contract::{ParameterValue, Selector, TableRow};

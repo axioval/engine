@@ -32,6 +32,7 @@ mod slab_contact;
 mod slab_stack;
 mod space_validation;
 mod support;
+mod table_allocation;
 mod unique_value;
 mod xsd_pattern;
 
@@ -66,6 +67,7 @@ pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
 pub use slab_stack::SlabStackSpacing;
 pub use space_validation::{SpaceCategory, SpaceValidation};
+pub use table_allocation::TableAllocation;
 pub use unique_value::UniqueValue;
 
 /// Registers all maintained built-in capabilities into a host registry.
@@ -105,4 +107,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PlanCoverage))
         .and_then(|registry| registry.register(PlanAreaRange))
         .and_then(|registry| registry.register(SlabStackSpacing))
+        .and_then(|registry| registry.register(TableAllocation))
 }

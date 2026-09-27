@@ -34,14 +34,14 @@ fn unavailable(error: PlanAreaError) -> Unavailable {
 
 /// A sum of areas as an interval, with every measurement's evidence.
 #[derive(Default)]
-struct Sum {
-    lower: f64,
-    upper: f64,
-    evidence: Vec<Evidence>,
+pub(crate) struct Sum {
+    pub(crate) lower: f64,
+    pub(crate) upper: f64,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 impl Sum {
-    fn add(&mut self, area: &PlanArea) {
+    pub(crate) fn add(&mut self, area: &PlanArea) {
         self.lower += area.lower_square_metres();
         self.upper += area.upper_square_metres();
         self.evidence.push(area.evidence().clone());
@@ -60,7 +60,7 @@ impl Sum {
 
     /// The summed areas of `objects`: stated by `property` when declared,
     /// otherwise measured as plan footprints.
-    fn areas(
+    pub(crate) fn areas(
         context: &RuleContext<'_>,
         property: Option<PropertyRef<'_>>,
         objects: &[ObjectId],
@@ -97,7 +97,7 @@ impl Sum {
 }
 
 /// A ratio interval as a reviewer reads it.
-fn shown(lower: f64, upper: f64) -> String {
+pub(crate) fn shown(lower: f64, upper: f64) -> String {
     let round = |value: f64| (value * 1e4).round() / 1e4;
     #[allow(clippy::float_cmp)]
     if round(lower) == round(upper) {
@@ -561,7 +561,10 @@ impl RuleCapability for PlanAreaRange {
 }
 
 /// A footprint that is not empty: an empty one means the object has no body.
-fn footprint(context: &RuleContext<'_>, object: &ObjectId) -> Result<PlanArea, Unavailable> {
+pub(crate) fn footprint(
+    context: &RuleContext<'_>,
+    object: &ObjectId,
+) -> Result<PlanArea, Unavailable> {
     let area = service(context)?
         .measure_footprint(object)
         .map_err(unavailable)?;

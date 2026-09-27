@@ -213,6 +213,31 @@ All bounds are inclusive, and `area-ratio` and `plan-area` need at least one of 
 
 `plan-area` reaches members as `related-count` does: through the declared traversal (`relationship` or `path`, as above; with IFC, `IfcRelAssignsToGroup` from a zone or `IfcRelAggregates` from a storey), or everywhere in the anchor's source without one; a traversal without `member_selector` is an invalid declaration. Footprints are summed, so members that overlap count twice; select members that tile the floor, such as spaces. An object with an empty footprint has no body and is not evaluated, and so is an anchor with such a member, since its sum is unknown. A member whose selection is undecided can only add area: a sum already above the maximum is still a finding, anything else is not evaluated. A finding relates the members summed. A definition bound to `plan-area` declares `minimum`, `maximum`, `member_selector` and the traversal parameters, all optional.
 
+### Table allocation
+
+`table-allocation` assigns each selected object to exactly one row of its `rows` table and then checks every row's objects together: "two offices and one meeting room per storey", "an archive of 30 m² ± 1 m²". One rule per row cannot express this, because an object would count in every row it matches.
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `key_1`, `key_2`, `key_3` | `textPattern` | Pattern over the property the same-named rule parameter names. |
+| `label` | `string` | How findings name the row; otherwise by its number and patterns. |
+| `count` | `integer` | Exactly this many objects are assigned to the row. |
+| `area` | `number` | Their summed plan area, in square metres. |
+| `area_tolerance` | `number` | Allowed deviation from `area`, in square metres (0 by default). |
+
+All columns are optional. The keyed properties are rule parameters, not cells: `key_1` might be `{"type": "propertyReference", "propertySet": "Pset_SpaceCommon", "property": "Reference"}` and `key_2` the name, and each row fills the pattern columns it tests. A row matches an object when every key cell it fills matches the object's value, compared case-sensitively unless `case_sensitive` is false; a row with no key cell matches everything, which makes a catch-all last row. A key value that is absent or null matches no pattern, not even `*`; one that is not text, or cannot be read, leaves the rows testing it undecided. A key cell whose parameter is not declared, a negative count, area or tolerance, and a tolerance without an area are invalid declarations.
+
+`mode` is `first` (the default), the first matching row in declared order, or `most_specific`, the matching row with the most literal pattern characters, the specificities of a row's keys adding up. Matching goes through the shared row matcher above, so it fails closed: an object whose row an undecided key could change, or whose most specific rows tie, is not evaluated.
+
+Rows are judged per group. With `anchor_selector`, each anchor is a group of the objects it reaches through the traversal parameters (or all of its source's objects without them), such as every storey through `IfcRelAggregates`; its outcomes go against the anchor, and an object that no anchor reaches is not evaluated. Without anchors, each source is a group, or the whole project with `across_sources`, and outcomes go against the source or the project; a traversal without `anchor_selector` is an invalid declaration.
+
+- An object no row matches is a finding of its own, the "extra", naming its key values.
+- A row that matched no object in a group is a finding, unless its `count` is 0.
+- A row's `count` must equal the number of objects assigned to it.
+- The summed area must lie within `area` ± `area_tolerance`. Areas are measured footprints through `PlanAreaService`, as in `plan-area`, or the area quantity `area_property` names. Measured areas are intervals, and a sum straddling a bound is not evaluated; an object with an empty footprint has no body and leaves its row's area not evaluated.
+
+Objects that may belong to a row without being decided (a tie, an undecided key, or an undecided selection) make its count and area not evaluated, unless the row already exceeds its count or area, since they could only add to it. A finding relates the objects assigned to the row.
+
 ### Slab stacks
 
 `slab-stack-spacing` judges `VerticalExtentService` elevations together with `PlanAreaService` footprints, so it needs a geometry adapter. Unlike `level-spacing`, which reads storey elevations, it measures the slabs' own surfaces.

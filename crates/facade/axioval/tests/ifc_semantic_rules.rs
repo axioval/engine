@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 ///
 /// Spaces #10 and #11 are both numbered `101`; #12 is not in the zone; #11
 /// is typed `KITCHEN`, which is not agreed. The storeys are named `1` and
-/// `3`, so the second does not follow the first.
+/// `3`, so the second does not follow the first and their numbering has a gap.
 const IFC: &str = "ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION((''),'2;1');
@@ -225,6 +225,29 @@ fn ruleset() -> RuleSetPackage {
                 "relationship": { "type": "string", "value": "IfcRelAggregates" },
             }),
         ),
+        rule(
+            "storey-numbering",
+            "numbering-consistency",
+            "axioval:test.storey",
+            json!({
+                "property": { "type": "propertyReference", "property": "axioval:test.number", "propertySet": ATTR },
+                "pattern": { "type": "string", "value": "(\\d+)" },
+                "gap_free": { "type": "boolean", "value": true },
+            }),
+        ),
+        rule(
+            "space-numbering",
+            "numbering-consistency",
+            "axioval:test.space",
+            json!({
+                "property": { "type": "propertyReference", "property": "axioval:test.number", "propertySet": ATTR },
+                "pattern": { "type": "string", "value": "(\\d+)" },
+                "prefix_length": { "type": "integer", "value": 1 },
+                "gap_free": { "type": "boolean", "value": true },
+                "relationship": { "type": "string", "value": "IfcRelAggregates" },
+                "direction": { "type": "string", "value": "backward" },
+            }),
+        ),
     ];
     serde_json::from_value(json!({
         "schemaVersion": "0.1.0",
@@ -250,6 +273,7 @@ fn report() -> Report {
             "related-count",
             "selector-conformance",
             "name-sequence",
+            "numbering-consistency",
         ],
     );
     let plan = compile(&registry, &[definitions], &ruleset()).unwrap();
@@ -307,6 +331,31 @@ fn storeys_are_ordered_by_their_elevation_in_si() {
         "{:?}",
         report.not_evaluated()
     );
+}
+
+#[test]
+fn numbering_gaps_are_found_per_scope() {
+    let report = report();
+    let storeys: Vec<_> = report
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id.to_string() == "storey-numbering")
+        .map(|finding| {
+            (
+                finding.object_id.local_id.as_str(),
+                finding.message.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        storeys,
+        [(
+            "#4",
+            "axioval:attributes.axioval:test.number `3` follows 1; 2 is missing"
+        )]
+    );
+    // 101, 101 and 102 on one storey share their prefix and leave no gap.
+    assert!(flagged(&report, "space-numbering").is_empty());
 }
 
 #[test]

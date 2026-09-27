@@ -17,6 +17,7 @@ mod horizontal_guard;
 mod level_spacing;
 mod manual_issue;
 mod name_sequence;
+mod numbering_consistency;
 mod pairs;
 mod plan_area;
 mod property_comparison;
@@ -48,6 +49,7 @@ pub use horizontal_guard::HorizontalGuard;
 pub use level_spacing::LevelSpacing;
 pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
+pub use numbering_consistency::NumberingConsistency;
 pub use plan_area::{AreaRatio, PlanCoverage};
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
@@ -89,6 +91,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(RelatedCount))
         .and_then(|registry| registry.register(RelativeCount))
         .and_then(|registry| registry.register(NameSequence))
+        .and_then(|registry| registry.register(NumberingConsistency))
         .and_then(|registry| registry.register(ManualIssue))
         .and_then(|registry| registry.register(LevelSpacing))
         .and_then(|registry| registry.register(AreaRatio))

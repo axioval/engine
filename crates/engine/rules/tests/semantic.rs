@@ -7,8 +7,8 @@ use axioval_ir::NotEvaluatedReason;
 use axioval_ir::PropertyValue;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_rules::{
-    ConsistentValue, ManualIssue, NameSequence, RelatedCount, RelativeCount, SelectorConformance,
-    UniqueValue, register_builtins,
+    ConsistentValue, ManualIssue, NameSequence, NumberingConsistency, RelatedCount, RelativeCount,
+    SelectorConformance, UniqueValue, register_builtins,
 };
 use common::{
     Model, boolean, findings, flagged, integer, kind, property, rule, selector, string, unevaluated,
@@ -525,6 +525,185 @@ mod name_sequence {
     }
 }
 
+mod numbering {
+    use super::*;
+
+    const ID: &str = "axioval:capability.numbering-consistency";
+
+    /// Storey 1: B-101, B-102, B-104, a lobby and a bare `101`; storey 2:
+    /// B-201, B-202, B-301.
+    fn spaces() -> Model {
+        let mut model = Model::default()
+            .object("st1", "storey")
+            .object("st2", "storey");
+        for (storey, space, name) in [
+            ("st1", "s1", "B-101"),
+            ("st1", "s2", "B-102"),
+            ("st1", "s3", "B-104"),
+            ("st1", "s4", "B-Lobby"),
+            ("st1", "s5", "101"),
+            ("st2", "s6", "B-201"),
+            ("st2", "s7", "B-202"),
+            ("st2", "s8", "B-301"),
+        ] {
+            model = model
+                .object(space, "space")
+                .edge("aggregates", storey, space)
+                .text(space, ATTR, "Name", name);
+        }
+        model
+    }
+
+    fn check(
+        model: Model,
+        extra: Vec<(&str, ParameterValue)>,
+    ) -> axioval_engine::CapabilityEvaluation {
+        let mut parameters = vec![
+            ("property", property(Some(ATTR), "Name")),
+            ("pattern", string(r"B-(\d+)")),
+            ("relationship", string("aggregates")),
+            ("direction", string("backward")),
+        ];
+        parameters.extend(extra);
+        model.evaluate(&NumberingConsistency, &rule(ID, kind("space"), parameters))
+    }
+
+    #[test]
+    fn a_gap_and_a_different_prefix_are_reported_per_storey() {
+        let evaluation = check(
+            spaces(),
+            vec![("prefix_length", integer(1)), ("gap_free", boolean(true))],
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [
+                (
+                    "s3".into(),
+                    "axioval:attributes.Name `B-104` follows 102; 103 is missing".into()
+                ),
+                (
+                    "s8".into(),
+                    "axioval:attributes.Name `B-301` does not start with 2, the prefix of 2 other object(s)"
+                        .into()
+                ),
+                (
+                    "s8".into(),
+                    "axioval:attributes.Name `B-301` follows 202; 203 to 300 are missing".into()
+                ),
+            ]
+        );
+        // The gap names the object below it.
+        assert_eq!(evaluation.findings()[0].related[0].local_id, "s2");
+        // Values the pattern does not number are not evaluated, never passed.
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s4".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("s5".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+    }
+
+    #[test]
+    fn each_check_runs_only_when_declared() {
+        let prefix = check(spaces(), vec![("prefix_length", integer(1))]);
+        assert_eq!(flagged(&prefix), ["s8"]);
+        let gaps = check(spaces(), vec![("gap_free", boolean(true))]);
+        assert_eq!(flagged(&gaps), ["s3", "s8"]);
+    }
+
+    #[test]
+    fn without_a_predominant_prefix_every_object_is_reported() {
+        let model = spaces()
+            .object("s9", "space")
+            .edge("aggregates", "st2", "s9")
+            .text("s9", ATTR, "Name", "B-302");
+        let evaluation = check(model, vec![("prefix_length", integer(1))]);
+        assert_eq!(flagged(&evaluation), ["s6", "s7", "s8", "s9"]);
+        assert!(evaluation.findings()[0].message.contains("2 (2), 3 (2)"));
+    }
+
+    #[test]
+    fn an_unreadable_number_withholds_the_gap_it_could_fill() {
+        let evaluation = check(spaces().unreadable("s2"), vec![("gap_free", boolean(true))]);
+        assert!(
+            evaluation
+                .findings()
+                .iter()
+                .all(|finding| finding.object_id.local_id != "s3"),
+            "{:?}",
+            findings(&evaluation)
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s2".to_owned(), NotEvaluatedReason::BackendUnavailable),
+                ("s4".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("s5".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("s3".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+        // Storey 2 is unaffected.
+        assert_eq!(flagged(&evaluation), ["s8"]);
+    }
+
+    #[test]
+    fn a_missing_service_leaves_every_object_unevaluated() {
+        use axioval_engine::RuleCapability;
+        let project = axioval_ir::Project::new(vec![
+            axioval_ir::Object::new(common::id("s1"), "space"),
+            axioval_ir::Object::new(common::id("s2"), "space"),
+        ])
+        .unwrap();
+        let services = axioval_engine::ServiceRegistry::new();
+        let evaluation = NumberingConsistency.evaluate(
+            &axioval_engine::RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &rule(
+                ID,
+                kind("space"),
+                vec![
+                    ("property", property(Some(ATTR), "Name")),
+                    ("pattern", string(r"B-(\d+)")),
+                    ("gap_free", boolean(true)),
+                ],
+            ),
+        );
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s1".to_owned(), NotEvaluatedReason::MissingService),
+                ("s2".to_owned(), NotEvaluatedReason::MissingService),
+            ]
+        );
+    }
+
+    #[test]
+    fn declarations_that_check_nothing_or_capture_no_number_are_refused() {
+        for extra in [
+            vec![],
+            vec![("gap_free", boolean(false))],
+            vec![("gap_free", boolean(true)), ("pattern", string(r"B-\d+"))],
+            vec![
+                ("gap_free", boolean(true)),
+                ("pattern", string(r"(B)-(\d+)")),
+            ],
+            vec![("prefix_length", integer(0))],
+            vec![("gap_free", boolean(true)), ("pattern", string("["))],
+        ] {
+            let evaluation = check(spaces(), extra);
+            assert!(evaluation.findings().is_empty());
+            assert_eq!(
+                unevaluated(&evaluation),
+                [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+            );
+        }
+    }
+}
+
 mod manual {
     use super::*;
 
@@ -563,6 +742,7 @@ fn every_new_capability_is_a_builtin() {
         "related-count",
         "relative-count",
         "name-sequence",
+        "numbering-consistency",
         "manual-issue",
     ] {
         assert!(

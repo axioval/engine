@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Numbering consistency.** `numbering-consistency` reads a number from
+  each value through a pattern with one captured group and requires the
+  numbers of one scope (a source, or a storey reached through a relationship)
+  to share a leading prefix and, optionally, to leave no gaps. A value the
+  pattern does not number is not evaluated, never passed.
 - **Unbound concepts are reported once.** A package concept the source's
   declared vocabulary cannot express is now `NotEvaluatedReason::UnboundConcept`
   (it was `InvalidDeclaration`) and is reported once per rule, source and

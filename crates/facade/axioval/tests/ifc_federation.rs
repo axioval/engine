@@ -8,9 +8,10 @@
 
 mod common;
 use axioval::engine::{
-    CapabilityRegistry, EvidenceSession, EvidenceSessionError, ObjectFrameError,
-    ObjectFrameServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    RelationshipQuery, RelationshipSelectionRequest, RelationshipSelectionServiceHandle, Runtime,
+    CapabilityRegistry, CoordinateSystemError, CoordinateSystemServiceHandle, EvidenceSession,
+    EvidenceSessionError, ObjectFrameError, ObjectFrameServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, Runtime,
     SemanticRelationship, SourceIntegrityServiceHandle, SourceSnapshot, TraversalDirection,
     TypeHierarchyServiceHandle, compile,
 };
@@ -153,6 +154,18 @@ fn two_models_keep_source_qualified_identities_in_one_session() {
     assert!(matches!(
         frames.object_frame(&id("other.ifc", "#10")),
         Err(ObjectFrameError::UncoveredSource(_))
+    ));
+    // Each file states its own coordinate system; neither has a model
+    // context, so neither states one.
+    let systems = session.service::<CoordinateSystemServiceHandle>().unwrap();
+    for document in ["arch.ifc", "struct.ifc"] {
+        let system = systems.coordinate_system(&source(document)).unwrap();
+        assert_eq!(system.source(), &source(document));
+        assert!(system.world().is_none());
+    }
+    assert!(matches!(
+        systems.coordinate_system(&source("other.ifc")),
+        Err(CoordinateSystemError::UncoveredSource(_))
     ));
 
     // A relationship request over the whole project is answered by the

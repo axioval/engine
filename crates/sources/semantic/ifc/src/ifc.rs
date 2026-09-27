@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, EvidenceSession,
-    EvidenceSessionError, ObjectFrameServiceHandle, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
-    RelationshipSelectionServiceHandle, ResolvedProperty, SourceIntegrityServiceHandle,
-    SourceSnapshot, TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
+    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, CoordinateSystemServiceHandle,
+    EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
+    TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
@@ -21,6 +22,7 @@ use thiserror::Error;
 
 use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
+use crate::coordinates::IfcCoordinateSystem;
 use crate::frames::IfcObjectFrames;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
@@ -395,6 +397,11 @@ pub fn import_ifc_session(
         model.clone(),
         snapshots.clone(),
     )));
+    let coordinates = CoordinateSystemServiceHandle::new(Arc::new(IfcCoordinateSystem::new(
+        release,
+        model.clone(),
+        snapshots.clone(),
+    )));
     let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
         IfcRelationshipService::new(release, model, snapshots.clone()),
     ));
@@ -408,6 +415,7 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(integrity))
         .and_then(|session| session.with_service(classifications))
         .and_then(|session| session.with_service(frames))
+        .and_then(|session| session.with_service(coordinates))
         .map_err(|error| session_error(&error))
 }
 

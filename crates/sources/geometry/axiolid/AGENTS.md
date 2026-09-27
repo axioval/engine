@@ -53,7 +53,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   other surface, via `axiolid-ray-mesh`) against winding numbers. Only closed
   two-manifold meshes have an inside; a pair with one is measured, two open
   surfaces report no penetration.
-  Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`.
+  Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`. A
+  host-declared bodiless object is refused with `ProximityError::NoBody`,
+  never `Unavailable`, so a comparison can tell "no body" from "unmeasured".
   `measure_distance` answers projections: horizontal distance folds 2D
   closest points over projected triangles (edge-on ones as segments), exact
   for non-convex footprints; vertical is the extent gap of footprint-related

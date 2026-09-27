@@ -188,6 +188,15 @@ The locator names the object and its placement chain from the object upwards: `p
 
 Door and window leaves (hinge side, swing sector from `OperationType` and panel definitions) wait for upstream support (openbimrs/ifc#148).
 
+### Coordinate system
+
+The IFC session registers a coordinate-system service (`CoordinateSystemServiceHandle`) without geometry. It reads the model context: the one root `IfcGeometricRepresentationContext` whose `ContextType` is `Model`.
+
+- `WorldCoordinateSystem` is resolved by `ifc-geometry`'s axis-placement reader, the reader that places bodies, and its origin is converted through the exact project length unit, never read as metres.
+- `TrueNorth` gives the plan direction of north.
+- An IFC4 `IfcMapConversion` whose `SourceCRS` is the model context gives the map conversion: `TargetCRS.Name`, `Eastings`, `Northings`, `OrthogonalHeight`, and `XAxisAbscissa`/`XAxisOrdinate` and `Scale`, which take the schema's stated defaults (no rotation, scale 1) when unset. The offset is in the target's `MapUnit`, resolved exactly through `ifc_properties::exact_unit`; an unstated or unresolvable map unit is reported unknown.
+- A file without a model context states no coordinate system. Several model contexts, several conversions of the one context, or conversions only from something else are refused. IFC2X3 has no `IfcMapConversion`, so its files state no map conversion; property-set conventions for georeferencing IFC2X3 are not read.
+
 ### Integrity warnings
 
 Besides relationship ends, the integrity scan reports two schema cardinality

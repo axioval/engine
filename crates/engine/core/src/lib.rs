@@ -434,6 +434,7 @@ mod classifications;
 mod compiler;
 mod concepts;
 mod contact;
+mod coordinate_system;
 mod derived_relationships;
 mod envelope_membership;
 mod facade_area;
@@ -468,6 +469,10 @@ pub use concepts::{
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
+};
+pub use coordinate_system::{
+    CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
+    MapConversion, SourceCoordinateSystem,
 };
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,

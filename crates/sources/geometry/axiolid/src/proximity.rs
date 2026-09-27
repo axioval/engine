@@ -88,6 +88,9 @@ impl AxiolidProximityService {
     }
 
     fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
+        if self.geometry.has_no_body(object) {
+            return Err(ProximityError::NoBody);
+        }
         let mesh = self
             .geometry
             .mesh(object)

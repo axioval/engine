@@ -55,6 +55,49 @@ All notable changes are documented here. This project follows Semantic Versionin
   `--geometry`. Space-boundary coverage stays open: no service measures the
   boundaries' connection geometry. Door swing direction waits on door
   leaves (openbimrs/ifc#148).
+- **Model comparison on the command line, with placement, geometry and
+  coordinate-system facets.** `axioval compare --base A.ifc --revised B.ifc`
+  compares two revisions of one model, matched by `GlobalId`, on kind,
+  classifications, relationships, each `--property SET.NAME`, placement and
+  coordinate system, and with `--geometry` each object's measured bounds.
+  Lengths and angles are judged against `--length-tolerance` (default
+  0.005 m) and `--angle-tolerance` (default 0.01°); a tessellated difference
+  straddling the tolerance is undetermined, never rounded. The result has
+  the shape of a check's, so `--report`, `--summary`, `--bcf` and
+  `axioval report` work unchanged, plus a `comparison` field listing every
+  added, removed, changed and incomplete identity with its differences per
+  facet, the counts, unidentified and ambiguous objects, and the coordinate
+  systems. Exit status as for `check`: 0 identical, 3 differences, 4
+  incomplete. Two files with one name become the sources `name@base` and
+  `name@revised`. In `axioval-rules`, `ComparisonRequest` gains
+  `with_placement`, `with_geometry` and `with_coordinate_systems`, each
+  with a `ComparisonTolerance`: placement compares object frames (origin
+  distance, axis rotation), geometry compares bounds widened by both chord
+  deviations, and coordinate systems compare each pair of sources (the only
+  one per side, else one per declared discipline). A comparison is a host
+  entry point, not a registered capability, since it needs two sessions.
+  A certified mesh difference (two-sided Hausdorff distance) waits on
+  axiolid/kernel#148; until then geometry compares bounds only.
+  **Breaking:** `ObjectChange::Matched` gains `undetermined`, `Unresolved`
+  names its `Facet` and `subject`, `Difference` gains `Measured` and
+  `Stated`, `ComparisonError` gains `InvalidTolerance`, and
+  `ModelComparison::report` gives each entry a rule id per facet
+  (`RULE.added`, `RULE.removed`, `RULE.property`, `RULE.placement`, ...,
+  `RULE.identity`) and one finding per changed facet. (#73)
+- **Source coordinate systems.** A new `CoordinateSystemService`
+  (`CoordinateSystemServiceHandle`) states per source its world frame
+  (`CoordinateFrame`, in metres), true north and map conversion
+  (`MapConversion`: target system, offset, rotation, scale, and the map unit
+  when known exactly), each `None` when unstated. The IFC session registers
+  it from the model context's `WorldCoordinateSystem` and `TrueNorth` and an
+  IFC4 `IfcMapConversion`; ambiguous statements are refused. Federated
+  sessions route it by source.
+- **Bodiless is not unmeasured in proximity.** `ProximityError::NoBody`
+  reports an object declared to occupy no material; Axiolid proximity
+  returns it for host-declared bodiless objects instead of `Unavailable`.
+  Clash and distance treat it as before. **Breaking:** `ProximityError`
+  gains a variant.
+
 - **Sill heights in `keyed-limit`.** The new `quantity` `sill-height`
   limits each object's bottom elevation above the floor of every object the
   new parameter `floor_path` reaches from it, through the vertical-extent

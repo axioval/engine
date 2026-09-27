@@ -2,8 +2,10 @@
 //!
 //! `validate` binds a ruleset without a model. `check` runs it over one or
 //! more models, each a source of one session with an optional discipline, and
-//! writes the report as JSON, and optionally as a BCF archive. `report` reads
-//! a saved result back as a bounded summary or a filtered, paged listing.
+//! writes the report as JSON, and optionally as a BCF archive. `compare`
+//! compares two revisions of a model object by object and writes the same
+//! kind of result. `report` reads a saved result back as a bounded summary
+//! or a filtered, paged listing.
 //!
 //! Exit status is part of the automation contract; see [`Outcome`].
 
@@ -17,6 +19,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod compare;
 mod digest;
 mod geometry;
 
@@ -24,7 +27,7 @@ use axioval::{
     bcf,
     engine::{EvidenceSession, IntegritySeverity, Runtime, SourceIntegrityServiceHandle, compile},
     ifc::import_ifc_session,
-    ir::{DefinitionPackage, Discipline, Report, RuleSetPackage, SourceId},
+    ir::{DefinitionPackage, Discipline, Project, Report, RuleSetPackage, SourceId},
 };
 use clap::{Args, Parser, Subcommand};
 use digest::{CheckOutput, Filter, IntegrityRecord, Section};
@@ -50,7 +53,16 @@ enum Command {
     /// least one finding; 4 no finding, but something was not evaluated, so
     /// the model has not passed; 1 the check could not run; 2 invalid usage.
     Check(CheckArgs),
-    /// Read a result saved by `check --report`.
+    /// Compare two revisions of a model, object by object.
+    ///
+    /// Objects are matched by `GlobalId`. Kind, classifications, named
+    /// properties, placement and the coordinate system are compared, and
+    /// with `--geometry` each object's measured bounds. Exit status as for
+    /// `check`: 0 identical, 3 at least one difference, 4 no difference but
+    /// something could not be compared, 1 the comparison could not run, 2
+    /// invalid usage.
+    Compare(compare::CompareArgs),
+    /// Read a result saved by `check --report` or `compare --report`.
     ///
     /// Without filters, prints the same bounded summary as `check --summary`.
     /// With any filter, lists the matching entries, paged.
@@ -70,6 +82,17 @@ struct CheckArgs {
     definitions: Vec<PathBuf>,
     #[arg(long)]
     ruleset: PathBuf,
+    /// Mesh the model's bodies so geometric rules can run. Off by default:
+    /// meshing costs time and purely semantic rulesets do not need it.
+    #[arg(long)]
+    geometry: bool,
+    #[command(flatten)]
+    output: OutputArgs,
+}
+
+/// Where and how a result is written; shared by `check` and `compare`.
+#[derive(Args)]
+struct OutputArgs {
     /// Write the JSON result here instead of stdout.
     #[arg(long)]
     report: Option<PathBuf>,
@@ -83,10 +106,6 @@ struct CheckArgs {
     /// when set, else the current time, in UTC.
     #[arg(long, requires = "bcf")]
     bcf_date: Option<String>,
-    /// Mesh the model's bodies so geometric rules can run. Off by default:
-    /// meshing costs time and purely semantic rulesets do not need it.
-    #[arg(long)]
-    geometry: bool,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -175,7 +194,7 @@ fn model_arg(value: &str) -> Result<ModelArg, String> {
 
 /// How a completed run ends. Errors exit 1 and usage errors 2 (clap).
 #[derive(Debug, PartialEq, Eq)]
-enum Outcome {
+pub(crate) enum Outcome {
     /// Every rule was evaluated and none found anything.
     Passed,
     /// At least one finding. Takes precedence over [`Outcome::Incomplete`]:
@@ -231,6 +250,7 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
             Ok(Outcome::Passed)
         }
         Command::Check(args) => check(args),
+        Command::Compare(args) => compare::compare(args),
         Command::Report(args) => {
             report(args)?;
             Ok(Outcome::Passed)
@@ -264,10 +284,21 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .collect(),
     });
     let output = CheckOutput::new(result, integrity, geometry, session.project());
-    let result = &output.report;
-    let json = serde_json::to_string_pretty(&output)? + "\n";
-    // Everything is built before anything is written, so a run that fails
-    // leaves no partial output behind.
+    emit(&output, session.project(), args.output)?;
+    Ok(Outcome::of(&output.report))
+}
+
+/// Writes a result as `args` asks: JSON to stdout or `--report`, a summary,
+/// a BCF archive, and diagnostics to stderr.
+///
+/// Everything is built before anything is written, so a run that fails
+/// leaves no partial output behind.
+pub(crate) fn emit(
+    output: &CheckOutput,
+    project: &Project,
+    args: OutputArgs,
+) -> Result<(), Box<dyn Error>> {
+    let json = serde_json::to_string_pretty(output)? + "\n";
     let archive = match &args.bcf {
         Some(path) => {
             let date = match args.bcf_date {
@@ -275,8 +306,8 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
                 None => timestamp()?,
             };
             let export = bcf::export(
-                result,
-                session.project(),
+                &output.report,
+                project,
                 &bcf::Options::new(args.bcf_author, date),
             )?;
             Some((path, export.to_bytes()?, export.unanchored))
@@ -288,7 +319,7 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .report
             .as_deref()
             .map(|path| path.to_string_lossy().into_owned());
-        digest::render_summary(&digest::summarize(&output, args.top, saved.as_deref()))
+        digest::render_summary(&digest::summarize(output, args.top, saved.as_deref()))
     });
 
     if let Some(path) = &args.report {
@@ -306,8 +337,8 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         .iter()
         .flat_map(|(_, _, unanchored)| unanchored)
         .collect();
-    warn(&output, summary.is_some(), &unanchored);
-    Ok(Outcome::of(result))
+    warn(output, summary.is_some(), &unanchored);
+    Ok(())
 }
 
 fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
@@ -471,7 +502,7 @@ fn import(model: &Path, bytes: &[u8]) -> Result<EvidenceSession, Box<dyn Error>>
         .map_err(|error| format!("{}: {error}", model.display()))?)
 }
 
-fn integrity(session: &EvidenceSession) -> Result<Vec<IntegrityRecord>, Box<dyn Error>> {
+pub(crate) fn integrity(session: &EvidenceSession) -> Result<Vec<IntegrityRecord>, Box<dyn Error>> {
     let Some(service) = session.service::<SourceIntegrityServiceHandle>() else {
         return Ok(vec![]);
     };

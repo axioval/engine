@@ -29,6 +29,11 @@ pub enum ProximityError {
     /// The adapter holds no measurable geometry for an object.
     #[error("proximity measurement is unavailable for the requested object")]
     Unavailable,
+    /// The object is declared to occupy no material, such as a storey or an
+    /// opening. A fact about the object, not a failure to measure it: an
+    /// object whose body could not be measured is [`Self::Unavailable`].
+    #[error("the requested object occupies no material")]
+    NoBody,
     /// Coordinates or measured quantities are non-finite, negative or incoherent.
     #[error("proximity measurement is not finite, non-negative and coherent")]
     InvalidMeasurement,

@@ -49,7 +49,8 @@ pub use body_extent::BodyExtent;
 pub use clash::Clash;
 pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
-    Difference, ModelComparison, ObjectChange, Side, Unresolved, compare_sessions,
+    ComparisonTolerance, Difference, Facet, Measure, Measurement, ModelComparison, ObjectChange,
+    Side, SourceComparison, Unresolved, compare_sessions,
 };
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;

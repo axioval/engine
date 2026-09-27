@@ -12,13 +12,14 @@ use axioval_ir::{ObjectId, SourceId};
 
 use crate::{
     ClassificationAssignment, ClassificationError, ClassificationService,
-    ClassificationServiceHandle, CompleteRelationshipSelection, EvidenceSessionError,
-    IntegrityError, IntegrityIssue, ObjectFrame, ObjectFrameError, ObjectFrameService,
-    ObjectFrameServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    ServiceRegistry, SnapshotBoundService, SourceIntegrityService, SourceIntegrityServiceHandle,
-    SourceSnapshot, TypeHierarchyServiceHandle,
+    ClassificationServiceHandle, CompleteRelationshipSelection, CoordinateSystemError,
+    CoordinateSystemService, CoordinateSystemServiceHandle, EvidenceSessionError, IntegrityError,
+    IntegrityIssue, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, ServiceRegistry,
+    SnapshotBoundService, SourceCoordinateSystem, SourceIntegrityService,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyServiceHandle,
 };
 
 /// How many of `registry`'s services federation can route.
@@ -33,6 +34,7 @@ pub(crate) fn routed(registry: &ServiceRegistry) -> usize {
         + usize::from(registry.get::<ClassificationServiceHandle>().is_some())
         + usize::from(registry.get::<SourceIntegrityServiceHandle>().is_some())
         + usize::from(registry.get::<ObjectFrameServiceHandle>().is_some())
+        + usize::from(registry.get::<CoordinateSystemServiceHandle>().is_some())
 }
 
 /// Registers one router per semantic interface any member provides.
@@ -54,6 +56,9 @@ pub(crate) fn register(
     }
     if let Some(router) = Router::<ObjectFrameServiceHandle>::of(members) {
         target.register(ObjectFrameServiceHandle::new(Arc::new(router)))?;
+    }
+    if let Some(router) = Router::<CoordinateSystemServiceHandle>::of(members) {
+        target.register(CoordinateSystemServiceHandle::new(Arc::new(router)))?;
     }
     let hierarchies: Vec<&TypeHierarchyServiceHandle> = members
         .iter()
@@ -195,5 +200,20 @@ impl ObjectFrameService for Router<ObjectFrameServiceHandle> {
             .member(&object.source)
             .ok_or_else(|| ObjectFrameError::UncoveredSource(object.source.clone()))?;
         member.object_frame(object)
+    }
+}
+
+impl CoordinateSystemService for Router<CoordinateSystemServiceHandle> {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+    fn coordinate_system(
+        &self,
+        source: &SourceId,
+    ) -> Result<SourceCoordinateSystem, CoordinateSystemError> {
+        let (_, member) = self
+            .member(source)
+            .ok_or_else(|| CoordinateSystemError::UncoveredSource(source.clone()))?;
+        member.coordinate_system(source)
     }
 }

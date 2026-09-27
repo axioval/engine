@@ -43,6 +43,127 @@ pub struct CheckOutput {
     /// How the model's bodies were meshed, when `check --geometry` ran.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geometry: Option<GeometryRecord>,
+    /// What `compare` found, per object and facet, beside the report it
+    /// projects to. Absent from a `check` result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<ComparisonRecord>,
+}
+
+/// The structured result of `compare`: every identity that is not unchanged,
+/// with its differences per facet, and everything that could not be matched.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ComparisonRecord {
+    /// The base source, `system:document`.
+    pub base: String,
+    /// The revised source.
+    pub revised: String,
+    /// The identity scheme objects were matched by.
+    pub scheme: String,
+    /// The facets compared, in order.
+    pub facets: Vec<String>,
+    pub tolerance: ToleranceRecord,
+    pub counts: ComparisonCounts,
+    /// Added, removed, changed and incomplete identities, by identity.
+    /// Unchanged identities are only counted.
+    pub objects: Vec<ComparedRecord>,
+    /// Objects without an identity in the scheme.
+    pub unidentified: Vec<SideObject>,
+    /// Identities claimed by several objects of one side.
+    pub ambiguous: Vec<AmbiguousRecord>,
+    /// Coordinate systems, per pair of sources.
+    pub coordinate_systems: Vec<SourceRecord>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ToleranceRecord {
+    pub length_metres: f64,
+    pub angle_degrees: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct ComparisonCounts {
+    pub added: usize,
+    pub removed: usize,
+    pub changed: usize,
+    pub unchanged: usize,
+    /// Matched without a difference, but with a facet not compared or a
+    /// measure undetermined.
+    pub incomplete: usize,
+    pub unidentified: usize,
+    pub ambiguous: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ComparedRecord {
+    pub identity: String,
+    /// `added`, `removed`, `changed` or `incomplete`.
+    pub state: String,
+    /// The object's kind, from the revised side when it has one.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<ChangeRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<GapRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undetermined: Vec<ChangeRecord>,
+}
+
+/// One difference, or one undetermined measure.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChangeRecord {
+    pub facet: String,
+    pub detail: String,
+    /// The measure, for a measured difference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measure: Option<String>,
+    /// The difference lies in `[lower, upper]`, in `unit`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lower: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upper: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<f64>,
+    /// `m`, `rad`, or empty for a ratio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+/// A facet that could not be compared.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GapRecord {
+    pub facet: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SideObject {
+    pub side: String,
+    pub object: ObjectId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AmbiguousRecord {
+    pub side: String,
+    pub identity: String,
+    pub objects: Vec<ObjectId>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SourceRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<SourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised: Option<SourceId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<ChangeRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<GapRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undetermined: Vec<ChangeRecord>,
 }
 
 /// Outcome of meshing, so a reader can tell "no finding" from "not measured".
@@ -121,7 +242,15 @@ impl CheckOutput {
             integrity,
             objects,
             geometry,
+            comparison: None,
         }
+    }
+
+    /// The same result carrying what `compare` found.
+    #[must_use]
+    pub fn with_comparison(mut self, comparison: ComparisonRecord) -> Self {
+        self.comparison = Some(comparison);
+        self
     }
 
     /// Whether the report spans more than one source document, in which case
@@ -259,10 +388,22 @@ pub struct Summary {
     pub integrity: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<GeometryCounts>,
+    /// What `compare` found, when the result is a comparison.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<ComparisonDigest>,
     pub groups: Vec<Group>,
     /// Groups left out by the `top` limit, per section.
     pub omitted_groups: BTreeMap<&'static str, usize>,
     pub next: Vec<String>,
+}
+
+/// The head of a comparison's summary.
+#[derive(Debug, Serialize)]
+pub struct ComparisonDigest {
+    pub base: String,
+    pub revised: String,
+    pub facets: Vec<String>,
+    pub counts: ComparisonCounts,
 }
 
 pub fn status(report: &Report) -> &'static str {
@@ -473,10 +614,14 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
         .iter()
         .any(|n| n.reason == NotEvaluatedReason::MissingService);
     if output.geometry.is_none() && missing_service {
-        next.push(
-            "some rules lack an evidence service; if they are geometric, rerun `axioval check` with --geometry"
-                .into(),
-        );
+        let command = if output.comparison.is_some() {
+            "compare"
+        } else {
+            "check"
+        };
+        next.push(format!(
+            "some rules lack an evidence service; if they are geometric, rerun `axioval {command}` with --geometry"
+        ));
     }
     Summary {
         status: status(&output.report),
@@ -488,6 +633,12 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             tessellated: g.tessellated,
             no_body: g.no_body,
             unmeasured: g.unmeasured.len(),
+        }),
+        comparison: output.comparison.as_ref().map(|c| ComparisonDigest {
+            base: c.base.clone(),
+            revised: c.revised.clone(),
+            facets: c.facets.clone(),
+            counts: c.counts,
         }),
         groups: kept,
         omitted_groups,
@@ -555,8 +706,32 @@ pub fn shell_quote(text: &str) -> String {
 }
 
 pub fn render_summary(summary: &Summary) -> String {
-    let mut out = format!(
-        "status: {} · {} finding(s) · {} not evaluated · {} integrity issue(s)\n",
+    let mut out = String::new();
+    // A comparison says first what was compared with what.
+    if let Some(comparison) = &summary.comparison {
+        let counts = comparison.counts;
+        let _ = writeln!(
+            out,
+            "compared: {} -> {} · {}",
+            comparison.base,
+            comparison.revised,
+            comparison.facets.join(", ")
+        );
+        let _ = writeln!(
+            out,
+            "objects: {} added · {} removed · {} changed · {} unchanged · {} incomplete · {} unidentified · {} ambiguous",
+            counts.added,
+            counts.removed,
+            counts.changed,
+            counts.unchanged,
+            counts.incomplete,
+            counts.unidentified,
+            counts.ambiguous
+        );
+    }
+    let _ = writeln!(
+        out,
+        "status: {} · {} finding(s) · {} not evaluated · {} integrity issue(s)",
         summary.status, summary.findings, summary.not_evaluated, summary.integrity
     );
     if let Some(geometry) = &summary.geometry {

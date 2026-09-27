@@ -119,11 +119,119 @@ A finding takes precedence over incompleteness: status 3 can still come with
 not-evaluated outcomes in the report. Automation that only needs pass or fail
 treats any non-zero status as a failure.
 
+## `axioval compare`
+
+```bash
+axioval compare --base r1/model.ifc --revised r2/model.ifc \
+  [--property SET.NAME ...] [--geometry] \
+  [--length-tolerance METRES] [--angle-tolerance DEGREES] \
+  [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
+  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
+```
+
+Compares two revisions of one IFC2X3 or IFC4 model object by object (see
+[Model comparison](./comparison.md)). Objects are matched by `GlobalId`, so a
+re-export that renumbers every entity still matches. Each revision is its own
+source, named by its file name; when both files have the same name, as two
+revisions usually do, the sources are named `model.ifc@base` and
+`model.ifc@revised`.
+
+Compared facets:
+
+- kind, classifications and relationships, always;
+- each `--property`, as `SET.NAME` (split at the first `.`, so
+  `Pset_WallCommon.FireRating` or `axioval:attributes.Name`) or a bare `NAME`.
+  IFC properties cannot be listed, so only named properties are compared;
+- placement (origin distance and axis rotation of each object frame), always;
+- the coordinate system of the two files (world frame, true north, map
+  conversion), always;
+- with `--geometry`, both revisions are meshed as for `check --geometry` and
+  each object's measured bounds are compared.
+
+A length differs when it exceeds `--length-tolerance` (default 0.005 m) and an
+angle when it exceeds `--angle-tolerance` (default 0.01°). The length default
+is above twice the 1 mm chord deviation of a tessellated body, so an unchanged
+curved body is provably unchanged. A tessellated difference straddling the
+tolerance is undetermined, never rounded to changed or unchanged. A negative
+or non-finite tolerance is refused (status 1).
+
+### Output
+
+The result has the shape of a `check` result: `report`, `integrity` (of both
+files), `objects` (both revisions' objects, by full id) and, with
+`--geometry`, `geometry` (counts over both files). The report holds one rule
+id per kind of entry: `compare.added`, `compare.removed`, one finding per
+changed facet (`compare.property`, `compare.placement`, `compare.geometry`,
+...) on the revised object with its base object in `related`,
+`compare.coordinate-system` on the revised source, and not-evaluated outcomes
+for facets that could not be compared, undetermined measures and unmatched
+objects (`compare.identity`). So `--summary`, `axioval report` and `--bcf`
+work on a comparison exactly as on a check, and `report --rule
+compare.placement` lists the moved objects.
+
+The result also has a `comparison` field with the structured comparison:
+
+```json
+"comparison": {
+  "base": "ifc-step:model.ifc@base",
+  "revised": "ifc-step:model.ifc@revised",
+  "scheme": "ifc-globalid",
+  "facets": ["kind", "classifications", "property", "relationship",
+             "placement", "geometry", "coordinate-system"],
+  "tolerance": { "length_metres": 0.005, "angle_degrees": 0.01 },
+  "counts": { "added": 1, "removed": 1, "changed": 2, "unchanged": 1,
+              "incomplete": 0, "unidentified": 0, "ambiguous": 0 },
+  "objects": [
+    { "identity": "0000000000000000000A01", "state": "changed", "kind": "IFCWALL",
+      "base": { "source": { "system": "ifc-step", "document": "model.ifc@base" }, "local_id": "#109" },
+      "revised": { "source": { "system": "ifc-step", "document": "model.ifc@revised" }, "local_id": "#549" },
+      "changes": [
+        { "facet": "placement", "measure": "origin", "unit": "m",
+          "lower": 0.5, "upper": 0.5, "tolerance": 0.005,
+          "detail": "placement origin differs by 0.5000 m (tolerance 0.0050 m)" }
+      ] }
+  ],
+  "unidentified": [],
+  "ambiguous": [],
+  "coordinate_systems": [
+    { "base": { "system": "ifc-step", "document": "model.ifc@base" },
+      "revised": { "system": "ifc-step", "document": "model.ifc@revised" } }
+  ]
+}
+```
+
+`objects` lists every identity that is `added`, `removed`, `changed` or
+`incomplete` (matched with no difference but a facet not compared or a
+measure undetermined), in identity order; unchanged identities are only
+counted. Each change carries its `facet` and a `detail`; a measured change
+also its `measure`, the interval `lower`–`upper` it lies in, the `tolerance`
+and the `unit` (`m`, `rad`, or empty for the map scale). `unresolved` and
+`undetermined` list what was not decided. A result without a `comparison`
+field is a check's; the field is additive.
+
+`--summary` starts with what was compared and the counts:
+
+```text
+compared: ifc-step:model.ifc@base -> ifc-step:model.ifc@revised · kind, classifications, property, relationship, placement, geometry, coordinate-system
+objects: 1 added · 1 removed · 2 changed · 1 unchanged · 0 incomplete · 0 unidentified · 0 ambiguous
+status: findings · 5 finding(s) · 0 not evaluated · 0 integrity issue(s)
+```
+
+followed by the same groups and next steps as a check's summary.
+
+### Exit status
+
+As for `check`: 0 when the revisions agree on everything compared, 3 when
+anything was added, removed or changed, 4 when nothing differs but something
+could not be compared (a facet not compared, an undetermined measure, an
+unmatched object), 1 when the comparison could not run, 2 for invalid usage.
+Everything is built before anything is written.
+
 ## Reading results
 
 A full result grows with the model: one entry per finding, and a real model has
-thousands. `axioval report` reads a result saved by `check --report` without
-re-running the check, in two views sized for a reader with a budget, such as a
+thousands. `axioval report` reads a result saved by `check --report` or
+`compare --report` without re-running it, in two views sized for a reader with a budget, such as a
 person at a terminal or an LLM agent paying per token.
 
 **Summary** (no filters, or `check --summary`): one group per rule and severity,

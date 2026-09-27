@@ -15,6 +15,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   small nonzero required counts explicitly. Below a table's first row the
   anchor or group is now skipped; it was extrapolated from zero with the
   increments.
+- **Numeric tolerance and rounding.** `unique-value`, `property-comparison`
+  and `property-predicate` take optional `tolerance` (absolute),
+  `relative_tolerance` (a fraction of the larger magnitude) or `decimals`
+  (round half away from zero, as the value is displayed) for numbers and
+  quantities, quantities in SI units. Within the tolerance two values are
+  equal, boundary included, and only beyond it greater or less. Rounding
+  groups `unique-value` keys into classes; a tolerance is not transitive, so
+  `unique-value` judges it pair by pair and each finding names exactly the
+  objects within the tolerance of its own value. Findings state the
+  tolerance used. **Breaking:** a definition bound to one of these
+  capabilities must declare the three new optional parameters.
 - **Numbering consistency.** `numbering-consistency` reads a number from
   each value through a pattern with one captured group and requires the
   numbers of one scope (a source, or a storey reached through a relationship)

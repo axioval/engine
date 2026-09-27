@@ -12,8 +12,15 @@ use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
 
 use crate::selection::{bound_property_request, property_error, select_objects};
+use crate::support::{Parameters, Tolerance};
 
 /// Compares a property on relationship-selected candidates with a property on each checked object.
+///
+/// Numbers and quantities may be compared under a declared `tolerance`,
+/// `relative_tolerance` or `decimals`, applied between the compared value
+/// and the target after its factor: within the tolerance they are equal, and
+/// only beyond it greater or less. A tolerance on a text, text list or
+/// boolean constant target is an invalid declaration.
 pub struct PropertyComparison;
 
 #[derive(Clone, Copy)]
@@ -81,6 +88,9 @@ impl RuleCapability for PropertyComparison {
             ParameterDescriptor::optional("skip_absent_relationship_ends", ParameterType::Boolean),
             ParameterDescriptor::required("quantifier", ParameterType::String),
         ]
+        .into_iter()
+        .chain(crate::support::tolerance_parameters())
+        .collect()
     }
     #[allow(clippy::too_many_lines)]
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -194,6 +204,7 @@ impl RuleCapability for PropertyComparison {
                         &target,
                         config.factor,
                         config.operator,
+                        &config.tolerance,
                     ) {
                         Ok(true) => any_match = true,
                         Ok(false) => mismatches.push((
@@ -226,7 +237,11 @@ impl RuleCapability for PropertyComparison {
                         evaluation.push_finding(make_finding(
                             rule,
                             object,
-                            format!("candidate {} does not satisfy comparison", candidate.id),
+                            format!(
+                                "candidate {} does not satisfy comparison{}",
+                                candidate.id,
+                                config.tolerance.suffix()
+                            ),
                             evidence,
                         ));
                     }
@@ -246,7 +261,10 @@ impl RuleCapability for PropertyComparison {
                         evaluation.push_finding(make_finding(
                             rule,
                             object,
-                            "no candidate satisfies comparison".into(),
+                            format!(
+                                "no candidate satisfies comparison{}",
+                                config.tolerance.suffix()
+                            ),
                             evidence,
                         ));
                     } else {
@@ -277,6 +295,7 @@ struct Config<'a> {
     follow_chain: bool,
     absent_ends: AbsentEndPolicy,
     quantifier: Quantifier,
+    tolerance: Tolerance,
 }
 impl<'a> Config<'a> {
     #[allow(clippy::too_many_lines)]
@@ -401,6 +420,17 @@ impl<'a> Config<'a> {
         if compared.is_none() && !matches!(quantifier, Quantifier::Count) {
             return None;
         }
+        let tolerance = Parameters(rule).tolerance().ok()?;
+        // A tolerance is numeric; a text or boolean constant cannot take one.
+        if !tolerance.is_exact()
+            && matches!(
+                target,
+                Target::Texts(_)
+                    | Target::Value(PropertyValue::String(_) | PropertyValue::Boolean(_))
+            )
+        {
+            return None;
+        }
         // A count or sum is one number; a text list cannot be its target.
         if matches!(quantifier, Quantifier::Count | Quantifier::Sum)
             && matches!(target, Target::Texts(_))
@@ -419,6 +449,7 @@ impl<'a> Config<'a> {
             follow_chain,
             absent_ends,
             quantifier,
+            tolerance,
         })
     }
 }
@@ -471,9 +502,10 @@ fn compare_side(
     side: &Side<'_>,
     factor: f64,
     operator: Operator,
+    tolerance: &Tolerance,
 ) -> Result<bool, String> {
     match side {
-        Side::Value(right, _) => compare(left, right, factor, operator),
+        Side::Value(right, _) => compare(left, right, factor, operator, tolerance),
         Side::Texts(texts) => match left {
             PropertyValue::String(text) => {
                 Ok(texts.contains(text) == matches!(operator, Operator::OneOf))
@@ -586,7 +618,13 @@ fn aggregate(
             return;
         }
     };
-    match compare_side(&left, &target, config.factor, config.operator) {
+    match compare_side(
+        &left,
+        &target,
+        config.factor,
+        config.operator,
+        &config.tolerance,
+    ) {
         Ok(true) => {}
         Ok(false) => {
             let operator = match rule.parameters.get("operator") {
@@ -602,9 +640,10 @@ fn aggregate(
                 rule,
                 object,
                 format!(
-                    "{label} is {} and is not {operator} {factor}{}",
+                    "{label} is {} and is not {operator} {factor}{}{}",
                     crate::support::display(Some(&left)),
-                    target.describe()
+                    target.describe(),
+                    config.tolerance.suffix()
                 ),
                 combined(&evidence, target.evidence(), &[]),
             ));
@@ -738,6 +777,7 @@ fn compare(
     right: &PropertyValue,
     factor: f64,
     operator: Operator,
+    tolerance: &Tolerance,
 ) -> Result<bool, String> {
     let equal = |ord: Ordering| match operator {
         Operator::Equals => ord.is_eq(),
@@ -763,7 +803,9 @@ fn compare(
             Operator::Contains => Ok(a.contains(b)),
             _ => Err("string comparison operator is invalid".into()),
         },
-        (PropertyValue::Integer(a), PropertyValue::Integer(b)) if exact_one(factor) => {
+        (PropertyValue::Integer(a), PropertyValue::Integer(b))
+            if exact_one(factor) && tolerance.is_exact() =>
+        {
             Ok(equal(a.cmp(b)))
         }
         (
@@ -777,7 +819,7 @@ fn compare(
             },
         ) if da == db => {
             if a.is_finite() && b.is_finite() {
-                numeric(*a, *b, factor, equal)
+                numeric(*a, *b, factor, tolerance, equal)
             } else {
                 Err("quantity value is non-finite".into())
             }
@@ -785,18 +827,25 @@ fn compare(
         (PropertyValue::Integer(a), PropertyValue::Decimal(b))
             if (*a).unsigned_abs() <= (1_u64 << 53) && b.is_finite() =>
         {
-            numeric(integer_to_f64(*a)?, *b, factor, equal)
+            numeric(integer_to_f64(*a)?, *b, factor, tolerance, equal)
         }
         (PropertyValue::Decimal(a), PropertyValue::Integer(b))
             if (*b).unsigned_abs() <= (1_u64 << 53) && a.is_finite() =>
         {
-            numeric(*a, integer_to_f64(*b)?, factor, equal)
+            numeric(*a, integer_to_f64(*b)?, factor, tolerance, equal)
         }
         (PropertyValue::Decimal(a), PropertyValue::Decimal(b))
             if a.is_finite() && b.is_finite() =>
         {
-            numeric(*a, *b, factor, equal)
+            numeric(*a, *b, factor, tolerance, equal)
         }
+        (PropertyValue::Integer(a), PropertyValue::Integer(b)) if !tolerance.is_exact() => numeric(
+            integer_to_f64(*a)?,
+            integer_to_f64(*b)?,
+            factor,
+            tolerance,
+            equal,
+        ),
         (PropertyValue::Integer(_), PropertyValue::Integer(_)) => {
             Err("integer factor cannot be represented exactly".into())
         }
@@ -807,11 +856,19 @@ fn numeric(
     left: f64,
     right: f64,
     factor: f64,
+    tolerance: &Tolerance,
     predicate: impl FnOnce(Ordering) -> bool,
 ) -> Result<bool, String> {
     let scaled = right * factor;
     if scaled.is_finite() {
-        Ok(predicate(left.total_cmp(&scaled)))
+        let ordering = if tolerance.is_exact() {
+            left.total_cmp(&scaled)
+        } else {
+            tolerance
+                .order(left, scaled)
+                .ok_or("compared value is non-finite")?
+        };
+        Ok(predicate(ordering))
     } else {
         Err("scaled target is non-finite".into())
     }

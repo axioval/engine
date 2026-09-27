@@ -9,7 +9,7 @@ use regex::{Regex, RegexBuilder};
 
 use crate::selection::select_objects;
 use crate::support::{
-    Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve, undefined,
+    Parameters, PropertyRef, Tolerance, Unavailable, display, finding, invalid, resolve, undefined,
 };
 
 /// Checks one property of each selected object against a declared predicate.
@@ -26,6 +26,12 @@ use crate::support::{
 /// target fails too. A quantity is compared only with a `quantity` target of
 /// the same dimension, never with a bare number; otherwise the object is not
 /// evaluated.
+///
+/// A numeric target may declare `tolerance`, `relative_tolerance` or
+/// `decimals`: a value within the tolerance of the target, or rounding to the
+/// same number, is equal to it, and only a value beyond the tolerance is
+/// greater or less. A tolerance on a text, text list or boolean target is an
+/// invalid declaration.
 pub struct PropertyPredicate;
 
 #[derive(Clone, Copy, Debug)]
@@ -78,6 +84,13 @@ enum Predicate {
 }
 
 impl Predicate {
+    fn numeric(&self) -> bool {
+        matches!(
+            self,
+            Self::Integer(..) | Self::Number(..) | Self::Quantity(..)
+        )
+    }
+
     #[allow(clippy::too_many_lines)]
     fn parse(parameters: &Parameters<'_>) -> Result<Self, Unavailable> {
         let operator = parameters.required_string("operator")?;
@@ -195,7 +208,7 @@ impl Predicate {
     }
 
     /// Whether `actual` satisfies the predicate; `Err` when it cannot be judged.
-    fn holds(&self, actual: Option<&PropertyValue>) -> Result<bool, String> {
+    fn holds(&self, actual: Option<&PropertyValue>, tolerance: &Tolerance) -> Result<bool, String> {
         if let Self::Defined(defined) = self {
             return Ok(undefined(actual) != *defined);
         }
@@ -211,7 +224,7 @@ impl Predicate {
                 },
             ) => {
                 return if held == dimension {
-                    Ok(compare(*order, *value, *expected))
+                    Ok(compare(*order, *value, *expected, tolerance))
                 } else {
                     Err(format!(
                         "a quantity in {} cannot be compared with one in {}",
@@ -236,17 +249,28 @@ impl Predicate {
             }
         };
         Ok(match (self, actual) {
-            (Self::Integer(order, expected), PropertyValue::Integer(value)) => {
+            (Self::Integer(order, expected), PropertyValue::Integer(value))
+                if tolerance.is_exact() =>
+            {
                 order.holds(value.cmp(expected))
             }
-            (Self::Integer(order, expected), PropertyValue::Decimal(value)) => {
-                exact_f64(*expected).is_some_and(|expected| compare(*order, *value, expected))
+            (Self::Integer(order, expected), PropertyValue::Integer(value)) => {
+                match (exact_f64(*value), exact_f64(*expected)) {
+                    (Some(value), Some(expected)) => compare(*order, value, expected, tolerance),
+                    _ => {
+                        return Err(
+                            "an integer beyond 2^53 cannot be compared under a tolerance".into(),
+                        );
+                    }
+                }
             }
+            (Self::Integer(order, expected), PropertyValue::Decimal(value)) => exact_f64(*expected)
+                .is_some_and(|expected| compare(*order, *value, expected, tolerance)),
             (Self::Number(order, expected), PropertyValue::Decimal(value)) => {
-                compare(*order, *value, *expected)
+                compare(*order, *value, *expected, tolerance)
             }
             (Self::Number(order, expected), PropertyValue::Integer(value)) => {
-                exact_f64(*value).is_some_and(|value| compare(*order, value, *expected))
+                exact_f64(*value).is_some_and(|value| compare(*order, value, *expected, tolerance))
             }
             (
                 Self::Text {
@@ -276,9 +300,13 @@ impl Predicate {
     }
 }
 
-fn compare(order: Order, left: f64, right: f64) -> bool {
-    left.partial_cmp(&right)
-        .is_some_and(|ordering| order.holds(ordering))
+fn compare(order: Order, left: f64, right: f64, tolerance: &Tolerance) -> bool {
+    let ordering = if tolerance.is_exact() {
+        left.partial_cmp(&right)
+    } else {
+        tolerance.order(left, right)
+    };
+    ordering.is_some_and(|ordering| order.holds(ordering))
 }
 
 fn exact_f64(value: i64) -> Option<f64> {
@@ -324,6 +352,9 @@ impl RuleCapability for PropertyPredicate {
             ParameterDescriptor::optional("boolean", ParameterType::Boolean),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::tolerance_parameters())
+        .collect()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -333,9 +364,14 @@ impl RuleCapability for PropertyPredicate {
                 set: Some(parameters.required_string("property_set")?),
                 name: parameters.required_string("property")?,
             };
-            Ok::<_, Unavailable>((property, Predicate::parse(&parameters)?))
+            let predicate = Predicate::parse(&parameters)?;
+            let tolerance = parameters.tolerance()?;
+            if !tolerance.is_exact() && !predicate.numeric() {
+                return Err(invalid("a tolerance applies to a numeric target only"));
+            }
+            Ok::<_, Unavailable>((property, predicate, tolerance))
         })();
-        let (property, predicate) = match parsed {
+        let (property, predicate, tolerance) = match parsed {
             Ok(parsed) => parsed,
             Err((reason, message)) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -345,7 +381,7 @@ impl RuleCapability for PropertyPredicate {
             }
         };
         let operator = parameters.required_string("operator").unwrap_or("invalid");
-        let target = target(&parameters);
+        let target = format!("{}{}", target(&parameters), tolerance.suffix());
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         for object in selected {
             let resolved = match resolve(context, object, property) {
@@ -355,7 +391,7 @@ impl RuleCapability for PropertyPredicate {
                     continue;
                 }
             };
-            match predicate.holds(resolved.value()) {
+            match predicate.holds(resolved.value(), &tolerance) {
                 Ok(true) => {}
                 Ok(false) => evaluation.push_finding(finding(
                     rule,

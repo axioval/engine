@@ -487,3 +487,223 @@ impl Parameters<'_> {
         }
     }
 }
+
+/// A declared numeric tolerance: absolute and relative, or rounding to decimals.
+///
+/// With `tolerance` and/or `relative_tolerance`, two numbers are equal when
+/// `|a - b| <= tolerance + relative_tolerance * max(|a|, |b|)`, the boundary
+/// included. The bound is symmetric but not transitive. Values are decimals
+/// as a reviewer reads them, so the comparison allows a few units in the last
+/// place for binary rounding: `1.1` and `1.0` are within `0.1`.
+///
+/// With `decimals`, both numbers are first rounded half away from zero to
+/// that many decimal places of their shortest decimal form (`2.345` rounds
+/// to `2.35`, as displayed) and then compared exactly. Rounding is
+/// transitive; it cannot be combined with a tolerance.
+///
+/// Quantities are compared in canonical SI units, so a tolerance or rounding
+/// on a length is in metres.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct Tolerance {
+    absolute: f64,
+    relative: f64,
+    decimals: Option<u32>,
+}
+
+/// The largest number of decimals a rule may round to.
+const MAX_DECIMALS: i64 = 15;
+
+impl Tolerance {
+    /// Whether this is exact comparison: no tolerance and no rounding.
+    pub(crate) fn is_exact(&self) -> bool {
+        self.decimals.is_none() && self.absolute == 0.0 && self.relative == 0.0
+    }
+
+    /// Whether this rounds to decimals rather than allowing a distance.
+    pub(crate) fn rounds(&self) -> bool {
+        self.decimals.is_some()
+    }
+
+    /// `value` rounded as declared; unchanged without `decimals`.
+    pub(crate) fn round(&self, value: f64) -> f64 {
+        match self.decimals {
+            Some(decimals) => round_decimal(value, decimals),
+            None => value,
+        }
+    }
+
+    /// Whether two finite numbers are equal under this tolerance.
+    pub(crate) fn equal(&self, left: f64, right: f64) -> bool {
+        if self.decimals.is_some() {
+            return self.round(left).total_cmp(&self.round(right)).is_eq();
+        }
+        let magnitude = left.abs().max(right.abs());
+        let bound = self.absolute + self.relative * magnitude;
+        // Binary rounding of decimal inputs and of the bound itself; an
+        // exact comparison takes none.
+        let slack = if bound > 0.0 {
+            4.0 * f64::EPSILON * magnitude.max(bound)
+        } else {
+            0.0
+        };
+        (left - right).abs() <= bound + slack
+    }
+
+    /// The order of two finite numbers, `Equal` when they are equal under
+    /// this tolerance; `None` when either is not finite.
+    pub(crate) fn order(&self, left: f64, right: f64) -> Option<std::cmp::Ordering> {
+        if !left.is_finite() || !right.is_finite() {
+            return None;
+        }
+        if self.equal(left, right) {
+            Some(std::cmp::Ordering::Equal)
+        } else {
+            self.round(left).partial_cmp(&self.round(right))
+        }
+    }
+
+    /// How findings state the tolerance, such as `within tolerance 0.01`.
+    pub(crate) fn describe(&self) -> String {
+        match self.decimals {
+            Some(decimals) => format!("rounded to {decimals} decimal(s)"),
+            None if self.relative == 0.0 => format!("within tolerance {}", self.absolute),
+            None if self.absolute == 0.0 => {
+                format!("within relative tolerance {}", self.relative)
+            }
+            None => format!(
+                "within tolerance {} plus relative tolerance {}",
+                self.absolute, self.relative
+            ),
+        }
+    }
+
+    /// ` (<description>)` for a finding message, or nothing when exact.
+    pub(crate) fn suffix(&self) -> String {
+        if self.is_exact() {
+            String::new()
+        } else {
+            format!(" ({})", self.describe())
+        }
+    }
+}
+
+/// Rounds `value` half away from zero to `decimals` places of its shortest
+/// decimal form.
+fn round_decimal(value: f64, decimals: u32) -> f64 {
+    if !value.is_finite() {
+        return value;
+    }
+    // `{:e}` prints the shortest digits that read back as `value`.
+    let text = format!("{:e}", value.abs());
+    let Some((mantissa, exponent)) = text.split_once('e') else {
+        return value;
+    };
+    let Ok(exponent) = exponent.parse::<i64>() else {
+        return value;
+    };
+    let digits: Vec<u8> = mantissa.bytes().filter(u8::is_ascii_digit).collect();
+    // Digits kept: those before the point plus `decimals` after it.
+    let Ok(keep) = usize::try_from(exponent + 1 + i64::from(decimals)) else {
+        // Every digit lies below half a unit of the last kept place.
+        return 0.0;
+    };
+    if keep >= digits.len() {
+        return value;
+    }
+    let kept = digits[..keep]
+        .iter()
+        .fold(0_u64, |total, digit| total * 10 + u64::from(digit - b'0'));
+    let units = kept + u64::from(digits[keep] >= b'5');
+    let rounded: f64 = format!("{units}e-{decimals}")
+        .parse()
+        .expect("a decimal literal parses");
+    // `+ 0.0` turns a negative zero into zero, so it keys like zero.
+    value.signum() * rounded + 0.0
+}
+
+/// Descriptors of the tolerance parameters numeric comparisons take.
+pub(crate) fn tolerance_parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::optional("tolerance", ParameterType::Number),
+        ParameterDescriptor::optional("relative_tolerance", ParameterType::Number),
+        ParameterDescriptor::optional("decimals", ParameterType::Integer),
+    ]
+}
+
+impl Parameters<'_> {
+    /// The tolerance declared by `tolerance`, `relative_tolerance` and
+    /// `decimals`; exact when none is given.
+    pub(crate) fn tolerance(&self) -> Result<Tolerance, Unavailable> {
+        let absolute = self.number("tolerance")?;
+        let relative = self.number("relative_tolerance")?;
+        let decimals = match self.integer("decimals")? {
+            None => None,
+            Some(value) if (0..=MAX_DECIMALS).contains(&value) => {
+                Some(u32::try_from(value).expect("bounded above"))
+            }
+            Some(_) => {
+                return Err(invalid(format!(
+                    "`decimals` must be between 0 and {MAX_DECIMALS}"
+                )));
+            }
+        };
+        if absolute.is_some_and(|value| value < 0.0) {
+            return Err(invalid("`tolerance` is negative"));
+        }
+        if relative.is_some_and(|value| !(0.0..1.0).contains(&value)) {
+            return Err(invalid(
+                "`relative_tolerance` must be at least 0 and below 1",
+            ));
+        }
+        if decimals.is_some() && (absolute.is_some() || relative.is_some()) {
+            return Err(invalid(
+                "declare either `decimals` or a tolerance, not both",
+            ));
+        }
+        Ok(Tolerance {
+            absolute: absolute.unwrap_or(0.0),
+            relative: relative.unwrap_or(0.0),
+            decimals,
+        })
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::float_cmp)]
+mod tests {
+    use super::{Tolerance, round_decimal};
+
+    #[test]
+    fn rounding_reads_the_shortest_decimal_form_half_away_from_zero() {
+        assert_eq!(round_decimal(2.345, 2), 2.35);
+        assert_eq!(round_decimal(1.005, 2), 1.01);
+        assert_eq!(round_decimal(2.344_999, 2), 2.34);
+        assert_eq!(round_decimal(-2.345, 2), -2.35);
+        assert_eq!(round_decimal(0.6, 0), 1.0);
+        assert_eq!(round_decimal(0.4, 0), 0.0);
+        assert_eq!(round_decimal(0.000_4, 2), 0.0);
+        assert_eq!(round_decimal(9.999, 2), 10.0);
+        assert_eq!(round_decimal(123.0, 2), 123.0);
+        assert_eq!(round_decimal(1e300, 2), 1e300);
+        assert!(round_decimal(-0.001, 2).is_sign_positive());
+    }
+
+    #[test]
+    fn a_tolerance_includes_its_boundary_as_written_in_decimal() {
+        let absolute = Tolerance {
+            absolute: 0.1,
+            ..Tolerance::default()
+        };
+        assert!(absolute.equal(1.0, 1.1));
+        assert!(absolute.equal(1.1, 1.0));
+        assert!(!absolute.equal(1.0, 1.100_001));
+        let relative = Tolerance {
+            relative: 0.25,
+            ..Tolerance::default()
+        };
+        assert!(relative.equal(3.0, 4.0));
+        assert!(!relative.equal(2.9, 4.0));
+        assert!(Tolerance::default().is_exact());
+        assert!(!Tolerance::default().equal(1.0, 1.0 + f64::EPSILON * 8.0));
+    }
+}

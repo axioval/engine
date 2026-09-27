@@ -28,6 +28,36 @@ All notable changes are documented here. This project follows Semantic Versionin
   `passage_width_property`, and the new `widths` column `passage_width`.
   (#79)
 
+- **Stair and ramp widths, landings and headroom below.** (Refs #85) A
+  `Tread` and a `SlopedRun` may carry the positions of their sides across
+  the walking direction (`with_sides`, along `across`), stated only where
+  the surface fills that rectangle; `TreadFlight::width` is the narrowest
+  tread's. `WalkingSurfaceService::measure_landing` answers a
+  `LandingRequest` (subject, `WalkingEnd`, the candidates a rule selects)
+  with `LandingEvidence`: the direction leaving the end, its arrival line
+  (the first riser, the last riser, a run's end) and the `Landing` a
+  candidate's level surface carries there, with its far side and sides
+  when it is a rectangle, so depth and width are derived as sure intervals.
+  `measure_clearance_below` answers a `ClearanceBelowRequest` with the
+  least height of the subject's underside above the floors of the spaces a
+  rule selects, leaving out where it rests on them. Both default to a
+  refusal. `AxiolidWalkingSurfaceService` proves rectangles from the
+  boundary edges of the faces and their area, finds one landing surface
+  per end within `LANDING_REACH` (several are refused, never merged; a
+  ramp may carry its own landings, a flight's top tread is no landing) and
+  measures the clearance below with a numerical margin, never exactly.
+  `stair-geometry` and `ramp-geometry` take `width_minimum` and
+  `width_maximum` (the flight's or each run's width), `landing_objects`
+  with `landing_depth_minimum`, `landing_width_minimum` and
+  `landing_at_least_walking_width` (the landing at least as deep and wide
+  as the flight or run), and `minimum_headroom_below` with
+  `headroom_below_spaces`; `stair-geometry` also takes `landings_required`
+  (a selected slab or landing meets both ends). A landing that fills no
+  rectangle, or an end the selection leaves undecided, is not evaluated.
+  **Breaking:** definitions bound to `stair-geometry` must declare the nine
+  new optional parameters, those bound to `ramp-geometry` the eight.
+  Handrails, doors on ramp landings, free space at a ramp's ends, a stair
+  near a ramp, winders and open risers remain open.
 - **Surface transparency.** `axioval:presentation.Transparency`
   (`axioval_ir::PRESENTATION_TRANSPARENCY`) lists every distinct
   transparency of an object's styled body surfaces, ascending, from `0.0`

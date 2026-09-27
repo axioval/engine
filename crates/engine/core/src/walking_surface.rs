@@ -14,10 +14,19 @@
 //! report a riser that disagrees with its treads. A position is an interval;
 //! the evidence is exact exactly when every position is a point.
 //!
+//! Widths come the same way: a tread or a run may report the positions of
+//! its two sides across the walking direction ([`across`]), stated only
+//! where it fills the rectangle between its ends and those sides. A landing
+//! ([`LandingEvidence`]) is the level surface a request's candidate carries
+//! at one end of a flight or run, reported as the positions of its far side
+//! and its sides along the direction leaving that end; its depth is taken
+//! from the end's arrival line. The clearance below a subject
+//! ([`ClearanceBelow`]) is its height above the floors of the spaces a
+//! request names.
+//!
 //! What the seam does not measure yet (Refs #85): winders and turning
-//! flights, open risers, landing sizes, clear width, handrails and the slab
-//! connection. A service refuses a shape it cannot decide rather than
-//! approximate it.
+//! flights, open risers, handrails and doors on landings. A service refuses
+//! a shape it cannot decide rather than approximate it.
 
 use std::sync::Arc;
 
@@ -152,6 +161,40 @@ pub struct Tread {
     elevation: ElevationInterval,
     front: ElevationInterval,
     back: ElevationInterval,
+    sides: Option<Sides>,
+}
+
+/// The positions of a surface's two sides across a walking direction, along
+/// [`across`] it: `left` the lower, `right` the higher.
+type Sides = (ElevationInterval, ElevationInterval);
+
+/// The horizontal direction a quarter turn anticlockwise from `direction` in
+/// plan: the axis widths and sides are measured along.
+#[must_use]
+pub fn across(direction: MetricDirection) -> MetricDirection {
+    let [x, y, _] = direction.components();
+    // A quarter turn swaps and negates the components: still a unit vector,
+    // so the normalization leaves it as it is.
+    MetricDirection::try_new([-y, x, 0.0]).unwrap_or(direction)
+}
+
+fn sides(left: ElevationInterval, right: ElevationInterval) -> Result<Sides, WalkingSurfaceError> {
+    if left.lower_metres() > right.lower_metres() || left.upper_metres() > right.upper_metres() {
+        return Err(WalkingSurfaceError::InvalidMeasurement);
+    }
+    Ok((left, right))
+}
+
+fn sides_exact(sides: Option<Sides>) -> bool {
+    sides.is_none_or(|(left, right)| left.is_exact() && right.is_exact())
+}
+
+/// The least of some widths: an interval sure to hold the narrowest.
+fn least(widths: impl Iterator<Item = MeasuredInterval>) -> Option<MeasuredInterval> {
+    widths.reduce(|least, width| MeasuredInterval {
+        lower: least.lower.min(width.lower),
+        upper: least.upper.min(width.upper),
+    })
 }
 
 impl Tread {
@@ -170,7 +213,35 @@ impl Tread {
             elevation,
             front,
             back,
+            sides: None,
         })
+    }
+
+    /// The tread with the positions of its sides along [`across`] the
+    /// walking direction. A service states them only where the tread fills
+    /// the rectangle between its front, back and sides, so the width holds
+    /// all along its depth.
+    pub fn with_sides(
+        mut self,
+        left: ElevationInterval,
+        right: ElevationInterval,
+    ) -> Result<Self, WalkingSurfaceError> {
+        self.sides = Some(sides(left, right)?);
+        Ok(self)
+    }
+
+    /// The positions of the tread's sides across the walking direction, when
+    /// measured.
+    #[must_use]
+    pub fn sides(&self) -> Option<(ElevationInterval, ElevationInterval)> {
+        self.sides
+    }
+
+    /// The tread's width across the walking direction, when its sides were
+    /// measured.
+    #[must_use]
+    pub fn width(&self) -> Option<MeasuredInterval> {
+        self.sides.map(|(left, right)| between(right, left))
     }
 
     /// Elevation of the tread's surface.
@@ -197,8 +268,13 @@ impl Tread {
         between(self.back, self.front)
     }
 
-    fn is_exact(&self) -> bool {
-        self.elevation.is_exact() && self.front.is_exact() && self.back.is_exact()
+    /// Whether every position of the tread is known exactly.
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
+        self.elevation.is_exact()
+            && self.front.is_exact()
+            && self.back.is_exact()
+            && sides_exact(self.sides)
     }
 }
 
@@ -367,6 +443,14 @@ impl TreadFlight {
         between(summit, self.base)
     }
 
+    /// The flight's width: its narrowest tread's, when every tread's sides
+    /// were measured.
+    #[must_use]
+    pub fn width(&self) -> Option<MeasuredInterval> {
+        let widths: Option<Vec<MeasuredInterval>> = self.treads.iter().map(Tread::width).collect();
+        least(widths?.into_iter())
+    }
+
     /// Whether every position is known exactly.
     #[must_use]
     pub fn is_exact(&self) -> bool {
@@ -392,6 +476,7 @@ pub struct SlopedRun {
     top: ElevationInterval,
     start: ElevationInterval,
     end: ElevationInterval,
+    sides: Option<Sides>,
 }
 
 impl SlopedRun {
@@ -418,7 +503,32 @@ impl SlopedRun {
             top,
             start,
             end,
+            sides: None,
         })
+    }
+
+    /// The run with the positions of its sides along [`across`] its
+    /// direction, stated only where its plan fills the rectangle between its
+    /// ends and those sides.
+    pub fn with_sides(
+        mut self,
+        left: ElevationInterval,
+        right: ElevationInterval,
+    ) -> Result<Self, WalkingSurfaceError> {
+        self.sides = Some(sides(left, right)?);
+        Ok(self)
+    }
+
+    /// The positions of the run's sides across its direction, when measured.
+    #[must_use]
+    pub fn sides(&self) -> Option<(ElevationInterval, ElevationInterval)> {
+        self.sides
+    }
+
+    /// The run's width across its direction, when its sides were measured.
+    #[must_use]
+    pub fn width(&self) -> Option<MeasuredInterval> {
+        self.sides.map(|(left, right)| between(right, left))
     }
 
     /// The run's horizontal direction of steepest ascent.
@@ -477,11 +587,14 @@ impl SlopedRun {
         }
     }
 
-    fn is_exact(&self) -> bool {
+    /// Whether every position of the run is known exactly.
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
         self.bottom.is_exact()
             && self.top.is_exact()
             && self.start.is_exact()
             && self.end.is_exact()
+            && sides_exact(self.sides)
     }
 }
 
@@ -599,25 +712,10 @@ impl Headroom {
     pub fn try_new(
         request: HeadroomRequest,
         clearance: Option<MeasuredInterval>,
-        mut governing: Vec<ObjectId>,
+        governing: Vec<ObjectId>,
         evidence: Evidence,
     ) -> Result<Self, WalkingSurfaceError> {
-        governing.sort();
-        governing.dedup();
-        let named = governing
-            .iter()
-            .all(|obstacle| request.obstacles.binary_search(obstacle).is_ok());
-        if !named || clearance.is_some() == governing.is_empty() {
-            return Err(WalkingSurfaceError::InvalidMeasurement);
-        }
-        if clearance.is_some_and(|clearance| clearance.lower < 0.0) {
-            return Err(WalkingSurfaceError::InvalidMeasurement);
-        }
-        if evidence.locator.trim().is_empty()
-            || (evidence.exact && clearance.is_some_and(|clearance| !clearance.is_point()))
-        {
-            return Err(WalkingSurfaceError::InexactEvidence);
-        }
+        let governing = governed(&request.obstacles, clearance, governing, &evidence)?;
         Ok(Self {
             request,
             clearance,
@@ -651,6 +749,376 @@ impl Headroom {
     }
 }
 
+/// One end of a stair flight or of a ramp's run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum WalkingEnd {
+    /// Where a straight flight starts, in front of its first riser.
+    FlightBottom,
+    /// Where a straight flight arrives, beyond its last riser.
+    FlightTop,
+    /// The lower end of a ramp's run, by its index in
+    /// [`SlopedSurface::runs`].
+    RunBottom(usize),
+    /// The upper end of a ramp's run, by its index.
+    RunTop(usize),
+}
+
+/// A request for the landing at one end of a flight or run.
+///
+/// The candidates are the objects that may carry it, the rule's selection
+/// (slabs, landings, floors): sorted, deduplicated and without the subject.
+/// A service may also take a ramp's own level faces as its landing, never a
+/// flight's own treads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LandingRequest {
+    subject: ObjectId,
+    end: WalkingEnd,
+    candidates: Vec<ObjectId>,
+}
+
+impl LandingRequest {
+    /// The landing at `end` of `subject` among `candidates`.
+    #[must_use]
+    pub fn new(
+        subject: ObjectId,
+        end: WalkingEnd,
+        candidates: impl IntoIterator<Item = ObjectId>,
+    ) -> Self {
+        let mut candidates: Vec<ObjectId> = candidates
+            .into_iter()
+            .filter(|candidate| *candidate != subject)
+            .collect();
+        candidates.sort();
+        candidates.dedup();
+        Self {
+            subject,
+            end,
+            candidates,
+        }
+    }
+
+    /// The flight or ramp whose end is measured.
+    #[must_use]
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+
+    /// Which end.
+    #[must_use]
+    pub fn end(&self) -> WalkingEnd {
+        self.end
+    }
+
+    /// The objects that may carry the landing.
+    #[must_use]
+    pub fn candidates(&self) -> &[ObjectId] {
+        &self.candidates
+    }
+}
+
+/// The rectangle of a landing along the direction leaving the flight or
+/// run: the position of its far side and of its two sides along [`across`]
+/// that direction. A service states it only where the landing's level
+/// surface fills that rectangle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LandingExtent {
+    far: ElevationInterval,
+    left: ElevationInterval,
+    right: ElevationInterval,
+}
+
+impl LandingExtent {
+    /// A landing reaching `far` along the leaving direction, between the
+    /// sides `left` and `right` across it.
+    pub fn try_new(
+        far: ElevationInterval,
+        left: ElevationInterval,
+        right: ElevationInterval,
+    ) -> Result<Self, WalkingSurfaceError> {
+        let (left, right) = sides(left, right)?;
+        Ok(Self { far, left, right })
+    }
+
+    /// Position of the landing's far side along the leaving direction.
+    #[must_use]
+    pub fn far(&self) -> ElevationInterval {
+        self.far
+    }
+
+    /// Positions of the landing's sides across the leaving direction.
+    #[must_use]
+    pub fn sides(&self) -> (ElevationInterval, ElevationInterval) {
+        (self.left, self.right)
+    }
+
+    fn is_exact(&self) -> bool {
+        self.far.is_exact() && sides_exact(Some((self.left, self.right)))
+    }
+}
+
+/// The object carrying a landing and, when it is a rectangle along the
+/// leaving direction, its extent.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Landing {
+    carrier: ObjectId,
+    extent: Option<LandingExtent>,
+}
+
+impl Landing {
+    /// A landing on `carrier`, measured when `extent` is given.
+    #[must_use]
+    pub fn new(carrier: ObjectId, extent: Option<LandingExtent>) -> Self {
+        Self { carrier, extent }
+    }
+
+    /// The object whose level surface meets the end: a requested candidate,
+    /// or the subject itself for a ramp's own landing.
+    #[must_use]
+    pub fn carrier(&self) -> &ObjectId {
+        &self.carrier
+    }
+
+    /// The landing's rectangle, `None` when its surface is no rectangle
+    /// along the leaving direction and so was not measured.
+    #[must_use]
+    pub fn extent(&self) -> Option<LandingExtent> {
+        self.extent
+    }
+}
+
+/// The landing at one end of a flight or run.
+///
+/// `direction` is the horizontal direction leaving the subject at that end
+/// (back down the flight's direction at its bottom, on at its top); `edge`
+/// the position along it of the end's arrival line: the first riser at a
+/// flight's bottom, the last riser at its top, a run's end. A landing's
+/// positions are along the same direction, so its depth is its far side
+/// less the edge. `landing` is `None` when no candidate's level surface at
+/// the end's elevation meets the end: nothing selected carries it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LandingEvidence {
+    request: LandingRequest,
+    direction: MetricDirection,
+    edge: ElevationInterval,
+    landing: Option<Landing>,
+    evidence: Evidence,
+}
+
+impl LandingEvidence {
+    /// The landing answering `request`. The carrier must be the subject or a
+    /// requested candidate, and a measured landing's far side must lie
+    /// decidably beyond the edge; the evidence is exact exactly when every
+    /// position is a point.
+    pub fn try_new(
+        request: LandingRequest,
+        direction: MetricDirection,
+        edge: ElevationInterval,
+        landing: Option<Landing>,
+        evidence: Evidence,
+    ) -> Result<Self, WalkingSurfaceError> {
+        #[allow(clippy::float_cmp)]
+        if direction.components()[2] != 0.0 {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        if let Some(landing) = &landing {
+            let named = landing.carrier == request.subject
+                || request.candidates.binary_search(&landing.carrier).is_ok();
+            let beyond = landing
+                .extent
+                .is_none_or(|extent| extent.far.lower_metres() > edge.upper_metres());
+            if !named || !beyond {
+                return Err(WalkingSurfaceError::InvalidMeasurement);
+            }
+        }
+        let exact = edge.is_exact()
+            && landing
+                .as_ref()
+                .and_then(|landing| landing.extent)
+                .is_none_or(|extent| extent.is_exact());
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(WalkingSurfaceError::InexactEvidence);
+        }
+        Ok(Self {
+            request,
+            direction,
+            edge,
+            landing,
+            evidence,
+        })
+    }
+
+    /// The request this answers.
+    #[must_use]
+    pub fn request(&self) -> &LandingRequest {
+        &self.request
+    }
+
+    /// The horizontal direction leaving the subject at the end.
+    #[must_use]
+    pub fn direction(&self) -> MetricDirection {
+        self.direction
+    }
+
+    /// Position of the end's arrival line along the leaving direction.
+    #[must_use]
+    pub fn edge(&self) -> ElevationInterval {
+        self.edge
+    }
+
+    /// The landing, or `None` when nothing requested carries one.
+    #[must_use]
+    pub fn landing(&self) -> Option<&Landing> {
+        self.landing.as_ref()
+    }
+
+    /// The landing's depth along the leaving direction, from the arrival
+    /// line to its far side, when its extent was measured.
+    #[must_use]
+    pub fn depth(&self) -> Option<MeasuredInterval> {
+        let extent = self.landing.as_ref()?.extent?;
+        Some(between(extent.far, self.edge))
+    }
+
+    /// The landing's width across the leaving direction, when its extent was
+    /// measured.
+    #[must_use]
+    pub fn width(&self) -> Option<MeasuredInterval> {
+        let extent = self.landing.as_ref()?.extent?;
+        Some(between(extent.right, extent.left))
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// A request for the clearance below a flight or ramp: its height above the
+/// floors of the spaces people walk in beneath it.
+///
+/// The spaces are the rule's selection, sorted, deduplicated and without the
+/// subject.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClearanceBelowRequest {
+    subject: ObjectId,
+    spaces: Vec<ObjectId>,
+}
+
+impl ClearanceBelowRequest {
+    /// The clearance below `subject` over the floors of `spaces`.
+    #[must_use]
+    pub fn new(subject: ObjectId, spaces: impl IntoIterator<Item = ObjectId>) -> Self {
+        let mut spaces: Vec<ObjectId> = spaces
+            .into_iter()
+            .filter(|space| *space != subject)
+            .collect();
+        spaces.sort();
+        spaces.dedup();
+        Self { subject, spaces }
+    }
+
+    /// The object whose underside is measured.
+    #[must_use]
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+
+    /// The spaces whose floors may lie beneath it.
+    #[must_use]
+    pub fn spaces(&self) -> &[ObjectId] {
+        &self.spaces
+    }
+}
+
+/// The clearance below a flight or ramp.
+///
+/// A space's floor is its body's downward-facing level faces. The clearance
+/// is the least vertical distance from a point of a requested space's floor
+/// up to the subject's underside directly above it, leaving out where the
+/// subject rests on that floor; `None` when the subject stands above no
+/// requested floor.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClearanceBelow {
+    request: ClearanceBelowRequest,
+    clearance: Option<MeasuredInterval>,
+    governing: Vec<ObjectId>,
+    evidence: Evidence,
+}
+
+impl ClearanceBelow {
+    /// The clearance answering `request`. `governing` names the spaces whose
+    /// floor may lie closest below: at least one when there is a clearance,
+    /// none otherwise, every one requested. A clearance interval is never
+    /// exact evidence.
+    pub fn try_new(
+        request: ClearanceBelowRequest,
+        clearance: Option<MeasuredInterval>,
+        governing: Vec<ObjectId>,
+        evidence: Evidence,
+    ) -> Result<Self, WalkingSurfaceError> {
+        let governing = governed(&request.spaces, clearance, governing, &evidence)?;
+        Ok(Self {
+            request,
+            clearance,
+            governing,
+            evidence,
+        })
+    }
+
+    /// The request this answers.
+    #[must_use]
+    pub fn request(&self) -> &ClearanceBelowRequest {
+        &self.request
+    }
+
+    /// The least vertical clearance, or `None` when no requested floor lies
+    /// beneath.
+    #[must_use]
+    pub fn clearance(&self) -> Option<MeasuredInterval> {
+        self.clearance
+    }
+
+    /// The spaces whose floor may lie closest below.
+    #[must_use]
+    pub fn governing(&self) -> &[ObjectId] {
+        &self.governing
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// `governing` sorted and checked against the requested `named` objects, a
+/// clearance and its evidence, as [`Headroom`] and [`ClearanceBelow`] share.
+fn governed(
+    named: &[ObjectId],
+    clearance: Option<MeasuredInterval>,
+    mut governing: Vec<ObjectId>,
+    evidence: &Evidence,
+) -> Result<Vec<ObjectId>, WalkingSurfaceError> {
+    governing.sort();
+    governing.dedup();
+    let requested = governing
+        .iter()
+        .all(|object| named.binary_search(object).is_ok());
+    if !requested || clearance.is_some() == governing.is_empty() {
+        return Err(WalkingSurfaceError::InvalidMeasurement);
+    }
+    if clearance.is_some_and(|clearance| clearance.lower < 0.0) {
+        return Err(WalkingSurfaceError::InvalidMeasurement);
+    }
+    if evidence.locator.trim().is_empty()
+        || (evidence.exact && clearance.is_some_and(|clearance| !clearance.is_point()))
+    {
+        return Err(WalkingSurfaceError::InexactEvidence);
+    }
+    Ok(governing)
+}
+
 /// Measures stair flights, ramps and the headroom above them.
 pub trait WalkingSurfaceService: Send + Sync + 'static {
     /// The treads, base and top of `object` as a straight stair flight.
@@ -661,6 +1129,31 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
 
     /// The headroom above the request subject's walking surface.
     fn measure_headroom(&self, request: &HeadroomRequest) -> Result<Headroom, WalkingSurfaceError>;
+
+    /// The landing at the requested end of a flight or run. The default
+    /// refuses: a service that does not look for landings never answers
+    /// that there is none.
+    fn measure_landing(
+        &self,
+        request: &LandingRequest,
+    ) -> Result<LandingEvidence, WalkingSurfaceError> {
+        Err(WalkingSurfaceError::Unsupported(format!(
+            "landings of {} are not measured by this service",
+            request.subject()
+        )))
+    }
+
+    /// The clearance below the request subject over the requested spaces'
+    /// floors. The default refuses.
+    fn measure_clearance_below(
+        &self,
+        request: &ClearanceBelowRequest,
+    ) -> Result<ClearanceBelow, WalkingSurfaceError> {
+        Err(WalkingSurfaceError::Unsupported(format!(
+            "the clearance below {} is not measured by this service",
+            request.subject()
+        )))
+    }
 }
 
 /// Registry handle for a [`WalkingSurfaceService`].
@@ -709,6 +1202,32 @@ impl WalkingSurfaceServiceHandle {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
         Ok(headroom)
+    }
+
+    /// The landing answering `request`; an answer to another request is
+    /// refused.
+    pub fn measure_landing(
+        &self,
+        request: &LandingRequest,
+    ) -> Result<LandingEvidence, WalkingSurfaceError> {
+        let landing = self.0.measure_landing(request)?;
+        if landing.request() != request {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(landing)
+    }
+
+    /// The clearance below answering `request`; an answer to another request
+    /// is refused.
+    pub fn measure_clearance_below(
+        &self,
+        request: &ClearanceBelowRequest,
+    ) -> Result<ClearanceBelow, WalkingSurfaceError> {
+        let below = self.0.measure_clearance_below(request)?;
+        if below.request() != request {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(below)
     }
 }
 
@@ -956,5 +1475,139 @@ mod tests {
             Err(WalkingSurfaceError::InvalidMeasurement)
         );
         assert!(handle.measure_tread_flight(&id("b")).is_ok());
+        // Landings and the clearance below are refused by default, never
+        // answered empty.
+        assert!(matches!(
+            handle.measure_landing(&LandingRequest::new(id("b"), WalkingEnd::FlightTop, [])),
+            Err(WalkingSurfaceError::Unsupported(_))
+        ));
+        assert!(matches!(
+            handle.measure_clearance_below(&ClearanceBelowRequest::new(id("b"), [])),
+            Err(WalkingSurfaceError::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn widths_come_from_the_sides_and_the_narrowest_tread_governs() {
+        let sided = |z: f64, front: f64, right: f64| {
+            tread(z, front, front + 0.3)
+                .with_sides(point(0.0), point(right))
+                .unwrap()
+        };
+        let treads = vec![sided(0.2, 0.0, 1.2), sided(0.4, 0.3, 1.1)];
+        let flight =
+            TreadFlight::try_new(id("a"), x(), point(0.0), point(0.4), treads, evidence(true))
+                .unwrap();
+        assert!(contains(flight.width().unwrap(), 1.1));
+        // One tread without sides leaves the flight's width unknown.
+        let treads = vec![sided(0.2, 0.0, 1.2), tread(0.4, 0.3, 0.6)];
+        let flight =
+            TreadFlight::try_new(id("a"), x(), point(0.0), point(0.4), treads, evidence(true))
+                .unwrap();
+        assert_eq!(flight.width(), None);
+        // Sides out of order, and widened sides reported as exact.
+        assert_eq!(
+            tread(0.2, 0.0, 0.3).with_sides(point(1.0), point(0.0)),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        let widened = tread(0.2, 0.0, 0.3)
+            .with_sides(point(0.0), ElevationInterval::try_new(1.0, 1.1).unwrap())
+            .unwrap();
+        assert!(!widened.is_exact());
+        assert_eq!(
+            TreadFlight::try_new(
+                id("a"),
+                x(),
+                point(0.0),
+                point(0.2),
+                vec![widened],
+                evidence(true)
+            ),
+            Err(WalkingSurfaceError::InexactEvidence)
+        );
+        let run = SlopedRun::try_new(x(), point(0.0), point(0.5), point(1.0), point(7.0))
+            .unwrap()
+            .with_sides(point(-0.75), point(0.75))
+            .unwrap();
+        assert!(contains(run.width().unwrap(), 1.5) && run.is_exact());
+        let [ax, ay, _] = across(x()).components();
+        assert!(ax.abs() < f64::EPSILON && (ay - 1.0).abs() < f64::EPSILON);
+    }
+
+    fn landing_evidence(
+        request: &LandingRequest,
+        landing: Option<Landing>,
+        exact: bool,
+    ) -> Result<LandingEvidence, WalkingSurfaceError> {
+        LandingEvidence::try_new(
+            request.clone(),
+            x(),
+            point(1.0),
+            landing,
+            Evidence {
+                source: source(),
+                locator: "landing:a".into(),
+                exact,
+            },
+        )
+    }
+
+    #[test]
+    fn a_landing_is_carried_by_a_requested_object_beyond_the_edge() {
+        let request = LandingRequest::new(id("a"), WalkingEnd::FlightTop, [id("c"), id("a")]);
+        assert_eq!(request.candidates(), &[id("c")]);
+        let extent = LandingExtent::try_new(point(2.5), point(-0.1), point(1.4)).unwrap();
+        let found =
+            landing_evidence(&request, Some(Landing::new(id("c"), Some(extent))), true).unwrap();
+        assert!(contains(found.depth().unwrap(), 1.5));
+        assert!(contains(found.width().unwrap(), 1.5));
+        // The subject may carry its own landing (a ramp's).
+        assert!(
+            landing_evidence(&request, Some(Landing::new(id("a"), Some(extent))), true).is_ok()
+        );
+        // An unrequested carrier, a far side short of the edge, and
+        // exactness that does not match the positions are refused.
+        assert_eq!(
+            landing_evidence(&request, Some(Landing::new(id("d"), None)), true),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        let short = LandingExtent::try_new(point(0.5), point(0.0), point(1.0)).unwrap();
+        assert_eq!(
+            landing_evidence(&request, Some(Landing::new(id("c"), Some(short))), true),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            landing_evidence(&request, None, false),
+            Err(WalkingSurfaceError::InexactEvidence)
+        );
+        assert_eq!(
+            LandingExtent::try_new(point(2.0), point(1.0), point(0.0)),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        // Found but not a rectangle: no size.
+        let unmeasured =
+            landing_evidence(&request, Some(Landing::new(id("c"), None)), true).unwrap();
+        assert_eq!(unmeasured.depth(), None);
+        assert_eq!(unmeasured.width(), None);
+    }
+
+    #[test]
+    fn the_clearance_below_names_requested_spaces_only() {
+        let request = ClearanceBelowRequest::new(id("a"), [id("s"), id("a"), id("s")]);
+        assert_eq!(request.spaces(), &[id("s")]);
+        let clearance = MeasuredInterval::try_new(1.5, 1.5 + 1e-9).ok();
+        assert!(
+            ClearanceBelow::try_new(request.clone(), clearance, vec![id("s")], evidence(false))
+                .is_ok()
+        );
+        assert_eq!(
+            ClearanceBelow::try_new(request.clone(), clearance, vec![id("t")], evidence(false)),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            ClearanceBelow::try_new(request.clone(), clearance, vec![id("s")], evidence(true)),
+            Err(WalkingSurfaceError::InexactEvidence)
+        );
+        assert!(ClearanceBelow::try_new(request, None, vec![], evidence(false)).is_ok());
     }
 }

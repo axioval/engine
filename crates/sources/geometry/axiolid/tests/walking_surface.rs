@@ -4,7 +4,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::{TriMesh, compose};
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkingSurfaceService};
 use axioval_engine::{
-    HeadroomRequest, MeasuredInterval, MetricDirection, WalkingSurfaceError, WalkingSurfaceService,
+    ClearanceBelowRequest, HeadroomRequest, LandingEvidence, LandingRequest, MeasuredInterval,
+    MetricDirection, WalkingEnd, WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -505,4 +506,335 @@ fn evidence_cites_each_measured_objects_own_source() {
         .unwrap();
     assert_eq!(headroom.evidence().source, other);
     assert_eq!(headroom.governing(), &[id("slab")]);
+}
+
+#[test]
+fn a_rectangular_flight_and_run_measure_their_width() {
+    let straight = flight(&[0.17; 4], 0.0)
+        .measure_tread_flight(&id("flight"))
+        .unwrap();
+    assert!(straight.is_exact());
+    let width = straight.width().unwrap();
+    assert!(width.is_point() && holds(width, 1.2), "{width:?}");
+    assert!(
+        straight
+            .treads()
+            .iter()
+            .all(|tread| tread.sides().is_some())
+    );
+
+    let turned = flight(&[0.18; 5], 0.5)
+        .measure_tread_flight(&id("flight"))
+        .unwrap();
+    let width = turned.width().unwrap();
+    assert!(holds(width, 1.2) && !width.is_point(), "{width:?}");
+    assert!(width.upper() - width.lower() < 1e-12);
+
+    let ramp = service(AxiolidGeometry::new().with_mesh(
+        id("ramp"),
+        prism(&ramp_profile(0.5, 6.0), 1.5, 0.0, [0.0; 3]),
+    ))
+    .measure_sloped_runs(&id("ramp"))
+    .unwrap();
+    assert!(ramp.is_exact());
+    assert!(holds(ramp.runs()[0].width().unwrap(), 1.5));
+}
+
+#[test]
+fn a_tread_filling_no_rectangle_has_no_width() {
+    // Pull one back corner of the top tread in: a trapezoid in plan.
+    let mut mesh = prism(&flight_profile(&[0.18; 3], 0.28), 1.2, 0.0, [0.0; 3]);
+    #[allow(clippy::float_cmp)]
+    for point in &mut mesh.positions {
+        if point.y == 1.2 && (point.x - 0.84).abs() < 1e-9 {
+            point.y = 1.0;
+        }
+    }
+    let measured = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh))
+        .measure_tread_flight(&id("flight"))
+        .unwrap();
+    assert!(measured.treads()[0].width().is_some());
+    assert!(measured.treads()[2].width().is_none());
+    assert_eq!(measured.width(), None);
+}
+
+/// A flight on the floor rising 0.72 m from x = 0 to 1.12, y 0 .. 1.2, its
+/// last tread its top (x 0.84 .. 1.12), with `objects` beside it.
+fn flight_with(objects: Vec<(&str, TriMesh)>) -> AxiolidWalkingSurfaceService {
+    let mut geometry = AxiolidGeometry::new().with_mesh(
+        id("flight"),
+        prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]),
+    );
+    for (local, mesh) in objects {
+        geometry = geometry.with_mesh(id(local), mesh);
+    }
+    service(geometry)
+}
+
+fn landing(
+    stairs: &AxiolidWalkingSurfaceService,
+    end: WalkingEnd,
+    candidates: &[&str],
+) -> Result<LandingEvidence, WalkingSurfaceError> {
+    stairs.measure_landing(&LandingRequest::new(
+        id("flight"),
+        end,
+        candidates.iter().map(|local| id(local)),
+    ))
+}
+
+#[test]
+fn a_flight_measures_the_landings_at_its_ends() {
+    let stairs = flight_with(vec![
+        ("landing", cuboid([1.12, -0.1, 0.52], [2.12, 1.4, 0.72])),
+        ("floor", cuboid([-2.0, -1.0, -0.2], [3.0, 3.0, 0.0])),
+        ("beam", cuboid([0.0, 0.0, 2.5], [3.0, 1.0, 2.8])),
+    ]);
+    let candidates = ["landing", "floor", "beam"];
+    // The last tread is the flight's top: the landing counts from its nosing.
+    let top = landing(&stairs, WalkingEnd::FlightTop, &candidates).unwrap();
+    assert!(top.evidence().exact, "{top:?}");
+    assert_eq!(top.landing().unwrap().carrier(), &id("landing"));
+    assert!(holds(top.depth().unwrap(), 2.12 - 0.84), "{top:?}");
+    assert!(holds(top.width().unwrap(), 1.5));
+    assert!(top.direction() == MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap());
+    // The floor runs on under the flight; its landing reaches 2 m back.
+    let bottom = landing(&stairs, WalkingEnd::FlightBottom, &candidates).unwrap();
+    assert_eq!(bottom.landing().unwrap().carrier(), &id("floor"));
+    assert!(holds(bottom.depth().unwrap(), 2.0), "{bottom:?}");
+    assert!(holds(bottom.width().unwrap(), 4.0));
+    assert!(bottom.direction() == MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap());
+    // Without candidates nothing carries a landing: the flight's own top
+    // tread is no landing.
+    let none = landing(&stairs, WalkingEnd::FlightTop, &[]).unwrap();
+    assert!(none.landing().is_none());
+    assert_eq!(none.depth(), None);
+}
+
+/// A closed, outward slab `thickness` thick under the plan polygon
+/// `outline` (counter-clockwise), its top at `top`.
+fn slab(outline: &[[f64; 2]], top: f64, thickness: f64) -> TriMesh {
+    let n = outline.len();
+    let mut points: Vec<Point3> = outline
+        .iter()
+        .map(|p| Point3::new(p[0], p[1], top - thickness))
+        .collect();
+    points.extend(outline.iter().map(|p| Point3::new(p[0], p[1], top)));
+    let mut indices = Vec::new();
+    for [a, b, c] in triangulate(outline) {
+        // The bottom looks down, the top up.
+        indices.extend([a, c, b].map(|i| u32::try_from(i).unwrap()));
+        indices.extend([a + n, b + n, c + n].map(|i| u32::try_from(i).unwrap()));
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, j + n, i, j + n, i + n].map(|k| u32::try_from(k).unwrap()));
+    }
+    TriMesh::new(points, indices)
+}
+
+#[test]
+fn a_landing_off_level_apart_or_shaped_otherwise_is_told_apart() {
+    // Standing 5 cm off the flight, or 2 cm lower, it meets nothing.
+    let apart = flight_with(vec![
+        ("gap", cuboid([1.17, 0.0, 0.52], [2.17, 1.2, 0.72])),
+        ("low", cuboid([1.12, 0.0, 0.5], [2.12, 1.2, 0.7])),
+    ]);
+    let top = landing(&apart, WalkingEnd::FlightTop, &["gap", "low"]).unwrap();
+    assert!(top.landing().is_none(), "{top:?}");
+    // An L-shaped landing is found but not measured.
+    let shaped = slab(
+        &[
+            [1.12, 0.0],
+            [2.12, 0.0],
+            [2.12, 0.2],
+            [1.62, 0.2],
+            [1.62, 1.2],
+            [1.12, 1.2],
+        ],
+        0.72,
+        0.2,
+    );
+    let stairs = flight_with(vec![("shaped", shaped)]);
+    let top = landing(&stairs, WalkingEnd::FlightTop, &["shaped"]).unwrap();
+    assert_eq!(top.landing().unwrap().carrier(), &id("shaped"));
+    assert!(top.landing().unwrap().extent().is_none(), "{top:?}");
+    assert_eq!(top.depth(), None);
+    // Two surfaces meeting one end are refused, never merged.
+    let two = flight_with(vec![
+        ("a", cuboid([1.12, 0.0, 0.52], [2.12, 0.6, 0.72])),
+        ("b", cuboid([1.12, 0.6, 0.52], [2.12, 1.2, 0.72])),
+    ]);
+    assert!(matches!(
+        landing(&two, WalkingEnd::FlightTop, &["a", "b"]),
+        Err(WalkingSurfaceError::Unsupported(m)) if m.contains("several")
+    ));
+}
+
+#[test]
+fn unmeasurable_landing_candidates_are_refused() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(
+            id("flight"),
+            prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]),
+        )
+        .with_tessellated_mesh(
+            id("curved"),
+            cuboid([1.12, 0.0, 0.52], [2.12, 1.2, 0.72]),
+            0.001,
+        )
+        .with_unmeasured(id("broken"), "no representation")
+        .with_no_body(id("zone"));
+    let stairs = service(geometry);
+    assert!(matches!(
+        landing(&stairs, WalkingEnd::FlightTop, &["curved"]),
+        Err(WalkingSurfaceError::InexactGeometry(_))
+    ));
+    assert!(matches!(
+        landing(&stairs, WalkingEnd::FlightTop, &["broken"]),
+        Err(WalkingSurfaceError::Unavailable(_))
+    ));
+    assert!(
+        landing(&stairs, WalkingEnd::FlightTop, &["zone"])
+            .unwrap()
+            .landing()
+            .is_none()
+    );
+    // A flight has no ramp runs.
+    assert!(matches!(
+        landing(&stairs, WalkingEnd::RunTop(0), &[]),
+        Err(WalkingSurfaceError::Unsupported(_))
+    ));
+}
+
+#[test]
+fn a_flight_ending_in_a_riser_counts_its_landing_from_that_riser() {
+    let profile = vec![
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [0.84, 0.72],
+        [0.84, 0.54],
+        [0.56, 0.54],
+        [0.56, 0.36],
+        [0.28, 0.36],
+        [0.28, 0.18],
+        [0.0, 0.18],
+    ];
+    let stairs = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("flight"), prism(&profile, 1.0, 0.0, [0.0; 3]))
+            .with_mesh(id("upper"), cuboid([0.84, -1.0, 0.52], [3.0, 2.0, 0.72])),
+    );
+    let top = landing(&stairs, WalkingEnd::FlightTop, &["upper"]).unwrap();
+    assert!(holds(top.depth().unwrap(), 3.0 - 0.84), "{top:?}");
+    assert!(holds(top.width().unwrap(), 3.0));
+}
+
+#[test]
+fn a_ramp_carries_its_own_landings() {
+    let two = vec![
+        [0.0, 0.0],
+        [9.0, 0.0],
+        [9.0, 0.6],
+        [8.0, 0.6],
+        [6.0, 0.4],
+        [4.0, 0.4],
+        [1.0, 0.1],
+        [0.0, 0.1],
+    ];
+    let ramps =
+        service(AxiolidGeometry::new().with_mesh(id("ramp"), prism(&two, 1.5, 0.0, [0.0; 3])));
+    for (end, depth) in [
+        (WalkingEnd::RunBottom(0), 1.0),
+        (WalkingEnd::RunTop(0), 2.0),
+        (WalkingEnd::RunBottom(1), 2.0),
+        (WalkingEnd::RunTop(1), 1.0),
+    ] {
+        let measured = ramps
+            .measure_landing(&LandingRequest::new(id("ramp"), end, []))
+            .unwrap();
+        assert_eq!(measured.landing().unwrap().carrier(), &id("ramp"));
+        assert!(
+            holds(measured.depth().unwrap(), depth),
+            "{end:?} {measured:?}"
+        );
+        assert!(holds(measured.width().unwrap(), 1.5));
+        assert!(measured.evidence().exact);
+    }
+}
+
+/// A flight whose underside slopes from its foot at x = 0 to 0.4 m under
+/// its back at x = 1.12, 1.2 m wide, with its foot at `z`.
+fn soffit_flight(z: f64) -> TriMesh {
+    prism(
+        &[
+            [0.0, 0.0],
+            [1.12, 0.4],
+            [1.12, 0.72],
+            [0.84, 0.72],
+            [0.84, 0.54],
+            [0.56, 0.54],
+            [0.56, 0.36],
+            [0.28, 0.36],
+            [0.28, 0.18],
+            [0.0, 0.18],
+        ],
+        1.2,
+        0.0,
+        [0.0, 0.0, z],
+    )
+}
+
+#[test]
+fn the_clearance_below_a_flight_is_measured_over_space_floors() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("raised"), soffit_flight(1.5))
+        .with_mesh(id("grounded"), soffit_flight(0.0))
+        .with_mesh(id("crossing"), soffit_flight(-0.1))
+        .with_mesh(
+            id("block"),
+            prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]),
+        )
+        .with_mesh(id("hall"), cuboid([-1.0, -1.0, 0.0], [3.0, 3.0, 2.5]))
+        .with_mesh(id("elsewhere"), cuboid([5.0, 5.0, 0.0], [6.0, 6.0, 2.5]))
+        .with_tessellated_mesh(
+            id("round"),
+            cuboid([-1.0, -1.0, 0.0], [3.0, 3.0, 2.5]),
+            0.01,
+        )
+        .with_unmeasured(id("broken"), "no representation")
+        .with_no_body(id("zone"));
+    let stairs = service(geometry);
+    let below = |subject: &str, spaces: &[&str]| {
+        stairs.measure_clearance_below(&ClearanceBelowRequest::new(
+            id(subject),
+            spaces.iter().map(|local| id(local)),
+        ))
+    };
+    let raised = below("raised", &["hall", "elsewhere", "zone"]).unwrap();
+    assert!(holds(raised.clearance().unwrap(), 1.5), "{raised:?}");
+    assert_eq!(raised.governing(), &[id("hall")]);
+    assert!(!raised.evidence().exact);
+    // Its underside meets the floor at its foot: nothing is higher than zero.
+    let grounded = below("grounded", &["hall"]).unwrap();
+    assert!(holds(grounded.clearance().unwrap(), 0.0), "{grounded:?}");
+    // A solid flight rests on the floor all along: nobody stands under it.
+    let block = below("block", &["hall"]).unwrap();
+    assert_eq!(block.clearance(), None, "{block:?}");
+    assert!(matches!(
+        below("crossing", &["hall"]),
+        Err(WalkingSurfaceError::Unsupported(m)) if m.contains("crosses")
+    ));
+    assert!(matches!(
+        below("raised", &["round"]),
+        Err(WalkingSurfaceError::InexactGeometry(_))
+    ));
+    assert!(matches!(
+        below("raised", &["broken"]),
+        Err(WalkingSurfaceError::Unavailable(_))
+    ));
+    assert_eq!(
+        below("raised", &["missing"]),
+        Err(WalkingSurfaceError::UnknownObject(id("missing")))
+    );
 }

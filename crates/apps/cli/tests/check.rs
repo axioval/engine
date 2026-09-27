@@ -3590,6 +3590,116 @@ fn with_geometry_a_ramp_too_steep_for_its_run_is_found() {
     );
 }
 
+/// Stair flight #108 (four 0.17 m risers, x 0 to 1.12, y -1.2 to 0) with
+/// landing slab #209 beyond its top tread (x 1.12 to 1.92, top at 0.68 m)
+/// and floor slab #309 under its foot (x -2 to 2, top at 0); flight #408,
+/// its underside sloping up from its foot 1 m above the floor of space #509
+/// (x 4.06 to 7.06, from 0 m).
+fn landings_and_soffits() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let soffit = [
+        [0.0, 0.0],
+        [1.12, 0.4],
+        [1.12, 0.68],
+        [0.84, 0.68],
+        [0.84, 0.51],
+        [0.56, 0.51],
+        [0.56, 0.34],
+        [0.28, 0.34],
+        [0.28, 0.17],
+        [0.0, 0.17],
+    ];
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        placed_box(
+            200,
+            [1.52, -0.6, 0.48],
+            [0.8, 1.2, 0.2],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.LANDING.)"
+        ),
+        placed_box(
+            300,
+            [0.0, -0.6, -0.2],
+            [4.0, 3.0, 0.2],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.FLOOR.)"
+        ),
+        profiled(400, [5.0, 0.0, 1.0], &soffit, flight),
+        placed_box(
+            500,
+            [5.56, -0.6, 0.0],
+            [3.0, 3.0, 3.0],
+            "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_a_shallow_landing_and_a_low_soffit_are_found() {
+    let case = Case::new("geometry-stair-landings");
+    let (output, result) = case.geometry_rule(
+        &landings_and_soffits(),
+        &[
+            ("flight", "IfcStairFlight"),
+            ("slab", "IfcSlab"),
+            ("space", "IfcSpace"),
+        ],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "width_minimum": {"type": "quantity", "value": 1.2, "unit": "m"},
+            "landing_objects": {"type": "selector", "value": entity("slab")},
+            "landing_depth_minimum": {"type": "quantity", "value": 1.2, "unit": "m"},
+            "landing_at_least_walking_width": {"type": "boolean", "value": true},
+            "minimum_headroom_below": {"type": "quantity", "value": 2, "unit": "m"},
+            "headroom_below_spaces": {"type": "selector", "value": entity("space")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #108 is 1.2 m wide and so is its landing, but the landing reaches only
+    // 1.08 m past the last riser; the floor gives it 2 m at its foot. #408
+    // stands on nothing selected, 1 m above the space's floor.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(
+        findings[0],
+        (
+            "#108".to_owned(),
+            "the landing at the top of the flight is 1.08 m deep; at least 1.2 m and the \
+             flight's width (1.2 m) required"
+                .to_owned()
+        ),
+        "{result:#}"
+    );
+    assert_eq!(findings[1].0, "#408", "{result:#}");
+    assert!(
+        findings[1]
+            .1
+            .starts_with("headroom below the flight is 1 m over the floor of ")
+            && findings[1].1.ends_with("#509; at least 2 m required"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Lobby #19 (x 0..4) and rooms #29 (x 4.2..8), #39 (x -4..-0.2) and #49
 /// (above the lobby, floor at 3.3 m), all 4 m deep in y. Door #59, 0.9 m
 /// wide, joins the lobby to #29 and states a clear width of 0.85 m; door

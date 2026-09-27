@@ -1,5 +1,6 @@
-//! `stair-geometry` and `ramp-geometry`: step dimensions, ramp slopes and
-//! headroom measured from each flight's or ramp's body.
+//! `stair-geometry` and `ramp-geometry`: step dimensions, ramp slopes,
+//! widths, landings and headroom above and below, measured from each
+//! flight's or ramp's body.
 //!
 //! Both judge the positions a [`WalkingSurfaceServiceHandle`] measured. Every
 //! length and slope is an interval: a verdict needs the whole interval on
@@ -12,9 +13,10 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, HeadroomRequest, MeasuredInterval,
+    CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, ElevationInterval,
+    HeadroomRequest, Landing, LandingEvidence, LandingRequest, MeasuredInterval,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext, SlopedRun,
-    TableColumn, TreadFlight, WalkingSurfaceError, WalkingSurfaceServiceHandle,
+    TableColumn, TreadFlight, WalkingEnd, WalkingSurfaceError, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
@@ -44,7 +46,15 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// - `riser_tolerance`/`going_tolerance` bound the difference between the
 ///   largest and smallest riser or going of the flight;
 /// - `minimum_headroom` bounds the vertical clearance above the treads to
-///   the `headroom_obstacles` the rule selects.
+///   the `headroom_obstacles` the rule selects;
+/// - `width_minimum`/`width_maximum` bound the flight's width, its
+///   narrowest tread's across the direction it climbs;
+/// - `landing_depth_minimum`, `landing_width_minimum` and
+///   `landing_at_least_walking_width` bound the landing at each end, the
+///   level surface of a `landing_objects` object meeting it, and
+///   `landings_required` requires one at both ends;
+/// - `minimum_headroom_below` bounds the clearance under the flight over
+///   the floors of the `headroom_below_spaces` the rule selects.
 pub struct StairGeometryCheck;
 
 /// Requires each selected ramp's sloped runs, measured from its body, to fit
@@ -56,7 +66,9 @@ pub struct StairGeometryCheck;
 /// admits; a run conforms when some row holds. A slope that depends on the
 /// run's length or rise is one row per step. `slope_tolerance` bounds the
 /// difference between the steepest and shallowest run, and
-/// `minimum_headroom` the clearance to the `headroom_obstacles`.
+/// `minimum_headroom` the clearance to the `headroom_obstacles`. Widths,
+/// landings at each run's ends and the clearance below are declared as for
+/// stairs, per run.
 pub struct RampGeometryCheck;
 
 const SLOPE_LIMITS: &[TableColumn] = &[
@@ -129,6 +141,138 @@ fn headroom_descriptors() -> [ParameterDescriptor; 2] {
         ParameterDescriptor::optional("minimum_headroom", ParameterType::Quantity),
         ParameterDescriptor::optional("headroom_obstacles", ParameterType::Selector),
     ]
+}
+
+/// The clearance-below check both capabilities share.
+struct BelowCheck<'a> {
+    minimum: f64,
+    spaces: &'a Selector,
+}
+
+fn below_check<'a>(parameters: &Parameters<'a>) -> Result<Option<BelowCheck<'a>>, Unavailable> {
+    let minimum = length(parameters, "minimum_headroom_below")?;
+    let spaces = parameters.selector("headroom_below_spaces")?;
+    match (minimum, spaces) {
+        (Some(minimum), Some(spaces)) => Ok(Some(BelowCheck { minimum, spaces })),
+        (None, None) => Ok(None),
+        _ => Err(invalid(
+            "`minimum_headroom_below` and `headroom_below_spaces` are declared together",
+        )),
+    }
+}
+
+/// The landing checks both capabilities share; `required` is the stair's.
+struct LandingCheck<'a> {
+    objects: &'a Selector,
+    depth: Option<f64>,
+    width: Option<f64>,
+    at_least_walking_width: bool,
+    required: bool,
+}
+
+impl LandingCheck<'_> {
+    fn sizes(&self) -> bool {
+        self.depth.is_some() || self.width.is_some() || self.at_least_walking_width
+    }
+}
+
+fn landing_check<'a>(
+    parameters: &Parameters<'a>,
+    stairs: bool,
+) -> Result<Option<LandingCheck<'a>>, Unavailable> {
+    let objects = parameters.selector("landing_objects")?;
+    let depth = length(parameters, "landing_depth_minimum")?;
+    let width = length(parameters, "landing_width_minimum")?;
+    let at_least_walking_width = parameters
+        .boolean("landing_at_least_walking_width")?
+        .unwrap_or(false);
+    let required = stairs && parameters.boolean("landings_required")?.unwrap_or(false);
+    let declared = depth.is_some() || width.is_some() || at_least_walking_width || required;
+    match (objects, declared) {
+        (Some(objects), true) => Ok(Some(LandingCheck {
+            objects,
+            depth,
+            width,
+            at_least_walking_width,
+            required,
+        })),
+        (None, false) => Ok(None),
+        (None, true) => Err(invalid("a landing check needs `landing_objects`")),
+        (Some(_), false) => Err(invalid(
+            "`landing_objects` is declared without a landing check",
+        )),
+    }
+}
+
+fn walking_descriptors(stairs: bool) -> Vec<ParameterDescriptor> {
+    let mut parameters = range_descriptors("width").to_vec();
+    parameters.extend([
+        ParameterDescriptor::optional("landing_objects", ParameterType::Selector),
+        ParameterDescriptor::optional("landing_depth_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("landing_width_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("landing_at_least_walking_width", ParameterType::Boolean),
+    ]);
+    if stairs {
+        parameters.push(ParameterDescriptor::optional(
+            "landings_required",
+            ParameterType::Boolean,
+        ));
+    }
+    parameters.extend([
+        ParameterDescriptor::optional("minimum_headroom_below", ParameterType::Quantity),
+        ParameterDescriptor::optional("headroom_below_spaces", ParameterType::Selector),
+    ]);
+    parameters
+}
+
+/// The width, landing and clearance-below checks both capabilities share.
+struct WalkingConfig<'a> {
+    width: Range,
+    landing: Option<LandingCheck<'a>>,
+    below: Option<BelowCheck<'a>>,
+}
+
+impl<'a> WalkingConfig<'a> {
+    fn parse(parameters: &Parameters<'a>, stairs: bool) -> Result<Self, Unavailable> {
+        Ok(Self {
+            width: range(parameters, "width")?,
+            landing: landing_check(parameters, stairs)?,
+            below: below_check(parameters)?,
+        })
+    }
+
+    fn declared(&self) -> bool {
+        self.width != (None, None) || self.landing.is_some() || self.below.is_some()
+    }
+}
+
+/// The selections the checks of one rule send with their requests: decided
+/// objects and whether the selector left any undecided.
+struct Selections {
+    headroom: Option<Result<(Vec<ObjectId>, bool), Unavailable>>,
+    landings: Option<Result<(Vec<ObjectId>, bool), Unavailable>>,
+    below: Option<Result<(Vec<ObjectId>, bool), Unavailable>>,
+}
+
+impl Selections {
+    fn select(
+        context: &RuleContext<'_>,
+        headroom: Option<&HeadroomCheck<'_>>,
+        walking: &WalkingConfig<'_>,
+    ) -> Self {
+        Self {
+            headroom: headroom
+                .map(|check| selected(context, check.obstacles, "headroom obstacle selection")),
+            landings: walking
+                .landing
+                .as_ref()
+                .map(|check| selected(context, check.objects, "landing selection")),
+            below: walking
+                .below
+                .as_ref()
+                .map(|check| selected(context, check.spaces, "space selection")),
+        }
+    }
 }
 
 /// A few units in the last place of the largest magnitude involved: decimal
@@ -298,10 +442,11 @@ fn report(
     }
 }
 
-/// The decided obstacles and whether the selector left any undecided.
-fn obstacles(
+/// The decided objects and whether the selector left any undecided.
+fn selected(
     context: &RuleContext<'_>,
     selector: &Selector,
+    what: &str,
 ) -> Result<(Vec<ObjectId>, bool), Unavailable> {
     let (objects, outcomes) = select_objects(context, selector);
     let mut undecided = BTreeSet::new();
@@ -313,10 +458,7 @@ fn obstacles(
             None => {
                 return Err((
                     outcome.reason().clone(),
-                    format!(
-                        "headroom obstacle selection is undecided: {}",
-                        outcome.message()
-                    ),
+                    format!("{what} is undecided: {}", outcome.message()),
                 ));
             }
         }
@@ -327,10 +469,66 @@ fn obstacles(
     ))
 }
 
-/// The headroom above `object` against the rule's minimum.
+/// A least clearance against a minimum: `what` names it (`headroom above
+/// the walking surface`), `relation` how it stands to the governing objects
+/// (`under`, `over`) and `nothing` what an absent clearance means.
 ///
-/// An obstacle the selector could not decide can only lower the headroom:
-/// too little headroom stands, enough is not evaluated.
+/// An object the selector could not decide (`undecided`, named `noun`) can
+/// only lower the clearance: too little stands, enough is not evaluated.
+struct Clearance<'a> {
+    what: &'a str,
+    relation: &'a str,
+    nothing: &'a str,
+    noun: &'a str,
+}
+
+impl Clearance<'_> {
+    fn judge(
+        &self,
+        minimum: f64,
+        clearance: Option<MeasuredInterval>,
+        governing: &[ObjectId],
+        undecided: bool,
+    ) -> Check {
+        let required = format!("at least {} required", metres(minimum));
+        let pending = if undecided {
+            format!(
+                "; {} the selection could not decide may lower it",
+                self.noun
+            )
+        } else {
+            String::new()
+        };
+        let Some(clearance) = clearance else {
+            return if undecided {
+                Check::Undecided(format!("{}{pending}", self.nothing))
+            } else {
+                Check::Pass
+            };
+        };
+        let named = governing
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let measured = format!(
+            "{} is {} {} {named}",
+            self.what,
+            shown(clearance.lower(), clearance.upper()),
+            self.relation,
+        );
+        match judge(clearance.lower(), clearance.upper(), Some(minimum), None) {
+            Verdict::Fail(_) => Check::Fail(format!("{measured}; {required}")),
+            Verdict::Pass if !undecided => Check::Pass,
+            Verdict::Pass => Check::Undecided(format!("{measured}{pending}")),
+            Verdict::Undecided(_) => {
+                Check::Undecided(format!("{measured}, which straddles {required}"))
+            }
+        }
+    }
+}
+
+/// The headroom above `object` against the rule's minimum.
 fn headroom(
     stairs: &WalkingSurfaceServiceHandle,
     check: &HeadroomCheck<'_>,
@@ -352,47 +550,262 @@ fn headroom(
             );
         }
     };
-    let evidence = vec![measured.evidence().clone()];
+    let clearance = Clearance {
+        what: "headroom above the walking surface",
+        relation: "under",
+        nothing: "nothing selected stands above the walking surface",
+        noun: "an obstacle",
+    };
     let governing = measured.governing().to_vec();
-    let required = format!("at least {} required", metres(check.minimum));
+    let check = clearance.judge(check.minimum, measured.clearance(), &governing, *undecided);
+    (check, vec![measured.evidence().clone()], governing)
+}
+
+/// The clearance below `object` over the selected spaces' floors against
+/// the rule's minimum; `noun` names the object (`flight`, `ramp`).
+fn below(
+    stairs: &WalkingSurfaceServiceHandle,
+    check: &BelowCheck<'_>,
+    spaces: &Result<(Vec<ObjectId>, bool), Unavailable>,
+    object: &ObjectId,
+    noun: &str,
+) -> (Check, Vec<Evidence>, Vec<ObjectId>) {
+    let (candidates, undecided) = match spaces {
+        Ok(spaces) => spaces,
+        Err((_, message)) => return (Check::Undecided(message.clone()), vec![], vec![]),
+    };
+    let request = ClearanceBelowRequest::new(object.clone(), candidates.iter().cloned());
+    let measured = match stairs.measure_clearance_below(&request) {
+        Ok(measured) => measured,
+        Err(error) => {
+            return (
+                Check::Undecided(format!("headroom below: {}", service_error(&error).1)),
+                vec![],
+                vec![],
+            );
+        }
+    };
+    let what = format!("headroom below the {noun}");
+    let nothing = format!("the {noun} stands above no selected space's floor");
+    let clearance = Clearance {
+        what: &what,
+        relation: "over the floor of",
+        nothing: &nothing,
+        noun: "a space",
+    };
+    let governing = measured.governing().to_vec();
+    let check = clearance.judge(check.minimum, measured.clearance(), &governing, *undecided);
+    (check, vec![measured.evidence().clone()], governing)
+}
+
+/// The flight's width against the rule's range.
+fn flight_width(width: MeasuredInterval, (minimum, maximum): Range, slack: f64) -> Check {
+    let measured = format!("the flight is {} wide", shown(width.lower(), width.upper()));
+    let bound = bound_words(minimum, maximum, metres);
+    match judge(
+        width.lower(),
+        width.upper(),
+        minimum.map(|m| m - slack),
+        maximum.map(|m| m + slack),
+    ) {
+        Verdict::Pass => Check::Pass,
+        Verdict::Fail(_) => Check::Fail(format!("{measured}; {bound} required")),
+        Verdict::Undecided(_) => Check::Undecided(format!("{measured}, which straddles {bound}")),
+    }
+}
+
+/// One end of a flight or run whose landing is checked.
+struct End<'a> {
+    object: &'a ObjectId,
+    which: WalkingEnd,
+    /// The end in a message: `the top of the flight`.
+    label: &'a str,
+    /// The width of the flight or run, when measured.
+    width: Option<MeasuredInterval>,
+    /// `flight` or `run`.
+    noun: &'a str,
+}
+
+/// A landing dimension against the declared minimum and, when the rule asks
+/// for it, the width of the flight or run: the requirement is the larger,
+/// an interval when that width is one.
+fn landing_dimension(
+    value: MeasuredInterval,
+    stated: Option<f64>,
+    walking: Option<MeasuredInterval>,
+    slack: f64,
+) -> Verdict {
+    let stated = stated.unwrap_or(0.0);
+    let (low, high) = walking.map_or((stated, stated), |walking| {
+        (stated.max(walking.lower()), stated.max(walking.upper()))
+    });
+    match judge(value.lower(), value.upper(), Some(low - slack), None) {
+        Verdict::Fail(message) => Verdict::Fail(message),
+        _ => match judge(value.lower(), value.upper(), Some(high - slack), None) {
+            Verdict::Pass => Verdict::Pass,
+            _ => Verdict::Undecided(String::new()),
+        },
+    }
+}
+
+/// The landing at one end against the rule's landing checks.
+fn landing(
+    stairs: &WalkingSurfaceServiceHandle,
+    check: &LandingCheck<'_>,
+    candidates: &Result<(Vec<ObjectId>, bool), Unavailable>,
+    at: &End<'_>,
+) -> Vec<(Check, Vec<Evidence>, Vec<ObjectId>)> {
+    let (candidates, undecided) = match candidates {
+        Ok(candidates) => candidates,
+        Err((_, message)) => return vec![(Check::Undecided(message.clone()), vec![], vec![])],
+    };
+    let request = LandingRequest::new(at.object.clone(), at.which, candidates.iter().cloned());
+    let measured = match stairs.measure_landing(&request) {
+        Ok(measured) => measured,
+        Err(error) => {
+            return vec![(
+                Check::Undecided(format!(
+                    "landing at {}: {}",
+                    at.label,
+                    service_error(&error).1
+                )),
+                vec![],
+                vec![],
+            )];
+        }
+    };
+    let evidence = vec![measured.evidence().clone()];
     let pending = if *undecided {
-        "; an obstacle the selection could not decide may lower it"
+        "; an object the selection could not decide may carry it"
     } else {
         ""
     };
-    let Some(clearance) = measured.clearance() else {
-        let check = if *undecided {
-            Check::Undecided(format!(
-                "nothing selected stands above the walking surface{pending}"
-            ))
-        } else {
-            Check::Pass
-        };
-        return (check, evidence, governing);
-    };
-    let under = governing
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(", ");
-    let measured = format!(
-        "headroom above the walking surface is {} under {under}",
-        shown(clearance.lower(), clearance.upper())
-    );
-    let check = match judge(
-        clearance.lower(),
-        clearance.upper(),
-        Some(check.minimum),
-        None,
-    ) {
-        Verdict::Fail(_) => Check::Fail(format!("{measured}; {required}")),
-        Verdict::Pass if !*undecided => Check::Pass,
-        Verdict::Pass => Check::Undecided(format!("{measured}{pending}")),
-        Verdict::Undecided(_) => {
-            Check::Undecided(format!("{measured}, which straddles {required}"))
+    let Some(landing) = measured.landing() else {
+        if !check.required {
+            return vec![];
         }
+        let message = format!("no selected slab or landing meets {}", at.label);
+        let check = if *undecided {
+            Check::Undecided(format!("{message}{pending}"))
+        } else {
+            Check::Fail(message)
+        };
+        return vec![(check, evidence, vec![])];
     };
-    (check, evidence, governing)
+    if !check.sizes() {
+        return vec![];
+    }
+    let carrier = landing.carrier();
+    let related = if carrier == at.object {
+        vec![]
+    } else {
+        vec![carrier.clone()]
+    };
+    let (Some(depth), Some(width)) = (measured.depth(), measured.width()) else {
+        return vec![(
+            Check::Undecided(format!(
+                "the landing {carrier} at {} fills no rectangle along the walking direction, so \
+                 its size is not measured",
+                at.label
+            )),
+            evidence,
+            related,
+        )];
+    };
+    let walking = if check.at_least_walking_width {
+        match at.width {
+            Some(width) => Some(width),
+            None => {
+                return vec![(
+                    Check::Undecided(format!(
+                        "the {}'s width is not measured, so the landing at {} is not compared \
+                         with it",
+                        at.noun, at.label
+                    )),
+                    evidence,
+                    related,
+                )];
+            }
+        }
+    } else {
+        None
+    };
+    let slack = 2.0 * slack(landing_scale(&measured));
+    let mut checks = Vec::new();
+    for (value, stated, words) in [(depth, check.depth, "deep"), (width, check.width, "wide")] {
+        if stated.is_none() && walking.is_none() {
+            continue;
+        }
+        let dimension = Dimension {
+            value,
+            stated,
+            walking,
+            words,
+        };
+        let check = dimension.judge(at, slack, (*undecided).then_some(pending));
+        checks.push((check, evidence.clone(), related.clone()));
+    }
+    checks
+}
+
+/// The largest magnitude among a landing's positions.
+fn landing_scale(measured: &LandingEvidence) -> f64 {
+    let edge = measured.edge();
+    let mut positions = vec![edge];
+    if let Some(extent) = measured.landing().and_then(Landing::extent) {
+        let (left, right) = extent.sides();
+        positions.extend([extent.far(), left, right]);
+    }
+    positions.iter().fold(0.0_f64, |scale, position| {
+        scale
+            .max(position.lower_metres().abs())
+            .max(position.upper_metres().abs())
+    })
+}
+
+/// One dimension of a landing and what it must reach.
+struct Dimension<'a> {
+    value: MeasuredInterval,
+    stated: Option<f64>,
+    walking: Option<MeasuredInterval>,
+    /// `deep` or `wide`.
+    words: &'a str,
+}
+
+impl Dimension<'_> {
+    /// The dimension against its requirement; with `pending`, an object the
+    /// selection could not decide might carry a larger landing, so a
+    /// shortfall is not evaluated.
+    fn judge(&self, at: &End<'_>, slack: f64, pending: Option<&str>) -> Check {
+        let mut required = Vec::new();
+        if let Some(stated) = self.stated {
+            required.push(metres(stated));
+        }
+        if let Some(walking) = self.walking {
+            required.push(format!(
+                "the {}'s width ({})",
+                at.noun,
+                shown(walking.lower(), walking.upper())
+            ));
+        }
+        let required = format!("at least {} required", required.join(" and "));
+        let measured = format!(
+            "the landing at {} is {} {}",
+            at.label,
+            shown(self.value.lower(), self.value.upper()),
+            self.words
+        );
+        match landing_dimension(self.value, self.stated, self.walking, slack) {
+            Verdict::Pass => Check::Pass,
+            Verdict::Fail(_) => match pending {
+                Some(pending) => Check::Undecided(format!("{measured}; {required}{pending}")),
+                None => Check::Fail(format!("{measured}; {required}")),
+            },
+            Verdict::Undecided(_) => {
+                Check::Undecided(format!("{measured}, which straddles {required}"))
+            }
+        }
+    }
 }
 
 struct StairConfig<'a> {
@@ -405,6 +818,7 @@ struct StairConfig<'a> {
     riser_tolerance: Option<f64>,
     going_tolerance: Option<f64>,
     headroom: Option<HeadroomCheck<'a>>,
+    walking: WalkingConfig<'a>,
 }
 
 impl<'a> StairConfig<'a> {
@@ -423,6 +837,7 @@ impl<'a> StairConfig<'a> {
             riser_tolerance: length(&parameters, "riser_tolerance")?,
             going_tolerance: length(&parameters, "going_tolerance")?,
             headroom: headroom_check(&parameters)?,
+            walking: WalkingConfig::parse(&parameters, true)?,
         };
         if let (Some(minimum), Some(maximum)) = config.risers
             && minimum > maximum
@@ -439,6 +854,7 @@ impl<'a> StairConfig<'a> {
             && config.riser_tolerance.is_none()
             && config.going_tolerance.is_none()
             && config.headroom.is_none()
+            && !config.walking.declared()
         {
             return Err(invalid("declare at least one stair check"));
         }
@@ -464,6 +880,7 @@ impl RuleCapability for StairGeometryCheck {
             ParameterDescriptor::optional("going_tolerance", ParameterType::Quantity),
         ]);
         parameters.extend(headroom_descriptors());
+        parameters.extend(walking_descriptors(true));
         parameters
     }
 
@@ -484,10 +901,7 @@ impl RuleCapability for StairGeometryCheck {
             );
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let obstacles = config
-            .headroom
-            .as_ref()
-            .map(|check| obstacles(context, check.obstacles));
+        let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         for object in selected {
             let flight = match stairs.measure_tread_flight(&object.id) {
                 Ok(flight) => flight,
@@ -498,8 +912,49 @@ impl RuleCapability for StairGeometryCheck {
                 }
             };
             let mut checks = stair_checks(&config, &flight);
-            if let (Some(check), Some(obstacles)) = (&config.headroom, &obstacles) {
+            if let (Some(check), Some(obstacles)) = (&config.headroom, &selections.headroom) {
                 checks.push(headroom(stairs, check, obstacles, &object.id));
+            }
+            let width = flight.width();
+            if config.walking.width != (None, None) {
+                checks.push(match width {
+                    Some(width) => {
+                        let slack = slack(flight_scale(&flight));
+                        (
+                            flight_width(width, config.walking.width, slack),
+                            vec![],
+                            vec![],
+                        )
+                    }
+                    None => (
+                        Check::Undecided(
+                            "the flight's width is not measured: a tread fills no rectangle \
+                             along the direction it climbs"
+                                .into(),
+                        ),
+                        vec![],
+                        vec![],
+                    ),
+                });
+            }
+            if let (Some(check), Some(candidates)) = (&config.walking.landing, &selections.landings)
+            {
+                for (end, label) in [
+                    (WalkingEnd::FlightBottom, "the bottom of the flight"),
+                    (WalkingEnd::FlightTop, "the top of the flight"),
+                ] {
+                    let at = End {
+                        object: &object.id,
+                        which: end,
+                        label,
+                        width,
+                        noun: "flight",
+                    };
+                    checks.extend(landing(stairs, check, candidates, &at));
+                }
+            }
+            if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
+                checks.push(below(stairs, check, spaces, &object.id, "flight"));
             }
             let checks = checks
                 .into_iter()
@@ -525,9 +980,17 @@ fn flight_scale(flight: &TreadFlight) -> f64 {
         scale = scale
             .max(tread.front().lower_metres().abs())
             .max(tread.back().upper_metres().abs())
-            .max(tread.elevation().upper_metres().abs());
+            .max(tread.elevation().upper_metres().abs())
+            .max(sides_scale(tread.sides()));
     }
     scale
+}
+
+/// The largest magnitude among the positions of a surface's sides.
+fn sides_scale(sides: Option<(ElevationInterval, ElevationInterval)>) -> f64 {
+    sides.map_or(0.0, |(left, right)| {
+        left.lower_metres().abs().max(right.upper_metres().abs())
+    })
 }
 
 fn stair_checks(
@@ -656,6 +1119,7 @@ struct RampConfig<'a> {
     limits: Vec<SlopeLimit>,
     slope_tolerance: Option<f64>,
     headroom: Option<HeadroomCheck<'a>>,
+    walking: WalkingConfig<'a>,
 }
 
 impl<'a> RampConfig<'a> {
@@ -672,15 +1136,19 @@ impl<'a> RampConfig<'a> {
             return Err(invalid("`slope_tolerance` is negative"));
         }
         let headroom = headroom_check(&parameters)?;
-        if limits.is_empty() && slope_tolerance.is_none() && headroom.is_none() {
-            return Err(invalid(
-                "declare `slope_limits`, `slope_tolerance` or `minimum_headroom`",
-            ));
+        let walking = WalkingConfig::parse(&parameters, false)?;
+        if limits.is_empty()
+            && slope_tolerance.is_none()
+            && headroom.is_none()
+            && !walking.declared()
+        {
+            return Err(invalid("declare at least one ramp check"));
         }
         Ok(Self {
             limits,
             slope_tolerance,
             headroom,
+            walking,
         })
     }
 }
@@ -696,6 +1164,7 @@ impl RuleCapability for RampGeometryCheck {
             ParameterDescriptor::optional("slope_tolerance", ParameterType::Number),
         ];
         parameters.extend(headroom_descriptors());
+        parameters.extend(walking_descriptors(false));
         parameters
     }
 
@@ -716,12 +1185,9 @@ impl RuleCapability for RampGeometryCheck {
             );
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let obstacles = config
-            .headroom
-            .as_ref()
-            .map(|check| obstacles(context, check.obstacles));
+        let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         for object in selected {
-            let checks = ramp(stairs, &config, obstacles.as_ref(), object);
+            let checks = ramp(stairs, &config, &selections, object);
             match checks {
                 Ok(checks) => report(&mut evaluation, rule, &object.id, checks),
                 Err((reason, message)) => {
@@ -738,7 +1204,7 @@ type Checks = Vec<(Check, Vec<Evidence>, Vec<ObjectId>)>;
 fn ramp(
     stairs: &WalkingSurfaceServiceHandle,
     config: &RampConfig<'_>,
-    obstacles: Option<&Result<(Vec<ObjectId>, bool), Unavailable>>,
+    selections: &Selections,
     object: &Object,
 ) -> Result<Checks, Unavailable> {
     let measured = stairs
@@ -762,8 +1228,48 @@ fn ramp(
             vec![],
         ));
     }
-    if let (Some(check), Some(obstacles)) = (&config.headroom, obstacles) {
+    if let (Some(check), Some(obstacles)) = (&config.headroom, &selections.headroom) {
         let (check, mut cited, related) = headroom(stairs, check, obstacles, &object.id);
+        cited.insert(0, evidence.clone());
+        checks.push((check, cited, related));
+    }
+    if config.walking.width != (None, None) {
+        let widths: Option<Vec<MeasuredInterval>> = runs.iter().map(SlopedRun::width).collect();
+        let check = match widths {
+            Some(widths) => {
+                let scale = runs.iter().map(run_scale).fold(0.0_f64, f64::max);
+                every("run width", &widths, config.walking.width, slack(scale))
+            }
+            None => Check::Undecided(
+                "a run's width is not measured: it fills no rectangle along its slope".into(),
+            ),
+        };
+        checks.push((check, vec![evidence.clone()], vec![]));
+    }
+    if let (Some(check), Some(candidates)) = (&config.walking.landing, &selections.landings) {
+        let total = runs.len();
+        for (index, run) in runs.iter().enumerate() {
+            for (end, place) in [
+                (WalkingEnd::RunBottom(index), "bottom"),
+                (WalkingEnd::RunTop(index), "top"),
+            ] {
+                let label = format!("the {place} of run {} of {total}", index + 1);
+                let at = End {
+                    object: &object.id,
+                    which: end,
+                    label: &label,
+                    width: run.width(),
+                    noun: "run",
+                };
+                for (check, mut cited, related) in landing(stairs, check, candidates, &at) {
+                    cited.insert(0, evidence.clone());
+                    checks.push((check, cited, related));
+                }
+            }
+        }
+    }
+    if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
+        let (check, mut cited, related) = below(stairs, check, spaces, &object.id, "ramp");
         cited.insert(0, evidence);
         checks.push((check, cited, related));
     }
@@ -779,7 +1285,9 @@ fn run_scale(run: &SlopedRun) -> f64 {
         run.end().upper_metres(),
     ]
     .iter()
-    .fold(0.0_f64, |scale, value| scale.max(value.abs()))
+    .fold(sides_scale(run.sides()), |scale, value| {
+        scale.max(value.abs())
+    })
 }
 
 /// The binary rounding of decimal coordinates, carried into a slope: rise

@@ -37,14 +37,31 @@
 //!   share. It is computed in floating point and widened by a numerical
 //!   margin, so it is never exact. An obstacle whose faces over the walking
 //!   surface lie both below and above it crosses the surface and is refused.
+//! - **Widths** are stated only for a tread or run that fills a rectangle
+//!   along its walking direction: every edge on the boundary of its faces
+//!   lies on a side of the rectangle its positions span, and its plan area
+//!   is that rectangle's. Anything else has no measured width.
+//! - A **landing** is the connected set of upward level faces of one
+//!   requested candidate (or of a ramp itself, never of a flight) at the
+//!   elevation of the end, reaching into the plan strip between the end's
+//!   walking surface and the end of its body, grown by [`LANDING_REACH`],
+//!   across the end's width. Several such surfaces are refused, since their
+//!   union is not measured; one that fills a rectangle along the leaving
+//!   direction is measured, any other only found.
+//! - The **clearance below** a subject is the least height of its
+//!   downward-facing faces above the downward-facing level faces (the floor)
+//!   of a requested space, over the plan region they share, leaving out the
+//!   region where a face of the subject lies flush on that floor: the
+//!   subject rests there, and nobody stands under it.
 
 use std::collections::BTreeMap;
 
 use axiolid_core::{Point3, Tolerance};
 use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh, component_count};
 use axioval_engine::{
-    ElevationInterval, Headroom, HeadroomRequest, MeasuredInterval, MetricDirection, SlopedRun,
-    SlopedSurface, Tread, TreadFlight, WalkingSurfaceError, WalkingSurfaceService,
+    ClearanceBelow, ClearanceBelowRequest, ElevationInterval, Headroom, HeadroomRequest, Landing,
+    LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, SlopedRun,
+    SlopedSurface, Tread, TreadFlight, WalkingEnd, WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -70,6 +87,11 @@ pub const LEVEL_TOLERANCE: f64 = 64.0 * f64::EPSILON;
 /// Relative numerical margin on a headroom, scaled by the coordinates'
 /// magnitude and the slopes of the two faces.
 const HEADROOM_MARGIN: f64 = 1e-9;
+
+/// How far, in metres, a landing may stand off the end of a flight or run
+/// and still meet it: the rounding two objects' placements leave, not a
+/// modelling gap.
+pub const LANDING_REACH: f64 = 1e-6;
 
 /// Measures stair flights, ramps and headroom over registered meshes.
 #[derive(Debug)]
@@ -380,13 +402,18 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
             along = ahead;
         }
         let projection = Projection::new(direction);
+        let frame = PlanFrame::new(direction);
         let treads = levels
             .iter()
             .map(|level| {
                 let (front, back) = projection.span(level.faces.iter().flatten())?;
                 let elevation = ElevationInterval::try_new(level.low, level.high)
                     .map_err(|_| WalkingSurfaceError::InvalidMeasurement)?;
-                Tread::try_new(elevation, front, back)
+                let tread = Tread::try_new(elevation, front, back)?;
+                match rectangle(&level.faces, &frame)? {
+                    Some([_, (left, right)]) => tread.with_sides(left, right),
+                    None => Ok(tread),
+                }
             })
             .collect::<Result<Vec<_>, _>>()?;
         let (base, top) = solid
@@ -396,12 +423,10 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), point| {
                 (low.min(point.z), high.max(point.z))
             });
-        #[allow(clippy::float_cmp)]
-        let level = levels.iter().all(|level| level.low == level.high);
         let evidence = Evidence {
             source: object.source.clone(),
             locator: format!("tread-flight:{object}"),
-            exact: projection.on_axis && level,
+            exact: treads.iter().all(Tread::is_exact),
         };
         TreadFlight::try_new(
             object.clone(),
@@ -436,9 +461,7 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
                 .lower_metres()
                 .total_cmp(&b.bottom().lower_metres())
         });
-        let exact = runs
-            .iter()
-            .all(|run| run.start().is_exact() && run.end().is_exact() && run.top().is_exact());
+        let exact = runs.iter().all(SlopedRun::is_exact);
         let evidence = Evidence {
             source: object.source.clone(),
             locator: format!("sloped-runs:{object}"),
@@ -549,6 +572,154 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
         };
         Headroom::try_new(request.clone(), least, governing, evidence)
     }
+
+    fn measure_landing(
+        &self,
+        request: &LandingRequest,
+    ) -> Result<LandingEvidence, WalkingSurfaceError> {
+        let subject = request.subject();
+        let end = self.walking_end(subject, request.end())?;
+        let frame = PlanFrame::new(end.direction);
+        let mut carriers: Vec<&ObjectId> = request.candidates().iter().collect();
+        if end.ramp {
+            carriers.push(subject);
+        }
+        let mut found: Vec<(ObjectId, Vec<Triangle>)> = Vec::new();
+        for carrier in carriers {
+            for surface in self.meeting_surfaces(carrier, subject, &end, &frame)? {
+                found.push((carrier.clone(), surface));
+            }
+        }
+        if found.len() > 1 {
+            let names = found
+                .iter()
+                .map(|(carrier, _)| carrier.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(WalkingSurfaceError::Unsupported(format!(
+                "several level surfaces meet the end of {subject} ({names}); their union is not \
+                 measured"
+            )));
+        }
+        let landing =
+            found.pop().map(|(carrier, faces)| {
+                let extent = rectangle(&faces, &frame).ok().flatten().and_then(
+                    |[(_, far), (left, right)]| {
+                        if far.lower_metres() > end.edge.upper_metres() {
+                            LandingExtent::try_new(far, left, right).ok()
+                        } else {
+                            None
+                        }
+                    },
+                );
+                Landing::new(carrier, extent)
+            });
+        let exact = end.edge.is_exact()
+            && landing
+                .as_ref()
+                .and_then(Landing::extent)
+                .is_none_or(|extent| {
+                    let (left, right) = extent.sides();
+                    extent.far().is_exact() && left.is_exact() && right.is_exact()
+                });
+        let evidence = Evidence {
+            source: subject.source.clone(),
+            locator: format!("landing:{subject}"),
+            exact,
+        };
+        LandingEvidence::try_new(request.clone(), end.direction, end.edge, landing, evidence)
+    }
+
+    fn measure_clearance_below(
+        &self,
+        request: &ClearanceBelowRequest,
+    ) -> Result<ClearanceBelow, WalkingSurfaceError> {
+        let subject = request.subject();
+        let solid = self.solid(subject)?;
+        let mut under = Vec::new();
+        for triangle in &solid.soup {
+            let (cross, bound) = plan_cross(triangle);
+            if cross < -bound {
+                under.push(*triangle);
+            }
+        }
+        let reach = plan_box(under.iter());
+        let mut clearances: Vec<(ObjectId, MeasuredInterval)> = Vec::new();
+        for space in request.spaces() {
+            if self.geometry.has_no_body(space) {
+                continue;
+            }
+            if let Some((_, reason)) = self
+                .geometry
+                .unmeasured()
+                .find(|(unmeasured, _)| *unmeasured == space)
+            {
+                return Err(WalkingSurfaceError::Unavailable(format!(
+                    "space {space} has a body that was not measured: {reason}"
+                )));
+            }
+            let mesh = self
+                .geometry
+                .mesh(space)
+                .ok_or_else(|| WalkingSurfaceError::UnknownObject(space.clone()))?;
+            let Some((min, max)) = self.geometry.enclosing_extent(space) else {
+                if mesh_extent(mesh).is_none() {
+                    continue;
+                }
+                return Err(WalkingSurfaceError::Unavailable(format!(
+                    "space {space} has an invalid chord deviation"
+                )));
+            };
+            if under.is_empty()
+                || max[0] < reach.0[0]
+                || min[0] > reach.1[0]
+                || max[1] < reach.0[1]
+                || min[1] > reach.1[1]
+            {
+                continue;
+            }
+            let floor_solid = self.solid(space)?;
+            let floor: Vec<Triangle> = floor_solid
+                .soup
+                .iter()
+                .filter(|triangle| {
+                    let (cross, bound) = plan_cross(triangle);
+                    cross < -bound && is_level(triangle)
+                })
+                .copied()
+                .collect();
+            let Some((low, margin)) = below(subject, space, &floor, &under)? else {
+                continue;
+            };
+            let clearance =
+                MeasuredInterval::try_new((low - margin).max(0.0), low.max(0.0) + margin)?;
+            clearances.push((space.clone(), clearance));
+        }
+        let least =
+            clearances
+                .iter()
+                .map(|(_, clearance)| *clearance)
+                .reduce(|least, clearance| {
+                    MeasuredInterval::try_new(
+                        least.lower().min(clearance.lower()),
+                        least.upper().min(clearance.upper()),
+                    )
+                    .unwrap_or(least)
+                });
+        let governing: Vec<ObjectId> = least.map_or_else(Vec::new, |least| {
+            clearances
+                .iter()
+                .filter(|(_, clearance)| clearance.lower() <= least.upper())
+                .map(|(space, _)| space.clone())
+                .collect()
+        });
+        let evidence = Evidence {
+            source: subject.source.clone(),
+            locator: format!("clearance-below:{subject}"),
+            exact: false,
+        };
+        ClearanceBelow::try_new(request.clone(), least, governing, evidence)
+    }
 }
 
 /// The triangles of `faces` (indices into the mesh) connected through
@@ -641,7 +812,11 @@ fn run(object: &ObjectId, faces: &[Triangle]) -> Result<SlopedRun, WalkingSurfac
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), point| {
             (low.min(point.z), high.max(point.z))
         });
-    SlopedRun::try_new(direction, exact(bottom)?, exact(top)?, start, end)
+    let run = SlopedRun::try_new(direction, exact(bottom)?, exact(top)?, start, end)?;
+    match rectangle(faces, &PlanFrame::new(direction))? {
+        Some([_, (left, right)]) => run.with_sides(left, right),
+        None => Ok(run),
+    }
 }
 
 /// The plan bounding box of some triangles.
@@ -745,4 +920,546 @@ fn clip_convex(subject: Vec<[f64; 2]>, clip: &[[f64; 2]]) -> Vec<[f64; 2]> {
         }
     }
     output
+}
+
+/// Plan positions along a horizontal direction and across it (a quarter
+/// turn anticlockwise), as [`axioval_engine::across`] defines it.
+struct PlanFrame {
+    along: [f64; 2],
+    across: [f64; 2],
+    on_axis: bool,
+}
+
+impl PlanFrame {
+    #[allow(clippy::float_cmp)]
+    fn new(direction: MetricDirection) -> Self {
+        let [x, y, _] = direction.components();
+        Self {
+            along: [x, y],
+            across: [-y, x],
+            on_axis: x == 0.0 || y == 0.0,
+        }
+    }
+
+    /// A point's positions along and across the direction. Along a
+    /// coordinate axis each reads one coordinate exactly.
+    fn map(&self, x: f64, y: f64) -> [f64; 2] {
+        [
+            x * self.along[0] + y * self.along[1],
+            x * self.across[0] + y * self.across[1],
+        ]
+    }
+
+    /// A bound on the rounding of [`Self::map`] at a point, as
+    /// [`Projection::span`] bounds it.
+    fn rounding(&self, x: f64, y: f64) -> f64 {
+        if self.on_axis {
+            0.0
+        } else {
+            8.0 * f64::EPSILON * (x.abs() + y.abs()).max(f64::MIN_POSITIVE)
+        }
+    }
+}
+
+/// The direction opposite `direction`.
+fn reversed(direction: MetricDirection) -> Result<MetricDirection, WalkingSurfaceError> {
+    let [x, y, z] = direction.components();
+    MetricDirection::try_new([-x, -y, -z]).map_err(|_| WalkingSurfaceError::InvalidMeasurement)
+}
+
+/// A position measured along the opposite direction.
+fn negated(position: ElevationInterval) -> Result<ElevationInterval, WalkingSurfaceError> {
+    ElevationInterval::try_new(-position.upper_metres(), -position.lower_metres())
+        .map_err(|_| WalkingSurfaceError::InvalidMeasurement)
+}
+
+/// A position interval from sure bounds.
+fn interval((lower, upper): (f64, f64)) -> Result<ElevationInterval, WalkingSurfaceError> {
+    ElevationInterval::try_new(lower, upper).map_err(|_| WalkingSurfaceError::InvalidMeasurement)
+}
+
+/// A point's key for matching edges between faces: its exact coordinates,
+/// with negative zero read as zero.
+fn key(point: &Point3) -> [u64; 3] {
+    [point.x + 0.0, point.y + 0.0, point.z + 0.0].map(f64::to_bits)
+}
+
+/// An edge by the exact coordinates of its ends, in order.
+type EdgeKey = ([u64; 3], [u64; 3]);
+
+/// How many faces share an edge, and its ends.
+type EdgeUse = (usize, Point3, Point3);
+
+/// The edges of `faces` by the exact coordinates of their ends, with how
+/// many faces share each.
+fn edge_counts(faces: &[Triangle]) -> BTreeMap<EdgeKey, EdgeUse> {
+    let mut edges: BTreeMap<EdgeKey, EdgeUse> = BTreeMap::new();
+    for face in faces {
+        for i in 0..3 {
+            let (a, b) = (face[i], face[(i + 1) % 3]);
+            let (ka, kb) = (key(&a), key(&b));
+            let entry = edges.entry((ka.min(kb), ka.max(kb))).or_insert((0, a, b));
+            entry.0 += 1;
+        }
+    }
+    edges
+}
+
+/// The rectangle `faces` fill along and across `frame`: the `(lowest,
+/// highest)` positions along it and across it, when every edge on the
+/// boundary of the faces lies on one of the rectangle's sides and their plan
+/// area is the rectangle's; `None` otherwise.
+///
+/// A region whose boundary lies on a rectangle's sides is that rectangle, so
+/// its width holds all along its length. Along a coordinate axis positions
+/// are exact and an edge must lie exactly on a side; along any other
+/// direction both are widened by the rounding of the projection.
+fn rectangle(
+    faces: &[Triangle],
+    frame: &PlanFrame,
+) -> Result<Option<[(ElevationInterval, ElevationInterval); 2]>, WalkingSurfaceError> {
+    if faces.is_empty() {
+        return Ok(None);
+    }
+    let mut lowest = [(f64::INFINITY, f64::INFINITY); 2];
+    let mut highest = [(f64::NEG_INFINITY, f64::NEG_INFINITY); 2];
+    let mut scale = 1.0_f64;
+    for point in faces.iter().flatten() {
+        let mapped = frame.map(point.x, point.y);
+        let rounding = frame.rounding(point.x, point.y);
+        scale = scale.max(point.x.abs()).max(point.y.abs());
+        for axis in 0..2 {
+            let (low, high) = (mapped[axis] - rounding, mapped[axis] + rounding);
+            lowest[axis] = (lowest[axis].0.min(low), lowest[axis].1.min(high));
+            highest[axis] = (highest[axis].0.max(low), highest[axis].1.max(high));
+        }
+    }
+    let tolerance = if frame.on_axis {
+        0.0
+    } else {
+        32.0 * f64::EPSILON * scale
+    };
+    let on =
+        |value: f64, (low, high): (f64, f64)| value >= low - tolerance && value <= high + tolerance;
+    for (count, a, b) in edge_counts(faces).into_values() {
+        if count > 2 {
+            return Ok(None);
+        }
+        if count == 2 {
+            continue;
+        }
+        let (a, b) = (frame.map(a.x, a.y), frame.map(b.x, b.y));
+        let on_side = (0..2).any(|axis| {
+            [lowest[axis], highest[axis]]
+                .iter()
+                .any(|side| on(a[axis], *side) && on(b[axis], *side))
+        });
+        if !on_side {
+            return Ok(None);
+        }
+    }
+    let middle = |(low, high): (f64, f64)| f64::midpoint(low, high);
+    let rectangle =
+        (middle(highest[0]) - middle(lowest[0])) * (middle(highest[1]) - middle(lowest[1]));
+    let covered: f64 = faces
+        .iter()
+        .map(|face| plan_cross(face).0.abs() / 2.0)
+        .sum();
+    if (covered - rectangle).abs() > 1e-9 * rectangle + 1e-12 * scale * scale {
+        return Ok(None);
+    }
+    Ok(Some([
+        (interval(lowest[0])?, interval(highest[0])?),
+        (interval(lowest[1])?, interval(highest[1])?),
+    ]))
+}
+
+/// Where a landing is looked for at one end of a flight or run.
+struct EndGeometry {
+    /// Whether the subject is a ramp, which may carry its own landings.
+    ramp: bool,
+    /// The horizontal direction leaving the subject at the end.
+    direction: MetricDirection,
+    /// The end's arrival line along `direction`.
+    edge: ElevationInterval,
+    /// The elevation of the walking surface at the end.
+    elevation: ElevationInterval,
+    /// The stretch along `direction` a landing must reach into: from where
+    /// the walking surface ends to where the body ends.
+    reach: (f64, f64),
+    /// The end's sure width across `direction`.
+    across: (f64, f64),
+}
+
+/// The positions across a leaving direction of sides measured across the
+/// opposite one: the sure interior between them.
+fn sides_across(
+    sides: Option<(ElevationInterval, ElevationInterval)>,
+    reverse: bool,
+    subject: &ObjectId,
+) -> Result<(f64, f64), WalkingSurfaceError> {
+    let Some((left, right)) = sides else {
+        return Err(WalkingSurfaceError::Unsupported(format!(
+            "the end of {subject} fills no rectangle, so its width is not measured"
+        )));
+    };
+    Ok(if reverse {
+        (-right.lower_metres(), -left.upper_metres())
+    } else {
+        (left.upper_metres(), right.lower_metres())
+    })
+}
+
+impl AxiolidWalkingSurfaceService {
+    fn walking_end(
+        &self,
+        subject: &ObjectId,
+        end: WalkingEnd,
+    ) -> Result<EndGeometry, WalkingSurfaceError> {
+        match end {
+            WalkingEnd::FlightBottom | WalkingEnd::FlightTop => {
+                let flight = self.measure_tread_flight(subject)?;
+                let (Some(first), Some(last)) = (flight.treads().first(), flight.treads().last())
+                else {
+                    return Err(WalkingSurfaceError::InvalidMeasurement);
+                };
+                let bottom = end == WalkingEnd::FlightBottom;
+                let direction = if bottom {
+                    reversed(flight.direction())?
+                } else {
+                    flight.direction()
+                };
+                // Where the body ends along the leaving direction.
+                let frame = PlanFrame::new(direction);
+                let solid = self.solid(subject)?;
+                let body_end = solid
+                    .soup
+                    .iter()
+                    .flatten()
+                    .fold(f64::NEG_INFINITY, |end, p| {
+                        end.max(frame.map(p.x, p.y)[0] + frame.rounding(p.x, p.y))
+                    });
+                if bottom {
+                    let edge = negated(first.front())?;
+                    Ok(EndGeometry {
+                        ramp: false,
+                        direction,
+                        edge,
+                        elevation: flight.base(),
+                        reach: (edge.lower_metres(), body_end),
+                        across: sides_across(first.sides(), true, subject)?,
+                    })
+                } else {
+                    let (edge, elevation) = if flight.ends_in_riser() {
+                        (last.back(), flight.top())
+                    } else {
+                        (last.front(), last.elevation())
+                    };
+                    Ok(EndGeometry {
+                        ramp: false,
+                        direction,
+                        edge,
+                        elevation,
+                        reach: (last.back().lower_metres(), body_end),
+                        across: sides_across(last.sides(), false, subject)?,
+                    })
+                }
+            }
+            WalkingEnd::RunBottom(index) | WalkingEnd::RunTop(index) => {
+                let ramp = self.measure_sloped_runs(subject)?;
+                let run = ramp.runs().get(index).ok_or_else(|| {
+                    WalkingSurfaceError::Unsupported(format!(
+                        "{subject} has no run {} of {}",
+                        index + 1,
+                        ramp.runs().len()
+                    ))
+                })?;
+                let bottom = matches!(end, WalkingEnd::RunBottom(_));
+                let (direction, edge, elevation) = if bottom {
+                    (
+                        reversed(run.direction())?,
+                        negated(run.start())?,
+                        run.bottom(),
+                    )
+                } else {
+                    (run.direction(), run.end(), run.top())
+                };
+                Ok(EndGeometry {
+                    ramp: true,
+                    direction,
+                    edge,
+                    elevation,
+                    reach: (edge.lower_metres(), edge.upper_metres()),
+                    across: sides_across(run.sides(), bottom, subject)?,
+                })
+            }
+        }
+    }
+
+    /// The connected level surfaces of `carrier` at the end's elevation that
+    /// reach into the end's strip.
+    fn meeting_surfaces(
+        &self,
+        carrier: &ObjectId,
+        subject: &ObjectId,
+        end: &EndGeometry,
+        frame: &PlanFrame,
+    ) -> Result<Vec<Vec<Triangle>>, WalkingSurfaceError> {
+        if self.geometry.has_no_body(carrier) {
+            return Ok(Vec::new());
+        }
+        if let Some((_, reason)) = self
+            .geometry
+            .unmeasured()
+            .find(|(unmeasured, _)| *unmeasured == carrier)
+        {
+            return Err(WalkingSurfaceError::Unavailable(format!(
+                "candidate landing {carrier} has a body that was not measured: {reason}"
+            )));
+        }
+        let mesh = self
+            .geometry
+            .mesh(carrier)
+            .ok_or_else(|| WalkingSurfaceError::UnknownObject(carrier.clone()))?;
+        let Some((min, max)) = self.geometry.enclosing_extent(carrier) else {
+            if mesh_extent(mesh).is_none() {
+                return Ok(Vec::new());
+            }
+            return Err(WalkingSurfaceError::Unavailable(format!(
+                "candidate landing {carrier} has an invalid chord deviation"
+            )));
+        };
+        let scale = end.elevation.upper_metres().abs().max(1.0);
+        let level = LEVEL_TOLERANCE * scale;
+        let (low, high) = (
+            end.elevation.lower_metres() - level,
+            end.elevation.upper_metres() + level,
+        );
+        if max[2] < low || min[2] > high {
+            return Ok(Vec::new());
+        }
+        // The extent's plan corners along and across the leaving direction.
+        let strip = (
+            (end.reach.0 - LANDING_REACH, end.reach.1 + LANDING_REACH),
+            end.across,
+        );
+        let corners = [
+            [min[0], min[1]],
+            [max[0], min[1]],
+            [max[0], max[1]],
+            [min[0], max[1]],
+        ]
+        .map(|[x, y]| frame.map(x, y));
+        let apart = (0..2).any(|axis| {
+            let (from, to) = if axis == 0 { strip.0 } else { strip.1 };
+            let slack = 1e-9 * scale;
+            corners.iter().all(|corner| corner[axis] < from - slack)
+                || corners.iter().all(|corner| corner[axis] > to + slack)
+        });
+        if apart {
+            return Ok(Vec::new());
+        }
+        if self.geometry.is_tessellated(carrier) {
+            return Err(WalkingSurfaceError::InexactGeometry(format!(
+                "candidate landing {carrier} at the end of {subject} is a tessellation of curved \
+                 faces"
+            )));
+        }
+        let solid = self.solid(carrier)?;
+        let mut faces = Vec::new();
+        for triangle in &solid.soup {
+            if facing(carrier, triangle)? != Facing::Level {
+                continue;
+            }
+            let (bottom, top) = elevations(triangle);
+            if bottom >= low && top <= high {
+                faces.push(*triangle);
+            }
+        }
+        Ok(components(&faces)
+            .into_iter()
+            .filter(|surface| touches(surface, frame, strip.0, strip.1))
+            .collect())
+    }
+}
+
+/// `faces` split into sets connected through shared edges, matched by the
+/// exact coordinates of their ends.
+fn components(faces: &[Triangle]) -> Vec<Vec<Triangle>> {
+    fn find(parent: &mut [usize], mut node: usize) -> usize {
+        while parent[node] != node {
+            parent[node] = parent[parent[node]];
+            node = parent[node];
+        }
+        node
+    }
+    let mut parent: Vec<usize> = (0..faces.len()).collect();
+    let mut edges: BTreeMap<([u64; 3], [u64; 3]), usize> = BTreeMap::new();
+    for (position, face) in faces.iter().enumerate() {
+        for i in 0..3 {
+            let (a, b) = (key(&face[i]), key(&face[(i + 1) % 3]));
+            if let Some(other) = edges.insert((a.min(b), a.max(b)), position) {
+                let (left, right) = (find(&mut parent, other), find(&mut parent, position));
+                parent[left.max(right)] = left.min(right);
+            }
+        }
+    }
+    let mut groups: BTreeMap<usize, Vec<Triangle>> = BTreeMap::new();
+    for (position, face) in faces.iter().enumerate() {
+        let root = find(&mut parent, position);
+        groups.entry(root).or_default().push(*face);
+    }
+    groups.into_values().collect()
+}
+
+/// Whether some face covers part of the strip between `along` and `across`
+/// positions with positive plan area.
+fn touches(faces: &[Triangle], frame: &PlanFrame, along: (f64, f64), across: (f64, f64)) -> bool {
+    if along.0 >= along.1 || across.0 >= across.1 {
+        return false;
+    }
+    let strip = [
+        [along.0, across.0],
+        [along.1, across.0],
+        [along.1, across.1],
+        [along.0, across.1],
+    ];
+    let least = 1e-6 * (along.1 - along.0) * (across.1 - across.0);
+    faces.iter().any(|face| {
+        let polygon = counter_clockwise(face.iter().map(|p| frame.map(p.x, p.y)).collect());
+        let clipped = clip_convex(polygon, &strip);
+        clipped.len() >= 3 && area(&clipped) > least
+    })
+}
+
+/// A polygon's corners in counter-clockwise order.
+fn counter_clockwise(mut polygon: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
+    let n = polygon.len();
+    let signed: f64 = (0..n)
+        .map(|i| {
+            let (p, q) = (polygon[i], polygon[(i + 1) % n]);
+            p[0] * q[1] - q[0] * p[1]
+        })
+        .sum();
+    if signed < 0.0 {
+        polygon.reverse();
+    }
+    polygon
+}
+
+/// The part of `polygon` on the left of the line from `a` to `b` (`left`),
+/// or on its right.
+fn half_plane(polygon: &[[f64; 2]], a: [f64; 2], b: [f64; 2], left: bool) -> Vec<[f64; 2]> {
+    let side = |point: [f64; 2]| {
+        let value = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+        if left { value } else { -value }
+    };
+    let mut output = Vec::new();
+    for (corner, from) in polygon.iter().enumerate() {
+        let to = polygon[(corner + 1) % polygon.len()];
+        let (inside_from, inside_to) = (side(*from), side(to));
+        if inside_from >= 0.0 {
+            output.push(*from);
+        }
+        if (inside_from >= 0.0) != (inside_to >= 0.0) {
+            let share = inside_from / (inside_from - inside_to);
+            output.push([
+                from[0] + share * (to[0] - from[0]),
+                from[1] + share * (to[1] - from[1]),
+            ]);
+        }
+    }
+    output
+}
+
+/// `polygon` less the convex counter-clockwise `hole`, as convex pieces.
+fn subtract(polygon: Vec<[f64; 2]>, hole: &[[f64; 2]]) -> Vec<Vec<[f64; 2]>> {
+    let mut pieces = Vec::new();
+    let mut rest = polygon;
+    for (index, a) in hole.iter().enumerate() {
+        let b = hole[(index + 1) % hole.len()];
+        let outside = half_plane(&rest, *a, b, false);
+        if outside.len() >= 3 {
+            pieces.push(outside);
+        }
+        rest = half_plane(&rest, *a, b, true);
+        if rest.len() < 3 {
+            return pieces;
+        }
+    }
+    // What remains lies inside the hole.
+    pieces
+}
+
+/// The least height of the `under` faces above the `floor` faces, over the
+/// plan regions they share with positive area and away from where an
+/// `under` face lies flush on the floor, and the numerical margin on it.
+/// `None` when they share no such region; refused when the subject crosses
+/// the floor.
+fn below(
+    subject: &ObjectId,
+    space: &ObjectId,
+    floor: &[Triangle],
+    under: &[Triangle],
+) -> Result<Option<(f64, f64)>, WalkingSurfaceError> {
+    let plan = |t: &Triangle| counter_clockwise(t.iter().map(|p| [p.x, p.y]).collect());
+    let mut found: Option<(f64, f64)> = None;
+    for ground in floor {
+        let ground_plan = plan(ground);
+        let mut flush: Vec<Vec<[f64; 2]>> = Vec::new();
+        let mut open: Vec<(&Triangle, Vec<[f64; 2]>, f64, f64)> = Vec::new();
+        for face in under {
+            let polygon = clip_convex(ground_plan.clone(), &plan(face));
+            let scale = face.iter().chain(ground.iter()).fold(1.0_f64, |scale, p| {
+                scale.max(p.x.abs()).max(p.y.abs()).max(p.z.abs())
+            });
+            let least = 1e-12 * scale * scale;
+            if polygon.len() < 3 || area(&polygon) <= least {
+                continue;
+            }
+            let margin = HEADROOM_MARGIN * scale * (1.0 + gradient(face) + gradient(ground));
+            let flat = polygon
+                .iter()
+                .all(|[x, y]| (height(face, *x, *y) - height(ground, *x, *y)).abs() <= margin);
+            if flat {
+                flush.push(polygon);
+            } else {
+                open.push((face, polygon, margin, least));
+            }
+        }
+        for (face, polygon, margin, least) in open {
+            let mut pieces = vec![polygon];
+            for hole in &flush {
+                pieces = pieces
+                    .into_iter()
+                    .flat_map(|piece| subtract(piece, hole))
+                    .collect();
+            }
+            for piece in pieces {
+                if area(&piece) <= least {
+                    continue;
+                }
+                let gaps = piece
+                    .iter()
+                    .map(|[x, y]| height(face, *x, *y) - height(ground, *x, *y));
+                let (low, high) = gaps.fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), g| {
+                    (l.min(g), h.max(g))
+                });
+                if high <= margin {
+                    // Below the floor, or flush on it.
+                    continue;
+                }
+                if low < -margin {
+                    return Err(WalkingSurfaceError::Unsupported(format!(
+                        "{subject} crosses the floor of {space}"
+                    )));
+                }
+                found = Some(match found {
+                    None => (low, margin),
+                    Some((least, most)) => (least.min(low), most.max(margin)),
+                });
+            }
+        }
+    }
+    Ok(found)
 }

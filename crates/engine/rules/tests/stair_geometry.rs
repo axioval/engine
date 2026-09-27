@@ -7,8 +7,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, ElevationInterval, Headroom, HeadroomRequest, MeasuredInterval,
-    MetricDirection, SlopedRun, SlopedSurface, Tread, TreadFlight, WalkingSurfaceError,
+    CapabilityEvaluation, ClearanceBelow, ClearanceBelowRequest, ElevationInterval, Headroom,
+    HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval,
+    MetricDirection, SlopedRun, SlopedSurface, Tread, TreadFlight, WalkingEnd, WalkingSurfaceError,
     WalkingSurfaceService, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
@@ -35,9 +36,14 @@ fn x() -> MetricDirection {
     MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap()
 }
 
-/// A flight on the floor with the given risers and 0.28 m goings, the last
-/// tread its top. With `margin`, every position is widened by it.
+/// A flight on the floor with the given risers and 0.28 m goings, 1.2 m
+/// wide, the last tread its top. With `margin`, every position is widened by
+/// it.
 fn flight(object: &str, risers: &[f64], margin: f64) -> TreadFlight {
+    wide_flight(object, risers, margin, 1.2)
+}
+
+fn wide_flight(object: &str, risers: &[f64], margin: f64, width: f64) -> TreadFlight {
     let mut elevation = 0.0;
     let mut treads = Vec::new();
     for (step, riser) in risers.iter().enumerate() {
@@ -52,7 +58,10 @@ fn flight(object: &str, risers: &[f64], margin: f64) -> TreadFlight {
             }
         };
         treads.push(
-            Tread::try_new(position(elevation), position(front), position(front + 0.28)).unwrap(),
+            Tread::try_new(position(elevation), position(front), position(front + 0.28))
+                .unwrap()
+                .with_sides(point(0.0), point(width))
+                .unwrap(),
         );
     }
     let evidence = Evidence {
@@ -77,6 +86,8 @@ fn ramp(object: &str, runs: &[(f64, f64)]) -> SlopedSurface {
                 point(start),
                 point(start + length),
             )
+            .unwrap()
+            .with_sides(point(0.0), point(1.5))
             .unwrap();
             start += length + 1.5;
             bottom += rise;
@@ -87,6 +98,9 @@ fn ramp(object: &str, runs: &[(f64, f64)]) -> SlopedSurface {
     SlopedSurface::try_new(id(object), runs, evidence).unwrap()
 }
 
+/// A landing's carrier and, when measured, its depth and width.
+type StatedLanding = (ObjectId, Option<(f64, f64)>);
+
 /// Flights, ramps and headroom per object; anything else is unsupported.
 #[derive(Default)]
 struct Stairs {
@@ -94,6 +108,11 @@ struct Stairs {
     ramps: BTreeMap<ObjectId, SlopedSurface>,
     /// Clearance per subject and obstacle.
     above: BTreeMap<(ObjectId, ObjectId), f64>,
+    /// The landing per subject and end: its carrier and, when measured, its
+    /// depth and width.
+    landings: BTreeMap<(ObjectId, WalkingEnd), StatedLanding>,
+    /// Clearance below per subject and space.
+    below: BTreeMap<(ObjectId, ObjectId), f64>,
 }
 
 impl Stairs {
@@ -109,6 +128,23 @@ impl Stairs {
 
     fn above(mut self, subject: &str, obstacle: &str, clearance: f64) -> Self {
         self.above.insert((id(subject), id(obstacle)), clearance);
+        self
+    }
+
+    fn landing(
+        mut self,
+        subject: &str,
+        end: WalkingEnd,
+        carrier: &str,
+        size: Option<(f64, f64)>,
+    ) -> Self {
+        self.landings
+            .insert((id(subject), end), (id(carrier), size));
+        self
+    }
+
+    fn below(mut self, subject: &str, space: &str, clearance: f64) -> Self {
+        self.below.insert((id(subject), id(space)), clearance);
         self
     }
 }
@@ -154,6 +190,56 @@ impl WalkingSurfaceService for Stairs {
             ),
         }
     }
+
+    /// Landings stated per end, found only when their carrier is requested;
+    /// every one runs along x from an edge at 0.
+    fn measure_landing(
+        &self,
+        request: &LandingRequest,
+    ) -> Result<LandingEvidence, WalkingSurfaceError> {
+        let landing = self
+            .landings
+            .get(&(request.subject().clone(), request.end()))
+            .filter(|(carrier, _)| {
+                carrier == request.subject() || request.candidates().contains(carrier)
+            })
+            .map(|(carrier, size)| {
+                let extent = size.map(|(depth, width)| {
+                    LandingExtent::try_new(point(depth), point(0.0), point(width)).unwrap()
+                });
+                Landing::new(carrier.clone(), extent)
+            });
+        let evidence = Evidence::exact(source(), format!("landing:{}", request.subject().local_id));
+        LandingEvidence::try_new(request.clone(), x(), point(0.0), landing, evidence)
+    }
+
+    fn measure_clearance_below(
+        &self,
+        request: &ClearanceBelowRequest,
+    ) -> Result<ClearanceBelow, WalkingSurfaceError> {
+        let mut least: Option<(f64, ObjectId)> = None;
+        for space in request.spaces() {
+            if let Some(clearance) = self.below.get(&(request.subject().clone(), space.clone()))
+                && least.as_ref().is_none_or(|(most, _)| clearance < most)
+            {
+                least = Some((*clearance, space.clone()));
+            }
+        }
+        let evidence = Evidence {
+            source: source(),
+            locator: format!("clearance-below:{}", request.subject().local_id),
+            exact: false,
+        };
+        match least {
+            None => ClearanceBelow::try_new(request.clone(), None, vec![], evidence),
+            Some((clearance, space)) => ClearanceBelow::try_new(
+                request.clone(),
+                MeasuredInterval::try_new(clearance - 1e-9, clearance + 1e-9).ok(),
+                vec![space],
+                evidence,
+            ),
+        }
+    }
 }
 
 fn model() -> Model {
@@ -165,6 +251,9 @@ fn model() -> Model {
         .object("steep", "ramp")
         .object("beam", "beam")
         .object("duct", "beam")
+        .object("slab", "slab")
+        .object("floor", "slab")
+        .object("hall", "space")
 }
 
 fn stairs() -> Stairs {
@@ -476,4 +565,370 @@ fn ramp_runs_of_unequal_slope_are_found() {
         unevaluated(&evaluation),
         [("steep".into(), NotEvaluatedReason::BackendUnavailable)]
     );
+}
+
+fn slabs() -> ParameterValue {
+    selector(kind("slab"))
+}
+
+#[test]
+fn a_narrow_flight_and_a_shallow_landing_are_found() {
+    let stairs = stairs()
+        .flight(wide_flight("regular", &[0.17; 4], 0.0, 1.0))
+        .landing("regular", WalkingEnd::FlightTop, "slab", Some((0.9, 1.0)))
+        .landing(
+            "regular",
+            WalkingEnd::FlightBottom,
+            "floor",
+            Some((3.0, 4.0)),
+        )
+        .landing("irregular", WalkingEnd::FlightTop, "slab", Some((1.5, 1.5)));
+    let evaluation = check_stairs(
+        model(),
+        stairs,
+        vec![
+            ("width_minimum", metres(1.1)),
+            ("landing_objects", slabs()),
+            ("landing_depth_minimum", metres(1.0)),
+            ("landing_at_least_walking_width", boolean(true)),
+        ],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "regular".into(),
+                "the flight is 1 m wide; at least 1.1 m required".into()
+            ),
+            (
+                "regular".into(),
+                "the landing at the top of the flight is 0.9 m deep; at least 1 m and the \
+                 flight's width (1 m) required"
+                    .into()
+            ),
+        ]
+    );
+    let landing = &evaluation.findings()[1];
+    assert_eq!(landing.related, [id("slab")]);
+    assert!(
+        landing
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "landing:regular")
+    );
+    // The winder is not measured; no landing at the bottom of `irregular`
+    // is nothing to check.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_missing_landing_is_found_only_when_required_and_decided() {
+    let stairs = || {
+        stairs()
+            .landing("regular", WalkingEnd::FlightTop, "slab", Some((1.5, 1.5)))
+            .landing("regular", WalkingEnd::FlightBottom, "floor", None)
+            .landing("irregular", WalkingEnd::FlightBottom, "floor", None)
+            .landing("irregular", WalkingEnd::FlightTop, "slab", None)
+    };
+    let evaluation = check_stairs(
+        model(),
+        stairs(),
+        vec![
+            ("landing_objects", selector(kind("slab"))),
+            ("landings_required", boolean(true)),
+        ],
+    );
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    // Only the landing slab carries landings now.
+    let model = || {
+        model()
+            .value("slab", "P", "Landing", PropertyValue::Boolean(true))
+            .value("floor", "P", "Landing", PropertyValue::Boolean(false))
+    };
+    let landing = Selector::Property {
+        property_set: Some("P".into()),
+        property: "Landing".into(),
+        operator: ComparisonOperator::Equals,
+        value: Some(boolean(true)),
+        case_sensitive: true,
+        trim: false,
+        quantifier: None,
+        precision: None,
+    };
+    let evaluation = check_stairs(
+        model().unreadable("beam"),
+        stairs(),
+        vec![
+            ("landing_objects", selector(landing.clone())),
+            ("landings_required", boolean(true)),
+        ],
+    );
+    // The beam's selection is undecided: it might carry the missing
+    // landings, so they are not found.
+    assert!(findings(&evaluation).is_empty());
+    assert!(
+        unevaluated(&evaluation)
+            .contains(&("regular".into(), NotEvaluatedReason::IncompleteEvidence))
+    );
+    let evaluation = check_stairs(
+        model(),
+        stairs(),
+        vec![
+            ("landing_objects", selector(landing)),
+            ("landings_required", boolean(true)),
+        ],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "irregular".into(),
+                "no selected slab or landing meets the bottom of the flight".into()
+            ),
+            (
+                "regular".into(),
+                "no selected slab or landing meets the bottom of the flight".into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_landing_filling_no_rectangle_or_beside_an_unmeasured_flight_is_not_evaluated() {
+    let stairs = stairs()
+        .flight({
+            // Treads without sides: the flight's width is unknown.
+            let treads = vec![
+                Tread::try_new(point(0.17), point(0.0), point(0.28)).unwrap(),
+                Tread::try_new(point(0.34), point(0.28), point(0.56)).unwrap(),
+            ];
+            let evidence = Evidence::exact(source(), "tread-flight:irregular");
+            TreadFlight::try_new(
+                id("irregular"),
+                x(),
+                point(0.0),
+                point(0.34),
+                treads,
+                evidence,
+            )
+            .unwrap()
+        })
+        .landing("regular", WalkingEnd::FlightTop, "slab", None)
+        .landing("irregular", WalkingEnd::FlightTop, "slab", Some((2.0, 2.0)));
+    let evaluation = check_stairs(
+        model(),
+        stairs,
+        vec![
+            ("landing_objects", slabs()),
+            ("landing_at_least_walking_width", boolean(true)),
+        ],
+    );
+    assert!(findings(&evaluation).is_empty());
+    let messages: Vec<String> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .map(|outcome| outcome.message().to_owned())
+        .collect();
+    assert!(
+        messages.iter().any(|message| message
+            == "the landing test:model/slab at the top of the flight fills no rectangle along \
+                the walking direction, so its size is not measured"),
+        "{messages:?}"
+    );
+    assert!(
+        messages.iter().any(|message| message
+            == "the flight's width is not measured, so the landing at the top of the flight \
+                is not compared with it"),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn too_little_headroom_below_a_flight_is_found_over_a_space_floor() {
+    let stairs = stairs()
+        .below("regular", "hall", 1.5)
+        .below("irregular", "hall", 2.4);
+    let evaluation = check_stairs(
+        model(),
+        stairs,
+        vec![
+            ("minimum_headroom_below", metres(2.0)),
+            ("headroom_below_spaces", selector(kind("space"))),
+        ],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            "headroom below the flight is 1.5 m over the floor of test:model/hall; at least 2 m \
+             required"
+                .into()
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [id("hall")]);
+}
+
+#[test]
+fn landing_and_below_declarations_are_checked() {
+    for parameters in [
+        vec![("landing_depth_minimum", metres(1.0))],
+        vec![("landing_objects", slabs())],
+        vec![("minimum_headroom_below", metres(2.0))],
+        vec![("headroom_below_spaces", selector(kind("space")))],
+        vec![
+            ("width_minimum", metres(1.2)),
+            ("width_maximum", metres(1.0)),
+        ],
+    ] {
+        let evaluation = check_stairs(model(), stairs(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+    // `landings_required` is the stair's only.
+    let evaluation = model().evaluate_with(
+        &RampGeometryCheck,
+        &rule(
+            RAMP,
+            kind("ramp"),
+            vec![
+                ("landing_objects", slabs()),
+                ("landings_required", boolean(true)),
+            ],
+        ),
+        |_| {},
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+#[test]
+fn ramp_widths_and_run_landings_are_checked_per_run() {
+    let evaluation = model().evaluate_with(
+        &RampGeometryCheck,
+        &rule(
+            RAMP,
+            kind("ramp"),
+            vec![
+                ("width_minimum", metres(1.2)),
+                ("landing_objects", slabs()),
+                ("landing_depth_minimum", metres(1.5)),
+            ],
+        ),
+        |services| {
+            let stairs = stairs()
+                .landing(
+                    "gentle",
+                    WalkingEnd::RunBottom(0),
+                    "gentle",
+                    Some((1.5, 1.5)),
+                )
+                .landing("gentle", WalkingEnd::RunTop(0), "gentle", Some((1.2, 1.5)))
+                .landing(
+                    "gentle",
+                    WalkingEnd::RunBottom(1),
+                    "gentle",
+                    Some((1.5, 1.5)),
+                )
+                .landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)));
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+        },
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "gentle".into(),
+            "the landing at the top of run 1 of 2 is 1.2 m deep; at least 1.5 m required".into()
+        )]
+    );
+    // The ramp's own landing relates nothing else.
+    assert!(evaluation.findings()[0].related.is_empty());
+    let evaluation = model().evaluate_with(
+        &RampGeometryCheck,
+        &rule(RAMP, kind("ramp"), vec![("width_minimum", metres(1.8))]),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs())))
+                .unwrap();
+        },
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "gentle".into(),
+                "run width 1 of 2 is 1.5 m, run width 2 of 2 is 1.5 m; at least 1.8 m required"
+                    .into()
+            ),
+            (
+                "steep".into(),
+                "run width 1 of 1 is 1.5 m; at least 1.8 m required".into()
+            ),
+        ]
+    );
+}
+
+/// A service measuring flights only refuses landings and the clearance
+/// below, and the checks say so rather than pass.
+#[test]
+fn a_service_without_landings_leaves_them_not_evaluated() {
+    struct FlightsOnly;
+    impl WalkingSurfaceService for FlightsOnly {
+        fn measure_tread_flight(
+            &self,
+            object: &ObjectId,
+        ) -> Result<TreadFlight, WalkingSurfaceError> {
+            stairs().measure_tread_flight(object)
+        }
+        fn measure_sloped_runs(
+            &self,
+            object: &ObjectId,
+        ) -> Result<SlopedSurface, WalkingSurfaceError> {
+            stairs().measure_sloped_runs(object)
+        }
+        fn measure_headroom(
+            &self,
+            request: &HeadroomRequest,
+        ) -> Result<Headroom, WalkingSurfaceError> {
+            stairs().measure_headroom(request)
+        }
+    }
+    let evaluation = model().evaluate_with(
+        &StairGeometryCheck,
+        &rule(
+            STAIR,
+            kind("flight"),
+            vec![
+                ("landing_objects", slabs()),
+                ("landings_required", boolean(true)),
+                ("minimum_headroom_below", metres(2.0)),
+                ("headroom_below_spaces", selector(kind("space"))),
+            ],
+        ),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(FlightsOnly)))
+                .unwrap();
+        },
+    );
+    assert!(evaluation.findings().is_empty());
+    let regular = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| outcome.object_id() == Some(&id("regular")))
+        .count();
+    // Both ends and the clearance below.
+    assert_eq!(regular, 3);
 }

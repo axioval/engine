@@ -590,8 +590,9 @@ pub use walkability::{
     WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
 };
 pub use walking_surface::{
-    Headroom, HeadroomRequest, MeasuredInterval, SlopedRun, SlopedSurface, Tread, TreadFlight,
-    WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle,
+    ClearanceBelow, ClearanceBelowRequest, Headroom, HeadroomRequest, Landing, LandingEvidence,
+    LandingExtent, LandingRequest, MeasuredInterval, SlopedRun, SlopedSurface, Tread, TreadFlight,
+    WalkingEnd, WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle, across,
 };
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.

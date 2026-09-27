@@ -972,6 +972,13 @@ Not decided yet (#72): effects that propagate into connected spaces, and the ele
 | `riser_tolerance`, `going_tolerance` | `quantity` | The difference between the flight's largest and smallest riser or going. |
 | `minimum_headroom` | `quantity` | The least vertical clearance above the treads, with `headroom_obstacles`. |
 | `headroom_obstacles` | `selector` | The objects that may stand above (slabs, beams, ducts); declared together with `minimum_headroom`. |
+| `width_minimum`, `width_maximum` | `quantity` | The flight's width: its narrowest tread's, across the direction it climbs. |
+| `landing_objects` | `selector` | The objects that may carry a landing (landing slabs, floors); declared with at least one landing check. |
+| `landing_depth_minimum`, `landing_width_minimum` | `quantity` | The landing at each end: its depth along the walking direction from the first or last riser, and its width across it. |
+| `landing_at_least_walking_width` | `boolean` | Each landing also at least as deep and as wide as the flight. |
+| `landings_required` | `boolean` | A selected slab or landing meets both ends of the flight. |
+| `minimum_headroom_below` | `quantity` | The least clearance under the flight over the floors of `headroom_below_spaces`. |
+| `headroom_below_spaces` | `selector` | The spaces people walk in under the flight; declared together with `minimum_headroom_below`. |
 
 `axioval:capability.ramp-geometry` measures a ramp's sloped runs: connected upward-facing faces flatter than 45°, each planar, separated by level landings. A run's slope is its rise over its horizontal length along its steepest ascent.
 
@@ -980,6 +987,9 @@ Not decided yet (#72): effects that propagate into connected spaces, and the ele
 | `slope_limits` | `table` | Rows of `maximum_slope` (`number`, rise over length: `0.0833` for 1:12, required), `maximum_length` and `maximum_rise` (`quantity`, optional). A run conforms when some row holds all its columns, so a slope depending on the run's length or rise is one row per step. |
 | `slope_tolerance` | `number` | The difference between the ramp's steepest and shallowest run. |
 | `minimum_headroom`, `headroom_obstacles` | | As for stairs, above the runs and landings. |
+| `width_minimum`, `width_maximum` | `quantity` | Every run's width across its slope. |
+| `landing_objects`, `landing_depth_minimum`, `landing_width_minimum`, `landing_at_least_walking_width` | | As for stairs, at both ends of every run; the ramp's own level faces count as its landings. |
+| `minimum_headroom_below`, `headroom_below_spaces` | | As for stairs, under the ramp. |
 
 A ramp limited to 1:12 and 0.76 m of rise per run, or allowed 1:10 over runs of at most 2 m:
 
@@ -993,7 +1003,13 @@ A ramp limited to 1:12 and 0.76 m of rise per run, or allowed 1:10 over runs of 
 
 Every length and slope is an interval. Each check is judged on its own and each failing check is its own finding naming the values (`riser 3 of 4 is 0.21 m; at most 0.19 m required`) and citing the measurement; a check whose interval straddles its bound, widened by a few units in the last place for the binary rounding of decimal coordinates, is not evaluated while the others still decide. Headroom is the least vertical distance from the walking surface (treads, runs and landings) to a selected obstacle's body directly above it, measured from the surface, not from the pitch line; a finding names and relates the lowest obstacle. An obstacle `headroom_obstacles` cannot decide can only lower the headroom: too little stands, enough is not evaluated. An obstacle crossing the walking surface, an unmeasured or nearby tessellated one leaves headroom not evaluated.
 
-A flight or ramp the service cannot measure is not evaluated, never passed: a tessellated body, an open or inward-facing mesh, winders or a turning flight, a flight in several pieces (open risers), a flight with a sloped walking face, a ramp whose slopes meet without a landing, or a body with no tread or run. Not measured yet (#85): winders, open risers, headroom under a flight, landing sizes, clear width, handrails (height, extension, continuity, side), the slab connection, doors on landings, free space at a ramp's ends and a stair nearby.
+A width is the walking surface's own, measured only where each tread or run fills a rectangle along its walking direction; handrails, walls or anything else standing over it are not deducted, so declare the width the body itself must have. A tread or run of any other shape leaves the width not evaluated.
+
+A landing is the level surface of one `landing_objects` object (or, for a ramp, of the ramp itself) at the elevation of an end, meeting that end across its width. At a flight's bottom its depth runs back from the first riser; at its top on from the last riser, so a top tread level with the landing counts towards it (the flight's own top tread is never a landing by itself). A landing is measured only when its surface is a rectangle along the walking direction; one of another shape, or two objects meeting one end, leave its size not evaluated. With `landing_at_least_walking_width`, the requirement is the larger of the declared minimum and the flight's (or run's) width, an interval when that width is one. No landing at an end has nothing to check unless `landings_required` is set, when it is a finding; an object `landing_objects` cannot decide leaves a missing landing or a shortfall not evaluated, since it might carry the landing.
+
+Headroom below is the least height of the flight's or ramp's underside above the floor of a selected space, its body's downward-facing level faces, directly beneath; where the body rests on that floor nobody stands, so it is left out. An open underside meeting the floor at its foot has no headroom there: select the spaces people walk in, and model the low part as another space where it is closed off. As for headroom above, an undecided space can only lower it, and a flight crossing a space's floor, an unmeasured or tessellated space leave it not evaluated.
+
+A flight or ramp the service cannot measure is not evaluated, never passed: a tessellated body, an open or inward-facing mesh, winders or a turning flight, a flight in several pieces (open risers), a flight with a sloped walking face, a ramp whose slopes meet without a landing, or a body with no tread or run. Not measured yet (#85): winders, open risers, handrails (height, extension, continuity, side), doors on ramp landings, free space at a ramp's ends and a stair near a ramp.
 
 ### Doors
 

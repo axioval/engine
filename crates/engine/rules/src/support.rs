@@ -8,7 +8,7 @@ use axioval_engine::{
     RelationshipSelectionServiceHandle, RuleContext, SemanticRelationship, SessionSources,
     TraversalDirection,
 };
-use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::contract::{CategoryLevel, ParameterValue, Selector};
 use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, ObjectId, Property, PropertyValue,
     QuantityDimension, Severity, SourceId, TemporalPrecision,
@@ -614,12 +614,74 @@ pub(crate) fn category_prefix(
     category: PropertyRef<'_>,
 ) -> Result<(String, Vec<Evidence>), Unavailable> {
     let resolved = resolve(context, object, category)?;
-    let prefix = match resolved.value() {
-        value if undefined(value) => String::new(),
-        Some(PropertyValue::String(text)) => format!("[{}] ", text.trim()),
-        value => format!("[{}] ", display(value)),
-    };
+    let prefix = heading(resolved.value())
+        .map(|text| format!("[{text}] "))
+        .unwrap_or_default();
     Ok((prefix, resolved.evidence()))
+}
+
+/// A category value as its heading reads: text trimmed, anything else as
+/// messages show it; `None` for nothing stated.
+fn heading(value: Option<&PropertyValue>) -> Option<String> {
+    match value {
+        value if undefined(value) => None,
+        Some(PropertyValue::String(text)) => Some(text.trim().to_owned()),
+        value => Some(display(value)),
+    }
+}
+
+/// The nested headings a rule's `categories` put before a finding about
+/// `object`, outermost first (`[F90] [Office] `), and the evidence they
+/// cite.
+///
+/// Each level reads its property on the object or, with a `path`, on every
+/// object the path reaches: distinct values join in one heading, sorted;
+/// none (absent, null, blank, or nothing reached) is `[-]`, so every level
+/// keeps its place. A property or path that cannot be read is an error, so
+/// the caller reports the object not evaluated rather than its finding
+/// under the wrong heading. This extends [`category_prefix`], which heads
+/// one property and adds nothing for no value.
+pub(crate) fn category_headings(
+    context: &RuleContext<'_>,
+    object: &Object,
+    levels: &[CategoryLevel],
+) -> Result<(String, Vec<Evidence>), Unavailable> {
+    let mut headings = String::new();
+    let mut evidence = Vec::new();
+    for level in levels {
+        let property = PropertyRef {
+            set: level.property_set.as_deref(),
+            name: &level.property,
+        };
+        let holders: Vec<&Object> = if level.path.is_empty() {
+            vec![object]
+        } else {
+            let everything: Vec<&Object> = context.project.objects().collect();
+            let (reached, cited) =
+                Traversal::path(&level.path)?.related(context, &object.id, &everything)?;
+            evidence.extend(cited);
+            reached
+                .iter()
+                .filter_map(|id| context.project.object(id))
+                .collect()
+        };
+        let mut values = BTreeSet::new();
+        for holder in holders {
+            let resolved = resolve(context, holder, property)?;
+            evidence.extend(resolved.evidence());
+            values.extend(heading(resolved.value()));
+        }
+        let text = if values.is_empty() {
+            "-".to_owned()
+        } else {
+            values.into_iter().collect::<Vec<_>>().join(", ")
+        };
+        headings.push('[');
+        headings.push_str(&text);
+        headings.push_str("] ");
+    }
+    sort_evidence(&mut evidence);
+    Ok((headings, evidence))
 }
 
 /// The group an object is judged in: its source, and optionally the objects a

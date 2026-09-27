@@ -109,6 +109,30 @@ pub struct RuleInstance {
     /// serialized.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub severity_overrides: Vec<SeverityOverride>,
+    /// Nested categories headed before each finding's message, outermost
+    /// first; see [`CategoryLevel`]. Empty adds none and is omitted when
+    /// serialized.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<CategoryLevel>,
+}
+
+/// One level of a rule's `categories`: the value of `property` (in
+/// `propertySet`, a declared concept or a reserved set) on the finding's
+/// subject, or on every object `path` reaches from it (steps as a `related`
+/// selector's path).
+///
+/// Each level heads the message in brackets, `[F90] [Office] ...`; several
+/// reached values join in one heading, and no value is `[-]`, so every
+/// level keeps its place. A value that cannot be read leaves the finding
+/// not evaluated rather than filed under the wrong heading.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CategoryLevel {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_set: Option<String>,
+    pub property: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path: Vec<String>,
 }
 
 /// One entry of a rule's `severityOverrides`: a finding whose subject or any

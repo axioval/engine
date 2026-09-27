@@ -1227,6 +1227,7 @@ impl<'o> Writer<'o> {
             tags: vec!["ids".to_owned()],
             severity_bands: Vec::new(),
             severity_overrides: Vec::new(),
+            categories: Vec::new(),
         }
     }
 

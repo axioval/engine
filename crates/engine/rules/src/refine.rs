@@ -10,12 +10,14 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, OutcomeRefiner, RuleContext,
     RuleRefinement, report_severity,
 };
-use axioval_ir::contract::SeverityOverride;
+use axioval_ir::contract::{CategoryLevel, SeverityOverride};
 use axioval_ir::{Evidence, Finding, Object, Scope, Severity};
 
 use crate::selection::{Selection, selector_matches};
+use crate::support::category_headings;
 
-/// Applies a rule instance's severity overrides to every finding.
+/// Applies a rule instance's severity overrides, then its nested
+/// categories, to every finding.
 ///
 /// Registered by [`crate::register_builtins`]; a host registering
 /// capabilities one by one registers it with
@@ -31,11 +33,21 @@ impl OutcomeRefiner for Refiner {
         refinement: &RuleRefinement,
         evaluation: &mut CapabilityEvaluation,
     ) {
-        if refinement.severity_overrides.is_empty() {
+        let (overrides, categories) = (&refinement.severity_overrides, &refinement.categories);
+        if overrides.is_empty() && categories.is_empty() {
             return;
         }
         for finding in evaluation.take_findings() {
-            match overridden(context, &refinement.severity_overrides, finding) {
+            let refined = if overrides.is_empty() {
+                Ok(finding)
+            } else {
+                overridden(context, overrides, finding)
+            };
+            let refined = match refined {
+                Ok(finding) if !categories.is_empty() => categorised(context, categories, finding),
+                refined => refined,
+            };
+            match refined {
                 Ok(finding) => evaluation.push_finding(finding),
                 Err(Undecided {
                     scope,
@@ -44,6 +56,37 @@ impl OutcomeRefiner for Refiner {
                 }) => evaluation.push_not_evaluated_about(scope, reason, message),
             }
         }
+    }
+}
+
+/// `finding` with its subject's nested category headings before its
+/// message. A finding about a source or the project has no subject to
+/// categorise and is kept as it is.
+fn categorised(
+    context: &RuleContext<'_>,
+    levels: &[CategoryLevel],
+    mut finding: Finding,
+) -> Result<Finding, Undecided> {
+    let Some(subject) = finding
+        .object_id()
+        .and_then(|id| context.project.object(id))
+    else {
+        return Ok(finding);
+    };
+    match category_headings(context, subject, levels) {
+        Ok((headings, mut cited)) => {
+            finding.message.insert_str(0, &headings);
+            cited.extend(std::mem::take(&mut finding.evidence));
+            Ok(finding.with_evidence(cited))
+        }
+        Err((reason, why)) => Err(Undecided {
+            scope: finding.scope.clone(),
+            reason,
+            message: format!(
+                "the finding's category cannot be read: {why}; finding: {}",
+                finding.message
+            ),
+        }),
     }
 }
 

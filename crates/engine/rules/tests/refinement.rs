@@ -363,3 +363,151 @@ mod severity_overrides {
         ));
     }
 }
+
+mod categories {
+    use super::*;
+
+    const CLASH: &str = "axioval:capability.clash";
+
+    /// Ducts `d1`, `d2` and `d3` each run through one wall. `d1` is a supply
+    /// duct serving the office `r1`, `d2` serves no room and states no
+    /// system, and `d3` serves `r1` and the lab `r2`, whose use cannot be
+    /// read.
+    fn ducts(model: Model) -> EvidenceSession {
+        let model = model
+            .object("d1", "duct")
+            .object("d2", "duct")
+            .object("d3", "duct")
+            .object("w1", "wall")
+            .object("w2", "wall")
+            .object("w3", "wall")
+            .object("r1", "room")
+            .object("r2", "room")
+            .text("d1", "Pset", "System", "Supply")
+            .text("d3", "Pset", "System", "Exhaust")
+            .text("r1", "Pset", "Use", " Office ")
+            .text("r2", "Pset", "Use", "Lab")
+            .edge("serves", "d1", "r1")
+            .edge("serves", "d3", "r1")
+            .edge("serves", "d3", "r2");
+        let boxes = Boxes(BTreeMap::from([
+            (id("d1"), 0.0),
+            (id("w1"), 0.5),
+            (id("d2"), 5.0),
+            (id("w2"), 5.5),
+            (id("d3"), 10.0),
+            (id("w3"), 10.5),
+        ]));
+        session(model)
+            .with_host_service(ProximityServiceHandle::new(Arc::new(boxes)), &[snapshot()])
+            .unwrap()
+    }
+
+    fn check(model: Model, extra: Value) -> Report {
+        let registry = registry();
+        let definitions = definitions(
+            &registry,
+            &[CLASH],
+            &["duct", "wall"],
+            &["System", "Use"],
+            &["Pset"],
+        );
+        let rule = rule(
+            "ducts-through-walls",
+            CLASH,
+            "error",
+            entity("duct"),
+            json!({
+                "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 },
+            }),
+            extra,
+        );
+        let plan = plan(&registry, &definitions, vec![rule]).unwrap();
+        run(registry, plan, &ducts(model), |runtime| runtime).unwrap()
+    }
+
+    fn nested() -> Value {
+        json!({ "categories": [
+            { "propertySet": "t.Pset", "property": "t.System" },
+            { "propertySet": "t.Pset", "property": "t.Use", "path": ["serves"] },
+        ] })
+    }
+
+    /// The headings before each finding's own message.
+    fn headings(report: &Report, plain: &Report) -> Vec<(String, String)> {
+        report
+            .findings()
+            .iter()
+            .zip(plain.findings())
+            .map(|(finding, plain)| {
+                let heading = finding
+                    .message
+                    .strip_suffix(&plain.message)
+                    .unwrap_or_else(|| panic!("{:?} lost its message", finding.message));
+                (common::subject(finding), heading.to_owned())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn findings_are_nested_under_their_subject_and_what_it_reaches() {
+        let report = check(Model::default(), nested());
+        let plain = check(Model::default(), json!({}));
+        assert_eq!(
+            headings(&report, &plain),
+            [
+                ("d1".into(), "[Supply] [Office] ".into()),
+                ("d2".into(), "[-] [-] ".into()),
+                ("d3".into(), "[Exhaust] [Lab, Office] ".into()),
+            ]
+        );
+        // The values heading a finding are cited beside it.
+        assert!(
+            report.findings()[0]
+                .evidence
+                .iter()
+                .any(|evidence| evidence.locator.contains("System"))
+        );
+        assert!(report.not_evaluated().is_empty());
+    }
+
+    #[test]
+    fn an_unreadable_category_leaves_the_finding_not_evaluated() {
+        let report = check(Model::default().unreadable("r2"), nested());
+        assert_eq!(common::subject(&report.findings()[0]), "d1");
+        assert_eq!(report.findings().len(), 2);
+        let [undecided] = report.not_evaluated() else {
+            panic!("{report:?}");
+        };
+        assert_eq!(undecided.object_id(), Some(&id("d3")));
+        assert!(
+            undecided
+                .message
+                .starts_with("the finding's category cannot be read"),
+            "{}",
+            undecided.message
+        );
+    }
+
+    #[test]
+    fn a_category_names_a_declared_property() {
+        let registry = registry();
+        let definitions = definitions(&registry, &[CLASH], &["duct", "wall"], &[], &[]);
+        let rule = rule(
+            "r",
+            CLASH,
+            "error",
+            entity("duct"),
+            json!({
+                "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 },
+            }),
+            json!({ "categories": [{ "property": "t.Use" }] }),
+        );
+        assert!(matches!(
+            plan(&registry, &definitions, vec![rule]),
+            Err(EngineError::UnknownConcept { .. })
+        ));
+    }
+}

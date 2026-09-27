@@ -88,3 +88,33 @@ Overrides are applied by the host's outcome refiner
 model. `axioval_rules::register_builtins` installs `axioval_rules::Refiner`.
 A rule declaring overrides against a registry without a refiner, or naming a
 concept no definition package declares, fails compilation.
+
+## Nested categories
+
+Reviewers file findings under categories: by fire rating and use, by the
+type of the space a window adjoins. A rule instance declares `categories`,
+an ordered list of properties, each read on the finding's subject or, with
+a `path`, on the objects the path reaches from it:
+
+```json
+"categories": [
+  {"propertySet": "t.Pset", "property": "t.FireRating"},
+  {"propertySet": "t.PsetSpace", "property": "t.Use", "path": ["axioval:derived.adjacent-space"]}
+]
+```
+
+Each level heads the finding's message in brackets, outermost first:
+`[F90] [Office] sill height above ...`. Several objects reached with
+different values share one heading (`[Lab, Office]`); no value (absent,
+null, blank, or nothing reached) is `[-]`, so every level keeps its place.
+The values read are cited in the finding's evidence. A property or path
+that cannot be read leaves the finding not evaluated, never filed under the
+wrong heading. A finding about a source or the project has no subject and
+is not categorised. A level's property must be a declared concept (or a
+reserved set such as `axioval:attributes`); paths take the steps of a
+`related` selector, derived relationships included.
+
+Categories apply to every capability. `property-comparison` and
+`property-requirements` keep their own `category_property`, which heads one
+property and adds nothing for no value; declared together, the rule's
+categories come first.

@@ -66,6 +66,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   spaces' bodies through the proximity service (`minimum_3d`), judged pair
   by pair as `straight` is. Two long rooms side by side, their centres 8 m
   apart and their bodies 0.2 m, meet a 1 m maximum.
+- **Nested categories.** (#92) A rule instance may declare `categories`:
+  properties read on each finding's subject, or along a `path` on the
+  objects it reaches (a window's adjacent spaces), heading the message
+  outermost first, `[F90] [Office] ...`. Several reached values share one
+  heading, no value is `[-]`, and an unreadable category leaves the
+  finding not evaluated. They apply to every capability through the
+  outcome refiner; the shared `category_prefix` helper grows into
+  `category_headings`. **Breaking:** `RuleInstance` and `RuleRefinement`
+  gain `categories` (omitted when empty).
 - **Severity overrides.** (#91) A rule instance may declare
   `severityOverrides`: selectors, each with a severity, tried in order
   against a finding's subject and related objects; the first that holds

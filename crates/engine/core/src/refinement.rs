@@ -7,7 +7,7 @@
 //! parameter of its own.
 
 use axioval_ir::Severity;
-use axioval_ir::contract::{self as schema, SeverityBand, SeverityOverride};
+use axioval_ir::contract::{self as schema, CategoryLevel, SeverityBand, SeverityOverride};
 
 use crate::{CapabilityEvaluation, CompiledRule, RuleContext};
 
@@ -111,26 +111,30 @@ pub struct RuleRefinement {
     /// Severities chosen by the objects a finding involves, first match
     /// first.
     pub severity_overrides: Vec<SeverityOverride>,
+    /// Nested categories headed before findings, outermost first.
+    pub categories: Vec<CategoryLevel>,
 }
 
 impl RuleRefinement {
     /// Whether the rule declares nothing.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.severity_bands.is_empty() && self.severity_overrides.is_empty()
+        self.severity_bands.is_empty()
+            && self.severity_overrides.is_empty()
+            && self.categories.is_empty()
     }
 
     /// Whether applying the rule's declarations needs an [`OutcomeRefiner`]:
     /// everything but severity bands reads the model.
     #[must_use]
     pub fn needs_refiner(&self) -> bool {
-        !self.severity_overrides.is_empty()
+        !self.severity_overrides.is_empty() || !self.categories.is_empty()
     }
 }
 
 /// Trusted code that applies what a rule instance declares about its
 /// outcomes and that needs the model to apply: selectors, properties and
-/// relationships (severity overrides).
+/// relationships (severity overrides, categories).
 ///
 /// The runtime calls it after the capability ran and after severity bands
 /// were applied, for every rule the plan refines. The host installs it with

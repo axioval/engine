@@ -2479,6 +2479,15 @@ impl Case {
         });
         declare_name(&mut definitions);
         declare_wall_quantities(&mut definitions);
+        for (id, name) in [("name", "Name"), ("object-type", "ObjectType")] {
+            definitions["properties"][format!("axioval:example.ifc.{id}")] = json!({
+                "id": format!("axioval:example.ifc.{id}"),
+                "name": {"default": name, "translations": {}},
+                "valueKind": "string",
+                "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+                "citations": [],
+            });
+        }
         definitions["definitions"]["axioval:example.under-test"] = json!({
             "id": "axioval:example.under-test",
             "name": {"default": "Under test", "translations": {}},
@@ -2748,6 +2757,53 @@ fn with_geometry_a_window_too_high_above_one_rooms_floor_is_found() {
         result["report"]["not_evaluated"]
             .as_array()
             .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// The window found too high is filed under the type of the spaces it
+/// adjoins.
+#[test]
+fn with_geometry_sill_height_findings_are_categorised_by_the_adjacent_space() {
+    let case = Case::new("geometry-sill-height-categories");
+    let reference = json!({"type": "propertyReference",
+                           "property": "axioval:example.ifc.reference",
+                           "propertySet": "axioval:example.ifc.pset-space-common"});
+    case.write("model.ifc", &offices_with_windows());
+    let adjacent = json!(["axioval:derived.adjacent-space"]);
+    let (output, result) = case.geometry_rule_with(
+        &["model.ifc"],
+        &[("window", "IfcWindow"), ("space", "IfcSpace")],
+        (
+            "axioval:capability.keyed-limit",
+            &registry_signature("axioval:capability.keyed-limit"),
+        ),
+        entity("window"),
+        json!({
+            "limits": {"type": "table", "value": [
+                {"key_1": {"type": "string", "value": "Office"},
+                 "maximum": {"type": "number", "value": 1.0}},
+            ]},
+            "quantity": {"type": "string", "value": "sill-height"},
+            "floor_path": {"type": "stringList", "value": adjacent},
+            "key_1": reference,
+            "key_1_path": {"type": "stringList", "value": adjacent},
+        }),
+        &json!({"categories": [{
+            "propertySet": "axioval:example.ifc.pset-space-common",
+            "property": "axioval:example.ifc.reference",
+            "path": adjacent,
+        }]}),
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .starts_with("[Office] sill height above the floor of "),
         "{result:#}"
     );
 }
@@ -6211,6 +6267,44 @@ fn with_geometry_a_column_with_too_little_side_cover_is_found() {
             .iter()
             .any(|(_, message)| message.starts_with("bottom cover")
                 && message.contains("is 0.4000 m")),
+        "{findings:?}"
+    );
+}
+
+/// Cover findings are nested by two properties of the column: its name,
+/// then its object type.
+#[test]
+fn with_geometry_containment_findings_are_nested_by_two_properties() {
+    let case = Case::new("containment-categories");
+    let named = columns_in_a_wall().replace(
+        "IFCCOLUMN('0000000000000000000029',$,$,$,$,",
+        "IFCCOLUMN('0000000000000000000029',$,'C1',$,'Precast',",
+    );
+    assert_ne!(named, columns_in_a_wall(), "the column template changed");
+    case.write("model.ifc", &named);
+    let attribute = |id: &str| json!({"propertySet": "axioval:attributes", "property": format!("axioval:example.ifc.{id}")});
+    let (output, result) = case.geometry_rule_with(
+        &["model.ifc"],
+        &[("column", "IfcColumn")],
+        (
+            "axioval:capability.containment",
+            &registry_signature("axioval:capability.containment"),
+        ),
+        entity("column"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "minimum_volume_ratio": {"type": "number", "value": 0.99},
+            "cover": {"type": "table", "value": [cover_row("side", 0.04)]},
+        }),
+        &json!({"categories": [attribute("name"), attribute("object-type")]}),
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = sorted_findings(&result);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].0, "#29", "{findings:?}");
+    assert!(
+        findings[0].1.starts_with("[C1] [Precast] side cover"),
         "{findings:?}"
     );
 }

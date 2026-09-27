@@ -111,9 +111,16 @@ fn refinement(
     for entry in &rule.severity_overrides {
         validate_selector_concepts(concepts, &rule.id, &entry.selector)?;
     }
+    for level in &rule.categories {
+        require_concept(concepts, &rule.id, ConceptKind::Property, &level.property)?;
+        if let Some(set) = &level.property_set {
+            require_set_concept(concepts, &rule.id, set)?;
+        }
+    }
     let refinement = RuleRefinement {
         severity_bands: rule.severity_bands.clone(),
         severity_overrides: rule.severity_overrides.clone(),
+        categories: rule.categories.clone(),
     };
     if refinement.needs_refiner() && registry.refiner().is_none() {
         return Err(invalid(

@@ -9988,11 +9988,16 @@ fn storey_rule(name: &str, capability: &str, applies_to: &str, parameters: Value
         .unwrap_or_else(|_| panic!("{}", stderr(&output)));
     assert_eq!(
         output.status.code(),
-        Some(if finding_messages(&result).is_empty() {
-            0
-        } else {
-            3
-        }),
+        Some(
+            if result["report"]["findings"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+            {
+                0
+            } else {
+                3
+            }
+        ),
         "{}",
         stderr(&output)
     );
@@ -10029,6 +10034,41 @@ fn table_allocation_rows_are_keyed_per_storey() {
             "row 1 (any object) in anchors like `EG` has 1 object(s); required exactly 2"
                 .to_owned()
         )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn group_composition_reports_a_required_storey_missing_from_the_model() {
+    let row = |group: &str| {
+        json!({"group": {"type": "string", "value": group},
+               "count": {"type": "integer", "value": 1}})
+    };
+    let result = storey_rule(
+        "group-composition-absent-storey",
+        "group-composition",
+        "IfcBuildingStorey",
+        json!({
+            "requirements": {"type": "table", "value": [row("EG"), row("OG"), row("UG")]},
+            "group_key_1": name_attribute(),
+            "member_selector": {"type": "selector", "value": entity("IfcSpace")},
+            "relationship": {"type": "string", "value": "IfcRelAggregates"},
+            "report_absent_groups": {"type": "boolean", "value": true},
+        }),
+    );
+    let findings: Vec<&str> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| finding["message"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        findings,
+        [
+            "not in model: no group matches row 3 (axioval:attributes.axioval:example.ifc.Name \
+          like `UG`)"
+        ],
         "{result:#}"
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");

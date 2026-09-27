@@ -265,3 +265,105 @@ fn a_declaration_without_a_relationship_or_a_count_is_invalid() {
         "group-composition: row 1 has no count"
     );
 }
+
+/// Apartment `a` of type `A`, number `1`, with a bedroom; the rows ask for
+/// types `A` (number `1`) and `B`.
+fn typed_apartments(extra: Vec<(&'static str, ParameterValue)>) -> Vec<(String, String)> {
+    let model = apartment(&["Bedroom"])
+        .text("a", "Pset", "Kind", "A")
+        .text("a", "Pset", "Number", "1");
+    let mut parameters = requirements(vec![
+        row(&[
+            ("group", string("A")),
+            ("group_3", string("1")),
+            ("key_1", string("Bed*")),
+            ("count", integer(1)),
+        ]),
+        row(&[
+            ("group", string("B")),
+            ("key_1", string("Bed*")),
+            ("count", integer(2)),
+        ]),
+    ]);
+    parameters.push(("group_key_1", property(Some("Pset"), "Kind")));
+    parameters.push(("group_key_3", property(Some("Pset"), "Number")));
+    parameters.extend(extra);
+    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    assert!(
+        evaluation.not_evaluated_outcomes().is_empty(),
+        "{:?}",
+        unevaluated(&evaluation)
+    );
+    findings(&evaluation)
+}
+
+#[test]
+fn a_required_group_missing_from_the_model_is_a_project_finding() {
+    // Without the switch, the unmatched row is silently unused.
+    assert!(typed_apartments(Vec::new()).is_empty());
+    assert_eq!(
+        typed_apartments(vec![(
+            "report_absent_groups",
+            ParameterValue::Boolean { value: true }
+        )]),
+        [(
+            "project".into(),
+            "not in model: no group matches row 2 (Pset.Kind like `B`)".into()
+        )]
+    );
+}
+
+#[test]
+fn a_group_whose_key_cannot_be_read_may_be_the_missing_one() {
+    let model =
+        apartment(&["Bedroom"]).value("a", "Pset", "Kind", axioval_ir::PropertyValue::Integer(2));
+    let mut parameters = requirements(vec![row(&[
+        ("group", string("B")),
+        ("key_1", string("Bed*")),
+        ("count", integer(1)),
+    ])]);
+    parameters.push(("group_key", property(Some("Pset"), "Kind")));
+    parameters.push((
+        "report_absent_groups",
+        ParameterValue::Boolean { value: true },
+    ));
+    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    assert!(
+        evaluation.findings().is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            ("-".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ("a".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+        ]
+    );
+}
+
+#[test]
+fn group_keys_must_be_declared_once_and_used() {
+    for extra in [
+        vec![
+            ("group_key", property(Some("Pset"), "Kind")),
+            ("group_key_1", property(Some("Pset"), "Kind")),
+        ],
+        vec![("group_key_2", property(Some("Pset"), "Name"))],
+    ] {
+        let mut parameters = requirements(vec![row(&[
+            ("group", string("A")),
+            ("group_3", string("1")),
+            ("key_1", string("Bed*")),
+            ("count", integer(1)),
+        ])]);
+        parameters.push(("group_key_3", property(Some("Pset"), "Number")));
+        parameters.extend(extra);
+        let evaluation = apartment(&["Bedroom"])
+            .evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}

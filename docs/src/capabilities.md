@@ -528,7 +528,7 @@ The rule's selection are the groups. Each reaches its members through the traver
 | Column | Kind | Meaning |
 |---|---|---|
 | `key_1`, `key_2`, `key_3` | `textPattern` | Pattern over the member property the same-named rule parameter names, as in `table-allocation`. |
-| `group` | `textPattern` | Pattern over the group's `group_key` property; the row applies only to groups it matches. |
+| `group`, `group_2`, `group_3` | `textPattern` | Patterns over the group's `group_key_1` (or `group_key`), `group_key_2` and `group_key_3` properties, such as an apartment's type, name and number; the row applies only to groups matching every one it fills. |
 | `label` | `string` | How findings name the entry; otherwise by its number and patterns. |
 | `count` | `integer` | Required: how many members the entry takes. |
 
@@ -539,9 +539,11 @@ Maximum allocations need not be unique, so outcomes are reported only as far as 
 - An entry that every maximum allocation leaves short is a finding naming how many of its members it has and how many are missing. Entries that compete for the same members, when any of them could be the short one, are reported together with their joint shortfall ("row 1 `bedroom` and row 2 `sleeping room` together have 1 of 2 required member(s); 1 missing"), never blamed one by one.
 - Members beyond the places they fit are a surplus, reported per set of full entries they compete for ("row 1 `bedroom` takes 2 member(s), but 3 fit; 1 surplus"). A member that fits no entry is a surplus finding of its own, naming its key values.
 
-Findings go against the group and relate the members concerned. With `group_key`, one table carries every kind of group: a row filling `group` applies only to groups whose `group_key` value it matches, and a row without it applies to every group. A group that no row with a `group` cell matches is a finding ("no requirement row matches the group"), and its members are not judged. A `group` cell without `group_key`, `group_key` with no `group` cell, a key cell without its property, a missing or negative `count`, an empty table and a missing traversal are invalid declarations.
+Findings go against the group and relate the members concerned. With group keys, one table carries every kind of group: a row filling group cells applies only to groups whose values of those keys it matches, and a row without any applies to every group. A group that no row with a group cell matches is a finding ("no requirement row matches the group"), and its members are not judged. `group_key` is the older name of `group_key_1`; declaring both, a group cell without its key, a group key with no row filling its cell, a key cell without its property, a missing or negative `count`, an empty table and a missing traversal are invalid declarations.
 
 Nothing undecided is guessed: a reached object whose membership in `member_selector` is undecided, a member whose key cannot be read or is not text when a row tests it, or a group whose `group_key` cannot be read leaves the group not evaluated, and the member is reported once as not evaluated. A group whose members cannot be walked is not evaluated.
+
+With `report_absent_groups: true`, each requirement row that no selected group matches is a finding against the project, "not in model: no group matches row 2 (Pset.Type like `B`)": an apartment type, a storey or any other required group the model lacks. A group whose selection or key cannot be read might be the missing one, so a row it could match is not evaluated instead. Without the switch, an unmatched row stays unused.
 
 With `ungrouped_selector`, each object it picks that no selected group reaches is a finding, "in no group". It is not evaluated when a group that could not be walked, or whose own selection is undecided, might reach it, or when its selection by `ungrouped_selector` is undecided. Spaces that must belong to a group are thus checked in the same rule as the groups, over the same relationship; a separate `related-count` rule walking the relationship backwards from each space checks the same where one rule per concern is preferred.
 

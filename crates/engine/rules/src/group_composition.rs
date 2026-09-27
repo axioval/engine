@@ -8,9 +8,10 @@ use axioval_engine::{
     ParameterType, RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId};
+use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope};
 
 use crate::counts::{Population, relation_text};
+use crate::pairs::severity;
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, match_rows};
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
@@ -19,11 +20,16 @@ use crate::table_allocation::{
     row_name, test_keys, unknown_key,
 };
 
+/// The group cells, each over the group key of the same position.
+const GROUP_COLUMNS: [&str; 3] = ["group", "group_2", "group_3"];
+
 const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("key_1", ColumnKind::TextPattern),
     TableColumn::optional("key_2", ColumnKind::TextPattern),
     TableColumn::optional("key_3", ColumnKind::TextPattern),
     TableColumn::optional("group", ColumnKind::TextPattern),
+    TableColumn::optional("group_2", ColumnKind::TextPattern),
+    TableColumn::optional("group_3", ColumnKind::TextPattern),
     TableColumn::optional("label", ColumnKind::String),
     TableColumn::required("count", ColumnKind::Integer),
 ];
@@ -45,10 +51,14 @@ const COLUMNS: &[TableColumn] = &[
 /// bipartite matching: as many places as possible are filled, whatever
 /// order members and entries are declared in.
 ///
-/// With `group_key`, a row filling the `group` cell applies only to groups
-/// whose `group_key` value it matches (a row without one applies to every
+/// With `group_key_1` (or `group_key`) to `group_key_3`, a row filling the
+/// `group`, `group_2` and `group_3` cells applies only to groups whose
+/// values of those keys it matches (a row without one applies to every
 /// group), so one table carries every apartment type; a group that no row
-/// with a `group` cell matches is a finding of its own.
+/// with a group cell matches is a finding of its own. With
+/// `report_absent_groups`, a row that no group in the model matches is a
+/// project finding ("not in model"), unless a group whose selection or key
+/// is undecided might match it.
 ///
 /// Shortfalls and surpluses are reported only as far as every maximum
 /// matching agrees: an entry misses members on its own when no allocation
@@ -71,6 +81,10 @@ impl RuleCapability for GroupComposition {
             ParameterDescriptor::optional("key_3", ParameterType::PropertyReference),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
             ParameterDescriptor::optional("group_key", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("group_key_1", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("group_key_2", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("group_key_3", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("report_absent_groups", ParameterType::Boolean),
             ParameterDescriptor::optional("member_selector", ParameterType::Selector),
             ParameterDescriptor::optional("ungrouped_selector", ParameterType::Selector),
         ]
@@ -110,6 +124,16 @@ impl RuleCapability for GroupComposition {
             .filter_map(|outcome| outcome.object_id().cloned())
             .collect();
 
+        if declaration.report_absent {
+            report_absent(
+                context,
+                rule,
+                &declaration,
+                &groups,
+                &undecided_groups,
+                &mut evaluation,
+            );
+        }
         let mut judge = Judge {
             context,
             rule,
@@ -153,6 +177,62 @@ impl RuleCapability for GroupComposition {
             );
         }
         evaluation
+    }
+}
+
+/// A project finding for each requirement row no group in the model
+/// matches, unless a group of undecided selection or key might.
+fn report_absent(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    declaration: &Declaration<'_>,
+    groups: &[&Object],
+    undecided_groups: &[ObjectId],
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let rows = declaration.rows.len();
+    let (mut present, mut maybe) = (vec![false; rows], vec![false; rows]);
+    let mut evidence = Vec::new();
+    let decided = groups.iter().map(|group| (*group, true));
+    let undecided = undecided_groups
+        .iter()
+        .filter_map(|id| context.project.object(id))
+        .map(|group| (group, false));
+    for (group, sure) in decided.chain(undecided) {
+        let (tests, _, cited) = declaration.group_tests(context, group);
+        evidence.extend(cited);
+        for (row, test) in tests.into_iter().enumerate() {
+            match test {
+                RowTest::Match(_) if sure => present[row] = true,
+                RowTest::NoMatch => {}
+                _ => maybe[row] = true,
+            }
+        }
+    }
+    for (index, row) in declaration.rows.iter().enumerate() {
+        if present[index] {
+            continue;
+        }
+        let name = row_name(row.number, row.label, &row.group, &declaration.group_key);
+        if maybe[index] {
+            evaluation.push_not_evaluated(
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "group-composition: whether a group matches {name} is undecided: a group's \
+                     selection or key cannot be read"
+                ),
+            );
+        } else {
+            evaluation.push_finding(
+                Finding::new(
+                    rule.id.clone(),
+                    Scope::Project,
+                    severity(rule),
+                    format!("not in model: no group matches {name}"),
+                )
+                .with_evidence(evidence.clone()),
+            );
+        }
     }
 }
 
@@ -226,7 +306,8 @@ struct Row<'a> {
     number: usize,
     label: Option<&'a str>,
     keys: KeyCells<'a>,
-    /// The `group` cell, as a key cell over `group_key`.
+    /// The `group`, `group_2` and `group_3` cells, as key cells over the
+    /// group keys.
     group: KeyCells<'a>,
     count: usize,
 }
@@ -235,6 +316,7 @@ struct Declaration<'a> {
     rows: Vec<Row<'a>>,
     properties: KeyProperties<'a>,
     group_key: KeyProperties<'a>,
+    report_absent: bool,
     members: &'a Selector,
     ungrouped: Option<&'a Selector>,
     traversal: Traversal<'a>,
@@ -245,7 +327,22 @@ impl<'a> Declaration<'a> {
         let parameters = Parameters(rule);
         let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
         let properties = key_properties(&parameters)?;
-        let group_key = [parameters.property("group_key")?, None, None, None];
+        let group_key = match (
+            parameters.property("group_key")?,
+            parameters.property("group_key_1")?,
+        ) {
+            (Some(_), Some(_)) => {
+                return Err(invalid(
+                    "`group_key` and `group_key_1` name one key; declare one",
+                ));
+            }
+            (first, other) => [
+                first.or(other),
+                parameters.property("group_key_2")?,
+                parameters.property("group_key_3")?,
+                None,
+            ],
+        };
         let traversal = parameters.traversal()?.ok_or_else(|| {
             invalid("a group reaches its members only through `relationship` or `path`")
         })?;
@@ -259,24 +356,24 @@ impl<'a> Declaration<'a> {
         for (index, row) in table.into_iter().enumerate() {
             let number = index + 1;
             let keys = key_cells(row, number, &properties, case_sensitive)?;
-            let group = match row.text("group")? {
-                None => [None, None, None, None],
-                Some(_) if group_key[0].is_none() => {
+            let mut group = [None, None, None, None];
+            for (slot, (column, key)) in group.iter_mut().zip(GROUP_COLUMNS.iter().zip(&group_key))
+            {
+                let Some(text) = row.text(column)? else {
+                    continue;
+                };
+                if key.is_none() {
                     return Err(invalid(format!(
-                        "row {number} fills `group`, but no `group_key` property is declared"
+                        "row {number} fills `{column}`, but no group key property is declared \
+                         for it"
                     )));
                 }
-                Some(text) => [
-                    Some((
-                        row.pattern("group", case_sensitive)?
-                            .expect("a filled cell compiles"),
-                        text,
-                    )),
-                    None,
-                    None,
-                    None,
-                ],
-            };
+                *slot = Some((
+                    row.pattern(column, case_sensitive)?
+                        .expect("a filled cell compiles"),
+                    text,
+                ));
+            }
             let count = row
                 .integer("count")?
                 .ok_or_else(|| invalid(format!("row {number} has no count")))?;
@@ -290,19 +387,47 @@ impl<'a> Declaration<'a> {
                 count,
             });
         }
-        if group_key[0].is_some() && rows.iter().all(|row| row.group[0].is_none()) {
-            return Err(invalid("`group_key` is declared, but no row fills `group`"));
+        for (at, column) in GROUP_COLUMNS.iter().enumerate() {
+            if group_key[at].is_some() && rows.iter().all(|row| row.group[at].is_none()) {
+                return Err(invalid(format!(
+                    "a group key is declared for `{column}`, but no row fills it"
+                )));
+            }
         }
         Ok(Self {
             rows,
             properties,
             group_key,
+            report_absent: parameters.boolean("report_absent_groups")?.unwrap_or(false),
             members: parameters
                 .selector("member_selector")?
                 .unwrap_or(&Selector::All),
             ungrouped: parameters.selector("ungrouped_selector")?,
             traversal,
         })
+    }
+
+    /// Whether each row applies to `group`: a row without group cells
+    /// always does. With the group's key values and the evidence for them.
+    fn group_tests(
+        &self,
+        context: &RuleContext<'_>,
+        group: &Object,
+    ) -> (Vec<RowTest>, [Option<Key>; KEY_COUNT], Vec<Evidence>) {
+        let used = [0, 1, 2, 3].map(|index| self.rows.iter().any(|row| row.group[index].is_some()));
+        let (keys, cited) = read_keys(context, group, &self.group_key, used);
+        let tests = self
+            .rows
+            .iter()
+            .map(|row| {
+                if row.group.iter().all(Option::is_none) {
+                    RowTest::Match(0)
+                } else {
+                    test_keys(&row.group, &keys)
+                }
+            })
+            .collect();
+        (tests, keys, cited)
     }
 
     fn name(&self, row: usize) -> String {
@@ -352,26 +477,18 @@ impl Judge<'_, '_> {
     fn entries(&mut self, group: &Object, evidence: &mut Vec<Evidence>) -> Option<Vec<usize>> {
         let declaration = self.declaration;
         let rows = &declaration.rows;
-        if declaration.group_key[0].is_none() {
+        if declaration.group_key.iter().all(Option::is_none) {
             return Some((0..rows.len()).collect());
         }
-        let (keys, cited) = read_keys(
-            self.context,
-            group,
-            &declaration.group_key,
-            [true, false, false, false],
-        );
+        let (tests, keys, cited) = declaration.group_tests(self.context, group);
         evidence.extend(cited);
-        let test = |row: &Row<'_>| {
-            if row.group[0].is_none() {
-                RowTest::Match(0)
-            } else {
-                test_keys(&row.group, &keys)
-            }
-        };
-        match match_rows(rows, RowSelection::All, test) {
+        let indexed: Vec<usize> = (0..rows.len()).collect();
+        match match_rows(&indexed, RowSelection::All, |index| tests[*index]) {
             Matched::Rows(matched) => {
-                if matched.iter().all(|(_, row)| row.group[0].is_none()) {
+                if matched
+                    .iter()
+                    .all(|(index, _)| rows[*index].group.iter().all(Option::is_none))
+                {
                     let shown = describe_keys(&declaration.group_key, &keys);
                     self.evaluation.push_finding(finding(
                         self.rule,

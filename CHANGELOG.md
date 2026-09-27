@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Required groups missing from the model.** (#112) `group-composition`
+  takes `report_absent_groups`: each requirement row no group in the model
+  matches is a project finding, "not in model", such as a required
+  apartment type or storey; a group whose selection or key cannot be read
+  leaves the rows it might match not evaluated. Groups are keyed by up to
+  three properties, `group_key_1` (the older `group_key` still works) to
+  `group_key_3`, over the `group`, `group_2` and `group_3` cells.
+  **Breaking:** the `requirements` table gains `group_2` and `group_3`, and
+  the capability `group_key_1`, `group_key_2`, `group_key_3` and
+  `report_absent_groups`, so a definition bound to it must declare them.
 - **Table allocation per anchor, a fourth key, relative tolerances and
   per-object areas.** (#111) `table-allocation` rows take an `anchor`
   pattern over the anchor's `anchor_key` value, so one rule states

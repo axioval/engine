@@ -17,6 +17,7 @@ pub mod geometry;
 pub mod guard;
 pub mod linear_quantity;
 pub mod metric_routing;
+mod placement;
 pub mod plan_area;
 pub mod plan_span;
 pub(crate) mod planar;

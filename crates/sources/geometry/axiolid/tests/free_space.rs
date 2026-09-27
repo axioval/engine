@@ -6,7 +6,7 @@ use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
     BoxClearance, ClearanceOutcome, ClearanceRequest, ClearanceShape, CylinderClearance,
     FreeAreaRequest, FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint,
-    MobilityProfile, PlacementOrientation, PlacementRequest, PlacementShape,
+    MobilityProfile,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -157,32 +157,6 @@ fn an_obstacle_is_clipped_to_the_scope() {
         (evidence.available_area().upper_square_metres() - 50.0).abs() < 1e-6,
         "only the overlap inside the room counts, got {}",
         evidence.available_area().upper_square_metres()
-    );
-}
-
-/// Placement refuses rather than guessing.
-///
-/// `NoPlacement` asserts an EXHAUSTIVE search found nowhere the shape fits. A
-/// sampled sweep can only fail to find a witness, which is a weaker statement.
-/// Returning `NoPlacement` from a sampled search would launder "did not find"
-/// into "does not exist" -- the exact failure mode the outcome type exists to
-/// prevent.
-#[test]
-fn placement_refuses_rather_than_claiming_an_exhaustive_search() {
-    let geometry =
-        AxiolidGeometry::new().with_mesh(id("room"), body(0.0, 10.0, 0.0, 10.0, 0.0, 0.1));
-    let service = AxiolidFreeSpaceService::new(geometry, source());
-    let shape = PlacementShape::Box {
-        shape: BoxClearance::try_new(0.8, 0.8, 2.0).unwrap(),
-        orientation: PlacementOrientation::Any,
-    };
-    let request = PlacementRequest::new(id("room"), shape, Vec::new());
-    assert!(
-        matches!(
-            service.find_placement(&request),
-            Err(FreeSpaceError::Unavailable(_))
-        ),
-        "an unimplementable completeness claim must be refused, not faked"
     );
 }
 

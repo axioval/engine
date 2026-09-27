@@ -8,9 +8,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
-- `src/free_space.rs` implements `FreeSpaceService` for clearance and free
-  area. `find_placement` refuses: its `NoPlacement` arm asserts an exhaustive
-  search this adapter cannot perform. Clearance tests each obstacle's solid
+- `src/free_space.rs` implements `FreeSpaceService` for clearance, placement
+  and free area. `find_placement` builds the scene (scope footprint, and each
+  obstacle's `walkable::band_footprint` in the open band from the scope's
+  floor up by the shape's height, never its whole projection) and hands it to
+  `src/placement.rs`: the configuration space by Minkowski erosion and sum
+  with the convex rectangle, one-sided disc morphology for circles, angle
+  interval search for `Any`. Witnesses are re-verified by direct overlap;
+  `NoPlacement` needs the shape shrunk by `KNIFE_EDGE_METRES` (plus the
+  rotation margin) to fit nowhere, so a fit by contact refuses. Never drop a
+  margin or return `NoPlacement` from an undecided interval. Only the scope's
+  own floor is searched; other supports and frame offsets refuse (#84).
+  Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside
   (winding number) obstructs. Never go back to testing height range and
@@ -199,6 +208,12 @@ an API.
   plan areas here are off by ~1.5e-8 of the extent while reported exact.
 - axiolid/kernel#174: publish certified `boundary_distance`/`boundary_clearance`,
   so curved parts can get exact clearances instead of tessellated estimates.
+- `src/placement.rs` already uses `Region::minkowski_sum`,
+  `minkowski_erosion`, the one-sided disc morphology below and `union_soup`
+  (axiolid/kernel#145, #163), which the published 0.3.0 overlay lacks. It is
+  built and tested against local kernel sources through an untracked
+  `.cargo/config.toml` patch; the crate cannot be published until those
+  overlay APIs are.
 - axiolid/kernel#163: one-sided disc morphology (`Region::erode_inner` and
   friends, axiolid-overlay 0.3.1, not yet published). With it, walkability can
   erode free regions by half the width and prove gaps inside surfaces

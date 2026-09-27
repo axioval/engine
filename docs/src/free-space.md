@@ -67,7 +67,25 @@ Frame-offset witnesses keep the anchor's axes, so a box searched in a frame-offs
 - `Found` carries one exact, scope-grounded placement frame. Supported domains additionally require exact evidence that the whole candidate base is supported by the requested source-qualified object at that exact frame and within the requested gap.
 - `NoPlacement` requires complete exact search evidence.
 
-A bounded or partial search cannot claim that no placement exists. Connected corridor requirements use [metric routing](./metric-routing.md) with an appropriate mobility profile rather than inventing a second path contract.
+A bounded or partial search cannot claim that no placement exists.
+
+### The Axiolid placement search
+
+The Axiolid adapter decides placement in the scope's configuration space: the set of centres at which the shape lies in the scope footprint and meets no obstacle in its height band. That set is the scope eroded by the shape, minus every obstacle footprint dilated by the reflected shape. A point in it is a witness; an empty set proves that no placement exists.
+
+The height band runs from the scope's floor (the bottom of its body) up by the shape's height, and is open at both ends: a body resting on the floor under the shape or starting exactly at its top does not block it. As in clearance, an obstacle counts only by the part of its solid inside the band, never by its height range and plan outline taken apart: its band footprint is its boundary clipped to the band, plus, for a body reaching down to the floor, its section just above the floor. So an L-shaped body with a column along a wall and an arm overhead blocks only the column's strip. Clipping planar triangles to horizontal planes is exact. A body reaching down to the floor must be closed and consistently wound, or the search refuses. An obstacle without a measured body, a tessellated scope, or a tessellated obstacle within reach refuses too.
+
+| Shape | Witness (`Found`) | Proof of absence (`NoPlacement`) |
+|---|---|---|
+| Box, `Fixed` | a centre in the exact configuration space, re-verified by direct overlap | the configuration space is empty even for the box shrunk by 1 µm per side |
+| Box, `Any` | a fixed-orientation witness at the middle of an angle interval | every interval is empty for the middle box shrunk by the half-diagonal times the half-interval |
+| Cylinder | a centre in the configuration space built from inner disc approximations, which lie inside the exact one | the configuration space built from outer disc approximations, which contain the exact one, is empty for a radius 1 µm smaller |
+
+Anything in between refuses: a fit by contact, a circle whose fit lies inside the disc approximation band (about 0.12 % of the radius), or an angle search whose budget (512 fixed-orientation checks over half a turn, a quarter turn for a square) runs out before every interval is decided. The shrink margins keep rounding from turning a fit by contact into a false proof of absence.
+
+The search runs on the scope's own floor: `Unconstrained` and `Supported` by the scope itself. Other supports and frame-offset domains are refused until their support rules are written down. A `Fixed` frame must be upright. The witness frame stands at the floor elevation and uses the requested axes for `Fixed`, or the found angle for `Any`. Evidence cites the scope's own source.
+
+Connected corridor requirements use [metric routing](./metric-routing.md) with an appropriate mobility profile rather than inventing a second path contract.
 
 ## Free-area bounds
 

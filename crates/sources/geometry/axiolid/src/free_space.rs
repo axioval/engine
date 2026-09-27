@@ -13,14 +13,18 @@ use axiolid_core::{Point2, Point3};
 use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
-    AreaInterval, ClearanceOutcome, ClearanceRequest, ClearanceShape, CompleteClearanceEvidence,
+    AreaInterval, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, ClearanceShape,
+    CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
     ContainmentOutcome, ContainmentRequest, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
-    FreeSpaceService, ObstructionEvidence, PlacementOutcome, PlacementRequest,
+    FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence,
+    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
+use crate::placement::{self, Axis, Scene, Search};
 use crate::planar::{plan_frame, polygon_area, projected_polygons};
+use crate::walkable::{band_footprint, trapezoids};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
 
 /// The audit tolerance every measurement here shares.
@@ -379,6 +383,77 @@ fn reach(
     }
 }
 
+impl AxiolidFreeSpaceService {
+    /// The scope footprint and what the obstacles occupy in the shape's height
+    /// band, and the floor elevation the shape stands on.
+    ///
+    /// An obstacle counts only by the part of its solid inside the open band,
+    /// as in clearance: a closed body's band footprint is its boundary clipped
+    /// to the band plus its section just above the floor, so an L-shaped body
+    /// contributes only its foot to a low band. Clipping a planar triangle to
+    /// horizontal planes is exact.
+    fn placement_scene(
+        &self,
+        request: &PlacementRequest,
+        tolerance: axiolid_core::Tolerance,
+    ) -> Result<(Scene, f64), FreeSpaceError> {
+        let missing = || FreeSpaceError::MissingGeometry(Box::new(request.scope().clone()));
+        let scope_mesh = self.geometry.mesh(request.scope()).ok_or_else(missing)?;
+        let (low, _) = mesh_extent(scope_mesh).ok_or_else(missing)?;
+        let floor = low[2];
+        let (height, reach) = match request.shape() {
+            PlacementShape::Box { shape, .. } => (
+                shape.height_metres(),
+                shape.width_metres().hypot(shape.depth_metres()) / 2.0,
+            ),
+            PlacementShape::Cylinder(c) => (c.height_metres(), c.radius_metres()),
+        };
+
+        // Exact evidence: a tessellated scope, or a tessellated obstacle whose
+        // true body could reach a placement, makes the verdict an estimate.
+        let scope_extent = self
+            .geometry
+            .enclosing_extent(request.scope())
+            .ok_or_else(missing)?;
+        if self.geometry.is_tessellated(request.scope())
+            || self
+                .geometry
+                .tessellated_near(&scope_extent, reach, true, |object| {
+                    !request.obstacles().contains(object)
+                })
+                .is_some()
+        {
+            return Err(FreeSpaceError::InexactPlacementEvidence);
+        }
+
+        let scope = placement::footprint(&triangles(scope_mesh), tolerance)?;
+        if scope.is_empty() {
+            return Err(missing());
+        }
+        let mut obstacle_rings = Vec::new();
+        for obstacle in request.obstacles() {
+            if self.geometry.has_no_body(obstacle) {
+                continue;
+            }
+            // An obstacle without geometry could stand anywhere, so neither a
+            // witness nor a proof of absence would be complete.
+            let mesh = self
+                .geometry
+                .mesh(obstacle)
+                .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())))?;
+            let occupied = band_footprint(obstacle, mesh, floor, floor + height)
+                .map_err(FreeSpaceError::Unavailable)?;
+            obstacle_rings.extend(trapezoids(&occupied).into_iter().map(|piece| piece.outer));
+        }
+        let scene = Scene {
+            scope,
+            obstacles: placement::union(&obstacle_rings, tolerance)?,
+            tolerance,
+        };
+        Ok((scene, floor))
+    }
+}
+
 impl FreeSpaceService for AxiolidFreeSpaceService {
     fn assess_clearance(
         &self,
@@ -460,22 +535,94 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         &self,
         request: &PlacementRequest,
     ) -> Result<PlacementOutcome, FreeSpaceError> {
-        // `NoPlacement` asserts an EXHAUSTIVE search: that the shape fits
-        // nowhere in the scope. A sampled sweep cannot establish that -- it can
-        // only fail to find a witness, which is a different statement. Rather
-        // than launder "did not find" into "does not exist", this adapter
-        // refuses the request it cannot answer completely.
-        //
-        // A finding witness would be sound to return, but returning `Found`
-        // while being unable to ever return `NoPlacement` gives a capability a
-        // one-sided answer that reads as a pass. Both arms need the same
-        // search, so both wait for it.
-        let _ = self.geometry.mesh(request.scope());
-        Err(FreeSpaceError::Unavailable(
-            "exhaustive placement search is not implemented; \
-             a sampled sweep cannot establish that no placement exists"
-                .to_string(),
-        ))
+        let tolerance = tolerance()?;
+        let support = match request.domain() {
+            PlacementDomain::Unconstrained => None,
+            // The scope's own floor is the support: every centre the search
+            // accepts keeps the whole base inside the scope footprint.
+            PlacementDomain::Supported(support) if support.support() == request.scope() => {
+                Some(support)
+            }
+            _ => {
+                return Err(FreeSpaceError::Unavailable(
+                    "placement is searched on the scope's own floor only; \
+                     other supports and frame offsets are not measured"
+                        .into(),
+                ));
+            }
+        };
+        let (scene, floor) = self.placement_scene(request, tolerance)?;
+
+        let search = match request.shape() {
+            PlacementShape::Cylinder(c) => placement::circle(&scene, c.radius_metres())?,
+            PlacementShape::Box {
+                shape,
+                orientation: PlacementOrientation::Any,
+            } => placement::any_rectangle(&scene, shape.width_metres(), shape.depth_metres())?,
+            PlacementShape::Box {
+                shape,
+                orientation: PlacementOrientation::Fixed(frame),
+            } => {
+                let [rx, ry, rz] = frame.right().components();
+                let [ux, uy, uz] = frame.up().components();
+                if rz.abs() > 1.0e-12 || ux.abs() > 1.0e-12 || uy.abs() > 1.0e-12 || uz <= 0.0 {
+                    return Err(FreeSpaceError::Unavailable(
+                        "a fixed orientation must be upright".into(),
+                    ));
+                }
+                placement::fixed_rectangle(
+                    &scene,
+                    shape.width_metres(),
+                    shape.depth_metres(),
+                    Axis { x: rx, y: ry },
+                )?
+            }
+        };
+
+        // Placement is evidence about the scope, so it cites the scope's own
+        // source.
+        let evidence = Evidence::exact(
+            request.scope().source.clone(),
+            format!("axiolid:placement:{}", request.scope().local_id),
+        );
+        let (centre, right) = match search {
+            Search::Nowhere => {
+                return Ok(PlacementOutcome::NoPlacement(
+                    CompletePlacementEvidence::try_new(request.clone(), evidence)?,
+                ));
+            }
+            Search::Found { centre, right } => (centre, right),
+        };
+        let origin = MetricPoint::try_new(request.scope().clone(), [centre.x, centre.y, floor])
+            .map_err(|e| FreeSpaceError::Unavailable(format!("witness: {e}")))?;
+        // A fixed orientation's witness uses the requested axes themselves.
+        let frame = if let Some(PlacementOrientation::Fixed(fixed)) = request.shape().orientation()
+        {
+            MetricFrame::try_new(origin, fixed.right(), fixed.forward(), fixed.up())?
+        } else {
+            let forward = right.left();
+            MetricFrame::try_new(
+                origin,
+                MetricDirection::try_new([right.x, right.y, 0.0])?,
+                MetricDirection::try_new([forward.x, forward.y, 0.0])?,
+                MetricDirection::try_new([0.0, 0.0, 1.0])?,
+            )?
+        };
+        let found = match support {
+            None => ClearancePlacementEvidence::try_new(request.clone(), frame, evidence)?,
+            Some(support) => ClearancePlacementEvidence::try_new_supported(
+                request.clone(),
+                frame.clone(),
+                CompleteSupportEvidence::try_new(
+                    support.support().clone(),
+                    frame,
+                    0.0,
+                    evidence.clone(),
+                )?,
+                evidence,
+            )?,
+        };
+        Ok(PlacementOutcome::Found(found))
     }
 
     fn measure_free_area(

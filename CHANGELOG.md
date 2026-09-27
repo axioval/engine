@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Openings in members and walls.** (#65) `opening-zone` places each
+  opening in its host's face (`host_path`, `host_selector`; the face
+  spanned by `length_axis` and `height_axis`, two of `extrusion`,
+  `profile-x`, `profile-y`) and requires it to lie within the host, and
+  optionally `end_distance` from the host's ends, `edge_distance` from its
+  edges or (with `zone` `web`) its flanges, and `opening_spacing` clear of
+  the other openings of the host. It reads both bodies from the reserved
+  body set: an opening's extent is the exact reach of its rectangle,
+  rounded rectangle, circle or ellipse swept along its extrusion; a host
+  must be a straight extrusion of a bounded section. Spacing is exact
+  between axis-aligned rectangles extruded through the host and otherwise
+  only passes. Anything it cannot place soundly is not evaluated. Distances
+  from supports and connecting beams, and gross against net wall area, are
+  not decided yet.
 - **Allowed profiles.** (#64) `allowed-profile` requires each member's
   body to be one swept solid whose profile is a row of a `profiles` table:
   its family (`type`), its name where the row states one (`HEA*`), and

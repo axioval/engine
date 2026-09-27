@@ -6008,3 +6008,188 @@ fn column_profiles_are_checked_against_a_table_of_allowed_profiles() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// Metres. Wall #10, 5 m long along x from the origin, 0.2 m thick and 3 m
+/// high, holds rectangular openings #100 (x 1.5 to 2.5), #200 (x 3.1 to
+/// 4.1) and #300 (x 4.2 to 5.2, 0.1 m from #200 and past the wall's end), each 1.2 m high from
+/// z 0.9. Beam #50, a 300 mm I-section with 20 mm flanges running 6 m along
+/// x at z 3, has round holes #400 (mid-span), #500 (0.2 m from its start)
+/// and #600 (reaching into the top flange).
+fn hosts_with_openings() -> String {
+    let opening = |id: u32, host: u32, profile: &str, at: [f64; 3], axis: &str, depth: f64| {
+        format!(
+            "#{a}={profile};\n#{b}=IFCCARTESIANPOINT(({},{},{}));\n\
+             #{c}=IFCAXIS2PLACEMENT3D(#{b},{axis});\n\
+             #{d}=IFCEXTRUDEDAREASOLID(#{a},#{c},#4,{depth});\n\
+             #{e}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{d}));\n\
+             #{f}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{e}));\n\
+             #{id}=IFCOPENINGELEMENT('{id:022}',$,$,$,$,#3,#{f},$,.OPENING.);\n\
+             #{g}=IFCRELVOIDSELEMENT('{g:022}',$,$,$,#{host},#{id});\n",
+            at[0],
+            at[1],
+            at[2],
+            a = id + 1,
+            b = id + 2,
+            c = id + 3,
+            d = id + 4,
+            e = id + 5,
+            f = id + 6,
+            g = id + 7,
+        )
+    };
+    // Extruded along -y through the wall, the profile's Y axis up.
+    let window = |id: u32, x: f64| {
+        opening(
+            id,
+            10,
+            "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,1.,1.2)",
+            [x, 0.1, 1.5],
+            "#6,#7",
+            0.2,
+        )
+    };
+    // Extruded along +y through the web.
+    let hole = |id: u32, x: f64, z: f64| {
+        opening(
+            id,
+            50,
+            "IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.05)",
+            [x, -0.2, 3.0 + z],
+            "#8,#7",
+            0.4,
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCDIRECTION((0.,-1.,0.));\n\
+         #7=IFCDIRECTION((1.,0.,0.));\n\
+         #8=IFCDIRECTION((0.,1.,0.));\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #22=IFCUNITASSIGNMENT((#20,#21));\n\
+         #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
+         #11=IFCCARTESIANPOINT((2.5,0.));\n\
+         #12=IFCAXIS2PLACEMENT2D(#11,$);\n\
+         #13=IFCRECTANGLEPROFILEDEF(.AREA.,$,#12,5.,0.2);\n\
+         #14=IFCEXTRUDEDAREASOLID(#13,#2,#4,3.);\n\
+         #15=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#14));\n\
+         #16=IFCPRODUCTDEFINITIONSHAPE($,$,(#15));\n\
+         #10=IFCWALL('0000000000000000000010',$,$,$,$,#3,#16,$,.STANDARD.);\n\
+         #51=IFCISHAPEPROFILEDEF(.AREA.,'I300',$,0.3,0.3,0.01,0.02,$,$,$);\n\
+         #52=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #55=IFCAXIS2PLACEMENT3D(#52,#7,#8);\n\
+         #56=IFCEXTRUDEDAREASOLID(#51,#55,#4,6.);\n\
+         #57=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#56));\n\
+         #58=IFCPRODUCTDEFINITIONSHAPE($,$,(#57));\n\
+         #50=IFCBEAM('0000000000000000000050',$,$,$,$,#3,#58,$,.BEAM.);\n\
+         {}{}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        window(100, 2.0),
+        window(200, 3.6),
+        window(300, 4.7),
+        hole(400, 3.0, 0.0),
+        hole(500, 0.2, 0.0),
+        hole(600, 4.5, 0.1),
+    )
+}
+
+fn opening_zone(name: &str, host: &str, parameters: Value) -> (Output, Value) {
+    let case = Case::new(name);
+    let mut parameters = parameters;
+    parameters["host_path"] =
+        json!({"type": "stringList", "value": ["IfcRelVoidsElement:backward"]});
+    parameters["host_selector"] = json!({"type": "selector", "value": entity(host)});
+    case.geometry_rule(
+        &hosts_with_openings(),
+        &[
+            ("opening", "IfcOpeningElement"),
+            ("wall", "IfcWall"),
+            ("beam", "IfcBeam"),
+        ],
+        "axioval:capability.opening-zone",
+        &registry_signature("axioval:capability.opening-zone"),
+        entity("opening"),
+        parameters,
+    )
+}
+
+#[test]
+fn wall_openings_are_checked_against_the_walls_outline_and_each_other() {
+    let metres = |value: f64| json!({"type": "quantity", "value": value, "unit": "m"});
+    let (output, result) = opening_zone(
+        "opening-zone-wall",
+        "wall",
+        json!({
+            "length_axis": {"type": "string", "value": "profile-x"},
+            "height_axis": {"type": "string", "value": "extrusion"},
+            "end_distance": metres(0.5),
+            "edge_distance": metres(0.5),
+            "opening_spacing": metres(0.8),
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#100".to_owned(),
+                "opening is 0.6 m clear of another opening in its host #10; 0.8 m required"
+                    .to_owned()
+            ),
+            (
+                "#200".to_owned(),
+                "opening is 0.1 m clear of another opening in its host #10; 0.8 m required"
+                    .to_owned()
+            ),
+            (
+                "#300".to_owned(),
+                "opening is 0.1 m clear of another opening in its host #10; 0.8 m required"
+                    .to_owned()
+            ),
+            (
+                "#300".to_owned(),
+                "opening lies partly outside its host #10: along its length it spans 1.7 m to \
+                 2.7 m, the host -2.5 m to 2.5 m"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn beam_holes_are_checked_against_the_web_zone_and_the_beams_ends() {
+    let (output, result) = opening_zone(
+        "opening-zone-beam",
+        "beam",
+        json!({
+            "length_axis": {"type": "string", "value": "extrusion"},
+            "height_axis": {"type": "string", "value": "profile-y"},
+            "end_distance": {"type": "quantity", "value": 300.0, "unit": "mm"},
+            "zone": {"type": "string", "value": "web"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#500".to_owned(),
+                "opening is 0.15 m from an end of its host #50; 0.3 m required".to_owned()
+            ),
+            (
+                "#600".to_owned(),
+                "opening reaches 0.02 m into the flanges of its host #50; 0 m clear required"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

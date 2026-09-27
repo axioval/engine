@@ -1198,6 +1198,9 @@ Rules on how structural members and walls are built read the reserved body set (
 | Extruded along the vertical | `property-predicate` on `axioval:body.Extrusion.Inclination`, `less_or_equal` a small angle. |
 | Empty element (no body) | `property-required` on `axioval:body.Count`. |
 | Profile from a table | `allowed-profile`. |
+| Openings within their host, clear of its ends, edges, flanges and each other | `opening-zone`. |
+| Gross area equal to net area plus openings | Not decided yet: the opening areas are known only for openings `opening-zone` can place, and no capability sums them against stated quantities. |
+| Openings clear of supports, and components penetrating a beam clear of connecting beams | Not decided yet: spans from supports need the structural connections of a member, which no contract states. |
 
 `axioval:capability.allowed-profile` requires each selected object's body to be one swept solid whose profile is a row of the `profiles` table. A row fits when its `type` pattern matches the profile family (`i-shape`, `rectangle`, …), its `name` pattern (if any) the profile's name (a catalogue designation such as `HEA300`), and every dimension it states lies within the tolerance of the profile's.
 
@@ -1221,6 +1224,27 @@ Three results are told apart, each a finding on the object:
 - **not an allowed profile**: a parameterised profile no row fits, naming the nearest row of its type (least total excess beyond the tolerance, then a matching name, then the first declared) and each dimension it is off in (`depth 0.295 m, allowed 0.29 m within 0.001 m`); or of a type no row names.
 
 A row stating a dimension the family does not have, or one the source leaves unset, does not fit; the schema's default is never assumed. A mirrored profile is judged by its parent, whose dimensions it keeps; a derived one is not evaluated, since the body set does not state whether its operator scales. A dimension the source refuses leaves the object not evaluated unless another row fits.
+
+`axioval:capability.opening-zone` requires each selected opening to lie within its host's face and inside the zone the rule allows. The host is what `host_path` reaches from the opening among the `host_selector` objects (every object by default); with IFC, `IfcRelVoidsElement` backward.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `host_path` | `stringList` | Required. Relationship steps from the opening to its host. |
+| `host_selector` | `selector` | The hosts checked. An opening reaching none of them is not checked. |
+| `length_axis`, `height_axis` | `string` | Required, distinct. Two of `extrusion`, `profile-x` and `profile-y`: the host's axes spanning the face the openings pass through. A beam: `extrusion` and `profile-y`; a wall extruded up from its plan outline: `profile-x` and `extrusion`. |
+| `end_distance` | `quantity` | A length the opening must keep from both ends of the host along `length_axis`. |
+| `edge_distance` | `quantity` | A length the opening must keep from both edges along `height_axis`, or from both flanges with `zone` `web`. |
+| `zone` | `string` | `section` (default: the host's whole height) or `web`: between the flanges of an I, T, U, C or Z section, across `profile-y`. |
+| `opening_spacing` | `quantity` | The clear distance the opening must keep from every other opening of the same host, in the face. |
+
+Every opening is checked to lie within its host's face along both axes (`opening lies partly outside its host #10: along its length it spans 1.7 m to 2.7 m, the host -2.5 m to 2.5 m`); each declared zone is its own finding. Findings relate the host, and a spacing finding the openings too close.
+
+Both bodies are read from the reserved body set, never from a mesh, and are judged only where they can be soundly:
+
+- the host must be one straight extrusion, perpendicular to its profile, of a family whose outline the set bounds (rectangles, circles, ellipses and the I, asymmetric I, T, U, C, Z and L sections, centred on their position); an arbitrary outline is not evaluated;
+- the opening must be one straight extrusion of a rectangle, rounded rectangle, circle or ellipse. Its extent along each face axis is exact: the reach of its outline in that direction, swept along its extrusion, even when it is tilted.
+
+Distances between openings are clear distances in the face. They are exact between two rectangles whose sides run along the face axes and which are extruded through the host (the third axis); for any other pair only the distance of their extents is known, a lower bound that can pass a pair but never find one, so a pair it cannot pass leaves the opening not evaluated. An opening whose host cannot be read, or whose own selection is undecided, may be a neighbour of any opening and is treated as one. Positions are composed from placements in binary arithmetic, so every bound is widened by a nanometre.
 
 ### Model quality
 

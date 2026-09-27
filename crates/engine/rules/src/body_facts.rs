@@ -96,6 +96,14 @@ impl<'a> BodyFacts<'a> {
         }
     }
 
+    pub(crate) fn decimal(&mut self, name: &str) -> Result<Option<f64>, Unavailable> {
+        match self.value(name)? {
+            None => Ok(None),
+            Some(PropertyValue::Decimal(value)) if value.is_finite() => Ok(Some(value)),
+            Some(other) => Err(Self::wrong(name, &other, "a decimal")),
+        }
+    }
+
     fn quantity(
         &mut self,
         name: &str,
@@ -115,6 +123,42 @@ impl<'a> BodyFacts<'a> {
     pub(crate) fn length(&mut self, name: &str) -> Result<Option<f64>, Unavailable> {
         self.quantity(name, QuantityDimension::Length, "a length")
     }
+
+    pub(crate) fn angle(&mut self, name: &str) -> Result<Option<f64>, Unavailable> {
+        self.quantity(name, QuantityDimension::PlaneAngle, "a plane angle")
+    }
+
+    /// A length the body must state: its absence is a gap in the source's
+    /// description, not a fact about the object.
+    pub(crate) fn required_length(&mut self, name: &str) -> Result<f64, Unavailable> {
+        self.length(name)?.ok_or_else(|| missing(name))
+    }
+
+    /// A unit vector the body must state, as `<name>X`, `<name>Y`, `<name>Z`.
+    pub(crate) fn vector(&mut self, name: &str) -> Result<[f64; 3], Unavailable> {
+        let mut vector = [0.0; 3];
+        for (component, axis) in vector.iter_mut().zip(["X", "Y", "Z"]) {
+            let name = format!("{name}{axis}");
+            *component = self.decimal(&name)?.ok_or_else(|| missing(&name))?;
+        }
+        Ok(vector)
+    }
+
+    /// A point the body must state, as `<name>X`, `<name>Y`, `<name>Z`.
+    pub(crate) fn point(&mut self, name: &str) -> Result<[f64; 3], Unavailable> {
+        let mut point = [0.0; 3];
+        for (component, axis) in point.iter_mut().zip(["X", "Y", "Z"]) {
+            *component = self.required_length(&format!("{name}{axis}"))?;
+        }
+        Ok(point)
+    }
+}
+
+fn missing(name: &str) -> Unavailable {
+    (
+        NotEvaluatedReason::IncompleteEvidence,
+        format!("the source states no `{BODY_SET}.{name}`"),
+    )
 }
 
 /// The family names of profiles that are not parameterised sections.

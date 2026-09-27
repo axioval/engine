@@ -40,6 +40,7 @@ mod name_sequence;
 mod numbering_consistency;
 mod object_count;
 mod opening_spaces;
+mod opening_zone;
 mod orientation;
 mod pairs;
 mod parking_bay;
@@ -108,6 +109,7 @@ pub use name_sequence::NameSequence;
 pub use numbering_consistency::NumberingConsistency;
 pub use object_count::ObjectCount;
 pub use opening_spaces::OpeningSpaces;
+pub use opening_zone::OpeningZone;
 pub use parking_bay::ParkingBay;
 pub use plan_area::{AreaRatio, PlanAreaRange, PlanCoverage};
 pub use property_comparison::PropertyComparison;
@@ -203,4 +205,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(CorridorEndOpenings))
         .and_then(|registry| registry.register(SpaceBoundaryCoverage))
         .and_then(|registry| registry.register(AllowedProfile))
+        .and_then(|registry| registry.register(OpeningZone))
 }

@@ -478,7 +478,9 @@ pub const MATERIAL_KIND_LIST: &str = "list";
 ///   (`XDim`, `YDim`, `OverallWidth`, `OverallDepth`, `WebThickness`,
 ///   `FlangeThickness`, `FilletRadius`, `Radius`, `WallThickness`, …).
 ///   A composite profile states `Count`, `Label` and `Member<n>.` facts; a
-///   derived or mirrored one `Label` and `Parent.` facts.
+///   derived or mirrored one `Label` and `Parent.` facts. Every
+///   parameterised section except the trapezium is centred on its position
+///   (the centre of its bounding box), its depth along the position's Y.
 /// - Without the `Item<n>.` prefix, a name reads the body's only item. A
 ///   body of several items is a conflict for such a name, never a choice.
 ///

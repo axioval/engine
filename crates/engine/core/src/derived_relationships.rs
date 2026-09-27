@@ -17,8 +17,9 @@
 //! parameter takes its documented default, and an unknown or repeated key, a
 //! negative, non-finite or out-of-range value is an invalid request.
 //!
-//! Edges always run from a subject to a space, so `forward` from an element
-//! reaches its spaces and `backward` from a space reaches its subjects.
+//! Edges always run from a subject to a space (a level, for `spans-level`),
+//! so `forward` from an element reaches its spaces and `backward` from a
+//! space reaches its subjects.
 
 use std::fmt;
 use std::sync::Arc;
@@ -66,11 +67,21 @@ pub enum Derivation {
         /// Largest vertical gap between the two extents, in metres.
         vertical_metres: f64,
     },
+    /// `axioval:derived.spans-level`: a space to every level (storey)
+    /// whose height band its vertical extent reaches at least `overlap`
+    /// metres into (default 1), or at least half its own height, so a space
+    /// counts in its own storey and a two-storey atrium in both. A level's
+    /// band runs from its elevation up to the next level's.
+    SpansLevel {
+        /// Smallest vertical overlap with a level's band, in metres.
+        overlap_metres: f64,
+    },
 }
 
 const CONTAINED_IN_SPACE: &str = "contained-in-space";
 const ADJACENT_SPACE: &str = "adjacent-space";
 const OVERLAPPING_GROUP_SPACE: &str = "overlapping-group-space";
+const SPANS_LEVEL: &str = "spans-level";
 
 impl Derivation {
     /// The derivation a relationship identity names, `None` for an identity
@@ -111,6 +122,7 @@ impl Derivation {
             CONTAINED_IN_SPACE => &["horizontal", "vertical"],
             ADJACENT_SPACE => &["reach"],
             OVERLAPPING_GROUP_SPACE => &["ratio", "vertical"],
+            SPANS_LEVEL => &["overlap"],
             _ => return Err(RelationshipSelectionError::InvalidRequest),
         };
         if parameters.iter().any(|(key, _)| !allowed.contains(key)) {
@@ -130,6 +142,9 @@ impl Derivation {
             ADJACENT_SPACE => Self::AdjacentSpace {
                 reach_metres: get("reach", 1.0),
             },
+            SPANS_LEVEL => Self::SpansLevel {
+                overlap_metres: get("overlap", 1.0),
+            },
             _ => Self::OverlappingGroupSpace {
                 minimum_ratio: get("ratio", 0.5),
                 vertical_metres: get("vertical", 0.0),
@@ -137,6 +152,9 @@ impl Derivation {
         };
         match derivation {
             Self::AdjacentSpace { reach_metres } if reach_metres <= 0.0 => {
+                Err(RelationshipSelectionError::InvalidRequest)
+            }
+            Self::SpansLevel { overlap_metres } if overlap_metres <= 0.0 => {
                 Err(RelationshipSelectionError::InvalidRequest)
             }
             Self::OverlappingGroupSpace { minimum_ratio, .. }
@@ -157,6 +175,7 @@ impl Derivation {
             Self::ContainedInSpace { .. } => CONTAINED_IN_SPACE,
             Self::AdjacentSpace { .. } => ADJACENT_SPACE,
             Self::OverlappingGroupSpace { .. } => OVERLAPPING_GROUP_SPACE,
+            Self::SpansLevel { .. } => SPANS_LEVEL,
         };
         format!("{DERIVED_RELATIONSHIP_PREFIX}{name}")
     }
@@ -179,6 +198,7 @@ impl fmt::Display for Derivation {
                 minimum_ratio,
                 vertical_metres,
             } => write!(f, ";ratio={minimum_ratio};vertical={vertical_metres}"),
+            Self::SpansLevel { overlap_metres } => write!(f, ";overlap={overlap_metres}"),
         }
     }
 }
@@ -524,6 +544,27 @@ mod tests {
                 .unwrap()
                 .to_string(),
             "axioval:derived.overlapping-group-space;ratio=0.9;vertical=0"
+        );
+        assert_eq!(
+            parse("axioval:derived.spans-level"),
+            Ok(Some(Derivation::SpansLevel {
+                overlap_metres: 1.0
+            }))
+        );
+        assert_eq!(
+            parse("axioval:derived.spans-level;overlap=0.5")
+                .unwrap()
+                .unwrap()
+                .to_string(),
+            "axioval:derived.spans-level;overlap=0.5"
+        );
+        assert_eq!(
+            parse("axioval:derived.spans-level;overlap=0"),
+            Err(RelationshipSelectionError::InvalidRequest)
+        );
+        assert_eq!(
+            parse("axioval:derived.spans-level;reach=1"),
+            Err(RelationshipSelectionError::InvalidRequest)
         );
     }
 

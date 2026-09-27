@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Spaces in every storey their height spans.** (#114) The derived
+  relationship `axioval:derived.spans-level;overlap=<m>` (default 1) runs
+  from a space to every level whose height band its vertical extent reaches
+  at least `overlap` metres into, or half its own height into, so a storey's
+  areas walked `backward` count a two-storey atrium in both storeys. The
+  Axiolid adapter takes levels with their bands (`with_level`,
+  `with_unmeasured_level`) and widens a tessellated space's extent by its
+  chord deviation; a straddling extent refuses the answer. The CLI declares
+  every `IfcBuildingStorey` a level, its band up to the next storey of the
+  same parent. **Breaking:** `Derivation` gains `SpansLevel`.
 - **Keyed limits on summed member areas.** (#113) `keyed-limit` takes the
   quantity `member-plan-area`: the summed footprints of the members
   `member_selector` picks among the objects each object reaches through the

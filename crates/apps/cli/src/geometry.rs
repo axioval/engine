@@ -245,7 +245,7 @@ pub fn attach(
         plan_area_service(&geometry, &source, &voids),
     );
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
-    let derived = derived_service(&geometry, &kinds, &is_a, voids);
+    let derived = derived_service(&geometry, &parsed, &kinds, &is_a, voids);
     let facade = facade_service(&geometry, &kinds, &is_a);
     let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
@@ -455,6 +455,7 @@ type Void = Result<(axiolid_mesh::TriMesh, bool), String>;
 /// finding no space beside it.
 fn derived_service(
     geometry: &AxiolidGeometry,
+    parsed: &BTreeMap<SourceId, Parsed>,
     kinds: &BTreeMap<ObjectId, String>,
     is_a: &impl Fn(&ObjectId, &str) -> bool,
     voids: Vec<(ObjectId, Void)>,
@@ -475,6 +476,76 @@ fn derived_service(
             }
             Err(reason) => service.with_unmeasured_opening_void(id, reason),
         };
+    }
+    with_levels(service, parsed, kinds, is_a)
+}
+
+/// A storey's world height, or why it has none.
+type Height = Result<f64, String>;
+
+/// A storey's source and spatial parent: the storeys whose heights order
+/// its band.
+type Parent = (SourceId, Option<EntityId>);
+
+/// Declares every `IfcBuildingStorey` a level for `spans-level`: its band
+/// runs from its placement's height up to the next storey's of the same
+/// parent (open above for the highest). A storey whose placement cannot be
+/// read, is tilted, or shares its height with a sibling has no band, so a
+/// request it could answer refuses.
+fn with_levels(
+    mut service: AxiolidDerivedRelationshipService,
+    parsed: &BTreeMap<SourceId, Parsed>,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+) -> AxiolidDerivedRelationshipService {
+    let trees: BTreeMap<&SourceId, SpatialTree> = parsed
+        .iter()
+        .map(|(source, Parsed { model, .. })| (source, SpatialTree::build(model)))
+        .collect();
+    let mut siblings: BTreeMap<Parent, Vec<(ObjectId, Height)>> = BTreeMap::new();
+    for id in kinds.keys().filter(|id| is_a(id, "IfcBuildingStorey")) {
+        let (Some(entity), Some(Parsed { model, units })) = (entity_id(id), parsed.get(&id.source))
+        else {
+            continue;
+        };
+        let parent = trees
+            .get(&id.source)
+            .and_then(|tree| tree.node(entity))
+            .and_then(|node| node.parent);
+        let height = ifc_geometry::product_world_transform(model, units, entity)
+            .map_err(|error| error.to_string())
+            .and_then(|frame| {
+                let up = frame.basis[2];
+                if up[0].abs() > 1e-12 || up[1].abs() > 1e-12 || (up[2] - 1.0).abs() > 1e-12 {
+                    Err("the storey's placement is tilted".to_owned())
+                } else {
+                    Ok(frame.origin[2])
+                }
+            });
+        siblings
+            .entry((id.source.clone(), parent))
+            .or_default()
+            .push((id.clone(), height));
+    }
+    for levels in siblings.into_values() {
+        let mut heights: Vec<f64> = levels
+            .iter()
+            .filter_map(|(_, height)| height.as_ref().ok().copied())
+            .collect();
+        heights.sort_by(f64::total_cmp);
+        for (level, height) in levels {
+            service = match height {
+                Err(reason) => service.with_unmeasured_level(level, reason),
+                #[allow(clippy::float_cmp)]
+                Ok(height) if heights.iter().filter(|other| **other == height).count() > 1 => {
+                    service.with_unmeasured_level(level, "another storey shares its elevation")
+                }
+                Ok(height) => {
+                    let top = heights.iter().copied().find(|other| *other > height);
+                    service.with_level(level, height, top)
+                }
+            };
+        }
     }
     service
 }

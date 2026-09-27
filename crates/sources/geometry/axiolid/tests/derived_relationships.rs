@@ -501,3 +501,106 @@ fn a_bodiless_opening_is_probed_through_its_void() {
     .unwrap();
     assert!(none.is_empty());
 }
+
+const SPANS: &str = "axioval:derived.spans-level";
+
+/// Storeys `eg` (0..3), `og` (3..6) and `dg` (6.., the highest) with a
+/// two-storey atrium, an office on each lower storey, and a gallery rising
+/// 0.5 m from `eg` into `og`.
+fn storeys(atrium: AxiolidGeometry) -> AxiolidDerivedRelationshipService {
+    let geometry = atrium
+        .with_mesh(id("office"), cuboid([10.0, 0.0, 0.0], [14.0, 4.0, 3.0]))
+        .with_mesh(id("upper"), cuboid([10.0, 0.0, 3.0], [14.0, 4.0, 6.0]))
+        .with_mesh(id("gallery"), cuboid([20.0, 0.0, 0.0], [24.0, 4.0, 3.5]));
+    ["atrium", "office", "upper", "gallery"]
+        .into_iter()
+        .fold(
+            AxiolidDerivedRelationshipService::new(geometry),
+            |service, space| service.with_space(id(space)),
+        )
+        .with_level(id("eg"), 0.0, Some(3.0))
+        .with_level(id("og"), 3.0, Some(6.0))
+        .with_level(id("dg"), 6.0, None)
+}
+
+const SPACES: &[&str] = &["atrium", "office", "upper", "gallery"];
+
+#[test]
+fn a_space_spans_every_level_it_rises_into_far_enough() {
+    let handle = handle(storeys(
+        AxiolidGeometry::new().with_mesh(id("atrium"), cuboid([0.0, 0.0, 0.0], [8.0, 8.0, 6.0])),
+    ));
+    let spanned = |space: &str| {
+        select(
+            &handle,
+            space,
+            &["eg", "og", "dg"],
+            SPANS,
+            TraversalDirection::Forward,
+        )
+        .unwrap()
+        .0
+    };
+    assert_eq!(spanned("atrium"), ["eg", "og"]);
+    assert_eq!(spanned("office"), ["eg"]);
+    assert_eq!(spanned("upper"), ["og"]);
+    // 0.5 m into `og` is less than the 1 m overlap.
+    assert_eq!(spanned("gallery"), ["eg"]);
+    let (reached, evidence) =
+        select(&handle, "og", SPACES, SPANS, TraversalDirection::Backward).unwrap();
+    assert_eq!(reached, ["atrium", "upper"]);
+    assert!(
+        evidence
+            .iter()
+            .any(|locator| locator.starts_with(&format!("{SPANS};overlap=1:"))),
+        "{evidence:?}"
+    );
+    let loose = select(
+        &handle,
+        "og",
+        SPACES,
+        &format!("{SPANS};overlap=0.5"),
+        TraversalDirection::Backward,
+    )
+    .unwrap()
+    .0;
+    assert_eq!(loose, ["atrium", "gallery", "upper"]);
+}
+
+#[test]
+fn a_straddling_extent_or_an_unmeasured_level_refuses() {
+    // A tessellated atrium reaching 1 m ± 1 mm into `og`.
+    let handle_of = |service| handle(service);
+    let straddling = handle_of(storeys(AxiolidGeometry::new().with_tessellated_mesh(
+        id("atrium"),
+        cuboid([0.0, 0.0, 0.0], [8.0, 8.0, 4.0]),
+        0.001,
+    )));
+    assert!(matches!(
+        select(
+            &straddling,
+            "og",
+            SPACES,
+            SPANS,
+            TraversalDirection::Backward
+        ),
+        Err(RelationshipSelectionError::Unavailable(_))
+    ));
+    let unmeasured = handle_of(
+        storeys(
+            AxiolidGeometry::new()
+                .with_mesh(id("atrium"), cuboid([0.0, 0.0, 0.0], [8.0, 8.0, 6.0])),
+        )
+        .with_unmeasured_level(id("zg"), "another storey shares its elevation"),
+    );
+    assert!(matches!(
+        select(
+            &unmeasured,
+            "atrium",
+            &["eg", "og"],
+            SPANS,
+            TraversalDirection::Forward
+        ),
+        Err(RelationshipSelectionError::Unavailable(_))
+    ));
+}

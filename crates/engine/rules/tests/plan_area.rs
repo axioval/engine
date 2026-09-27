@@ -212,6 +212,53 @@ mod window_ratio {
     }
 
     #[test]
+    fn an_atrium_spanning_two_storeys_counts_in_both_numerators() {
+        // The derived relationship runs from each space to every storey it
+        // spans; walked backward, each storey reaches the atrium.
+        const SPANS: &str = "axioval:derived.spans-level;overlap=1";
+        let model = Model::default()
+            .object("eg", "storey")
+            .object("og", "storey")
+            .object("atrium", "space")
+            .object("office", "space")
+            .object("upper", "space")
+            .object("eg-slab", "slab")
+            .object("og-slab", "slab")
+            .edge(SPANS, "atrium", "eg")
+            .edge(SPANS, "atrium", "og")
+            .edge(SPANS, "office", "eg")
+            .edge(SPANS, "upper", "og")
+            .edge(SPANS, "eg-slab", "eg")
+            .edge(SPANS, "og-slab", "og");
+        let rectangles = Rectangles::default()
+            .with("atrium", [0.0, 0.0, 4.0, 5.0], 0.0)
+            .with("office", [4.0, 0.0, 10.0, 5.0], 0.0)
+            .with("upper", [4.0, 0.0, 10.0, 5.0], 0.0)
+            .with("eg-slab", [0.0, 0.0, 10.0, 5.0], 0.0)
+            .with("og-slab", [0.0, 0.0, 10.0, 5.0], 0.0);
+        let parameters = vec![
+            ("numerator_selector", selector(kind("space"))),
+            ("denominator_selector", selector(kind("slab"))),
+            ("minimum", number(0.9)),
+            ("relationship", string(SPANS)),
+            ("direction", string("backward")),
+        ];
+        let evaluation = run(
+            model,
+            rectangles,
+            &AreaRatio,
+            &rule("axioval:capability.area-ratio", kind("storey"), parameters),
+        );
+        // Without the atrium the upper storey's spaces cover 30 m² of 50 m².
+        assert!(
+            evaluation.findings().is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+        assert!(evaluation.not_evaluated_outcomes().is_empty());
+    }
+
+    #[test]
     fn a_window_without_a_stated_area_leaves_the_storey_unjudged() {
         let model = Model::default()
             .object("st", "storey")

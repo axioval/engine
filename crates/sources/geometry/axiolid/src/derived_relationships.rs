@@ -1,5 +1,5 @@
 //! Relationships derived from geometry: element to space, opening to space,
-//! space to group space.
+//! space to group space, space to the levels it spans.
 //!
 //! ADR 0004: this module measures which spaces an object lies in, borders or
 //! falls within; whether a count or a comparison over them passes is a
@@ -88,6 +88,9 @@ struct SpaceBody<'a> {
 pub struct AxiolidDerivedRelationshipService {
     geometry: AxiolidGeometry,
     spaces: BTreeSet<ObjectId>,
+    /// Each declared level's height band, bottom and top (open above for
+    /// the highest), or why it has none.
+    levels: BTreeMap<ObjectId, Result<(f64, Option<f64>), String>>,
     openings: BTreeSet<ObjectId>,
     voids: BTreeMap<ObjectId, Void>,
     cache: Mutex<BTreeMap<(String, ObjectId), Cached>>,
@@ -100,6 +103,7 @@ impl AxiolidDerivedRelationshipService {
         Self {
             geometry,
             spaces: BTreeSet::new(),
+            levels: BTreeMap::new(),
             openings: BTreeSet::new(),
             voids: BTreeMap::new(),
             cache: Mutex::new(BTreeMap::new()),
@@ -111,6 +115,32 @@ impl AxiolidDerivedRelationshipService {
     #[must_use]
     pub fn with_space(mut self, space: ObjectId) -> Self {
         self.spaces.insert(space);
+        self
+    }
+
+    /// Declares a level (a storey) and its height band, the target of
+    /// `spans-level`: from `bottom` up to `top`, the next level's elevation,
+    /// or open above for the highest level. Which objects are levels and
+    /// which level comes next is semantic, so the host states both.
+    #[must_use]
+    pub fn with_level(mut self, level: ObjectId, bottom: f64, top: Option<f64>) -> Self {
+        let band = if bottom.is_finite() && top.is_none_or(|top| top.is_finite() && top > bottom) {
+            Ok((bottom, top))
+        } else {
+            Err(format!(
+                "level {level} has no height band from {bottom} to {top:?}"
+            ))
+        };
+        self.levels.insert(level, band);
+        self
+    }
+
+    /// Declares a level whose band the host could not state, such as one
+    /// sharing its elevation with another level. A `spans-level` request
+    /// refuses while it could be the answer.
+    #[must_use]
+    pub fn with_unmeasured_level(mut self, level: ObjectId, reason: impl Into<String>) -> Self {
+        self.levels.insert(level, Err(reason.into()));
         self
     }
 
@@ -162,7 +192,17 @@ impl AxiolidDerivedRelationshipService {
         match derivation {
             Derivation::ContainedInSpace { .. } => !self.spaces.contains(object),
             Derivation::AdjacentSpace { .. } => self.openings.contains(object),
-            Derivation::OverlappingGroupSpace { .. } => self.spaces.contains(object),
+            Derivation::OverlappingGroupSpace { .. } | Derivation::SpansLevel { .. } => {
+                self.spaces.contains(object)
+            }
+        }
+    }
+
+    /// Whether `object` can be the end of an edge under `derivation`.
+    fn is_target(&self, derivation: &Derivation, object: &ObjectId) -> bool {
+        match derivation {
+            Derivation::SpansLevel { .. } => self.levels.contains_key(object),
+            _ => self.spaces.contains(object),
         }
     }
 
@@ -243,7 +283,11 @@ impl AxiolidDerivedRelationshipService {
         if let Some(cached) = self.cache.lock().map_err(|_| poisoned())?.get(&key) {
             return cached.clone();
         }
-        let result = if self.is_subject(derivation, subject) {
+        let result = if let (true, Derivation::SpansLevel { overlap_metres }) =
+            (self.is_subject(derivation, subject), derivation)
+        {
+            self.spans(subject, *overlap_metres).map(Arc::new)
+        } else if self.is_subject(derivation, subject) {
             let spaces = spaces
                 .get_or_insert_with(|| self.space_bodies())
                 .as_ref()
@@ -260,6 +304,7 @@ impl AxiolidDerivedRelationshipService {
                     minimum_ratio,
                     vertical_metres,
                 } => Self::group(subject, spaces, *minimum_ratio, *vertical_metres),
+                Derivation::SpansLevel { .. } => unreachable!("levels are derived above"),
             }
             .map(Arc::new)
         } else {
@@ -470,6 +515,64 @@ impl AxiolidDerivedRelationshipService {
         Ok(derived)
     }
 
+    /// The levels a space spans: every level whose band its vertical
+    /// extent reaches at least `overlap` metres into, or at least half its
+    /// own height, so a space lying within one level always spans it. A
+    /// tessellated extent is widened by its chord deviation, and a level it
+    /// may or may not span refuses the answer.
+    fn spans(&self, subject: &ObjectId, overlap: f64) -> Result<Derived, String> {
+        let Some(shape) = self.shape(subject)? else {
+            return Err(format!(
+                "space {subject} has no body, so the levels it spans are undecided"
+            ));
+        };
+        let (low, high) =
+            mesh_extent(shape.mesh).ok_or_else(|| format!("space {subject} has an empty mesh"))?;
+        let deviation = if shape.tessellated {
+            self.geometry
+                .fidelity(subject)
+                .map_err(|error| format!("the fidelity of {subject} is unknown: {error}"))?
+                .deviation_metres()
+        } else {
+            0.0
+        };
+        let (bottom, top) = (low[2], high[2]);
+        let height = top - bottom;
+        // The reach a level needs, at the most and least the height may be.
+        let (sure_need, possible_need) = (
+            overlap.min(height / 2.0 + deviation),
+            overlap.min((height - 2.0 * deviation).max(0.0) / 2.0),
+        );
+        let mut derived = Derived::default();
+        for (level, band) in &self.levels {
+            let (floor, ceiling) = band.clone()?;
+            let ceiling = ceiling.unwrap_or(f64::INFINITY);
+            // The least and most the extent can reach into the band.
+            let least = (top - deviation).min(ceiling) - (bottom + deviation).max(floor);
+            let most = (top + deviation).min(ceiling) - (bottom - deviation).max(floor);
+            if least > 0.0 && least >= sure_need {
+                derived.edges.push(Edge {
+                    target: level.clone(),
+                    note: format!(
+                        "bottom={bottom}:top={top}:deviation={deviation}:band={floor}..{}:reach={least}",
+                        if ceiling.is_finite() {
+                            ceiling.to_string()
+                        } else {
+                            "open".into()
+                        }
+                    ),
+                });
+            } else if most > 0.0 && most >= possible_need {
+                return Err(format!(
+                    "whether space {subject} spans level {level} is undecided: its extent \
+                     {bottom}..{top} ± {deviation} reaches between {least} and {most} into the \
+                     band from {floor}"
+                ));
+            }
+        }
+        Ok(derived)
+    }
+
     /// The larger spaces covering at least `ratio` of a space's footprint.
     fn group(
         subject: &ObjectId,
@@ -576,11 +679,11 @@ impl Walk<'_> {
             self.cite(current, &derived, None);
             found.extend(derived.edges.iter().map(|edge| edge.target.clone()));
         }
-        // Every edge ends at a space, so only a space has subjects.
+        // Every edge ends at a space (or a level), so only one has subjects.
         if matches!(
             direction,
             TraversalDirection::Backward | TraversalDirection::Either
-        ) && self.service.spaces.contains(current)
+        ) && self.service.is_target(&self.derivation, current)
         {
             for subject in domain {
                 let derived = self.edges(subject)?;

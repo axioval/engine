@@ -10106,3 +10106,64 @@ fn keyed_limits_bound_each_storeys_summed_space_area() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// [`storeys_with_facades`] with a 4 m × 4 m atrium #89, 6 m high, in the
+/// ground storey: it rises through the upper storey too. The upper storey
+/// is placed 3 m up, where its elevation says.
+fn storeys_with_an_atrium() -> String {
+    storeys_with_facades()
+        .replace(
+            "#100=IFCBUILDING(",
+            &format!(
+                "{}#100=IFCBUILDING(",
+                placed_box(
+                    80,
+                    [20.0, 2.0, 0.0],
+                    [4.0, 4.0, 6.0],
+                    "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+                )
+            ),
+        )
+        .replace("#101,(#49));", "#101,(#49,#89));")
+        // The upper storey is placed at its elevation, as its band needs.
+        .replace("$,'OG',$,$,#3,", "$,'OG',$,$,#122,")
+        .replace(
+            "#100=IFCBUILDING(",
+            "#120=IFCCARTESIANPOINT((0.,0.,3.));\n\
+             #121=IFCAXIS2PLACEMENT3D(#120,$,$);\n\
+             #122=IFCLOCALPLACEMENT($,#121);\n\
+             #100=IFCBUILDING(",
+        )
+}
+
+#[test]
+fn an_atrium_counts_in_every_storey_its_height_spans() {
+    let case = Case::new("spans-level-atrium");
+    let (output, result) = case.geometry_rule(
+        &storeys_with_an_atrium(),
+        &[("storey", "IfcBuildingStorey"), ("space", "IfcSpace")],
+        "axioval:capability.plan-area",
+        &registry_signature("axioval:capability.plan-area"),
+        entity("storey"),
+        json!({
+            "maximum": {"type": "number", "value": 50.0},
+            "member_selector": {"type": "selector", "value": entity("space")},
+            "relationship": {"type": "string", "value": "axioval:derived.spans-level;overlap=1"},
+            "direction": {"type": "string", "value": "backward"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Each storey's 40 m² space and the 16 m² atrium.
+    let expected = |storey: &str| {
+        (
+            storey.to_owned(),
+            "summed plan area of the members is 56 m²; required at most 50 m²".to_owned(),
+        )
+    };
+    assert_eq!(
+        finding_messages(&result),
+        [expected("#101"), expected("#102")],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

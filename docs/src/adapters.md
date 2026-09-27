@@ -606,6 +606,15 @@ be closed solids, since containment is a winding-number test.
   strictly larger footprint that covers at least the ratio of its own and is
   vertically within the tolerance. Footprints and overlaps come from the plan
   overlay the plan-area service uses.
+- **spans-level.** The host declares each level and its height band
+  (`with_level`: its elevation and the next level's, open above for the
+  highest), or a level it cannot place (`with_unmeasured_level`), which
+  refuses every answer it could change. A space spans every level its mesh's
+  vertical extent reaches at least `overlap` metres into, or at least half
+  its own height. A tessellated space's extent is widened by its chord
+  deviation at both ends, and a level it may or may not span refuses the
+  answer: this derivation alone accepts tessellated spaces, since it reads
+  only their extents.
 
 Every derivation compares exact planar bodies: a tessellated subject refuses,
 as does a tessellated space whose enclosing extent comes within the

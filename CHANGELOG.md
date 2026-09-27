@@ -39,6 +39,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   are now dates, so a text or integer rule over them is not evaluated or
   fails as a type mismatch; `PropertyResolutionError::InvalidValue` now
   reads "property value is invalid for its type".
+- **Property requirement tables.** The new capability
+  `property-requirements` checks each selected object against every row of
+  a `requirements` table that applies to it (`applies_to`, a selector such
+  as one exact class or a class with its subtypes). A row names a property
+  by `property_set` and `property`, marks it `required`, `optional` or
+  `forbidden`, and may constrain its value with `value_like` (a wildcard
+  pattern), `one_of` (`|`-separated values) and a `minimum`/`maximum` range
+  in `unit`, optionally divided `per` the object's measured plan area or
+  its stated area (`area_property`) or volume (`volume_property`). Each
+  failing row is a finding whose message names its result: missing
+  property, missing value, forbidden property present, forbidden value or
+  wrong value. Property set and property names are resolved exactly: the
+  property service cannot list an object's properties, so a row with a
+  wildcard name or a set without a property is reported not evaluated for
+  the rule while the other rows are checked.
 - **Keyed limit tables.** The new capability `keyed-limit` checks a
   quantity of each selected object against the single applicable row of a
   `limits` table: a fire compartment's area limit by its building's fire

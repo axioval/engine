@@ -228,6 +228,34 @@ All bounds are inclusive, and `area-ratio` and `plan-area` need at least one of 
 
 `plan-area` reaches members as `related-count` does: through the declared traversal (`relationship` or `path`, as above; with IFC, `IfcRelAssignsToGroup` from a zone or `IfcRelAggregates` from a storey), or everywhere in the anchor's source without one; a traversal without `member_selector` is an invalid declaration. Footprints are summed, so members that overlap count twice; select members that tile the floor, such as spaces. An object with an empty footprint has no body and is not evaluated, and so is an anchor with such a member, since its sum is unknown. A member whose selection is undecided can only add area: a sum already above the maximum is still a finding, anything else is not evaluated. A finding relates the members summed. A definition bound to `plan-area` declares `minimum`, `maximum`, `member_selector` and the traversal parameters, all optional.
 
+### Property requirements
+
+`property-requirements` checks each selected object against a `requirements` table: which properties it must, may or must not carry, and which values they may hold. One rule carries a whole requirement sheet.
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `applies_to` | `selector` | Objects the row applies to, such as `{"kind": "entityType", "objectType": "IfcWall", "includeSubtypes": false}` for one exact class or `true` for the class and its subtypes. Blank applies the row to every selected object. |
+| `property_set` | `textPattern` | The property set's exact name. Blank asks for the property by name in any set. |
+| `property` | `textPattern` | The property's exact name. |
+| `requirement` | `string` (required) | `required`, `optional` or `forbidden`. |
+| `value_like` | `textPattern` | A whole-value wildcard pattern the value must match. |
+| `one_of` | `string` | Allowed values separated by `\|`; a backslash escapes the next character (`a\\|b` is one value). |
+| `minimum`, `maximum` | `number` | Inclusive numeric bounds, in `unit`. |
+| `unit` | `string` | The bounds' unit, as for quantity parameters (`mm`, `m2`, `l`, `deg` …). Without it, the bounds compare with unit-free numbers only. |
+| `per` | `string` | Divides the value before it is bounded: `measured-area` (the measured plan footprint through `PlanAreaService`, in m²), `stated-area` (the area quantity `area_property` names) or `stated-volume` (`volume_property`, in m³). |
+
+The rule-level `case_sensitive` (default `true`) applies to `value_like` and `one_of`. Every row that applies to an object is checked, through the shared row matcher with all rows selected: an `applies_to` selector that cannot be decided leaves the object not evaluated. Each failing row is one finding against the object, and its message begins with the result:
+
+- `missing property`: a `required` property is exactly absent.
+- `missing value`: a `required` property is present but null, blank or an empty list.
+- `forbidden property present`: a `forbidden` row without a value condition, and the property is present with any value, null included.
+- `forbidden value`: a `forbidden` row with a value condition, and the value meets it.
+- `wrong value`: a `required` or `optional` value that does not meet the row's conditions.
+
+An `optional` property may be absent, null or blank. Conditions must all hold. `value_like` and `one_of` compare text, booleans (`true`/`false`) and integers as text; any other value is not evaluated. A range compares integers and decimals when the row has no `unit`, and quantities of the unit's dimension in canonical SI units when it has one; any other pairing is not evaluated, never a pass. A list value must meet the conditions with every element, and a forbidden value is present when any element meets them. A divided value is an interval when the measured footprint is: a quotient straddling a bound, a footprint that is not positive, or a missing stated area or volume is not evaluated.
+
+Names are resolved exactly. The property service answers requests for one named property and cannot list an object's property sets or properties, so a row whose set or property name contains a wildcard (`Pset_*Common`), or that names a set without a property (set presence), cannot be decided: each such row is reported once as not evaluated for the rule (`MissingService`), and the other rows are still checked. A backslash-escaped `*` or `?` is part of an exact name. Missing property sets are therefore reported as missing properties. An unknown requirement, bounds in the wrong order, a `unit` or `per` without bounds, `stated-area` without `area_property`, an empty `one_of` value, or a value condition on a set-only row is an invalid declaration.
+
 ### Table allocation
 
 `table-allocation` assigns each selected object to exactly one row of its `rows` table and then checks every row's objects together: "two offices and one meeting room per storey", "an archive of 30 m² ± 1 m²". One rule per row cannot express this, because an object would count in every row it matches.

@@ -24,6 +24,7 @@ mod pairs;
 mod plan_area;
 mod property_comparison;
 mod property_predicate;
+mod property_requirements;
 mod property_rules;
 mod property_value;
 mod relative_count;
@@ -60,6 +61,7 @@ pub use object_count::ObjectCount;
 pub use plan_area::{AreaRatio, PlanAreaRange, PlanCoverage};
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
+pub use property_requirements::PropertyRequirements;
 pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyRequired,
 };
@@ -86,6 +88,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
         .and_then(|registry| registry.register(PropertyComparison))
+        .and_then(|registry| registry.register(PropertyRequirements))
         .and_then(|registry| registry.register(ShelfCapacity))
         .and_then(|registry| registry.register(SlabContact))
         .and_then(|registry| registry.register(ExternalWallValidation))

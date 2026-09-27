@@ -48,6 +48,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
         findings: vec![finding("#1", "#2"), finding("#3", "#1")],
         not_evaluated: vec![],
         tables: vec![],
+        rules: Vec::new(),
     };
 
     let export = export(

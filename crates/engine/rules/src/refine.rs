@@ -14,7 +14,7 @@ use axioval_ir::contract::{CategoryLevel, SeverityOverride};
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope, Severity};
 
 use crate::location::Locator;
-use crate::selection::{Selection, selector_matches};
+use crate::selection::{Selection, select_objects, selector_matches};
 use crate::support::category_headings;
 
 /// Applies a rule instance's severity overrides, then its nested
@@ -63,6 +63,10 @@ impl OutcomeRefiner for Refiner {
         if let Some(policy) = refining.locations {
             locate(context, policy, evaluation);
         }
+    }
+
+    fn selected(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> usize {
+        select_objects(context, &rule.selector).0.len()
     }
 }
 

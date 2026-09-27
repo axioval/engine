@@ -349,6 +349,7 @@ mod tables {
                 location: None,
             }],
             tables,
+            rules: Vec::new(),
         }
     }
 

@@ -75,6 +75,7 @@ fn report(document: &str, first: u64) -> Report {
             location: None,
         }],
         tables: vec![],
+        rules: Vec::new(),
     }
 }
 
@@ -341,6 +342,7 @@ fn scoped_report(document: &str, first: u64) -> Report {
             location: None,
         }],
         tables: vec![],
+        rules: Vec::new(),
     }
 }
 
@@ -399,6 +401,7 @@ fn a_project_finding_is_written_and_its_guid_is_stable() {
         )],
         not_evaluated: vec![],
         tables: vec![],
+        rules: Vec::new(),
     };
     let guid = |project: &Project| {
         export(&report, project, &options())

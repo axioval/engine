@@ -21,3 +21,4 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
 - BCF cameras come from `geometry::bounds`: the proximity service's enclosing extent of each object the report names, only with `--geometry`. An unmeasured object is left out, never estimated; without `--geometry` pass `None` so the archive stays byte-identical. `--bcf-version 3.0` fails (status 1, nothing written) when a viewpoint has no camera.
 - `tests/check.rs` runs the real binary; keep a case for every exit status. Update `docs/src/cli.md` with any change to arguments, output or status.
 - `check --locate` builds the IFC `LocationPolicy` (`IfcBuildingStorey`, `IfcSpace`, containment and aggregation, `Name`); `none` must leave the result byte-identical. `report --location` keeps outcomes whose location is unresolved.
+- `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

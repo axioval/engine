@@ -63,3 +63,5 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 `OutcomeRefiner` is the host-installed hook (`CapabilityRegistry::with_refiner`) for refinements that read the model; the runtime calls it after grading, for every refined rule. A rule whose refinement `needs_refiner` compiles only against a registry with one, so a declaration is never silently ignored.
 
 `LocationPolicy` is the host's (`Runtime::with_locations`), never a package's; the runtime hands it to the refiner through `Refining` for every rule and fails the run without a refiner. Locations stay `None` otherwise, so reports are byte-identical, and never enter a finding's identity.
+
+Rule summaries (`Runtime::with_rule_summaries`) count each rule's decided selection through `OutcomeRefiner::selected` and the distinct objects of its refined outcomes; the status is decided from outcomes at every scope, so a source-scoped finding still fails a rule that selected nothing. Off by default; `Report::rules` is then empty and omitted.

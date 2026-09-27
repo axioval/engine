@@ -20,7 +20,7 @@ use std::fmt::Write as _;
 
 use axioval::ir::{
     Finding, Location, NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report,
-    ReportColumn, ReportRow, ReportTable, ReportValue, Scope, Severity, SourceId,
+    ReportColumn, ReportRow, ReportTable, ReportValue, RuleStatus, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -542,10 +542,81 @@ pub struct Summary {
     /// What `compare` found, when the result is a comparison.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comparison: Option<ComparisonDigest>,
+    /// Each rule's status, when `check --rule-status` recorded it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rules: Option<RulesDigest>,
     pub groups: Vec<Group>,
     /// Groups left out by the `top` limit, per section.
     pub omitted_groups: BTreeMap<&'static str, usize>,
     pub next: Vec<String>,
+}
+
+/// Rules by status: how many of each, and the rules themselves, those that
+/// did not pass first, at most `top`.
+#[derive(Debug, Serialize)]
+pub struct RulesDigest {
+    pub counts: BTreeMap<&'static str, usize>,
+    pub rules: Vec<RuleLine>,
+    /// Rules left out by the `top` limit.
+    pub omitted: usize,
+}
+
+/// One rule's counts.
+#[derive(Debug, Serialize)]
+pub struct RuleLine {
+    pub rule: String,
+    pub status: &'static str,
+    pub checked: usize,
+    pub failed: usize,
+    pub not_evaluated: usize,
+}
+
+fn rule_status(status: RuleStatus) -> &'static str {
+    match status {
+        RuleStatus::Failed => "failed",
+        RuleStatus::NotEvaluated => "not evaluated",
+        RuleStatus::NothingSelected => "nothing selected",
+        RuleStatus::Passed => "passed",
+    }
+}
+
+/// The rules digest of `report`; `None` when it records no rule status.
+fn rules_digest(report: &Report, top: usize) -> Option<RulesDigest> {
+    if report.rules().is_empty() {
+        return None;
+    }
+    let rank = |status: RuleStatus| match status {
+        RuleStatus::Failed => 0,
+        RuleStatus::NotEvaluated => 1,
+        RuleStatus::NothingSelected => 2,
+        RuleStatus::Passed => 3,
+    };
+    let mut ordered: Vec<_> = report.rules().iter().collect();
+    ordered.sort_by(|a, b| {
+        rank(a.status)
+            .cmp(&rank(b.status))
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
+    });
+    let mut counts = BTreeMap::new();
+    for summary in &ordered {
+        *counts.entry(rule_status(summary.status)).or_default() += 1;
+    }
+    let rules: Vec<RuleLine> = ordered
+        .iter()
+        .take(top)
+        .map(|summary| RuleLine {
+            rule: summary.rule_id.to_string(),
+            status: rule_status(summary.status),
+            checked: summary.checked,
+            failed: summary.failed,
+            not_evaluated: summary.not_evaluated,
+        })
+        .collect();
+    Some(RulesDigest {
+        counts,
+        omitted: ordered.len() - rules.len(),
+        rules,
+    })
 }
 
 /// The head of a comparison's summary.
@@ -808,6 +879,7 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             facets: c.facets.clone(),
             counts: c.counts,
         }),
+        rules: rules_digest(&output.report, top),
         groups: kept,
         omitted_groups,
         next,
@@ -918,6 +990,28 @@ pub fn render_summary(summary: &Summary) -> String {
             "geometry: {} exact · {} tessellated · {} without body · {} unmeasured",
             geometry.exact, geometry.tessellated, geometry.no_body, geometry.unmeasured
         );
+    }
+    if let Some(rules) = &summary.rules {
+        let counts: Vec<String> = ["failed", "not evaluated", "nothing selected", "passed"]
+            .iter()
+            .filter_map(|status| {
+                rules
+                    .counts
+                    .get(status)
+                    .map(|count| format!("{count} {status}"))
+            })
+            .collect();
+        let _ = writeln!(out, "\nrules: {}", counts.join(" · "));
+        for rule in &rules.rules {
+            let _ = writeln!(
+                out,
+                "  {:<16}  {:>6} checked · {} failed · {} not evaluated  {}",
+                rule.status, rule.checked, rule.failed, rule.not_evaluated, rule.rule
+            );
+        }
+        if rules.omitted > 0 {
+            let _ = writeln!(out, "  … {} more rule(s)", rules.omitted);
+        }
     }
     let mut section = None;
     for group in &summary.groups {

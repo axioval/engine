@@ -20,7 +20,7 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
 axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
   --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
-  [--geometry] [--locate storeys|containers|geometry] [--report result.json] \
+  [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
 ```
@@ -183,6 +183,19 @@ spaces from the bodies that contain or meet each object, so it needs
 `location`, BCF topics are labelled `Storey: <name>` and `Space: <name>`,
 and listings print it. Without `--locate` (or with `--locate none`) the
 result is unchanged, byte for byte.
+
+`--rule-status` adds each rule's counts and status to the report (see
+[Rule status](./refinement.md#rule-status)), and the summary lists them, the
+rules that did not pass first, at most `--top`:
+
+```text
+rules: 1 failed · 1 nothing selected
+  failed                10 checked · 2 failed · 0 not evaluated  wall-reference-required
+  nothing selected       0 checked · 0 failed · 0 not evaluated  column-reference-required
+```
+
+Without it the result is unchanged. A rule that selected nothing does not
+change the exit status.
 
 Everything is built before anything is written: a failing run leaves no
 partial report or archive behind.

@@ -151,6 +151,10 @@ pub trait OutcomeRefiner: Send + Sync {
         refining: &Refining<'_>,
         evaluation: &mut CapabilityEvaluation,
     );
+
+    /// How many objects `rule`'s applicability selector surely selects;
+    /// objects it cannot decide are not counted.
+    fn selected(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> usize;
 }
 
 /// What one call of an [`OutcomeRefiner`] applies: the rule's declarations

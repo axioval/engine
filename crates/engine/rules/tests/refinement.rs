@@ -671,3 +671,110 @@ mod locations {
         ));
     }
 }
+
+mod rule_summaries {
+    use super::*;
+    use axioval_ir::{RuleStatus, RuleSummary};
+
+    const EXISTS: &str = "axioval:capability.property-exists";
+
+    /// Ten walls, all but `w9` and `w10` stating a reference, and one wall
+    /// whose properties cannot be read.
+    fn walls(unreadable: bool) -> EvidenceSession {
+        let mut model = Model::default();
+        for index in 1..=10 {
+            let wall = format!("w{index}");
+            model = model.object(&wall, "wall");
+            if index <= 8 {
+                model = model.text(&wall, "Pset", "Reference", "W");
+            }
+        }
+        if unreadable {
+            model = model.object("w11", "wall").unreadable("w11");
+        }
+        session(model)
+    }
+
+    fn exists(id: &str, over: &str) -> Value {
+        rule(
+            id,
+            EXISTS,
+            "error",
+            entity(over),
+            json!({ "property": {
+                "type": "propertyReference", "propertySet": "t.Pset", "property": "t.Reference",
+            } }),
+            json!({}),
+        )
+    }
+
+    fn check(session: &EvidenceSession, summaries: bool) -> Report {
+        let registry = registry();
+        let definitions = definitions(
+            &registry,
+            &[EXISTS],
+            &["wall", "column"],
+            &["Reference"],
+            &["Pset"],
+        );
+        let plan = plan(
+            &registry,
+            &definitions,
+            vec![exists("columns", "column"), exists("walls", "wall")],
+        )
+        .unwrap();
+        run(registry, plan, session, |runtime| {
+            if summaries {
+                runtime.with_rule_summaries()
+            } else {
+                runtime
+            }
+        })
+        .unwrap()
+    }
+
+    fn summary(
+        id: &str,
+        checked: usize,
+        failed: usize,
+        open: usize,
+        status: RuleStatus,
+    ) -> RuleSummary {
+        RuleSummary {
+            rule_id: axioval_ir::RuleId::new(id).unwrap(),
+            checked,
+            failed,
+            not_evaluated: open,
+            status,
+        }
+    }
+
+    #[test]
+    fn each_rule_reports_what_it_checked_and_how_it_fared() {
+        let report = check(&walls(false), true);
+        assert_eq!(
+            report.rules(),
+            [
+                summary("columns", 0, 0, 0, RuleStatus::NothingSelected),
+                summary("walls", 10, 2, 0, RuleStatus::Failed),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_object_not_evaluated_is_counted_apart_from_the_checked_ones() {
+        let report = check(&walls(true), true);
+        assert_eq!(
+            report.rules()[1],
+            summary("walls", 11, 2, 1, RuleStatus::Failed)
+        );
+    }
+
+    #[test]
+    fn without_asking_the_report_is_unchanged() {
+        let report = check(&walls(false), false);
+        assert!(report.rules().is_empty());
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(!json.contains("\"rules\""), "{json}");
+    }
+}

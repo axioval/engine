@@ -908,6 +908,7 @@ impl Projection<'_> {
             findings: self.findings,
             not_evaluated: self.not_evaluated,
             tables: Vec::new(),
+            rules: Vec::new(),
         }
     }
 }

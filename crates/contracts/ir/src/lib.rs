@@ -1170,6 +1170,67 @@ impl TryFrom<NotEvaluatedWire> for NotEvaluated {
         })
     }
 }
+/// How one rule fared overall.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleStatus {
+    /// Something was checked and nothing found or left open.
+    Passed,
+    /// At least one finding.
+    Failed,
+    /// No finding, but something was not evaluated. Never a pass.
+    NotEvaluated,
+    /// The rule surely selected nothing and reported nothing: it passed
+    /// vacuously, which a reader must be able to tell from a pass.
+    NothingSelected,
+}
+
+/// One rule's counts over the objects it checked.
+///
+/// `checked` is the size of the rule's decided selection: the objects its
+/// applicability selector surely selects. `failed` and `not_evaluated`
+/// count the distinct objects its findings and not-evaluated outcomes are
+/// about; an outcome about a source or the project counts no object, but
+/// still decides the status.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleSummary {
+    pub rule_id: RuleId,
+    pub checked: usize,
+    pub failed: usize,
+    pub not_evaluated: usize,
+    pub status: RuleStatus,
+}
+
+impl RuleSummary {
+    /// The summary of a rule with these counts, and whether it found
+    /// anything or left anything not evaluated at any scope.
+    #[must_use]
+    pub fn new(
+        rule_id: RuleId,
+        checked: usize,
+        (failed, found): (usize, bool),
+        (not_evaluated, open): (usize, bool),
+    ) -> Self {
+        let status = if found {
+            RuleStatus::Failed
+        } else if open {
+            RuleStatus::NotEvaluated
+        } else if checked == 0 {
+            RuleStatus::NothingSelected
+        } else {
+            RuleStatus::Passed
+        };
+        Self {
+            rule_id,
+            checked,
+            failed,
+            not_evaluated,
+            status,
+        }
+    }
+}
+
 /// Ordered report from a plan execution.
 ///
 /// `tables` holds the measured values rules report beside their findings,
@@ -1184,6 +1245,10 @@ pub struct Report {
     pub not_evaluated: Vec<NotEvaluated>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tables: Vec<ReportTable>,
+    /// One summary per rule, by rule id, when the host asked for them;
+    /// omitted when empty, so a report without them serializes as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<RuleSummary>,
 }
 impl Report {
     /// Findings in deterministic order.
@@ -1197,6 +1262,10 @@ impl Report {
     /// Tables of measured values, by rule and table name.
     pub fn tables(&self) -> &[ReportTable] {
         &self.tables
+    }
+    /// Per-rule counts and status, by rule id; empty unless the host asked.
+    pub fn rules(&self) -> &[RuleSummary] {
+        &self.rules
     }
     /// The table `name` of `rule_id`, if the report has it.
     pub fn table(&self, rule_id: &RuleId, name: &str) -> Option<&ReportTable> {

@@ -400,6 +400,70 @@ fn a_summary_stays_small_and_names_the_next_command() {
     );
 }
 
+/// Ten walls, each but #9 and #10 stating its `Pset_WallCommon.Reference`.
+fn ten_walls_two_without_reference() -> String {
+    let mut data = String::new();
+    for i in 1..=10 {
+        let _ = writeln!(data, "#{i}=IFCWALL('{i:0>22}',$,$,$,$,$,$,$,$);");
+    }
+    for i in 1..=8 {
+        let (value, set, rel) = (100 + 3 * i, 101 + 3 * i, 102 + 3 * i);
+        let _ = writeln!(
+            data,
+            "#{value}=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('W{i}'),$);\n\
+             #{set}=IFCPROPERTYSET('{set:0>22}',$,'Pset_WallCommon',$,(#{value}));\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('{rel:0>22}',$,$,$,(#{i}),#{set});"
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+#[test]
+fn rule_status_counts_the_checked_and_failed_objects_of_each_rule() {
+    let case = Case::new("rule-status");
+    let saved = case.path("result.json");
+    let saved = saved.to_str().unwrap();
+    let output = case.check(
+        &ten_walls_two_without_reference(),
+        true,
+        &["--rule-status", "--summary", "--report", saved],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(saved).unwrap()).unwrap();
+    assert_eq!(
+        result["report"]["rules"],
+        json!([{"rule_id": "wall-reference-required", "checked": 10, "failed": 2,
+                "not_evaluated": 0, "status": "failed"}]),
+        "{result:#}"
+    );
+    let summary = stdout(&output);
+    assert!(summary.contains("rules: 1 failed"), "{summary}");
+    assert!(
+        summary.contains(
+            "failed                10 checked · 2 failed · 0 not evaluated  wall-reference-required"
+        ),
+        "{summary}"
+    );
+
+    // Over a model without walls the rule selected nothing, which is not a
+    // pass over walls.
+    let output = case.check(&many_walls(0), true, &["--rule-status", "--report", saved]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(saved).unwrap()).unwrap();
+    assert_eq!(
+        result["report"]["rules"][0]["status"], "nothing_selected",
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["rules"][0]["checked"], 0, "{result:#}");
+
+    // Without the flag the result is unchanged.
+    case.check(&many_walls(0), true, &["--report", saved]);
+    let plain = std::fs::read_to_string(saved).unwrap();
+    assert!(!plain.contains("\"rules\""), "{plain}");
+}
+
 #[test]
 fn a_summary_without_a_saved_result_says_how_to_get_one() {
     let case = Case::new("summary-unsaved");

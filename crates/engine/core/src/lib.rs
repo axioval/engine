@@ -7,8 +7,8 @@ use std::{collections::BTreeMap, sync::Arc};
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
 use axioval_ir::{
-    Finding, Location, NotEvaluated, ObjectId, Project, Report, ReportTable, RuleId, Scope,
-    SourceId,
+    Finding, Location, NotEvaluated, ObjectId, Project, Report, ReportTable, RuleId, RuleSummary,
+    Scope, SourceId,
 };
 use thiserror::Error;
 
@@ -830,11 +830,35 @@ fn collapse_source_wide(
     kept
 }
 
+/// One rule's counts from its refined outcomes.
+fn summarize(rule: &RuleId, checked: usize, evaluation: &CapabilityEvaluation) -> RuleSummary {
+    let objects = |scopes: &mut dyn Iterator<Item = &Scope>| {
+        scopes
+            .filter_map(Scope::object)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+    };
+    let failed = objects(&mut evaluation.findings.iter().map(|finding| &finding.scope));
+    let open = objects(
+        &mut evaluation
+            .not_evaluated
+            .iter()
+            .map(|outcome| &outcome.scope),
+    );
+    RuleSummary::new(
+        rule.clone(),
+        checked,
+        (failed, !evaluation.findings.is_empty()),
+        (open, !evaluation.not_evaluated.is_empty()),
+    )
+}
+
 /// Deterministic runtime that invokes only registered trusted capabilities.
 pub struct Runtime {
     registry: CapabilityRegistry,
     services: ServiceRegistry,
     locations: Option<LocationPolicy>,
+    summaries: bool,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -843,7 +867,18 @@ impl Runtime {
             registry,
             services: ServiceRegistry::new(),
             locations: None,
+            summaries: false,
         }
+    }
+    /// Reports per-rule counts and status ([`Report::rules`]): how many
+    /// objects each rule surely selected, how many it found or left not
+    /// evaluated, and whether it passed, failed, was not evaluated or
+    /// selected nothing. Off by default, and then reports are unchanged.
+    /// Needs the registry's outcome refiner to count selections.
+    #[must_use]
+    pub fn with_rule_summaries(mut self) -> Self {
+        self.summaries = true;
+        self
     }
     /// Locates every finding and not-evaluated outcome by storey and space
     /// as `policy` says. Off by default, and then reports carry no
@@ -933,6 +968,12 @@ impl Runtime {
         if self.locations.is_some() && refiner.is_none() {
             return Err(EngineError::MissingRefiner("locating outcomes"));
         }
+        if self.summaries && refiner.is_none() {
+            return Err(EngineError::MissingRefiner(
+                "counting each rule's selection",
+            ));
+        }
+        let mut summaries: Vec<RuleSummary> = Vec::new();
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
@@ -940,6 +981,11 @@ impl Runtime {
         let mut not_evaluated: Vec<NotEvaluated> = plan
             .deferred
             .into_iter()
+            .inspect(|rule| {
+                if self.summaries {
+                    summaries.push(RuleSummary::new(rule.id.clone(), 0, (0, false), (0, true)));
+                }
+            })
             .map(|rule| NotEvaluated {
                 rule_id: rule.id,
                 scope: Scope::Project,
@@ -969,6 +1015,15 @@ impl Runtime {
                 };
                 refiner.refine(&context, &rule, &refining, &mut evaluation);
             }
+            if let Some(refiner) = refiner
+                && self.summaries
+            {
+                summaries.push(summarize(
+                    &rule_id,
+                    refiner.selected(&context, &rule),
+                    &evaluation,
+                ));
+            }
             findings.extend(evaluation.findings);
             // The compiled rule is the table's identity, whatever the capability named.
             tables.extend(
@@ -997,10 +1052,12 @@ impl Runtime {
                 table: pair[0].name().to_owned(),
             });
         }
+        summaries.sort();
         Ok(Report {
             findings,
             not_evaluated,
             tables,
+            rules: summaries,
         })
     }
 }

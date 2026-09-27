@@ -159,3 +159,34 @@ Locating needs the registry's outcome refiner; without one the run fails
 
 Locations are not part of a finding's identity: the BCF sink's GUID key
 ignores them, so a finding keeps its GUID whether or not it was located.
+
+## Rule status
+
+A report of findings cannot tell a rule that selected nothing from one that
+passed on 500 objects. A host may ask for one summary per rule
+(`Runtime::with_rule_summaries()`), reported in `Report::rules`, by rule id:
+
+```json
+"rules": [
+  {"rule_id": "columns-named", "checked": 0, "failed": 0, "not_evaluated": 0,
+   "status": "nothing_selected"},
+  {"rule_id": "walls-named", "checked": 10, "failed": 2, "not_evaluated": 0,
+   "status": "failed"}
+]
+```
+
+- `checked` is the decided selection: the objects the rule's applicability
+  selector surely selects. An object it cannot decide is not counted; its
+  capability reports it not evaluated.
+- `failed` and `not_evaluated` count the distinct objects the rule's
+  findings and not-evaluated outcomes are about, after refinement. An outcome
+  about a source or the project counts no object.
+- `status` is `failed` with any finding, else `not_evaluated` with any
+  not-evaluated outcome (at any scope), else `nothing_selected` when nothing
+  was checked, else `passed`. A rule compiled but not executable is
+  `not_evaluated` with nothing checked.
+
+Counting a selection evaluates the selector, so it needs the outcome refiner
+(`OutcomeRefiner::selected`); without one the run fails. Without the option
+`rules` is empty and omitted, so reports serialize as before. Rule status
+never changes a finding or the CLI's exit status.

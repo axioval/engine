@@ -66,6 +66,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   spaces' bodies through the proximity service (`minimum_3d`), judged pair
   by pair as `straight` is. Two long rooms side by side, their centres 8 m
   apart and their bodies 0.2 m, meet a 1 m maximum.
+- **Rule status.** (#95) With `Runtime::with_rule_summaries()` a report
+  holds one `RuleSummary` per rule (`Report::rules`): the decided selection
+  size, the objects found and not evaluated, and a `RuleStatus` (`passed`,
+  `failed`, `not_evaluated`, `nothing_selected`), so a rule that selected
+  nothing is told from one that passed. `check --rule-status` records them
+  and `--summary` lists them. Without the option reports are unchanged.
+  **Breaking:** `Report` gains `rules`, and `OutcomeRefiner` gains
+  `selected`, which counts a rule's decided selection.
 - **Locations.** (#93) Findings and not-evaluated outcomes carry an
   optional `location`: the storeys and spaces their objects lie in, each
   with its name, and why part of it could not be derived (`unresolved`).

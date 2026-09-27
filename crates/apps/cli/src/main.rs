@@ -114,6 +114,12 @@ struct CheckArgs {
     /// and then the result is unchanged.
     #[arg(long, value_enum, default_value_t = Locate::None)]
     locate: Locate,
+    /// Report each rule's counts and status: how many objects it surely
+    /// selected, how many it found or left not evaluated, and whether it
+    /// passed, failed, was not evaluated or selected nothing. The summary
+    /// then lists them. Off by default, and then the result is unchanged.
+    #[arg(long)]
+    rule_status: bool,
     #[command(flatten)]
     output: OutputArgs,
 }
@@ -435,6 +441,9 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let mut runtime = Runtime::new(registry);
     if let Some(policy) = args.locate.policy() {
         runtime = runtime.with_locations(policy);
+    }
+    if args.rule_status {
+        runtime = runtime.with_rule_summaries();
     }
     let result = runtime.run_session(&session, plan)?;
     let integrity = integrity(&session)?;

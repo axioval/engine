@@ -110,6 +110,14 @@ of it could not be derived. Only a host asking for it gets one (see
 [Locations](./refinement.md#locations)); otherwise the field is absent and a
 report serializes exactly as before.
 
+### Rule status
+
+`Report::rules` holds one `RuleSummary` per rule when the host asked for
+them: the decided selection size (`checked`), the objects with findings
+(`failed`) and not evaluated, and a `RuleStatus` (`passed`, `failed`,
+`not_evaluated`, `nothing_selected`). See [Rule status](./refinement.md#rule-status).
+The field is omitted when empty.
+
 ### Tables
 
 A finding says what is wrong; a table says what was measured, whether it passed or not: one row per storey with its elevation and height, one per anchor with its areas and their ratio. `Report::tables` holds `ReportTable`s, each reported by one rule under a name unique for that rule.

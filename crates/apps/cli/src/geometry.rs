@@ -28,13 +28,13 @@ use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidContactService, AxiolidEnvelopeMembershipService, AxiolidFreeSpaceService,
-    AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService, AxiolidProximityService,
-    AxiolidSpaceService,
+    AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService, AxiolidPlanAreaService,
+    AxiolidProximityService, AxiolidSpaceService,
 };
 use axioval::engine::{
     ContactServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession, FreeSpaceServiceHandle,
-    GuardServiceHandle, LinearQuantityServiceHandle, PropertyRequest, PropertyResolution,
-    PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
+    GuardServiceHandle, LinearQuantityServiceHandle, PlanAreaServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
     RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
     SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
 };
@@ -219,6 +219,13 @@ fn register(
         )?
         .with_host_service(
             LinearQuantityServiceHandle::new(Arc::new(AxiolidLinearQuantityService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        .with_host_service(
+            PlanAreaServiceHandle::new(Arc::new(AxiolidPlanAreaService::new(
                 geometry.clone(),
                 source.clone(),
             ))),

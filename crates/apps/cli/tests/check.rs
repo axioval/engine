@@ -1021,3 +1021,123 @@ fn with_geometry_an_unguarded_landing_edge_is_found() {
         "{result:#}"
     );
 }
+
+/// Space #16 lies wholly on slab #36; space #26 only half.
+fn spaces_on_a_slab() -> String {
+    let body = |first: u32, x: f64, length: f64, depth: f64, product: &str| {
+        let [p, pos, profile, solid, shape, definition, object] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        format!(
+            "#{p}=IFCCARTESIANPOINT(({x},2.));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},4.);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth});\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{object}={};\n",
+            product.replace("REP", &format!("#{definition}")),
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        body(
+            10,
+            2.0,
+            4.0,
+            3.0,
+            "IFCSPACE('0000000000000000000016',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)"
+        ),
+        body(
+            20,
+            5.0,
+            4.0,
+            3.0,
+            "IFCSPACE('0000000000000000000026',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)"
+        ),
+        body(
+            30,
+            2.0,
+            4.0,
+            0.2,
+            "IFCSLAB('0000000000000000000036',$,$,$,$,#3,REP,$,.FLOOR.)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_plan_coverage_measures_real_footprints() {
+    let case = Case::new("geometry-plan-coverage");
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    for (id, name) in [("space", "IfcSpace"), ("slab", "IfcSlab")] {
+        definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
+            "id": format!("axioval:example.ifc.{id}"),
+            "name": {"default": name, "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        });
+    }
+    let declare = |id: &str, kind: &str, required: bool| {
+        json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": required, "allowedValues": [], "citations": []})
+    };
+    definitions["definitions"]["axioval:example.coverage"] = json!({
+        "id": "axioval:example.coverage",
+        "name": {"default": "Coverage", "translations": {}},
+        "description": {"default": "Spaces lie on a slab.", "translations": {}},
+        "capability": "axioval:capability.plan-coverage",
+        "parameters": {
+            "candidate_selector": declare("candidate_selector", "selector", true),
+            "minimum_ratio": declare("minimum_ratio", "number", true),
+            "relationship": declare("relationship", "string", false),
+            "direction": declare("direction", "string", false),
+            "follow_chain": declare("follow_chain", "boolean", false),
+            "path": declare("path", "stringList", false),
+            "skip_absent_relationship_ends":
+                declare("skip_absent_relationship_ends", "boolean", false),
+        },
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("spaces-on-slabs");
+    rule["definitionId"] = json!("axioval:example.coverage");
+    rule["parameters"] = json!({
+        "candidate_selector": {"type": "selector", "value": {
+            "kind": "entityType", "objectType": "axioval:example.ifc.slab",
+            "includeSubtypes": true}},
+        "minimum_ratio": {"type": "number", "value": 0.9},
+    });
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!("axioval:example.ifc.space");
+    let model = case.write("model.ifc", &spaces_on_a_slab());
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#26", "{result:#}");
+}

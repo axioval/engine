@@ -10,6 +10,8 @@ Capabilities may depend on Axioval IR and typed host-service interfaces, never c
 
 `free_floor_circle.rs` and `free_floor_rectangle.rs` own exact grounded vertical-shape profiles. They must request whole-base support and all project objects as candidate obstacles. Missing services, backend failures, and invalid/incomplete proofs emit typed not-evaluated outcomes; they never produce a pass or compliance finding. The rectangle must state its orientation explicitly; never default it to the world axes.
 
+`slab_contact.rs` resolves its `counterparts` selector and sends the candidates in every `ContactRequest`; the adapter measures only those. A shortfall with undecided counterparts is not evaluated; a pass stands. Storey skipping orders storeys by the `Elevation` attribute and fails closed on an unknown elevation or a subject without exactly one storey.
+
 `clash.rs` and `distance.rs` own pairwise policy over `ProximityServiceHandle`; `pairs.rs` holds their shared selection and broad-phase set-up. An object whose extent cannot be read is reported not evaluated, never skipped. Meeting surfaces with no penetration measurement are not evaluated, not passed. Distance maxima may conclude "none within" only when every counterpart was measured.
 
 `comparison.rs` owns the semantic session diff. Match by external identity scheme only, never by `ObjectId`. Report unidentified objects, ambiguous identities and unreadable facets; never compare an unknown as empty.

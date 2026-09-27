@@ -35,6 +35,10 @@ pub enum ContactError {
     /// The object's body has no direction the adapter can orient against.
     #[error("object body has no checkable orientation")]
     UncheckableOrientation,
+    /// The measurement names an object the request did not offer as a
+    /// candidate, so it answers a different question.
+    #[error("contact evidence names an object that is not a requested candidate")]
+    UnrequestedCandidate,
 }
 
 /// Which side of the subject the contacting surface must lie on.
@@ -90,23 +94,48 @@ impl ContactTolerance {
 }
 
 /// A request for the contact measurement of one object.
+///
+/// The request names the candidates the face may rest on. Which objects count
+/// is the rule's scope decision, so an adapter measures exactly these and no
+/// others: an object outside the list neither supports the face nor blocks
+/// the measurement.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContactRequest {
     subject: ObjectId,
+    candidates: Vec<ObjectId>,
     side: ContactSide,
     tolerance: ContactTolerance,
 }
 
 impl ContactRequest {
-    pub fn new(subject: ObjectId, side: ContactSide, tolerance: ContactTolerance) -> Self {
+    /// Candidates are sorted and deduplicated, and the subject is removed:
+    /// a face never rests on itself.
+    pub fn new(
+        subject: ObjectId,
+        mut candidates: Vec<ObjectId>,
+        side: ContactSide,
+        tolerance: ContactTolerance,
+    ) -> Self {
+        candidates.sort();
+        candidates.dedup();
+        candidates.retain(|candidate| *candidate != subject);
         Self {
             subject,
+            candidates,
             side,
             tolerance,
         }
     }
     pub fn subject(&self) -> &ObjectId {
         &self.subject
+    }
+    /// The objects the face may rest on: sorted, deduplicated, subject excluded.
+    pub fn candidates(&self) -> &[ObjectId] {
+        &self.candidates
+    }
+    /// Whether `object` is one of the requested candidates.
+    pub fn is_candidate(&self, object: &ObjectId) -> bool {
+        self.candidates.binary_search(object).is_ok()
     }
     pub fn side(&self) -> ContactSide {
         self.side
@@ -156,6 +185,11 @@ impl ContactEvidence {
         }
         touching.sort();
         touching.dedup();
+        // Only a requested candidate can support the face; anything else
+        // answers a question the rule did not ask.
+        if touching.iter().any(|object| !request.is_candidate(object)) {
+            return Err(ContactError::UnrequestedCandidate);
+        }
         Ok(Self {
             request,
             whole_area_square_metres,
@@ -230,6 +264,7 @@ mod tests {
     fn request() -> ContactRequest {
         ContactRequest::new(
             id("wall"),
+            vec![id("slab-b"), id("slab-a")],
             ContactSide::Above,
             ContactTolerance::try_new(0.01, 0.01, 0.001).unwrap(),
         )
@@ -279,5 +314,29 @@ mod tests {
         )
         .unwrap();
         assert_eq!(measured.touching(), &[id("slab-a"), id("slab-b")]);
+    }
+
+    #[test]
+    fn candidates_are_sorted_deduplicated_and_exclude_the_subject() {
+        let request = ContactRequest::new(
+            id("wall"),
+            vec![id("slab-b"), id("wall"), id("slab-a"), id("slab-b")],
+            ContactSide::Above,
+            ContactTolerance::try_new(0.01, 0.01, 0.001).unwrap(),
+        );
+        assert_eq!(request.candidates(), &[id("slab-a"), id("slab-b")]);
+        assert!(!request.is_candidate(&id("wall")));
+    }
+
+    /// Evidence that the face rests on an object the rule did not offer, the
+    /// subject included, answers a different question and must not reach it.
+    #[test]
+    fn touching_an_unrequested_object_is_refused() {
+        for stray in ["slab-c", "wall"] {
+            assert_eq!(
+                ContactEvidence::try_new(request(), 4.0, 2.0, None, vec![id(stray)], evidence()),
+                Err(ContactError::UnrequestedCandidate)
+            );
+        }
     }
 }

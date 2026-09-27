@@ -11,6 +11,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   numbers of one scope (a source, or a storey reached through a relationship)
   to share a leading prefix and, optionally, to leave no gaps. A value the
   pattern does not number is not evaluated, never passed.
+- **Slab-contact scope.** `slab-contact` takes an optional `counterparts`
+  selector, and `ContactRequest` now carries the resolved candidates
+  (`ContactRequest::new` takes them; a breaking change). The Axiolid adapter
+  measures only those and refuses only when one of them is unmeasured or
+  undescribed, not when any object anywhere is. Evidence naming an object
+  outside the candidates is refused (`ContactError::UnrequestedCandidate`).
+  `skip_top_storey` and `skip_bottom_storey` leave out subjects on the
+  highest or lowest `storey_selector` object, ordered by the `Elevation`
+  attribute; an unknown elevation or storey assignment is not evaluated.
+
 - **Unbound concepts are reported once.** A package concept the source's
   declared vocabulary cannot express is now `NotEvaluatedReason::UnboundConcept`
   (it was `InvalidDeclaration`) and is reported once per rule, source and

@@ -66,9 +66,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   object occupies no volume; `with_unmeasured` says it has a body the host
   could not mesh. Never let a service skip an unmeasured object as if it were
   bodiless: its extent is unknown, so a measurement it could affect refuses.
-  Contact refuses while any object is unmeasured; space refuses while a
-  declared role, storey member or requested cap element is; free space
-  refuses it as an obstacle.
+  Contact measures only the request's candidates and refuses while one of
+  them is unmeasured or undescribed; space refuses while a declared role,
+  storey member or requested cap element is; free space refuses it as an
+  obstacle.
 - `src/lib.rs` keeps the source-scoping contracts and the in-memory conformance
   double. `UnavailableGeometryBackend` remains the explicit "no kernel linked"
   placeholder.

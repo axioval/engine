@@ -67,14 +67,23 @@ fn slab_on_wall(column_x: f64) -> AxiolidGeometry {
         )
 }
 
-fn contact(geometry: AxiolidGeometry, subject: &str) -> Result<f64, ContactError> {
+fn contact_with(
+    geometry: AxiolidGeometry,
+    subject: &str,
+    candidates: &[&str],
+) -> Result<f64, ContactError> {
     AxiolidContactService::new(geometry, source())
         .measure_contact(&ContactRequest::new(
             id(subject),
+            candidates.iter().map(|local| id(local)).collect(),
             ContactSide::Below,
             ContactTolerance::try_new(0.01, 0.01, 0.0001).unwrap(),
         ))
         .map(|evidence| evidence.contact_ratio())
+}
+
+fn contact(geometry: AxiolidGeometry, subject: &str) -> Result<f64, ContactError> {
+    contact_with(geometry, subject, &["wall", "column", "slab"])
 }
 
 #[test]
@@ -86,6 +95,13 @@ fn contact_refuses_a_curved_part_it_could_touch_but_not_one_far_away() {
         Err(ContactError::InexactEvidence)
     );
     assert!(contact(slab_on_wall(40.0), "slab").is_ok());
+}
+
+/// A curved part the rule did not offer as a candidate is never measured, so
+/// it cannot make the answer an estimate.
+#[test]
+fn contact_ignores_a_curved_part_outside_the_candidates() {
+    assert!(contact_with(slab_on_wall(4.0), "slab", &["wall"]).is_ok());
 }
 
 #[test]

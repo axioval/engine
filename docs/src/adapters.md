@@ -160,8 +160,9 @@ A host states one of three things about each object: its mesh (`with_mesh`, or
 (`with_no_body`, e.g. a storey or zone), or that its body is **unmeasured**
 (`with_unmeasured`: it exists but could not be meshed). The last two differ on
 purpose. A bodiless object is skipped wherever every other object is a
-candidate obstacle. An unmeasured one has an unknown extent, so contact and
-space measurements refuse while one exists that could affect them, and
+candidate obstacle. An unmeasured one has an unknown extent, so contact
+refuses while one of the request's candidates is unmeasured, space
+measurements refuse while one exists that could affect them, and
 free-space checks refuse it as an obstacle. Treating an unmeasured slab as
 absent would make a wall above it look unsupported, exactly.
 

@@ -187,14 +187,6 @@ impl AxiolidGeometry {
     pub(crate) fn objects(&self) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
         self.meshes.iter()
     }
-
-    /// Every registered object other than `subject`, in identity order.
-    pub(crate) fn counterparts(
-        &self,
-        subject: &ObjectId,
-    ) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
-        self.meshes.iter().filter(move |(id, _)| *id != subject)
-    }
 }
 
 /// An axis-aligned `(min, max)` extent in metres.

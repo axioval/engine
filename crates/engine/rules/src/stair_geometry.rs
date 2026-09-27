@@ -16,6 +16,7 @@ use std::fmt::Write as _;
 
 mod handrails;
 mod ramp_ends;
+mod whole;
 
 use axioval_engine::{
     CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, Deviation,
@@ -88,6 +89,13 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// - `end_space_depth`, `end_space_width` and `end_space_height` place a
 ///   free space before the first riser and beyond the last, which no
 ///   `end_space_obstacles` object may reach into.
+///
+/// With `stair_path`, the rule selects whole stairs: each flight
+/// `stair_flights` picks among the parts that path reaches is checked as
+/// above, and the stair as a whole against `maximum_total_rise` and, with
+/// `handrail_continuous_across_landings`, for a handrail joined across every
+/// landing between consecutive flights, except where a
+/// `handrail_break_doors` door stands.
 ///
 /// A turning flight's landing is placed along the tread meeting it and
 /// compared with that tread's width; its handrails are measured in its
@@ -319,10 +327,11 @@ struct WalkingConfig<'a> {
 impl<'a> WalkingConfig<'a> {
     fn parse(parameters: &Parameters<'a>, ramp: bool) -> Result<Self, Unavailable> {
         let end_space = ramp_ends::parse_end_space(parameters)?;
-        let doors = ramp_ends::parse_doors(parameters)?;
+        let break_doors = parameters.selector("handrail_break_doors")?.is_some();
+        let doors = ramp_ends::parse_doors(parameters, break_doors)?;
         Ok(Self {
             width: range(parameters, "width")?,
-            landing: landing_check(parameters, doors.is_some())?,
+            landing: landing_check(parameters, doors.is_some() || break_doors)?,
             below: below_check(parameters)?,
             handrail: handrails::parse(parameters, ramp)?,
             end_space,
@@ -1084,6 +1093,8 @@ struct StairConfig<'a> {
     going_tolerance: Option<f64>,
     headroom: Option<HeadroomCheck<'a>>,
     walking: WalkingConfig<'a>,
+    /// With `stair_path`, the rule selects whole stairs.
+    stair: Option<whole::StairMode<'a>>,
 }
 
 impl<'a> StairConfig<'a> {
@@ -1111,7 +1122,14 @@ impl<'a> StairConfig<'a> {
             going_tolerance: length(&parameters, "going_tolerance")?,
             headroom: headroom_check(&parameters)?,
             walking: WalkingConfig::parse(&parameters, false)?,
+            stair: None,
         };
+        let stair = whole::parse(
+            &parameters,
+            config.walking.handrail.as_ref(),
+            parameters.selector("landing_objects")?.is_some(),
+        )?;
+        let config = Self { stair, ..config };
         if let (Some(minimum), Some(maximum)) = config.risers
             && minimum > maximum
         {
@@ -1139,6 +1157,10 @@ impl<'a> StairConfig<'a> {
             && !config.forbid_open_risers
             && config.headroom.is_none()
             && !config.walking.declared()
+            && !config
+                .stair
+                .as_ref()
+                .is_some_and(whole::StairMode::declared)
         {
             return Err(invalid("declare at least one stair check"));
         }
@@ -1174,6 +1196,7 @@ impl RuleCapability for StairGeometryCheck {
         ]);
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
+        parameters.extend(whole::descriptors());
         parameters
     }
 
@@ -1202,6 +1225,10 @@ impl RuleCapability for StairGeometryCheck {
             config: &config,
             selections: &selections,
         };
+        if let Some(mode) = &config.stair {
+            whole::evaluate(context, rule, mode, &flights, &selected, &mut evaluation);
+            return evaluation;
+        }
         for object in selected {
             let flight = match flights.measure(&object.id) {
                 Ok(flight) => flight,

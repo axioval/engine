@@ -86,13 +86,17 @@ pub(super) fn parse_end_space<'a>(
     }
 }
 
+/// The landing-door check; `break_doors` says whether the rule declares
+/// `handrail_break_doors`, which takes `landing_door_height` too.
 pub(super) fn parse_doors<'a>(
     parameters: &Parameters<'a>,
+    break_doors: bool,
 ) -> Result<Option<DoorCheck<'a>>, Unavailable> {
     let doors = parameters.selector("landing_doors")?;
     let height = positive(parameters, "landing_door_height")?;
     let swing = parameters.boolean("landing_door_swing")?;
     match (doors, height) {
+        (None, Some(_)) if break_doors && swing.is_none() => Ok(None),
         (Some(doors), Some(height)) => Ok(Some(DoorCheck {
             doors,
             height,
@@ -114,7 +118,7 @@ fn middle(value: ElevationInterval) -> f64 {
 
 /// A box `width` across and `depth` along `direction`, centred at the
 /// positions `along` and `across` it and standing on `elevation`.
-struct Placed {
+pub(super) struct Placed {
     direction: MetricDirection,
     along: f64,
     across: f64,
@@ -348,6 +352,57 @@ pub(super) fn flight_end_space(
         });
     evidence.insert(0, measured.evidence().clone());
     (check, evidence, related)
+}
+
+/// The column `height` high over a landing's rectangle grown by `grow` on
+/// every side, standing on `elevation`, or why it cannot be placed.
+pub(super) fn landing_column(
+    measured: &LandingEvidence,
+    elevation: ElevationInterval,
+    grow: f64,
+    height: f64,
+    label: &str,
+) -> Result<Placed, String> {
+    let Some(landing) = measured.landing() else {
+        return Err(format!("no selected landing meets {label}"));
+    };
+    let Some(extent) = landing.extent() else {
+        return Err(format!(
+            "the landing {} at {label} fills no rectangle along the walking direction",
+            Landing::carrier(landing)
+        ));
+    };
+    let (left, right) = extent.sides();
+    let (near, far) = (
+        measured.edge().upper_metres() - grow,
+        extent.far().lower_metres() + grow,
+    );
+    let (low, high) = (left.upper_metres() - grow, right.lower_metres() + grow);
+    if far <= near || high <= low {
+        return Err(format!("the landing at {label} is too small to look at"));
+    }
+    Ok(Placed {
+        direction: measured.direction(),
+        along: f64::midpoint(near, far),
+        across: f64::midpoint(low, high),
+        elevation: elevation.upper_metres(),
+        width: high - low,
+        depth: far - near,
+        height,
+    })
+}
+
+/// Whether a selected object reaches into `placed` over the landing at
+/// `label`: `Fail` names the objects that do, as `found` words them.
+pub(super) fn reaches_into(
+    free: Option<&FreeSpaceServiceHandle>,
+    placed: &Placed,
+    subject: &ObjectId,
+    selected: &Result<(Vec<ObjectId>, bool), Unavailable>,
+    what: &str,
+    found: impl Fn(&str) -> String,
+) -> (Check, Vec<Evidence>, Vec<ObjectId>) {
+    assess(free, placed, subject, selected, what, found)
 }
 
 /// Whether a selected door stands on the landing at one end of a run or a

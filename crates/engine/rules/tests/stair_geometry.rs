@@ -10,9 +10,11 @@ use axioval_engine::{
     CapabilityEvaluation, ClearanceBelow, ClearanceBelowRequest, ClearanceOutcome,
     ClearanceRequest, ClearanceShape, CompleteClearanceEvidence, ElevationInterval,
     FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
-    HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing, LandingEvidence,
-    LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, ObstructionEvidence,
-    PlacementOutcome, PlacementRequest, PlanSegment, RailMeasurement, RiserClosure, SlopedRun,
+    GeometryFidelity, HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing,
+    LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval, MetricDirection,
+    ObjectBounds, ObstructionEvidence, PlacementOutcome, PlacementRequest, PlanSegment,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityRequest,
+    ProximityService, ProximityServiceHandle, RailMeasurement, RiserClosure, SlopedRun,
     SlopedSurface, StretchPart, Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine,
     WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
     WalkingSurfaceServiceHandle,
@@ -2504,4 +2506,228 @@ fn a_ramps_end_landings_have_their_own_minimums() {
             "the landing at the bottom of run 1 of 2 is 1.4 m deep; at least 1.5 m required".into()
         )]
     );
+}
+
+/// A flight like `flight`, four 0.17 m risers, standing on `base`.
+fn raised_flight(object: &str, base: f64) -> TreadFlight {
+    let treads: Vec<Tread> = (0..4_u8)
+        .map(|step| {
+            let (elevation, front) = (base + 0.17 * f64::from(step + 1), 0.28 * f64::from(step));
+            Tread::try_new(point(elevation), point(front), point(front + 0.28))
+                .unwrap()
+                .with_sides(point(0.0), point(1.2))
+                .unwrap()
+        })
+        .collect();
+    let top = treads.last().unwrap().elevation();
+    TreadFlight::try_new(
+        straight(object),
+        WalkingLine::Straight(x()),
+        point(base),
+        top,
+        treads,
+        Evidence::exact(source(), format!("tread-flight:{object}")),
+    )
+    .unwrap()
+}
+
+/// Distances in space between pairs of rails; nothing has a box.
+#[derive(Default)]
+struct Rails(BTreeMap<(String, String), f64>);
+
+impl Rails {
+    fn apart(mut self, a: &str, b: &str, distance: f64) -> Self {
+        self.0.insert((a.into(), b.into()), distance);
+        self.0.insert((b.into(), a.into()), distance);
+        self
+    }
+}
+
+impl ProximityService for Rails {
+    fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let pair = (
+            request.subject().local_id.clone(),
+            request.counterpart().local_id.clone(),
+        );
+        let distance = self.0.get(&pair).copied().unwrap_or(5.0);
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            distance,
+            distance,
+            GeometryFidelity::Exact,
+            Evidence::exact(source(), format!("distance:{}:{}", pair.0, pair.1)),
+        )
+    }
+}
+
+/// Stair `stair` of flights `lower` (0 to 0.68 m) and `upper` (0.68 to
+/// 1.36 m), reached along `parts`, with the rails `l1` and `r1` along the
+/// lower flight's left and right sides and `l2` and `r2` along the upper
+/// one's, landing rail `r3`, slab `landing` and door `exit`.
+fn two_flights() -> Model {
+    Model::default()
+        .object("stair", "stair")
+        .object("lower", "flight")
+        .object("upper", "flight")
+        .object("landing", "slab")
+        .object("exit", "door")
+        .object("l1", "railing")
+        .object("l2", "railing")
+        .object("r1", "railing")
+        .object("r2", "railing")
+        .object("r3", "railing")
+        .edge("parts", "stair", "lower")
+        .edge("parts", "stair", "upper")
+        .edge("parts", "stair", "landing")
+}
+
+fn two_flight_stairs() -> Stairs {
+    let rail_at = |left: f64, right: f64| rail((left, right), (-0.3, 1.14), (0.9, 0.9), LEVEL);
+    Stairs::default()
+        .flight(raised_flight("lower", 0.0))
+        .flight(raised_flight("upper", 0.68))
+        .rail("lower", WalkingStretch::Flight, "l1", rail_at(1.25, 1.3))
+        .rail("lower", WalkingStretch::Flight, "r1", rail_at(-0.1, -0.05))
+        .rail("upper", WalkingStretch::Flight, "l2", rail_at(1.25, 1.3))
+        .rail("upper", WalkingStretch::Flight, "r2", rail_at(-0.1, -0.05))
+        .landing("lower", WalkingEnd::FlightTop, "landing", Some((1.5, 1.2)))
+}
+
+fn whole_parameters(
+    extra: Vec<(&'static str, ParameterValue)>,
+) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        ("stair_path", common::strings(&["parts"])),
+        ("stair_flights", selector(kind("flight"))),
+    ];
+    parameters.extend(extra);
+    parameters
+}
+
+fn check_whole(
+    stairs: Stairs,
+    floor: Floor,
+    rails: Rails,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    two_flights().evaluate_with(
+        &StairGeometryCheck,
+        &rule(STAIR, kind("stair"), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+            services
+                .register(FreeSpaceServiceHandle::new(Arc::new(floor)))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(Arc::new(rails)))
+                .unwrap();
+        },
+    )
+}
+
+/// A two-flight stair whose inner rail stops at the landing fails, unless
+/// a selected door stands there; its rise is the whole stair's.
+#[test]
+fn a_stairs_inner_rail_must_continue_across_its_landing() {
+    // The right rails are joined by the landing rail r3; the left rails
+    // lie 1 m apart with nothing between them.
+    let rails = || {
+        Rails::default()
+            .apart("r1", "r3", 0.0)
+            .apart("r3", "r2", 0.0)
+            .apart("l1", "l2", 1.0)
+    };
+    let parameters = |doors: bool| {
+        let mut parameters = handrail_parameters(whole_parameters(vec![
+            ("handrail_continuous_across_landings", boolean(true)),
+            ("maximum_total_rise", metres(1.2)),
+        ]));
+        if doors {
+            parameters.push(("landing_objects", slabs()));
+            parameters.push(("handrail_break_doors", selector(kind("door"))));
+            parameters.push(("landing_door_height", metres(2.0)));
+        }
+        parameters
+    };
+    let evaluation = check_whole(
+        two_flight_stairs(),
+        Floor::default(),
+        rails(),
+        parameters(false),
+    );
+    let (lower, upper) = (id("lower"), id("upper"));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "stair".into(),
+                "the stair rises 1.36 m from its lowest flight's base to its highest flight's \
+                 top; at most 1.2 m allowed"
+                    .into()
+            ),
+            (
+                "stair".into(),
+                format!(
+                    "the handrail along the left side stops at the landing between {lower} and \
+                     {upper}: {} and {} are not joined by selected rails within 0 m of each other",
+                    id("l1"),
+                    id("l2")
+                )
+            ),
+        ]
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        unevaluated(&evaluation)
+    );
+    // A door standing in the wall beside the landing breaks the rail there.
+    let floor = Floor::default().blocker("exit", [0.5, -0.15], [1.0, -0.05]);
+    let evaluation = check_whole(two_flight_stairs(), floor, rails(), parameters(true));
+    assert_eq!(common::flagged(&evaluation), ["stair"]);
+    assert!(findings(&evaluation)[0].1.starts_with("the stair rises"));
+    // A door elsewhere does not.
+    let floor = Floor::default().blocker("exit", [5.0, 5.0], [6.0, 6.0]);
+    let evaluation = check_whole(two_flight_stairs(), floor, rails(), parameters(true));
+    assert_eq!(findings(&evaluation).len(), 2);
+}
+
+#[test]
+fn whole_stair_declarations_are_checked() {
+    for parameters in [
+        vec![("maximum_total_rise", metres(3.0))],
+        vec![
+            ("stair_path", common::strings(&["parts"])),
+            ("maximum_total_rise", metres(3.0)),
+        ],
+        handrail_parameters(whole_parameters(vec![(
+            "handrail_break_doors",
+            selector(kind("door")),
+        )])),
+        handrail_parameters(vec![("handrail_continuous_across_landings", boolean(true))]),
+    ] {
+        let evaluation = check_whole(
+            two_flight_stairs(),
+            Floor::default(),
+            Rails::default(),
+            parameters,
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
 }

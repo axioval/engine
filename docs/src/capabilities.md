@@ -1259,6 +1259,18 @@ A value of another kind (text, a negative number, a length for an area) is not a
 | `end_space_depth`, `end_space_width`, `end_space_height` | `quantity` | A free space this deep (along the walking direction), wide and high before the first riser and beyond the last, standing on the level there and centred on the end tread; declared together with `end_space_obstacles`. |
 | `end_space_obstacles` | `selector` | The objects that must not reach into the free space at either end. |
 
+**Whole stairs.** With `stair_path`, the rule selects whole stairs (with IFC, `IfcStair`) and reaches each one's parts along that path (`IfcRelAggregates`); the parts `stair_flights` selects are its flights. Every flight is checked once as above, its findings on the flight, and the stair as a whole, its findings on the stair:
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `stair_path` | `stringList` | Steps from a stair to its parts, as in `path`. |
+| `stair_flights` | `selector` | Which reached parts are its flights; required with `stair_path`. |
+| `maximum_total_rise` | `quantity` | The stair's rise, from its lowest flight's base to its highest flight's top. |
+| `handrail_continuous_across_landings` | `boolean` | The handrail along each side continues across every landing between consecutive flights; needs the handrail parameters. |
+| `handrail_break_doors` | `selector` | Doors that break the handrail where they stand at a landing; needs `landing_objects` and `landing_door_height`. |
+
+Consecutive flights are the stair's flights in the order of their bases, each arriving within a millimetre of the level the next one starts from; flights that do not meet so, or start at one level, leave the handrails between them not evaluated. Across each such landing, the last piece along a side of the lower flight and the first piece along the same side of the upper one (sides seen climbing each, so the inner side of a stair turning left is the left of both) must be joined by a chain of `handrail_objects` rails, each within `handrail_gap_maximum` of the next (touching without it), as the proximity service measures them in space: a rail along the landing joins them, a rail stopping at it does not (`the handrail along the left side stops at the landing between … and …: … and … are not joined by selected rails within 0 m of each other`), and neither does a side one flight has a rail along and the other not. A side neither has is left to `handrail_sides`. Where a `handrail_break_doors` door reaches into the column `landing_door_height` high over the landing's rectangle grown by `handrail_reach_across` on every side (where a handrail would run), the rail may break there: a door that may stand there leaves a break not evaluated. A flight the selection cannot decide or the service cannot measure leaves the stair's continuity not evaluated and its rise decided only when already too high; a pair of rails whose distance is not decided, or an undecided rail that may bridge the gap, leaves the side not evaluated. `stair_flights`, `maximum_total_rise`, `handrail_continuous_across_landings` and `handrail_break_doors` without `stair_path` are an invalid declaration.
+
 `axioval:capability.ramp-geometry` measures a ramp's sloped runs: connected upward-facing faces flatter than 45°, each planar, separated by level landings. A run's slope is its rise over its horizontal length along its steepest ascent.
 
 | Parameter | Kind | Meaning |

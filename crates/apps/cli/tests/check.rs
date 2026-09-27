@@ -8751,6 +8751,95 @@ fn with_geometry_a_cupboard_in_a_flights_end_space_is_found() {
     );
 }
 
+/// Stair #700 of two flights in one line, aggregated by #701: #108 (four
+/// 0.17 m risers, x 0 to 1.12, y -1.2 to 0) and #408 (the same from x 2.12
+/// and 0.68 m up), landing #609 between them. Each flight has a handrail
+/// along its left side (y 0.05 to 0.1, seen climbing), #208 and #508,
+/// reaching 0.3 m past its ends; nothing joins them across the landing.
+fn a_stair_whose_rail_stops_at_its_landing() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}{}\
+         #700=IFCSTAIR('0000000000000000000700',$,$,$,$,#3,$,$,.STRAIGHT_RUN_STAIR.);\n\
+         #701=IFCRELAGGREGATES('0000000000000000000701',$,$,$,#700,(#108,#408,#609));\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        swept(200, [0.0, 0.05, 0.0], &rail_profile(0.9), 0.05, rail),
+        profiled(400, [2.12, 0.0, 0.68], &stair_profile(&[0.17; 4]), flight),
+        swept(500, [2.12, 0.05, 0.68], &rail_profile(0.9), 0.05, rail),
+        placed_box(
+            600,
+            [1.62, -0.6, 0.48],
+            [1.0, 1.2, 0.2],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.LANDING.)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_a_stairs_rail_stopping_at_its_landing_is_found() {
+    let case = Case::new("geometry-whole-stair");
+    let (output, result) = case.geometry_rule(
+        &a_stair_whose_rail_stops_at_its_landing(),
+        &[
+            ("stair", "IfcStair"),
+            ("flight", "IfcStairFlight"),
+            ("rail", "IfcRailing"),
+        ],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("stair"),
+        json!({
+            "stair_path": {"type": "stringList", "value": ["IfcRelAggregates"]},
+            "stair_flights": {"type": "selector", "value": entity("flight")},
+            "maximum_total_rise": {"type": "quantity", "value": 1.2, "unit": "m"},
+            "handrail_objects": {"type": "selector", "value": entity("rail")},
+            "handrail_reach_across": {"type": "quantity", "value": 0.2, "unit": "m"},
+            "handrail_reach_above": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "handrail_continuous_across_landings": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The stair rises 1.36 m; its left handrail breaks off at the landing.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert!(
+        findings.iter().all(|(object, _)| object == "#700"),
+        "{result:#}"
+    );
+    assert!(
+        findings.iter().any(|(_, message)| message
+            == "the stair rises 1.36 m from its lowest flight's base to its highest flight's top; \
+                at most 1.2 m allowed"),
+        "{result:#}"
+    );
+    assert!(
+        findings.iter().any(|(_, message)| message
+            .starts_with("the handrail along the left side stops at the landing between ")
+            && message.contains("#208 and ")
+            && message.ends_with("#508 are not joined by selected rails within 0 m of each other")),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Metres. Wall #10, 0.2 m thick and 3 m high, is extruded up from a plan
 /// polyline mitred at its far end: 5 m long on its face y = 0, 5.2 m on
 /// y = 0.2. Windows of 1 m x 1.2 m run through it along -y at x 2 to 3

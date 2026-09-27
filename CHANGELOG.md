@@ -332,6 +332,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates' plan triangles, never exactly. **Breaking:** definitions
   bound to `component-clearance` must declare the optional parameters
   `wall_selector`, `wall_reach` and `wall_inset`.
+- **Whole stairs.** (Refs #132) `stair-geometry` gains a whole-stair mode:
+  with `stair_path` the rule selects stairs, reaches their parts, and
+  checks the parts `stair_flights` picks as flights (each once) and the
+  stair as a whole: `maximum_total_rise` from its lowest flight's base to
+  its highest flight's top, and with `handrail_continuous_across_landings`
+  the handrail along each side joined across every landing between
+  consecutive flights by selected rails touching one another (within
+  `handrail_gap_maximum`), measured by the proximity service in space. A
+  two-flight stair whose inner rail stops at the landing is a finding,
+  unless a `handrail_break_doors` door stands there (in the column
+  `landing_door_height` high over the landing grown by the rails' reach).
+  **Breaking:** definitions bound to `stair-geometry` must declare the new
+  optional parameters `stair_path`, `stair_flights`, `maximum_total_rise`,
+  `handrail_continuous_across_landings` and `handrail_break_doors`.
+
 - **Stair end spaces and the remaining handrail, winder and ramp
   landing options.** (Refs #132) `stair-geometry` takes `end_space_depth`,
   `end_space_width`, `end_space_height` and `end_space_obstacles`: a free

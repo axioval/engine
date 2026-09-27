@@ -51,6 +51,22 @@ pub(super) struct HandrailCheck<'a> {
     from_riser: bool,
     gap: Option<f64>,
     sides: Option<Required>,
+    /// Whether the handrail along each side must continue across the
+    /// landings between a stair's flights.
+    pub(super) continuous: bool,
+}
+
+impl HandrailCheck<'_> {
+    /// How far outside the walking surface's sides a rail may run.
+    pub(super) fn reach(&self) -> f64 {
+        self.reach
+    }
+
+    /// The largest gap allowed between pieces of one handrail, zero when
+    /// the rule allows none.
+    pub(super) fn gap(&self) -> f64 {
+        self.gap.unwrap_or(0.0)
+    }
 }
 
 pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
@@ -117,8 +133,14 @@ pub(super) fn parse<'a>(
             )));
         }
     };
-    let declared =
-        height != (None, None) || extension != (None, None) || gap.is_some() || sides.is_some();
+    let continuous = parameters
+        .boolean("handrail_continuous_across_landings")?
+        .unwrap_or(false);
+    let declared = height != (None, None)
+        || extension != (None, None)
+        || gap.is_some()
+        || sides.is_some()
+        || continuous;
     match (rails, reach, above, declared) {
         (Some(rails), Some(reach), Some(above), true) => Ok(Some(HandrailCheck {
             rails,
@@ -129,6 +151,7 @@ pub(super) fn parse<'a>(
             from_riser,
             gap,
             sides,
+            continuous,
         })),
         (None, None, None, false) => Ok(None),
         (_, _, _, true) => Err(invalid(
@@ -214,35 +237,9 @@ pub(super) fn handrails(
         Ok(rails) => rails,
         Err((_, message)) => return vec![(Check::Undecided(message.clone()), vec![], vec![])],
     };
-    let request = match HandrailRequest::try_new(
-        along.object.clone(),
-        along.stretch,
-        candidates.iter().cloned(),
-        (check.reach, check.above),
-        check.extension.0.unwrap_or(0.0),
-    ) {
-        Ok(request) => request,
-        Err(error) => {
-            return vec![(
-                Check::Undecided(format!("handrails: {}", service_error(&error).1)),
-                vec![],
-                vec![],
-            )];
-        }
-    };
-    let measured = match stairs.measure_handrails(&request) {
+    let measured = match measure(stairs, check, candidates, along) {
         Ok(measured) => measured,
-        Err(error) => {
-            return vec![(
-                Check::Undecided(format!(
-                    "handrails along {}: {}",
-                    along.label,
-                    service_error(&error).1
-                )),
-                vec![],
-                vec![],
-            )];
-        }
+        Err(message) => return vec![(Check::Undecided(message), vec![], vec![])],
     };
     let evidence = vec![measured.evidence().clone()];
     let judged = Judged {
@@ -282,6 +279,31 @@ pub(super) fn handrails(
         push(check, related);
     }
     checks
+}
+
+/// The rails among `candidates` along one stretch, as the rule's reaches
+/// find them, or why they are not measured.
+pub(super) fn measure(
+    stairs: &WalkingSurfaceServiceHandle,
+    check: &HandrailCheck<'_>,
+    candidates: &[ObjectId],
+    along: &Along<'_>,
+) -> Result<HandrailEvidence, String> {
+    let request = HandrailRequest::try_new(
+        along.object.clone(),
+        along.stretch,
+        candidates.iter().cloned(),
+        (check.reach, check.above),
+        check.extension.0.unwrap_or(0.0),
+    )
+    .map_err(|error| format!("handrails: {}", service_error(&error).1))?;
+    stairs.measure_handrails(&request).map_err(|error| {
+        format!(
+            "handrails along {}: {}",
+            along.label,
+            service_error(&error).1
+        )
+    })
 }
 
 /// Pushes each failing or undecided check with the rails it names, or

@@ -216,12 +216,6 @@ impl<'a> Parameters<'a> {
     /// `direction`, `follow_chain`, `path` and `skip_absent_relationship_ends`
     /// parameters.
     pub(crate) fn traversal(&self) -> Result<Option<Traversal<'a>>, Unavailable> {
-        let direction = |value: Option<&str>| match value {
-            None | Some("forward") => Ok(TraversalDirection::Forward),
-            Some("backward") => Ok(TraversalDirection::Backward),
-            Some("either") => Ok(TraversalDirection::Either),
-            Some(other) => Err(invalid(format!("direction `{other}` is unsupported"))),
-        };
         let relationship = self.string("relationship")?;
         let path = self.strings("path")?;
         let follow_chain = self.boolean("follow_chain")?.unwrap_or(false);
@@ -235,29 +229,54 @@ impl<'a> Parameters<'a> {
                 direction: direction(self.string("direction")?)?,
             }],
             (None, Some(path)) => {
-                if path.is_empty() {
-                    return Err(invalid("`path` has no steps"));
-                }
                 if self.string("direction")?.is_some() || follow_chain {
                     return Err(invalid(
                         "a `path` states each step's direction and cannot follow chains",
                     ));
                 }
-                path.iter()
-                    .map(|step| {
-                        let (relationship, stated) = match step.split_once(':') {
-                            Some((relationship, stated)) => (relationship, Some(stated)),
-                            None => (step.as_str(), None),
-                        };
-                        Ok(Step {
-                            relationship: relationship.trim(),
-                            direction: direction(stated.map(str::trim))?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, Unavailable>>()?
+                path_steps(path)?
             }
         };
-        Ok(Some(Traversal {
+        let absent_ends = if self.boolean("skip_absent_relationship_ends")? == Some(true) {
+            AbsentEndPolicy::Skip
+        } else {
+            AbsentEndPolicy::Refuse
+        };
+        Ok(Some(Traversal::new(steps, follow_chain, absent_ends)))
+    }
+}
+
+fn direction(value: Option<&str>) -> Result<TraversalDirection, Unavailable> {
+    match value {
+        None | Some("forward") => Ok(TraversalDirection::Forward),
+        Some("backward") => Ok(TraversalDirection::Backward),
+        Some("either") => Ok(TraversalDirection::Either),
+        Some(other) => Err(invalid(format!("direction `{other}` is unsupported"))),
+    }
+}
+
+/// The steps of a `path`, each `Relationship` or `Relationship:direction`.
+fn path_steps(path: &[String]) -> Result<Vec<Step<'_>>, Unavailable> {
+    if path.is_empty() {
+        return Err(invalid("`path` has no steps"));
+    }
+    path.iter()
+        .map(|step| {
+            let (relationship, stated) = match step.split_once(':') {
+                Some((relationship, stated)) => (relationship, Some(stated)),
+                None => (step.as_str(), None),
+            };
+            Ok(Step {
+                relationship: relationship.trim(),
+                direction: direction(stated.map(str::trim))?,
+            })
+        })
+        .collect()
+}
+
+impl<'a> Traversal<'a> {
+    fn new(steps: Vec<Step<'a>>, follow_chain: bool, absent_ends: AbsentEndPolicy) -> Self {
+        Self {
             relationship: steps
                 .iter()
                 .map(|step| step.relationship)
@@ -265,12 +284,14 @@ impl<'a> Parameters<'a> {
                 .join(" then "),
             steps,
             follow_chain,
-            absent_ends: if self.boolean("skip_absent_relationship_ends")? == Some(true) {
-                AbsentEndPolicy::Skip
-            } else {
-                AbsentEndPolicy::Refuse
-            },
-        }))
+            absent_ends,
+        }
+    }
+
+    /// The `path` of a `related` selector. A relationship end the source
+    /// cannot resolve refuses the step rather than being skipped.
+    pub(crate) fn path(path: &'a [String]) -> Result<Self, Unavailable> {
+        Ok(Self::new(path_steps(path)?, false, AbsentEndPolicy::Refuse))
     }
 }
 

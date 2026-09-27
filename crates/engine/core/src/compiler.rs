@@ -297,6 +297,7 @@ fn validate_selector_concepts(
             .iter()
             .try_for_each(|operand| validate_selector_concepts(concepts, rule, operand)),
         Selector::Not { operand } => validate_selector_concepts(concepts, rule, operand),
+        Selector::Related { selector, .. } => validate_selector_concepts(concepts, rule, selector),
     }
 }
 

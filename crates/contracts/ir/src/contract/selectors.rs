@@ -49,6 +49,19 @@ pub enum Selector {
     Not {
         operand: Box<Selector>,
     },
+    /// Objects by the objects a relationship `path` reaches from them.
+    ///
+    /// Each step is `Relationship` or `Relationship:direction` (`forward`,
+    /// the default, `backward` or `either`), walked one after another; the
+    /// reached objects are tested against `selector` under `quantifier`.
+    Related {
+        path: Vec<String>,
+        /// Which reached objects must match; `any` is omitted when
+        /// serialized.
+        #[serde(default, skip_serializing_if = "RelatedQuantifier::is_any")]
+        quantifier: RelatedQuantifier,
+        selector: Box<Selector>,
+    },
 }
 impl Default for Selector {
     fn default() -> Self {
@@ -86,6 +99,24 @@ pub enum Quantifier {
     Any,
     /// Every element satisfies it, and there is at least one.
     All,
+}
+/// Which of the objects a `related` selector reaches must match its selector.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RelatedQuantifier {
+    /// At least one reached object matches.
+    #[default]
+    Any,
+    /// Every reached object matches, and at least one is reached.
+    All,
+    /// No reached object matches; holds when none is reached.
+    None,
+}
+impl RelatedQuantifier {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_any(&self) -> bool {
+        matches!(self, Self::Any)
+    }
 }
 /// How a property selector compares the resolved value with its `value`.
 ///

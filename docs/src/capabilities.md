@@ -130,6 +130,30 @@ The selector fails closed:
 - a list value compared without a `quantifier` is not evaluated (`InvalidEvidence`), except by `exists`;
 - a selector whose `value` does not fit its operator, an unknown unit, an invalid pattern, a text option on a non-text comparison, or a `quantifier` on `exists` is an invalid declaration.
 
+### Related selectors
+
+A `related` selector selects an object by the objects a relationship `path` reaches from it. The `path` is written as the `path` parameter of the relationship-scoped capabilities: steps `Relationship` or `Relationship:direction` (`forward`, the default, `backward` or `either`), walked one after another through `RelationshipSelectionServiceHandle`, never reaching the object itself. The reached objects are tested against the nested `selector` under a `quantifier`:
+
+| `quantifier` | Selects when |
+|---|---|
+| `any` (default, omitted when serialized) | at least one reached object matches. |
+| `all` | every reached object matches, and at least one is reached. |
+| `none` | no reached object matches; also when none is reached. |
+
+Fire-wall doors are doors whose wall states `Compartmentation` true; with IFC:
+
+```json
+{ "kind": "allOf", "operands": [
+  { "kind": "entityType", "objectType": "…door", "includeSubtypes": true },
+  { "kind": "related",
+    "path": ["IfcRelFillsElement:backward", "IfcRelVoidsElement:backward"],
+    "selector": { "kind": "property", "propertySet": "…wall-common",
+                  "property": "…compartmentation", "operator": "equals",
+                  "value": { "type": "boolean", "value": true } } } ] }
+```
+
+The other direction, walls holding at least one unrated door, is `IfcRelVoidsElement` then `IfcRelFillsElement` forward from the wall. A `related` selector fails closed as well: a relationship answer the service refuses (an unknown relationship, an unresolved relationship end, an unavailable backend) leaves the object not evaluated, since the objects it would reach are unknown. So does a reached object the nested selector cannot decide, unless the others already settle the verdict: one match settles `any` and `none`, one non-match settles `all`. An empty or malformed `path` is an invalid declaration. Relationship names are the source's own, as in capability parameters; the nested selector names concepts like any selector and is bound per source. In `selector-conformance`, the properties of related objects are not among the checked object's consulted properties.
+
 ### Numeric tolerance
 
 `property-predicate`, `property-comparison` and `unique-value` take three optional parameters that relax exact numeric comparison. They apply to integers, decimals and quantities; a quantity is compared in its canonical SI unit, so a tolerance on a length is in metres. Text and booleans are never affected, and a tolerance declared with a text, text-list or boolean constant target is an invalid declaration. A definition bound to one of these capabilities must declare all three, as optional parameters (`number`, `number`, `integer`).

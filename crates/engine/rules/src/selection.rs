@@ -6,12 +6,14 @@ use axioval_engine::{
     PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, TypeHierarchyError,
     TypeHierarchyServiceHandle,
 };
-use axioval_ir::contract::{ComparisonOperator, ParameterValue, Quantifier, Selector};
+use axioval_ir::contract::{
+    ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, Selector,
+};
 use axioval_ir::{Evidence, Object, PropertyValue, QuantityDimension};
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
 
-use crate::support::{Tolerance, exact_f64, si_quantity};
+use crate::support::{Tolerance, Traversal, exact_f64, si_quantity};
 
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
@@ -95,6 +97,62 @@ pub(crate) fn selector_matches(
             ),
             evidence,
         ),
+        Selector::Related {
+            path,
+            quantifier,
+            selector,
+        } => related_matches(context, object, path, *quantifier, selector, evidence),
+    }
+}
+
+/// Whether the objects `path` reaches from `object` satisfy `selector`
+/// under `quantifier`.
+///
+/// A refused relationship answer leaves the object undecided: the objects
+/// it would have reached are unknown. So does a reached object `selector`
+/// cannot decide, unless the others already settle the verdict.
+fn related_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    path: &[String],
+    quantifier: RelatedQuantifier,
+    selector: &Selector,
+    evidence: &mut Vec<Evidence>,
+) -> Selection {
+    let traversal = match Traversal::path(path) {
+        Ok(traversal) => traversal,
+        Err((reason, message)) => {
+            return Selection::NotEvaluated(reason, format!("related selector: {message}"));
+        }
+    };
+    let everything: Vec<&Object> = context.project.objects().collect();
+    let (reached, cited) = match traversal.related(context, &object.id, &everything) {
+        Ok(found) => found,
+        Err((reason, message)) => {
+            return Selection::NotEvaluated(
+                reason,
+                format!("related selector via {}: {message}", traversal.relationship),
+            );
+        }
+    };
+    evidence.extend(cited);
+    let outcomes = reached.iter().map(|id| match context.project.object(id) {
+        Some(target) => selector_matches(context, selector, target, evidence),
+        None => Selection::NotEvaluated(
+            NotEvaluatedReason::InvalidEvidence,
+            format!("related selector reached {id}, which is not in the project"),
+        ),
+    });
+    match quantifier {
+        RelatedQuantifier::Any => any_of(outcomes),
+        // `all` never holds vacuously.
+        RelatedQuantifier::All if reached.is_empty() => Selection::NoMatch,
+        RelatedQuantifier::All => all_of(outcomes),
+        RelatedQuantifier::None => match any_of(outcomes) {
+            Selection::Match => Selection::NoMatch,
+            Selection::NoMatch => Selection::Match,
+            unavailable @ Selection::NotEvaluated(..) => unavailable,
+        },
     }
 }
 

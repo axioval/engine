@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Selecting objects by related objects.** The new selector kind
+  `related` follows a relationship `path` from each candidate (steps
+  `Relationship` or `Relationship:direction`, as in the `path` parameter)
+  and tests the reached objects against a nested `selector` under a
+  `quantifier`: `any` (the default, omitted when serialized), `all` (at
+  least one reached, and every one matches) or `none`. Fire-wall doors are
+  doors whose wall, reached through `IfcRelFillsElement` then
+  `IfcRelVoidsElement` backwards, states `Compartmentation` true. A refused
+  relationship answer or a reached object the nested selector cannot decide
+  leaves the candidate not evaluated unless the others settle the verdict.
+  **Breaking:** `Selector` has the new variant `Related`, beside the new
+  enum `RelatedQuantifier`; existing packages serialize unchanged.
 - **Every presentation layer of an object, and models without layers.**
   `axioval:presentation.Layer` now lists all distinct layers of an object,
   sorted by name, as the new `PropertyValue::List` (scalar elements only;

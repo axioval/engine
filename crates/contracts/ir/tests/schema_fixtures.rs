@@ -202,3 +202,36 @@ fn table_contracts_reject_unknown_fields_and_kinds() {
     );
     assert!(serde_json::from_str::<ParameterValue>(r#"{"type":"table","rows":[]}"#).is_err());
 }
+
+#[test]
+fn related_selector_omits_its_default_quantifier_and_round_trips() {
+    let any = r#"{"kind":"related","path":["IfcRelFillsElement:backward","IfcRelVoidsElement:backward"],"selector":{"kind":"entityType","objectType":"axioval:example.wall","includeSubtypes":true}}"#;
+    let selector: Selector = serde_json::from_str(any).unwrap();
+    assert!(matches!(
+        &selector,
+        Selector::Related {
+            quantifier: axioval_ir::contract::RelatedQuantifier::Any,
+            path,
+            ..
+        } if path.len() == 2
+    ));
+    assert_eq!(
+        serde_json::to_value(&selector).unwrap(),
+        serde_json::from_str::<serde_json::Value>(any).unwrap()
+    );
+    for quantifier in ["all", "none"] {
+        let json = any.replacen(
+            "\"selector\"",
+            &format!("\"quantifier\":\"{quantifier}\",\"selector\""),
+            1,
+        );
+        let selector: Selector = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            serde_json::to_value(&selector).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&json).unwrap()
+        );
+    }
+    let unknown = any.replacen("\"selector\"", "\"quantifier\":\"some\",\"selector\"", 1);
+    assert!(serde_json::from_str::<Selector>(&unknown).is_err());
+    assert!(serde_json::from_str::<Selector>(&any.replace("\"path\"", "\"steps\"")).is_err());
+}

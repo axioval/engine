@@ -48,27 +48,82 @@ impl AxiolidFreeSpaceService {
     }
 }
 
-/// The plan footprint of a clearance shape centred on `(x, y)`.
+/// Sides of the polygons that bound a cylinder's disc from inside and outside.
+const DISC_SIDES: u32 = 64;
+
+/// A clearance volume's plan footprint, bounded from both sides.
 ///
-/// A cylinder is approximated by its inscribed square in plan: understating
-/// the footprint would let a volume "fit" where it does not, so the
-/// circumscribed square is used instead and the fit is conservative.
-fn shape_footprint(shape: ClearanceShape, x: f64, y: f64) -> Polygon {
-    let (half_width, half_depth) = match shape {
-        ClearanceShape::Box(b) => (b.width_metres() / 2.0, b.depth_metres() / 2.0),
-        ClearanceShape::Cylinder(c) => (c.radius_metres(), c.radius_metres()),
-    };
+/// `inner` lies inside the true footprint and `outer` contains it, so an
+/// obstacle meeting `inner` certainly obstructs, and one missing `outer`
+/// certainly does not. For a box both are the exact rectangle along the
+/// frame's axes; for a cylinder they are the inscribed and circumscribed
+/// polygons of its disc.
+struct Footprint {
+    inner: Polygon,
+    outer: Polygon,
+}
+
+fn ring(points: Vec<Point2>) -> Polygon {
     Polygon {
-        outer: Ring {
-            points: vec![
-                Point2::new(x - half_width, y - half_depth),
-                Point2::new(x + half_width, y - half_depth),
-                Point2::new(x + half_width, y + half_depth),
-                Point2::new(x - half_width, y + half_depth),
-            ],
-        },
+        outer: Ring { points },
         holes: Vec::new(),
     }
+}
+
+fn shape_footprint(request: &ClearanceRequest) -> Result<Footprint, FreeSpaceError> {
+    let frame = request.frame();
+    let [centre_x, centre_y, _] = frame.origin().coordinates_metres();
+    let [rx, ry, rz] = frame.right().components();
+    let [fx, fy, fz] = frame.forward().components();
+    let [ux, uy, _] = frame.up().components();
+    // A tilted frame has no plan rectangle; refuse rather than project it.
+    if rz.abs() > 1.0e-12 || fz.abs() > 1.0e-12 || ux.abs() > 1.0e-12 || uy.abs() > 1.0e-12 {
+        return Err(FreeSpaceError::Unavailable(
+            "clearance frames must be upright".into(),
+        ));
+    }
+    Ok(match request.shape() {
+        ClearanceShape::Box(b) => {
+            let (half_width, half_depth) = (b.width_metres() / 2.0, b.depth_metres() / 2.0);
+            let corner = |along: f64, across: f64| {
+                Point2::new(
+                    centre_x + along * rx + across * fx,
+                    centre_y + along * ry + across * fy,
+                )
+            };
+            let rectangle = ring(vec![
+                corner(-half_width, -half_depth),
+                corner(half_width, -half_depth),
+                corner(half_width, half_depth),
+                corner(-half_width, half_depth),
+            ]);
+            Footprint {
+                inner: rectangle.clone(),
+                outer: rectangle,
+            }
+        }
+        ClearanceShape::Cylinder(cylinder) => {
+            let sides = f64::from(DISC_SIDES);
+            let polygon = |radius: f64| {
+                ring(
+                    (0..DISC_SIDES)
+                        .map(|i| {
+                            let angle = 2.0 * std::f64::consts::PI * f64::from(i) / sides;
+                            Point2::new(
+                                centre_x + radius * angle.cos(),
+                                centre_y + radius * angle.sin(),
+                            )
+                        })
+                        .collect(),
+                )
+            };
+            let radius = cylinder.radius_metres();
+            Footprint {
+                inner: polygon(radius),
+                outer: polygon(radius / (std::f64::consts::PI / sides).cos()),
+            }
+        }
+    })
 }
 
 /// Vertical span of a triangle set as `(min_z, max_z)`.
@@ -122,8 +177,8 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         request: &ClearanceRequest,
     ) -> Result<ClearanceOutcome, FreeSpaceError> {
         let tolerance = tolerance()?;
-        let [x, y, z] = request.frame().origin().coordinates_metres();
-        let footprint = shape_footprint(request.shape(), x, y);
+        let [_, _, z] = request.frame().origin().coordinates_metres();
+        let footprint = shape_footprint(request)?;
         let height = match request.shape() {
             ClearanceShape::Box(b) => b.height_metres(),
             ClearanceShape::Cylinder(c) => c.height_metres(),
@@ -132,7 +187,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
 
         // The volume's box. A tessellated obstacle whose true body could reach
         // it makes the verdict an estimate; this evidence is exact.
-        let volume = footprint.outer.points.iter().fold(
+        let volume = footprint.outer.outer.points.iter().fold(
             (
                 [f64::INFINITY, f64::INFINITY, volume_span.0],
                 [f64::NEG_INFINITY, f64::NEG_INFINITY, volume_span.1],
@@ -155,6 +210,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         }
 
         let mut blockers = Vec::new();
+        let mut undecided = false;
         for obstacle in request.obstacles() {
             if self.geometry.has_no_body(obstacle) {
                 continue;
@@ -172,11 +228,19 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             if overlapping_height(volume_span, span) <= 0.0 {
                 continue;
             }
-            if overlap_area(&footprint, &body, tolerance)? > AREA_EPSILON_M2 {
+            if overlap_area(&footprint.inner, &body, tolerance)? > AREA_EPSILON_M2 {
                 blockers.push(obstacle.clone());
+            } else if overlap_area(&footprint.outer, &body, tolerance)? > AREA_EPSILON_M2 {
+                // Between the two bounds: it may or may not reach the volume.
+                undecided = true;
             }
         }
 
+        if blockers.is_empty() && undecided {
+            return Err(FreeSpaceError::Unavailable(
+                "an obstacle lies within the cylinder's approximation band".into(),
+            ));
+        }
         if blockers.is_empty() {
             // Every named obstacle was measured and none intersects, so the
             // completeness claim is earned rather than assumed.

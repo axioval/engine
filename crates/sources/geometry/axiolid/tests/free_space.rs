@@ -4,9 +4,9 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
-    BoxClearance, ClearanceOutcome, ClearanceRequest, ClearanceShape, FreeAreaRequest,
-    FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
-    PlacementOrientation, PlacementRequest, PlacementShape,
+    BoxClearance, ClearanceOutcome, ClearanceRequest, ClearanceShape, CylinderClearance,
+    FreeAreaRequest, FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint,
+    MobilityProfile, PlacementOrientation, PlacementRequest, PlacementShape,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -295,5 +295,71 @@ fn an_unmeasured_obstacle_still_refuses() {
     assert!(matches!(
         service.assess_clearance(&request),
         Err(FreeSpaceError::MissingGeometry(_))
+    ));
+}
+
+/// A 2 m × 0.4 m box turned by 45°. Its axis-aligned bounding square
+/// (about 1.56 m) would reach a column at its corner; the turned box does not.
+#[test]
+fn a_turned_box_follows_its_frame_axes() {
+    let (s, c) = std::f64::consts::FRAC_PI_4.sin_cos();
+    let frame = MetricFrame::try_new(
+        MetricPoint::try_new(id("scope"), [0.0, 0.0, 0.0]).unwrap(),
+        MetricDirection::try_new([c, s, 0.0]).unwrap(),
+        MetricDirection::try_new([-s, c, 0.0]).unwrap(),
+        MetricDirection::try_new([0.0, 0.0, 1.0]).unwrap(),
+    )
+    .unwrap();
+    let geometry =
+        AxiolidGeometry::new().with_mesh(id("column"), body(0.6, 0.75, -0.75, -0.6, 0.0, 3.0));
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let request = ClearanceRequest::new(frame, box_shape(2.0, 0.4, 2.0), vec![id("column")]);
+    assert!(matches!(
+        service.assess_clearance(&request).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// A column in the corner of a cylinder's bounding square is outside the
+/// cylinder, and must not be named as a blocker.
+#[test]
+fn a_column_in_the_corner_of_a_cylinders_square_does_not_obstruct_it() {
+    let geometry =
+        AxiolidGeometry::new().with_mesh(id("column"), body(0.65, 0.75, 0.65, 0.75, 0.0, 3.0));
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let cylinder = ClearanceShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    let request = ClearanceRequest::new(frame_at(0.0, 0.0, 0.0), cylinder, vec![id("column")]);
+    assert!(matches!(
+        service.assess_clearance(&request).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// An obstacle grazing the disc between the inscribed and circumscribed
+/// polygons is neither a proven blocker nor proven clear.
+#[test]
+fn an_obstacle_in_the_disc_band_refuses() {
+    // Both polygons have a vertex at angle 0, so at angle pi/64 the inscribed
+    // one's edge is about 0.9 mm inside the circle and the circumscribed
+    // one's touches it. A 0.1 mm post centred 0.5 mm inside is in the band.
+    let angle = std::f64::consts::PI / 64.0;
+    let (cx, cy) = (0.7495 * angle.cos(), 0.7495 * angle.sin());
+    let geometry = AxiolidGeometry::new().with_mesh(
+        id("post"),
+        body(
+            cx - 0.00005,
+            cx + 0.00005,
+            cy - 0.00005,
+            cy + 0.00005,
+            0.0,
+            3.0,
+        ),
+    );
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let cylinder = ClearanceShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    let request = ClearanceRequest::new(frame_at(0.0, 0.0, 0.0), cylinder, vec![id("post")]);
+    assert!(matches!(
+        service.assess_clearance(&request),
+        Err(FreeSpaceError::Unavailable(_))
     ));
 }

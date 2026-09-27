@@ -20,6 +20,8 @@ The result is asymmetric:
 
 Partial geometry therefore cannot produce a false clear result.
 
+The Axiolid adapter measures a box as the exact rectangle along the frame's right and forward axes, and refuses a tilted frame. It bounds a cylinder's disc from both sides with inscribed and circumscribed 64-gons. An obstacle meeting the inscribed polygon obstructs; the volume is clear only when every obstacle misses the circumscribed one. An obstacle between the two (within about 0.12 % of the radius) refuses the request rather than being guessed either way.
+
 ## Placement search
 
 `PlacementRequest` asks whether a box or cylinder can fit in a source-qualified search scope. Its `PlacementShape` states which rotations count, because "fits" depends on it: a box that fits only diagonally has no placement along a fixed frame but has one at some angle.

@@ -8,6 +8,7 @@ use axioval_ir::{Discipline, Project, SourceId};
 use thiserror::Error;
 
 use crate::derived_relationships::{DerivedRelationshipServiceHandle, RoutedRelationships};
+use crate::discipline_map::{DisciplineMap, DisciplineOrigin, Mapping, UnmappedReason};
 use crate::source_metadata::SourceMetadata;
 use crate::{RelationshipSelectionServiceHandle, ServiceRegistry, ServiceRegistryError};
 
@@ -113,17 +114,37 @@ impl SourceSnapshot {
 /// Capabilities find it in the service registry. A source without an entry
 /// declares no discipline; that is unknown, never "no discipline matches".
 #[derive(Clone, Debug, Default)]
-pub struct SourceDisciplines(BTreeMap<SourceId, Discipline>);
+pub struct SourceDisciplines {
+    disciplines: BTreeMap<SourceId, Discipline>,
+    origins: BTreeMap<SourceId, DisciplineOrigin>,
+}
 
 impl SourceDisciplines {
-    pub(crate) fn new(disciplines: BTreeMap<SourceId, Discipline>) -> Self {
-        Self(disciplines)
+    pub(crate) fn new(
+        disciplines: BTreeMap<SourceId, Discipline>,
+        origins: BTreeMap<SourceId, DisciplineOrigin>,
+    ) -> Self {
+        Self {
+            disciplines,
+            origins,
+        }
     }
 
     /// The discipline declared for `source`, if any.
     #[must_use]
     pub fn of(&self, source: &SourceId) -> Option<&Discipline> {
-        self.0.get(source)
+        self.disciplines.get(source)
+    }
+
+    /// Where `source`'s discipline came from, if it has one.
+    #[must_use]
+    pub fn origin(&self, source: &SourceId) -> Option<&DisciplineOrigin> {
+        self.of(source)?;
+        Some(
+            self.origins
+                .get(source)
+                .unwrap_or(&DisciplineOrigin::Declared),
+        )
     }
 }
 
@@ -211,6 +232,11 @@ pub struct EvidenceSession {
     project: Arc<Project>,
     snapshots: BTreeMap<SourceId, SourceSnapshot>,
     disciplines: BTreeMap<SourceId, Discipline>,
+    /// Where each mapped discipline came from; a discipline without an
+    /// entry was declared.
+    origins: BTreeMap<SourceId, DisciplineOrigin>,
+    /// Why a discipline map left a source without a discipline.
+    unmapped: BTreeMap<SourceId, UnmappedReason>,
     metadata: BTreeMap<SourceId, SourceMetadata>,
     services: ServiceRegistry,
 }
@@ -253,6 +279,8 @@ impl EvidenceSession {
             project: Arc::new(project),
             snapshots: indexed,
             disciplines: BTreeMap::new(),
+            origins: BTreeMap::new(),
+            unmapped: BTreeMap::new(),
             metadata: BTreeMap::new(),
             services: ServiceRegistry::new(),
         })
@@ -317,6 +345,12 @@ impl EvidenceSession {
                     .iter()
                     .map(|(source, discipline)| (source.clone(), discipline.clone())),
             );
+            federated
+                .origins
+                .extend(member.origins.iter().map(|(s, o)| (s.clone(), o.clone())));
+            federated
+                .unmapped
+                .extend(member.unmapped.iter().map(|(s, u)| (s.clone(), u.clone())));
             federated.metadata.extend(
                 member
                     .metadata
@@ -368,6 +402,74 @@ impl EvidenceSession {
         &self.disciplines
     }
 
+    /// Assigns disciplines from source metadata to the sources that declare
+    /// none.
+    ///
+    /// Each such source takes the discipline of the first rule of `map`
+    /// matching one of its field's values, and the session records the rule
+    /// and the value ([`Self::discipline_origin`]); the `discipline` selector
+    /// cites them. A declared discipline is never replaced. A source no rule
+    /// matches keeps none, as does one where a rule reads a field it never
+    /// stated, since that rule might have matched ([`Self::unmapped`]). Map
+    /// after stating metadata and declaring disciplines: a discipline
+    /// declared afterwards for a mapped source is a duplicate.
+    #[must_use]
+    pub fn with_discipline_map(mut self, map: &DisciplineMap) -> Self {
+        if map.is_empty() {
+            return self;
+        }
+        let index = self.metadata_index();
+        for source in self.snapshots.keys() {
+            if self.disciplines.contains_key(source) {
+                continue;
+            }
+            match map.decide(source, &index) {
+                Mapping::Assigned { rule, value } => {
+                    let rule = &map.rules()[rule];
+                    self.disciplines
+                        .insert(source.clone(), rule.discipline().clone());
+                    self.origins.insert(
+                        source.clone(),
+                        DisciplineOrigin::Mapped {
+                            rule: rule.to_string(),
+                            field: rule.field(),
+                            value,
+                        },
+                    );
+                    self.unmapped.remove(source);
+                }
+                Mapping::Unread { rule } => {
+                    self.unmapped.insert(
+                        source.clone(),
+                        UnmappedReason::Unread(map.rules()[rule].to_string()),
+                    );
+                }
+                Mapping::Unmatched => {
+                    self.unmapped
+                        .insert(source.clone(), UnmappedReason::NoMatch);
+                }
+            }
+        }
+        self
+    }
+
+    /// Where `source`'s discipline came from, if it has one.
+    #[must_use]
+    pub fn discipline_origin(&self, source: &SourceId) -> Option<&DisciplineOrigin> {
+        self.disciplines.get(source)?;
+        Some(
+            self.origins
+                .get(source)
+                .unwrap_or(&DisciplineOrigin::Declared),
+        )
+    }
+
+    /// Why a discipline map left `source` without a discipline, if one did.
+    #[must_use]
+    pub fn unmapped(&self, source: &SourceId) -> Option<&UnmappedReason> {
+        self.unmapped.get(source)
+    }
+
     /// States what is known about `source` as a whole: the adapter the
     /// applications and project it read, the host the file name.
     ///
@@ -399,6 +501,11 @@ impl EvidenceSession {
     #[must_use]
     pub fn source_metadata(&self, source: &SourceId) -> Option<&SourceMetadata> {
         self.metadata.get(source)
+    }
+
+    /// Every source's discipline and its origin, as a run reads them.
+    pub(crate) fn source_disciplines(&self) -> SourceDisciplines {
+        SourceDisciplines::new(self.disciplines.clone(), self.origins.clone())
     }
 
     /// Every source's metadata as a run reads it: the schema comes from the

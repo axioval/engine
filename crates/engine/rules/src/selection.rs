@@ -144,7 +144,7 @@ pub(crate) fn selector_matches(
             quantifier,
             selector,
         } => related_matches(context, object, path, *quantifier, selector, evidence),
-        Selector::Discipline { value } => discipline_matches(context, object, value),
+        Selector::Discipline { value } => discipline_matches(context, object, value, evidence),
         source @ Selector::Source { .. } => source_matches(context, object, source),
     }
 }
@@ -231,9 +231,26 @@ fn discipline_matches(
     context: &RuleContext<'_>,
     object: &Object,
     discipline: &Discipline,
+    evidence: &mut Vec<Evidence>,
 ) -> Selection {
     match discipline_of(context, object, "the `discipline` selector") {
-        Ok(declared) if declared == discipline => Selection::Match,
+        Ok(declared) if declared == discipline => {
+            // A mapped discipline cites the map rule and the value it matched:
+            // the host's assignment, not a fact the source states.
+            if let Some(locator) = context
+                .services
+                .get::<SourceDisciplines>()
+                .and_then(|disciplines| disciplines.origin(&object.id.source))
+                .and_then(axioval_engine::DisciplineOrigin::locator)
+            {
+                evidence.push(Evidence {
+                    source: object.id.source.clone(),
+                    locator,
+                    exact: false,
+                });
+            }
+            Selection::Match
+        }
         Ok(_) => Selection::NoMatch,
         Err((reason, message)) => Selection::NotEvaluated(reason, message),
     }
@@ -1256,23 +1273,7 @@ fn operator_name(operator: &ComparisonOperator) -> &'static str {
 /// backslash makes the next character literal (`\*`, `\?`, `\\`). Every
 /// other character is literal.
 pub(crate) fn wildcard(pattern: &str) -> Result<String, String> {
-    let mut out = String::from("(?s)^");
-    let mut chars = pattern.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '*' => out.push_str(".*"),
-            '?' => out.push('.'),
-            '\\' => {
-                let escaped = chars
-                    .next()
-                    .ok_or("a wildcard pattern ends with a backslash")?;
-                out.push_str(&regex::escape(escaped.encode_utf8(&mut [0; 4])));
-            }
-            other => out.push_str(&regex::escape(other.encode_utf8(&mut [0; 4]))),
-        }
-    }
-    out.push('$');
-    Ok(out)
+    axioval_engine::wildcard_regex(pattern)
 }
 
 #[cfg(test)]

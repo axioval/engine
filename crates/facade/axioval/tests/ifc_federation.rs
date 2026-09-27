@@ -462,6 +462,11 @@ END-ISO-10303-21;
 
 /// "Every model contains a wall", per source.
 fn run_wall_count(session: &EvidenceSession) -> Report {
+    run_count(session, &entity("axioval:test.wall"), &json!({}))
+}
+
+/// An `object-count` rule over `applicability` with `parameters`.
+fn run_count(session: &EvidenceSession, applicability: &Value, parameters: &Value) -> Report {
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
     let capability = "axioval:capability.object-count";
     let mut definitions = serde_json::to_value(definitions(&registry)).unwrap();
@@ -486,8 +491,8 @@ fn run_wall_count(session: &EvidenceSession) -> Report {
             "definitionId": "axioval:test.object-count",
             "name": text("a-wall-exists"),
             "severity": "error",
-            "applicability": entity("axioval:test.wall"),
-            "parameters": {},
+            "applicability": applicability,
+            "parameters": parameters,
         }]},
     }))
     .unwrap();
@@ -550,5 +555,116 @@ fn a_member_without_objects_stays_in_the_federation_as_an_empty_source() {
     assert_eq!(
         finding.message,
         "no object matches the selection in source `ifc-step:empty.ifc`; required at least 1"
+    );
+}
+
+/// The file names as the CLI states them, then `map`.
+fn mapped(map: &axioval::engine::DisciplineMap, structure: Option<&str>) -> EvidenceSession {
+    use axioval::engine::SourceMetadata;
+    use axioval::ir::contract::SourceField;
+    let named = |document: &str, ifc: &str, role: Option<&str>| {
+        member(document, ifc, role)
+            .with_source_metadata(
+                &source(document),
+                SourceMetadata::new().with(SourceField::FileName, [document]),
+            )
+            .unwrap()
+    };
+    EvidenceSession::federate([
+        named("arch.ifc", ARCHITECTURE, Some("architecture")),
+        named("struct.ifc", STRUCTURE, structure),
+    ])
+    .unwrap()
+    .with_discipline_map(map)
+}
+
+#[test]
+fn a_discipline_map_assigns_undeclared_sources_and_is_cited() {
+    use axioval::engine::{DisciplineMap, DisciplineOrigin, DisciplineRule, UnmappedReason};
+    use axioval::ir::contract::SourceField;
+    let rule = |field, pattern: &str, role: &str| {
+        DisciplineRule::new(field, pattern, discipline(role)).unwrap()
+    };
+    // The architectural file is declared: the first rule would match it
+    // too, and does not replace its discipline.
+    let map = DisciplineMap::new()
+        .with(rule(SourceField::FileName, "*.ifc", "mep"))
+        .with(rule(SourceField::FileName, "struct*", "structure"));
+    let session = mapped(&map, None);
+    assert_eq!(
+        session.discipline(&source("arch.ifc")),
+        Some(&discipline("architecture"))
+    );
+    assert_eq!(
+        session.discipline_origin(&source("arch.ifc")),
+        Some(&DisciplineOrigin::Declared)
+    );
+    assert_eq!(
+        session.discipline(&source("struct.ifc")),
+        Some(&discipline("mep"))
+    );
+
+    let map = DisciplineMap::new().with(rule(SourceField::FileName, "struct*", "structure"));
+    let session = mapped(&map, None);
+    assert_eq!(
+        session.discipline_origin(&source("struct.ifc")),
+        Some(&DisciplineOrigin::Mapped {
+            rule: "fileName:struct*=structure".into(),
+            field: SourceField::FileName,
+            value: "struct.ifc".into(),
+        })
+    );
+    // The discipline rule now evaluates the mapped model.
+    let report = run(&session);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    assert!(
+        flagged(&report).contains(&(
+            "structural-walls-have-a-reference".to_owned(),
+            "ifc-step:struct.ifc/#10".to_owned()
+        )),
+        "{:?}",
+        report.findings()
+    );
+    // A selection resting on the mapped discipline cites the assignment.
+    let structural_walls = json!({
+        "kind": "allOf",
+        "operands": [entity("axioval:test.wall"), { "kind": "discipline", "value": "structure" }],
+    });
+    let report = run_count(
+        &session,
+        &structural_walls,
+        &json!({ "maximum": { "type": "integer", "value": 0 } }),
+    );
+    let [finding] = report.findings() else {
+        panic!("{:?}", report.findings());
+    };
+    assert!(
+        finding.evidence.iter().any(|evidence| !evidence.exact
+            && evidence.locator == "discipline-map:fileName:struct*=structure@struct.ifc"),
+        "{:?}",
+        finding.evidence
+    );
+
+    // A field the source never stated stops the map: unmapped, as without one.
+    let map = DisciplineMap::new()
+        .with(rule(SourceField::Application, "*", "structure"))
+        .with(rule(SourceField::FileName, "struct*", "structure"));
+    let session = EvidenceSession::federate([
+        member("arch.ifc", ARCHITECTURE, Some("architecture")),
+        member("struct.ifc", STRUCTURE, None),
+    ])
+    .unwrap()
+    .with_discipline_map(&map);
+    // Without owner histories the file states no application, exactly:
+    // the first rule matches nothing and the second reads an unstated
+    // file name.
+    assert_eq!(session.discipline(&source("struct.ifc")), None);
+    assert_eq!(
+        session.unmapped(&source("struct.ifc")),
+        Some(&UnmappedReason::Unread("fileName:struct*=structure".into()))
     );
 }

@@ -78,6 +78,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_bands` (omitted when empty, so packages are unchanged),
   `EngineError` gains `InvalidRefinement`, and
   `ExecutionPlan::refinement` exposes what a rule declares.
+- **Disciplines from source metadata.** (#102) A `DisciplineMap` of
+  ordered wildcard rules over a source metadata field
+  (`EvidenceSession::with_discipline_map`) assigns a discipline to each
+  source that declares none: the first rule matching one of the field's
+  values wins, a declared discipline is never replaced, and a source whose
+  field a rule reads was never stated keeps none. The session records each
+  assignment (`DisciplineOrigin::Mapped`: rule and value), readable through
+  `SourceDisciplines::origin`, and the `discipline` selector cites it as
+  inexact evidence. The CLI takes repeatable `--discipline-map
+  FIELD:PATTERN=DISCIPLINE` (`application:*Architecture*=architecture`)
+  and lists every source with its discipline and its origin in the
+  result's new `sources` field. The `like` wildcard translation moved to
+  `axioval_engine::wildcard_regex`. **Breaking:** `SourceDisciplines` is
+  a struct of disciplines and origins.
 - **Empty and not-empty, classification patterns, source metadata.** (#101)
   Selectors gain the operators `isEmpty` (present but null, blank or a
   list of nothing else) and `isNotEmpty` (present with a value), with the

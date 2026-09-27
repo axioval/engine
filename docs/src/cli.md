@@ -17,6 +17,7 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise.
 
 ```bash
 axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
+  [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
   --definitions definitions.json --ruleset ruleset.json \
   [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
@@ -66,6 +67,48 @@ Each model's file name is stated as its source's `fileName` metadata, beside the
 Reports, `report` and BCF work with several models. Over several documents,
 the summary and listings name objects as `arch.ifc/#42`, and `--object`
 accepts that form.
+
+### Disciplines from what a model states
+
+Federated models often carry their discipline only in the application that
+wrote them or in their file name. `--discipline-map FIELD:PATTERN=DISCIPLINE`
+assigns one to each model that declares none:
+
+```bash
+axioval check --model a.ifc --model s.ifc --model m.ifc:mep \
+  --discipline-map 'application:*Architecture*=architecture' \
+  --discipline-map 'fileName:*_STR*=structure' \
+  --definitions d.json --ruleset r.json
+```
+
+FIELD is `application`, `fileName`, `project` or `schema` (see
+[Source selectors](./capabilities.md#source-selectors)); PATTERN is a
+wildcard pattern over the whole value, as the `like` operator reads it (`*`,
+`?`, `\` escapes), compared case-sensitively; the discipline is the text
+after the last `=`. Rules are tried in order, and the first whose pattern
+matches one of the model's values assigns its discipline. A declared
+`:DISCIPLINE` always wins. A model no rule matches keeps none and behaves as
+without a map. So does a model that never stated the field a rule reads
+before any rule matched, since that rule might have matched. A malformed rule
+is a usage error (status 2).
+
+The result's `sources` lists every model with its discipline and where it
+came from, so an assignment can be reviewed:
+
+```json
+"sources": [
+  { "source": "ifc-step:a.ifc", "discipline": "architecture", "discipline_origin": "mapped",
+    "mapped_by": "application:*Architecture*=architecture",
+    "mapped_value": "Modeller Architecture 2024" },
+  { "source": "ifc-step:m.ifc", "discipline": "mep", "discipline_origin": "declared" },
+  { "source": "ifc-step:x.ifc", "unmapped": "no rule of the discipline map matches" }
+]
+```
+
+A selection resting on a mapped discipline also cites the rule and the value
+as inexact evidence
+(`discipline-map:application:*Architecture*=architecture@Modeller Architecture 2024`)
+wherever the capability keeps its selection's evidence.
 
 ### Output
 

@@ -48,6 +48,32 @@ pub struct CheckOutput {
     /// projects to. Absent from a `check` result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comparison: Option<ComparisonRecord>,
+    /// Every checked source with its discipline and where it came from.
+    /// Absent from a `compare` result and from results saved before it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<SourceInfo>,
+}
+
+/// One checked source: its discipline, declared or assigned by
+/// `--discipline-map`, or why the map left it without one.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SourceInfo {
+    /// `system:document`.
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<String>,
+    /// `declared` or `mapped`, with a discipline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline_origin: Option<String>,
+    /// The map rule that assigned it, `field:pattern=discipline`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapped_by: Option<String>,
+    /// The value the rule matched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapped_value: Option<String>,
+    /// Why `--discipline-map` assigned none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unmapped: Option<String>,
 }
 
 /// The structured result of `compare`: every identity that is not unchanged,
@@ -245,7 +271,15 @@ impl CheckOutput {
             objects,
             geometry,
             comparison: None,
+            sources: Vec::new(),
         }
+    }
+
+    /// The same result listing its sources.
+    #[must_use]
+    pub fn with_sources(mut self, sources: Vec<SourceInfo>) -> Self {
+        self.sources = sources;
+        self
     }
 
     /// The same result carrying what `compare` found.

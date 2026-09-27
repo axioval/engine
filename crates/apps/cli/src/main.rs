@@ -26,8 +26,8 @@ mod geometry;
 use axioval::{
     bcf,
     engine::{
-        EvidenceSession, IntegritySeverity, Runtime, SourceIntegrityServiceHandle, SourceMetadata,
-        compile,
+        DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, IntegritySeverity,
+        Runtime, SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile,
     },
     ifc::import_ifc_session,
     ir::{
@@ -84,6 +84,15 @@ struct CheckArgs {
     /// file whose name itself ends in `:name` takes a trailing `:`.
     #[arg(long = "model", required = true, value_name = "PATH[:DISCIPLINE]", value_parser = model_arg)]
     models: Vec<ModelArg>,
+    /// Assign a discipline to each model declaring none from what the file
+    /// states: `FIELD:PATTERN=DISCIPLINE`, where FIELD is `application`,
+    /// `fileName`, `project` or `schema` and PATTERN a wildcard pattern
+    /// (`*`, `?`, `\` escapes) over the whole value, case-sensitive
+    /// (`application:*Architecture*=architecture`). Repeat for several;
+    /// the first matching one assigns. The result lists where each
+    /// discipline came from.
+    #[arg(long = "discipline-map", value_name = "FIELD:PATTERN=DISCIPLINE", value_parser = discipline_rule)]
+    discipline_map: Vec<DisciplineRule>,
     #[arg(long, required = true)]
     definitions: Vec<PathBuf>,
     #[arg(long)]
@@ -198,6 +207,65 @@ fn model_arg(value: &str) -> Result<ModelArg, String> {
     })
 }
 
+/// Parses `FIELD:PATTERN=DISCIPLINE`.
+///
+/// The field is everything before the first `:` and the discipline
+/// everything after the last `=`, so the pattern may hold both.
+fn discipline_rule(value: &str) -> Result<DisciplineRule, String> {
+    let usage = || format!("`{value}` is not FIELD:PATTERN=DISCIPLINE");
+    let (field, rest) = value.split_once(':').ok_or_else(usage)?;
+    let (pattern, discipline) = rest.rsplit_once('=').ok_or_else(usage)?;
+    let field = match field {
+        "application" => SourceField::Application,
+        "fileName" => SourceField::FileName,
+        "project" => SourceField::Project,
+        "schema" => SourceField::Schema,
+        other => {
+            return Err(format!(
+                "`{other}` is not `application`, `fileName`, `project` or `schema`"
+            ));
+        }
+    };
+    let discipline = Discipline::new(discipline).map_err(|error| error.to_string())?;
+    DisciplineRule::new(field, pattern, discipline).map_err(|error| error.to_string())
+}
+
+/// Every source of the session with its discipline and where it came from.
+fn source_infos(session: &EvidenceSession) -> Vec<digest::SourceInfo> {
+    session
+        .snapshots()
+        .map(|snapshot| {
+            let source = snapshot.source();
+            let origin = session.discipline_origin(source);
+            let (mapped_by, mapped_value) = match origin {
+                Some(DisciplineOrigin::Mapped { rule, value, .. }) => {
+                    (Some(rule.clone()), Some(value.clone()))
+                }
+                _ => (None, None),
+            };
+            digest::SourceInfo {
+                source: source.to_string(),
+                discipline: session.discipline(source).map(ToString::to_string),
+                discipline_origin: origin.map(|origin| {
+                    match origin {
+                        DisciplineOrigin::Declared => "declared",
+                        DisciplineOrigin::Mapped { .. } => "mapped",
+                    }
+                    .to_owned()
+                }),
+                mapped_by,
+                mapped_value,
+                unmapped: session.unmapped(source).map(|reason| match reason {
+                    UnmappedReason::NoMatch => "no rule of the discipline map matches".to_owned(),
+                    UnmappedReason::Unread(rule) => {
+                        format!("the model does not state what `{rule}` reads")
+                    }
+                }),
+            }
+        })
+        .collect()
+}
+
 /// How a completed run ends. Errors exit 1 and usage errors 2 (clap).
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
@@ -269,6 +337,13 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let registry = axioval::default_registry()?;
     let plan = compile(&registry, &definitions, &ruleset)?;
     let (session, bytes) = sources(&args.models)?;
+    let session = session.with_discipline_map(
+        &args
+            .discipline_map
+            .iter()
+            .cloned()
+            .fold(DisciplineMap::new(), DisciplineMap::with),
+    );
     let (session, meshed) = if args.geometry {
         let (session, report) =
             geometry::attach(session, &bytes).map_err(|error| format!("geometry: {error}"))?;
@@ -289,7 +364,8 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .map(|(object, reason)| digest::Unmeasured { object, reason })
             .collect(),
     });
-    let output = CheckOutput::new(result, integrity, geometry, session.project());
+    let output = CheckOutput::new(result, integrity, geometry, session.project())
+        .with_sources(source_infos(&session));
     emit(&output, session.project(), args.output)?;
     Ok(Outcome::of(&output.report))
 }

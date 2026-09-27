@@ -3498,6 +3498,100 @@ fn a_source_selector_selects_the_objects_of_models_a_matching_application_wrote(
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
+fn either_discipline() -> Value {
+    json!({"kind": "anyOf", "operands": [
+        {"kind": "discipline", "value": "architecture"},
+        {"kind": "discipline", "value": "structure"},
+    ]})
+}
+
+#[test]
+fn a_discipline_map_assigns_disciplines_by_application_and_records_how() {
+    let case = Case::new("discipline-map");
+    let map = [
+        "--discipline-map",
+        "application:*Architecture*=architecture",
+        "--discipline-map",
+        "application:*Structure*=structure",
+    ];
+    let output = case.authored_check(&["arch.ifc", "struct.ifc"], &either_discipline(), &map);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    // The discipline rule evaluates both models.
+    assert_eq!(
+        finding_documents(&result),
+        ["arch.ifc", "struct.ifc"],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert_eq!(
+        result["sources"],
+        json!([
+            {
+                "source": "ifc-step:arch.ifc",
+                "discipline": "architecture",
+                "discipline_origin": "mapped",
+                "mapped_by": "application:*Architecture*=architecture",
+                "mapped_value": "Modeller Architecture 2024",
+            },
+            {
+                "source": "ifc-step:struct.ifc",
+                "discipline": "structure",
+                "discipline_origin": "mapped",
+                "mapped_by": "application:*Structure*=structure",
+                "mapped_value": "Modeller Structure 2024",
+            },
+        ]),
+        "{result:#}"
+    );
+    // A declared discipline wins; an unmapped model behaves as without a map.
+    let output = case.authored_check(
+        &["arch.ifc:structure", "struct.ifc"],
+        &json!({"kind": "discipline", "value": "architecture"}),
+        &map[..2],
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        result["sources"][0]["discipline"], "structure",
+        "{result:#}"
+    );
+    assert_eq!(result["sources"][0]["discipline_origin"], "declared");
+    assert_eq!(
+        result["sources"][1]["unmapped"],
+        "no rule of the discipline map matches"
+    );
+    let outcomes = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(
+        outcomes
+            .iter()
+            .any(|outcome| outcome["source"]["document"] == "struct.ifc"
+                && outcome["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("declares no discipline")),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn a_malformed_discipline_map_is_a_usage_error() {
+    let case = Case::new("discipline-map-usage");
+    for rule in [
+        "application*Architecture*=architecture",
+        "owner:*=architecture",
+        "application:*=Architecture",
+        "application:x\\=architecture",
+    ] {
+        let output = case.authored_check(
+            &["arch.ifc"],
+            &either_discipline(),
+            &["--discipline-map", rule],
+        );
+        assert_eq!(output.status.code(), Some(2), "{rule}: {}", stderr(&output));
+    }
+}
+
 /// A clash matrix cell keyed by discipline on both sides.
 fn discipline_cell(subject: &str, counterpart: &str, tolerance: f64, severity: &str) -> Value {
     json!({

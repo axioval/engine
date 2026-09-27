@@ -210,11 +210,49 @@ pub enum ProximityProjection {
     /// footprints overlap with positive area or, with a positive
     /// `footprint_offset_metres`, when the counterpart's footprint comes
     /// closer than the offset to the subject's (the subject's footprint grown
-    /// by the offset). Unrelated bodies have no distance in this projection.
-    Vertical { footprint_offset_metres: f64 },
+    /// by the offset), and when the counterpart lies in `direction` from the
+    /// subject. Unrelated bodies have no distance in this projection.
+    Vertical {
+        footprint_offset_metres: f64,
+        direction: VerticalDirection,
+    },
     /// Whether the footprints overlap with positive area: distance zero when
     /// they do, none when they do not.
     PlanOverlap,
+}
+
+/// Where the counterpart of a [`ProximityProjection::Vertical`] distance must
+/// lie relative to the subject.
+///
+/// Compare the two vertical extents (bottom to top) end by end. A counterpart
+/// lies **above** the subject unless it lies lower at both ends (its top
+/// below the subject's top and its bottom below the subject's bottom), and
+/// **below** unless it lies higher at both ends. A counterpart overlapping
+/// the subject in height is therefore above, below or both at distance zero:
+/// a pendant reaching down past a sprinkler's top is above it, a riser
+/// passing the sprinkler is both. Every counterpart is above or below, so the
+/// `Either` distance is the lesser of the two.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum VerticalDirection {
+    /// Above or below: the gap between the two extents.
+    Either,
+    /// The counterpart lies above: the gap from the subject's top up to the
+    /// counterpart's bottom, zero when the extents overlap.
+    Above,
+    /// The counterpart lies below: the gap from the subject's bottom down to
+    /// the counterpart's top, zero when the extents overlap.
+    Below,
+}
+
+impl VerticalDirection {
+    /// The direction's spelling in rule parameters, evidence and messages.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Either => "either",
+            Self::Above => "above",
+            Self::Below => "below",
+        }
+    }
 }
 
 impl ProximityProjection {
@@ -223,6 +261,7 @@ impl ProximityProjection {
         match self {
             Self::Vertical {
                 footprint_offset_metres,
+                ..
             } => footprint_offset_metres.is_finite() && *footprint_offset_metres >= 0.0,
             _ => true,
         }
@@ -240,14 +279,15 @@ impl ProximityProjection {
             Self::PlanOverlap => "plan_overlap",
         }
     }
-    fn key(&self) -> (u8, f64) {
+    fn key(&self) -> (u8, f64, VerticalDirection) {
         match self {
-            Self::Minimum3d => (0, 0.0),
-            Self::Horizontal => (1, 0.0),
+            Self::Minimum3d => (0, 0.0, VerticalDirection::Either),
+            Self::Horizontal => (1, 0.0, VerticalDirection::Either),
             Self::Vertical {
                 footprint_offset_metres,
-            } => (2, *footprint_offset_metres),
-            Self::PlanOverlap => (3, 0.0),
+                direction,
+            } => (2, *footprint_offset_metres, *direction),
+            Self::PlanOverlap => (3, 0.0, VerticalDirection::Either),
         }
     }
 }
@@ -265,9 +305,11 @@ impl PartialOrd for ProximityProjection {
 }
 impl Ord for ProximityProjection {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let (a, a_offset) = self.key();
-        let (b, b_offset) = other.key();
-        a.cmp(&b).then_with(|| a_offset.total_cmp(&b_offset))
+        let (a, a_offset, a_direction) = self.key();
+        let (b, b_offset, b_direction) = other.key();
+        a.cmp(&b)
+            .then_with(|| a_offset.total_cmp(&b_offset))
+            .then_with(|| a_direction.cmp(&b_direction))
     }
 }
 
@@ -784,12 +826,26 @@ mod tests {
                     id("pipe"),
                     id("wall"),
                     ProximityProjection::Vertical {
-                        footprint_offset_metres: offset
+                        footprint_offset_metres: offset,
+                        direction: VerticalDirection::Either,
                     }
                 ),
                 Err(ProximityError::InvalidMeasurement)
             );
         }
+    }
+
+    /// Above and below are different questions.
+    #[test]
+    fn a_vertical_direction_distinguishes_requests() {
+        let vertical = |direction| ProximityProjection::Vertical {
+            footprint_offset_metres: 0.0,
+            direction,
+        };
+        let above = vertical(VerticalDirection::Above);
+        assert_ne!(above, vertical(VerticalDirection::Below));
+        assert_ne!(above, vertical(VerticalDirection::Either));
+        assert!(vertical(VerticalDirection::Either) < above);
     }
 
     /// Penetration is a question in space; a projected request cannot carry it.

@@ -376,13 +376,13 @@ fn vertical_projection_counts_only_bodies_above_or_below() {
             .distance(
                 "pipe",
                 "near",
-                "Vertical { footprint_offset_metres: 0.0 }",
+                "Vertical { footprint_offset_metres: 0.0, direction: Either }",
                 (2.0, 2.0),
             )
             .distance(
                 "pipe",
                 "mid",
-                "Vertical { footprint_offset_metres: 0.0 }",
+                "Vertical { footprint_offset_metres: 0.0, direction: Either }",
                 (f64::INFINITY, f64::INFINITY),
             )
     };
@@ -409,7 +409,7 @@ fn a_footprint_offset_reaches_the_service() {
         .distance(
             "pipe",
             "near",
-            "Vertical { footprint_offset_metres: 0.5 }",
+            "Vertical { footprint_offset_metres: 0.5, direction: Either }",
             (2.0, 2.0),
         );
     let mut parameters = at_least(1, 3.0);
@@ -417,6 +417,78 @@ fn a_footprint_offset_reaches_the_service() {
     parameters.push(("footprint_offset_metres", number(0.5)));
     let outcome = run(model(), stub, parameters);
     assert!(outcome.findings().is_empty() && outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// A sprinkler at most 0.5 m below the ceiling: only counterparts above
+/// count, and the broad phase never proposes the floor below (the stub would
+/// panic on it). Nothing above within 2 m: a counterpart above too close is a
+/// finding naming the direction.
+#[test]
+fn a_vertical_direction_counts_only_its_side() {
+    let stub = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 0.5, 1.5)
+            .at("mid", 0.2, -1.4)
+            .at("far", 20.0, 0.0)
+            .distance(
+                "pipe",
+                "near",
+                "Vertical { footprint_offset_metres: 0.0, direction: Above }",
+                (0.5, 0.5),
+            )
+            .distance(
+                "pipe",
+                "mid",
+                "Vertical { footprint_offset_metres: 0.0, direction: Below }",
+                (0.4, 0.4),
+            )
+    };
+    let declare = |direction: &str, parameters: Vec<(&'static str, ParameterValue)>| {
+        let mut parameters = parameters;
+        parameters.push(("projection", string("vertical")));
+        parameters.push(("vertical_direction", string(direction)));
+        parameters
+    };
+    // At most 0.5 m below the ceiling: the wall above is 0.5 m up.
+    let outcome = run(
+        model(),
+        stub(),
+        declare("above", vec![("maximum_metres", number(0.5))]),
+    );
+    assert!(outcome.findings().is_empty() && outcome.not_evaluated_outcomes().is_empty());
+    // At least 0.5 m clear below: the one under the pipe is 0.4 m down.
+    let outcome = run(
+        model(),
+        stub(),
+        declare("below", vec![("minimum_metres", number(0.5))]),
+    );
+    let finding = only_finding(&outcome);
+    assert_eq!(finding.related, vec![id("mid")]);
+    assert!(
+        finding.message.contains("vertical distance 0.4000 m below"),
+        "{}",
+        finding.message
+    );
+    // Nothing above within 2 m.
+    let outcome = run(
+        model(),
+        stub(),
+        declare(
+            "above",
+            vec![
+                ("mode", string("none_closer_than")),
+                ("minimum_metres", number(2.0)),
+            ],
+        ),
+    );
+    let finding = only_finding(&outcome);
+    assert_eq!(finding.related, vec![id("near")]);
+    assert!(
+        finding.message.contains("vertical distance 0.5000 m above"),
+        "{}",
+        finding.message
+    );
 }
 
 /// Nothing may overlap the subject in plan; a tessellated overlap left open
@@ -559,6 +631,20 @@ fn invalid_mode_projection_and_count_declarations_are_refused() {
             ("projection", string("vertical")),
             ("footprint_offset_metres", number(-0.5)),
         ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("vertical_direction", string("above")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("horizontal")),
+            ("vertical_direction", string("below")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("vertical")),
+            ("vertical_direction", string("sideways")),
+        ],
         {
             let mut range = at_least(1, 1.0);
             range.push(("minimum_metres", number(2.0)));
@@ -584,6 +670,7 @@ fn the_signature_declares_modes_projections_and_scoping() {
         "count",
         "projection",
         "footprint_offset_metres",
+        "vertical_direction",
         "relationship",
         "path",
     ] {

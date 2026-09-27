@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Above or below in vertical distances.** `distance` takes a
+  `vertical_direction` (`either`, the default, `above` or `below`) with the
+  `vertical` projection, so a rule can require a sprinkler at most 0.5 m
+  below the ceiling (`nearest`, `maximum_metres` 0.5, `above`) or nothing
+  above within 2 m (`none_closer_than`, `above`). A counterpart is above
+  unless it lies lower at both ends of its vertical extent, below unless it
+  lies higher at both; the distance is the one-sided gap, zero when the
+  extents overlap. `ProximityProjection::Vertical` carries a
+  `VerticalDirection`; `projected_candidate_pairs` prunes each direction by
+  its one-sided box gap and drops counterparts whose box lies wholly on the
+  other side, keeping a pair when either orientation the groups allow
+  qualifies. The Axiolid adapter measures directions exactly on planar
+  meshes and leaves the side open where a tessellated end lies within the
+  combined chord deviation of the subject's. **Breaking:** definitions bound
+  to `distance` must declare the new optional parameter
+  `vertical_direction`; `ProximityProjection::Vertical` gains the
+  `direction` field, so code constructing or matching it must name it. Door
+  swing footprints as distance sources wait on door leaves
+  (openbimrs/ifc#148). (#60)
 - **Accessible route.** `accessible-route` requires each selected
   destination to be reachable from a start point through the route spaces
   for a mobility profile (`width_metres`, `clear_height_metres`), through

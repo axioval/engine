@@ -11,11 +11,11 @@
 //! between the bodies inside. The result is therefore complete: a pair absent
 //! from it is proven farther apart than the margin.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_ir::ObjectId;
 
-use crate::proximity::{Bounds3, ObjectBounds, ProximityProjection};
+use crate::proximity::{Bounds3, ObjectBounds, ProximityProjection, VerticalDirection};
 
 /// Why a candidate search could not run.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -152,7 +152,12 @@ pub fn candidate_pairs(
 ///   the plan margin is zero whatever `margin_metres` says.
 /// - `Vertical`: the bodies are related only when their plan box gap is within
 ///   the footprint offset, and their distance is at least the vertical gap
-///   between their boxes, which must be within the margin.
+///   between their boxes, which must be within the margin. With a direction
+///   the gap is one-sided (subject top up to counterpart bottom for `Above`),
+///   and a counterpart whose box lies wholly on the other side of the
+///   subject's box is certainly not in that direction. A pair is kept when
+///   either orientation the groups allow qualifies, since a capability
+///   measures a pair reported once from both of its ends.
 pub fn projected_candidate_pairs(
     subjects: &[ObjectBounds],
     counterparts: &[ObjectBounds],
@@ -170,6 +175,7 @@ pub fn projected_candidate_pairs(
         ProximityProjection::PlanOverlap => 0.0,
         ProximityProjection::Vertical {
             footprint_offset_metres,
+            ..
         } => footprint_offset_metres,
     };
     // Flattening loses the vertical extent, so refuse conflicting inputs
@@ -199,21 +205,50 @@ pub fn projected_candidate_pairs(
             .collect()
     };
     let pairs = candidate_pairs(&flat(subjects)?, &flat(counterparts)?, plan_margin)?;
-    if !matches!(projection, ProximityProjection::Vertical { .. }) {
+    let ProximityProjection::Vertical { direction, .. } = projection else {
         return Ok(pairs);
-    }
-    let vertical_gap = |a: &Bounds3, b: &Bounds3| {
-        (b.min()[2] - a.max()[2])
-            .max(a.min()[2] - b.max()[2])
-            .max(0.0)
+    };
+    let in_subjects: BTreeSet<&ObjectId> = subjects.iter().map(ObjectBounds::object).collect();
+    let in_counterparts: BTreeSet<&ObjectId> =
+        counterparts.iter().map(ObjectBounds::object).collect();
+    let keep = |subject: &ObjectId, counterpart: &ObjectId, direction| {
+        vertically_within(
+            &enclosing[subject],
+            &enclosing[counterpart],
+            direction,
+            margin_metres,
+        )
     };
     Ok(pairs
         .into_iter()
         .filter(|pair| {
-            vertical_gap(&enclosing[pair.subject()], &enclosing[pair.counterpart()])
-                <= margin_metres
+            keep(pair.subject(), pair.counterpart(), direction)
+                || (in_subjects.contains(pair.counterpart())
+                    && in_counterparts.contains(pair.subject())
+                    && keep(pair.counterpart(), pair.subject(), direction))
         })
         .collect())
+}
+
+/// Whether a counterpart in `counterpart` may lie within `margin` of a
+/// subject in `subject` in `direction`, judged on enclosing boxes.
+///
+/// The one-sided box gap bounds the one-sided distance from below. A box
+/// wholly below the subject's (its top under the subject's bottom) holds a
+/// body lower at both ends than the subject, so certainly not above it.
+fn vertically_within(
+    subject: &Bounds3,
+    counterpart: &Bounds3,
+    direction: VerticalDirection,
+    margin: f64,
+) -> bool {
+    let rise = counterpart.min()[2] - subject.max()[2];
+    let drop = subject.min()[2] - counterpart.max()[2];
+    match direction {
+        VerticalDirection::Either => rise.max(drop) <= margin,
+        VerticalDirection::Above => rise <= margin && drop <= 0.0,
+        VerticalDirection::Below => drop <= margin && rise <= 0.0,
+    }
 }
 
 #[cfg(test)]
@@ -278,18 +313,86 @@ mod tests {
         }
     }
 
+    /// The pairs an exhaustive search keeps, each checked on its own.
+    fn exhaustive_pairs(
+        subjects: &[ObjectBounds],
+        counterparts: &[ObjectBounds],
+        projection: ProximityProjection,
+        margin: f64,
+    ) -> Vec<CandidatePair> {
+        let gap = |a: &Bounds3, b: &Bounds3, axis: usize| {
+            (b.min()[axis] - a.max()[axis])
+                .max(a.min()[axis] - b.max()[axis])
+                .max(0.0)
+        };
+        let plan_gap = |a: &Bounds3, b: &Bounds3| gap(a, b, 0).hypot(gap(a, b, 1));
+        // Upward gap from the subject's top to the counterpart's bottom.
+        let up = |a: &Bounds3, b: &Bounds3| (b.min()[2] - a.max()[2]).max(0.0);
+        let wholly_below = |a: &Bounds3, b: &Bounds3| b.max()[2] < a.min()[2];
+        let keep = |s: &ObjectBounds, c: &ObjectBounds| {
+            let (a, b) = (s.enclosing(), c.enclosing());
+            match projection {
+                ProximityProjection::Minimum3d => a.gap(&b) <= margin,
+                ProximityProjection::Horizontal => plan_gap(&a, &b) <= margin,
+                ProximityProjection::PlanOverlap => plan_gap(&a, &b) <= 0.0,
+                ProximityProjection::Vertical {
+                    footprint_offset_metres,
+                    direction,
+                } => {
+                    plan_gap(&a, &b) <= footprint_offset_metres
+                        && match direction {
+                            VerticalDirection::Either => gap(&a, &b, 2) <= margin,
+                            VerticalDirection::Above => {
+                                up(&a, &b) <= margin && !wholly_below(&a, &b)
+                            }
+                            VerticalDirection::Below => {
+                                up(&b, &a) <= margin && !wholly_below(&b, &a)
+                            }
+                        }
+                }
+            }
+        };
+        let mut expected = BTreeSet::new();
+        for s in subjects {
+            for c in counterparts {
+                if s.object() == c.object() || !keep(s, c) {
+                    continue;
+                }
+                // Reported once, the lesser identity as subject when the
+                // groups allow it.
+                let reversible = subjects.iter().any(|o| o.object() == c.object())
+                    && counterparts.iter().any(|o| o.object() == s.object());
+                let (subject, counterpart) = if reversible && c.object() < s.object() {
+                    (c.object(), s.object())
+                } else {
+                    (s.object(), c.object())
+                };
+                expected.insert(CandidatePair {
+                    subject: subject.clone(),
+                    counterpart: counterpart.clone(),
+                });
+            }
+        }
+        expected.into_iter().collect()
+    }
+
     /// Each projection must keep every pair whose projected box gap is within
-    /// its margin: that gap bounds the projected distance from below.
+    /// its margin: that gap bounds the projected distance from below. A
+    /// vertical direction may drop only pairs whose boxes put the
+    /// counterpart certainly on the other side. Disjoint groups keep their
+    /// roles; one group checked against itself keeps a pair when either
+    /// orientation qualifies.
     #[test]
     fn projected_sweeps_match_exhaustive_search() {
         let objects: Vec<ObjectBounds> = (0..40)
             .map(|i| {
                 let x = f64::from((i * 37) % 23) * 0.7;
                 let y = f64::from((i * 11) % 7) * 0.9;
-                let z = f64::from((i * 5) % 4) * 3.0;
+                let z = f64::from((i * 5) % 4) * 3.0 + f64::from(i % 3) * 0.2;
+                let height = 0.3 + f64::from(i % 5);
                 ObjectBounds::try_new(
                     id(&format!("o{i:02}")),
-                    Bounds3::try_new([x, y, z], [x + 1.0, y + 0.5, z + 0.3]).unwrap(),
+                    Bounds3::try_new([x, y, z], [x + 1.0, y + 0.5, z + height]).unwrap(),
                     if i % 3 == 0 {
                         GeometryFidelity::tessellated(0.05).unwrap()
                     } else {
@@ -299,54 +402,81 @@ mod tests {
                 .unwrap()
             })
             .collect();
-        let (subjects, counterparts) = objects.split_at(15);
-        let gap = |a: &Bounds3, b: &Bounds3, axis: usize| {
-            (b.min()[axis] - a.max()[axis])
-                .max(a.min()[axis] - b.max()[axis])
-                .max(0.0)
-        };
-        let plan_gap = |a: &Bounds3, b: &Bounds3| gap(a, b, 0).hypot(gap(a, b, 1));
-        for margin in [0.0, 0.3, 2.0, 4.0] {
-            for projection in [
-                ProximityProjection::Minimum3d,
-                ProximityProjection::Horizontal,
-                ProximityProjection::PlanOverlap,
-                ProximityProjection::Vertical {
-                    footprint_offset_metres: 0.0,
-                },
-                ProximityProjection::Vertical {
-                    footprint_offset_metres: 1.0,
-                },
-            ] {
-                let found =
-                    projected_candidate_pairs(subjects, counterparts, projection, margin).unwrap();
-                let mut expected = Vec::new();
-                for s in subjects {
-                    for c in counterparts {
-                        let (a, b) = (s.enclosing(), c.enclosing());
-                        let keep = match projection {
-                            ProximityProjection::Minimum3d => a.gap(&b) <= margin,
-                            ProximityProjection::Horizontal => plan_gap(&a, &b) <= margin,
-                            ProximityProjection::PlanOverlap => plan_gap(&a, &b) <= 0.0,
-                            ProximityProjection::Vertical {
-                                footprint_offset_metres,
-                            } => {
-                                plan_gap(&a, &b) <= footprint_offset_metres
-                                    && gap(&a, &b, 2) <= margin
-                            }
-                        };
-                        if keep {
-                            expected.push(CandidatePair {
-                                subject: s.object().clone(),
-                                counterpart: c.object().clone(),
-                            });
-                        }
-                    }
-                }
-                expected.sort();
-                assert_eq!(found, expected, "{} margin {margin}", projection.name());
+        let mut projections = vec![
+            ProximityProjection::Minimum3d,
+            ProximityProjection::Horizontal,
+            ProximityProjection::PlanOverlap,
+        ];
+        for direction in [
+            VerticalDirection::Either,
+            VerticalDirection::Above,
+            VerticalDirection::Below,
+        ] {
+            for footprint_offset_metres in [0.0, 1.0] {
+                projections.push(ProximityProjection::Vertical {
+                    footprint_offset_metres,
+                    direction,
+                });
             }
         }
+        let groups = [
+            objects.split_at(15),
+            (&objects[..25], &objects[..25]),
+            (&objects[10..30], &objects[20..]),
+        ];
+        for (subjects, counterparts) in groups {
+            for margin in [0.0, 0.3, 2.0, 4.0] {
+                for &projection in &projections {
+                    assert_eq!(
+                        projected_candidate_pairs(subjects, counterparts, projection, margin)
+                            .unwrap(),
+                        exhaustive_pairs(subjects, counterparts, projection, margin),
+                        "{projection:?} margin {margin}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A sprinkler under a ceiling and over a floor: each direction keeps
+    /// only its own side, within the margin.
+    #[test]
+    fn a_vertical_direction_keeps_only_its_side() {
+        let body = |local: &str, z: [f64; 2]| {
+            ObjectBounds::try_new(
+                id(local),
+                Bounds3::try_new([0.0, 0.0, z[0]], [1.0, 1.0, z[1]]).unwrap(),
+                GeometryFidelity::Exact,
+            )
+            .unwrap()
+        };
+        let sprinkler = body("sprinkler", [2.6, 2.7]);
+        let others = [
+            body("ceiling", [3.0, 3.2]),
+            body("floor", [-0.2, 0.0]),
+            body("riser", [-1.0, 4.0]),
+        ];
+        let kept = |direction, margin| {
+            names(
+                &projected_candidate_pairs(
+                    std::slice::from_ref(&sprinkler),
+                    &others,
+                    ProximityProjection::Vertical {
+                        footprint_offset_metres: 0.0,
+                        direction,
+                    },
+                    margin,
+                )
+                .unwrap(),
+            )
+            .into_iter()
+            .map(|(_, counterpart)| counterpart)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(kept(VerticalDirection::Above, 0.5), ["ceiling", "riser"]);
+        assert_eq!(kept(VerticalDirection::Below, 0.5), ["riser"]);
+        assert_eq!(kept(VerticalDirection::Below, 3.0), ["floor", "riser"]);
+        assert_eq!(kept(VerticalDirection::Either, 0.5), ["ceiling", "riser"]);
     }
 
     /// Bodies on different storeys are close in plan and above one another.
@@ -378,6 +508,7 @@ mod tests {
         }
         let vertical = ProximityProjection::Vertical {
             footprint_offset_metres: 0.0,
+            direction: VerticalDirection::Either,
         };
         assert_eq!(
             projected_candidate_pairs(subjects, counterparts, vertical, 9.0)

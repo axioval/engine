@@ -12,7 +12,7 @@ use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidProximityService};
 use axioval_engine::{
     ProjectedDistanceEvidence, ProximityError, ProximityProjection, ProximityRequest,
-    ProximityService,
+    ProximityService, VerticalDirection,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -113,9 +113,22 @@ fn assert_point(measured: &ProjectedDistanceEvidence, expected: f64) {
 }
 
 fn vertical(offset: f64) -> ProximityProjection {
+    directed(offset, VerticalDirection::Either)
+}
+
+fn directed(offset: f64, direction: VerticalDirection) -> ProximityProjection {
     ProximityProjection::Vertical {
         footprint_offset_metres: offset,
+        direction,
     }
+}
+
+fn above() -> ProximityProjection {
+    directed(0.0, VerticalDirection::Above)
+}
+
+fn below() -> ProximityProjection {
+    directed(0.0, VerticalDirection::Below)
 }
 
 #[test]
@@ -217,6 +230,96 @@ fn a_footprint_offset_relates_bodies_that_are_nearly_above() {
         &measure(&geometry, "lamp", "desk", vertical(0.5)),
         f64::INFINITY,
     );
+}
+
+/// A sprinkler under a ceiling and over a floor, a riser passing it and a
+/// pendant reaching down past its top: each direction sees only its side.
+#[test]
+fn a_vertical_direction_relates_only_its_side() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("sprinkler"), cuboid([1.0, 1.0, 2.6], [1.1, 1.1, 2.7]))
+        .with_mesh(id("ceiling"), cuboid([0.0, 0.0, 3.0], [4.0, 4.0, 3.2]))
+        .with_mesh(id("floor"), cuboid([0.0, 0.0, -0.2], [4.0, 4.0, 0.0]))
+        .with_mesh(id("riser"), cuboid([0.9, 0.9, -1.0], [1.2, 1.2, 4.0]))
+        .with_mesh(id("pendant"), cuboid([0.95, 0.95, 2.65], [1.15, 1.15, 3.0]));
+    let cases = [
+        ("ceiling", 0.3, f64::INFINITY, 0.3),
+        ("floor", f64::INFINITY, 2.6, 2.6),
+        ("riser", 0.0, 0.0, 0.0),
+        ("pendant", 0.0, f64::INFINITY, 0.0),
+    ];
+    for (counterpart, up, down, either) in cases {
+        assert_point(&measure(&geometry, "sprinkler", counterpart, above()), up);
+        assert_point(&measure(&geometry, "sprinkler", counterpart, below()), down);
+        assert_point(
+            &measure(&geometry, "sprinkler", counterpart, vertical(0.0)),
+            either,
+        );
+        // Seen from the counterpart, above is below.
+        assert_point(&measure(&geometry, counterpart, "sprinkler", below()), up);
+    }
+    // A direction does not relate a body standing beside the subject.
+    let beside = AxiolidGeometry::new()
+        .with_mesh(id("sprinkler"), cuboid([1.0, 1.0, 2.6], [1.1, 1.1, 2.7]))
+        .with_mesh(id("duct"), cuboid([2.0, 1.0, 3.0], [3.0, 2.0, 3.4]));
+    assert_point(
+        &measure(&beside, "sprinkler", "duct", above()),
+        f64::INFINITY,
+    );
+    assert_point(
+        &measure(
+            &beside,
+            "sprinkler",
+            "duct",
+            directed(1.0, VerticalDirection::Above),
+        ),
+        0.3,
+    );
+    let evidence = measure(&geometry, "sprinkler", "ceiling", above());
+    assert!(evidence.evidence().locator.contains(":vertical-above:"));
+}
+
+/// A tessellated end within the deviation of the subject's leaves the side
+/// open; one clear of it decides.
+#[test]
+fn a_tessellated_side_within_the_deviation_is_open() {
+    let deviation = 0.02;
+    let with_column = |z: [f64; 2]| {
+        AxiolidGeometry::new()
+            .with_mesh(id("slab"), cuboid([0.0, 0.0, 3.0], [4.0, 4.0, 3.2]))
+            .with_tessellated_mesh(id("column"), column([2.0, 2.0], 0.2, z, 24), deviation)
+    };
+    let interval = |geometry: &AxiolidGeometry, projection| {
+        let measured = measure(geometry, "slab", "column", projection);
+        assert!(!measured.evidence().exact);
+        measured.interval_metres()
+    };
+    let close = |(lower, upper): (f64, f64), expected: (f64, f64)| {
+        let near = |a: f64, b: f64| (a.is_infinite() && b.is_infinite()) || (a - b).abs() < 1e-9;
+        assert!(
+            near(lower, expected.0) && near(upper, expected.1),
+            "{lower}..{upper}, expected {expected:?}"
+        );
+    };
+    // The column's top is 0.01 m under the slab's: it may reach past it.
+    let reaching = with_column([0.0, 3.19]);
+    close(interval(&reaching, above()), (0.0, f64::INFINITY));
+    close(interval(&reaching, below()), (0.0, deviation));
+    // 0.01 m over it on the mesh is not yet over it on the true surface.
+    let barely = with_column([0.0, 3.21]);
+    close(interval(&barely, above()), (0.0, f64::INFINITY));
+    close(interval(&barely, below()), (0.0, deviation));
+    // Well under the slab: certainly below, certainly not above.
+    let under = with_column([0.0, 2.5]);
+    close(interval(&under, above()), (f64::INFINITY, f64::INFINITY));
+    close(
+        interval(&under, below()),
+        (0.5 - deviation, 0.5 + deviation),
+    );
+    // Well over it: the reverse.
+    let over = with_column([4.0, 5.0]);
+    close(interval(&over, above()), (0.8 - deviation, 0.8 + deviation));
+    close(interval(&over, below()), (f64::INFINITY, f64::INFINITY));
 }
 
 #[test]

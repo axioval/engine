@@ -32,8 +32,13 @@ projection by the gap that bounds it:
 | `horizontal` | the plan box gap exceeds the margin |
 | `plan_overlap` | the boxes do not meet in plan |
 | `vertical` | the plan box gap exceeds the footprint offset, or the vertical box gap exceeds the margin |
+| `vertical`, `above` | as `vertical`, with the gap from the subject's top up to the counterpart's bottom; or the counterpart's box lies wholly below the subject's |
+| `vertical`, `below` | the mirror image of `above` |
 
-Each is proven against the exhaustive search in its tests.
+A directed search keeps a pair when either orientation the groups allow
+qualifies: an object in both groups is reported once, and the capability
+measures the pair from each of its ends. Each rule is proven against the
+exhaustive search in its tests, disjoint and overlapping groups alike.
 
 An object may be in both groups, which is how a group is checked against
 itself. It is never paired with itself, and each unordered pair is reported
@@ -98,7 +103,7 @@ volume tolerance until then.
 |---|---|
 | `Minimum3d` | shortest distance between the surfaces in space |
 | `Horizontal` | plan distance between the footprints; zero when they meet |
-| `Vertical { footprint_offset_metres }` | gap between the vertical extents (bottom to top) of bodies above one another |
+| `Vertical { footprint_offset_metres, direction }` | gap between the vertical extents (bottom to top) of bodies above one another, one-sided with a direction |
 | `PlanOverlap` | zero when the footprints overlap with positive area |
 
 `Vertical` and `PlanOverlap` relate only some pairs. Vertical bodies are
@@ -109,9 +114,26 @@ is the gap between the two bodies' whole vertical extents, not their extents
 over the overlap. An unrelated pair has no distance, reported as an infinite
 interval.
 
+A `VerticalDirection` narrows the vertical projection to one side, comparing
+the two extents end by end:
+
+| Direction | Related when the counterpart | Distance |
+|---|---|---|
+| `Either` | lies anywhere | gap between the extents |
+| `Above` | is not lower at both ends (top below the subject's top and bottom below its bottom) | subject's top up to the counterpart's bottom |
+| `Below` | is not higher at both ends | subject's bottom down to the counterpart's top |
+
+Both distances are zero when the extents overlap. A riser passing a
+sprinkler is therefore above and below it at zero; a pendant reaching down
+past the sprinkler's top is above it, at zero, and not below. Every
+counterpart is above or below, so `Either` is the lesser of the two
+distances. Seen from the counterpart, above is below.
+
 Exact evidence is a point, related or not. A tessellation widens each
 distance by the combined chord deviation and may leave the relation open: its
-interval then reaches infinity. `measure_proximity` refuses a projected
+interval then reaches infinity. A direction is open in the same way when
+either end of the counterpart lies within the combined deviation of the
+subject's and no end is decided beyond it. `measure_proximity` refuses a projected
 request, and the default `measure_distance` answers `Minimum3d` from the full
 measurement and refuses every other projection with `UnsupportedProjection`,
 so a service that does not measure projections fails closed.
@@ -167,9 +189,11 @@ Projected distances reuse the same pieces:
   the notch of a stair) is measured exactly without a polygon
   boundary-distance primitive. A triangle standing edge-on projects to a
   segment, so an open vertical sheet has a footprint too.
-- **Vertical** distance is the gap between the meshes' vertical extents. Plan
-  overlap decides whether exact bodies are related, the plan distance whether
-  they come within a footprint offset.
+- **Vertical** distance is the gap between the meshes' vertical extents,
+  one-sided with a direction. Plan overlap decides whether exact bodies are
+  related, the plan distance whether they come within a footprint offset,
+  and the mesh ends which side a counterpart lies on. For a tessellation an
+  end difference within the combined deviation decides no side.
 - **Tessellated** footprints may lie anywhere within their chord deviation of
   the mesh footprint. Overlap is asserted only from a witness point inside the
   meshes' overlap farther than the deviations from its boundary (the overlap's
@@ -361,6 +385,7 @@ declared distance. It takes these parameters:
 | `count` | integer, optional | how many counterparts `at_least` requires |
 | `projection` | string, optional | `minimum_3d` (default), `horizontal`, `vertical`, `plan_overlap` |
 | `footprint_offset_metres` | number, optional | grows the subject's footprint for `vertical` |
+| `vertical_direction` | string, optional | `either` (default), `above` or `below`: where a counterpart must lie for `vertical` |
 | `relationship`, `direction`, `follow_chain`, `path`, `skip_absent_relationship_ends` | optional | the container traversal |
 
 The modes:
@@ -378,6 +403,14 @@ The modes:
 With `plan_overlap`, a distance is zero or none, so `none_closer_than` with
 any positive minimum forbids overlapping footprints and `at_least` with any
 maximum requires them.
+
+With `vertical`, `vertical_direction` counts only counterparts above the
+subject or only those below it, as the vertical projection defines them.
+"A sprinkler at most 0.5 m below the ceiling" is `nearest` with
+`maximum_metres` 0.5 and `above` (the ceiling lies above the sprinkler);
+"nothing above within 2 m" is `none_closer_than` with `minimum_metres` 2
+and `above`. A direction or an offset with another projection is an
+invalid declaration.
 
 **Scoping.** With a traversal declared, only counterparts sharing a container
 with the subject are measured: the objects the traversal reaches from each,
@@ -397,7 +430,8 @@ unknown. When nothing lies within a maximum, that is a finding: the broad
 phase is complete, so a pair it does not report is farther apart than the
 margin.
 
-Door-swing footprints as distance sources wait on object frames (#36).
+Door-swing footprints as distance sources wait on door leaves in the IFC
+source (upstream openbimrs/ifc#148) and on object frames (#36).
 
 These capabilities fail closed:
 

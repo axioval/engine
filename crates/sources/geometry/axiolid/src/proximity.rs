@@ -50,14 +50,18 @@
 //!   boundary-distance primitive.
 //! - **Vertical** distance is the gap between the two meshes' vertical
 //!   extents, for bodies whose footprints are related (see
-//!   [`axioval_engine::ProximityProjection::Vertical`]).
+//!   [`axioval_engine::ProximityProjection::Vertical`]). A direction takes
+//!   the one-sided gap and relates only a counterpart on that side
+//!   ([`axioval_engine::VerticalDirection`]), compared end by end.
 //! - **Plan overlap** is the footprint overlay of plan overlap measurement.
 //!
 //! A tessellation widens every distance by the combined chord deviation. Its
 //! footprint may differ from the mesh footprint by up to the deviation, so
 //! overlap is only asserted from a witness point lying deeper than the
 //! deviations inside both mesh footprints, and denied only when the plan
-//! distance exceeds them; anything between is reported open.
+//! distance exceeds them; anything between is reported open. A direction is
+//! decided the same way: a tessellated end may move by the deviation, so ends
+//! nearer each other than the combined deviation leave the side open.
 
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_measure::{
@@ -69,7 +73,7 @@ use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
     BodyContainment, Bounds3, GeometryFidelity, LengthInterval, ObjectBounds, OverlapExtents,
     ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService,
+    ProximityRequest, ProximityService, VerticalDirection,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -163,18 +167,26 @@ impl AxiolidProximityService {
             }
             ProximityProjection::Vertical {
                 footprint_offset_metres,
+                direction,
             } => {
-                let (lower, upper) = widen(vertical_gap(subject, counterpart));
-                match relation(
-                    subject,
-                    counterpart,
-                    footprint_offset_metres,
-                    subject_fidelity,
-                    counterpart_fidelity,
-                )? {
-                    Relation::Related => (lower, upper),
-                    Relation::Unrelated => (f64::INFINITY, f64::INFINITY),
-                    Relation::Open => (lower, f64::INFINITY),
+                let side = side(subject, counterpart, direction, deviation);
+                if matches!(side, Relation::Unrelated) {
+                    return Ok((f64::INFINITY, f64::INFINITY));
+                }
+                let (lower, upper) = widen(vertical_gap(subject, counterpart, direction));
+                match (
+                    side,
+                    relation(
+                        subject,
+                        counterpart,
+                        footprint_offset_metres,
+                        subject_fidelity,
+                        counterpart_fidelity,
+                    )?,
+                ) {
+                    (_, Relation::Unrelated) => (f64::INFINITY, f64::INFINITY),
+                    (Relation::Related, Relation::Related) => (lower, upper),
+                    _ => (lower, f64::INFINITY),
                 }
             }
         })
@@ -398,12 +410,49 @@ fn plan_separation(first: &Body<'_>, second: &Body<'_>) -> Result<f64, Proximity
     nearest(&footprint(first)?, &footprint(second)?, flat_distance)
 }
 
-/// Gap between the two meshes' vertical extents; zero when they overlap.
-fn vertical_gap(first: &Body<'_>, second: &Body<'_>) -> f64 {
-    let (a, b) = (first.soup.bounds, second.soup.bounds);
-    (b.min()[2] - a.max()[2])
-        .max(a.min()[2] - b.max()[2])
-        .max(0.0)
+/// Gap between the two meshes' vertical extents in `direction`: from the
+/// subject's top up to the counterpart's bottom (`Above`), from its bottom
+/// down to the counterpart's top (`Below`), or either; zero when they overlap.
+fn vertical_gap(subject: &Body<'_>, counterpart: &Body<'_>, direction: VerticalDirection) -> f64 {
+    let (a, b) = (subject.soup.bounds, counterpart.soup.bounds);
+    let rise = b.min()[2] - a.max()[2];
+    let drop = a.min()[2] - b.max()[2];
+    match direction {
+        VerticalDirection::Either => rise.max(drop),
+        VerticalDirection::Above => rise,
+        VerticalDirection::Below => drop,
+    }
+    .max(0.0)
+}
+
+/// Whether the counterpart lies in `direction` from the subject: above
+/// unless lower at both ends, below unless higher at both ends.
+///
+/// Each true end may lie up to its body's chord deviation from the mesh end,
+/// so an end difference within the combined `deviation` of zero decides
+/// nothing: the side is asserted only beyond it and denied only when both
+/// ends are beyond it on the other side.
+fn side(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    direction: VerticalDirection,
+    deviation: f64,
+) -> Relation {
+    let (a, b) = (subject.soup.bounds, counterpart.soup.bounds);
+    // How far the counterpart's top and bottom lie in `direction` past the
+    // subject's.
+    let ends = match direction {
+        VerticalDirection::Either => return Relation::Related,
+        VerticalDirection::Above => [b.max()[2] - a.max()[2], b.min()[2] - a.min()[2]],
+        VerticalDirection::Below => [a.max()[2] - b.max()[2], a.min()[2] - b.min()[2]],
+    };
+    if ends.iter().any(|past| past - deviation >= 0.0) {
+        Relation::Related
+    } else if ends.iter().all(|past| past + deviation < 0.0) {
+        Relation::Unrelated
+    } else {
+        Relation::Open
+    }
 }
 
 /// Whether two bodies are related in plan, or whether the geometry's fidelity
@@ -1100,12 +1149,23 @@ impl ProximityService for AxiolidProximityService {
             fidelity,
             Evidence {
                 source: request.subject().source.clone(),
-                locator: format!(
-                    "axiolid:distance:{}:{}:{}",
-                    request.projection().name(),
-                    request.subject(),
-                    request.counterpart()
-                ),
+                locator: match request.projection() {
+                    ProximityProjection::Vertical {
+                        direction: direction @ (VerticalDirection::Above | VerticalDirection::Below),
+                        ..
+                    } => format!(
+                        "axiolid:distance:vertical-{}:{}:{}",
+                        direction.name(),
+                        request.subject(),
+                        request.counterpart()
+                    ),
+                    projection => format!(
+                        "axiolid:distance:{}:{}:{}",
+                        projection.name(),
+                        request.subject(),
+                        request.counterpart()
+                    ),
+                },
                 exact: fidelity.is_exact(),
             },
         )

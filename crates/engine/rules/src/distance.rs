@@ -11,9 +11,10 @@
 //!   and no nearer than `minimum_metres` when one is declared.
 //!
 //! Distance is measured in the declared `projection`: surface to surface in
-//! space, in plan, vertically between bodies above one another, or as overlap
-//! in plan. Counterparts may be scoped to the subject's containers (its
-//! space, its group) through the traversal parameters.
+//! space, in plan, vertically between bodies above one another (only those
+//! above or only those below with `vertical_direction`), or as overlap in
+//! plan. Counterparts may be scoped to the subject's containers (its space,
+//! its group) through the traversal parameters.
 //!
 //! Every distance is an interval, a point for exact geometry. A counterpart
 //! counts only when its whole interval satisfies the bound, and is certainly
@@ -29,6 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     ProjectedDistanceEvidence, ProximityProjection, ProximityRequest, RuleCapability, RuleContext,
+    VerticalDirection,
 };
 use axioval_ir::{Evidence, Object, ObjectId};
 
@@ -104,19 +106,38 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         return Err(invalid("`minimum_metres` exceeds `maximum_metres`"));
     }
     let offset = length(&parameters, "footprint_offset_metres")?;
-    let projection = match (parameters.string("projection")?, offset) {
-        (None | Some("minimum_3d"), None) => ProximityProjection::Minimum3d,
-        (Some("horizontal"), None) => ProximityProjection::Horizontal,
-        (Some("plan_overlap"), None) => ProximityProjection::PlanOverlap,
-        (Some("vertical"), offset) => ProximityProjection::Vertical {
+    let direction = match parameters.string("vertical_direction")? {
+        None => None,
+        Some("either") => Some(VerticalDirection::Either),
+        Some("above") => Some(VerticalDirection::Above),
+        Some("below") => Some(VerticalDirection::Below),
+        Some(other) => {
+            return Err(invalid(format!(
+                "vertical direction `{other}` is unsupported; use `above`, `below` or `either`"
+            )));
+        }
+    };
+    let projection = match (parameters.string("projection")?, offset, direction) {
+        (None | Some("minimum_3d"), None, None) => ProximityProjection::Minimum3d,
+        (Some("horizontal"), None, None) => ProximityProjection::Horizontal,
+        (Some("plan_overlap"), None, None) => ProximityProjection::PlanOverlap,
+        (Some("vertical"), offset, direction) => ProximityProjection::Vertical {
             footprint_offset_metres: offset.unwrap_or(0.0),
+            direction: direction.unwrap_or(VerticalDirection::Either),
         },
-        (None | Some("minimum_3d" | "horizontal" | "plan_overlap"), Some(_)) => {
+        (None | Some("minimum_3d" | "horizontal" | "plan_overlap"), Some(_), _) => {
             return Err(invalid(
                 "`footprint_offset_metres` applies only to the `vertical` projection",
             ));
         }
-        (Some(other), _) => return Err(invalid(format!("projection `{other}` is unsupported"))),
+        (None | Some("minimum_3d" | "horizontal" | "plan_overlap"), None, Some(_)) => {
+            return Err(invalid(
+                "`vertical_direction` applies only to the `vertical` projection",
+            ));
+        }
+        (Some(other), _, _) => {
+            return Err(invalid(format!("projection `{other}` is unsupported")));
+        }
     };
     Ok(Declaration {
         mode,
@@ -200,19 +221,26 @@ impl Candidate {
 
 /// A distance as a reviewer reads it: a point, a range, or no relation.
 fn describe(measured: &ProjectedDistanceEvidence) -> String {
-    let projection = match measured.request().projection() {
-        ProximityProjection::Minimum3d => "distance",
-        ProximityProjection::Horizontal => "horizontal distance",
-        ProximityProjection::Vertical { .. } => "vertical distance",
-        ProximityProjection::PlanOverlap => "plan-overlap distance",
+    let (projection, side) = match measured.request().projection() {
+        ProximityProjection::Minimum3d => ("distance", ""),
+        ProximityProjection::Horizontal => ("horizontal distance", ""),
+        ProximityProjection::Vertical { direction, .. } => (
+            "vertical distance",
+            match direction {
+                VerticalDirection::Either => "",
+                VerticalDirection::Above => " above",
+                VerticalDirection::Below => " below",
+            },
+        ),
+        ProximityProjection::PlanOverlap => ("plan-overlap distance", ""),
     };
     match measured.interval_metres() {
-        (lower, _) if lower.is_infinite() => format!("no {projection}"),
-        (lower, upper) if lower >= upper => format!("{projection} {lower:.4} m"),
+        (lower, _) if lower.is_infinite() => format!("no {projection}{side}"),
+        (lower, upper) if lower >= upper => format!("{projection} {lower:.4} m{side}"),
         (lower, upper) if upper.is_infinite() => {
-            format!("{projection} of at least {lower:.4} m, or none")
+            format!("{projection} of at least {lower:.4} m{side}, or none")
         }
-        (lower, upper) => format!("{projection} between {lower:.4} and {upper:.4} m"),
+        (lower, upper) => format!("{projection} between {lower:.4} and {upper:.4} m{side}"),
     }
 }
 
@@ -507,6 +535,7 @@ impl RuleCapability for Distance {
             ParameterDescriptor::optional("count", ParameterType::Integer),
             ParameterDescriptor::optional("projection", ParameterType::String),
             ParameterDescriptor::optional("footprint_offset_metres", ParameterType::Number),
+            ParameterDescriptor::optional("vertical_direction", ParameterType::String),
         ];
         parameters.extend(traversal_parameters());
         parameters

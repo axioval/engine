@@ -98,7 +98,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `measure_distance` answers projections: horizontal distance folds 2D
   closest points over projected triangles (edge-on ones as segments), exact
   for non-convex footprints; vertical is the extent gap of footprint-related
-  bodies; plan overlap uses the overlay. Overlap extents span witnessed
+  bodies (one-sided with a direction, whose side a tessellated end within the
+  combined deviation leaves open); plan overlap uses the overlay. Overlap extents span witnessed
   intersection points (edge crossings both ways, inside vertices tried
   outermost first) below and the boxes' overlap above; the Hausdorff
   distance is bounded per triangle by the farthest vertex from one other

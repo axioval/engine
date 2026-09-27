@@ -168,6 +168,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   along a coordinate axis, cutting cover bodies to the element's depth
   with their cross-sections. **Breaking:** definitions bound to
   `counterpart-coverage` must declare the three new optional parameters.
+- **Escape routes count independent routes.** (#119) `escape-route`
+  takes `exit_count: routes`: `exits` then counts routes to distinct
+  exits (and doors out of the compartment), walked from the space, two
+  routes sharing a passage counting once. Two exits at the end of one
+  dead-end corridor are one route: the walk around the corridor reaches no
+  exit. A passage selector without `passage_width` then only traces
+  routes. **Breaking:** definitions bound to `escape-route` must declare
+  `exit_count`.
+
 - **BCF cameras and BCF 3.0.** (#109) `axioval_bcf::Options` gains
   `bounds`, each object's measured `Bounds`, and `version`
   (`Version::V2_1` or `Version::V3_0`). A topic whose objects are all

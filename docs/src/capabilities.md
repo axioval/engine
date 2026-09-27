@@ -660,7 +660,7 @@ occupants.
 | `occupants` | integer, required | the row covers loads up to this many occupants |
 | `width` | number, required | the least clear width of each exit, in metres |
 | `total_width` | number | the least width of all exits together |
-| `passage_width` | number | the least clear width of each passage; required in every row by `passage_selector` |
+| `passage_width` | number | the least clear width of each passage; required in every row by `passage_selector`, unless the passages only trace routes (`exit_count: routes`, `common_path_factor`) |
 
 | Column of `sections` | Kind | Meaning |
 |---|---|---|
@@ -687,6 +687,7 @@ occupants.
 | `compartment_selector` | selector | the fire compartments; travel ends at the start compartment's boundary. Needs `door_path`, `door_selector` and one of the two below |
 | `compartment_path` | string list | from a space to the compartments it lies in (a group membership, say) |
 | `compartment_overlap` | number | a space lies in each compartment covering at least this share (above 0, at most 1) of its footprint, 0.8 say |
+| `exit_count` | string | `exits` (default): `exits` counts exits; `routes`: it counts independent routes. `routes` needs `passage_selector` and a walking profile |
 | `zones` | table | ranks of zones (`objects`, a selector; `rank`, an integer; `label`); every walk keeps out of what ranks above the start |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
@@ -762,6 +763,19 @@ occupants.
   as it measures every avoided object, so zones are best walked from the
   doors (`route_start: door`).
 - **Exits** are counted as `exit-separation`'s `minimum_exits` counts them.
+- **Independent routes** (`exit_count: routes`): `exits` then counts
+  routes to distinct targets (exits, and doors out of the compartment),
+  two routes that share a passage (`passage_selector`, within the start's
+  compartment where compartments are declared) counting once. Routes are
+  walked from the space's representative point. At most, every target a
+  walk may reach (a target proven unreachable is none), and a single route
+  when the nearest walk crosses a passage around which no walk reaches any
+  target: every route passes through it, as through a dead-end corridor
+  with both exits at its end. At least, as many sure targets as have walks
+  (around everything possibly avoided) that cross pairwise no common
+  passage, as traced (`trace_path`); a walk that cannot be traced may
+  share every passage. A finding needs fewer routes at most than required,
+  a pass at least as many at least.
 - **Widths**: the occupant load is the space's footprint (`PlanAreaService`)
   divided by `area_per_occupant`, rounded up. Each exit's stated clear width
   must reach the covering row's `width`, and together they must reach its

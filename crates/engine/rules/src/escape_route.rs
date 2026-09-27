@@ -91,6 +91,12 @@
 //! or no other space, leads out. A project without any compartment is an
 //! inadequate-information finding per source of a checked space.
 //!
+//! **Independent routes.** With `exit_count: routes`, `exits` counts
+//! routes to distinct targets, walked from the space's representative
+//! point; routes sharing a passage count once. At most every reachable
+//! target, one where a passage cuts every walk; at least the sure targets
+//! whose traced walks share no passage.
+//!
 //! **Zones.** Each object takes the rank of the first row of `zones`
 //! picking it, the start its space's or compartment's; every walk keeps out
 //! of what ranks above the start, as it keeps out of what is not usable for
@@ -204,6 +210,9 @@ struct Passages<'a> {
     /// Whether the passages are those the walks from each space's doors
     /// cross, rather than declared along `path`.
     walked: bool,
+    /// Whether their widths are checked: every row of `widths` states a
+    /// `passage_width`. Otherwise they only merge routes.
+    judged: bool,
 }
 
 /// How a space is assigned to its compartments.
@@ -242,6 +251,8 @@ struct Declaration<'a> {
     door_direction: bool,
     /// Objects not usable for escape: never exits, starts or passed.
     no_escape: Option<&'a Selector>,
+    /// Whether `exits` counts independent routes rather than exits.
+    count_routes: bool,
     compartments: Option<Compartments<'a>>,
     /// By row; the first row picking an object ranks it.
     zones: Vec<Zone<'a>>,
@@ -382,7 +393,24 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         ));
     }
     let (sections, section_path) = sections(&parameters, &uses)?;
-    let passages = passages(&parameters, &widths)?;
+    let count_routes = match parameters.string("exit_count")? {
+        None | Some("exits") => false,
+        Some("routes") => true,
+        Some(other) => {
+            return Err(invalid(format!(
+                "exit count `{other}` is unsupported (exits, routes)"
+            )));
+        }
+    };
+    let passages = passages(&parameters, &widths, count_routes)?;
+    if count_routes
+        && (passages.is_none() || profile.is_none() || uses.iter().all(|use_| use_.exits.is_none()))
+    {
+        return Err(invalid(
+            "`exit_count: routes` needs `passage_selector`, `walking_height`, `walking_step` \
+             and a use stating `exits`",
+        ));
+    }
     if passages.as_ref().is_some_and(|passages| passages.walked)
         && (doors.is_none() || profile.is_none())
     {
@@ -423,6 +451,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         profile,
         door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
         no_escape: parameters.selector("no_escape_selector")?,
+        count_routes,
         compartments,
         zones,
     })
@@ -542,6 +571,7 @@ fn sections<'a>(
 fn passages<'a>(
     parameters: &Parameters<'a>,
     widths: &[WidthRow],
+    count_routes: bool,
 ) -> Result<Option<Passages<'a>>, Unavailable> {
     let path = parameters.strings("passage_path")?;
     let width = parameters.property("passage_width_property")?;
@@ -564,9 +594,18 @@ fn passages<'a>(
             "`walked_passages` and `passage_path` exclude each other",
         ));
     }
-    if widths.is_empty() || widths.iter().any(|row| row.passage.is_none()) {
+    let judged = !widths.is_empty() && widths.iter().all(|row| row.passage.is_some());
+    let stated = widths.iter().any(|row| row.passage.is_some());
+    if !judged && (!count_routes || stated) {
         return Err(invalid(
-            "`passage_selector` needs every row of `widths` to state `passage_width`",
+            "`passage_selector` needs every row of `widths` to state `passage_width`, unless \
+             it only merges routes (`exit_count: routes`, no `passage_width`)",
+        ));
+    }
+    if !judged && (path.is_some() || width.is_some() || walked) {
+        return Err(invalid(
+            "`passage_path`, `walked_passages` and `passage_width_property` need `widths` \
+             stating `passage_width`",
         ));
     }
     Ok(Some(Passages {
@@ -574,6 +613,7 @@ fn passages<'a>(
         selector,
         width,
         walked,
+        judged,
     }))
 }
 
@@ -608,6 +648,7 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("compartment_path", ParameterType::StringList),
             ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
             ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
+            ParameterDescriptor::optional("exit_count", ParameterType::String),
         ]
     }
 
@@ -710,7 +751,11 @@ impl RuleCapability for EscapeRoute {
                 checked,
             ));
         }
-        if judge.passages.is_some() {
+        if declared
+            .passages
+            .as_ref()
+            .is_some_and(|passages| passages.judged)
+        {
             // A space the rule may select brings occupants nobody counted.
             for space in Candidates::select(context, &rule.selector).undecided.keys() {
                 judge.serve(
@@ -962,6 +1007,10 @@ impl Reached {
 }
 
 impl Reached {
+    fn contains(&self, object: &ObjectId) -> bool {
+        self.sure.contains(object) || self.maybe.contains(object)
+    }
+
     /// Adds `other`'s objects; an object sure in either is sure.
     fn merge(&mut self, other: Self) {
         for object in other.sure {
@@ -1620,7 +1669,11 @@ impl Judge<'_, '_> {
             }
         };
         if let Some(required) = use_.exits {
-            self.count(space, use_, required, &exits, checked);
+            if self.declared.count_routes {
+                self.routes(space, use_, required, checked);
+            } else {
+                self.count(space, use_, required, &exits, checked);
+            }
         }
         if let (Some(per_occupant), Some(load)) = (use_.area_per_occupant, &load) {
             match load {
@@ -1728,6 +1781,9 @@ impl Judge<'_, '_> {
         else {
             return None;
         };
+        if !declared.judged {
+            return None;
+        }
         if declared.walked {
             let walked = self.walked(space, candidates);
             let empty = Vec::new();
@@ -2150,6 +2206,161 @@ impl Judge<'_, '_> {
             evidence,
             reliance.spaces.clone(),
         ));
+    }
+
+    /// Counts the independent routes out of `space`: routes to distinct
+    /// targets, two sharing a passage (within the start's compartment)
+    /// counting once.
+    ///
+    /// At most, every target some walk may reach, and one when a passage
+    /// the nearest walk crosses cuts every walk (the walk around it reaches
+    /// no target). At least, as many sure targets as have walks crossing
+    /// pairwise no common passage, as traced; a walk that cannot be traced
+    /// may share every passage.
+    #[allow(clippy::too_many_lines)]
+    fn routes(&self, space: &Object, use_: &Use<'_>, required: usize, checked: &mut Checked) {
+        let needed = format!("{} requires at least {required}", use_.name);
+        let (Some(routes), Some(profile), Some(candidates)) = (
+            self.context.services.get::<MetricRoutingServiceHandle>(),
+            self.declared.profile,
+            self.passages.as_ref(),
+        ) else {
+            checked.doubts.push(missing("metric-routing"));
+            return;
+        };
+        let escape = match self.escape(&space.id) {
+            Ok(escape) => escape,
+            Err(unavailable) => {
+                checked.doubts.push(unavailable);
+                return;
+            }
+        };
+        let origin = &space.id;
+        // The passages two routes may share (within the compartment, if
+        // any), and those surely passages surely within it.
+        let mut shared = BTreeSet::new();
+        let mut surely = BTreeSet::new();
+        for passage in &candidates.universe {
+            let passage = &passage.id;
+            if passage == origin || escape.targets.contains(passage) {
+                continue;
+            }
+            let inside = match &escape.compartment {
+                None => Within::Yes,
+                Some(compartment) => self.within(passage, compartment),
+            };
+            match inside {
+                Within::Yes => {
+                    shared.insert(passage.clone());
+                    if !candidates.undecided.contains_key(passage) {
+                        surely.insert(passage.clone());
+                    }
+                }
+                Within::Unknown(_) => {
+                    shared.insert(passage.clone());
+                }
+                Within::No => {}
+            }
+        }
+        let mut evidence = escape.targets.evidence.clone();
+        // At most: every target a walk may reach.
+        let mut reachable = 0_usize;
+        for (target, point) in &escape.placed.all {
+            let alone = [(target.clone(), point.clone())];
+            match self.nearest(routes, origin, &alone, &escape.avoid.least(origin), profile) {
+                Ok(walk) if walk.lower.is_infinite() => evidence.extend(walk.evidence),
+                _ => reachable += 1,
+            }
+        }
+        // One passage every walk crosses leaves one route.
+        let mut cut = None;
+        if escape.placed.complete
+            && let Some(walk) = self.witness(routes, profile, origin, &escape)
+            && let Some(crossed) = Self::crossed(routes, &walk, &surely)
+        {
+            for passage in crossed.keys() {
+                let mut avoided = escape.avoid.least(origin);
+                avoided.push(passage.clone());
+                if let Ok(around) =
+                    self.nearest(routes, origin, &escape.placed.all, &avoided, profile)
+                    && around.lower.is_infinite()
+                {
+                    evidence.extend(walk.evidence.iter().cloned());
+                    evidence.extend(around.evidence);
+                    cut = Some(passage.clone());
+                    break;
+                }
+            }
+        }
+        let most = if !escape.placed.complete {
+            None
+        } else if cut.is_some() {
+            Some(reachable.min(1))
+        } else {
+            Some(reachable)
+        };
+        // At least: sure targets walked to over pairwise distinct passages,
+        // the shorter walks first.
+        let mut walks = Vec::new();
+        for (target, point) in &escape.placed.sure {
+            let alone = [(target.clone(), point.clone())];
+            if let Ok(walk) =
+                self.nearest(routes, origin, &alone, &escape.avoid.most(origin), profile)
+                && walk.upper.is_finite()
+            {
+                let crosses: BTreeSet<ObjectId> = match Self::crossed(routes, &walk, &shared) {
+                    Some(crossed) => crossed.into_keys().collect(),
+                    None => shared.clone(),
+                };
+                walks.push((walk.upper, crosses));
+            }
+        }
+        walks.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut taken = BTreeSet::new();
+        let mut least = 0_usize;
+        for (_, crosses) in walks {
+            if crosses.is_disjoint(&taken) {
+                least += 1;
+                taken.extend(crosses);
+            }
+        }
+        let related: Vec<ObjectId> = escape
+            .targets
+            .sure
+            .iter()
+            .chain(&escape.targets.maybe)
+            .cloned()
+            .collect();
+        match most {
+            Some(most) if most < required => {
+                let message = match &cut {
+                    Some(passage) => format!(
+                        "every walk from it to an exit passes through {passage}, so it has at \
+                         most {most} independent route(s); {needed}"
+                    ),
+                    None => format!(
+                        "it reaches at most {most} exit(s) walking, so it has at most {most} \
+                         independent route(s); {needed}"
+                    ),
+                };
+                let mut related = related;
+                related.extend(cut);
+                checked
+                    .findings
+                    .push(finding(self.rule, &space.id, message, evidence, related));
+            }
+            _ if least >= required => {}
+            most => {
+                checked.doubts.extend(escape.placed.doubts);
+                checked.doubts.push(incomplete(format!(
+                    "it has at least {least} and {} independent route(s), and {needed}",
+                    most.map_or_else(
+                        || "perhaps more".to_owned(),
+                        |most| format!("at most {most}")
+                    )
+                )));
+            }
+        }
     }
 
     fn count(

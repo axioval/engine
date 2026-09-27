@@ -2087,3 +2087,90 @@ fn a_model_without_compartments_is_inadequate_information() {
             .contains("it lies in no compartment")
     );
 }
+
+/// Room `r` reaches exits `x1` and `x2`, both at the end of corridor `c`.
+fn routes(geometry: Geometry) -> CapabilityEvaluation {
+    Model::default()
+        .object("r", "space")
+        .object("c", "corridor")
+        .object("x1", "exit")
+        .object("x2", "exit")
+        .edge("serves", "x1", "r")
+        .edge("serves", "x2", "r")
+        .evaluate_with(
+            &EscapeRoute,
+            &rule(
+                CAPABILITY,
+                kind("space"),
+                with(
+                    doors_and_exits(),
+                    vec![
+                        uses(&[("exits", integer(2))]),
+                        ("exit_count", string("routes")),
+                        ("passage_selector", selector(kind("corridor"))),
+                    ],
+                ),
+            ),
+            |services| geometry.register(services),
+        )
+}
+
+fn two_exits() -> Geometry {
+    Geometry::default()
+        .walk("r", "x1", Walk::Between(12.0, 12.0))
+        .walk("r", "x2", Walk::Between(14.0, 14.0))
+        .walk("r", "x1,x2", Walk::Between(12.0, 12.0))
+}
+
+#[test]
+fn two_exits_through_one_dead_end_corridor_count_as_one_route() {
+    // Every walk crosses the corridor: without it no exit is reached.
+    let evaluation = routes(two_exits().trace("r", "c", 6.0).detour(
+        "r",
+        "x1,x2",
+        "c",
+        Walk::Unreachable,
+    ));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "r".into(),
+            format!(
+                "every walk from it to an exit passes through {}, so it has at most 1 \
+                 independent route(s); use 0 requires at least 2",
+                id("c")
+            )
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    let finding = &evaluation.findings()[0];
+    assert!(
+        finding
+            .evidence
+            .iter()
+            .any(|item| item.locator == "cut-off:r"),
+        "{finding:?}"
+    );
+
+    // Walks keeping off the corridor are two independent routes.
+    let evaluation = routes(two_exits().trace("r", "c", 0.0));
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+
+    // Both walks cross it, but a longer walk round it exists: one to two
+    // routes, which decides nothing.
+    let evaluation = routes(two_exits().trace("r", "c", 6.0).detour(
+        "r",
+        "x1,x2",
+        "c",
+        Walk::Between(30.0, 30.0),
+    ));
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("it has at least 1 and at most 2 independent route(s)"),
+        "{message}"
+    );
+}

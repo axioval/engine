@@ -8617,6 +8617,59 @@ fn with_geometry_escape_travel_ends_at_the_door_out_of_the_compartment() {
 }
 
 #[test]
+fn with_geometry_an_office_behind_one_corridor_has_one_independent_route() {
+    // The office's only way out runs through the corridor: the walk round
+    // it reaches no exit, so its routes are one, where two are required.
+    let case = Case::new("geometry-escape-route-independent-routes");
+    let reference = |value: &str| {
+        json!({"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+               "property": "axioval:example.ifc.reference", "operator": "equals",
+               "value": {"type": "string", "value": value}})
+    };
+    let (output, result) = case.geometry_rule(
+        &office_behind_a_corridor(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        json!({"kind": "allOf", "operands": [
+            entity("space"), {"kind": "not", "operand": reference("Corridor")}]}),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"spaces": {"type": "selector", "value": entity("space")},
+                 "exits": {"type": "integer", "value": 2}},
+            ]},
+            "exit_path": {"type": "stringList", "value": [
+                "IfcRelSpaceBoundary:forward", "IfcRelSpaceBoundary:backward",
+                "IfcRelSpaceBoundary:forward"]},
+            "exit_selector": {"type": "selector", "value":
+                {"kind": "allOf", "operands": [entity("door"), reference("Exit")]}},
+            "exit_count": {"type": "string", "value": "routes"},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+            "passage_selector": {"type": "selector", "value":
+                {"kind": "allOf", "operands": [entity("space"), reference("Corridor")]}},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#19".to_owned(),
+            "every walk from it to an exit passes through ifc-step:model.ifc/#29, so it has at \
+             most 1 independent route(s); use 0 requires at least 2"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn with_geometry_exit_doors_opening_against_the_escape_are_found() {
     let case = Case::new("geometry-exit-door-direction");
     let (output, result) = case.geometry_rule(

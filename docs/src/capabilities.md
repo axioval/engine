@@ -324,6 +324,32 @@ Rows are judged per group. With `anchor_selector`, each anchor is a group of the
 
 Objects that may belong to a row without being decided (a tie, an undecided key, or an undecided selection) make its count and area not evaluated, unless the row already exceeds its count or area, since they could only add to it. A finding relates the objects assigned to the row.
 
+### Group composition
+
+`group-composition` requires each selected group to hold a multiset of members: "two bedrooms, one kitchen and one bathroom per apartment". `related-count` checks one entry at a time and counts a member for every entry it fits; this capability allocates members across entries.
+
+The rule's selection are the groups. Each reaches its members through the traversal parameters, which are required: `relationship` (such as `IfcRelAssignsToGroup`, or the derived `axioval:derived.overlapping-group-space` walked `backward`, from a group space to the spaces it covers) or a `path`. `member_selector` restricts which reached objects are members, every one by default. The `requirements` table lists the member entries:
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `key_1`, `key_2`, `key_3` | `textPattern` | Pattern over the member property the same-named rule parameter names, as in `table-allocation`. |
+| `group` | `textPattern` | Pattern over the group's `group_key` property; the row applies only to groups it matches. |
+| `label` | `string` | How findings name the entry; otherwise by its number and patterns. |
+| `count` | `integer` | Required: how many members the entry takes. |
+
+A member fits an entry when every key cell the entry fills matches its value (absent or null matches no pattern); a row with no key cell fits every member. A member may fit several entries but fills one place, so members are allocated to places by a **maximum bipartite matching**: as many places as possible are filled, whatever order members and rows come in. A bedroom that fits both `*room` and `Bed*` goes to `Bed*` when a living room can take only `*room`, where filling entries in declared order would strand the living room.
+
+Maximum allocations need not be unique, so outcomes are reported only as far as all of them agree:
+
+- An entry that every maximum allocation leaves short is a finding naming how many of its members it has and how many are missing. Entries that compete for the same members, when any of them could be the short one, are reported together with their joint shortfall ("row 1 `bedroom` and row 2 `sleeping room` together have 1 of 2 required member(s); 1 missing"), never blamed one by one.
+- Members beyond the places they fit are a surplus, reported per set of full entries they compete for ("row 1 `bedroom` takes 2 member(s), but 3 fit; 1 surplus"). A member that fits no entry is a surplus finding of its own, naming its key values.
+
+Findings go against the group and relate the members concerned. With `group_key`, one table carries every kind of group: a row filling `group` applies only to groups whose `group_key` value it matches, and a row without it applies to every group. A group that no row with a `group` cell matches is a finding ("no requirement row matches the group"), and its members are not judged. A `group` cell without `group_key`, `group_key` with no `group` cell, a key cell without its property, a missing or negative `count`, an empty table and a missing traversal are invalid declarations.
+
+Nothing undecided is guessed: a reached object whose membership in `member_selector` is undecided, a member whose key cannot be read or is not text when a row tests it, or a group whose `group_key` cannot be read leaves the group not evaluated, and the member is reported once as not evaluated. A group whose members cannot be walked is not evaluated.
+
+With `ungrouped_selector`, each object it picks that no selected group reaches is a finding, "in no group". It is not evaluated when a group that could not be walked, or whose own selection is undecided, might reach it, or when its selection by `ungrouped_selector` is undecided. Spaces that must belong to a group are thus checked in the same rule as the groups, over the same relationship; a separate `related-count` rule walking the relationship backwards from each space checks the same where one rule per concern is preferred.
+
 ### Keyed limits
 
 `keyed-limit` looks a limit up in a table keyed by facts about each selected object, then checks one of its quantities against it. A fire compartment's area limit depends on the building's fire class, the compartment's use class and whether its storey is sprinklered; one rule carries the whole table.

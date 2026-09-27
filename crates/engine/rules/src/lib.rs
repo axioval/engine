@@ -12,6 +12,7 @@ mod distance;
 mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
+mod group_composition;
 mod guard_diagnosis;
 mod horizontal_guard;
 mod keyed_limit;
@@ -51,6 +52,7 @@ pub use distance::Distance;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
+pub use group_composition::GroupComposition;
 pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
 pub use keyed_limit::KeyedLimit;
@@ -117,4 +119,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(SlabStackSpacing))
         .and_then(|registry| registry.register(TableAllocation))
         .and_then(|registry| registry.register(OpeningSpaces))
+        .and_then(|registry| registry.register(GroupComposition))
 }

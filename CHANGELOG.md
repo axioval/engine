@@ -123,6 +123,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   the rule declares as `key_1` to `key_3`. Objects no row matches and rows
   that matched nothing are findings; ties, undecided keys and straddling
   areas are not evaluated.
+- **Group composition.** The new capability `group-composition` requires
+  each selected group to hold the members a `requirements` table lists:
+  entries keyed by text patterns over up to three member properties
+  (`key_1` to `key_3`, as in `table-allocation`), each taking `count`
+  members. Members are reached through the (required) traversal parameters
+  and restricted by `member_selector`. A member may fit several entries but
+  fills one place: members are allocated by a maximum bipartite matching,
+  not in declared order. Per group, entries every maximum allocation leaves
+  short are findings, jointly when competing entries could each be the short
+  one; members beyond the places they fit, and members fitting no entry, are
+  surplus findings. With `group_key`, rows with a `group` pattern apply only
+  to matching groups, and a group no such row matches is a finding. With
+  `ungrouped_selector`, objects no group reaches are findings. An undecided
+  membership, member key or group key leaves the group not evaluated.
 - **Every presentation layer of an object, and models without layers.**
   `axioval:presentation.Layer` now lists all distinct layers of an object,
   sorted by name, as the new `PropertyValue::List` (scalar elements only;

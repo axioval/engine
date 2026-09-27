@@ -13,14 +13,167 @@ use crate::counts::{Population, relation_text, tally};
 use crate::pairs::severity;
 use crate::plan_area::{Sum, footprint, shown};
 use crate::selection::select_objects;
-use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
+use crate::support::table::{self, Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve,
     traversal_parameters,
 };
 
 /// The key columns, each testing the property the same-named parameter names.
-const KEYS: [&str; 3] = ["key_1", "key_2", "key_3"];
+pub(crate) const KEYS: [&str; 3] = ["key_1", "key_2", "key_3"];
+
+/// A row's key cells: each compiled pattern with its text as written.
+pub(crate) type KeyCells<'a> = [Option<(TextPattern, &'a str)>; 3];
+
+/// The key properties the `key_1` to `key_3` parameters name.
+pub(crate) fn key_properties<'a>(
+    parameters: &Parameters<'a>,
+) -> Result<[Option<PropertyRef<'a>>; 3], Unavailable> {
+    Ok([
+        parameters.property(KEYS[0])?,
+        parameters.property(KEYS[1])?,
+        parameters.property(KEYS[2])?,
+    ])
+}
+
+/// The key cells of row `number`; a cell whose property is not declared is
+/// an invalid declaration.
+pub(crate) fn key_cells<'a>(
+    row: table::Row<'a>,
+    number: usize,
+    properties: &[Option<PropertyRef<'_>>; 3],
+    case_sensitive: bool,
+) -> Result<KeyCells<'a>, Unavailable> {
+    let mut keys = [None, None, None];
+    for (slot, (column, property)) in keys.iter_mut().zip(KEYS.iter().zip(properties)) {
+        let Some(text) = row.text(column)? else {
+            continue;
+        };
+        if property.is_none() {
+            return Err(invalid(format!(
+                "row {number} fills `{column}`, but no `{column}` property is declared"
+            )));
+        }
+        let pattern = row
+            .pattern(column, case_sensitive)?
+            .expect("a filled cell compiles");
+        *slot = Some((pattern, text));
+    }
+    Ok(keys)
+}
+
+/// How findings name a row: by its label, or by its number and key cells.
+pub(crate) fn row_name(
+    number: usize,
+    label: Option<&str>,
+    cells: &KeyCells<'_>,
+    properties: &[Option<PropertyRef<'_>>; 3],
+) -> String {
+    if let Some(label) = label {
+        return format!("row {number} `{label}`");
+    }
+    let keys: Vec<String> = cells
+        .iter()
+        .zip(properties)
+        .filter_map(|(key, property)| {
+            let ((_, pattern), property) = (key.as_ref()?, property.as_ref()?);
+            Some(format!("{property} like `{pattern}`"))
+        })
+        .collect();
+    if keys.is_empty() {
+        format!("row {number} (any object)")
+    } else {
+        format!("row {number} ({})", keys.join(", "))
+    }
+}
+
+/// An object's key values, read only for the keys in `used`, with the
+/// evidence for them.
+pub(crate) fn read_keys(
+    context: &RuleContext<'_>,
+    object: &Object,
+    properties: &[Option<PropertyRef<'_>>; 3],
+    used: [bool; 3],
+) -> ([Option<Key>; 3], Vec<Evidence>) {
+    let mut evidence = Vec::new();
+    let mut keys = [None, None, None];
+    for ((slot, property), used) in keys.iter_mut().zip(properties).zip(used) {
+        let Some(property) = property.filter(|_| used) else {
+            continue;
+        };
+        *slot = Some(match resolve(context, object, property) {
+            Ok(resolved) => {
+                evidence.extend(resolved.evidence());
+                match resolved.value() {
+                    None | Some(PropertyValue::Null) => Key::Absent,
+                    Some(PropertyValue::String(text)) => Key::Text(text.clone()),
+                    Some(other) => Key::Unknown(
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("{property} is {}, not text", display(Some(other))),
+                    ),
+                }
+            }
+            Err((reason, message)) => Key::Unknown(reason, message),
+        });
+    }
+    (keys, evidence)
+}
+
+/// Whether a row's key cells match an object's key values: an absent value
+/// matches no pattern, an unknown one decides nothing.
+pub(crate) fn test_keys(cells: &KeyCells<'_>, keys: &[Option<Key>; 3]) -> RowTest {
+    cells
+        .iter()
+        .zip(keys)
+        .fold(RowTest::Match(0), |test, (pattern, key)| {
+            let Some((pattern, _)) = pattern else {
+                return test;
+            };
+            test.and(match key {
+                Some(Key::Text(text)) => pattern.test(text),
+                Some(Key::Absent) => RowTest::NoMatch,
+                Some(Key::Unknown(..)) | None => RowTest::Undecided,
+            })
+        })
+}
+
+/// Why an object's keys leave a row undecided: its first unknown key.
+pub(crate) fn unknown_key(keys: &[Option<Key>; 3]) -> Unavailable {
+    keys.iter()
+        .flatten()
+        .find_map(|key| match key {
+            Key::Unknown(reason, message) => Some((reason.clone(), message.clone())),
+            _ => None,
+        })
+        .unwrap_or((
+            NotEvaluatedReason::IncompleteEvidence,
+            "a key cannot be read".into(),
+        ))
+}
+
+/// Key values as a reviewer reads them.
+pub(crate) fn describe_keys(
+    properties: &[Option<PropertyRef<'_>>; 3],
+    keys: &[Option<Key>; 3],
+) -> String {
+    let shown: Vec<String> = properties
+        .iter()
+        .zip(keys)
+        .filter_map(|(property, key)| {
+            let value = match key.as_ref()? {
+                Key::Text(text) => format!("`{text}`"),
+                Key::Absent => "absent".into(),
+                Key::Unknown(..) => "unknown".into(),
+            };
+            Some(format!("{} is {value}", (*property)?))
+        })
+        .collect();
+    if shown.is_empty() {
+        "the table has no row".into()
+    } else {
+        shown.join(", ")
+    }
+}
 
 const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("key_1", ColumnKind::TextPattern),
@@ -145,7 +298,7 @@ struct Row<'a> {
     /// One-based, as a reviewer counts.
     number: usize,
     label: Option<&'a str>,
-    keys: [Option<(TextPattern, &'a str)>; 3],
+    keys: KeyCells<'a>,
     count: Option<i64>,
     /// Required area and tolerance, square metres.
     area: Option<(f64, f64)>,
@@ -153,28 +306,12 @@ struct Row<'a> {
 
 impl Row<'_> {
     fn name(&self, properties: &[Option<PropertyRef<'_>>; 3]) -> String {
-        if let Some(label) = self.label {
-            return format!("row {} `{label}`", self.number);
-        }
-        let keys: Vec<String> = self
-            .keys
-            .iter()
-            .zip(properties)
-            .filter_map(|(key, property)| {
-                let ((_, pattern), property) = (key.as_ref()?, property.as_ref()?);
-                Some(format!("{property} like `{pattern}`"))
-            })
-            .collect();
-        if keys.is_empty() {
-            format!("row {} (any object)", self.number)
-        } else {
-            format!("row {} ({})", self.number, keys.join(", "))
-        }
+        row_name(self.number, self.label, &self.keys, properties)
     }
 }
 
 /// An object's key value.
-enum Key {
+pub(crate) enum Key {
     Text(String),
     /// Exactly absent, or null: no pattern matches it.
     Absent,
@@ -222,11 +359,7 @@ impl<'a> Declaration<'a> {
             }
         };
         let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
-        let properties = [
-            parameters.property(KEYS[0])?,
-            parameters.property(KEYS[1])?,
-            parameters.property(KEYS[2])?,
-        ];
+        let properties = key_properties(&parameters)?;
         let anchors = parameters.selector("anchor_selector")?;
         let traversal = parameters.traversal()?;
         let across_sources = parameters.boolean("across_sources")?.unwrap_or(false);
@@ -248,21 +381,7 @@ impl<'a> Declaration<'a> {
             .enumerate()
         {
             let number = index + 1;
-            let mut keys = [None, None, None];
-            for (slot, (column, property)) in keys.iter_mut().zip(KEYS.iter().zip(&properties)) {
-                let Some(text) = row.text(column)? else {
-                    continue;
-                };
-                if property.is_none() {
-                    return Err(invalid(format!(
-                        "row {number} fills `{column}`, but no `{column}` property is declared"
-                    )));
-                }
-                let pattern = row
-                    .pattern(column, case_sensitive)?
-                    .expect("a filled cell compiles");
-                *slot = Some((pattern, text));
-            }
+            let keys = key_cells(row, number, &properties, case_sensitive)?;
             let count = row.integer("count")?;
             if count.is_some_and(|count| count < 0) {
                 return Err(invalid(format!("row {number} has a negative count")));
@@ -305,52 +424,14 @@ impl<'a> Declaration<'a> {
 
     /// The row `object` belongs to, with the evidence for its key values.
     fn assign(&self, context: &RuleContext<'_>, object: &Object) -> (Assignment, Vec<Evidence>) {
-        let mut evidence = Vec::new();
-        let keys: Vec<Option<Key>> = self
-            .properties
-            .iter()
-            .enumerate()
-            .map(|(index, property)| {
-                // Only keys some row tests are read.
-                let property = (*property)?;
-                self.rows
-                    .iter()
-                    .any(|row| row.keys[index].is_some())
-                    .then(|| match resolve(context, object, property) {
-                        Ok(resolved) => {
-                            evidence.extend(resolved.evidence());
-                            match resolved.value() {
-                                None | Some(PropertyValue::Null) => Key::Absent,
-                                Some(PropertyValue::String(text)) => Key::Text(text.clone()),
-                                Some(other) => Key::Unknown(
-                                    NotEvaluatedReason::IncompleteEvidence,
-                                    format!("{property} is {}, not text", display(Some(other))),
-                                ),
-                            }
-                        }
-                        Err((reason, message)) => Key::Unknown(reason, message),
-                    })
-            })
-            .collect();
-        let test = |row: &Row<'_>| {
-            row.keys
-                .iter()
-                .zip(&keys)
-                .fold(RowTest::Match(0), |test, (pattern, key)| {
-                    let Some((pattern, _)) = pattern else {
-                        return test;
-                    };
-                    test.and(match key {
-                        Some(Key::Text(text)) => pattern.test(text),
-                        Some(Key::Absent) => RowTest::NoMatch,
-                        Some(Key::Unknown(..)) | None => RowTest::Undecided,
-                    })
-                })
-        };
+        // Only keys some row tests are read.
+        let used = [0, 1, 2].map(|index| self.rows.iter().any(|row| row.keys[index].is_some()));
+        let (keys, evidence) = read_keys(context, object, &self.properties, used);
+        let test = |row: &Row<'_>| test_keys(&row.keys, &keys);
         let assignment = match match_rows(&self.rows, self.selection, test) {
             Matched::Rows(rows) => match rows.first() {
                 Some((index, _)) => Assignment::Row(*index),
-                None => Assignment::Extra(self.describe(&keys)),
+                None => Assignment::Extra(describe_keys(&self.properties, &keys)),
             },
             Matched::Ambiguous(tied) => {
                 let names: Vec<String> = tied
@@ -371,17 +452,7 @@ impl<'a> Declaration<'a> {
                     .filter(|(_, row)| test(row) != RowTest::NoMatch)
                     .map(|(index, _)| index)
                     .collect();
-                let (reason, message) = keys
-                    .iter()
-                    .flatten()
-                    .find_map(|key| match key {
-                        Key::Unknown(reason, message) => Some((reason.clone(), message.clone())),
-                        _ => None,
-                    })
-                    .unwrap_or((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "a key cannot be read".into(),
-                    ));
+                let (reason, message) = unknown_key(&keys);
                 Assignment::Open(
                     candidates,
                     reason,
@@ -390,28 +461,6 @@ impl<'a> Declaration<'a> {
             }
         };
         (assignment, evidence)
-    }
-
-    /// Key values as a reviewer reads them in an extra's finding.
-    fn describe(&self, keys: &[Option<Key>]) -> String {
-        let shown: Vec<String> = self
-            .properties
-            .iter()
-            .zip(keys)
-            .filter_map(|(property, key)| {
-                let value = match key.as_ref()? {
-                    Key::Text(text) => format!("`{text}`"),
-                    Key::Absent => "absent".into(),
-                    Key::Unknown(..) => "unknown".into(),
-                };
-                Some(format!("{} is {value}", (*property)?))
-            })
-            .collect();
-        if shown.is_empty() {
-            "the table has no row".into()
-        } else {
-            shown.join(", ")
-        }
     }
 
     /// The groups rows are judged in. Members no anchor reaches are not

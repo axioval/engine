@@ -133,6 +133,24 @@ All notable changes are documented here. This project follows Semantic Versionin
   `measure_overlaps` take a request, and `measure_storey_residuals`
   (`StoreyResidual`) is replaced by `measure_unallocated_regions`
   (`UnallocatedRegion`).
+- **Counterpart coverage in the element's elevation, and frame infill.**
+  (#133) `counterpart-coverage` takes `measure`: with `elevation`, plan
+  and height are one check, the share of the element's projection onto the
+  vertical plane along its long axis that the counterparts leave uncovered,
+  each counted within the element's depth widened by the horizontal
+  tolerance and grown by it along the axis and by the vertical tolerance in
+  height. A wall under a full-height counterpart on one half and a
+  half-height one on the other passes plan and height but fails in
+  elevation. `infill_counterparts` (columns, beams) cover by the convex
+  hull of their projections once more than `infill_above` (half by
+  default) is uncovered, so a wall filling a column-and-beam bay passes.
+  Findings now report their deviation from the lowest threshold, so rules
+  may grade them with severity bands. `PlanAreaService` gains
+  `measure_elevation_cover` (`ElevationRequest`, `ElevationCover`), refused
+  by default; the Axiolid adapter measures it exactly for exact bodies seen
+  along a coordinate axis, cutting cover bodies to the element's depth
+  with their cross-sections. **Breaking:** definitions bound to
+  `counterpart-coverage` must declare the three new optional parameters.
 - **BCF cameras and BCF 3.0.** (#109) `axioval_bcf::Options` gains
   `bounds`, each object's measured `Bounds`, and `version`
   (`Version::V2_1` or `Version::V3_0`). A topic whose objects are all

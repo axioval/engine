@@ -378,6 +378,25 @@ unmeasured, undescribed or a group that cannot give a footprint refuses the
 measurement, never zero. The 0.3.0 overlay's region dilation is not used: it
 does not state on which side of the true offset its polygon lies.
 
+An elevation cover (`measure_elevation_cover`) takes every body into the
+request's frame (`s` along the plan axis, `t` across it, `z` up) and
+projects onto `(s, z)`. A cover body counts within the subject's depth
+across the axis, widened by the along growth: its projection there is the
+projection of its surface inside that slab together with its two
+cross-sections at the slab's faces. A cross-section needs no outline walk:
+a point of the face plane lies inside a closed body exactly when a line from
+it away from the slab crosses the surface an odd number of times, so the
+cross-section is the even-odd fill of the surface beyond the plane,
+projected, whatever the triangles' winding. Growth along the axis and in
+height is a Minkowski sum with a rectangle, which is exact: the region with
+every boundary edge swept over the rectangle. Frame members cover by the
+convex hull of their projections, grown the same way. Exact bodies seen
+along a coordinate axis measure exactly; a tessellated body or an axis off
+the coordinate axes (rounding of the projection) is bracketed as a
+tessellated plan cover is, the sure part grown by less and cut to a
+narrower slab, the possible part grown by more and cut to a wider one, and
+the subject's band widening both ends.
+
 Coverage (`measure_coverage`) brackets every source's effect area between an
 inner region, inside the true one, and an outer region holding it. A grown
 effect is the source's footprint dilated by the range with a stated side

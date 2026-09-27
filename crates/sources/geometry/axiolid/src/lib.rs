@@ -13,6 +13,7 @@ pub(crate) mod containment;
 pub(crate) mod corridor_end;
 pub(crate) mod coverage;
 pub mod derived_relationships;
+pub(crate) mod elevation;
 pub mod envelope_membership;
 pub mod facade_area;
 mod face_distance;

@@ -1,15 +1,16 @@
 //! Coverage and conformity of one set of elements by another: how much of
 //! each architectural wall no structural wall stands under, in plan and in
-//! height.
+//! height, or in the wall's own elevation.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectBounds, ParameterDescriptor,
-    ParameterType, PlanArea, PlanAreaServiceHandle, PlanRectangle, PlanSpanServiceHandle,
-    ProximityProjection, ProximityServiceHandle, RuleCapability, RuleContext, VerticalExtent,
-    VerticalExtentError, VerticalExtentServiceHandle, projected_candidate_pairs,
+    CapabilityEvaluation, CompiledRule, Deviation, ElevationCover, ElevationRequest,
+    NotEvaluatedReason, ObjectBounds, ParameterDescriptor, ParameterType, PlanArea,
+    PlanAreaServiceHandle, PlanRectangle, PlanSpanServiceHandle, ProximityProjection,
+    ProximityServiceHandle, RuleCapability, RuleContext, VerticalExtent, VerticalExtentError,
+    VerticalExtentServiceHandle, projected_candidate_pairs,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension, Severity};
@@ -63,6 +64,26 @@ const NAME: &str = "counterpart-coverage";
 /// Without `axis_tolerance`, a perpendicular wall meeting the element
 /// within the horizontal tolerance overlaps it in plan and counts towards
 /// its height.
+///
+/// With `measure` `elevation`, plan and height are one check: the share of
+/// the element's elevation (its projection onto the vertical plane along the
+/// long axis of its footprint's least-area rectangle) that the counterparts'
+/// projections leave uncovered. A counterpart counts by its part within the
+/// element's depth across the axis, widened by the horizontal tolerance;
+/// its projection grows by the horizontal tolerance along the axis and the
+/// vertical tolerance in height. A wall under a full-height counterpart on
+/// one half and a half-height one on the other passes plan and height, but
+/// a quarter of its face is uncovered. An element without a long axis (a
+/// square, several least-area rectangles, a tessellated footprint) is not
+/// evaluated; both tolerances must be switched on.
+///
+/// `infill_counterparts` (elevation only) are the members of a frame, such
+/// as columns and beams: when more than `infill_above` (a share in `[0, 1)`,
+/// half by default) of the elevation is uncovered by the counterparts, the
+/// frame's infill (the convex hull of the members' projections, grown the
+/// same way) covers too, so a wall filling a column-and-beam bay passes.
+/// Whether the infill applies is decided on the share the counterparts
+/// leave; a share straddling `infill_above` is judged from both answers.
 pub struct CounterpartCoverage;
 
 /// A declared threshold and the severity of the band above it.
@@ -79,6 +100,11 @@ struct Config<'a> {
     /// Largest angle, in degrees, between compatible long axes; `None`
     /// counts counterparts at any angle.
     axis: Option<f64>,
+    /// Whether plan and height are measured together in the elevation.
+    elevation: bool,
+    /// Frame members whose infill covers, and the uncovered share above
+    /// which it does.
+    infill: Option<(&'a Selector, f64)>,
 }
 
 impl RuleCapability for CounterpartCoverage {
@@ -96,7 +122,14 @@ impl RuleCapability for CounterpartCoverage {
             ParameterDescriptor::optional("warning_above", ParameterType::Number),
             ParameterDescriptor::optional("error_above", ParameterType::Number),
             ParameterDescriptor::optional("axis_tolerance", ParameterType::Quantity),
+            ParameterDescriptor::optional("measure", ParameterType::String),
+            ParameterDescriptor::optional("infill_counterparts", ParameterType::Selector),
+            ParameterDescriptor::optional("infill_above", ParameterType::Number),
         ]
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -111,8 +144,27 @@ impl RuleCapability for CounterpartCoverage {
             Ok(services) => services,
             Err((reason, message)) => return refuse_all(&subjects, evaluation, &reason, &message),
         };
-        let counterparts = match Counterparts::find(context, &config, &services, &subjects) {
+        // A counterpart within the tolerance along and across the axis may
+        // lie that much farther away in plan.
+        let margin = config.horizontal.unwrap_or(0.0)
+            * if config.elevation {
+                std::f64::consts::SQRT_2
+            } else {
+                1.0
+            };
+        let found = |selector: &Selector| {
+            Counterparts::find(context, selector, margin, &services, &subjects)
+        };
+        let counterparts = match found(config.counterparts) {
             Ok(counterparts) => counterparts,
+            Err((reason, message)) => return refuse_all(&subjects, evaluation, &reason, &message),
+        };
+        let frame = match config
+            .infill
+            .map(|(selector, _)| found(selector))
+            .transpose()
+        {
+            Ok(frame) => frame,
             Err((reason, message)) => return refuse_all(&subjects, evaluation, &reason, &message),
         };
         let mut evaluation = evaluation;
@@ -130,16 +182,23 @@ impl RuleCapability for CounterpartCoverage {
                 config: &config,
                 services: &services,
                 counterparts: &counterparts,
+                frame: frame.as_ref(),
                 object: subject,
             }
             .checks();
             for check in checks {
                 match check {
                     Ok(None) => {}
-                    Ok(Some((severity, message, evidence, related))) => {
+                    Ok(Some(Graded {
+                        severity,
+                        message,
+                        evidence,
+                        related,
+                        deviation,
+                    })) => {
                         let mut found = finding(rule, &subject.id, message, evidence, related);
                         found.severity = severity;
-                        evaluation.push_finding(found);
+                        evaluation.push_graded_finding(found, deviation);
                     }
                     Err((reason, message)) => {
                         evaluation.push_object_not_evaluated(subject.id.clone(), reason, message);
@@ -212,13 +271,54 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
             "declare at least one of `info_above`, `warning_above` and `error_above`",
         ));
     }
+    let elevation = match parameters.string("measure")? {
+        None | Some("plan_and_height") => false,
+        Some("elevation") => true,
+        Some(other) => {
+            return Err(invalid(format!(
+                "measure `{other}` is unsupported; use `plan_and_height` or `elevation`"
+            )));
+        }
+    };
+    if elevation && (horizontal.is_none() || vertical.is_none()) {
+        return Err(invalid(
+            "the elevation is one check measured with both tolerances; neither may be negative",
+        ));
+    }
     Ok(Config {
         counterparts: parameters.required_selector("counterparts")?,
         horizontal,
         vertical,
         bands,
         axis: angle_tolerance(parameters, "axis_tolerance")?,
+        elevation,
+        infill: infill(parameters, elevation)?,
     })
+}
+
+/// The frame members whose infill covers, and the share above which.
+fn infill<'a>(
+    parameters: &Parameters<'a>,
+    elevation: bool,
+) -> Result<Option<(&'a Selector, f64)>, Unavailable> {
+    match (
+        parameters.selector("infill_counterparts")?,
+        parameters.number("infill_above")?,
+    ) {
+        (None, None) => Ok(None),
+        (None, Some(_)) => Err(invalid("`infill_above` needs `infill_counterparts`")),
+        (Some(_), _) if !elevation => Err(invalid(
+            "`infill_counterparts` applies only to `measure` `elevation`",
+        )),
+        (Some(selector), above) => {
+            let above = above.unwrap_or(0.5);
+            if (0.0..1.0).contains(&above) {
+                Ok(Some((selector, above)))
+            } else {
+                Err(invalid("infill_above must lie in [0, 1)"))
+            }
+        }
+    }
 }
 
 struct Services<'a> {
@@ -246,17 +346,18 @@ impl<'a> Services<'a> {
                 .get::<ProximityServiceHandle>()
                 .ok_or_else(|| missing("proximity"))?,
             extents: match config.vertical {
-                None => None,
-                Some(_) => Some(
+                Some(_) if !config.elevation => Some(
                     context
                         .services
                         .get::<VerticalExtentServiceHandle>()
                         .ok_or_else(|| missing("vertical-extent"))?,
                 ),
+                _ => None,
             },
-            rectangles: match config.axis {
-                None => None,
-                Some(_) => Some(rectangle_service(context)?),
+            rectangles: if config.axis.is_some() || config.elevation {
+                Some(rectangle_service(context)?)
+            } else {
+                None
             },
         })
     }
@@ -278,11 +379,12 @@ struct Counterparts {
 impl Counterparts {
     fn find(
         context: &RuleContext<'_>,
-        config: &Config<'_>,
+        selector: &Selector,
+        margin: f64,
         services: &Services<'_>,
         subjects: &[&Object],
     ) -> Result<Self, Unavailable> {
-        let (matched, selection) = select_objects(context, config.counterparts);
+        let (matched, selection) = select_objects(context, selector);
         let matched: BTreeSet<ObjectId> = matched.iter().map(|object| object.id.clone()).collect();
         let undecided: BTreeSet<ObjectId> = selection
             .not_evaluated_outcomes()
@@ -324,7 +426,7 @@ impl Counterparts {
             &subject_bounds,
             &counterpart_bounds,
             ProximityProjection::Horizontal,
-            config.horizontal.unwrap_or(0.0),
+            margin,
         )
         .map_err(|error| (NotEvaluatedReason::InvalidEvidence, error.to_string()))?;
         let mut near: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
@@ -351,8 +453,17 @@ enum Overlap {
     Maybe,
 }
 
+/// A finding graded into a band, with how far it misses the lowest.
+struct Graded {
+    severity: Severity,
+    message: String,
+    evidence: Vec<Evidence>,
+    related: Vec<ObjectId>,
+    deviation: Deviation,
+}
+
 /// The finding of one check, or `None` when it passes.
-type Check = Result<Option<(Severity, String, Vec<Evidence>, Vec<ObjectId>)>, Unavailable>;
+type Check = Result<Option<Graded>, Unavailable>;
 
 /// Counterparts that surely cover part of the subject, and those that may.
 struct Cover {
@@ -372,11 +483,15 @@ struct Subject<'s, 'a> {
     config: &'s Config<'s>,
     services: &'s Services<'a>,
     counterparts: &'s Counterparts,
+    frame: Option<&'s Counterparts>,
     object: &'s Object,
 }
 
 impl Subject<'_, '_> {
     fn checks(&self) -> Vec<Check> {
+        if self.config.elevation {
+            return vec![self.elevation()];
+        }
         let area = match footprint(self.context, &self.object.id) {
             Ok(area) => area,
             Err(error) => return vec![Err(error)],
@@ -612,8 +727,167 @@ impl Subject<'_, '_> {
                 label(&surely)
             );
         }
-        Ok(Some((severity, message, evidence, cover.least.clone())))
+        Ok(Some(Graded {
+            severity,
+            message,
+            evidence,
+            related: cover.least.clone(),
+            deviation: Deviation::above(lowest, lower, upper),
+        }))
     }
+
+    /// The near counterparts of `found` as a cover of the elevation: every
+    /// selected one surely, undecided ones and those only possibly
+    /// axis-compatible possibly. Axes are compared only when `own` holds
+    /// the element's rectangle.
+    fn elevation_cover(
+        &self,
+        found: &Counterparts,
+        own: Option<&Result<PlanRectangle, String>>,
+    ) -> Cover {
+        let mut cover = Cover {
+            least: Vec::new(),
+            most: Vec::new(),
+            unknown: Vec::new(),
+            axes: Vec::new(),
+            evidence: Vec::new(),
+        };
+        let blind = found.blind.len();
+        if blind > 0 {
+            cover.unknown.push(format!(
+                "{blind} counterpart(s) have no readable extent, so they may cover it"
+            ));
+        }
+        let near = found
+            .near
+            .get(&self.object.id)
+            .map_or(&[][..], Vec::as_slice);
+        for counterpart in near {
+            let sure = match (own, self.config.axis) {
+                (Some(own), Some(tolerance)) => {
+                    match self.compatible(own, counterpart, tolerance, &mut cover) {
+                        Tri::No => continue,
+                        Tri::Yes => true,
+                        Tri::Maybe => false,
+                    }
+                }
+                _ => true,
+            };
+            if sure && found.matched.contains(counterpart) {
+                cover.least.push(counterpart.clone());
+            }
+            cover.most.push(counterpart.clone());
+        }
+        cover
+    }
+
+    /// The uncovered share of the element's elevation.
+    fn elevation(&self) -> Check {
+        let (Some(rectangles), Some(along), Some(vertical)) = (
+            self.services.rectangles,
+            self.config.horizontal,
+            self.config.vertical,
+        ) else {
+            unreachable!("an elevation check has its tolerances and axes")
+        };
+        let own = rectangle(rectangles, &self.object.id)?;
+        let axis = own.long_axis().map_err(|why| {
+            (
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "elevation: {} has no long axis to measure its elevation along: {why}",
+                    self.object.id
+                ),
+            )
+        })?;
+        let axis = own.axes()[axis];
+        let mut cover = self.elevation_cover(self.counterparts, Some(&Ok(own.clone())));
+        cover.evidence.push(own.evidence().clone());
+        let measure = |objects: &[ObjectId], frame: &[ObjectId]| {
+            ElevationRequest::try_new(
+                self.object.id.clone(),
+                axis,
+                objects,
+                frame,
+                along,
+                vertical,
+            )
+            .and_then(|request| self.services.areas.measure_elevation_cover(&request))
+            .map_err(unavailable)
+        };
+        // The area left by the least cover bounds it from above, the area
+        // left by the most from below, and something unread may cover all.
+        let share = |least: &ElevationCover, most: &ElevationCover, unknown: bool| {
+            let upper = least.uncovered_square_metres().1;
+            let lower = if unknown {
+                0.0
+            } else {
+                most.uncovered_square_metres().0
+            };
+            (
+                (lower, upper),
+                ratio((lower, upper), least.area_square_metres()),
+            )
+        };
+        let least = measure(&cover.least, &[])?;
+        let most = if cover.most == cover.least {
+            least.clone()
+        } else {
+            measure(&cover.most, &[])?
+        };
+        cover
+            .evidence
+            .extend([least.evidence().clone(), most.evidence().clone()]);
+        let area = least.area_square_metres();
+        let (mut uncovered, mut shares) = share(&least, &most, !cover.unknown.is_empty());
+        let mut infill = String::new();
+        if let (Some(frame), Some((_, above))) = (self.frame, self.config.infill) {
+            let members = self.elevation_cover(frame, None);
+            let applies = Tri::of(shares.0 > above, shares.1 <= above);
+            if applies != Tri::No && !(members.most.is_empty() && members.unknown.is_empty()) {
+                let least_framed = measure(&cover.least, &members.least)?;
+                let most_framed = measure(&cover.most, &members.most)?;
+                cover.evidence.extend([
+                    least_framed.evidence().clone(),
+                    most_framed.evidence().clone(),
+                ]);
+                let unknown = !cover.unknown.is_empty() || !members.unknown.is_empty();
+                let (framed, framed_shares) = share(&least_framed, &most_framed, unknown);
+                cover.unknown.extend(members.unknown.iter().cloned());
+                if applies == Tri::Yes {
+                    (uncovered, shares) = (framed, framed_shares);
+                    cover.least.extend(members.least.iter().cloned());
+                    infill = format!(" or the infill of the frame of {}", named(&members.most));
+                } else {
+                    uncovered.0 = framed.0;
+                    shares.0 = framed_shares.0;
+                    infill = format!(
+                        " or, should more than {above} be uncovered (undecided), the infill of \
+                         the frame of {}",
+                        named(&members.most)
+                    );
+                }
+            }
+        }
+        let what = format!(
+            "elevation: {} of the elevation ({} of {} m²) lies outside every counterpart{infill}, \
+             grown by {along} m along its axis and {vertical} m in height",
+            shown(shares.0, shares.1),
+            shown(uncovered.0, uncovered.1),
+            shown(area.0, area.1),
+        );
+        let evidence = cover.evidence.clone();
+        self.grade(shares, what, evidence, &cover)
+    }
+}
+
+/// Object identities for a message, comma-separated.
+fn named(objects: &[ObjectId]) -> String {
+    objects
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn label(severity: &Severity) -> &'static str {

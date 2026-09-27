@@ -41,8 +41,8 @@ use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Ring};
 use axioval_engine::{
-    CoverageEvidence, CoverageRequest, GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService,
-    PlanBand,
+    CoverageEvidence, CoverageRequest, ElevationCover, ElevationRequest, GeometryFidelity,
+    PlanArea, PlanAreaError, PlanAreaService, PlanBand,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -117,6 +117,11 @@ impl AxiolidPlanAreaService {
             Some(None) => Err(format!("the void of {opening} was not measured")),
             None => Err(format!("{opening} has neither a body nor a void")),
         }
+    }
+
+    /// The source every measurement's evidence names.
+    pub(crate) fn source(&self) -> &SourceId {
+        &self.source
     }
 
     /// Whether the host declared the object bodiless.
@@ -520,5 +525,12 @@ impl PlanAreaService for AxiolidPlanAreaService {
         request: &CoverageRequest,
     ) -> Result<CoverageEvidence, PlanAreaError> {
         crate::coverage::measure(self, request)
+    }
+
+    fn measure_elevation_cover(
+        &self,
+        request: &ElevationRequest,
+    ) -> Result<ElevationCover, PlanAreaError> {
+        crate::elevation::measure(self, request)
     }
 }

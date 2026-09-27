@@ -7,17 +7,17 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    Bounds3, CapabilityEvaluation, CompiledRule, ElevationInterval, GeometryFidelity, ObjectBounds,
-    PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanLength, PlanRectangle,
-    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProximityError,
-    ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
-    RectangleOrientation, VerticalExtent, VerticalExtentError, VerticalExtentService,
-    VerticalExtentServiceHandle,
+    Bounds3, CapabilityEvaluation, CompiledRule, ElevationCover, ElevationInterval,
+    ElevationRequest, GeometryFidelity, ObjectBounds, PlanArea, PlanAreaError, PlanAreaService,
+    PlanAreaServiceHandle, PlanLength, PlanRectangle, PlanSpan, PlanSpanError, PlanSpanService,
+    PlanSpanServiceHandle, ProximityError, ProximityEvidence, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RectangleOrientation, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, Severity};
 use axioval_rules::CounterpartCoverage;
-use common::{Model, id, kind, number, rule, selector, source, unevaluated};
+use common::{Model, id, kind, number, rule, selector, source, string, unevaluated};
 
 const ID: &str = "axioval:capability.counterpart-coverage";
 
@@ -137,6 +137,77 @@ impl PlanAreaService for Boxes {
             outside(body.plan, &rects),
             slack,
             format!("uncovered:{object}"),
+        )
+    }
+
+    /// Boxes seen along a coordinate axis: a cover box counts when its
+    /// depth meets the subject's widened by the along growth, and a frame
+    /// by the box around its members, which is their hull for these cases.
+    fn measure_elevation_cover(
+        &self,
+        request: &ElevationRequest,
+    ) -> Result<ElevationCover, PlanAreaError> {
+        let along_x = request.axis()[0].abs() > 0.5;
+        let view = |body: &Body| {
+            let [x0, y0, x1, y1] = body.plan;
+            let (s, depth) = if along_x {
+                ((x0, x1), (y0, y1))
+            } else {
+                ((y0, y1), (x0, x1))
+            };
+            ([s.0, body.bottom, s.1, body.top], depth)
+        };
+        let subject = self.get(request.object())?;
+        let (face, depth) = view(&subject);
+        let (a, b) = (
+            request.along_growth_metres(),
+            request.vertical_growth_metres(),
+        );
+        let mut slack = subject.deviation;
+        let mut near = |objects: &[ObjectId]| -> Result<Vec<[f64; 4]>, PlanAreaError> {
+            let mut rects = Vec::new();
+            for member in objects {
+                let member = self.get(member)?;
+                slack += member.deviation;
+                let (rect, across) = view(&member);
+                if across.1 >= depth.0 - a && across.0 <= depth.1 + a {
+                    rects.push(rect);
+                }
+            }
+            Ok(rects)
+        };
+        let mut rects = near(request.cover())?;
+        let framed = near(request.frame())?;
+        if !framed.is_empty() {
+            rects.push(framed.iter().fold(
+                [
+                    f64::INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::NEG_INFINITY,
+                ],
+                |[s0, z0, s1, z1], r| [s0.min(r[0]), z0.min(r[1]), s1.max(r[2]), z1.max(r[3])],
+            ));
+        }
+        let grown: Vec<[f64; 4]> = rects
+            .iter()
+            .map(|r| [r[0] - a, r[1] - b, r[2] + a, r[3] + b])
+            .collect();
+        let whole = (face[2] - face[0]) * (face[3] - face[1]);
+        let open = outside(face, &grown);
+        let mut evidence = Evidence::exact(source(), format!("elevation:{}", request.object()));
+        evidence.exact = slack == 0.0;
+        ElevationCover::try_new(
+            request.object().clone(),
+            (
+                (whole - subject.deviation).max(0.0),
+                whole + subject.deviation,
+            ),
+            (
+                (open - slack).max(0.0),
+                (open + slack).min(whole + subject.deviation),
+            ),
+            evidence,
         )
     }
 }
@@ -701,4 +772,150 @@ fn an_element_without_proven_axes_leaves_every_cover_undecided() {
             .message()
             .contains("is tessellated")
     );
+}
+
+/// `w1` stands on a full-height structural wall along its left half and a
+/// half-height one along its right half.
+fn two_heights() -> Boxes {
+    Boxes::default()
+        .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+        .with("s1", [0.0, 0.0, 2.0, 0.2], 0.0, 3.0)
+        .with("s2", [2.0, 0.0, 4.0, 0.2], 0.0, 1.5)
+}
+
+fn elevation_rule(extra: Vec<(&'static str, ParameterValue)>) -> CompiledRule {
+    let mut tolerances = vec![
+        ("tolerance", metres(0.02)),
+        ("measure", string("elevation")),
+    ];
+    tolerances.extend(extra);
+    coverage_rule(tolerances)
+}
+
+#[test]
+fn two_heights_pass_plan_and_height_but_fail_in_elevation() {
+    let separate = run(
+        two_heights(),
+        &coverage_rule(vec![("tolerance", metres(0.02))]),
+    );
+    assert!(graded(&separate).is_empty(), "{:#?}", graded(&separate));
+    assert!(separate.not_evaluated_outcomes().is_empty());
+
+    let evaluation = run(two_heights(), &elevation_rule(vec![]));
+    let found = graded(&evaluation);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    // The upper right quarter, less 2 cm along and in height:
+    // 1.98 × 1.48 of 12 m².
+    assert_eq!(found[0].1, Severity::Info);
+    assert_eq!(
+        found[0].2,
+        "elevation: 0.2442 of the elevation (2.9304 of 12 m²) lies outside every \
+         counterpart, grown by 0.02 m along its axis and 0.02 m in height"
+    );
+    assert_eq!(evaluation.findings()[0].related, vec![id("s1"), id("s2")]);
+    let deviation = evaluation.deviation(0).expect("graded");
+    // 0.2442 over the lowest threshold of 0.01.
+    assert!((deviation.lower() - 23.42).abs() < 1e-6, "{deviation:?}");
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
+/// `w1` fills the bay of two columns and a beam (`bc1`, `bc2`, `bb`).
+fn bay() -> Boxes {
+    Boxes::default()
+        .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+        .with("bc1", [-0.3, 0.0, 0.0, 0.2], 0.0, 3.0)
+        .with("bc2", [4.0, 0.0, 4.3, 0.2], 0.0, 3.0)
+        .with("bb", [-0.3, 0.0, 4.3, 0.2], 3.0, 3.4)
+}
+
+#[test]
+fn a_wall_filling_a_frame_passes_with_infill_on() {
+    let without = graded(&run(bay(), &elevation_rule(vec![])));
+    assert_eq!(without.len(), 1, "{without:#?}");
+    assert_eq!(without[0].1, Severity::Error);
+
+    let evaluation = run(
+        bay(),
+        &elevation_rule(vec![("infill_counterparts", selector(kind("beam")))]),
+    );
+    assert!(graded(&evaluation).is_empty(), "{:#?}", graded(&evaluation));
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn the_infill_covers_only_above_its_share() {
+    // A structural wall under 60 % of w1 leaves less than half uncovered,
+    // so the frame's infill does not count.
+    let boxes = bay().with("s1", [0.0, 0.0, 2.4, 0.2], 0.0, 3.0);
+    let found = graded(&run(
+        boxes,
+        &elevation_rule(vec![("infill_counterparts", selector(kind("beam")))]),
+    ));
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0]
+            .2
+            .starts_with("elevation: 0.395 of the elevation (4.74 of 12 m²)"),
+        "{found:#?}"
+    );
+    // Above a share of a third it does.
+    let boxes = bay().with("s1", [0.0, 0.0, 2.4, 0.2], 0.0, 3.0);
+    let evaluation = run(
+        boxes,
+        &elevation_rule(vec![
+            ("infill_counterparts", selector(kind("beam"))),
+            ("infill_above", number(0.3)),
+        ]),
+    );
+    assert!(graded(&evaluation).is_empty(), "{:#?}", graded(&evaluation));
+}
+
+#[test]
+fn an_element_without_a_long_axis_has_no_elevation() {
+    let boxes = Boxes::default()
+        .with("w1", [0.0, 0.0, 1.0, 1.0], 0.0, 3.0)
+        .with("s1", [0.0, 0.0, 1.0, 1.0], 0.0, 3.0);
+    let evaluation = run(boxes, &elevation_rule(vec![]));
+    assert!(evaluation.findings().is_empty());
+    let outcomes = evaluation.not_evaluated_outcomes();
+    assert_eq!(outcomes.len(), 1, "{outcomes:?}");
+    assert!(
+        outcomes[0].message().contains("no long axis"),
+        "{outcomes:?}"
+    );
+}
+
+#[test]
+fn invalid_elevation_declarations_refuse_the_rule() {
+    for parameters in [
+        vec![("tolerance", metres(0.02)), ("measure", string("section"))],
+        vec![
+            ("measure", string("elevation")),
+            ("horizontal_tolerance", metres(0.02)),
+            ("vertical_tolerance", metres(-1.0)),
+        ],
+        vec![
+            ("tolerance", metres(0.02)),
+            ("infill_counterparts", selector(kind("beam"))),
+        ],
+        vec![
+            ("tolerance", metres(0.02)),
+            ("measure", string("elevation")),
+            ("infill_above", number(0.5)),
+        ],
+        vec![
+            ("tolerance", metres(0.02)),
+            ("measure", string("elevation")),
+            ("infill_counterparts", selector(kind("beam"))),
+            ("infill_above", number(1.0)),
+        ],
+    ] {
+        let evaluation = run(bay(), &coverage_rule(parameters));
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)],
+            "{:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+    }
 }

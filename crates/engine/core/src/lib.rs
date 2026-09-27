@@ -699,7 +699,10 @@ pub use object_frame::{
 pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
-pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand};
+pub use plan_area::{
+    ElevationCover, ElevationRequest, PlanArea, PlanAreaError, PlanAreaService,
+    PlanAreaServiceHandle, PlanBand,
+};
 pub use plan_region::ConvexPlanRegion;
 pub use plan_span::{
     CentrePlacement, PlanCentre, PlanLength, PlanRecess, PlanRecesses, PlanRectangle, PlanSection,

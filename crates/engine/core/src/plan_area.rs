@@ -16,6 +16,14 @@
 //! The covered area of a footprint is the union of several sources' effect
 //! areas clipped to it ([`crate::CoverageRequest`]): how much of a room the
 //! devices placed in it reach.
+//!
+//! The uncovered elevation area ([`ElevationRequest`]) is the same question
+//! asked in a vertical plane of the object's own: the object and its cover
+//! projected onto the plane through a stated plan axis and the vertical,
+//! each cover grown by a length along the axis and another in height. It is
+//! how much of a wall's face no structural wall stands behind, where plan
+//! and height checked apart pass a wall under a full-height counterpart on
+//! one half and a half-height one on the other.
 
 use std::sync::Arc;
 
@@ -154,6 +162,187 @@ impl PlanBand {
     }
 }
 
+/// A request for the area of an object's elevation that its cover leaves
+/// uncovered.
+///
+/// The elevation is the object projected onto the vertical plane through
+/// `axis` (a plan direction, normalised here): positions along the axis
+/// against heights. Only the part of each cover object within the object's
+/// own depth across the axis, widened by `along_growth_metres` on both
+/// sides, is projected; that projection is grown by `along_growth_metres`
+/// along the axis and `vertical_growth_metres` in height.
+///
+/// `frame` objects cover by the frame they form, not by their bodies: the
+/// convex hull of their projected parts (a column at each end and a beam
+/// over them enclose the bay between), grown the same way. An empty frame
+/// adds nothing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElevationRequest {
+    object: ObjectId,
+    axis: [f64; 2],
+    cover: Vec<ObjectId>,
+    frame: Vec<ObjectId>,
+    along_growth: f64,
+    vertical_growth: f64,
+}
+
+impl ElevationRequest {
+    /// The request, its cover and frame sorted and without repeats.
+    ///
+    /// Refuses an axis that is not a finite plan direction, a growth that is
+    /// negative or not finite, and an object in its own cover or frame.
+    pub fn try_new(
+        object: ObjectId,
+        axis: [f64; 2],
+        cover: &[ObjectId],
+        frame: &[ObjectId],
+        along_growth_metres: f64,
+        vertical_growth_metres: f64,
+    ) -> Result<Self, PlanAreaError> {
+        let length = axis[0].hypot(axis[1]);
+        if !length.is_finite() || length <= f64::EPSILON {
+            return Err(PlanAreaError::Unavailable(format!(
+                "an elevation needs a plan axis, not {axis:?}"
+            )));
+        }
+        for growth in [along_growth_metres, vertical_growth_metres] {
+            if !growth.is_finite() || growth < 0.0 {
+                return Err(PlanAreaError::Unavailable(format!(
+                    "a growth of {growth} m is not a non-negative length"
+                )));
+            }
+        }
+        if cover.contains(&object) || frame.contains(&object) {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{object} cannot cover its own elevation"
+            )));
+        }
+        let sorted = |objects: &[ObjectId]| {
+            let mut objects = objects.to_vec();
+            objects.sort();
+            objects.dedup();
+            objects
+        };
+        Ok(Self {
+            object,
+            axis: [axis[0] / length, axis[1] / length],
+            cover: sorted(cover),
+            frame: sorted(frame),
+            along_growth: along_growth_metres,
+            vertical_growth: vertical_growth_metres,
+        })
+    }
+
+    /// The object whose elevation is measured.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The unit plan direction the elevation runs along.
+    #[must_use]
+    pub fn axis(&self) -> [f64; 2] {
+        self.axis
+    }
+
+    /// The objects covering by their bodies, sorted.
+    #[must_use]
+    pub fn cover(&self) -> &[ObjectId] {
+        &self.cover
+    }
+
+    /// The objects covering by the frame they form, sorted.
+    #[must_use]
+    pub fn frame(&self) -> &[ObjectId] {
+        &self.frame
+    }
+
+    /// Growth along the axis, and the depth added across it on each side.
+    #[must_use]
+    pub fn along_growth_metres(&self) -> f64 {
+        self.along_growth
+    }
+
+    /// Growth in height.
+    #[must_use]
+    pub fn vertical_growth_metres(&self) -> f64 {
+        self.vertical_growth
+    }
+}
+
+/// The elevation area of an object and the part of it its cover leaves
+/// uncovered, each in square metres as an interval.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElevationCover {
+    object: ObjectId,
+    area: (f64, f64),
+    uncovered: (f64, f64),
+    evidence: Evidence,
+}
+
+impl ElevationCover {
+    /// The elevation of `object` with area in `area` and uncovered area in
+    /// `uncovered`, each `(lower, upper)`.
+    ///
+    /// Refuses bounds that are not finite, negative or reversed, an
+    /// uncovered area surely larger than the elevation, and evidence that
+    /// is exact unless both are points (or a point claimed inexact).
+    pub fn try_new(
+        object: ObjectId,
+        area: (f64, f64),
+        uncovered: (f64, f64),
+        evidence: Evidence,
+    ) -> Result<Self, PlanAreaError> {
+        let valid = |(lower, upper): (f64, f64)| {
+            lower.is_finite() && upper.is_finite() && lower >= 0.0 && lower <= upper
+        };
+        if !valid(area) || !valid(uncovered) || uncovered.0 > area.1 {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        #[allow(clippy::float_cmp)]
+        let exact = area.0 == area.1 && uncovered.0 == uncovered.1;
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(PlanAreaError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            area,
+            uncovered,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The elevation's area, `(lower, upper)` square metres.
+    #[must_use]
+    pub fn area_square_metres(&self) -> (f64, f64) {
+        self.area
+    }
+
+    /// The uncovered part of it, `(lower, upper)` square metres.
+    #[must_use]
+    pub fn uncovered_square_metres(&self) -> (f64, f64) {
+        self.uncovered
+    }
+
+    /// Whether both areas are known exactly.
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
+        self.evidence.exact
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures plan-projected areas of model objects.
 pub trait PlanAreaService: Send + Sync + 'static {
     /// The area of `object`'s footprint: its geometry projected onto the
@@ -213,6 +402,21 @@ pub trait PlanAreaService: Send + Sync + 'static {
         Err(PlanAreaError::Unavailable(format!(
             "this plan-area service does not measure the coverage of {}",
             request.subject()
+        )))
+    }
+
+    /// The elevation of the request's object and the part of it the
+    /// request's cover and frame, grown, leave uncovered.
+    ///
+    /// A service that does not measure elevations refuses; it never answers
+    /// with the whole elevation or with zero.
+    fn measure_elevation_cover(
+        &self,
+        request: &ElevationRequest,
+    ) -> Result<ElevationCover, PlanAreaError> {
+        Err(PlanAreaError::Unavailable(format!(
+            "this plan-area service does not measure the elevation of {}",
+            request.object()
         )))
     }
 }
@@ -312,6 +516,20 @@ impl PlanAreaServiceHandle {
     ) -> Result<CoverageEvidence, PlanAreaError> {
         let answer = self.0.measure_coverage(request)?;
         check_answer(request, &answer)?;
+        Ok(answer)
+    }
+
+    /// The elevation of the request's object and its uncovered part.
+    ///
+    /// An answer about another object is refused.
+    pub fn measure_elevation_cover(
+        &self,
+        request: &ElevationRequest,
+    ) -> Result<ElevationCover, PlanAreaError> {
+        let answer = self.0.measure_elevation_cover(request)?;
+        if answer.object() != request.object() {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
         Ok(answer)
     }
 }
@@ -456,5 +674,108 @@ mod tests {
                 "{lower} {upper}"
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn an_elevation_request_is_normalised_ordered_and_never_covers_itself() {
+        use super::ElevationRequest;
+        let request = ElevationRequest::try_new(
+            id("a"),
+            [0.0, 2.0],
+            &[id("c"), id("b"), id("c")],
+            &[],
+            0.1,
+            0.2,
+        )
+        .unwrap();
+        assert_eq!(request.axis(), [0.0, 1.0]);
+        assert_eq!(request.cover(), [id("b"), id("c")]);
+        assert!(request.frame().is_empty());
+        assert_eq!(
+            (
+                request.along_growth_metres(),
+                request.vertical_growth_metres()
+            ),
+            (0.1, 0.2)
+        );
+        for (axis, along, vertical) in [
+            ([0.0, 0.0], 0.0, 0.0),
+            ([f64::NAN, 1.0], 0.0, 0.0),
+            ([1.0, 0.0], -0.1, 0.0),
+            ([1.0, 0.0], 0.0, f64::INFINITY),
+        ] {
+            assert!(
+                ElevationRequest::try_new(id("a"), axis, &[], &[], along, vertical).is_err(),
+                "{axis:?} {along} {vertical}"
+            );
+        }
+        assert!(ElevationRequest::try_new(id("a"), [1.0, 0.0], &[id("a")], &[], 0.0, 0.0).is_err());
+        assert!(ElevationRequest::try_new(id("a"), [1.0, 0.0], &[], &[id("a")], 0.0, 0.0).is_err());
+    }
+
+    #[test]
+    fn an_elevation_cover_must_be_coherent_and_about_the_requested_object() {
+        use super::ElevationCover;
+        let mut approximate = exact();
+        approximate.exact = false;
+        assert!(ElevationCover::try_new(id("a"), (2.0, 2.0), (1.0, 1.0), exact()).is_ok());
+        assert!(
+            ElevationCover::try_new(id("a"), (2.0, 2.0), (1.0, 1.5), approximate.clone()).is_ok()
+        );
+        assert_eq!(
+            ElevationCover::try_new(id("a"), (2.0, 2.0), (1.0, 1.5), exact()),
+            Err(PlanAreaError::InexactEvidence)
+        );
+        assert_eq!(
+            ElevationCover::try_new(id("a"), (2.0, 2.0), (1.0, 1.0), approximate.clone()),
+            Err(PlanAreaError::InexactEvidence)
+        );
+        for (area, uncovered) in [
+            ((2.0, 1.0), (0.0, 0.0)),
+            ((1.0, 1.0), (1.5, 1.5)),
+            ((1.0, 1.0), (-0.5, 0.5)),
+            ((1.0, f64::NAN), (0.0, 0.0)),
+        ] {
+            assert_eq!(
+                ElevationCover::try_new(id("a"), area, uncovered, approximate.clone()),
+                Err(PlanAreaError::InvalidMeasurement),
+                "{area:?} {uncovered:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_elevation_about_another_object_or_unmeasured_is_refused() {
+        use super::{ElevationCover, ElevationRequest};
+        struct Elsewhere;
+        impl PlanAreaService for Elsewhere {
+            fn measure_footprint(&self, _: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+                PlanArea::try_new(1.0, 1.0, exact())
+            }
+            fn measure_plan_overlap(
+                &self,
+                _: &ObjectId,
+                _: &ObjectId,
+            ) -> Result<PlanArea, PlanAreaError> {
+                PlanArea::try_new(0.0, 0.0, exact())
+            }
+            fn measure_elevation_cover(
+                &self,
+                _: &ElevationRequest,
+            ) -> Result<ElevationCover, PlanAreaError> {
+                ElevationCover::try_new(id("b"), (1.0, 1.0), (0.0, 0.0), exact())
+            }
+        }
+        let request = ElevationRequest::try_new(id("a"), [1.0, 0.0], &[], &[], 0.0, 0.0).unwrap();
+        assert_eq!(
+            PlanAreaServiceHandle::new(Arc::new(Elsewhere)).measure_elevation_cover(&request),
+            Err(PlanAreaError::InvalidMeasurement)
+        );
+        assert!(matches!(
+            PlanAreaServiceHandle::new(Arc::new(FootprintsOnly::default()))
+                .measure_elevation_cover(&request),
+            Err(PlanAreaError::Unavailable(_))
+        ));
     }
 }

@@ -4439,6 +4439,63 @@ fn with_geometry_walls_are_graded_by_how_much_structure_stands_under_them() {
     );
 }
 
+#[test]
+fn with_geometry_a_wall_over_two_heights_of_structure_is_found_only_in_elevation() {
+    let case = Case::new("geometry-counterpart-elevation");
+    // A 4 m wall over a full-height structural wall along its left half and
+    // a 1.5 m high one along its right half.
+    case.write(
+        "arch.ifc",
+        &walls_file(&[(10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000A16")]),
+    );
+    case.write(
+        "full.ifc",
+        &walls_file(&[(10, 1.0, 0.0, 2.0, 0.2, "0000000000000000000F16")]),
+    );
+    case.write(
+        "half.ifc",
+        &walls_of_height(&[(10, 3.0, 0.0, 2.0, 0.2, "0000000000000000000H16")], 1.5),
+    );
+    let walls_of = |discipline: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("wall"), {"kind": "discipline", "value": discipline},
+        ]})
+    };
+    let check = |measure: &str| {
+        case.geometry_rule_over(
+            &[
+                "arch.ifc:architecture",
+                "full.ifc:structure",
+                "half.ifc:structure",
+            ],
+            &[],
+            "axioval:capability.counterpart-coverage",
+            &registry_signature("axioval:capability.counterpart-coverage"),
+            walls_of("architecture"),
+            json!({
+                "counterparts": {"type": "selector", "value": walls_of("structure")},
+                "tolerance": {"type": "quantity", "value": 0.02, "unit": "m"},
+                "measure": {"type": "string", "value": measure},
+                "info_above": {"type": "number", "value": 0.01},
+                "warning_above": {"type": "number", "value": 0.25},
+            }),
+        )
+    };
+    let (output, result) = check("plan_and_height");
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    let (output, result) = check("elevation");
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    // The upper right quarter, less the 2 cm tolerance each way.
+    assert!(
+        findings[0]
+            .1
+            .starts_with("elevation: 0.2442 of the elevation (2.9304 of 12 m²)"),
+        "{findings:#?}"
+    );
+}
+
 /// A side profile extruded 1.2 m across, as instances `#first` to
 /// `#first + 8` and its corners from `#first + 10`: `points` (along, up)
 /// stand in the vertical plane through `origin` along world x and are swept

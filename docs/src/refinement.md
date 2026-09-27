@@ -55,3 +55,36 @@ These capabilities grade their findings:
 
 Several failing values in one finding (risers of one flight) grade by the
 one missing most.
+
+## Severity overrides
+
+A finding may take another severity depending on the objects it involves:
+a clash is a warning in general but an error when a load-bearing wall is
+involved. A rule instance declares `severityOverrides`, each a selector and
+a severity:
+
+```json
+"severity": "warning",
+"severityOverrides": [
+  {"selector": {"kind": "property", "propertySet": "t.Pset", "property": "t.LoadBearing",
+                "operator": "equals", "value": {"type": "boolean", "value": true}},
+   "severity": "error"}
+]
+```
+
+An override holds for a finding when its selector selects the finding's
+subject or any of its related objects. Overrides are tried in order and the
+first that holds decides, over the severity the rule and its bands gave; the
+property facts the selector read are cited in the finding's evidence. An
+override that cannot be decided for an involved object (its property cannot
+be read, its concept is unbound) may or may not hold: when that could change
+the severity, the finding is reported not evaluated, naming the severities it
+may take and why, never given the rule's severity by default. When every
+possibility agrees, the severity stands.
+
+Overrides are applied by the host's outcome refiner
+(`axioval_engine::OutcomeRefiner`, installed with
+`CapabilityRegistry::with_refiner`), since evaluating a selector reads the
+model. `axioval_rules::register_builtins` installs `axioval_rules::Refiner`.
+A rule declaring overrides against a registry without a refiner, or naming a
+concept no definition package declares, fails compilation.

@@ -60,6 +60,7 @@ mod property_requirements;
 mod property_rules;
 mod property_value;
 mod recess_width;
+mod refine;
 mod relative_count;
 mod same_container;
 mod selection;
@@ -132,6 +133,7 @@ pub use property_rules::{
 };
 pub use property_value::PropertyValueConstraint;
 pub use recess_width::RecessWidth;
+pub use refine::Refiner;
 pub use relative_count::RelativeCount;
 pub use same_container::SameContainer;
 pub use shelf_capacity::ShelfCapacity;
@@ -150,7 +152,9 @@ pub use wall_spacing::WallSpacing;
 /// syntax, for a property selector's `matches` operator.
 pub use xsd_pattern::translate as translate_xsd_pattern;
 
-/// Registers all maintained built-in capabilities into a host registry.
+/// Registers all maintained built-in capabilities into a host registry, and
+/// the [`Refiner`] that applies what rule instances declare about their
+/// outcomes.
 ///
 /// # Errors
 ///
@@ -221,4 +225,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(AllowedProfile))
         .and_then(|registry| registry.register(OpeningZone))
         .and_then(|registry| registry.register(OpeningArea))
+        .map(|registry| registry.with_refiner(Refiner))
 }

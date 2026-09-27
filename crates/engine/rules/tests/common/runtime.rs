@@ -8,10 +8,11 @@ use std::sync::Arc;
 
 use axioval_engine::{
     CapabilityRegistry, CompleteRelationshipSelection, EngineError, EvidenceSession, ExecutionPlan,
-    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
-    RelationshipSelectionServiceHandle, Runtime, SourceSnapshot, compile,
+    ParameterType, PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, Runtime, SourceSnapshot,
+    compile,
 };
 use axioval_ir::{DefinitionPackage, Project, Report, RuleSetPackage};
 use serde_json::{Map, Value, json};
@@ -90,7 +91,7 @@ fn concept(name: &str) -> (String, Value) {
 }
 
 /// The definition `t.def.<suffix>` of every capability in `capabilities`,
-/// its signature taken from the registry, and the concepts `t.<name>` of
+/// its signature (a table's columns too) taken from the registry, and the concepts `t.<name>` of
 /// the named object types, properties and property sets.
 pub fn definitions(
     registry: &CapabilityRegistry,
@@ -107,15 +108,27 @@ pub fn definitions(
             .parameters()
             .into_iter()
             .map(|descriptor| {
-                (
-                    descriptor.name.clone(),
-                    json!({
-                        "id": descriptor.name,
-                        "name": text(&descriptor.name),
-                        "kind": descriptor.parameter_type.package_kind(),
-                        "required": descriptor.required,
-                    }),
-                )
+                let mut declared = json!({
+                    "id": descriptor.name,
+                    "name": text(&descriptor.name),
+                    "kind": descriptor.parameter_type.package_kind(),
+                    "required": descriptor.required,
+                });
+                // A table declares its columns as the capability does.
+                if let ParameterType::Table(columns) = &descriptor.parameter_type {
+                    declared["columns"] = columns
+                        .iter()
+                        .map(|column| {
+                            json!({
+                                "id": column.id,
+                                "name": text(column.id),
+                                "kind": column.kind.as_str(),
+                                "required": column.required,
+                            })
+                        })
+                        .collect();
+                }
+                (descriptor.name.clone(), declared)
             })
             .collect();
         let id = definition(capability);

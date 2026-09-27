@@ -7,7 +7,9 @@
 //! parameter of its own.
 
 use axioval_ir::Severity;
-use axioval_ir::contract::{self as schema, SeverityBand};
+use axioval_ir::contract::{self as schema, SeverityBand, SeverityOverride};
+
+use crate::{CapabilityEvaluation, CompiledRule, RuleContext};
 
 /// How far a measured value misses the bound it fails, relative to that
 /// bound, as an interval sure to hold the exact relative deviation.
@@ -106,14 +108,45 @@ impl Deviation {
 pub struct RuleRefinement {
     /// Severity bands over the relative deviation, ascending.
     pub severity_bands: Vec<SeverityBand>,
+    /// Severities chosen by the objects a finding involves, first match
+    /// first.
+    pub severity_overrides: Vec<SeverityOverride>,
 }
 
 impl RuleRefinement {
     /// Whether the rule declares nothing.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.severity_bands.is_empty()
+        self.severity_bands.is_empty() && self.severity_overrides.is_empty()
     }
+
+    /// Whether applying the rule's declarations needs an [`OutcomeRefiner`]:
+    /// everything but severity bands reads the model.
+    #[must_use]
+    pub fn needs_refiner(&self) -> bool {
+        !self.severity_overrides.is_empty()
+    }
+}
+
+/// Trusted code that applies what a rule instance declares about its
+/// outcomes and that needs the model to apply: selectors, properties and
+/// relationships (severity overrides).
+///
+/// The runtime calls it after the capability ran and after severity bands
+/// were applied, for every rule the plan refines. The host installs it with
+/// the capabilities ([`crate::CapabilityRegistry::with_refiner`]); a rule
+/// needing one compiles only against a registry that has one, so no
+/// declaration is ever silently ignored.
+pub trait OutcomeRefiner: Send + Sync {
+    /// Refines one rule's outcomes in place. What cannot be decided becomes
+    /// a not-evaluated outcome, never a default.
+    fn refine(
+        &self,
+        context: &RuleContext<'_>,
+        rule: &CompiledRule,
+        refinement: &RuleRefinement,
+        evaluation: &mut CapabilityEvaluation,
+    );
 }
 
 /// Checks a rule's bands: each threshold finite and positive, strictly
@@ -146,7 +179,7 @@ pub(crate) fn grade(
     let mut from = 0.0;
     for band in bands {
         if deviation.lower < band.below && deviation.upper >= from {
-            reached.push(severity(&band.severity));
+            reached.push(report_severity(&band.severity));
         }
         from = band.below;
     }
@@ -165,7 +198,7 @@ pub(crate) fn grade(
 
 /// A package severity as a report severity.
 #[must_use]
-pub fn severity(severity: &schema::Severity) -> Severity {
+pub fn report_severity(severity: &schema::Severity) -> Severity {
     match severity {
         schema::Severity::Error => Severity::Error,
         schema::Severity::Warning => Severity::Warning,

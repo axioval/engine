@@ -104,6 +104,26 @@ pub struct RuleInstance {
     /// keeps the rule's severity and is omitted when serialized.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub severity_bands: Vec<SeverityBand>,
+    /// Severities chosen by the objects a finding involves; see
+    /// [`SeverityOverride`]. Empty keeps the severity and is omitted when
+    /// serialized.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub severity_overrides: Vec<SeverityOverride>,
+}
+
+/// One entry of a rule's `severityOverrides`: a finding whose subject or any
+/// related object `selector` selects takes `severity`.
+///
+/// Entries are tried in order and the first that holds decides, over the
+/// severity the rule (and its bands) gave. An entry that cannot be decided
+/// for an involved object leaves the finding's severity undecided whenever
+/// it could change it: the finding is then reported not evaluated, never
+/// given a default.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SeverityOverride {
+    pub selector: Selector,
+    pub severity: Severity,
 }
 
 /// One band of a rule's `severityBands`: a finding whose relative deviation

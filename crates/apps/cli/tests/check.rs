@@ -650,6 +650,48 @@ impl Case {
     }
 }
 
+/// A clash that is a warning in general is an error where a selected wall
+/// is involved.
+#[test]
+fn with_geometry_a_severity_override_raises_a_clash_involving_a_wall() {
+    let case = Case::new("clash-severity-override");
+    let clash = |extra: &Value| {
+        case.write("model.ifc", &crossing_walls());
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[],
+            (
+                "axioval:capability.clash",
+                &registry_signature("axioval:capability.clash"),
+            ),
+            entity("wall"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+            }),
+            extra,
+            &[],
+        )
+    };
+    let severities = |result: &Value| -> Vec<String> {
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| finding["severity"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let (output, result) = clash(&json!({"severity": "warning"}));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(severities(&result), ["warning"], "{result:#}");
+    let (output, result) = clash(&json!({
+        "severity": "warning",
+        "severityOverrides": [{"selector": entity("wall"), "severity": "error"}],
+    }));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(severities(&result), ["error"], "{result:#}");
+}
+
 /// The two walls cross 0.2 m wide in plan and 3 m high. Axis tolerances
 /// below that keep the clash; one above it hides it.
 #[test]
@@ -2353,6 +2395,30 @@ impl Case {
         applicability: Value,
         parameters: Value,
     ) -> (Output, Value) {
+        self.geometry_rule_with(
+            models,
+            types,
+            (capability, signature),
+            applicability,
+            parameters,
+            &json!({}),
+            &[],
+        )
+    }
+
+    /// As [`Case::geometry_rule_over`], with `extra` fields on the rule
+    /// (such as `severityOverrides`) and further `check` arguments.
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+    fn geometry_rule_with(
+        &self,
+        models: &[&str],
+        types: &[(&str, &str)],
+        (capability, signature): (&str, &Value),
+        applicability: Value,
+        parameters: Value,
+        extra: &Value,
+        args: &[&str],
+    ) -> (Output, Value) {
         let definitions = self.definitions(true);
         let mut definitions: Value =
             serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
@@ -2429,6 +2495,9 @@ impl Case {
         rule["definitionId"] = json!("axioval:example.under-test");
         rule["parameters"] = parameters;
         rule["applicability"]["groups"]["walls"]["selector"] = applicability;
+        for (field, value) in extra.as_object().into_iter().flatten() {
+            rule[field] = value.clone();
+        }
         let definitions = self.write("definitions.json", &definitions.to_string());
         let ruleset = self.write("ruleset.json", &ruleset.to_string());
         let saved = self.path("result.json");
@@ -2443,6 +2512,7 @@ impl Case {
             .arg("--ruleset")
             .arg(ruleset)
             .args(["--geometry", "--report", saved.to_str().unwrap()])
+            .args(args)
             .output()
             .unwrap();
         let result = std::fs::read_to_string(&saved)

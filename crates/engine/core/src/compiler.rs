@@ -56,7 +56,7 @@ pub fn compile(
         }
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
-        let refinement = refinement(registry, rule, &definition.capability)?;
+        let refinement = refinement(registry, &concepts, rule, &definition.capability)?;
         if !refinement.is_empty() {
             refinements.insert(id.clone(), refinement);
         }
@@ -89,6 +89,7 @@ pub fn compile(
 /// What `rule` asks of its outcomes, checked against the capability.
 fn refinement(
     registry: &CapabilityRegistry,
+    concepts: &ConceptCatalog,
     rule: &RuleInstance,
     capability: &str,
 ) -> Result<RuleRefinement, EngineError> {
@@ -107,9 +108,21 @@ fn refinement(
             )));
         }
     }
-    Ok(RuleRefinement {
+    for entry in &rule.severity_overrides {
+        validate_selector_concepts(concepts, &rule.id, &entry.selector)?;
+    }
+    let refinement = RuleRefinement {
         severity_bands: rule.severity_bands.clone(),
-    })
+        severity_overrides: rule.severity_overrides.clone(),
+    };
+    if refinement.needs_refiner() && registry.refiner().is_none() {
+        return Err(invalid(
+            "the rule refines its outcomes by reading the model, and the host registered no \
+             outcome refiner"
+                .into(),
+        ));
+    }
+    Ok(refinement)
 }
 
 /// Separates a ruleset's package ID from a rule ID in a qualified rule ID.

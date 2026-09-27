@@ -392,6 +392,22 @@ impl CapabilityEvaluation {
             finding.severity = severity;
         }
     }
+    /// Removes and returns every finding, for an [`OutcomeRefiner`] to put
+    /// back refined; deviations are dropped with them.
+    pub fn take_findings(&mut self) -> Vec<Finding> {
+        self.graded.clear();
+        std::mem::take(&mut self.findings)
+    }
+    /// Adds a not-evaluated outcome about `scope`: an object, a source, or
+    /// the rule as a whole.
+    pub fn push_not_evaluated_about(
+        &mut self,
+        scope: Scope,
+        reason: NotEvaluatedReason,
+        message: impl Into<String>,
+    ) {
+        self.push_unavailable(scope, reason, message);
+    }
     /// Adds a rule-level not-evaluated outcome.
     pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
         self.push_unavailable(Scope::Project, reason, message);
@@ -459,6 +475,7 @@ pub trait RuleCapability: Send + Sync {
 #[derive(Clone, Default)]
 pub struct CapabilityRegistry {
     capabilities: BTreeMap<String, Arc<dyn RuleCapability>>,
+    refiner: Option<Arc<dyn OutcomeRefiner>>,
 }
 impl CapabilityRegistry {
     /// Creates an empty registry.
@@ -483,6 +500,17 @@ impl CapabilityRegistry {
     /// Gets trusted code by exact ID.
     pub fn get(&self, id: &str) -> Option<&Arc<dyn RuleCapability>> {
         self.capabilities.get(id)
+    }
+    /// Installs the trusted code that applies rule refinements reading the
+    /// model, replacing any installed before.
+    #[must_use]
+    pub fn with_refiner<R: OutcomeRefiner + 'static>(mut self, refiner: R) -> Self {
+        self.refiner = Some(Arc::new(refiner));
+        self
+    }
+    /// The installed outcome refiner, if any.
+    pub fn refiner(&self) -> Option<&Arc<dyn OutcomeRefiner>> {
+        self.refiner.as_ref()
     }
 }
 
@@ -665,7 +693,7 @@ pub use proximity::{
     ProximityServiceHandle, RegionDistanceEvidence, RegionDistanceRequest, VerticalDirection,
     VolumeInterval,
 };
-pub use refinement::{Deviation, RuleRefinement};
+pub use refinement::{Deviation, OutcomeRefiner, RuleRefinement, report_severity};
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
@@ -884,6 +912,9 @@ impl Runtime {
             let mut evaluation = capability.evaluate(&context, &rule);
             if let Some(refinement) = plan.refinements.get(&rule_id) {
                 evaluation.grade(&refinement.severity_bands);
+                if let Some(refiner) = self.registry.refiner() {
+                    refiner.refine(&context, &rule, refinement, &mut evaluation);
+                }
             }
             findings.extend(evaluation.findings);
             // The compiled rule is the table's identity, whatever the capability named.

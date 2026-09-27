@@ -9,11 +9,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityRegistry, EngineError, EvidenceSession, PlanArea, PlanAreaError, PlanAreaService,
-    PlanAreaServiceHandle,
+    Bounds3, CapabilityRegistry, EngineError, EvidenceSession, GeometryFidelity, LengthInterval,
+    ObjectBounds, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, ProximityError,
+    ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
 };
 use axioval_ir::{Evidence, ObjectId, Report, Severity};
-use axioval_rules::register_builtins;
+use axioval_rules::{Clash, register_builtins};
 use common::runtime::{definitions, entity, plan, rule, run, session, snapshot};
 use common::{Model, id, source};
 use serde_json::{Value, json};
@@ -174,6 +175,191 @@ mod severity_bands {
         assert!(matches!(
             plan(&registry, &definitions, vec![descending]),
             Err(EngineError::InvalidRefinement { .. })
+        ));
+    }
+}
+
+/// Unit boxes along x: every pair overlapping in x clashes by its overlap.
+struct Boxes(BTreeMap<ObjectId, f64>);
+
+impl ProximityService for Boxes {
+    fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        let x = *self.0.get(object).ok_or(ProximityError::Unavailable)?;
+        ObjectBounds::try_new(
+            object.clone(),
+            Bounds3::try_new([x, 0.0, 0.0], [x + 1.0, 1.0, 1.0])?,
+            GeometryFidelity::Exact,
+        )
+    }
+
+    fn measure_proximity(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProximityEvidence, ProximityError> {
+        let gap = (self.0[request.subject()] - self.0[request.counterpart()]).abs() - 1.0;
+        ProximityEvidence::try_new(
+            request.clone(),
+            gap.max(0.0),
+            Some((-gap).max(0.0)),
+            0.0,
+            None,
+            GeometryFidelity::Exact,
+            Evidence::exact(
+                source(),
+                format!("proximity:{}:{}", request.subject(), request.counterpart()),
+            ),
+        )?
+        .with_hausdorff(LengthInterval::try_new(1.0, 1.0).unwrap())
+    }
+}
+
+mod severity_overrides {
+    use super::*;
+
+    const CLASH: &str = "axioval:capability.clash";
+
+    /// Ducts `d1`, `d2` and `d3` each run through one wall: `w1` is load
+    /// bearing, `w2` is not, and whether `w3` is cannot be read.
+    fn ducts_and_walls() -> EvidenceSession {
+        let model = Model::default()
+            .object("d1", "duct")
+            .object("d2", "duct")
+            .object("d3", "duct")
+            .object("w1", "wall")
+            .object("w2", "wall")
+            .object("w3", "wall")
+            .text("w1", "Pset", "LoadBearing", "yes")
+            .text("w2", "Pset", "LoadBearing", "no")
+            .unreadable("w3");
+        let boxes = Boxes(BTreeMap::from([
+            (id("d1"), 0.0),
+            (id("w1"), 0.5),
+            (id("d2"), 5.0),
+            (id("w2"), 5.5),
+            (id("d3"), 10.0),
+            (id("w3"), 10.5),
+        ]));
+        session(model)
+            .with_host_service(ProximityServiceHandle::new(Arc::new(boxes)), &[snapshot()])
+            .unwrap()
+    }
+
+    fn load_bearing() -> Value {
+        json!({
+            "kind": "property", "propertySet": "t.Pset", "property": "t.LoadBearing",
+            "operator": "equals", "value": {"type": "string", "value": "yes"},
+        })
+    }
+
+    fn check(extra: Value) -> Result<Report, EngineError> {
+        let registry = registry();
+        let definitions = definitions(
+            &registry,
+            &[CLASH],
+            &["duct", "wall"],
+            &["LoadBearing"],
+            &["Pset"],
+        );
+        let rule = rule(
+            "ducts-through-walls",
+            CLASH,
+            "warning",
+            entity("duct"),
+            json!({ "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 } }),
+            extra,
+        );
+        let plan = plan(&registry, &definitions, vec![rule])?;
+        run(registry, plan, &ducts_and_walls(), |runtime| runtime)
+    }
+
+    #[test]
+    fn a_clash_with_a_load_bearing_wall_is_an_error() {
+        let report = check(json!({ "severityOverrides": [
+            { "selector": load_bearing(), "severity": "error" },
+        ] }))
+        .unwrap();
+        assert_eq!(
+            graded(&report),
+            [
+                ("d1".into(), Severity::Error),
+                ("d2".into(), Severity::Warning),
+            ]
+        );
+        // The wall's load bearing is cited beside the clash.
+        assert!(
+            report.findings()[0]
+                .evidence
+                .iter()
+                .any(|evidence| evidence.locator.contains("LoadBearing"))
+        );
+        // Whether `w3` bears load is unknown: the clash stands, its severity
+        // does not, and it is never defaulted to the rule's.
+        let [undecided] = report.not_evaluated() else {
+            panic!("{report:?}");
+        };
+        assert_eq!(undecided.object_id(), Some(&id("d3")));
+        assert!(
+            undecided.message.contains("error or warning"),
+            "{}",
+            undecided.message
+        );
+    }
+
+    #[test]
+    fn without_overrides_every_clash_keeps_the_rule_severity() {
+        let report = check(json!({})).unwrap();
+        assert_eq!(
+            graded(&report),
+            [
+                ("d1".into(), Severity::Warning),
+                ("d2".into(), Severity::Warning),
+                ("d3".into(), Severity::Warning),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_undecided_override_that_cannot_change_the_severity_decides_nothing() {
+        // Whether or not `w3` bears load, `d3` is a warning.
+        let report = check(json!({ "severityOverrides": [
+            { "selector": load_bearing(), "severity": "warning" },
+        ] }))
+        .unwrap();
+        assert_eq!(
+            graded(&report),
+            [
+                ("d1".into(), Severity::Warning),
+                ("d2".into(), Severity::Warning),
+                ("d3".into(), Severity::Warning),
+            ]
+        );
+        assert!(report.not_evaluated().is_empty());
+    }
+
+    #[test]
+    fn overrides_need_a_refiner_and_known_concepts() {
+        let registry = CapabilityRegistry::new().register(Clash).unwrap();
+        let definitions = definitions(&registry, &[CLASH], &["duct", "wall"], &[], &[]);
+        let overriding = |selector: Value| {
+            rule(
+                "r",
+                CLASH,
+                "warning",
+                entity("duct"),
+                json!({ "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 } }),
+                json!({ "severityOverrides": [{ "selector": selector, "severity": "error" }] }),
+            )
+        };
+        assert!(matches!(
+            plan(&registry, &definitions, vec![overriding(entity("wall"))]),
+            Err(EngineError::InvalidRefinement { .. })
+        ));
+        let registry = super::registry();
+        assert!(matches!(
+            plan(&registry, &definitions, vec![overriding(entity("column"))]),
+            Err(EngineError::UnknownConcept { .. })
         ));
     }
 }

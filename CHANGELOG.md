@@ -66,6 +66,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   spaces' bodies through the proximity service (`minimum_3d`), judged pair
   by pair as `straight` is. Two long rooms side by side, their centres 8 m
   apart and their bodies 0.2 m, meet a 1 m maximum.
+- **Severity overrides.** (#91) A rule instance may declare
+  `severityOverrides`: selectors, each with a severity, tried in order
+  against a finding's subject and related objects; the first that holds
+  decides, and the facts it read are cited. An override that cannot be
+  decided and could change the severity leaves the finding not
+  evaluated, never defaulted. Overrides are applied by the new
+  `OutcomeRefiner` hook (`CapabilityRegistry::with_refiner`), which
+  `register_builtins` installs as `axioval_rules::Refiner`; compiling a
+  rule with overrides needs one. **Breaking:** `RuleInstance` gains
+  `severity_overrides` (omitted when empty), `RuleRefinement` gains
+  `severity_overrides`, and `CapabilityEvaluation` gains `take_findings`
+  and `push_not_evaluated_about` for refiners.
+
 - **Clash tolerance cases along the elements' own axes.** (#135)
   `ProximityService::measure_overlap_along` answers the extents of two
   bodies' intersection along stated directions (`OverlapAlongRequest`,

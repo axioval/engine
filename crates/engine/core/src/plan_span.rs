@@ -28,6 +28,8 @@ use std::sync::Arc;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
+use crate::corridor_end::{self, CorridorEndRequest, CorridorEnds};
+
 /// Failure to measure a plan span.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum PlanSpanError {
@@ -681,6 +683,19 @@ pub trait PlanSpanService: Send + Sync + 'static {
             objects.len()
         )))
     }
+    /// The ends of the paths through the request's space footprint, the
+    /// wall each runs into, and the request's subjects measured against
+    /// every decided wall (see [`CorridorEnds`]). A service that does not
+    /// find corridor ends refuses by default, never answering with none.
+    fn measure_corridor_ends(
+        &self,
+        request: &CorridorEndRequest,
+    ) -> Result<CorridorEnds, PlanSpanError> {
+        Err(PlanSpanError::Unavailable(format!(
+            "this plan-span service does not find the corridor ends of {}",
+            request.space()
+        )))
+    }
 }
 
 /// Registry handle for a [`PlanSpanService`].
@@ -775,6 +790,16 @@ impl PlanSpanServiceHandle {
             ));
         }
         Ok(section)
+    }
+
+    /// The corridor ends of the request's space; an answer about another
+    /// space, or a wall not measured against exactly the requested subjects
+    /// in order, is refused.
+    pub fn measure_corridor_ends(
+        &self,
+        request: &CorridorEndRequest,
+    ) -> Result<CorridorEnds, PlanSpanError> {
+        corridor_end::measure(&self.0, request)
     }
 }
 

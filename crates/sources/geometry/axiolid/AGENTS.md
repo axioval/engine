@@ -61,6 +61,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/coverage.rs` answers `measure_coverage` for the plan-area service: each effect bracketed between inner and outer regions (`Region::dilate_inner`/`dilate_outer` for grown effects; the exact visibility polygon cut to inscribed and circumscribed 64-gons; convex cells of the free region judged by the distance map with the 1-Lipschitz bound `D(g) ± ρ`, split up to `MAX_DEPTH`, undecided cells outer only; the reached cells are united by `union_soup` into a region). Effects are `Region`s, united and clipped with region operations; the trapezoids only cut the free region into convex cells. Tessellated subjects and blockers refuse; a tessellated, unmeasured or centreless source is an unmeasured effect, never an empty one.
 - `src/sight.rs` implements `SightService` with the kernel's `line_of_sight`. Blockers apart from the box of the eye and the target are not handed over; tessellated targets in range and tessellated blockers that may matter refuse; an unmeasured blocker refuses. Never merge blockers into one mesh to decide more: occluders must stay attributable.
 - `src/plan_span.rs` implements `PlanSpanService` over the plan-area service's footprints: longest diagonal and farthest span from convex-hull vertices (exact because distance is convex), centres from the overlay centroid. Tessellation widens a diagonal by `2d`, a farthest span by both deviations, a centre by `b·(R + d)/(A − b)`; a footprint no larger than its band has no bounded centre and refuses. A located centre is `Inside`/`Outside` only when farther from every footprint edge than its radius plus the chord deviation; otherwise `Undecided`. Recesses are the pockets between the outer ring and its convex hull, walked between consecutive ring vertices on the hull's boundary (vertices on a hull edge count, or a niche's mouth would be the whole wall); pockets under `RECESS_RESOLUTION` are grid rounding. Sections intersect the footprints and take their sides from `least_area_rectangle` (`Enclosing::sides`), which answers only for a unique orientation: a tied section refuses. Both refuse tessellated footprints: never bound a least-area rectangle's short side by a chord band, it is not monotone.
+- `src/corridor_end.rs` (internal) answers `measure_corridor_ends` for the plan-span service with `axiolid_route::skeleton` (prune 1.5; spacing refined below an eighth of the narrowest width found, at most 50 000 samples). Collinear vertices are dropped first so a straight wall is one edge. A wall is `Decided` only when the end lies within its clearance plus two spacings of the kernel's wall ahead and rays within `SPREAD` (20°) of the path's direction all meet that wall first; never widen `SPREAD` or the slack to decide more walls without a proof. A tessellated space refuses (its edges are chords); a tessellated subject widens gap by `d` and facing by `2d`. Evidence for the ends is always approximate.
 - `src/derived_relationships.rs` implements `DerivedRelationshipService`:
   element to containing (or nearest) space, opening to the spaces a probe
   first enters on each side, space to larger covering spaces. Spaces and
@@ -220,9 +221,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
 0.3.0, except `axiolid-overlay` 0.3.3 (`minimum_area_rectangle`, the
-Minkowski and dilation family, settled `union_soup` output), `axiolid-route` 0.3.2 (`distance_map`,
-`farthest_point`) and `axiolid-inspect` 0.3.2 (volumes, `line_of_sight`,
-`detect_planes`). `mesh_distance` is published there, but certified exact-B-rep distance
+Minkowski and dilation family, settled `union_soup` output), `axiolid-route`
+0.3.3 (`distance_map`, `farthest_point`, and `skeleton` behind circulation
+maps and corridor ends, with `axiolid-triangulate` 0.3.1) and
+`axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). `mesh_distance` is published there, but certified exact-B-rep distance
 (`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
 branch. Check the registry source, not the kernel checkout, before relying on
 an API.

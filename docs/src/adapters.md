@@ -384,6 +384,23 @@ cross-section may touch the boundary: without that construction tolerance a
 band against a wall rounded a hair off the layout's axis would be one point
 long. The clear height is the mesh's vertical span, widened by twice the
 chord deviation.
+The same service finds corridor ends with the region skeleton of
+`axiolid-route` 0.3.3 (`skeleton`, prune factor 1.5, which drops the spurs
+into right-angled and sharper corners). Vertices on the line through their
+neighbours are dropped first, so a straight wall is one edge. The boundary
+spacing starts at a tenth of the footprint's narrower bounding side and is
+refined to a tenth of the narrowest width the skeleton finds until it lies
+below an eighth of it; a footprint needing more than 50 000 samples is
+refused. Skeleton nodes lie inside the footprint and their clearances are
+certified; the axis itself is approximate. An end's wall is decided only
+when the path stops at it (the end lies no farther from it than its
+clearance and two spacings) and rays from the end within 20° either side
+of the path's direction, taken one clearance back along it, all meet the
+kernel's wall first; otherwise it is undecided. A tessellated space is
+refused: its edges are chords of a curved wall. Each subject's gap and
+facing length are measured on its own footprint, exactly for a planar mesh;
+a tessellated subject widens the gap by its chord deviation `d` and the
+facing by `2d`.
 
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation

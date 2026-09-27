@@ -2442,6 +2442,83 @@ fn with_geometry_exits_too_close_for_their_hall_are_found() {
     }
 }
 
+/// Corridor #19 (x 0..20, y 0..2) and office #29 (x 0..6, y 4..9), both 3 m
+/// high, with 1 m windows 0.2 m deep: #39 in the corridor's east end wall,
+/// #49 in its south side wall, #59 in the office's east wall.
+/// `Pset_SpaceCommon.Reference` is `Corridor` for #19 and `Office` for #29.
+fn corridor_and_office_with_windows() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let window = "IFCWINDOW('GID',$,$,$,$,PL,REP,$,1.2,1.,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Corridor'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Office'),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceCommon',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#29),#211);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [10.0, 1.0, 0.0], [20.0, 2.0, 3.0], space),
+        placed_box(20, [3.0, 6.5, 0.0], [6.0, 5.0, 3.0], space),
+        placed_box(30, [20.1, 1.0, 1.0], [0.2, 1.0, 1.2], window),
+        placed_box(40, [10.5, -0.1, 1.0], [1.0, 0.2, 1.2], window),
+        placed_box(50, [6.1, 6.5, 1.0], [0.2, 1.0, 1.2], window),
+    )
+}
+
+#[test]
+fn with_geometry_a_window_at_a_corridors_end_is_found() {
+    let case = Case::new("geometry-corridor-end-openings");
+    let (output, result) = case.geometry_rule(
+        &corridor_and_office_with_windows(),
+        &[("window", "IfcWindow"), ("space", "IfcSpace")],
+        "axioval:capability.corridor-end-openings",
+        &registry_signature("axioval:capability.corridor-end-openings"),
+        json!({"kind": "allOf", "operands": [
+            entity("space"),
+            {"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+             "property": "axioval:example.ifc.reference", "operator": "equals",
+             "value": {"type": "string", "value": "Corridor"}},
+        ]}),
+        json!({
+            "opening_path": {"type": "stringList",
+                             "value": ["axioval:derived.adjacent-space:backward"]},
+            "opening_selector": {"type": "selector", "value": entity("window")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #39 ends the corridor; #49 is in its side wall, and the office's #59
+    // is in no corridor.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .starts_with("sits in the end wall of corridor ")
+            && findings[0].1.contains("#19")
+            && findings[0]
+                .1
+                .ends_with("0 m from the wall (20, 0)–(20, 2) and facing 1 m of it"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn with_geometry_property_comparison_finds_components_in_the_same_derived_space() {
     // Issue #43: `same_space` climbs the declared relationship to the

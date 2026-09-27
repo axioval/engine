@@ -640,6 +640,25 @@ width of the route between passages, and whether exit doors open in the
 direction of escape, which needs door leaves (openbimrs/ifc#148). Travel is
 measured for a point: a body's width is checked at the exits and passages,
 not along the walk.
+### Openings at corridor ends
+
+`corridor-end-openings` finds windows (or any opening the rule selects) in the wall a selected corridor ends at. The rule selects the corridors, typically spaces of a corridor type.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `opening_path` | string list, required | the relationship path from the corridor to its openings, such as `["axioval:derived.adjacent-space:backward"]` |
+| `opening_selector` | selector, required | which reached objects are checked (windows) |
+| `wall_depth` | number, optional | how far, in metres, an opening's footprint may lie from the end wall's face and still sit in it; `0.5` by default |
+| `facing` | number, optional | how much of the end wall, in metres, an opening must face to sit in it; more than `0.1` by default |
+
+Through `PlanSpanService::measure_corridor_ends`, the corridor's footprint gives the ends of its paths and the straight wall each runs into, and every reached opening is measured against each such wall: its plan gap to the wall segment and the length of the segment it faces. An opening sits in an end wall when its gap is at most `wall_depth` and it faces more than `facing` of the wall, so a window in a side wall right beside the corner, which touches the end wall but faces none of it, does not. A straight corridor has two ends, an L-shaped one the far end of each leg, a corridor looping round a core none.
+
+A finding is on the opening; it names the corridor and the wall, relates the corridor, and cites the path, the corridor ends (approximate evidence) and the gap and facing measurements.
+
+- Gap and facing are intervals: an opening surely sits in an end wall only when the whole gap lies within `wall_depth` and the whole facing beyond `facing`, surely not when either lies wholly on the other side; otherwise it is not evaluated.
+- An end whose wall the service could not decide (the path's direction too uncertain, a path stopping short of any wall, a room whose skeleton is only a stub) leaves every opening not found at another end not evaluated: it might sit in that wall.
+- Ends come from an approximate skeleton of the footprint. A finding stands on the wall segment and the measured footprints; a pass relies on the skeleton having found every end, which is not certified.
+- An opening whose selection is undecided is not evaluated where it would sit in an end wall, and ignored otherwise. A corridor reaching no opening passes without measurement; a missing service or a corridor whose ends cannot be measured (a tessellated footprint, whose edges are chords of a curved wall) is not evaluated.
 
 ### Distances and connections between spaces
 

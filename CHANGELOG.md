@@ -39,6 +39,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   to `stair-geometry` must declare the three new optional parameters
   `walking_line_offset`, `winder_angle_maximum` and `forbid_open_risers`;
   the workspace requires `axiolid-inspect` 0.3.2.
+- **Openings at corridor ends.** `corridor-end-openings` finds windows (any
+  opening `opening_selector` picks among those `opening_path` reaches, such
+  as `axioval:derived.adjacent-space:backward`) in the wall a selected
+  corridor ends at: within `wall_depth` (0.5 m by default) of the end wall
+  and facing more than `facing` (0.1 m) of it, so a window in a side wall
+  beside the corner is not one. `PlanSpanService::measure_corridor_ends`
+  (refusing by default) answers a `CorridorEndRequest` with `CorridorEnds`:
+  each `CorridorEnd`'s point, certified clearance and `EndWall`, either
+  `Decided` (the boundary segment and a `WallContact` per subject, with the
+  plan gap to the segment and the length faced as `PlanLength` intervals)
+  or `Undecided` with its reason. The ends come from an approximate
+  skeleton, so their evidence is never exact; an undecided wall or a
+  straddling gap or facing leaves the opening not evaluated. The Axiolid
+  adapter builds the skeleton with `axiolid-route` 0.3.3, decides a wall
+  only when the path stops at it and rays within 20° of the path's
+  direction all meet it, and refuses a tessellated space. No breaking change: the trait method
+  has a default and the capability is new. (#86)
 - **Local circulation within rooms.** `local-circulation` requires, within
   each selected space, a path `width_metres` wide from the entrances
   (`access_path`, such as `axioval:derived.adjacent-space`, with

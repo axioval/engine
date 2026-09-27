@@ -54,6 +54,9 @@
 //! farther from every boundary edge than the centre's own uncertainty plus
 //! the chord deviation, outside likewise, and undecided otherwise: a centre
 //! on the boundary of an exact footprint is undecided too.
+//!
+//! Corridor ends come from the footprint's region skeleton; see
+//! `corridor_end.rs`.
 
 use axiolid_core::Point2;
 use axiolid_overlay::{
@@ -61,11 +64,13 @@ use axiolid_overlay::{
     minimum_area_rectangle, overlay,
 };
 use axioval_engine::{
-    CentrePlacement, PlanAreaError, PlanCentre, PlanLength, PlanRecess, PlanRecesses,
-    PlanRectangle, PlanSection, PlanSpan, PlanSpanError, PlanSpanService, RectangleOrientation,
+    CentrePlacement, CorridorEndRequest, CorridorEnds, PlanAreaError, PlanCentre, PlanLength,
+    PlanRecess, PlanRecesses, PlanRectangle, PlanSection, PlanSpan, PlanSpanError, PlanSpanService,
+    RectangleOrientation,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
+use crate::corridor_end::corridor_ends;
 use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::plan_area::{AxiolidPlanAreaService, Footprint, band, tolerance};
 use crate::planar::{
@@ -709,6 +714,19 @@ impl PlanSpanService for AxiolidPlanSpanService {
             sides,
             Evidence::exact(self.source.clone(), format!("{locator}:area")),
         )
+    }
+
+    fn measure_corridor_ends(
+        &self,
+        request: &CorridorEndRequest,
+    ) -> Result<CorridorEnds, PlanSpanError> {
+        let space = self.footprint(request.space())?;
+        let subjects = request
+            .subjects()
+            .iter()
+            .map(|subject| Ok((subject.clone(), self.footprint(subject)?)))
+            .collect::<Result<Vec<_>, PlanSpanError>>()?;
+        corridor_ends(request, &space, &subjects)
     }
 }
 

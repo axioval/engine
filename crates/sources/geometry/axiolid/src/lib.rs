@@ -9,6 +9,7 @@
 mod circulation;
 pub mod contact;
 pub(crate) mod containment;
+pub(crate) mod corridor_end;
 pub(crate) mod coverage;
 pub mod derived_relationships;
 pub mod envelope_membership;

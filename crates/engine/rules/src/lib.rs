@@ -14,6 +14,7 @@ mod component_visibility;
 mod conformance;
 mod consistent_value;
 mod containment;
+mod corridor_end_openings;
 mod counterpart_coverage;
 mod counts;
 mod distance;
@@ -81,6 +82,7 @@ pub use component_visibility::ComponentVisibility;
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
 pub use containment::Containment;
+pub use corridor_end_openings::CorridorEndOpenings;
 pub use counterpart_coverage::CounterpartCoverage;
 pub use counts::RelatedCount;
 pub use distance::Distance;
@@ -193,4 +195,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(ComponentVisibility))
         .and_then(|registry| registry.register(EffectiveCoverage))
         .and_then(|registry| registry.register(LocalCirculation))
+        .and_then(|registry| registry.register(CorridorEndOpenings))
 }

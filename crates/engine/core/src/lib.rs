@@ -457,6 +457,7 @@ mod compiler;
 mod concepts;
 mod contact;
 mod coordinate_system;
+mod corridor_end;
 mod coverage;
 mod derived_relationships;
 mod envelope_membership;
@@ -502,6 +503,7 @@ pub use coordinate_system::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
     MapConversion, SourceCoordinateSystem,
 };
+pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, WallContact};
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,

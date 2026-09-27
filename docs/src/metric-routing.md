@@ -134,8 +134,8 @@ closed, counts only by its straight-line distance, which no route beats.
   barriers (`CrossingObstacles`) and a map over `axiolid-route`'s vertex
   budget refuse as well.
 
-These need `axiolid-route` 0.3.2 (`distance_map`, `farthest_point`), not yet
-published.
+These need `axiolid-route` 0.3.2 or later (`distance_map`, `farthest_point`);
+the workspace requires 0.3.3.
 
 ## Consumers
 

@@ -11,11 +11,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    BlockedMetricRouteEvidence, CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence,
-    ElevationInterval, LengthInterval, MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest,
-    MetricRoutingError, MetricRoutingService, MetricRoutingServiceHandle, PlanCentre, PlanLength,
-    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ServiceRegistry,
-    VerticalExtent, VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ElevationInterval,
+    LengthInterval, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome,
+    NearestTargetRequest, PlanCentre, PlanLength, PlanSpan, PlanSpanError, PlanSpanService,
+    PlanSpanServiceHandle, ServiceRegistry, UnreachableTargetsEvidence, VerticalExtent,
+    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId};
@@ -153,39 +154,70 @@ impl MetricRoutingService for Geometry {
         &self,
         request: &MetricRouteRequest,
     ) -> Result<MetricRouteOutcome, MetricRoutingError> {
-        let key = (
-            request.origin().subject().local_id.clone(),
-            request.destination().subject().local_id.clone(),
-        );
+        panic!("walking asks for nearest targets, not the route {request:?}")
+    }
+
+    /// Answers from the declared pair routes as the Axiolid backend would:
+    /// the nearest reachable target bounds from above; a refused one is
+    /// unmeasured and drops the lower bound to zero; only blocked ones make
+    /// the targets unreachable.
+    fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
         // Every walk starts at the stubbed centre, on the floor.
         #[allow(clippy::float_cmp)]
         {
             assert_eq!(request.origin().coordinates_metres(), [1.0, 2.0, 0.0]);
         }
-        match self
-            .routes
-            .get(&key)
-            .unwrap_or_else(|| panic!("unexpected route {key:?}"))
-        {
-            Route::Reachable(lower, upper) => {
-                Ok(MetricRouteOutcome::Reachable(MetricRouteEvidence::try_new(
-                    LengthInterval::try_new(*lower, *upper)?,
-                    vec![request.origin().clone(), request.destination().clone()],
-                    vec![request.origin().subject().clone()],
-                    Evidence::exact(source(), format!("route:{}:{}", key.0, key.1)),
-                )?))
+        let from = request.origin().subject().local_id.clone();
+        let mut best: Option<(usize, f64, f64)> = None;
+        let mut refused = false;
+        for (index, target) in request.targets().iter().enumerate() {
+            let key = (from.clone(), target.subject().local_id.clone());
+            match self
+                .routes
+                .get(&key)
+                .unwrap_or_else(|| panic!("unexpected route {key:?}"))
+            {
+                Route::Reachable(lower, upper) => {
+                    if best.is_none_or(|(_, _, least)| *upper < least) {
+                        best = Some((index, best.map_or(*lower, |b| b.1.min(*lower)), *upper));
+                    } else if let Some(found) = &mut best {
+                        found.1 = found.1.min(*lower);
+                    }
+                }
+                Route::Blocked => {}
+                Route::Refused => refused = true,
             }
-            Route::Blocked => Ok(MetricRouteOutcome::Blocked(
-                BlockedMetricRouteEvidence::new(
+        }
+        match best {
+            Some((index, lower, upper)) => {
+                let lower = if refused { 0.0 } else { lower };
+                let to = &request.targets()[index];
+                Ok(NearestTargetOutcome::Reached(
+                    NearestTargetEvidence::try_new(
+                        index,
+                        LengthInterval::try_new(lower, upper)?,
+                        vec![request.origin().clone(), to.clone()],
+                        Evidence::exact(
+                            source(),
+                            format!("route:{from}:{}", to.subject().local_id),
+                        ),
+                    )?,
+                ))
+            }
+            None if refused => Err(MetricRoutingError::Unavailable(
+                "a gap is too narrow".into(),
+            )),
+            None => Ok(NearestTargetOutcome::Unreachable(
+                UnreachableTargetsEvidence::new(
                     request.clone(),
                     CompleteMetricEvidence::try_new(Evidence::exact(
                         source(),
-                        format!("blocked:{}:{}", key.0, key.1),
+                        format!("blocked:{from}"),
                     ))?,
                 ),
-            )),
-            Route::Refused => Err(MetricRoutingError::Unavailable(
-                "a gap is too narrow".into(),
             )),
         }
     }
@@ -398,7 +430,7 @@ fn a_refused_route_decides_only_what_it_cannot_change() {
     let message = evaluation.not_evaluated_outcomes()[0].message();
     assert!(
         message.contains("the nearest destination is at most 12.5 m walking")
-            && message.contains("a gap is too narrow"),
+            && message.contains("between 0 and 12.5 m away"),
         "{message}"
     );
 }

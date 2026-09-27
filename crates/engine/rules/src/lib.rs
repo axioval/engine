@@ -15,6 +15,7 @@ mod containment;
 mod counterpart_coverage;
 mod counts;
 mod distance;
+mod escape_route;
 mod exit_separation;
 mod external_wall_validation;
 mod free_floor_circle;
@@ -73,6 +74,7 @@ pub use containment::Containment;
 pub use counterpart_coverage::CounterpartCoverage;
 pub use counts::RelatedCount;
 pub use distance::Distance;
+pub use escape_route::EscapeRoute;
 pub use exit_separation::ExitSeparation;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
@@ -158,6 +160,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(OpeningSpaces))
         .and_then(|registry| registry.register(GroupComposition))
         .and_then(|registry| registry.register(ExitSeparation))
+        .and_then(|registry| registry.register(EscapeRoute))
         .and_then(|registry| registry.register(CounterpartCoverage))
         .and_then(|registry| registry.register(ParkingBay))
         .and_then(|registry| registry.register(WallSpacing))

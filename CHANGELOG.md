@@ -95,6 +95,43 @@ All notable changes are documented here. This project follows Semantic Versionin
   definitions bound to `clash` must declare the new optional parameter, and
   `clash-matrix` definitions the new optional `cells` column. (#57)
 
+- **Escape routes.** The new capability `escape-route` checks each space
+  against the first row of a `uses` table whose `spaces` selector picks it:
+  `maximum_travel` from the farthest point of its walkable area
+  (`route_start: farthest-point`, the default) or from each of its doors
+  (`door`, through `door_path` and `door_selector`) to the nearest exit,
+  the number of `exits`, and, with `area_per_occupant`, exit widths for
+  the occupant load (footprint over area per occupant, rounded up) from a
+  `widths` table (`occupants`, `width` per exit, optional `total_width`).
+  Exits are the `exit_selector` objects `exit_path` reaches, as for
+  `exit-separation`. Widths are stated clear widths
+  (`clear_width_property`); without one, an exit whose whole footprint is
+  narrower than required is a finding and anything else is not evaluated.
+  Travel follows a point's walking line (`walking_height`,
+  `walking_step`) and is bounded through the sure exits from above and
+  every possible exit from below; part of a space that reaches no exit is
+  a finding. Stair and shared-section multipliers, passage widths and exit
+  door opening direction (door leaves, openbimrs/ifc#148) are not checked.
+  (#79)
+- **Nearest targets and farthest points in metric routing.**
+  `MetricRoutingService` gains `nearest_target` (`NearestTargetRequest`,
+  `NearestTargetOutcome`: the distance from one point to the nearest of
+  several targets, or complete evidence that none is reachable) and
+  `farthest_point` (`FarthestPointRequest`, `FarthestPointOutcome`: a
+  certified interval on the largest distance from any point of a region to
+  its nearest target, with a witness point and convergence against a
+  tolerance, or a point of the region no target reaches). Both default to a
+  refusal; the handle binds every answer to its request.
+  `AxiolidMetricRoutingService` answers them with one `axiolid-route`
+  distance map per query: targets may stand in a portal, so exit doors
+  (also to the outside) are targets; the upper bound holds on any level and
+  the lower bound and unreachable verdicts need a closed one with every
+  target placed; farthest points are for a point body only.
+  `space-distance` now walks with two nearest-target queries (sure and
+  possible destinations) instead of one route per pair, so a body sweep is
+  proven to one destination only. **Breaking:** `MetricRoutingError` gains
+  `NoTargets`, `InvalidTolerance` and `InconsistentResponse`; the workspace
+  requires `axiolid-route` 0.3.2, which is not yet published. (#79)
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m

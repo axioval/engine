@@ -74,7 +74,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   measured, no connector touching the level) and a separation of the free
   region less the chord-proven bands around narrow portals' mid-lines. The
   `axiolid-route` path is a lower bound only: it can cut across outside gaps
-  between collinear boundary edges.
+  between collinear boundary edges. `nearest_target` and `farthest_point`
+  build one `distance_map` over the level, which then also holds the
+  corridors of portals opening from it onto nothing else of it (exits to
+  the outside); a target may stand in a portal. A target the service cannot
+  place counts only by its straight line; a lower bound comes from the map
+  only on a closed level with every target placed, and so does an
+  unreachable verdict. Farthest points are for a point body only; never
+  report the bracket for a body with a radius.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`, measuring shelf
@@ -175,7 +182,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0. `mesh_distance` is published there, but certified exact-B-rep distance
+0.3.0, except `axiolid-route` 0.3.2 (`distance_map`, `farthest_point`),
+which is not published yet: build against the kernel sources with a local,
+untracked `[patch.crates-io]` until it is. `mesh_distance` is published there, but certified exact-B-rep distance
 (`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
 branch. Check the registry source, not the kernel checkout, before relying on
 an API.
@@ -199,10 +208,12 @@ an API.
   product against the linear tolerance and flags collinear non-adjacent
   edges anywhere on their lines; 0.3.1 checks the extent. Until it is
   published, `walkable.rs` re-cuts overlay output into trapezoids.
-- `axiolid-route` 0.3.0 checks a visibility edge by proper crossings and its
-  midpoint only, so an edge along two collinear boundary edges passes over
-  the gap between them. Its path may leave the region; use it as a lower
-  bound or a proposal, never as a witness or a disconnection proof.
+- `axiolid-route` 0.3.2 publication (axiolid/kernel#186): the many-target
+  queries need it. It also fixes the 0.3.0 visibility edges that passed
+  over gaps along collinear boundary edges and between touching obstacles
+  (#187, #189); the single-route service still treats the kernel path as a
+  lower bound or proposal only, and the many-target queries use a point
+  path as a witness only on 0.3.2.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

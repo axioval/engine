@@ -4642,3 +4642,69 @@ fn with_geometry_orphans_and_counts_are_found() {
         stderr(&output)
     );
 }
+
+#[test]
+fn with_geometry_escape_routes_too_long_and_too_few_exits_are_found() {
+    // #19 (20 x 10 m) and #29, whose doors lead outside, reach them through
+    // the derived adjacency. #29 is sprinklered and needs three exits; the
+    // farthest corner of #19 lies about 18.47 m from its nearer door.
+    let case = Case::new("geometry-escape-route");
+    let sprinklered = json!({"kind": "property",
+        "propertySet": "axioval:example.ifc.pset-space-fire-safety",
+        "property": "axioval:example.ifc.sprinkler-protection", "operator": "equals",
+        "value": {"type": "boolean", "value": true}});
+    let (output, result) = case.geometry_rule(
+        &halls_with_exits(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        entity("space"),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"label": {"type": "string", "value": "assembly"},
+                 "spaces": {"type": "selector", "value": sprinklered},
+                 "exits": {"type": "integer", "value": 3}},
+                {"label": {"type": "string", "value": "open plan"},
+                 "spaces": {"type": "selector", "value": entity("space")},
+                 "maximum_travel": {"type": "number", "value": 15.0},
+                 "exits": {"type": "integer", "value": 2}},
+            ]},
+            "exit_path": {"type": "stringList",
+                          "value": ["axioval:derived.adjacent-space:backward"]},
+            "exit_selector": {"type": "selector", "value": entity("door")},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(findings[0].0, "#19", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .starts_with("its farthest point, around (20.00, 0.00), lies ")
+            && findings[0].1.contains("18.47")
+            && findings[0].1.ends_with(
+                " m from the nearest exit walking; use 1 (open plan) allows at most 15 m of \
+                 travel"
+            ),
+        "{result:#}"
+    );
+    assert_eq!(
+        findings[1],
+        (
+            "#29".to_owned(),
+            "has 2 exit(s) via axioval:derived.adjacent-space; use 0 (assembly) requires at \
+             least 3"
+                .to_owned()
+        ),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

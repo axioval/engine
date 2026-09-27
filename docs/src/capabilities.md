@@ -531,6 +531,65 @@ A finding names the pair (with `any`, the pair farthest apart), its separation, 
 - An object `exit_selector` cannot decide can only add exits and pairs: with `any` a pair far enough apart stands, with `all` a pair too close stands, and anything else they could change is not evaluated. The same holds for the count against `minimum_exits`.
 - A diagonal that cannot be measured, or a missing service, leaves the space not evaluated.
 
+### Escape routes
+
+`escape-route` checks each selected space against the first row of its
+`uses` table whose `spaces` selector picks it: how far it lies from an exit,
+how many exits it has and how wide they are for its occupants.
+
+| Column of `uses` | Kind | Meaning |
+|---|---|---|
+| `spaces` | selector, required | the spaces of this use |
+| `maximum_travel` | number | the longest walk in metres from the start to the nearest exit |
+| `route_start` | string | `farthest-point` (default): every point of the space; `door`: each of its own doors |
+| `exits` | integer | the number of exits the space needs |
+| `area_per_occupant` | number | square metres per occupant, for the occupant load |
+| `label` | string | named in findings |
+
+| Column of `widths` | Kind | Meaning |
+|---|---|---|
+| `occupants` | integer, required | the row covers loads up to this many occupants |
+| `width` | number, required | the least clear width of each exit, in metres |
+| `total_width` | number | the least width of all exits together |
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `uses` | table, required | the rows above; each states at least one requirement |
+| `widths` | table | required by `area_per_occupant`, and only with it |
+| `exit_path`, `exit_selector` | string list, selector, required | the exits, reached from the space as `exit-separation` reaches them |
+| `door_path`, `door_selector` | string list, selector | the space's own doors; required by `route_start: door` |
+| `clear_width_property` | property reference | an exit's stated clear width, a length |
+| `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
+
+- **Travel** follows the walking line of a point through the metric-routing
+  service, from the farthest point of the space's walkable area
+  (`farthest_point`) or from each of its doors (`nearest_target`), to the
+  nearest exit. Exits and doors stand at their representative points, the
+  centroid of the footprint inside it at the bottom of the vertical extent,
+  as `space-distance` walks. The farthest distance is a certified bracket;
+  part of the space that reaches no exit (proven with complete evidence) is
+  a finding at a point of it. See [Metric routing](./metric-routing.md#many-targets).
+- **Exits** are counted as `exit-separation`'s `minimum_exits` counts them.
+- **Widths**: the occupant load is the space's footprint (`PlanAreaService`)
+  divided by `area_per_occupant`, rounded up. Each exit's stated clear width
+  must reach the covering row's `width`, and together they must reach its
+  `total_width`. Without a stated width, geometry decides only a failure:
+  no clear width exceeds the longest plan diagonal of the exit's footprint.
+
+Every measure is an interval, and a verdict stands only when what is
+unknown cannot change it. The travel is bounded from above through the exits
+that surely are exits and from below through every one that might be; with
+`door`, a finding needs one sure door too far, a pass every possible door
+near enough. An exit without a representative point leaves the lower bound
+at zero. A load between two rows of `widths` requires either row's widths.
+
+Not checked yet: multipliers for travel on stairs and for route sections
+shared by several spaces (routes are measured on one level, and which
+sections are shared is not a measured quantity), the free width of passages
+between the exits, and whether exit doors open in the direction of escape,
+which needs door leaves (openbimrs/ifc#148). Travel is measured for a point:
+a body's width is checked at the exits, not along the route.
+
 ### Distances and connections between spaces
 
 Two capabilities judge how spaces relate to one another: `space-connection`
@@ -612,14 +671,16 @@ already decides it.
   (`PlanSpanService`, `centres`), an interval exact for planar meshes. Plan
   rather than 3D, because storeys are what `same_storey` states; the closest
   distance between footprints is `distance`'s `horizontal` projection.
-- **Walking** is the metric route (`MetricRoutingService`) between the
-  spaces' representative points: the centroid of each footprint
-  (`PlanSpanService::measure_centre`) at the bottom of its vertical extent.
-  The centroid must be exact and lie inside the footprint; an L- or
-  U-shaped space whose centroid falls outside it, or on its boundary, is not
-  evaluated rather than walked from a point chosen for it. A blocked route
-  (with complete evidence) is no destination; a refused one is unknown. See
-  [Metric routing](./metric-routing.md).
+- **Walking** is the metric route (`MetricRoutingService`) from the
+  space's representative point to the nearest destination's: the centroid
+  of each footprint (`PlanSpanService::measure_centre`) at the bottom of
+  its vertical extent. The centroid must be exact and lie inside the
+  footprint; an L- or U-shaped space whose centroid falls outside it, or on
+  its boundary, is not evaluated rather than walked from a point chosen for
+  it. It is one nearest-target query over all destinations at once
+  (`nearest_target`); destinations proven unreachable (with complete
+  evidence) are none, and a refused query is unknown. See
+  [Metric routing](./metric-routing.md#many-targets).
 
 The nearest distance is bounded from above by the destinations that surely
 qualify (`to` matches, same storey, direct access) and from below by every
@@ -629,8 +690,10 @@ zero. A maximum fails only when every possible destination lies beyond it
 lies within it; a minimum fails once a sure destination lies nearer, and
 holds only when every possible one lies at least that far. Anything else is
 not evaluated with the reasons, so a route that cannot be measured decides
-only what it cannot change. Each pair is routed on its own: a
-nearest-destination search over many targets awaits axiolid/kernel#186.
+only what it cannot change. Walking, the upper bound is one query over the
+sure destinations and the lower bound one over every possible destination;
+a destination without a representative point leaves the lower bound at
+zero.
 
 ### Counterpart coverage
 

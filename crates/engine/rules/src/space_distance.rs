@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, MetricPoint,
-    MetricRouteOutcome, MetricRouteRequest, MetricRoutingServiceHandle, MobilityProfile,
+    MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan, PlanSpanServiceHandle,
     RuleCapability, RuleContext, TableColumn, VerticalExtentServiceHandle,
 };
@@ -57,7 +57,10 @@ const COLUMNS: &[TableColumn] = &[
 /// distance is bounded from above by the destinations that surely qualify
 /// and from below by every one that might: a verdict stands only when
 /// destinations whose qualification or distance is unknown cannot change
-/// it. Each pair is routed on its own until a many-target search exists.
+/// it. Walking, each bound is one nearest-destination query (the
+/// metric-routing service's `nearest_target`) over all its destinations at
+/// once; a destination without a representative point leaves the lower
+/// bound at zero.
 pub struct SpaceDistance;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -285,33 +288,26 @@ impl RuleCapability for SpaceDistance {
 }
 
 /// A measured distance between two spaces.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 enum Distance {
     /// Between `lower` and `upper` metres.
     Between(f64, f64, Evidence),
-    /// No route exists, with complete evidence.
-    Unreachable(Evidence),
 }
 
 impl Distance {
     fn lower(&self) -> f64 {
-        match self {
-            Self::Between(lower, _, _) => *lower,
-            Self::Unreachable(_) => f64::INFINITY,
-        }
+        let Self::Between(lower, _, _) = self;
+        *lower
     }
 
     fn upper(&self) -> f64 {
-        match self {
-            Self::Between(_, upper, _) => *upper,
-            Self::Unreachable(_) => f64::INFINITY,
-        }
+        let Self::Between(_, upper, _) = self;
+        *upper
     }
 
     fn evidence(&self) -> &Evidence {
-        match self {
-            Self::Between(_, _, evidence) | Self::Unreachable(evidence) => evidence,
-        }
+        let Self::Between(_, _, evidence) = self;
+        evidence
     }
 }
 
@@ -321,11 +317,52 @@ struct Candidate {
     /// `None` when it surely qualifies, else why it might not.
     doubt: Option<String>,
     evidence: Vec<Evidence>,
-    distance: Result<Distance, Unavailable>,
+}
+
+/// The nearest distance, bounded by the destinations that surely qualify
+/// from above and by every one that might from below.
+struct Nearest {
+    most: f64,
+    least: f64,
+    /// The sure destination bounding `most` from above.
+    sure: Option<(ObjectId, Distance, Vec<Evidence>)>,
+    /// A possible destination at the least lower bound.
+    closest: Option<(ObjectId, Distance, Vec<Evidence>)>,
+    /// Evidence that destinations cannot be reached.
+    blocked: Vec<Evidence>,
+    doubts: Vec<String>,
+    reason: NotEvaluatedReason,
+}
+
+impl Nearest {
+    fn new() -> Self {
+        Self {
+            most: f64::INFINITY,
+            least: f64::INFINITY,
+            sure: None,
+            closest: None,
+            blocked: Vec::new(),
+            doubts: Vec::new(),
+            reason: NotEvaluatedReason::IncompleteEvidence,
+        }
+    }
+
+    fn doubt(&mut self, (why, message): Unavailable) {
+        if why == NotEvaluatedReason::MissingService {
+            self.reason = why;
+        }
+        self.doubts.push(message);
+    }
 }
 
 /// Nearest storeys, and the climb's evidence.
 type Climb = Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable>;
+
+/// What a nearest-destination query found.
+enum Walked {
+    Reached(usize, Distance),
+    Unreachable(Evidence),
+}
 
 struct Judge<'r, 'c> {
     context: &'r RuleContext<'c>,
@@ -339,7 +376,7 @@ struct Judge<'r, 'c> {
     climbed: BTreeMap<ObjectId, Climb>,
     partners: BTreeMap<ObjectId, Partners>,
     points: BTreeMap<ObjectId, Result<(MetricPoint, Vec<Evidence>), Unavailable>>,
-    lengths: BTreeMap<(Measure, ObjectId, ObjectId), Result<Distance, Unavailable>>,
+    lengths: BTreeMap<(ObjectId, ObjectId), Result<Distance, Unavailable>>,
 }
 
 fn missing(service: &str) -> Unavailable {
@@ -351,6 +388,63 @@ fn missing(service: &str) -> Unavailable {
 
 fn incomplete(message: String) -> Unavailable {
     (NotEvaluatedReason::IncompleteEvidence, message)
+}
+
+/// An object's representative point for walking: the centre of its
+/// footprint, which must lie inside it, on its floor (the bottom of its
+/// vertical extent). Shared with `escape-route`.
+pub(crate) fn representative_point(
+    context: &RuleContext<'_>,
+    object: &ObjectId,
+) -> Result<(MetricPoint, Vec<Evidence>), Unavailable> {
+    let services = context.services;
+    let spans = services
+        .get::<PlanSpanServiceHandle>()
+        .ok_or_else(|| missing("plan-span"))?;
+    let extents = services
+        .get::<VerticalExtentServiceHandle>()
+        .ok_or_else(|| missing("vertical-extent"))?;
+    let centre = spans
+        .measure_centre(object)
+        .map_err(|error| incomplete(format!("the centre of {object}: {error}")))?;
+    if !centre.is_exact() {
+        return Err(incomplete(format!(
+            "the centre of {object} is known only within {} m, so no route starts or ends \
+             there",
+            shown(centre.radius_metres(), centre.radius_metres())
+        )));
+    }
+    match centre.placement() {
+        CentrePlacement::Inside => {}
+        CentrePlacement::Outside => {
+            return Err(incomplete(format!(
+                "the centre of {object} lies outside its footprint, so it has no \
+                 representative point to walk from"
+            )));
+        }
+        CentrePlacement::Undecided => {
+            return Err(incomplete(format!(
+                "the centre of {object} lies on its footprint's boundary"
+            )));
+        }
+    }
+    let extent = extents
+        .measure_vertical_extent(object)
+        .map_err(|error| incomplete(format!("the floor of {object}: {error}")))?;
+    let floor = extent.bottom();
+    if !floor.is_exact() {
+        return Err(incomplete(format!(
+            "the floor of {object} lies {} m high, not at one elevation",
+            shown(floor.lower_metres(), floor.upper_metres())
+        )));
+    }
+    let [x, y] = centre.point();
+    let point = MetricPoint::try_new(object.clone(), [x, y, floor.lower_metres()])
+        .map_err(|error| incomplete(format!("the centre of {object}: {error}")))?;
+    Ok((
+        point,
+        vec![centre.evidence().clone(), extent.evidence().clone()],
+    ))
 }
 
 impl Judge<'_, '_> {
@@ -378,7 +472,7 @@ impl Judge<'_, '_> {
             .clone()
     }
 
-    /// The candidates `row` names for `space`, each measured.
+    /// The candidates `row` names for `space`.
     fn candidates(
         &mut self,
         space: &Object,
@@ -448,142 +542,214 @@ impl Judge<'_, '_> {
                     }
                 }
             }
-            let distance = self.distance(row.measure, &space.id, &object.id);
             candidates.push(Candidate {
                 id: object.id.clone(),
                 doubt: (!doubts.is_empty()).then(|| doubts.join("; ")),
                 evidence,
-                distance,
             });
         }
         Ok(candidates)
     }
 
-    fn distance(
-        &mut self,
-        measure: Measure,
-        from: &ObjectId,
-        to: &ObjectId,
-    ) -> Result<Distance, Unavailable> {
-        // A straight line has no direction; a route may.
-        let key = match measure {
-            Measure::Straight if to < from => (measure, to.clone(), from.clone()),
-            _ => (measure, from.clone(), to.clone()),
+    fn straight(&mut self, from: &ObjectId, to: &ObjectId) -> Result<Distance, Unavailable> {
+        // A straight line has no direction.
+        let key = if to < from {
+            (to.clone(), from.clone())
+        } else {
+            (from.clone(), to.clone())
         };
         if let Some(known) = self.lengths.get(&key) {
             return known.clone();
         }
-        let measured = match measure {
-            Measure::Straight => self.straight(&key.1, &key.2),
-            Measure::Walking => self.walking(from, to),
-        };
+        let measured = (|| {
+            let spans = self
+                .context
+                .services
+                .get::<PlanSpanServiceHandle>()
+                .ok_or_else(|| missing("plan-span"))?;
+            let length = spans
+                .measure_span(&key.0, &key.1, PlanSpan::Centres)
+                .map_err(|error| incomplete(format!("{} to {}: {error}", key.0, key.1)))?;
+            Ok(Distance::Between(
+                length.lower_metres(),
+                length.upper_metres(),
+                length.evidence().clone(),
+            ))
+        })();
         self.lengths.insert(key, measured.clone());
         measured
     }
 
-    fn straight(&self, from: &ObjectId, to: &ObjectId) -> Result<Distance, Unavailable> {
-        let spans = self
-            .context
-            .services
-            .get::<PlanSpanServiceHandle>()
-            .ok_or_else(|| missing("plan-span"))?;
-        let length = spans
-            .measure_span(from, to, PlanSpan::Centres)
-            .map_err(|error| incomplete(format!("{from} to {to}: {error}")))?;
-        Ok(Distance::Between(
-            length.lower_metres(),
-            length.upper_metres(),
-            length.evidence().clone(),
-        ))
-    }
-
-    /// A space's representative point: the centre of its footprint, which
-    /// must lie inside it, on its floor.
+    /// A space's representative point, cached.
     fn point(&mut self, space: &ObjectId) -> Result<(MetricPoint, Vec<Evidence>), Unavailable> {
         if let Some(known) = self.points.get(space) {
             return known.clone();
         }
-        let located = self.locate(space);
+        let located = representative_point(self.context, space);
         self.points.insert(space.clone(), located.clone());
         located
     }
 
-    fn locate(&self, space: &ObjectId) -> Result<(MetricPoint, Vec<Evidence>), Unavailable> {
-        let services = self.context.services;
-        let spans = services
-            .get::<PlanSpanServiceHandle>()
-            .ok_or_else(|| missing("plan-span"))?;
-        let extents = services
-            .get::<VerticalExtentServiceHandle>()
-            .ok_or_else(|| missing("vertical-extent"))?;
-        let centre = spans
-            .measure_centre(space)
-            .map_err(|error| incomplete(format!("the centre of {space}: {error}")))?;
-        if !centre.is_exact() {
-            return Err(incomplete(format!(
-                "the centre of {space} is known only within {} m, so no route starts there",
-                shown(centre.radius_metres(), centre.radius_metres())
-            )));
-        }
-        match centre.placement() {
-            CentrePlacement::Inside => {}
-            CentrePlacement::Outside => {
-                return Err(incomplete(format!(
-                    "the centre of {space} lies outside its footprint, so it has no \
-                     representative point to walk from"
-                )));
+    /// Bounds the nearest distance in a straight line, pair by pair.
+    fn nearest_straight(&mut self, space: &ObjectId, candidates: &[Candidate]) -> Nearest {
+        let mut nearest = Nearest::new();
+        for candidate in candidates {
+            if let Some(doubt) = &candidate.doubt {
+                nearest.doubts.push(doubt.clone());
             }
-            CentrePlacement::Undecided => {
-                return Err(incomplete(format!(
-                    "the centre of {space} lies on its footprint's boundary"
-                )));
+            match self.straight(space, &candidate.id) {
+                Ok(distance) => {
+                    if candidate.doubt.is_none() && distance.upper() < nearest.most {
+                        nearest.most = distance.upper();
+                        nearest.sure = Some((
+                            candidate.id.clone(),
+                            distance.clone(),
+                            candidate.evidence.clone(),
+                        ));
+                    }
+                    if distance.lower() < nearest.least {
+                        nearest.least = distance.lower();
+                        nearest.closest = Some((
+                            candidate.id.clone(),
+                            distance.clone(),
+                            candidate.evidence.clone(),
+                        ));
+                    }
+                    nearest.blocked.push(distance.evidence().clone());
+                }
+                // An unmeasured destination might be at any distance.
+                Err(unavailable) => {
+                    nearest.least = 0.0;
+                    nearest.doubt(unavailable);
+                }
             }
         }
-        let extent = extents
-            .measure_vertical_extent(space)
-            .map_err(|error| incomplete(format!("the floor of {space}: {error}")))?;
-        let floor = extent.bottom();
-        if !floor.is_exact() {
-            return Err(incomplete(format!(
-                "the floor of {space} lies {} m high, not at one elevation",
-                shown(floor.lower_metres(), floor.upper_metres())
-            )));
-        }
-        let [x, y] = centre.point();
-        let point = MetricPoint::try_new(space.clone(), [x, y, floor.lower_metres()])
-            .map_err(|error| incomplete(format!("the centre of {space}: {error}")))?;
-        Ok((
-            point,
-            vec![centre.evidence().clone(), extent.evidence().clone()],
-        ))
+        nearest
     }
 
-    fn walking(&mut self, from: &ObjectId, to: &ObjectId) -> Result<Distance, Unavailable> {
-        let routes = self
-            .context
-            .services
-            .get::<MetricRoutingServiceHandle>()
-            .ok_or_else(|| missing("metric-routing"))?;
-        let profile = self
-            .profile
-            .ok_or_else(|| invalid("a walking row needs a walking profile"))?;
-        let (origin, _) = self.point(from)?;
-        let (destination, _) = self.point(to)?;
-        let request = MetricRouteRequest::new(origin, destination, profile);
-        match routes.route(&request) {
-            Ok(MetricRouteOutcome::Reachable(route)) => {
-                let length = route.shortest_distance();
-                Ok(Distance::Between(
-                    length.lower_metres(),
-                    length.upper_metres(),
-                    route.evidence().clone(),
-                ))
+    /// Bounds the nearest distance walking with two nearest-destination
+    /// queries: the destinations that surely qualify bound it from above,
+    /// every one that might from below.
+    #[allow(clippy::too_many_lines)]
+    fn nearest_walking(&mut self, space: &ObjectId, candidates: &[Candidate]) -> Nearest {
+        let mut nearest = Nearest::new();
+        for candidate in candidates {
+            if let Some(doubt) = &candidate.doubt {
+                nearest.doubts.push(doubt.clone());
             }
-            Ok(MetricRouteOutcome::Blocked(blocked)) => Ok(Distance::Unreachable(
-                blocked.completeness().evidence().clone(),
-            )),
-            Err(error) => Err(incomplete(format!("walking from {from} to {to}: {error}"))),
         }
+        if candidates.is_empty() {
+            return nearest;
+        }
+        let Some(routes) = self.context.services.get::<MetricRoutingServiceHandle>() else {
+            nearest.least = 0.0;
+            nearest.doubt(missing("metric-routing"));
+            return nearest;
+        };
+        let Some(profile) = self.profile else {
+            nearest.least = 0.0;
+            nearest.doubt(invalid("a walking row needs a walking profile"));
+            return nearest;
+        };
+        let origin = match self.point(space) {
+            Ok((origin, _)) => origin,
+            Err(unavailable) => {
+                nearest.least = 0.0;
+                nearest.doubt(unavailable);
+                return nearest;
+            }
+        };
+        let mut sure: Vec<(&Candidate, MetricPoint)> = Vec::new();
+        let mut all: Vec<(&Candidate, MetricPoint)> = Vec::new();
+        let mut placed = true;
+        for candidate in candidates {
+            match self.point(&candidate.id) {
+                Ok((point, _)) => {
+                    if candidate.doubt.is_none() {
+                        sure.push((candidate, point.clone()));
+                    }
+                    all.push((candidate, point));
+                }
+                Err(unavailable) => {
+                    placed = false;
+                    nearest.doubt(unavailable);
+                }
+            }
+        }
+        let walk = |targets: &[(&Candidate, MetricPoint)]| -> Result<Walked, Unavailable> {
+            let request = NearestTargetRequest::try_new(
+                origin.clone(),
+                targets.iter().map(|(_, point)| point.clone()).collect(),
+                profile,
+            )
+            .map_err(|error| incomplete(error.to_string()))?;
+            match routes.nearest_target(&request) {
+                Ok(NearestTargetOutcome::Reached(reached)) => {
+                    let length = reached.shortest_distance();
+                    Ok(Walked::Reached(
+                        reached.target(),
+                        Distance::Between(
+                            length.lower_metres(),
+                            length.upper_metres(),
+                            reached.evidence().clone(),
+                        ),
+                    ))
+                }
+                Ok(NearestTargetOutcome::Unreachable(unreachable)) => Ok(Walked::Unreachable(
+                    unreachable.completeness().evidence().clone(),
+                )),
+                Err(error) => Err(incomplete(format!("walking from {space}: {error}"))),
+            }
+        };
+        let upper = if sure.is_empty() {
+            None
+        } else {
+            Some(walk(&sure))
+        };
+        match &upper {
+            Some(Ok(Walked::Reached(target, distance))) => {
+                let candidate = sure[*target].0;
+                nearest.most = distance.upper();
+                nearest.sure = Some((
+                    candidate.id.clone(),
+                    distance.clone(),
+                    candidate.evidence.clone(),
+                ));
+            }
+            Some(Ok(Walked::Unreachable(evidence))) => nearest.blocked.push(evidence.clone()),
+            Some(Err(unavailable)) => nearest.doubt(unavailable.clone()),
+            None => {}
+        }
+        if !placed {
+            // An unplaced destination might be at any distance.
+            nearest.least = 0.0;
+            return nearest;
+        }
+        let lower = if sure.len() == all.len() {
+            upper.expect("every destination is sure and placed, and there is one")
+        } else {
+            walk(&all)
+        };
+        match lower {
+            Ok(Walked::Reached(target, distance)) => {
+                let candidate = all[target].0;
+                nearest.least = distance.lower();
+                nearest.closest =
+                    Some((candidate.id.clone(), distance, candidate.evidence.clone()));
+            }
+            Ok(Walked::Unreachable(evidence)) => {
+                if !nearest.blocked.contains(&evidence) {
+                    nearest.blocked.push(evidence);
+                }
+            }
+            Err(unavailable) => {
+                nearest.least = 0.0;
+                if !nearest.doubts.contains(&unavailable.1) {
+                    nearest.doubt(unavailable);
+                }
+            }
+        }
+        nearest
     }
 
     /// Judges one row for one space.
@@ -594,66 +760,42 @@ impl Judge<'_, '_> {
         row: &Row<'_>,
     ) -> Result<Option<Finding>, Unavailable> {
         let candidates = self.candidates(space, index, row)?;
-        // The nearest distance is at most the nearest sure destination's
-        // upper bound, and at least the least lower bound of every one that
-        // might count, an unmeasured one counting as zero.
-        let most = candidates
-            .iter()
-            .filter(|candidate| candidate.doubt.is_none())
-            .filter_map(|candidate| candidate.distance.as_ref().ok())
-            .map(Distance::upper)
-            .fold(f64::INFINITY, f64::min);
-        let least = candidates
-            .iter()
-            .map(|candidate| candidate.distance.as_ref().map_or(0.0, Distance::lower))
-            .fold(f64::INFINITY, f64::min);
-        let mut doubts: Vec<String> = Vec::new();
-        let mut reason = NotEvaluatedReason::IncompleteEvidence;
-        for candidate in &candidates {
-            if let Some(doubt) = &candidate.doubt {
-                doubts.push(doubt.clone());
-            }
-            if let Err((why, message)) = &candidate.distance {
-                if *why == NotEvaluatedReason::MissingService {
-                    reason = why.clone();
-                }
-                doubts.push(message.clone());
-            }
-        }
+        let nearest = match row.measure {
+            Measure::Straight => self.nearest_straight(&space.id, &candidates),
+            Measure::Walking => self.nearest_walking(&space.id, &candidates),
+        };
+        let (most, least) = (nearest.most, nearest.least);
         let how = row.measure.describe();
         if let Some(maximum) = row.maximum
             && least > maximum
         {
-            return Ok(Some(self.too_far(space, row, &candidates, maximum)));
+            return Ok(Some(self.too_far(
+                space,
+                row,
+                &candidates,
+                &nearest,
+                maximum,
+            )));
         }
         if let Some(minimum) = row.minimum
             && most < minimum
         {
-            let nearest = candidates
-                .iter()
-                .filter(|candidate| candidate.doubt.is_none())
-                .filter_map(|candidate| {
-                    candidate
-                        .distance
-                        .as_ref()
-                        .ok()
-                        .map(|distance| (candidate, distance))
-                })
-                .min_by(|a, b| a.1.upper().total_cmp(&b.1.upper()))
+            let (id, distance, cited) = nearest
+                .sure
+                .as_ref()
                 .expect("a finite upper bound comes from a sure destination");
-            let mut evidence = nearest.0.evidence.clone();
-            evidence.push(nearest.1.evidence().clone());
+            let mut evidence = cited.clone();
+            evidence.push(distance.evidence().clone());
             return Ok(Some(finding(
                 self.rule,
                 &space.id,
                 format!(
-                    "{} is {} m away {how}; {} requires at least {minimum} m",
-                    nearest.0.id,
-                    shown(nearest.1.lower(), nearest.1.upper()),
+                    "{id} is {} m away {how}; {} requires at least {minimum} m",
+                    shown(distance.lower(), distance.upper()),
                     row.name
                 ),
                 evidence,
-                vec![nearest.0.id.clone()],
+                vec![id.clone()],
             )));
         }
         let within = row.maximum.is_none_or(|maximum| most <= maximum);
@@ -667,17 +809,24 @@ impl Judge<'_, '_> {
             (None, Some(maximum)) => format!("at most {maximum} m"),
             (None, None) => unreachable!("a row states a bound"),
         };
-        let nearest = if most.is_finite() {
+        let shown_most = if most.is_finite() {
             format!("at most {} m", shown(most, most))
         } else {
             "unknown".to_owned()
         };
+        let mut doubts = nearest.doubts;
+        if doubts.is_empty() {
+            doubts.push(format!(
+                "it is known only to lie {} m away",
+                shown(least, most)
+            ));
+        }
         doubts.sort();
         doubts.dedup();
         Err((
-            reason,
+            nearest.reason,
             format!(
-                "the nearest destination is {nearest} {how}, {bounds} required, and {}",
+                "the nearest destination is {shown_most} {how}, {bounds} required, and {}",
                 doubts.join("; ")
             ),
         ))
@@ -690,6 +839,7 @@ impl Judge<'_, '_> {
         space: &Object,
         row: &Row<'_>,
         candidates: &[Candidate],
+        nearest: &Nearest,
         maximum: f64,
     ) -> Finding {
         let how = row.measure.describe();
@@ -705,17 +855,6 @@ impl Judge<'_, '_> {
         } else {
             format!(" {}", filters.join(" "))
         };
-        let reachable: Vec<(&Candidate, &Distance)> = candidates
-            .iter()
-            .filter_map(|candidate| {
-                candidate
-                    .distance
-                    .as_ref()
-                    .ok()
-                    .map(|distance| (candidate, distance))
-            })
-            .filter(|(_, distance)| matches!(distance, Distance::Between(..)))
-            .collect();
         let mut evidence = Vec::new();
         let (message, related) = if candidates.is_empty() {
             (
@@ -725,28 +864,20 @@ impl Judge<'_, '_> {
                 ),
                 Vec::new(),
             )
-        } else if let Some((nearest, distance)) = reachable
-            .iter()
-            .min_by(|a, b| a.1.lower().total_cmp(&b.1.lower()))
-        {
-            evidence.extend(nearest.evidence.iter().cloned());
+        } else if let Some((id, distance, cited)) = &nearest.closest {
+            evidence.extend(cited.iter().cloned());
             evidence.push(distance.evidence().clone());
             (
                 format!(
-                    "the nearest destination{filters}, {}, is {} m away {how}; {} allows at \
+                    "the nearest destination{filters}, {id}, is {} m away {how}; {} allows at \
                      most {maximum} m",
-                    nearest.id,
                     shown(distance.lower(), distance.upper()),
                     row.name
                 ),
-                vec![nearest.id.clone()],
+                vec![id.clone()],
             )
         } else {
-            for candidate in candidates {
-                if let Ok(distance) = &candidate.distance {
-                    evidence.push(distance.evidence().clone());
-                }
-            }
+            evidence.extend(nearest.blocked.iter().cloned());
             (
                 format!(
                     "reaches none of its {} destination(s){filters} {how}; {} requires one \

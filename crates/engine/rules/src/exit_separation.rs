@@ -186,14 +186,15 @@ impl RuleCapability for ExitSeparation {
     }
 }
 
-/// The objects `exit_selector` picks, and those it cannot decide.
-struct Candidates<'a> {
-    universe: Vec<&'a Object>,
-    undecided: BTreeMap<ObjectId, String>,
+/// The objects `exit_selector` picks, and those it cannot decide. Shared
+/// with `escape-route`.
+pub(crate) struct Candidates<'a> {
+    pub(crate) universe: Vec<&'a Object>,
+    pub(crate) undecided: BTreeMap<ObjectId, String>,
 }
 
 impl<'a> Candidates<'a> {
-    fn select(context: &RuleContext<'a>, selector: &Selector) -> Self {
+    pub(crate) fn select(context: &RuleContext<'a>, selector: &Selector) -> Self {
         let mut universe = Vec::new();
         let mut undecided = BTreeMap::new();
         for object in context.project.objects() {

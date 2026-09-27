@@ -250,7 +250,7 @@ pub(crate) fn subtract(a: &Plan, b: &Plan) -> Result<Plan, String> {
     overlay_soups(trapezoids(a), trapezoids(b), OverlayOperation::Difference)
 }
 
-fn intersect(a: &Plan, b: &Plan) -> Result<Plan, String> {
+pub(crate) fn intersect(a: &Plan, b: &Plan) -> Result<Plan, String> {
     if a.is_empty() || b.is_empty() {
         return Ok(Plan::empty());
     }

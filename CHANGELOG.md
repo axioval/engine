@@ -6,6 +6,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Relative counts by group, for small counts and at table edges.**
+  `relative-count` takes `group_property` to count per property value (a
+  location code, say) instead of per anchor, within one source unless
+  `across_sources`; a group with required objects and no provided object is
+  reported as present only in the required set. In ratio mode,
+  `small_required_below` and `small_provided` state the requirement for
+  small nonzero required counts explicitly. Below a table's first row the
+  anchor or group is now skipped; it was extrapolated from zero with the
+  increments.
 - **Numbering consistency.** `numbering-consistency` reads a number from
   each value through a pattern with one captured group and requires the
   numbers of one scope (a source, or a storey reached through a relationship)

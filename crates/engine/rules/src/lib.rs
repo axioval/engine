@@ -24,6 +24,7 @@ mod property_comparison;
 mod property_predicate;
 mod property_rules;
 mod property_value;
+mod relative_count;
 mod selection;
 mod shelf_capacity;
 mod slab_contact;
@@ -39,7 +40,7 @@ pub use comparison::{
 };
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
-pub use counts::{RelatedCount, RelativeCount};
+pub use counts::RelatedCount;
 pub use distance::Distance;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
@@ -57,6 +58,7 @@ pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyRequired,
 };
 pub use property_value::PropertyValueConstraint;
+pub use relative_count::RelativeCount;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
 pub use space_validation::{SpaceCategory, SpaceValidation};

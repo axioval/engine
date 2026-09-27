@@ -74,6 +74,14 @@
 //! skipped; a door without a hinged leaf, unknown leaves, and a space
 //! neither probe lies in are not evaluated.
 //!
+//! **Not usable for escape.** With `no_escape_selector`, what it picks
+//! (locked or staff-only doors) is no exit and no start, and every walk
+//! keeps out of it. What it may pick is only a possible exit or start, and
+//! avoided by the walks bounding the travel from above only. The farthest
+//! point is measured on the plain walk, which bounds the walk around
+//! anything from below, and from above only where every avoided object lies
+//! surely farther from the space than that bound.
+//!
 //! Not checked: passages walked from the farthest point rather than the
 //! doors.
 
@@ -82,11 +90,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeavesError, FarthestPointOutcome,
-    FarthestPointRequest, FreeSpaceServiceHandle, MetricPoint, MetricRoutingServiceHandle,
-    MobilityProfile, NearestTargetOutcome, NearestTargetRequest, NotEvaluatedReason,
-    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, PathTraceRequest, PlanArea,
-    PlanSpanServiceHandle, ProximityProjection, ProximityRequest, ProximityServiceHandle,
-    RuleCapability, RuleContext, TableColumn,
+    FarthestPointRequest, FreeSpaceServiceHandle, LengthInterval, MetricPoint,
+    MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
+    NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor, ParameterType,
+    PathTraceRequest, PlanArea, PlanSpanServiceHandle, ProximityProjection, ProximityRequest,
+    ProximityServiceHandle, RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension};
@@ -192,6 +200,8 @@ struct Declaration<'a> {
     profile: Option<MobilityProfile>,
     /// Whether exit doors must open in the direction of escape.
     door_direction: bool,
+    /// Objects not usable for escape: never exits, starts or passed.
+    no_escape: Option<&'a Selector>,
 }
 
 fn positive(name: &str, column: &str, value: Option<f64>) -> Result<Option<f64>, Unavailable> {
@@ -354,6 +364,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         clear_width: parameters.property("clear_width_property")?,
         profile,
         door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
+        no_escape: parameters.selector("no_escape_selector")?,
     })
 }
 
@@ -480,6 +491,7 @@ impl RuleCapability for EscapeRoute {
             ),
             ParameterDescriptor::optional("exit_door_direction", ParameterType::Boolean),
             ParameterDescriptor::optional("walked_passages", ParameterType::Boolean),
+            ParameterDescriptor::optional("no_escape_selector", ParameterType::Selector),
         ]
     }
 
@@ -510,6 +522,9 @@ impl RuleCapability for EscapeRoute {
             doors,
             sections: possible_sections(context, rule, &declared),
             passages,
+            no_escape: declared
+                .no_escape
+                .map(|selector| Candidates::select(context, selector)),
             walks: RefCell::new(BTreeMap::new()),
         };
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
@@ -762,22 +777,88 @@ fn occupants(least: u64, most: u64) -> String {
 }
 
 /// Objects reached from a space, split by whether their selection is sure.
+#[derive(Clone, Default)]
 struct Reached {
     sure: Vec<ObjectId>,
     maybe: Vec<ObjectId>,
+    /// Why each of `maybe` is not sure.
+    why: BTreeMap<ObjectId, String>,
     evidence: Vec<Evidence>,
 }
 
 impl Reached {
-    fn doubts(&self, candidates: &Candidates<'_>, what: &str) -> Vec<String> {
+    fn doubts(&self, what: &str) -> Vec<String> {
         self.maybe
             .iter()
             .map(|object| {
                 format!(
                     "whether {object} is {what} is undecided: {}",
-                    candidates.undecided[object]
+                    self.why[object]
                 )
             })
+            .collect()
+    }
+
+    /// Takes out what `excluded` surely picks, and leaves what it may pick
+    /// only possible.
+    fn without(&mut self, excluded: &Candidates<'_>, what: &str) {
+        let picked = |object: &ObjectId| excluded.universe.iter().any(|known| known.id == *object);
+        let surely = |object: &ObjectId| picked(object) && !excluded.undecided.contains_key(object);
+        self.sure.retain(|object| !surely(object));
+        self.maybe.retain(|object| !surely(object));
+        let mut doubted = Vec::new();
+        self.sure.retain(|object| {
+            if picked(object) {
+                doubted.push(object.clone());
+                false
+            } else {
+                true
+            }
+        });
+        for object in self.maybe.iter().chain(&doubted) {
+            if let Some(why) = excluded.undecided.get(object) {
+                let doubt = format!("whether it is {what} is undecided ({why})");
+                let entry = self.why.entry(object.clone()).or_default();
+                *entry = if entry.is_empty() {
+                    doubt
+                } else {
+                    format!("{entry}; {doubt}")
+                };
+            }
+        }
+        self.maybe.extend(doubted);
+        self.maybe.sort();
+        let maybe = &self.maybe;
+        self.why.retain(|object, _| maybe.contains(object));
+    }
+}
+
+/// Objects every walk from a start keeps out of: surely, and perhaps.
+#[derive(Clone, Default)]
+struct Avoid {
+    sure: BTreeSet<ObjectId>,
+    maybe: BTreeSet<ObjectId>,
+}
+
+impl Avoid {
+    /// What every walk from `origin` surely keeps out of: for its lower
+    /// bound.
+    fn least(&self, origin: &ObjectId) -> Vec<ObjectId> {
+        self.sure
+            .iter()
+            .filter(|object| *object != origin)
+            .cloned()
+            .collect()
+    }
+
+    /// What a walk from `origin` may have to keep out of: for its upper
+    /// bound.
+    fn most(&self, origin: &ObjectId) -> Vec<ObjectId> {
+        self.sure
+            .iter()
+            .chain(&self.maybe)
+            .filter(|object| *object != origin)
+            .cloned()
             .collect()
     }
 }
@@ -796,6 +877,18 @@ enum Width {
     /// The footprint's longest plan diagonal, which no clear width exceeds.
     AtMost(f64, Evidence),
     Unknown(String),
+}
+
+/// Where the walks out of one space end, and what they keep out of.
+struct Escape {
+    /// The space's exits usable for escape.
+    exits: Reached,
+    /// Every target a walk may end at: the exits, and more.
+    targets: Reached,
+    /// Whether no target is missing from `targets`.
+    known: bool,
+    placed: Placed,
+    avoid: Avoid,
 }
 
 /// A space's exits placed as walking targets.
@@ -839,9 +932,9 @@ impl Travel {
     }
 }
 
-/// A walk from a door to the nearest of some exits, perhaps around an
-/// object: `(door, exits, avoided)`.
-type WalkKey = (ObjectId, Vec<ObjectId>, Option<ObjectId>);
+/// A walk from a door (or a space) to the nearest of some exits, around
+/// some objects: `(origin, exits, avoided)`, the avoided sorted.
+type WalkKey = (ObjectId, Vec<ObjectId>, Vec<ObjectId>);
 
 /// An exit and the point a walk reaches it at.
 type Target = (ObjectId, MetricPoint);
@@ -854,6 +947,8 @@ struct Judge<'r, 'c> {
     doors: Option<Candidates<'c>>,
     sections: Vec<Section>,
     passages: Option<Candidates<'c>>,
+    /// Objects not usable for escape.
+    no_escape: Option<Candidates<'c>>,
     /// Walks already measured: travel and walked passages share them.
     walks: RefCell<BTreeMap<WalkKey, Result<Travel, Unavailable>>>,
 }
@@ -876,13 +971,77 @@ impl Judge<'_, '_> {
         space: &ObjectId,
     ) -> Result<Reached, Unavailable> {
         let (reached, evidence) = traversal.related(self.context, space, &candidates.universe)?;
-        let (maybe, sure) = reached
+        let (maybe, sure): (Vec<ObjectId>, Vec<ObjectId>) = reached
             .into_iter()
             .partition(|object| candidates.undecided.contains_key(object));
+        let why = maybe
+            .iter()
+            .map(|object| (object.clone(), candidates.undecided[object].clone()))
+            .collect();
         Ok(Reached {
             sure,
             maybe,
+            why,
             evidence,
+        })
+    }
+
+    /// The exits of `space` usable for escape.
+    fn exits_of(&self, space: &ObjectId) -> Result<Reached, Unavailable> {
+        let mut exits = self.reached(&self.declared.exits, &self.exits, space)?;
+        if let Some(no_escape) = &self.no_escape {
+            exits.without(no_escape, "not usable for escape");
+        }
+        Ok(exits)
+    }
+
+    /// The doors of `space` a walk may start from: none surely unusable for
+    /// escape.
+    fn start_doors(&self, space: &ObjectId) -> Result<Reached, Unavailable> {
+        let (Some((traversal, _)), Some(candidates)) =
+            (self.declared.doors.as_ref(), self.doors.as_ref())
+        else {
+            return Err(invalid("no `door_path` and `door_selector` are declared"));
+        };
+        let mut doors = self.reached(traversal, candidates, space)?;
+        if let Some(no_escape) = &self.no_escape {
+            doors.without(no_escape, "not usable for escape");
+        }
+        Ok(doors)
+    }
+
+    /// What every walk out of `space` keeps out of: whatever is not usable
+    /// for escape, surely or perhaps. The space itself is never avoided.
+    fn avoid(&self, space: &ObjectId) -> Avoid {
+        let mut avoid = Avoid::default();
+        if let Some(no_escape) = &self.no_escape {
+            for object in &no_escape.universe {
+                if object.id == *space {
+                    continue;
+                }
+                if no_escape.undecided.contains_key(&object.id) {
+                    avoid.maybe.insert(object.id.clone());
+                } else {
+                    avoid.sure.insert(object.id.clone());
+                }
+            }
+        }
+        avoid
+    }
+
+    /// Where the walks out of `space` end, and what they keep out of.
+    fn escape(&self, space: &ObjectId) -> Result<Escape, Unavailable> {
+        let exits = self.exits_of(space)?;
+        let targets = exits.clone();
+        let known = true;
+        let mut placed = self.placed(&targets);
+        placed.complete &= known;
+        Ok(Escape {
+            exits,
+            targets,
+            known,
+            placed,
+            avoid: self.avoid(space),
         })
     }
 
@@ -897,7 +1056,7 @@ impl Judge<'_, '_> {
         let load = use_
             .area_per_occupant
             .map(|per_occupant| Self::load(self.context, &space.id, per_occupant));
-        let exits = match self.reached(&self.declared.exits, &self.exits, &space.id) {
+        let exits = match self.exits_of(&space.id) {
             Ok(exits) => exits,
             Err(unavailable) => {
                 checked.doubts.push(unavailable);
@@ -914,7 +1073,7 @@ impl Judge<'_, '_> {
             }
         }
         if let Some(maximum) = use_.maximum_travel {
-            self.travel(space, use_, maximum, &exits, checked);
+            self.travel(space, use_, maximum, checked);
         }
         if self.declared.door_direction {
             self.door_direction(space, &exits, checked);
@@ -972,7 +1131,7 @@ impl Judge<'_, '_> {
                 )),
                 Ok((Relation::Into, _)) => checked.doubts.push(incomplete(format!(
                     "{exit} opens into the space, and whether it is an exit is undecided: {}",
-                    self.exits.undecided[exit]
+                    exits.why[exit]
                 ))),
                 Ok((Relation::Apart, _)) if sure => checked.doubts.push(incomplete(format!(
                     "neither side of exit door {exit} lies in the space at its probes, so the \
@@ -1103,28 +1262,24 @@ impl Judge<'_, '_> {
                 .collect();
             walked
         };
-        let (Some(routes), Some(profile), Some((traversal, _)), Some(doors)) = (
+        let (Some(routes), Some(profile)) = (
             self.context.services.get::<MetricRoutingServiceHandle>(),
             self.declared.profile,
-            self.declared.doors.as_ref(),
-            self.doors.as_ref(),
         ) else {
             return anything(walked);
         };
-        let Ok(exits) = self.reached(&self.declared.exits, &self.exits, space) else {
+        let Ok(escape) = self.escape(space) else {
             return anything(walked);
         };
-        let doors = match self.reached(traversal, doors, space) {
+        let doors = match self.start_doors(space) {
             Ok(doors) if !doors.sure.is_empty() || !doors.maybe.is_empty() => doors,
             _ => return anything(walked),
         };
-        let placed = self.placed(&exits);
-        let exits: Vec<&ObjectId> = exits.sure.iter().chain(&exits.maybe).collect();
         let mut sure: Option<BTreeMap<ObjectId, Vec<Evidence>>> = None;
         let mut perhaps = BTreeSet::new();
         for door in doors.sure.iter().chain(&doors.maybe) {
             let (door_sure, door_perhaps) =
-                self.door_passages(routes, profile, door, &exits, &placed, &all);
+                self.door_passages(routes, profile, door, &escape, &all);
             perhaps.extend(door_perhaps);
             sure = Some(match sure {
                 None => door_sure,
@@ -1166,59 +1321,123 @@ impl Judge<'_, '_> {
         routes: &MetricRoutingServiceHandle,
         profile: MobilityProfile,
         door: &ObjectId,
-        exits: &[&ObjectId],
-        placed: &Placed,
+        escape: &Escape,
         all: &BTreeSet<ObjectId>,
     ) -> (BTreeMap<ObjectId, Vec<Evidence>>, BTreeSet<ObjectId>) {
         let mut sure = BTreeMap::new();
-        let walk = if placed.sure.is_empty() {
-            None
-        } else {
-            self.nearest(routes, door, &placed.sure, None, profile).ok()
-        };
-        let Some(walk) = walk.filter(|walk| walk.upper.is_finite()) else {
+        let Some(walk) = self.witness(routes, profile, door, escape) else {
             return (sure, all.clone());
         };
-        let crossed: Option<BTreeSet<ObjectId>> = walk.path.as_ref().and_then(|path| {
-            let request =
-                PathTraceRequest::try_new(path.clone(), all.iter().cloned().collect()).ok()?;
-            let trace = routes.trace_path(&request).ok()?;
-            Some(
-                request
-                    .objects()
-                    .iter()
-                    .zip(trace.lengths())
-                    .filter(|(_, length)| {
-                        length
-                            .as_ref()
-                            .map_or(true, |length| length.upper_metres() > 0.0)
-                    })
-                    .map(|(passage, _)| passage.clone())
-                    .collect(),
-            )
-        });
+        let crossed = Self::crossed(routes, &walk, all);
+        let targets: Vec<&ObjectId> = escape
+            .targets
+            .sure
+            .iter()
+            .chain(&escape.targets.maybe)
+            .collect();
         let perhaps: BTreeSet<ObjectId> = all
             .iter()
             .filter(|passage| {
                 crossed
                     .as_ref()
-                    .is_some_and(|crossed| crossed.contains(*passage))
-                    || !self.off_every_walk(door, passage, exits, walk.upper)
+                    .is_some_and(|crossed| crossed.contains_key(*passage))
+                    || !escape.known
+                    || !self.off_every_walk(door, passage, &targets, walk.upper)
             })
             .cloned()
             .collect();
-        if placed.complete {
-            for passage in crossed.as_ref().unwrap_or(&perhaps) {
-                if let Ok(around) = self.nearest(routes, door, &placed.all, Some(passage), profile)
-                    && around.lower > walk.upper
-                {
-                    let mut proof = walk.evidence.clone();
-                    proof.extend(around.evidence);
-                    sure.insert(passage.clone(), proof);
-                }
+        let tried: Vec<&ObjectId> = match &crossed {
+            Some(crossed) => crossed.keys().collect(),
+            None => perhaps.iter().collect(),
+        };
+        for passage in tried {
+            if let Some(proof) = self.on_every_walk(routes, profile, door, escape, &walk, passage) {
+                sure.insert(passage.clone(), proof);
             }
         }
         (sure, perhaps)
+    }
+
+    /// The walk from `origin` to the nearest sure target around everything
+    /// it may have to avoid: one shortest walk, no longer than its upper
+    /// bound, which is finite.
+    fn witness(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        profile: MobilityProfile,
+        origin: &ObjectId,
+        escape: &Escape,
+    ) -> Option<Travel> {
+        if escape.placed.sure.is_empty() {
+            return None;
+        }
+        self.nearest(
+            routes,
+            origin,
+            &escape.placed.sure,
+            &escape.avoid.most(origin),
+            profile,
+        )
+        .ok()
+        .filter(|walk| walk.upper.is_finite())
+    }
+
+    /// The objects of `among` the walk may lie over, each with the traced
+    /// length (`None` where unmeasured); `None` when the walk cannot be
+    /// traced.
+    fn crossed(
+        routes: &MetricRoutingServiceHandle,
+        walk: &Travel,
+        among: &BTreeSet<ObjectId>,
+    ) -> Option<BTreeMap<ObjectId, Option<LengthInterval>>> {
+        let path = walk.path.as_ref()?;
+        if among.is_empty() {
+            return Some(BTreeMap::new());
+        }
+        let request =
+            PathTraceRequest::try_new(path.clone(), among.iter().cloned().collect()).ok()?;
+        let trace = routes.trace_path(&request).ok()?;
+        Some(
+            request
+                .objects()
+                .iter()
+                .zip(trace.lengths())
+                .filter(|(_, length)| {
+                    length
+                        .as_ref()
+                        .map_or(true, |length| length.upper_metres() > 0.0)
+                })
+                .map(|(object, length)| (object.clone(), length.as_ref().ok().copied()))
+                .collect(),
+        )
+    }
+
+    /// The proof that every shortest walk from `origin` to whichever
+    /// targets there are enters `object`: with every possible target
+    /// placed, the walk to them around it (and around only what surely is
+    /// avoided) is longer than `walk`, the witness, or reaches none.
+    fn on_every_walk(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        profile: MobilityProfile,
+        origin: &ObjectId,
+        escape: &Escape,
+        walk: &Travel,
+        object: &ObjectId,
+    ) -> Option<Vec<Evidence>> {
+        if !escape.placed.complete || object == origin {
+            return None;
+        }
+        let mut avoided = escape.avoid.least(origin);
+        avoided.push(object.clone());
+        let around = self
+            .nearest(routes, origin, &escape.placed.all, &avoided, profile)
+            .ok()?;
+        (around.lower > walk.upper).then(|| {
+            let mut proof = walk.evidence.clone();
+            proof.extend(around.evidence);
+            proof
+        })
     }
 
     /// Whether every walk from `door` through `passage` to any of `exits`
@@ -1402,7 +1621,7 @@ impl Judge<'_, '_> {
         } else if sure < required {
             checked.doubts.push(incomplete(format!(
                 "{sure} certain exit(s), at least {required} required: {}",
-                exits.doubts(&self.exits, "an exit").join("; ")
+                exits.doubts("an exit").join("; ")
             )));
         }
     }
@@ -1576,7 +1795,7 @@ impl Judge<'_, '_> {
             if !matches!(width, Width::Stated(width, _) if *width >= high) {
                 checked.doubts.push(incomplete(format!(
                     "whether {exit} is an exit is undecided ({}), and it may be too narrow",
-                    self.exits.undecided[exit]
+                    exits.why[exit]
                 )));
             }
         }
@@ -1651,16 +1870,18 @@ impl Judge<'_, '_> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn travel(
-        &self,
-        space: &Object,
-        use_: &Use<'_>,
-        maximum: f64,
-        exits: &Reached,
-        checked: &mut Checked,
-    ) {
+    #[allow(clippy::too_many_lines)]
+    fn travel(&self, space: &Object, use_: &Use<'_>, maximum: f64, checked: &mut Checked) {
         let allows = format!("{} allows at most {maximum} m of travel", use_.name);
-        if exits.sure.is_empty() && exits.maybe.is_empty() {
+        let escape = match self.escape(&space.id) {
+            Ok(escape) => escape,
+            Err(unavailable) => {
+                checked.doubts.push(unavailable);
+                return;
+            }
+        };
+        let exits = &escape.exits;
+        if escape.known && escape.targets.sure.is_empty() && escape.targets.maybe.is_empty() {
             checked.findings.push(finding(
                 self.rule,
                 &space.id,
@@ -1668,7 +1889,7 @@ impl Judge<'_, '_> {
                     "has no exit via {} to walk to; {allows}",
                     self.declared.exits.relationship
                 ),
-                exits.evidence.clone(),
+                escape.targets.evidence.clone(),
                 Vec::new(),
             ));
             return;
@@ -1688,44 +1909,42 @@ impl Judge<'_, '_> {
             sure,
             all,
             complete: placed,
-            mut doubts,
-        } = self.placed(exits);
+            doubts,
+        } = &escape.placed;
+        let mut doubts = doubts.clone();
         let bounds = |door: Option<&ObjectId>| -> [Result<Travel, Unavailable>; 2] {
-            let measure = |targets: &[Target]| {
+            let measure = |targets: &[Target], avoided: Vec<ObjectId>| {
                 if targets.is_empty() {
                     return Ok(Travel::unbounded(f64::INFINITY));
                 }
                 match door {
-                    None => Self::farthest(
-                        routes,
-                        &space.id,
-                        targets.iter().map(|(_, point)| point.clone()).collect(),
-                        profile,
-                    ),
-                    Some(door) => self.nearest(routes, door, targets, None, profile),
+                    None => self.farthest(routes, &space.id, targets, &avoided, profile),
+                    Some(door) => self.nearest(routes, door, targets, &avoided, profile),
                 }
             };
-            let upper = measure(&sure);
+            let from = door.unwrap_or(&space.id);
+            let upper = measure(sure, escape.avoid.most(from));
+            // The farthest point is measured on the plain walk, which no
+            // walk around anything undercuts: a lower bound either way.
+            let least = if door.is_some() {
+                escape.avoid.least(from)
+            } else {
+                Vec::new()
+            };
             let lower = if !placed {
-                // An exit without a point might lie anywhere.
+                // A target without a point might lie anywhere.
                 Ok(Travel::unbounded(0.0))
-            } else if sure.len() == all.len() {
+            } else if sure.len() == all.len() && least == escape.avoid.most(from) {
                 upper.clone()
             } else {
-                measure(&all)
+                measure(all, least)
             };
             [lower, upper]
         };
         let measured: Vec<Measured> = match use_.start {
             Start::FarthestPoint => vec![(None, true, bounds(None))],
             Start::Door => {
-                let (traversal, _) = self
-                    .declared
-                    .doors
-                    .as_ref()
-                    .expect("a door start is declared with doors");
-                let candidates = self.doors.as_ref().expect("door candidates are selected");
-                let doors = match self.reached(traversal, candidates, &space.id) {
+                let doors = match self.start_doors(&space.id) {
                     Ok(doors) => doors,
                     Err(unavailable) => {
                         checked.doubts.push(unavailable);
@@ -1734,17 +1953,12 @@ impl Judge<'_, '_> {
                 };
                 if doors.sure.is_empty() && doors.maybe.is_empty() {
                     checked.doubts.push(incomplete(format!(
-                        "{} reaches no door via {} to start from",
-                        space.id, traversal.relationship
+                        "{} reaches no door usable for escape to start from",
+                        space.id
                     )));
                     return;
                 }
-                doubts.extend(
-                    doors
-                        .doubts(candidates, "a door of it")
-                        .into_iter()
-                        .map(incomplete),
-                );
+                doubts.extend(doors.doubts("a door of it").into_iter().map(incomplete));
                 doors
                     .sure
                     .iter()
@@ -1894,12 +2108,9 @@ impl Judge<'_, '_> {
                 }
             }
         }
-        placed.doubts.extend(
-            exits
-                .doubts(&self.exits, "an exit")
-                .into_iter()
-                .map(incomplete),
-        );
+        placed
+            .doubts
+            .extend(exits.doubts("an exit").into_iter().map(incomplete));
         placed
     }
 
@@ -1926,21 +2137,10 @@ impl Judge<'_, '_> {
                 self.sections.iter().map(|section| section.kind).collect(),
             );
         }
-        let proximity = self.context.services.get::<ProximityServiceHandle>();
         let mut factor = 1.0_f64;
         let mut kinds = BTreeSet::new();
         for section in &self.sections {
-            let far = section.object != *from
-                && proximity.is_some_and(|proximity| {
-                    ProximityRequest::projected(
-                        from.clone(),
-                        section.object.clone(),
-                        ProximityProjection::Horizontal,
-                    )
-                    .and_then(|request| proximity.measure_distance(&request))
-                    .is_ok_and(|distance| distance.interval_metres().0 > reach)
-                });
-            if !far {
+            if !self.farther(from, &section.object, reach) {
                 factor = factor.max(section.factor);
                 kinds.insert(section.kind);
             }
@@ -1992,8 +2192,64 @@ impl Judge<'_, '_> {
         Some((cost, kinds))
     }
 
-    /// The farthest point of `space` from the nearest of `targets`.
+    /// The farthest point of `space` from the nearest of `targets`,
+    /// keeping out of `avoided`.
+    ///
+    /// The routing service measures the farthest point on the plain walk
+    /// only. A walk of at most `U` metres from a point of the space stays
+    /// within `U` of the space in plan, so the plain answer stands for the
+    /// walk around every avoided object surely farther than its upper bound
+    /// from the space; any other avoided object leaves the travel unknown.
     fn farthest(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        space: &ObjectId,
+        targets: &[Target],
+        avoided: &[ObjectId],
+        profile: MobilityProfile,
+    ) -> Result<Travel, Unavailable> {
+        let plain = Self::plain_farthest(
+            routes,
+            space,
+            targets.iter().map(|(_, point)| point.clone()).collect(),
+            profile,
+        )?;
+        let near: Vec<String> = avoided
+            .iter()
+            .filter(|object| !self.farther(space, object, plain.upper))
+            .map(ToString::to_string)
+            .collect();
+        if near.is_empty() {
+            return Ok(plain);
+        }
+        Err(incomplete(format!(
+            "the farthest point of {space} is measured on the plain walk only, and a walk may \
+             have to keep out of {}",
+            near.join(", ")
+        )))
+    }
+
+    /// Whether `object` lies surely farther than `reach` from `from` in
+    /// plan.
+    fn farther(&self, from: &ObjectId, object: &ObjectId, reach: f64) -> bool {
+        reach.is_finite()
+            && object != from
+            && self
+                .context
+                .services
+                .get::<ProximityServiceHandle>()
+                .is_some_and(|proximity| {
+                    ProximityRequest::projected(
+                        from.clone(),
+                        object.clone(),
+                        ProximityProjection::Horizontal,
+                    )
+                    .and_then(|request| proximity.measure_distance(&request))
+                    .is_ok_and(|distance| distance.interval_metres().0 > reach)
+                })
+    }
+
+    fn plain_farthest(
         routes: &MetricRoutingServiceHandle,
         space: &ObjectId,
         targets: Vec<MetricPoint>,
@@ -2030,25 +2286,29 @@ impl Judge<'_, '_> {
         }
     }
 
-    /// The walk from `door` to the nearest of `targets`, keeping out of
-    /// `avoided` where given. Each walk is measured once.
+    /// The walk from `origin` (a door, or a space's representative point)
+    /// to the nearest of `targets`, keeping out of `avoided`. Each walk is
+    /// measured once.
     fn nearest(
         &self,
         routes: &MetricRoutingServiceHandle,
-        door: &ObjectId,
+        origin: &ObjectId,
         targets: &[Target],
-        avoided: Option<&ObjectId>,
+        avoided: &[ObjectId],
         profile: MobilityProfile,
     ) -> Result<Travel, Unavailable> {
+        let mut avoided = avoided.to_vec();
+        avoided.sort();
+        avoided.dedup();
         let key = (
-            door.clone(),
+            origin.clone(),
             targets.iter().map(|(exit, _)| exit.clone()).collect(),
-            avoided.cloned(),
+            avoided,
         );
         if let Some(known) = self.walks.borrow().get(&key) {
             return known.clone();
         }
-        let walked = Self::walk(self.context, routes, door, targets, avoided, profile);
+        let walked = Self::walk(self.context, routes, origin, targets, &key.2, profile);
         self.walks.borrow_mut().insert(key, walked.clone());
         walked
     }
@@ -2056,16 +2316,16 @@ impl Judge<'_, '_> {
     fn walk(
         context: &RuleContext<'_>,
         routes: &MetricRoutingServiceHandle,
-        door: &ObjectId,
+        from: &ObjectId,
         targets: &[Target],
-        avoided: Option<&ObjectId>,
+        avoided: &[ObjectId],
         profile: MobilityProfile,
     ) -> Result<Travel, Unavailable> {
-        let (origin, cited) = representative_point(context, door)?;
+        let (origin, cited) = representative_point(context, from)?;
         let points = targets.iter().map(|(_, point)| point.clone()).collect();
         let request = NearestTargetRequest::try_new(origin, points, profile)
             .map_err(|error| incomplete(error.to_string()))?
-            .with_avoided(avoided.into_iter().cloned().collect());
+            .with_avoided(avoided.to_vec());
         match routes.nearest_target(&request) {
             Ok(NearestTargetOutcome::Reached(reached)) => {
                 let mut evidence = cited;
@@ -2089,11 +2349,14 @@ impl Judge<'_, '_> {
                     evidence,
                 })
             }
-            Err(error) => Err(incomplete(match avoided {
-                None => format!("walking from door {door} to an exit: {error}"),
-                Some(avoided) => {
-                    format!("walking from door {door} to an exit around {avoided}: {error}")
-                }
+            Err(error) => Err(incomplete(if avoided.is_empty() {
+                format!("walking from {from} to an exit: {error}")
+            } else {
+                let names: Vec<String> = avoided.iter().map(ToString::to_string).collect();
+                format!(
+                    "walking from {from} to an exit around {}: {error}",
+                    names.join(", ")
+                )
             })),
         }
     }

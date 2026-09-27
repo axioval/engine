@@ -683,6 +683,7 @@ occupants.
 | `walked_passages` | boolean | the passages are those the walks from each space's doors cross, not declared; needs `passage_selector`, `door_path`, `door_selector` and a walking profile, and excludes `passage_path` |
 | `passage_width_property` | property reference | a passage's stated clear width, a length; needs `passage_selector` |
 | `exit_door_direction` | boolean | every exit door must open in the direction of escape, out of the space |
+| `no_escape_selector` | selector | objects not usable for escape (locked or staff-only doors): never an exit or a start, and every walk keeps out of them |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
 - **Travel** follows the walking line of a point through the metric-routing
@@ -715,6 +716,18 @@ occupants.
   `shared_by` multiplies only a section at least that many checked spaces
   (including those the rule's selector cannot decide) reach along
   `section_path`; a space whose sections cannot be read may reach any.
+- **Doors not used for escape** (`no_escape_selector`): an exit the
+  selector surely picks is no exit, a door it surely picks is no start, and
+  every walk keeps out of whatever it picks (`nearest_target` with the
+  objects avoided), so a locked door on the short way forces the longer
+  walk. An object it may pick counts as possibly not usable: an exit or
+  door only possible, and the walk bounded from below around the sure
+  picks only, from above around every possible one. A backend that cannot
+  walk around objects (`avoids_objects`) leaves such travel not evaluated.
+  The farthest point is measured on the plain walk only; its answer bounds
+  the walk around the avoided objects from below, and from above only when
+  every avoided object lies surely farther from the space in plan than the
+  plain walk's upper bound, beyond the reach of any such walk.
 - **Exits** are counted as `exit-separation`'s `minimum_exits` counts them.
 - **Widths**: the occupant load is the space's footprint (`PlanAreaService`)
   divided by `area_per_occupant`, rounded up. Each exit's stated clear width

@@ -269,6 +269,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_overrides` (omitted when empty), `RuleRefinement` gains
   `severity_overrides`, and `CapabilityEvaluation` gains `take_findings`
   and `push_not_evaluated_about` for refiners.
+- **Escape routes keep out of doors not used for escape.** (#119)
+  `escape-route` takes `no_escape_selector`: what it picks (a locked or
+  staff-only door) is no exit and no start door, and every walk keeps out
+  of it through the metric-routing service's avoided objects, so a locked
+  door on the short way forces the longer walk. An undecided pick is a
+  possible exit only, and avoided by the upper bound's walk only; a backend
+  that cannot walk around objects leaves such travel not evaluated. The
+  farthest point, measured on the plain walk, keeps its upper bound only
+  where every avoided object lies beyond its reach. **Breaking:**
+  definitions bound to `escape-route` must declare the new optional
+  parameter.
 
 - **Clash tolerance cases along the elements' own axes.** (#135)
   `ProximityService::measure_overlap_along` answers the extents of two

@@ -54,6 +54,8 @@ struct Geometry {
     distances: BTreeMap<(String, String), f64>,
     walks: BTreeMap<(String, String), Walk>,
     traces: BTreeMap<(String, String), f64>,
+    /// A backend that cannot walk around objects.
+    plain: bool,
 }
 
 impl Geometry {
@@ -304,7 +306,7 @@ impl MetricRoutingService for Geometry {
     }
 
     fn avoids_objects(&self) -> bool {
-        true
+        !self.plain
     }
 
     /// A declared length is exact; an object not declared for the walk's
@@ -1674,6 +1676,165 @@ fn a_passage_no_walk_surely_crosses_is_never_found_too_narrow() {
     assert!(
         message.contains("no walk surely crosses it")
             && message.contains(&format!("perhaps from {}, {}", id("hall"), id("office"))),
+        "{message}"
+    );
+}
+
+/// Hall `hall` leaves by its door `d1` towards exits `x1` and `x2`; door
+/// `ld`, somewhere on the way, is locked where the model says so.
+fn hall_with_a_locked_door() -> Model {
+    Model::default()
+        .object("hall", "space")
+        .object("d1", "door")
+        .object("ld", "door")
+        .object("x1", "exit")
+        .object("x2", "exit")
+        .edge("bounds", "d1", "hall")
+        .edge("serves", "x1", "hall")
+        .edge("serves", "x2", "hall")
+}
+
+fn exists(set: &str, name: &str) -> Selector {
+    Selector::Property {
+        property_set: Some(set.into()),
+        property: name.into(),
+        operator: ComparisonOperator::Exists,
+        value: None,
+        case_sensitive: true,
+        trim: false,
+        quantifier: None,
+        precision: None,
+    }
+}
+
+fn from_the_door(cells: &[(&str, ParameterValue)]) -> (&'static str, ParameterValue) {
+    let mut row = use_row(cells);
+    row.insert("route_start".into(), string("door"));
+    ("uses", ParameterValue::Table { value: vec![row] })
+}
+
+#[test]
+fn a_door_not_usable_for_escape_forces_the_longer_walk() {
+    let run = |model: Model, geometry: Geometry, extra: Vec<(&'static str, ParameterValue)>| {
+        let mut parameters = with(
+            doors_and_exits(),
+            vec![from_the_door(&[
+                ("maximum_travel", number(20.0)),
+                ("exits", integer(2)),
+            ])],
+        );
+        parameters.extend(extra);
+        model.evaluate_with(
+            &EscapeRoute,
+            &rule(CAPABILITY, kind("space"), parameters),
+            |services| geometry.register(services),
+        )
+    };
+    let no_escape = || vec![("no_escape_selector", selector(exists("Escape", "Locked")))];
+    // Through the locked door the walk is 8 m; around it 25 m.
+    let geometry = || {
+        Geometry::default()
+            .walk("d1", "x1,x2", Walk::Between(8.0, 8.0))
+            .walk("d1", "x1,x2~ld", Walk::Between(25.0, 25.0))
+    };
+    let locked =
+        || hall_with_a_locked_door().value("ld", "Escape", "Locked", PropertyValue::Boolean(true));
+    let evaluation = run(locked(), geometry(), Vec::new());
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    let evaluation = run(locked(), geometry(), no_escape());
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "hall".into(),
+            format!(
+                "door {} lies 25 m from the nearest exit walking; use 0 allows at most 20 m of \
+                 travel",
+                id("d1")
+            )
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // An exit marked as not usable is no exit: one is left of two.
+    let evaluation = run(
+        locked().value("x2", "Escape", "Locked", PropertyValue::Boolean(true)),
+        Geometry::default().walk("d1", "x1~ld,x2", Walk::Between(12.0, 12.0)),
+        no_escape(),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "hall".into(),
+            "has 1 exit(s) via serves; use 0 requires at least 2".into()
+        )]
+    );
+
+    // Whether the door is locked cannot be read: the walk lies between 8
+    // and 25 m, which decides nothing.
+    let evaluation = run(
+        hall_with_a_locked_door().unreadable("ld"),
+        geometry(),
+        no_escape(),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(message.contains("between 8 and 25 m walking"), "{message}");
+
+    // A backend that cannot walk around the door answers nothing.
+    let mut plain = geometry();
+    plain.plain = true;
+    let evaluation = run(locked(), plain, no_escape());
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("this backend does not walk around objects"),
+        "{message}"
+    );
+}
+
+#[test]
+fn the_farthest_point_stands_only_where_no_walk_reaches_what_it_avoids() {
+    // The farthest point is measured on the plain walk: 12 m at most. A
+    // locked door 50 m away is out of reach of any such walk; one 5 m away
+    // may be on it, and the travel is then unknown.
+    let run = |apart: f64| {
+        hall_with_a_locked_door()
+            .value("ld", "Escape", "Locked", PropertyValue::Boolean(true))
+            .evaluate_with(
+                &EscapeRoute,
+                &rule(
+                    CAPABILITY,
+                    kind("space"),
+                    with(
+                        doors_and_exits(),
+                        vec![
+                            uses(&[("maximum_travel", number(20.0))]),
+                            ("no_escape_selector", selector(exists("Escape", "Locked"))),
+                        ],
+                    ),
+                ),
+                |services| {
+                    Geometry::default()
+                        .walk("hall", "x1,x2", Walk::Between(11.9, 12.0))
+                        .distance("hall", "ld", apart)
+                        .register(services);
+                },
+            )
+    };
+    let evaluation = run(50.0);
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    let evaluation = run(5.0);
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("measured on the plain walk only")
+            && message.contains("at least 11.9 m walking"),
         "{message}"
     );
 }

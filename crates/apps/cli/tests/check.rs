@@ -10073,3 +10073,36 @@ fn group_composition_reports_a_required_storey_missing_from_the_model() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+#[test]
+fn keyed_limits_bound_each_storeys_summed_space_area() {
+    let limit = |pattern: &str, minimum: f64, maximum: f64| {
+        json!({"key_1": {"type": "string", "value": pattern},
+               "minimum": {"type": "number", "value": minimum},
+               "maximum": {"type": "number", "value": maximum}})
+    };
+    let result = storey_rule(
+        "keyed-limit-storey-areas",
+        "keyed-limit",
+        "IfcBuildingStorey",
+        json!({
+            "limits": {"type": "table", "value": [limit("EG*", 30.0, 50.0), limit("OG*", 50.0, 60.0)]},
+            "quantity": {"type": "string", "value": "member-plan-area"},
+            "key_1": name_attribute(),
+            "member_selector": {"type": "selector", "value": entity("IfcSpace")},
+            "relationship": {"type": "string", "value": "IfcRelAggregates"},
+        }),
+    );
+    // Each storey holds one 10 m × 4 m space.
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#102".to_owned(),
+            "summed plan area of the members via IfcRelAggregates is 40 m²; required at least \
+             50 m² (limit row 1: axioval:attributes.axioval:example.ifc.Name `OG`)"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

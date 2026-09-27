@@ -8,17 +8,19 @@ use axioval_engine::{
     DoorLeavesError, LeafMotion, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
     ParameterType, RuleCapability, RuleContext, TableColumn, VerticalExtent,
 };
+use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
+use crate::counts::{Population, relation_text};
 use crate::door_swing;
 use crate::level_spacing::{extent, extents};
 use crate::light_area::{LightArea, length};
-use crate::plan_area::{Verdict, deviation, footprint, judge, shown};
+use crate::plan_area::{Measure, Verdict, deviation, footprint, judge, member_areas, shown};
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, display, exact_f64, finding, invalid, resolve,
-    undefined,
+    traversal_parameters, undefined,
 };
 
 /// How many keys a table may be keyed by.
@@ -62,6 +64,12 @@ struct Limit {
 /// The quantity each row limits.
 enum Quantity<'a> {
     PlanArea,
+    /// The summed footprints of the members the object reaches, as
+    /// `plan-area` sums them with `member_selector`.
+    MemberPlanArea {
+        members: &'a Selector,
+        traversal: Option<Traversal<'a>>,
+    },
     Property(PropertyRef<'a>),
     /// The object's bottom above the bottom of each object `floor_path`
     /// reaches from it.
@@ -541,7 +549,11 @@ enum Key {
 /// applies; a row without bounds applies no limit.
 ///
 /// `quantity` names what is limited: `plan-area`, the object's measured
-/// footprint in square metres, `property`, the number or quantity stated
+/// footprint in square metres, `member-plan-area`, the summed footprints of
+/// the members `member_selector` picks among the objects the object reaches
+/// through the traversal parameters (everywhere in its source without
+/// them), as `plan-area` sums a storey's spaces, `property`, the number or
+/// quantity stated
 /// by `quantity_property`, in canonical SI units, or `sill-height`, the
 /// object's bottom elevation above the bottom of each object `floor_path`
 /// reaches from it (a window's spaces), in metres, or `clear-width`, a
@@ -602,7 +614,9 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
             ParameterDescriptor::optional("ramp_reach", ParameterType::Quantity),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
+            ParameterDescriptor::optional("member_selector", ParameterType::Selector),
         ];
+        parameters.extend(traversal_parameters());
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
             parameters.push(if index == 0 {
                 ParameterDescriptor::required(*key, ParameterType::PropertyReference)
@@ -627,9 +641,17 @@ impl RuleCapability for KeyedLimit {
                 );
             }
         };
+        let population = match &quantity {
+            Quantity::MemberPlanArea { members, .. } => Some(Population::of(context, members)),
+            _ => None,
+        };
         let (subjects, mut evaluation) = select_objects(context, &rule.selector);
         for subject in subjects {
-            match check(context, rule, &keys, &limits, &quantity, subject) {
+            let measuring = Measuring {
+                quantity: &quantity,
+                members: population.as_ref(),
+            };
+            match check(context, rule, &keys, &limits, &measuring, subject) {
                 Ok(Some((found, deviation))) => evaluation.push_finding_deviating(found, deviation),
                 Ok(None) => {}
                 Err((reason, message)) => {
@@ -708,6 +730,12 @@ const APPLIES: &[(&str, &[&str])] = &[
     ("threshold_thickness", &["clear-height", "threshold-step"]),
     ("ramp_selector", &["threshold-step"]),
     ("ramp_reach", &["threshold-step"]),
+    ("member_selector", &["member-plan-area"]),
+    ("relationship", &["member-plan-area"]),
+    ("direction", &["member-plan-area"]),
+    ("follow_chain", &["member-plan-area"]),
+    ("path", &["member-plan-area"]),
+    ("skip_absent_relationship_ends", &["member-plan-area"]),
 ];
 
 /// The declared quantity, its own parameters checked against it.
@@ -716,6 +744,7 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
     if !matches!(
         named,
         "plan-area"
+            | "member-plan-area"
             | "property"
             | "sill-height"
             | "clear-width"
@@ -740,6 +769,12 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
     let floor = parameters.strings("floor_path")?;
     Ok(match named {
         "plan-area" => Quantity::PlanArea,
+        "member-plan-area" => Quantity::MemberPlanArea {
+            members: parameters
+                .selector("member_selector")?
+                .ok_or_else(|| invalid("`quantity` `member-plan-area` needs `member_selector`"))?,
+            traversal: parameters.traversal()?,
+        },
         "property" => Quantity::Property(
             property.ok_or_else(|| invalid("`quantity` `property` needs `quantity_property`"))?,
         ),
@@ -941,6 +976,7 @@ fn measure(
         Quantity::SillHeight(_) | Quantity::ThresholdStep(_) => Err(invalid(
             "a sill height or threshold step is judged per floor",
         )),
+        Quantity::MemberPlanArea { .. } => Err(invalid("member areas are summed per anchor")),
         Quantity::ClearWidth(clear) => clear.measure(context, object),
         Quantity::ClearHeight(clear) => clear.measure(context, object),
         Quantity::PlanArea => {
@@ -990,14 +1026,84 @@ fn measure(
     }
 }
 
+/// The quantity a rule limits, with the members it sums, if any.
+struct Measuring<'q, 'a> {
+    quantity: &'q Quantity<'a>,
+    members: Option<&'q Population>,
+}
+
+impl Measuring<'_, '_> {
+    /// The quantity of `object`, the members it summed and how many
+    /// reached objects may be members undecided.
+    fn measure(
+        &self,
+        context: &RuleContext<'_>,
+        object: &Object,
+    ) -> Result<(Measured, Vec<ObjectId>, usize), Unavailable> {
+        let (Quantity::MemberPlanArea { traversal, .. }, Some(population)) =
+            (self.quantity, self.members)
+        else {
+            return Ok((measure(context, self.quantity, object)?, Vec::new(), 0));
+        };
+        let (sum, reached) = member_areas(
+            context,
+            traversal.as_ref(),
+            object,
+            population,
+            Measure::Footprint,
+        )?;
+        let (related, undecided) = reached.unwrap_or_default();
+        Ok((
+            Measured {
+                lower: sum.lower,
+                upper: sum.upper,
+                unit: " m²".into(),
+                what: format!(
+                    "summed plan area of the members {}",
+                    relation_text(traversal.as_ref())
+                ),
+                evidence: sum.evidence,
+            },
+            related,
+            undecided,
+        ))
+    }
+}
+
+/// Undecided members can only add area: with any, only a sum already
+/// above the maximum stands.
+fn only_an_excess(
+    measured: &Measured,
+    undecided: usize,
+    limit: &Limit,
+    index: usize,
+) -> Result<(), Unavailable> {
+    if undecided > 0
+        && !limit
+            .maximum
+            .is_some_and(|maximum| measured.lower > maximum)
+    {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "{undecided} reached object(s) may be members, so the {} is known only from \
+                 below (limit row {index})",
+                measured.what
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn check(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
     declared: &[Option<KeySource<'_>>],
     limits: &[Limit],
-    quantity: &Quantity<'_>,
+    measuring: &Measuring<'_, '_>,
     subject: &Object,
 ) -> Result<Option<Graded>, Unavailable> {
+    let quantity = measuring.quantity;
     let keys = Keys::read(context, declared, subject)?;
     let (index, limit) =
         match match_rows(limits, RowSelection::MostSpecific, |limit| keys.test(limit)) {
@@ -1056,7 +1162,8 @@ fn check(
             keys.sources,
         );
     }
-    let measured = measure(context, quantity, subject)?;
+    let (measured, members, undecided) = measuring.measure(context, subject)?;
+    only_an_excess(&measured, undecided, limit, index)?;
     let unit = &measured.unit;
     let verdict = if matches!(quantity, Quantity::ClearWidth(_) | Quantity::ClearHeight(_)) {
         judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
@@ -1069,6 +1176,8 @@ fn check(
             let described = keys.describe(declared);
             let mut evidence = keys.evidence;
             evidence.extend(measured.evidence);
+            let mut related = keys.sources;
+            related.extend(members);
             Ok(Some((
                 finding(
                     rule,
@@ -1079,7 +1188,7 @@ fn check(
                         shown(measured.lower, measured.upper),
                     ),
                     evidence,
-                    keys.sources,
+                    related,
                 ),
                 deviation(measured.lower, measured.upper, limit.minimum, limit.maximum),
             )))

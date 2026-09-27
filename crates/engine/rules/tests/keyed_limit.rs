@@ -533,6 +533,16 @@ fn a_package_binds_the_limit_table() {
     }
     parameters.insert("ramp_selector".into(), parameter("selector", false));
     parameters.insert("ramp_reach".into(), parameter("quantity", false));
+    parameters.insert("member_selector".into(), parameter("selector", false));
+    for (name, kind) in [
+        ("relationship", "string"),
+        ("direction", "string"),
+        ("follow_chain", "boolean"),
+        ("path", "stringList"),
+        ("skip_absent_relationship_ends", "boolean"),
+    ] {
+        parameters.insert(name.into(), parameter(kind, false));
+    }
     for index in 1..=4 {
         parameters.insert(
             format!("key_{index}"),
@@ -1576,4 +1586,107 @@ fn a_ramp_near_the_door_is_the_floor_on_its_side() {
         unevaluated(&evaluation),
         [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
     );
+}
+
+/// Storeys `eg`, `og` and `dg`, named after themselves in capitals, each
+/// containing the spaces listed.
+fn named_storeys(storeys: &[(&str, &str, &[&str])]) -> Model {
+    let mut model = Model::default();
+    for (storey, name, spaces) in storeys {
+        model = model
+            .object(storey, "storey")
+            .text(storey, "Pset", "Name", name);
+        for space in *spaces {
+            model = model.object(space, "space").edge("contains", storey, space);
+        }
+    }
+    model
+}
+
+fn storey_area_limits() -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "limits",
+            table(vec![
+                row([Some("EG*"), None, None], Some(300.0), Some(400.0)),
+                row([Some("OG*"), None, None], Some(250.0), Some(350.0)),
+            ]),
+        ),
+        ("quantity", string("member-plan-area")),
+        ("key_1", property(Some("Pset"), "Name")),
+        ("member_selector", common::selector(kind("space"))),
+        ("relationship", string("contains")),
+    ]
+}
+
+fn per_storey(model: Model, areas: Areas) -> CapabilityEvaluation {
+    model.evaluate_with(
+        &KeyedLimit,
+        &rule(ID, kind("storey"), storey_area_limits()),
+        |services| {
+            services
+                .register(PlanAreaServiceHandle::new(Arc::new(areas)))
+                .unwrap();
+        },
+    )
+}
+
+#[test]
+fn each_storey_sums_its_spaces_against_its_own_row() {
+    let model = named_storeys(&[
+        ("eg", "EG", &["e1", "e2"]),
+        ("og", "OG1", &["o1", "o2"]),
+        ("dg", "DG", &["d1"]),
+    ]);
+    let areas = Areas::default()
+        .with("e1", 200.0, 0.0)
+        .with("e2", 150.0, 0.0)
+        .with("o1", 100.0, 0.0)
+        .with("o2", 100.0, 0.0)
+        .with("d1", 80.0, 0.0);
+    let evaluation = per_storey(model, areas);
+    assert_eq!(
+        findings(&evaluation),
+        [
+            ("dg".into(), "no limit defined for Pset.Name `DG`".into()),
+            (
+                "og".into(),
+                "summed plan area of the members via contains is 200 m²; required at least \
+                 250 m² (limit row 1: Pset.Name `OG1`)"
+                    .into()
+            ),
+        ]
+    );
+    assert_eq!(evaluation.findings()[1].related, [id("o1"), id("o2")]);
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn a_storey_sum_straddling_its_row_is_not_evaluated() {
+    let model = named_storeys(&[("eg", "EG", &["e1", "e2"])]);
+    let areas = Areas::default()
+        .with("e1", 200.0, 1.0)
+        .with("e2", 100.0, 1.0);
+    let evaluation = per_storey(model, areas);
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("eg".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn member_areas_need_a_member_selector_and_nothing_else_takes_one() {
+    let mut without = storey_area_limits();
+    without.retain(|(name, _)| *name != "member_selector");
+    let mut other = storey_area_limits();
+    other[1] = ("quantity", string("plan-area"));
+    for parameters in [without, other] {
+        let evaluation = named_storeys(&[("eg", "EG", &["e1"])])
+            .evaluate(&KeyedLimit, &rule(ID, kind("storey"), parameters));
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
 }

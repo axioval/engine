@@ -1009,11 +1009,11 @@ pub(crate) fn face_area(
 
 /// A summed area, with the members summed and the number left undecided
 /// when members were summed.
-type Measured = (Sum, Option<(Vec<ObjectId>, usize)>);
+pub(crate) type Measured = (Sum, Option<(Vec<ObjectId>, usize)>);
 
 /// The summed areas of the members `anchor` reaches, with the decided
 /// members and the number of undecided ones.
-fn member_areas(
+pub(crate) fn member_areas(
     context: &RuleContext<'_>,
     traversal: Option<&crate::support::Traversal<'_>>,
     anchor: &Object,

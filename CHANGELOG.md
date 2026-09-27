@@ -6,6 +6,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Keyed limits on summed member areas.** (#113) `keyed-limit` takes the
+  quantity `member-plan-area`: the summed footprints of the members
+  `member_selector` picks among the objects each object reaches through the
+  traversal parameters, as `plan-area` sums them. One table of storey
+  patterns and area ranges judges every storey, and a storey without a row
+  is "no limit defined". **Breaking:** the capability gains the optional
+  `member_selector` and traversal parameters (`relationship`, `direction`,
+  `follow_chain`, `path`, `skip_absent_relationship_ends`), so a definition
+  bound to it must declare them.
 - **Required groups missing from the model.** (#112) `group-composition`
   takes `report_absent_groups`: each requirement row no group in the model
   matches is a project finding, "not in model", such as a required

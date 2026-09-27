@@ -1476,19 +1476,28 @@ Rules on how structural members and walls are built read the reserved body set (
 | `profiles` | `table` | Required. Columns below. |
 | `tolerance` | `quantity` | A length every dimension may be off by; exact (up to binary rounding) without it. |
 | `case_sensitive` | `boolean` | Whether `type` and `name` patterns match case. `false` by default. |
+| `angle_tolerance` | `quantity` | A plane angle every slope may be off by; exact without it. |
+| `match` | `string` | `rows` (the default): a profile fits one whole row. `per_dimension`: the rows of its type and name list each dimension's allowed values apart, and any combination fits. |
 
 | Column | Kind | Meaning |
 |---|---|---|
 | `type` | `textPattern` | Required. The profile family, a whole-value wildcard pattern. |
 | `name` | `textPattern` | The profile's name. A profile without a name does not fit a row stating one. |
-| `width`, `depth`, `web_thickness`, `flange_thickness`, `thickness`, `wall_thickness`, `radius`, `girth`, `fillet_radius` | `quantity` | Lengths, named alike for every family: `width` is a rectangle's `XDim`, an I-section's overall width, a T, U or Z section's flange width, an angle's or C section's `Width`; `depth` is `YDim` or the (overall) depth; `thickness` an angle's or centre-line profile's; `wall_thickness` a hollow or C section's; `fillet_radius` the root (or rounding, or inner) radius. |
-| `tolerance` | `quantity` | The row's own tolerance, replacing the rule's. |
+| `width`, `depth`, `web_thickness`, `flange_thickness`, `thickness`, `wall_thickness`, `radius`, `girth`, `fillet_radius` | `quantity` | Lengths, named alike for every family: `width` is a rectangle's `XDim`, an I-section's overall width, a T, U or Z section's flange width, an angle's or C section's `Width`, an asymmetric I-section's bottom flange width, a trapezium's bottom width; `depth` is `YDim` or the (overall) depth; `flange_thickness` (and `fillet_radius`) an asymmetric I-section's bottom flange's; `thickness` an angle's or centre-line profile's; `wall_thickness` a hollow or C section's; `fillet_radius` the root (or rounding, or inner) radius. |
+| `semi_axis_1`, `semi_axis_2` | `quantity` | An ellipse's semi-axes. |
+| `top_width`, `top_offset` | `quantity` | A trapezium's top width and the offset of its top (which may be negative); `top_width` is also an asymmetric I-section's top flange width. |
+| `top_flange_thickness`, `top_fillet_radius`, `top_edge_radius`, `top_flange_slope` | `quantity` | An asymmetric I-section's top flange. |
+| `edge_radius`, `web_edge_radius`, `outer_fillet_radius` | `quantity` | Edge radii: the flange edges of I and T sections (the bottom flange of an asymmetric I), the leg or flange edges of L, U and Z sections, a T's web edge, a hollow rectangle's outer corners. |
+| `flange_slope`, `leg_slope`, `web_slope` | `quantity` | Plane angles: the flange slope of I, T and U sections (an asymmetric I's bottom flange), an angle's leg slope, a T's web slope; judged within `angle_tolerance`. |
+| `tolerance`, `angle_tolerance` | `quantity` | The row's own tolerances, replacing the rule's. |
 
 Three results are told apart, each a finding on the object:
 
 - **wrong geometry**: no body, a body of several items, or one that is no swept profile (a boundary representation, a tessellation);
 - **arbitrary profile**: an arbitrary outline, centre-line or composite profile no row allows;
 - **not an allowed profile**: a parameterised profile no row fits, naming the nearest row of its type (least total excess beyond the tolerance, then a matching name, then the first declared) and each dimension it is off in (`depth 0.295 m, allowed 0.29 m within 0.001 m`); or of a type no row names.
+
+With `match: per_dimension`, allowed profiles given as any combination of listed values need one row per value, not one per combination: rows `width 0.2, depth 0.3` and `width 0.3, depth 0.4` allow a 0.2 × 0.4 rectangle. Every dimension any row of the profile's type and name states must match one of those rows' values; a finding lists each dimension that matches none and the values it could have had. A profile whose name no row of its type allows is found as such.
 
 A row stating a dimension the family does not have, or one the source leaves unset, does not fit; the schema's default is never assumed. A mirrored profile is judged by its parent, whose dimensions it keeps; a derived one is not evaluated, since the body set does not state whether its operator scales. A dimension the source refuses leaves the object not evaluated unless another row fits.
 

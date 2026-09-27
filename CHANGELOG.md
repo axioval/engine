@@ -18,6 +18,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   in folders, then its tags. `check --bcf` labels every topic this way,
   qualified by package with several rulesets; GUIDs are unchanged.
   **Breaking:** `Options` gains a field.
+- **Allowed profiles read every profile dimension, and list values per
+  dimension.** (#139) `allowed-profile` gains columns for ellipse
+  semi-axes (`semi_axis_1`, `semi_axis_2`), a trapezium's top
+  (`top_width`, `top_offset`), an asymmetric I-section's separate top
+  flange (`top_width`, `top_flange_thickness`, `top_fillet_radius`,
+  `top_edge_radius`, `top_flange_slope`; `width`, `flange_thickness`
+  and `fillet_radius` are its bottom flange's), edge radii
+  (`edge_radius`, `web_edge_radius`, `outer_fillet_radius`) and slopes
+  (`flange_slope`, `leg_slope`, `web_slope`, judged within the new
+  `angle_tolerance`). With `match: per_dimension`, each dimension may take
+  any value the rows of its type list, so 5 widths by 6 depths need 6 rows,
+  not 30. The IFC adapter already stated every one of these attributes.
+  **Breaking:** definitions bound to `allowed-profile` must declare the
+  new optional parameters `angle_tolerance` and `match` and the new table
+  columns.
 - **External-wall validation finds a model declaring no envelope, and
   disagreeing derivations.** (#138) When no selected object of a source is
   declared external, `external-wall-validation` reports one `error` finding

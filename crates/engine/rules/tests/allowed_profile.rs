@@ -240,3 +240,244 @@ fn an_unreadable_body_leaves_the_member_undecided_and_an_unset_dimension_does_no
         )]
     );
 }
+
+fn angle(degrees: f64) -> PropertyValue {
+    PropertyValue::Quantity {
+        value: degrees.to_radians(),
+        dimension: QuantityDimension::PlaneAngle,
+    }
+}
+
+fn degrees(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "deg".into(),
+    }
+}
+
+fn run(
+    model: Model,
+    rows: Vec<TableRow>,
+    extra: Vec<(&str, ParameterValue)>,
+) -> axioval_engine::CapabilityEvaluation {
+    let mut parameters = vec![("profiles", ParameterValue::Table { value: rows })];
+    parameters.extend(extra);
+    model.evaluate(&AllowedProfile, &rule(ID, kind("column"), parameters))
+}
+
+/// An asymmetric I-section is judged by both flanges: `width` and
+/// `flange_thickness` are the bottom flange's, `top_width` and
+/// `top_flange_thickness` the top's.
+#[test]
+fn an_asymmetric_i_section_with_a_wrong_top_flange_is_found() {
+    let section = |model: Model, local: &str, top: f64| {
+        member(
+            model,
+            local,
+            "asymmetric-i-shape",
+            None,
+            &[
+                ("BottomFlangeWidth", 0.3),
+                ("OverallDepth", 0.5),
+                ("WebThickness", 0.01),
+                ("BottomFlangeThickness", 0.02),
+                ("TopFlangeWidth", top),
+                ("TopFlangeThickness", 0.015),
+            ],
+        )
+    };
+    let model = section(Model::default(), "good", 0.2);
+    let model = section(model, "bad", 0.25);
+    let rows = vec![row(
+        "asymmetric-i-shape",
+        None,
+        &[
+            ("width", 0.3),
+            ("depth", 0.5),
+            ("flange_thickness", 0.02),
+            ("top_width", 0.2),
+            ("top_flange_thickness", 0.015),
+        ],
+    )];
+    assert_eq!(
+        findings(&run(model, rows, vec![])),
+        [(
+            "bad".into(),
+            "profile `asymmetric-i-shape` is not an allowed profile; nearest is row 1 \
+             (`asymmetric-i-shape`): top_width 0.25 m, allowed 0.2 m"
+                .into()
+        )]
+    );
+}
+
+/// Ellipses, trapezia (whose top may be offset either way) and edge radii
+/// have their own columns.
+#[test]
+fn ellipse_trapezium_and_edge_radius_columns_are_read() {
+    let model = member(
+        Model::default(),
+        "ellipse",
+        "ellipse",
+        None,
+        &[("SemiAxis1", 0.2), ("SemiAxis2", 0.1)],
+    );
+    let model = member(
+        model,
+        "trapezium",
+        "trapezium",
+        None,
+        &[
+            ("BottomXDim", 0.4),
+            ("TopXDim", 0.2),
+            ("YDim", 0.3),
+            ("TopXOffset", -0.05),
+        ],
+    );
+    let model = member(
+        model,
+        "angle",
+        "l-shape",
+        None,
+        &[("Depth", 0.1), ("Thickness", 0.01), ("EdgeRadius", 0.004)],
+    );
+    let mut offset = row(
+        "trapezium",
+        None,
+        &[("width", 0.4), ("top_width", 0.2), ("depth", 0.3)],
+    );
+    offset.insert("top_offset".into(), quantity(-0.05));
+    let rows = vec![
+        row(
+            "ellipse",
+            None,
+            &[("semi_axis_1", 0.2), ("semi_axis_2", 0.1)],
+        ),
+        offset,
+        row(
+            "l-shape",
+            None,
+            &[("depth", 0.1), ("thickness", 0.01), ("edge_radius", 0.005)],
+        ),
+    ];
+    assert_eq!(
+        findings(&run(model, rows, vec![])),
+        [(
+            "angle".into(),
+            "profile `l-shape` is not an allowed profile; nearest is row 3 (`l-shape`): \
+             edge_radius 0.004 m, allowed 0.005 m"
+                .into()
+        )]
+    );
+}
+
+/// Slopes are plane angles, judged within `angle_tolerance`, never the
+/// length tolerance.
+#[test]
+fn slopes_are_judged_within_the_angle_tolerance() {
+    let model = || {
+        member(
+            Model::default(),
+            "u",
+            "u-shape",
+            None,
+            &[("Depth", 0.2), ("FlangeWidth", 0.075)],
+        )
+        .value("u", BODY_SET, "Profile.FlangeSlope", angle(4.6))
+    };
+    let mut sloped = row("u-shape", None, &[("depth", 0.2), ("width", 0.075)]);
+    sloped.insert("flange_slope".into(), degrees(4.5));
+    let rows = vec![sloped];
+    let found = findings(&run(model(), rows.clone(), vec![]));
+    assert_eq!(found.len(), 1);
+    assert!(
+        found[0].1.ends_with("flange_slope 4.6°, allowed 4.5°"),
+        "{}",
+        found[0].1
+    );
+    let lenient = run(model(), rows, vec![("angle_tolerance", degrees(0.2))]);
+    assert!(findings(&lenient).is_empty());
+}
+
+/// `match: per_dimension` takes each dimension's allowed values from any
+/// row of the type: a width from row 1 with a depth from row 2 fits.
+#[test]
+fn per_dimension_accepts_any_combination_of_listed_values() {
+    let model = || {
+        let model = member(
+            Model::default(),
+            "mixed",
+            "rectangle",
+            None,
+            &[("XDim", 0.2), ("YDim", 0.4)],
+        );
+        member(
+            model,
+            "off",
+            "rectangle",
+            None,
+            &[("XDim", 0.25), ("YDim", 0.4)],
+        )
+    };
+    let rows = || {
+        vec![
+            row("rectangle", None, &[("width", 0.2), ("depth", 0.3)]),
+            row("rectangle", None, &[("width", 0.3), ("depth", 0.4)]),
+        ]
+    };
+    let per_dimension = || vec![("match", text("per_dimension"))];
+    assert_eq!(
+        findings(&run(model(), rows(), per_dimension())),
+        [(
+            "off".into(),
+            "profile `rectangle` is not an allowed profile: width 0.25 m is none of 0.2 m \
+             (row 1), 0.3 m (row 2)"
+                .into()
+        )]
+    );
+    // Whole rows: the mixed profile fits neither.
+    let mut rows_found = findings(&run(model(), rows(), vec![("match", text("rows"))]));
+    rows_found.sort();
+    assert_eq!(rows_found.len(), 2);
+    assert_eq!(rows_found[0].0, "mixed");
+}
+
+/// Under `per_dimension` a name that fits no row of the type, or a type no
+/// row names, is found; an unknown `match` is an invalid declaration.
+#[test]
+fn per_dimension_names_types_and_an_unknown_match() {
+    let model = || {
+        let model = i_shape(Model::default(), "c1", "IPE300", 0.15, 0.3);
+        member(model, "c2", "l-shape", None, &[("Depth", 0.1)])
+    };
+    let mut found = findings(&run(
+        model(),
+        vec![row("i-shape", Some("HEA*"), &[("width", 0.15)])],
+        vec![("match", text("per_dimension"))],
+    ));
+    found.sort();
+    assert_eq!(
+        found,
+        [
+            (
+                "c1".into(),
+                "profile `i-shape` `IPE300` is not an allowed profile: its name fits none of \
+                 rows 1 of its type"
+                    .into()
+            ),
+            (
+                "c2".into(),
+                "profile `l-shape` is not of an allowed type".into()
+            ),
+        ]
+    );
+    let invalid = run(
+        model(),
+        vec![row("i-shape", None, &[])],
+        vec![("match", text("any"))],
+    );
+    assert!(findings(&invalid).is_empty());
+    assert_eq!(
+        unevaluated(&invalid),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}

@@ -66,7 +66,7 @@ use axiolid_overlay::{
 use axioval_engine::{
     CentrePlacement, CorridorEndRequest, CorridorEnds, PlanAreaError, PlanCentre, PlanLength,
     PlanRecess, PlanRecesses, PlanRectangle, PlanSection, PlanSpan, PlanSpanError, PlanSpanService,
-    RectangleOrientation,
+    RectangleOrientation, SideDistanceRequest, SideDistances,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -100,7 +100,12 @@ impl AxiolidPlanSpanService {
         }
     }
 
-    fn footprint(&self, object: &ObjectId) -> Result<Footprint, PlanSpanError> {
+    /// Whether the host declared the object bodiless.
+    pub(crate) fn has_no_body(&self, object: &ObjectId) -> bool {
+        self.footprints.has_no_body(object)
+    }
+
+    pub(crate) fn footprint(&self, object: &ObjectId) -> Result<Footprint, PlanSpanError> {
         self.footprints
             .measure(object)
             .map_err(|error| match error {
@@ -727,6 +732,13 @@ impl PlanSpanService for AxiolidPlanSpanService {
             .map(|subject| Ok((subject.clone(), self.footprint(subject)?)))
             .collect::<Result<Vec<_>, PlanSpanError>>()?;
         corridor_ends(request, &space, &subjects)
+    }
+
+    fn measure_side_distances(
+        &self,
+        request: &SideDistanceRequest,
+    ) -> Result<SideDistances, PlanSpanError> {
+        crate::side_distance::measure(self, request)
     }
 }
 

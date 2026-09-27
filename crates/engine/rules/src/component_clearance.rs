@@ -10,8 +10,8 @@ use axioval_engine::{
     FrameOffsetPlacement, FreeSpaceError, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
     MetricPoint, NotEvaluatedReason, ObjectFrame, ObjectFrameServiceHandle, ObjectFront,
     ParameterDescriptor, ParameterType, PlacementDomain, PlacementOrientation, PlacementOutcome,
-    PlacementRequest, PlacementShape, RuleCapability, RuleContext, SignedDistanceInterval,
-    VerticalExtentServiceHandle,
+    PlacementRequest, PlacementShape, PlanSpanServiceHandle, RuleCapability, RuleContext,
+    SignedDistanceInterval, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
@@ -21,6 +21,7 @@ use crate::door_swing;
 use crate::level_spacing::{extent, metres};
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::wall_sides::Walls;
 
 /// Requires a free volume on a stated side of each selected component.
 ///
@@ -28,7 +29,13 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 /// which frame axis is the component's front (`front_axis`: `forward`,
 /// `-forward`, `right` or `-right`, or `stated` for the front the source
 /// states), because a placement axis says nothing about which way a
-/// component faces; the engine never infers one. For a door, `swing` is the
+/// component faces; the engine never infers one from its axes. With
+/// `against-wall` the front is derived from the walls (`wall_selector`)
+/// beside the sides of the footprint's least-area rectangle, within
+/// `wall_reach` of its centre lines, each side's strip narrowed by
+/// `wall_inset`: the side surely nearer a wall than every other side is the
+/// back, and the front faces away from it. A tie, or no wall within reach,
+/// leaves the front not decided, never guessed. For a door, `swing` is the
 /// side its hinged leaves open towards and `-swing` the other, as its
 /// leaves state them; `align` `handle` or `hinge` puts the volume flush with
 /// the edge of its single hinged leaf's handle or hinge. `side` is `front`, `back`,
@@ -138,6 +145,8 @@ enum FrontAxis {
     Swing,
     /// The side a door's leaves swing away from.
     Push,
+    /// Away from the wall the component stands against.
+    AgainstWall,
 }
 
 impl FrontAxis {
@@ -150,9 +159,10 @@ impl FrontAxis {
             "stated" => Ok(Self::Stated),
             "swing" => Ok(Self::Swing),
             "-swing" => Ok(Self::Push),
+            "against-wall" => Ok(Self::AgainstWall),
             other => Err(invalid(format!(
                 "front_axis `{other}` is unsupported; use `forward`, `-forward`, `right`, \
-                 `-right`, `stated`, `swing` or `-swing`"
+                 `-right`, `stated`, `swing`, `-swing` or `against-wall`"
             ))),
         }
     }
@@ -174,6 +184,7 @@ impl FrontAxis {
                 )),
             },
             Self::Swing | Self::Push => unreachable!("a swing side comes from the leaves"),
+            Self::AgainstWall => unreachable!("a wall's side comes from the footprint"),
         }
     }
 
@@ -341,6 +352,8 @@ struct Config<'a> {
     /// The offsets across the side a floating volume may slide by.
     slide: Option<(f64, f64)>,
     spaces: Option<Traversal<'a>>,
+    /// With `against-wall`: the walls, how far to look and the inset.
+    walls: Option<(&'a Selector, f64, f64)>,
 }
 
 fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
@@ -446,6 +459,28 @@ impl<'a> Config<'a> {
             vec![stated]
         };
         let front = FrontAxis::parse(parameters.required_string("front_axis")?)?;
+        let inset = length(&parameters, "wall_inset")?;
+        let walls = match (
+            matches!(front, FrontAxis::AgainstWall),
+            parameters.selector("wall_selector")?,
+            positive(&parameters, "wall_reach")?,
+        ) {
+            (true, Some(selector), Some(reach)) => {
+                Some((selector, reach, non_negative(&parameters, "wall_inset")?))
+            }
+            (true, _, _) => {
+                return Err(invalid(
+                    "`front_axis` `against-wall` needs `wall_selector` and `wall_reach`",
+                ));
+            }
+            (false, None, None) if inset.is_none() => None,
+            (false, _, _) => {
+                return Err(invalid(
+                    "`wall_selector`, `wall_reach` and `wall_inset` apply only to `front_axis` \
+                     `against-wall`",
+                ));
+            }
+        };
         let protrusion = non_negative(&parameters, "protrusion")?;
         let (size, mode, tolerance) = sizes(&parameters, protrusion)?;
         let align = match parameters.string("align")? {
@@ -510,6 +545,7 @@ impl<'a> Config<'a> {
             within_space,
             slide,
             spaces,
+            walls,
         })
     }
 }
@@ -542,6 +578,9 @@ impl RuleCapability for ComponentClearance {
             ParameterDescriptor::optional("protrusion", ParameterType::Quantity),
             ParameterDescriptor::optional("within_space", ParameterType::Boolean),
             ParameterDescriptor::optional("space_path", ParameterType::StringList),
+            ParameterDescriptor::optional("wall_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("wall_reach", ParameterType::Quantity),
+            ParameterDescriptor::optional("wall_inset", ParameterType::Quantity),
         ]
     }
 
@@ -566,10 +605,22 @@ impl RuleCapability for ComponentClearance {
                  services",
             );
         };
+        let spans = context.services.get::<PlanSpanServiceHandle>();
+        if config.walls.is_some() && spans.is_none() {
+            return CapabilityEvaluation::not_evaluated(
+                NotEvaluatedReason::MissingService,
+                "component-clearance with `front_axis` `against-wall` needs the plan-span service",
+            );
+        }
+        let walls = config
+            .walls
+            .map(|(selector, _, _)| Walls::select(context, selector));
         let services = Services {
             frames,
             extents,
             free_space,
+            spans,
+            walls: walls.as_ref(),
         };
         let obstacles = Obstacles::select(context, &config);
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
@@ -601,6 +652,8 @@ struct Services<'a> {
     frames: &'a ObjectFrameServiceHandle,
     extents: &'a VerticalExtentServiceHandle,
     free_space: &'a FreeSpaceServiceHandle,
+    spans: Option<&'a PlanSpanServiceHandle>,
+    walls: Option<&'a Walls>,
 }
 
 /// The obstacle selection, split by how sure it is.
@@ -760,11 +813,24 @@ fn check(
     results
 }
 
+/// How far a derived front may be turned from the true one: the volume is
+/// widened by the arc its points could sweep about the rectangle's centre.
+struct Turn {
+    /// The rectangle's centre in plan.
+    centre: [f64; 2],
+    /// The largest turn, in radians.
+    angle: f64,
+    /// How far the component's footprint reaches from the centre.
+    reach: f64,
+}
+
 /// What every side of one component shares: its frame, its front, its
 /// base elevation and its spaces.
 struct Placement {
     front: [f64; 3],
     up: [f64; 3],
+    /// With a front derived from the footprint: how far it may be turned.
+    turn: Option<Turn>,
     /// Elevation interval of the height reference.
     base: (f64, f64),
     spaces: Vec<ObjectId>,
@@ -790,43 +856,51 @@ impl Placement {
                 None
             };
         let swinging = leaves.as_ref().filter(|_| config.front.is_swing());
-        let (front, up, mut evidence) = if let Some(leaves) = swinging {
-            // The leaves open along a horizontal direction; the volume
-            // stands upright whatever way the door's axes point.
-            let opening = door_swing::swing_side(leaves)?;
-            let front = if matches!(config.front, FrontAxis::Swing) {
-                opening
+        let mut turn = None;
+        let (front, up, mut evidence) =
+            if let Some((front, derived, mut evidence)) = against_wall(config, services, object)? {
+                turn = Some(derived);
+                if let Some(leaves) = &leaves {
+                    evidence.push(leaves.evidence().clone());
+                }
+                (front, [0.0, 0.0, 1.0], evidence)
+            } else if let Some(leaves) = swinging {
+                // The leaves open along a horizontal direction; the volume
+                // stands upright whatever way the door's axes point.
+                let opening = door_swing::swing_side(leaves)?;
+                let front = if matches!(config.front, FrontAxis::Swing) {
+                    opening
+                } else {
+                    negate(opening)
+                };
+                (front, [0.0, 0.0, 1.0], vec![leaves.evidence().clone()])
             } else {
-                negate(opening)
-            };
-            (front, [0.0, 0.0, 1.0], vec![leaves.evidence().clone()])
-        } else {
-            let frame = services
-                .frames
-                .object_frame(&object.id)
-                .map_err(|error| frame_error(&error))?;
-            let up = frame.frame().up().components();
-            if (up[2] - 1.0).abs() > AXIS_TOLERANCE {
-                return Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    "the component's frame is tilted; clearances are measured in upright \
+                let frame = services
+                    .frames
+                    .object_frame(&object.id)
+                    .map_err(|error| frame_error(&error))?;
+                let up = frame.frame().up().components();
+                if (up[2] - 1.0).abs() > AXIS_TOLERANCE {
+                    return Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        "the component's frame is tilted; clearances are measured in upright \
                          frames only"
-                        .into(),
-                ));
-            }
-            let front = config.front.of(&frame)?;
-            if dot(front, up).abs() > AXIS_TOLERANCE {
-                return Err((
-                    NotEvaluatedReason::InvalidEvidence,
-                    "the stated front is not horizontal".into(),
-                ));
-            }
-            let mut evidence = vec![frame.evidence().clone()];
-            if let Some(leaves) = &leaves {
-                evidence.push(leaves.evidence().clone());
-            }
-            (front, up, evidence)
-        };
+                            .into(),
+                    ));
+                }
+                let front = config.front.of(&frame)?;
+                if dot(front, up).abs() > AXIS_TOLERANCE {
+                    return Err((
+                        NotEvaluatedReason::InvalidEvidence,
+                        "the stated front is not horizontal".into(),
+                    ));
+                }
+                let mut evidence = vec![frame.evidence().clone()];
+                if let Some(leaves) = &leaves {
+                    evidence.push(leaves.evidence().clone());
+                }
+                (front, up, evidence)
+            };
         let handle = match (&leaves, config.align) {
             (Some(leaves), Align::Handle | Align::Hinge) => Some(door_swing::handle(leaves)?),
             _ => None,
@@ -873,6 +947,7 @@ impl Placement {
         Ok(Self {
             front,
             up,
+            turn,
             base,
             spaces,
             evidence,
@@ -926,8 +1001,18 @@ impl Placement {
             }
             (align, _) => align,
         };
+        let turn = self.turn.as_ref().map(|turn| {
+            let (o, a) = (outward.components(), across.components());
+            (
+                turn.angle,
+                turn.reach,
+                turn.centre[0] * o[0] + turn.centre[1] * o[1],
+                turn.centre[0] * a[0] + turn.centre[1] * a[1],
+            )
+        });
         Ok(Faces {
             align,
+            turn,
             outward,
             across,
             up,
@@ -938,6 +1023,35 @@ impl Placement {
             evidence,
         })
     }
+}
+
+/// A front derived from the footprint, how far it may be turned and the
+/// evidence deriving it.
+type Derived = ([f64; 3], Turn, Vec<Evidence>);
+
+/// With `against-wall`: the front facing away from the wall the component
+/// stands against, how far it may be turned and the evidence.
+fn against_wall(
+    config: &Config<'_>,
+    services: &Services<'_>,
+    object: &Object,
+) -> Result<Option<Derived>, Unavailable> {
+    let (Some((_, reach, inset)), Some(walls), Some(spans)) =
+        (config.walls, services.walls, services.spans)
+    else {
+        return Ok(None);
+    };
+    let measured = walls.measure(spans, &object.id, reach, inset)?;
+    let back = walls.back(&measured)?;
+    let rectangle = measured.rectangle();
+    let front = back.side.opposite().outward(rectangle);
+    let halves = rectangle.half_extents_metres();
+    let turn = Turn {
+        centre: rectangle.centre(),
+        angle: rectangle.axis_error_radians(),
+        reach: halves[0].1.hypot(halves[1].1) + rectangle.centre_radius_metres(),
+    };
+    Ok(Some(([front[0], front[1], 0.0], turn, back.evidence)))
 }
 
 fn direction(vector: [f64; 3]) -> Result<MetricDirection, Unavailable> {
@@ -964,6 +1078,9 @@ struct Faces {
     evidence: Vec<Evidence>,
     /// The alignment across the side, a door's handle or hinge resolved.
     align: Align,
+    /// With a derived front: the largest turn, the footprint's reach from
+    /// the rectangle's centre and the centre along and across the side.
+    turn: Option<(f64, f64, f64, f64)>,
 }
 
 impl Faces {
@@ -986,18 +1103,34 @@ impl Faces {
             Shape::Box { depth, .. } => depth / 2.0,
             Shape::Cylinder { radius } => radius,
         };
+        let centre_out = (
+            self.face.0 + config.offset + reach,
+            self.face.1 + config.offset + reach,
+        );
+        let centre_across = (
+            centre_across.0 + config.lateral_offset,
+            centre_across.1 + config.lateral_offset,
+        );
+        // Turned about the rectangle's centre by at most `angle`, every
+        // point moves by at most its distance from the centre times the
+        // angle; the component's faces by the footprint's reach, the volume
+        // by its farthest corner's.
+        let margin = self.turn.map_or(0.0, |(angle, footprint, out, side)| {
+            let far = |(low, high): (f64, f64), centre: f64, half: f64| {
+                (low - half - centre)
+                    .abs()
+                    .max((high + half - centre).abs())
+            };
+            let corner = far(centre_out, out, reach).hypot(far(centre_across, side, half));
+            angle * (footprint + corner)
+        });
         Volume {
             outward: self.outward,
             across: self.across,
             up: self.up,
-            centre_out: (
-                self.face.0 + config.offset + reach,
-                self.face.1 + config.offset + reach,
-            ),
-            centre_across: (
-                centre_across.0 + config.lateral_offset,
-                centre_across.1 + config.lateral_offset,
-            ),
+            centre_out: (centre_out.0 - margin, centre_out.1 + margin),
+            centre_across: (centre_across.0 - margin, centre_across.1 + margin),
+
             base: (
                 self.base.0 + config.vertical_offset,
                 self.base.1 + config.vertical_offset,

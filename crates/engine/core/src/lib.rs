@@ -557,6 +557,7 @@ mod proximity;
 mod refinement;
 mod relationships;
 mod services;
+mod side_distance;
 mod sight;
 mod source_metadata;
 mod space;
@@ -673,6 +674,9 @@ pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{
     EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
     SourceSnapshot,
+};
+pub use side_distance::{
+    RectangleSide, SideDistance, SideDistanceRequest, SideDistances, SidePresence,
 };
 pub use sight::{
     SightError, SightEvidence, SightOutcome, SightRequest, SightService, SightServiceHandle,

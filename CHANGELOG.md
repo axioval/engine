@@ -131,6 +131,24 @@ All notable changes are documented here. This project follows Semantic Versionin
   `Option` beside the new `code_pattern`; `Selector` gains `Source`,
   `ComparisonOperator` gains `IsEmpty` and `IsNotEmpty`, and
   `EvidenceSessionError` gains `ConflictingMetadata`.
+- **A front against the wall.** (#128) `component-clearance` takes
+  `front_axis` `against-wall`, with `wall_selector`, `wall_reach` and
+  `wall_inset`: the sides are those of the footprint's least-area
+  rectangle, the side whose nearest wall (from the side) is surely nearer
+  than every other side's is the back, and the front faces away from it,
+  so one rule serves fixtures whose placements are turned any way. A tie,
+  or no wall within reach, is not evaluated (`front not decided`), never
+  guessed; the derived front is cited as inexact evidence naming the
+  wall. `PlanSpanService` gains `measure_side_distances`
+  (`SideDistanceRequest`, `SideDistances`, `SideDistance`,
+  `RectangleSide`, `SidePresence`): per side of the least-area rectangle,
+  every candidate that may lie in the strip beside it, surely or possibly,
+  with its least distance from the centre line as an interval; the
+  default refuses. The Axiolid plan-span service answers it from the
+  candidates' plan triangles, never exactly. **Breaking:** definitions
+  bound to `component-clearance` must declare the optional parameters
+  `wall_selector`, `wall_reach` and `wall_inset`.
+
 - **Window leaves.** (#36) `ObjectFrameService::leaves` answers a window's
   panels as leaves, as it answers a door's: the IFC adapter derives them
   with `openbim-ifc`'s `window_operation` (openbimrs/ifc#170) from the

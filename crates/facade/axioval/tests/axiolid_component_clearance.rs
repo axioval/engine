@@ -10,14 +10,16 @@ use std::sync::Arc;
 
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
-use axioval::axiolid::{AxiolidFreeSpaceService, AxiolidGeometry, AxiolidVerticalExtentService};
+use axioval::axiolid::{
+    AxiolidFreeSpaceService, AxiolidGeometry, AxiolidPlanSpanService, AxiolidVerticalExtentService,
+};
 use axioval::engine::{
     CapabilityEvaluation, CompiledRule, CompleteRelationshipSelection, FreeSpaceServiceHandle,
     MetricDirection, MetricFrame, MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService,
-    ObjectFrameServiceHandle, ObjectFront, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    RuleCapability, RuleContext, ServiceRegistry, SourceSnapshot, TraversalDirection,
-    VerticalExtentServiceHandle,
+    ObjectFrameServiceHandle, ObjectFront, PlanSpanServiceHandle, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
+    RelationshipSelectionServiceHandle, RuleCapability, RuleContext, ServiceRegistry,
+    SourceSnapshot, TraversalDirection, VerticalExtentServiceHandle,
 };
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
 use axioval::ir::{Evidence, NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
@@ -164,6 +166,11 @@ impl Scene {
         services
             .register(FreeSpaceServiceHandle::new(Arc::new(
                 AxiolidFreeSpaceService::new(geometry.clone(), source()),
+            )))
+            .unwrap();
+        services
+            .register(PlanSpanServiceHandle::new(Arc::new(
+                AxiolidPlanSpanService::new(geometry.clone(), source()),
             )))
             .unwrap();
         services
@@ -668,4 +675,125 @@ fn a_turned_component_floats_its_volume_as_an_interval() {
     assert_eq!(found.len(), 1, "{outcome:#?}");
     assert!(found[0].0.contains("fits nowhere"), "{outcome:#?}");
     assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+}
+
+/// The WC's room with its south wall (behind the WC) and west wall, and a
+/// chair north of the WC, in its front area.
+fn walled(scene: Scene) -> Scene {
+    scene
+        .body("south", "wall", cuboid([-0.2, -0.2, 0.0], [3.2, 0.0, 2.5]))
+        .body("west", "wall", cuboid([-0.2, -0.2, 0.0], [0.0, 3.2, 2.5]))
+        .body("chair", "fixture", cuboid([1.1, 1.2, 0.0], [1.3, 1.4, 0.9]))
+}
+
+fn front_area(front: &str) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        ("side", text("front")),
+        ("front_axis", text(front)),
+        ("width", metres(0.8)),
+        ("depth", metres(1.2)),
+        ("align", text("centre")),
+    ];
+    if front == "against-wall" {
+        parameters.extend([
+            ("wall_selector", selector(kind("wall"))),
+            ("wall_reach", metres(1.5)),
+            ("wall_inset", metres(0.01)),
+        ]);
+    }
+    parameters
+}
+
+#[test]
+fn the_front_against_a_wall_does_not_depend_on_the_local_axes() {
+    // The WC's placement turned a quarter: forward points west, and the
+    // front area there misses the chair and runs into the walls.
+    let quarter = |scene: Scene| Scene {
+        right: [0.0, 1.0, 0.0],
+        ..scene
+    };
+    let outcome = walled(quarter(Scene::wc())).check(&front_area("forward"));
+    assert_eq!(findings(&outcome)[0].1, ["south", "west"], "{outcome:#?}");
+    // Against the south wall, both placements face north, into the chair.
+    for scene in [walled(Scene::wc()), walled(quarter(Scene::wc()))] {
+        let outcome = scene.check(&front_area("against-wall"));
+        assert_eq!(
+            findings(&outcome),
+            [(
+                "front clearance (0.8 m wide, 1.2 m deep, 2 m high) is obstructed by \
+                 cad:model/chair"
+                    .to_owned(),
+                vec!["chair".to_owned()]
+            )],
+            "{outcome:#?}"
+        );
+        let derived = &outcome.findings()[0].evidence;
+        assert!(
+            derived.iter().any(|evidence| !evidence.exact
+                && evidence.locator
+                    == "axioval:derived.front:cad:model/wc:against=cad:model/south:side=-second"),
+            "{outcome:#?}"
+        );
+    }
+}
+
+#[test]
+fn a_turned_room_derives_its_front_within_the_rectangle_error() {
+    // Everything turned 20 degrees about the WC's centre: the rectangle's
+    // axes are rounded, so the volume is widened by the arc they may turn.
+    let turn = 20_f64.to_radians();
+    let pivot = [1.2, 0.35];
+    let scene = Scene::wc()
+        .turned_wc(turn)
+        .body(
+            "south",
+            "wall",
+            turned([-0.2, -0.2, 0.0], [3.2, 0.0, 2.5], turn, pivot),
+        )
+        .body(
+            "west",
+            "wall",
+            turned([-0.2, -0.2, 0.0], [0.0, 3.2, 2.5], turn, pivot),
+        )
+        .body(
+            "chair",
+            "fixture",
+            turned([1.1, 1.2, 0.0], [1.3, 1.4, 0.9], turn, pivot),
+        );
+    let outcome = scene.check(&front_area("against-wall"));
+    assert_eq!(findings(&outcome).len(), 1, "{outcome:#?}");
+    assert_eq!(findings(&outcome)[0].1, ["chair"], "{outcome:#?}");
+}
+
+#[test]
+fn a_front_between_two_walls_as_near_is_not_decided() {
+    // A wall flush with the WC's west face: two sides stand against a wall.
+    let scene =
+        walled(Scene::wc()).body("corner", "wall", cuboid([0.8, 0.0, 0.0], [1.0, 3.0, 2.5]));
+    let outcome = scene.check(&front_area("against-wall"));
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    let reasons = unevaluated(&outcome);
+    assert_eq!(reasons.len(), 1, "{outcome:#?}");
+    assert_eq!(reasons[0].0, NotEvaluatedReason::IncompleteEvidence);
+    assert!(reasons[0].1.contains("front not decided"), "{outcome:#?}");
+    // Without a wall in reach there is no front either.
+    let outcome = Scene::wc().check(&front_area("against-wall"));
+    let reasons = unevaluated(&outcome);
+    assert!(
+        reasons.len() == 1 && reasons[0].1.contains("no wall lies within 1.5 m"),
+        "{outcome:#?}"
+    );
+    // The walls go with `against-wall` only, and it needs them.
+    let mut parameters = front_area("forward");
+    parameters.push(("wall_reach", metres(1.0)));
+    let outcome = walled(Scene::wc()).check(&parameters);
+    assert_eq!(
+        unevaluated(&outcome)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
+    let outcome = walled(Scene::wc()).check(&[("front_axis", text("against-wall"))]);
+    assert_eq!(
+        unevaluated(&outcome)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
 }

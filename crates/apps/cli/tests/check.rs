@@ -5548,6 +5548,73 @@ fn with_geometry_an_obstructed_wc_transfer_area_is_found() {
     );
 }
 
+/// Washroom #19 (x 0..3, y 0..3) with WC #29 (x 1..1.4, y 0..0.7) against
+/// the south wall #39 (y -0.2..0), the west wall #49 (x -0.2..0) and a
+/// chair #59 north of the WC (x 1.1..1.3, y 1.2..1.4).
+fn washroom_with_walls() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let wc = "IFCSANITARYTERMINAL('GID',$,$,$,$,PL,REP,$,.TOILETPAN.)";
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let chair = "IFCFURNISHINGELEMENT('GID',$,$,$,$,PL,REP,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [1.5, 1.5, 0.0], [3.0, 3.0, 2.5], space),
+        placed_box(20, [1.2, 0.35, 0.0], [0.4, 0.7, 0.4], wc),
+        placed_box(30, [1.5, -0.1, 0.0], [3.4, 0.2, 2.5], wall),
+        placed_box(40, [-0.1, 1.5, 0.0], [0.2, 3.4, 2.5], wall),
+        placed_box(50, [1.2, 1.3, 0.0], [0.2, 0.2, 0.9], chair),
+    )
+}
+
+#[test]
+fn with_geometry_a_front_is_derived_from_the_wall_behind_a_wc() {
+    let case = Case::new("geometry-clearance-against-wall");
+    let (output, result) = case.geometry_rule(
+        &washroom_with_walls(),
+        &[
+            ("wall", "IfcWall"),
+            ("terminal", "IfcSanitaryTerminal"),
+            ("furniture", "IfcFurnishingElement"),
+        ],
+        "axioval:capability.component-clearance",
+        &registry_signature("axioval:capability.component-clearance"),
+        entity("terminal"),
+        json!({
+            "side": {"type": "string", "value": "front"},
+            "front_axis": {"type": "string", "value": "against-wall"},
+            "wall_selector": {"type": "selector", "value": entity("wall")},
+            "wall_reach": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "wall_inset": {"type": "quantity", "value": 1, "unit": "cm"},
+            "width": {"type": "quantity", "value": 0.8, "unit": "m"},
+            "depth": {"type": "quantity", "value": 1.2, "unit": "m"},
+            "height": {"type": "quantity", "value": 2, "unit": "m"},
+            "height_reference": {"type": "string", "value": "bottom"},
+            "obstacles": {"type": "selector", "value": entity("furniture")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#29".to_owned(),
+            "front clearance (0.8 m wide, 1.2 m deep, 2 m high) is obstructed by \
+             ifc-step:model.ifc/#59"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+}
+
 /// As [`placed_box`], with the profile's length turned `degrees` from the
 /// x-axis about its centre, as instances `#first` to `#first + 10`; the
 /// product is `#first + 10`.

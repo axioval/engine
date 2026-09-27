@@ -29,6 +29,7 @@ use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
 use crate::corridor_end::{self, CorridorEndRequest, CorridorEnds};
+use crate::side_distance::{self, SideDistanceRequest, SideDistances};
 
 /// Failure to measure a plan span.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -696,6 +697,19 @@ pub trait PlanSpanService: Send + Sync + 'static {
             request.space()
         )))
     }
+    /// The request's candidates beside each side of its object's
+    /// least-area rectangle, and how far from its centre lines (see
+    /// [`SideDistances`]). A service that does not measure them refuses by
+    /// default, never answering with none.
+    fn measure_side_distances(
+        &self,
+        request: &SideDistanceRequest,
+    ) -> Result<SideDistances, PlanSpanError> {
+        Err(PlanSpanError::Unavailable(format!(
+            "this plan-span service does not measure what lies beside {}",
+            request.object()
+        )))
+    }
 }
 
 /// Registry handle for a [`PlanSpanService`].
@@ -800,6 +814,15 @@ impl PlanSpanServiceHandle {
         request: &CorridorEndRequest,
     ) -> Result<CorridorEnds, PlanSpanError> {
         corridor_end::measure(&self.0, request)
+    }
+
+    /// The candidates beside each side of the request's object; an answer
+    /// to another request is refused.
+    pub fn measure_side_distances(
+        &self,
+        request: &SideDistanceRequest,
+    ) -> Result<SideDistances, PlanSpanError> {
+        side_distance::measure(&self.0, request)
     }
 }
 

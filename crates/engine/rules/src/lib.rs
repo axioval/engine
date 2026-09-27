@@ -74,6 +74,7 @@ mod support;
 mod table_allocation;
 mod triangle_count;
 mod unique_value;
+mod wall_sides;
 mod wall_spacing;
 mod xsd_pattern;
 

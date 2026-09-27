@@ -27,6 +27,7 @@ pub mod plan_area;
 pub mod plan_span;
 pub(crate) mod planar;
 pub mod proximity;
+mod side_distance;
 pub mod sight;
 pub mod space;
 pub mod triangle_count;

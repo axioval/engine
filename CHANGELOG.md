@@ -147,6 +147,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Doors swinging over ramp landings.** (Refs #85) `ramp-geometry` gains
+  `landing_door_swing`: no `landing_doors` door may swing over a landing at
+  a run's end. A hinged leaf's sector overlapping the landing's rectangle
+  in plan, for a door reaching into the column over it, is a finding; a
+  door surely above or below the column is skipped, and unknown leaves, an
+  unknown height or a swing that only may overlap leave the landing not
+  evaluated. **Breaking:** definitions bound to `ramp-geometry` must
+  declare the new optional parameter `landing_door_swing`.
 - **Exit doors open in the direction of escape.** (Refs #79)
   `escape-route` gains `exit_door_direction`: every exit door `exit_path`
   reaches must open out of the checked space. Its leaves come from the

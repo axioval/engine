@@ -6772,3 +6772,71 @@ fn with_geometry_exit_doors_opening_against_the_escape_are_found() {
         "{result:#}"
     );
 }
+
+/// Ramp #408 (as in [`handrails_and_ramp_ends`]) with its top landing at
+/// x 12..13, y -1.2..0, 0.6 m up. Door #610 north of it, hinged at
+/// (13, 0.15) and turned half round, swings south over the landing; door
+/// #640, hinged at (12.1, 0.15), swings north away from it.
+fn doors_at_a_ramp_landing() -> String {
+    let ramp = "IFCRAMPFLIGHT('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(400, [5.0, 0.0, 0.0], &ramp_profile(6.0), ramp),
+        swinging_door(
+            600,
+            [13.0, 0.15, 0.6],
+            [-1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+        swinging_door(
+            630,
+            [12.1, 0.15, 0.6],
+            [1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_a_door_swinging_over_a_ramp_landing_is_found() {
+    let case = Case::new("geometry-ramp-landing-door-swing");
+    let (output, result) = case.geometry_rule(
+        &doors_at_a_ramp_landing(),
+        &[("ramp", "IfcRampFlight"), ("door", "IfcDoor")],
+        "axioval:capability.ramp-geometry",
+        &registry_signature("axioval:capability.ramp-geometry"),
+        entity("ramp"),
+        json!({
+            "landing_objects": {"type": "selector", "value": entity("ramp")},
+            "landing_depth_minimum": {"type": "quantity", "value": 0.5, "unit": "m"},
+            "landing_doors": {"type": "selector", "value": entity("door")},
+            "landing_door_height": {"type": "quantity", "value": 2, "unit": "m"},
+            "landing_door_swing": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#408", "{result:#}");
+    assert!(
+        findings[0].1.ends_with(
+            "door ifc-step:model.ifc/#610 swings over the landing at the top of run 1 of 1"
+        ),
+        "{result:#}"
+    );
+}

@@ -1810,3 +1810,88 @@ fn a_turning_flight_keeps_its_headroom_below_and_leaves_width_landings_and_rails
         "{messages:?}"
     );
 }
+
+/// Doors standing 0 .. 2.1 m high, whatever their level.
+struct DoorHeights;
+
+impl axioval_engine::VerticalExtentService for DoorHeights {
+    fn measure_vertical_extent(
+        &self,
+        object: &ObjectId,
+    ) -> Result<axioval_engine::VerticalExtent, axioval_engine::VerticalExtentError> {
+        axioval_engine::VerticalExtent::try_new(
+            object.clone(),
+            ElevationInterval::exact(0.0).unwrap(),
+            ElevationInterval::exact(2.1).unwrap(),
+            Evidence::exact(source(), format!("extent:{}", object.local_id)),
+        )
+    }
+}
+
+#[test]
+fn a_door_swinging_over_a_ramp_landing_is_found() {
+    use common::doors::{Doors, hinged};
+    // Every stated landing runs from x 0 to 2 and y 0 to 1.5. `door`,
+    // hinged at (1, 2), swings south over it; turned to swing north, it
+    // sweeps y 2 .. 2.9 and misses it.
+    let landing = || stairs().landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)));
+    let run = |open: [f64; 3], heights: bool| {
+        let doors = Doors::default().door(
+            "door",
+            vec![hinged([1.0, 2.0, 0.0], [-1.0, 0.0, 0.0], open, 0.9, false)],
+            1.0,
+            None,
+        );
+        model().evaluate_with(
+            &RampGeometryCheck,
+            &rule(
+                RAMP,
+                kind("ramp"),
+                vec![
+                    ("landing_objects", slabs()),
+                    ("landing_doors", selector(kind("door"))),
+                    ("landing_door_height", metres(2.0)),
+                    ("landing_door_swing", boolean(true)),
+                ],
+            ),
+            |services| {
+                services
+                    .register(WalkingSurfaceServiceHandle::new(Arc::new(landing())))
+                    .unwrap();
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(Floor::default())))
+                    .unwrap();
+                services.register(doors.handle()).unwrap();
+                if heights {
+                    services
+                        .register(axioval_engine::VerticalExtentServiceHandle::new(Arc::new(
+                            DoorHeights,
+                        )))
+                        .unwrap();
+                }
+            },
+        )
+    };
+    let evaluation = run([0.0, -1.0, 0.0], true);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "gentle".into(),
+            format!(
+                "door {} swings over the landing at the top of run 2 of 2",
+                id("door")
+            )
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [id("door")]);
+    // Without its height the door may stand on another level.
+    let evaluation = run([0.0, -1.0, 0.0], false);
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("gentle".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // Swinging away, it passes, height or not.
+    let evaluation = run([0.0, 1.0, 0.0], false);
+    assert!(findings(&evaluation).is_empty() && unevaluated(&evaluation).is_empty());
+}

@@ -97,7 +97,8 @@ pub struct StairGeometryCheck;
 /// `end_space_width` and `end_space_height` place a free space in front of
 /// the lowest run and beyond the highest, which no `end_space_obstacles`
 /// object may reach into, and no `landing_doors` object may reach into the
-/// column `landing_door_height` high over a landing at a run's end.
+/// column `landing_door_height` high over a landing at a run's end; with
+/// `landing_door_swing`, no such door's leaves may swing over the landing.
 pub struct RampGeometryCheck;
 
 const SLOPE_LIMITS: &[TableColumn] = &[
@@ -307,6 +308,8 @@ struct Selections {
     rails: Option<Selected>,
     ends: Option<Selected>,
     doors: Option<Selected>,
+    /// The selected landing doors' swings, with `landing_door_swing`.
+    swings: Option<Vec<ramp_ends::DoorSwing>>,
 }
 
 /// Decided objects and whether the selector left any undecided.
@@ -318,6 +321,16 @@ impl Selections {
         headroom: Option<&HeadroomCheck<'_>>,
         walking: &WalkingConfig<'_>,
     ) -> Self {
+        let doors = walking
+            .doors
+            .as_ref()
+            .map(|check| selected(context, check.doors, "door selection"));
+        let swings = match (&walking.doors, &doors) {
+            (Some(check), Some(Ok((doors, _)))) if check.swing => {
+                Some(ramp_ends::door_swings(context, doors))
+            }
+            _ => None,
+        };
         Self {
             headroom: headroom
                 .map(|check| selected(context, check.obstacles, "headroom obstacle selection")),
@@ -337,10 +350,8 @@ impl Selections {
                 .end_space
                 .as_ref()
                 .map(|check| selected(context, check.obstacles, "end-space obstacle selection")),
-            doors: walking
-                .doors
-                .as_ref()
-                .map(|check| selected(context, check.doors, "door selection")),
+            doors,
+            swings,
         }
     }
 }
@@ -1483,6 +1494,17 @@ fn ramp(
                     found.push(ramp_ends::doors(
                         free, doors, selected, measured, elevation, &label,
                     ));
+                    if doors.swing {
+                        found.push(match (selected, &selections.swings) {
+                            (Ok((_, undecided)), Some(swings)) => ramp_ends::door_swings_over(
+                                doors, swings, *undecided, measured, elevation, &label,
+                            ),
+                            (Err((_, message)), _) => {
+                                (Check::Undecided(message.clone()), vec![], vec![])
+                            }
+                            (Ok(_), None) => unreachable!("swings are read with the selection"),
+                        });
+                    }
                 }
                 for (check, mut cited, related) in found {
                     cited.insert(0, evidence.clone());

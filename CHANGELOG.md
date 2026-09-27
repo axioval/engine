@@ -51,6 +51,31 @@ All notable changes are documented here. This project follows Semantic Versionin
   and panel properties, openbimrs/ifc#149; rectangles fixed to the door,
   #18). **Breaking:** definitions bound to `keyed-limit` must declare the
   new optional parameters `overall_width` and `width_deduction`. (#82)
+- **Distances and connections between spaces.** Two capabilities.
+  `space-connection` checks each space against the rows of a `connections`
+  table whose `from` selector picks it: direct access to a space `to` picks
+  `allowed`, `required` or `forbidden`, through `any` door or opening, only
+  `doors` or only `openings`, and a direct exit to the outside likewise.
+  `space-distance` checks the nearest destination a row of its `distances`
+  table names (`to`, optionally on the same storey and with direct access)
+  against a `minimum` and a `maximum`, in a straight line between the
+  footprints' centroids or walking the metric route between them. Doors
+  (`door_selector`) and openings (`opening_selector`) reach their spaces
+  through `access_path`: with `axioval:derived.adjacent-space` two spaces
+  must lie on opposite faces and a face entering no space is the outside;
+  a stated relationship such as `IfcRelSpaceBoundary` connects spaces but
+  cannot show an exit. A walk starts at a space's centroid on its floor and
+  refuses a space whose centroid lies outside its footprint. Everything is
+  three-valued: an element of undecided type or unreadable spaces, a refused
+  route or an undecided destination leaves only what it could change not
+  evaluated; a blocked route is no destination. Each pair is routed on its
+  own until a many-target search exists (axiolid/kernel#186). (#80)
+- **Footprint centres.** `PlanSpanService::measure_centre` (default: refuse)
+  returns a `PlanCentre`: the centroid the `centres` span measures from, the
+  radius the true one lies within, and a `CentrePlacement` (`Inside`,
+  `Outside`, `Undecided`); the handle refuses a centre of another object.
+  `AxiolidPlanSpanService` places it against the measured footprint, off
+  every edge by more than its radius plus the chord deviation. (#80)
 - **Walkability and metric routing from geometry.** `axioval-axiolid` now
   implements both contracts, and `--geometry` registers them.
   `AxiolidWalkabilityService` builds a region per selected surface (its floor

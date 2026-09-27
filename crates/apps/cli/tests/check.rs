@@ -3934,3 +3934,129 @@ fn with_geometry_door_clear_widths_thresholds_and_spacing_are_checked() {
         "{result:#}"
     );
 }
+
+#[test]
+fn with_geometry_a_forbidden_connection_and_a_missing_exit_are_found() {
+    let case = Case::new("geometry-space-connection");
+    let (output, result) = case.geometry_rule(
+        &walls_with_openings(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.space-connection",
+        &registry_signature("axioval:capability.space-connection"),
+        entity("space"),
+        json!({
+            "connections": {"type": "table", "value": [
+                {"from": {"type": "selector", "value": entity("space")},
+                 "to": {"type": "selector", "value": entity("space")},
+                 "access": {"type": "string", "value": "forbidden"},
+                 "access_type": {"type": "string", "value": "doors"}},
+                {"label": {"type": "string", "value": "exit"},
+                 "from": {"type": "selector", "value": entity("space")},
+                 "exit": {"type": "string", "value": "required"},
+                 "access_type": {"type": "string", "value": "doors"}},
+            ]},
+            "access_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+            "door_selector": {"type": "selector", "value": entity("door")},
+            "space_selector": {"type": "selector", "value": entity("space")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Doors #66 and #116 join the two rooms, which no door may; door #96
+    // opens #26 to the outside, while #16 has only a window there.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 3, "{result:#}");
+    let of = |id: &str| -> Vec<&str> {
+        findings
+            .iter()
+            .filter(|(object, _)| object == id)
+            .map(|(_, message)| message.as_str())
+            .collect()
+    };
+    assert!(
+        of("#16")
+            .iter()
+            .any(|message| message.starts_with("has direct access to ")
+                && message.contains("/#26 through ")
+                && message.ends_with("which row 0 forbids for a door")),
+        "{result:#}"
+    );
+    assert!(
+        of("#16").contains(&"has no door directly to the outside, which row 1 (exit) requires"),
+        "{result:#}"
+    );
+    assert_eq!(of("#26").len(), 1, "{result:#}");
+    assert!(of("#26")[0].contains("/#16 through "), "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// Rooms #19 (x 0..4) and #29 (x 4.2..8.2), both 4 m deep and 3 m high,
+/// joined only by the bodiless opening #39 in the gap between them at
+/// y 3..4, so the walk from centre to centre detours north.
+fn rooms_through_an_opening() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let opening = "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [6.2, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(30, [4.1, 3.5, 0.0], [0.2, 1.0, 2.1], opening),
+    )
+}
+
+#[test]
+fn with_geometry_a_walking_distance_too_long_is_found() {
+    let case = Case::new("geometry-space-distance");
+    let row = |measure: &str| {
+        json!({"from": {"type": "selector", "value": entity("space")},
+               "to": {"type": "selector", "value": entity("space")},
+               "measure": {"type": "string", "value": measure},
+               "maximum": {"type": "number", "value": 4.5}})
+    };
+    let (output, result) = case.geometry_rule(
+        &rooms_through_an_opening(),
+        &[("space", "IfcSpace")],
+        "axioval:capability.space-distance",
+        &registry_signature("axioval:capability.space-distance"),
+        entity("space"),
+        json!({
+            "distances": {"type": "table", "value": [row("straight"), row("walking")]},
+            "walking_radius": {"type": "number", "value": 0.3},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The centres lie 4.2 m apart, within 4.5 m; the walk through the
+    // opening is at least 2·√5 + 0.2 ≈ 4.67 m.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    for (space, message) in &findings {
+        assert!(["#19", "#29"].contains(&space.as_str()), "{result:#}");
+        assert!(
+            message.starts_with("the nearest destination, ")
+                && message.contains(" m away walking; row 1 allows at most 4.5 m"),
+            "{result:#}"
+        );
+    }
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

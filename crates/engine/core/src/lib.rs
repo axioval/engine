@@ -516,7 +516,10 @@ pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
 pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
-pub use plan_span::{PlanLength, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle};
+pub use plan_span::{
+    CentrePlacement, PlanCentre, PlanLength, PlanSpan, PlanSpanError, PlanSpanService,
+    PlanSpanServiceHandle,
+};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,

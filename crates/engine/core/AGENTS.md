@@ -31,7 +31,7 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `plan_area.rs` owns footprint, overlap and uncovered-area intervals, exact exactly when a point. The uncovered area is the footprint outside a cover's footprints grown by a stated length; the handle refuses a bad growth or an object in its own cover, and the trait's default refuses rather than answering with the footprint.
 
-`plan_span.rs` owns plan lengths per object and pair: the longest plan diagonal and the centre-to-centre and farthest-point spans between two footprints, as `PlanLength` intervals exact exactly when a point. Closest-point plan distance belongs to `proximity.rs` (`Horizontal`); never add it here. The handle refuses one object measured against itself.
+`plan_span.rs` owns plan lengths per object and pair: the longest plan diagonal and the centre-to-centre and farthest-point spans between two footprints, as `PlanLength` intervals exact exactly when a point. Closest-point plan distance belongs to `proximity.rs` (`Horizontal`); never add it here. The handle refuses one object measured against itself. It also owns `PlanCentre`, the centroid with a radius (exact exactly when zero) and a `CentrePlacement`; the handle refuses a centre naming another object, and the trait's default refuses rather than answering with another point.
 
 `facade_area.rs` owns the outward-facing surface area per object as an interval, exact exactly when a point; the handle refuses an area naming another object. Which objects are external is never this seam's.
 

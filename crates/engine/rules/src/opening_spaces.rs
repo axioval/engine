@@ -94,7 +94,7 @@ impl<'a> Config<'a> {
 
 /// Whether a relationship identity names the derived adjacency. A malformed
 /// derived identity is left to the relationship service to refuse.
-fn is_adjacency(relationship: &str) -> bool {
+pub(crate) fn is_adjacency(relationship: &str) -> bool {
     SemanticRelationship::try_new(relationship)
         .ok()
         .and_then(|relationship| Derivation::parse(&relationship).ok().flatten())

@@ -502,6 +502,107 @@ A finding names the pair (with `any`, the pair farthest apart), its separation, 
 - An object `exit_selector` cannot decide can only add exits and pairs: with `any` a pair far enough apart stands, with `all` a pair too close stands, and anything else they could change is not evaluated. The same holds for the count against `minimum_exits`.
 - A diagonal that cannot be measured, or a missing service, leaves the space not evaluated.
 
+### Distances and connections between spaces
+
+Two capabilities judge how spaces relate to one another: `space-connection`
+how they open onto each other and onto the outside, `space-distance` how far
+each lies from its nearest destination. They are separate because they ask
+different services: a connection is a relationship question and needs no
+geometry, while a distance is measured.
+
+Both read direct access the same way. Each door (`door_selector`) or opening
+(`opening_selector`) reaches the spaces it connects through `access_path`,
+among the `space_selector` objects (every object by default):
+
+- `["axioval:derived.adjacent-space"]`, forward and alone: the spaces a probe
+  first enters on each face of the element. Two spaces have direct access
+  through it only on opposite faces, and a space opens to the outside
+  through it when its other face enters no space. Faces are read with
+  `adjacent_side`, never from the locator by hand.
+- a relationship the model states, such as `["IfcRelSpaceBoundary:backward"]`
+  from the element to the spaces it bounds: two spaces the element reaches
+  have direct access through it. A stated relationship records no faces and
+  no outside, so it cannot judge an exit.
+
+Every answer is three-valued. A link through an element surely of the asked
+type stands. An element whose type a selector cannot decide, or whose
+spaces cannot be read (a refused derivation, which might connect anything),
+leaves an answer it could change not evaluated, never "no".
+
+#### Space connection
+
+`space-connection` checks each selected space against the rows of its
+`connections` table whose `from` selector picks it (every such row applies;
+an undecided `from` leaves the space not evaluated).
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `from` | selector, required | the spaces the row applies to |
+| `to` | selector | the spaces access is judged to |
+| `access` | string | `allowed` (default), `required` (direct access to at least one `to` space) or `forbidden` (to none); needs `to` |
+| `access_type` | string | `any` (default), `doors` or `openings`: which elements count, for access and exit alike |
+| `exit` | string | `allowed` (default), `required` or `forbidden`: a direct exit to the outside; needs the derived adjacency |
+| `label` | string | named in findings |
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `connections` | table, required | the rows above |
+| `access_path` | string list, required | from a door or opening to the spaces it connects |
+| `door_selector`, `opening_selector` | selector | the doors and the openings; at least one, and each `access_type` other than `any` needs its own |
+| `space_selector` | selector | the spaces an element may reach |
+
+A forbidden connection is found once per row, naming every linked space and
+the element it is reached through, and cites the adjacency evidence; a
+missing required connection or exit cites the evidence of every element that
+reaches the space. A `to` selector that cannot decide a linked space, like an
+undecided element, leaves the requirement not evaluated unless a sure link
+already decides it.
+
+#### Space distance
+
+`space-distance` checks each selected space against the rows of its
+`distances` table whose `from` selector picks it.
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `from`, `to` | selector, required | the start spaces and their destinations |
+| `measure` | string | `straight` (default) or `walking` |
+| `same_storey` | boolean | only destinations on the start's storey count |
+| `direct_access` | boolean | only destinations the start has direct access to count |
+| `minimum`, `maximum` | number | bounds in metres on the nearest destination's distance; at least one, minimum not above maximum |
+| `label` | string | named in findings |
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `distances` | table, required | the rows above |
+| `storey_path`, `storey_selector` | string list, selector | how a space's storeys are found, climbed as `same-container` climbs; required by `same_storey` |
+| `access_path`, `door_selector`, `opening_selector`, `space_selector` | | as for `space-connection`; `access_path` is required by `direct_access` |
+| `walking_radius`, `walking_height`, `walking_step` | number | the body a walking row routes, required by one; `walking_slope` defaults to level |
+
+- **Straight** is the plan distance between the footprints' centroids
+  (`PlanSpanService`, `centres`), an interval exact for planar meshes. Plan
+  rather than 3D, because storeys are what `same_storey` states; the closest
+  distance between footprints is `distance`'s `horizontal` projection.
+- **Walking** is the metric route (`MetricRoutingService`) between the
+  spaces' representative points: the centroid of each footprint
+  (`PlanSpanService::measure_centre`) at the bottom of its vertical extent.
+  The centroid must be exact and lie inside the footprint; an L- or
+  U-shaped space whose centroid falls outside it, or on its boundary, is not
+  evaluated rather than walked from a point chosen for it. A blocked route
+  (with complete evidence) is no destination; a refused one is unknown. See
+  [Metric routing](./metric-routing.md).
+
+The nearest distance is bounded from above by the destinations that surely
+qualify (`to` matches, same storey, direct access) and from below by every
+destination that might, a destination whose distance is unknown counting as
+zero. A maximum fails only when every possible destination lies beyond it
+(or there is none, or none is reachable), and holds once a sure destination
+lies within it; a minimum fails once a sure destination lies nearer, and
+holds only when every possible one lies at least that far. Anything else is
+not evaluated with the reasons, so a route that cannot be measured decides
+only what it cannot change. Each pair is routed on its own: a
+nearest-destination search over many targets awaits axiolid/kernel#186.
+
 ### Counterpart coverage
 
 `counterpart-coverage` checks that each selected element is covered by its counterparts, in plan and in height: architectural walls by structural walls, or the reverse. The counterparts are the objects `counterparts` picks, typically another discipline's elements of matching kinds (a [`discipline` selector](#discipline-selectors) with an entity type), so a check across two models declares `--model arch.ifc:architecture --model struct.ifc:structure`. It needs the plan-area, proximity and (for the height check) vertical-extent services.

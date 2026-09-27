@@ -5,7 +5,9 @@ use std::sync::Arc;
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidPlanSpanService};
-use axioval_engine::{PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle};
+use axioval_engine::{
+    CentrePlacement, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
+};
 use axioval_ir::{ObjectId, SourceId};
 
 fn source() -> SourceId {
@@ -180,6 +182,49 @@ fn objects_without_a_measured_footprint_are_refused_never_zero() {
         spans.measure_diameter(&id("ghost")),
         Err(PlanSpanError::UnknownObject(id("ghost")))
     );
+}
+
+#[test]
+fn a_rooms_centre_lies_inside_it_and_an_l_shaped_rooms_outside() {
+    // An L of 10 m² along x and 9 m² up its west end: its centroid
+    // (32.87, 2.87) lies in the notch.
+    let geometry = room_with_doors()
+        .with_mesh(id("leg-a"), cuboid(30.0, 0.0, 40.0, 1.0, 3.0))
+        .with_mesh(id("leg-b"), cuboid(30.0, 1.0, 31.0, 10.0, 3.0))
+        .with_group(id("ell"), [id("leg-a"), id("leg-b")]);
+    let spans = PlanSpanServiceHandle::new(Arc::new(service(geometry)));
+    let room = spans.measure_centre(&id("room")).unwrap();
+    assert!(room.is_exact());
+    assert_eq!(room.object(), &id("room"));
+    assert_eq!(room.placement(), CentrePlacement::Inside);
+    let [x, y] = room.point();
+    assert!(
+        (x - 10.0).abs() < LENGTH && (y - 5.0).abs() < LENGTH,
+        "{x} {y}"
+    );
+    assert!(room.evidence().locator.ends_with(":inside"));
+
+    let ell = spans.measure_centre(&id("ell")).unwrap();
+    assert_eq!(ell.placement(), CentrePlacement::Outside);
+    // The centre is the one spans between centres measure from.
+    let span = spans
+        .measure_span(&id("room"), &id("ell"), PlanSpan::Centres)
+        .unwrap();
+    let [ex, ey] = ell.point();
+    assert!(((ex - x).hypot(ey - y) - span.lower_metres()).abs() < LENGTH);
+}
+
+#[test]
+fn a_tessellated_centre_is_an_approximate_disc() {
+    let spans = service(AxiolidGeometry::new().with_tessellated_mesh(
+        id("room"),
+        cuboid(0.0, 0.0, 4.0, 3.0, 3.0),
+        0.01,
+    ));
+    let centre = spans.measure_centre(&id("room")).unwrap();
+    assert!(!centre.is_exact());
+    assert!(centre.radius_metres() > 0.0);
+    assert_eq!(centre.placement(), CentrePlacement::Inside);
 }
 
 #[test]

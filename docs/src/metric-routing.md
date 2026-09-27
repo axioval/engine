@@ -69,3 +69,11 @@ on exactly one surface.
   not state its side; such a route is refused, not blocked, until one-sided
   erosion (`Region::erode_inner`, 0.3.1) is published. Routes across vertical
   connectors are not measured.
+
+## Consumers
+
+`space-distance` walks between spaces with this service: from the centroid
+of one space's footprint, on its floor, to that of another, refusing a space
+whose centroid lies outside its footprint. A `Blocked` route is no
+destination; a refusal leaves the distance unknown. See
+[Distances and connections between spaces](./capabilities.md#distances-and-connections-between-spaces).

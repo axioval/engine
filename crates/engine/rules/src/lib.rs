@@ -41,6 +41,9 @@ mod selection;
 mod shelf_capacity;
 mod slab_contact;
 mod slab_stack;
+mod space_access;
+mod space_connection;
+mod space_distance;
 mod space_validation;
 mod stair_geometry;
 mod support;
@@ -90,6 +93,8 @@ pub use same_container::SameContainer;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
 pub use slab_stack::SlabStackSpacing;
+pub use space_connection::SpaceConnection;
+pub use space_distance::SpaceDistance;
 pub use space_validation::{SpaceCategory, SpaceValidation};
 pub use stair_geometry::{RampGeometryCheck, StairGeometryCheck};
 pub use table_allocation::TableAllocation;
@@ -150,4 +155,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(StairGeometryCheck))
         .and_then(|registry| registry.register(RampGeometryCheck))
         .and_then(|registry| registry.register(AccessibleRoute))
+        .and_then(|registry| registry.register(SpaceConnection))
+        .and_then(|registry| registry.register(SpaceDistance))
 }

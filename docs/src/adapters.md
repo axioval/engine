@@ -279,7 +279,10 @@ both deviations. Its centroid can move only through the band of area
 `b = 2·P·d + π·d²` where the true and meshed footprints differ, whose points
 lie within `R + d` of the measured centroid (`R` the farthest hull vertex), so
 by at most `b·(R + d) / (A − b)`; a footprint no larger than its band has no
-bounded centre and is refused.
+bounded centre and is refused. A located centre lies inside (or outside)
+the footprint when it lies inside (or outside) the measured one farther from
+every boundary edge than its own radius plus the chord deviation, and is
+undecided otherwise, on the boundary of an exact footprint included.
 
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation

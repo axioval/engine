@@ -209,7 +209,7 @@ pub(crate) fn extent_error(error: &VerticalExtentError) -> Unavailable {
 /// A few units in the last place of the largest magnitude involved: decimal
 /// coordinates and lengths read in binary differ from what was meant by
 /// that much, and no more.
-fn rounding_slack(magnitudes: &[f64]) -> f64 {
+pub(crate) fn rounding_slack(magnitudes: &[f64]) -> f64 {
     4.0 * f64::EPSILON
         * magnitudes
             .iter()

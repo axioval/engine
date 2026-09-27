@@ -1188,6 +1188,40 @@ The first row holding a recess's depth applies; a recess no row holds has no req
 
 The well's height runs from its lowest bottom to its highest top, and selects the first row of `requirements` whose `maximum_height_metres` it does not exceed (a row without one holds any height); no row means no requirement. Every value is an interval, and one straddling a bound is not evaluated. Findings relate the well's spaces. A tessellated space leaves its well not evaluated: the short side of a minimum-area rectangle does not grow monotonically with the shape, so a chord band cannot bound it.
 
+### Structural members
+
+Rules on how structural members and walls are built read the reserved body set (`axioval:body`, see [IR](./ir.md#attribute-sets)): the source's own statement of how a body is modelled, never a mesh. They need no geometry service. A wall's allowed representation kinds, its extrusion along the vertical, and an empty wall are ordinary property rules over it:
+
+| Check | Rule |
+|---|---|
+| Allowed representation kinds | `selector-conformance` or `property-value` on `axioval:body.Kinds` with `quantifier: all` and `oneOf`. |
+| Extruded along the vertical | `property-predicate` on `axioval:body.Extrusion.Inclination`, `less_or_equal` a small angle. |
+| Empty element (no body) | `property-required` on `axioval:body.Count`. |
+| Profile from a table | `allowed-profile`. |
+
+`axioval:capability.allowed-profile` requires each selected object's body to be one swept solid whose profile is a row of the `profiles` table. A row fits when its `type` pattern matches the profile family (`i-shape`, `rectangle`, …), its `name` pattern (if any) the profile's name (a catalogue designation such as `HEA300`), and every dimension it states lies within the tolerance of the profile's.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `profiles` | `table` | Required. Columns below. |
+| `tolerance` | `quantity` | A length every dimension may be off by; exact (up to binary rounding) without it. |
+| `case_sensitive` | `boolean` | Whether `type` and `name` patterns match case. `false` by default. |
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `type` | `textPattern` | Required. The profile family, a whole-value wildcard pattern. |
+| `name` | `textPattern` | The profile's name. A profile without a name does not fit a row stating one. |
+| `width`, `depth`, `web_thickness`, `flange_thickness`, `thickness`, `wall_thickness`, `radius`, `girth`, `fillet_radius` | `quantity` | Lengths, named alike for every family: `width` is a rectangle's `XDim`, an I-section's overall width, a T, U or Z section's flange width, an angle's or C section's `Width`; `depth` is `YDim` or the (overall) depth; `thickness` an angle's or centre-line profile's; `wall_thickness` a hollow or C section's; `fillet_radius` the root (or rounding, or inner) radius. |
+| `tolerance` | `quantity` | The row's own tolerance, replacing the rule's. |
+
+Three results are told apart, each a finding on the object:
+
+- **wrong geometry**: no body, a body of several items, or one that is no swept profile (a boundary representation, a tessellation);
+- **arbitrary profile**: an arbitrary outline, centre-line or composite profile no row allows;
+- **not an allowed profile**: a parameterised profile no row fits, naming the nearest row of its type (least total excess beyond the tolerance, then a matching name, then the first declared) and each dimension it is off in (`depth 0.295 m, allowed 0.29 m within 0.001 m`); or of a type no row names.
+
+A row stating a dimension the family does not have, or one the source leaves unset, does not fit; the schema's default is never assumed. A mirrored profile is judged by its parent, whose dimensions it keeps; a derived one is not evaluated, since the body set does not state whether its operator scales. A dimension the source refuses leaves the object not evaluated unless another row fits.
+
 ### Model quality
 
 Checks on how a model is built rather than on what it designs. Each sub-check maps to one rule:

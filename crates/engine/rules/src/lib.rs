@@ -4,7 +4,9 @@
 use axioval_engine::{CapabilityRegistry, EngineError};
 
 mod accessible_route;
+mod allowed_profile;
 mod body_extent;
+mod body_facts;
 mod clash;
 mod clash_matrix;
 mod classification_requirement;
@@ -69,6 +71,7 @@ mod wall_spacing;
 mod xsd_pattern;
 
 pub use accessible_route::AccessibleRoute;
+pub use allowed_profile::AllowedProfile;
 pub use body_extent::BodyExtent;
 pub use clash::Clash;
 pub use clash_matrix::ClashMatrix;
@@ -199,4 +202,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(LocalCirculation))
         .and_then(|registry| registry.register(CorridorEndOpenings))
         .and_then(|registry| registry.register(SpaceBoundaryCoverage))
+        .and_then(|registry| registry.register(AllowedProfile))
 }

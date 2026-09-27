@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Allowed profiles.** (#64) `allowed-profile` requires each member's
+  body to be one swept solid whose profile is a row of a `profiles` table:
+  its family (`type`), its name where the row states one (`HEA*`), and
+  every dimension the row states (`width`, `depth`, `web_thickness`,
+  `flange_thickness`, `thickness`, `wall_thickness`, `radius`, `girth`,
+  `fillet_radius`, named alike across families) within the rule's or the
+  row's `tolerance`. Findings tell wrong geometry (no body, several items,
+  no swept profile), an arbitrary profile and a profile no row fits apart,
+  and the last names the nearest row and each dimension it is off in. It
+  reads the reserved body set and needs no geometry service. A refused
+  dimension leaves the member not evaluated unless another row fits; a
+  derived profile is not evaluated, a mirrored one is judged by its parent.
 - **How a body is modelled.** (#40) The reserved `axioval:body` set
   (`BODY_SET`) states, from the body representation a source authors and
   never from a mesh, the number of geometric items (`Count`), their kinds

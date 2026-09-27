@@ -5917,3 +5917,94 @@ fn with_geometry_space_boundaries_are_measured_against_the_space_surface() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// Metres. Columns #10 (an HEA300, 290 mm deep) and #20 (named HEA300 but
+/// 295 mm deep) are I-sections extruded up; #30 is an arbitrary outline.
+fn profiled_columns() -> String {
+    let column = |id: u32, profile: &str| {
+        format!(
+            "#{a}={profile};\n#{b}=IFCEXTRUDEDAREASOLID(#{a},#2,#4,3.);\n\
+             #{c}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{b}));\n\
+             #{d}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{c}));\n\
+             #{id}=IFCCOLUMN('00000000000000000000{id:02}',$,$,$,$,#3,#{d},$,.COLUMN.);\n",
+            a = id + 1,
+            b = id + 2,
+            c = id + 3,
+            d = id + 4,
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #7=IFCUNITASSIGNMENT((#6,#9));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}\
+         #40=IFCCARTESIANPOINT((0.,0.));\n\
+         #41=IFCCARTESIANPOINT((0.3,0.));\n\
+         #42=IFCCARTESIANPOINT((0.,0.3));\n\
+         #43=IFCPOLYLINE((#40,#41,#42,#40));\n\
+         {}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        column(
+            10,
+            "IFCISHAPEPROFILEDEF(.AREA.,'HEA300',$,0.3,0.29,0.0085,0.014,0.027,$,$)"
+        ),
+        column(
+            20,
+            "IFCISHAPEPROFILEDEF(.AREA.,'HEA300',$,0.3,0.295,0.0085,0.014,0.027,$,$)"
+        ),
+        column(30, "IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#43)"),
+    )
+}
+
+#[test]
+fn column_profiles_are_checked_against_a_table_of_allowed_profiles() {
+    let case = Case::new("allowed-profile");
+    let mut signature = registry_signature("axioval:capability.allowed-profile");
+    for column in signature["profiles"]["columns"].as_array_mut().unwrap() {
+        if column["kind"] == "quantity" {
+            column["unitDimension"] = json!("length");
+        }
+    }
+    let millimetres = |value: f64| json!({"type": "quantity", "value": value, "unit": "mm"});
+    let (output, result) = case.geometry_rule(
+        &profiled_columns(),
+        &[("column", "IfcColumn")],
+        "axioval:capability.allowed-profile",
+        &signature,
+        entity("column"),
+        json!({
+            "profiles": {"type": "table", "value": [
+                {"type": {"type": "string", "value": "i-shape"},
+                 "name": {"type": "string", "value": "HEA*"},
+                 "width": millimetres(300.0), "depth": millimetres(290.0)},
+            ]},
+            "tolerance": millimetres(1.0),
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#20".to_owned(),
+                "profile `i-shape` `HEA300` is not an allowed profile; nearest is row 1 \
+                 (`i-shape` `HEA*`): depth 0.295 m, allowed 0.29 m within 0.001 m"
+                    .to_owned()
+            ),
+            (
+                "#30".to_owned(),
+                "arbitrary profile `arbitrary-closed`: no allowed profile is of its type"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

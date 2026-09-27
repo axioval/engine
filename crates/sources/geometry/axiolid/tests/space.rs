@@ -213,6 +213,9 @@ fn unallocated_floor_area_is_reported_per_storey() {
         residuals[0].area_square_metres()
     );
     assert_eq!(residuals[0].storey(), &id("level-0"));
+    // The gross floor area the region is a share of.
+    let gross = residuals[0].floor_area_square_metres().expect("stated");
+    assert!((gross - 100.0).abs() < 1e-6, "got {gross}");
 }
 
 /// Support counts report what the model has, not a decision about it.

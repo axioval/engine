@@ -86,6 +86,8 @@ struct Stub {
     overlaps: Answer<OverlapRows>,
     cap: Answer<(f64, f64)>,
     residuals: Answer<ResidualRows>,
+    /// The gross floor area every residual states, if any.
+    floor: Option<f64>,
     support: Answer<(usize, usize)>,
     /// Every cap request the capability made, in order.
     cap_requests: Mutex<Vec<CapRequest>>,
@@ -151,7 +153,13 @@ impl SpaceService for Stub {
             .clone()
             .unwrap_or(Ok(Vec::new()))?
             .into_iter()
-            .map(|(storey, area, elements)| UnallocatedRegion::try_new(storey, area, elements))
+            .map(|(storey, area, elements)| {
+                let region = UnallocatedRegion::try_new(storey, area, elements)?;
+                match self.floor {
+                    Some(floor) => region.with_floor_area(floor),
+                    None => Ok(region),
+                }
+            })
             .collect()
     }
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
@@ -375,6 +383,77 @@ fn storey_residual_above_the_allowance_is_reported_against_the_storey() {
         )]),
     );
     assert!(within.findings().is_empty());
+}
+
+#[test]
+fn an_unallocated_share_of_the_gross_area_is_bounded() {
+    let share = |regions: &[f64], floor: Option<f64>| {
+        evaluate(
+            Stub {
+                residuals: Some(Ok(regions
+                    .iter()
+                    .map(|area| (oid("storey-1"), *area, Vec::new()))
+                    .collect())),
+                floor,
+                ..Stub::default()
+            },
+            &rule_with(&[
+                (
+                    "check_unallocated_area",
+                    ParameterValue::Boolean { value: true },
+                ),
+                (
+                    "maximum_unallocated_area_square_metres",
+                    ParameterValue::Number { value: 1000.0 },
+                ),
+                (
+                    "maximum_unallocated_share",
+                    ParameterValue::Number { value: 0.03 },
+                ),
+            ]),
+        )
+    };
+    // 5 m² of 100 m² outside every space is 5 %, beyond 3 %.
+    let over = share(&[5.0], Some(100.0));
+    assert_eq!(over.findings().len(), 1);
+    assert_eq!(
+        over.findings()[0].message,
+        "unallocated_area: 5.000% of the storey's gross floor area (5.000 m2 of 100.000 m2) \
+         belongs to no space; required at most 3%"
+    );
+    assert!(share(&[2.0], Some(100.0)).findings().is_empty());
+    // The storey's regions count together: two 2 m² shafts are 4 %.
+    let together = share(&[2.0, 2.0], Some(100.0));
+    assert_eq!(together.findings().len(), 1);
+    assert!(
+        together.findings()[0]
+            .message
+            .contains("4.000% of the storey's gross floor area"),
+        "{}",
+        together.findings()[0].message
+    );
+    // Without a gross area the share is undefined.
+    let unknown = share(&[5.0], None);
+    assert!(unknown.findings().is_empty());
+    assert_eq!(
+        unknown.not_evaluated_outcomes()[0].object_id(),
+        Some(&oid("storey-1"))
+    );
+    // A share above one is no share.
+    let invalid = evaluate(
+        Stub::default(),
+        &rule_with(&[(
+            "maximum_unallocated_share",
+            ParameterValue::Number { value: 3.0 },
+        )]),
+    );
+    assert!(invalid.findings().is_empty());
+    assert!(
+        invalid
+            .not_evaluated_outcomes()
+            .iter()
+            .all(|outcome| *outcome.reason() == NotEvaluatedReason::InvalidDeclaration)
+    );
 }
 
 /// The reason for splitting the bundled fact struct: one unavailable aspect

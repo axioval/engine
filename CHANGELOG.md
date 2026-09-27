@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Separate area measures and the unallocated share.** (#115)
+  `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
+  storey's external-wall ratio divides its walls' facade area by its gross
+  footprint in one rule. `space-validation` takes
+  `maximum_unallocated_share`, the largest share of a storey's gross floor
+  area its unallocated regions may cover together, graded by severity
+  bands; `UnallocatedRegion` states that gross area (`with_floor_area`,
+  `floor_area_square_metres`), which the Axiolid space service now
+  reports. **Breaking:** `area-ratio` gains two optional
+  parameters and `space-validation` one, so a definition bound to either
+  must declare them.
 - **Spaces in every storey their height spans.** (#114) The derived
   relationship `axioval:derived.spans-level;overlap=<m>` (default 1) runs
   from a space to every level whose height band its vertical extent reaches

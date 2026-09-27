@@ -450,3 +450,47 @@ fn every_measured_area_is_reported_in_a_table_in_its_measure() {
     );
     assert!(evaluation.tables().is_empty());
 }
+
+#[test]
+fn an_external_wall_ratio_divides_facade_area_by_gross_footprint() {
+    let (model, areas) = building();
+    let model = model
+        .object("s1", "slab")
+        .object("s2", "slab")
+        .edge("contains", "eg", "s1")
+        .edge("contains", "og", "s2");
+    let areas = areas.with("s1", 100.0, 0.0).with("s2", 100.0, 0.0);
+    let parameters = vec![
+        ("numerator_measure", string("facade")),
+        ("denominator_measure", string("footprint")),
+        ("numerator_selector", selector(external())),
+        ("denominator_selector", selector(kind("slab"))),
+        ("maximum", number(0.4)),
+        ("relationship", string("contains")),
+    ];
+    let evaluation = run(
+        model,
+        areas,
+        &AreaRatio,
+        &rule(RATIO, kind("storey"), parameters.clone()),
+    );
+    // eg: 24 + 20 m² of external facade over a 100 m² floor; og: 30 m².
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "eg".into(),
+            "facade area to plan area ratio is 0.44 (44 m² of 100 m²); required at most 0.4".into()
+        )]
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+
+    // `measure` states both sides at once, so it never joins them.
+    let mut both = parameters;
+    both.push(("measure", string("facade")));
+    let (model, areas) = building();
+    let evaluation = run(model, areas, &AreaRatio, &rule(RATIO, kind("storey"), both));
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}

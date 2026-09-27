@@ -71,13 +71,36 @@ pub(crate) enum Measure {
 impl Measure {
     /// The `measure` parameter: `footprint` (the default) or `facade`.
     fn parse(parameters: &Parameters<'_>) -> Result<Self, Unavailable> {
-        match parameters.string("measure")? {
-            None | Some("footprint") => Ok(Self::Footprint),
-            Some("facade") => Ok(Self::Facade),
+        Ok(Self::named(parameters, "measure")?.unwrap_or(Self::Footprint))
+    }
+
+    /// A measure parameter named `name`, if declared.
+    fn named(parameters: &Parameters<'_>, name: &str) -> Result<Option<Self>, Unavailable> {
+        match parameters.string(name)? {
+            None => Ok(None),
+            Some("footprint") => Ok(Some(Self::Footprint)),
+            Some("facade") => Ok(Some(Self::Facade)),
             Some(other) => Err(invalid(format!(
-                "measure `{other}` is unsupported; use `footprint` or `facade`"
+                "{name} `{other}` is unsupported; use `footprint` or `facade`"
             ))),
         }
+    }
+
+    /// The numerator's and the denominator's measures: `measure` for both,
+    /// or `numerator_measure` and `denominator_measure` each (defaulting to
+    /// the footprint), never `measure` beside them.
+    fn sides(parameters: &Parameters<'_>) -> Result<(Self, Self), Unavailable> {
+        let both = Self::named(parameters, "measure")?;
+        let top = Self::named(parameters, "numerator_measure")?;
+        let bottom = Self::named(parameters, "denominator_measure")?;
+        if both.is_some() && (top.is_some() || bottom.is_some()) {
+            return Err(invalid(
+                "`measure` applies to both sides; declare it or `numerator_measure` and \
+                 `denominator_measure`, not both",
+            ));
+        }
+        let both = both.unwrap_or(Self::Footprint);
+        Ok((top.unwrap_or(both), bottom.unwrap_or(both)))
     }
 
     fn noun(self) -> &'static str {
@@ -321,6 +344,9 @@ pub(crate) fn judge_bounds(
 /// window-to-wall ratio of a storey is the facade area of its windows over
 /// that of its external walls and windows (walls are measured with their
 /// openings cut out, so the windows belong in the denominator too).
+/// `numerator_measure` and `denominator_measure` measure each side on its
+/// own instead: a storey's external-wall ratio is the facade area of its
+/// external walls over its gross footprint.
 ///
 /// With `numerator_derivation` `light-area`, each numerator member's area is
 /// its light-transmitting area, taken from the first step of a fallback
@@ -372,6 +398,8 @@ impl RuleCapability for AreaRatio {
             ParameterDescriptor::optional("numerator_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("denominator_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("measure", ParameterType::String),
+            ParameterDescriptor::optional("numerator_measure", ParameterType::String),
+            ParameterDescriptor::optional("denominator_measure", ParameterType::String),
             ParameterDescriptor::optional("numerator_derivation", ParameterType::String),
             ParameterDescriptor::optional("empty_numerator_finding", ParameterType::Boolean),
         ]
@@ -404,7 +432,7 @@ impl RuleCapability for AreaRatio {
                     .unwrap_or(false),
                 parameters.property("denominator_property")?,
                 (minimum, maximum),
-                Measure::parse(&parameters)?,
+                Measure::sides(&parameters)?,
                 parameters.traversal()?,
             ))
         })();
@@ -416,7 +444,7 @@ impl RuleCapability for AreaRatio {
             report_empty,
             bottom_area,
             (minimum, maximum),
-            measure,
+            (top_measure, bottom_measure),
             traversal,
         ) = match parsed {
             Ok(parsed) => parsed,
@@ -427,14 +455,20 @@ impl RuleCapability for AreaRatio {
                 );
             }
         };
-        if light.is_some() && measure == Measure::Facade {
+        if light.is_some() && (top_measure == Measure::Facade || bottom_measure == Measure::Facade)
+        {
             return CapabilityEvaluation::not_evaluated(
                 NotEvaluatedReason::InvalidDeclaration,
-                "area-ratio: `measure` `facade` does not combine with `numerator_derivation` \
+                "area-ratio: a `facade` measure does not combine with `numerator_derivation` \
                  `light-area`"
                     .to_owned(),
             );
         }
+        let noun = if top_measure == bottom_measure {
+            top_measure.noun().to_owned()
+        } else {
+            format!("{} to {}", top_measure.noun(), bottom_measure.noun())
+        };
         let numerator = Population::of(context, numerator);
         // Members already reported, so one reached by several anchors is
         // reported once.
@@ -472,7 +506,7 @@ impl RuleCapability for AreaRatio {
                 }
                 let (mut top, provenance) = match &light {
                     None => (
-                        Sum::measured(context, top_area, measure, &over.decided)?,
+                        Sum::measured(context, top_area, top_measure, &over.decided)?,
                         String::new(),
                     ),
                     Some(light) => {
@@ -523,11 +557,13 @@ impl RuleCapability for AreaRatio {
                 };
                 top.evidence.extend(over.evidence);
                 let mut bottom = match &under {
-                    Some(under) => Sum::measured(context, bottom_area, measure, &under.decided)?,
+                    Some(under) => {
+                        Sum::measured(context, bottom_area, bottom_measure, &under.decided)?
+                    }
                     None => Sum::measured(
                         context,
                         bottom_area,
-                        measure,
+                        bottom_measure,
                         std::slice::from_ref(&anchor.id),
                     )?,
                 };
@@ -537,7 +573,7 @@ impl RuleCapability for AreaRatio {
                 if bottom.upper <= 0.0 {
                     return Err((
                         NotEvaluatedReason::IncompleteEvidence,
-                        format!("the denominator has no {}", measure.noun()),
+                        format!("the denominator has no {}", bottom_measure.noun()),
                     ));
                 }
                 let lower = top.lower / bottom.upper;
@@ -609,8 +645,7 @@ impl RuleCapability for AreaRatio {
                         rule,
                         &anchor.id,
                         format!(
-                            "{} ratio is {} ({} m² of {} m²); required {bound}{provenance}",
-                            measure.noun(),
+                            "{noun} ratio is {} ({} m² of {} m²); required {bound}{provenance}",
                             shown(lower, upper),
                             (area * 100.0).round() / 100.0,
                             (of * 100.0).round() / 100.0,
@@ -624,8 +659,7 @@ impl RuleCapability for AreaRatio {
                     anchor.id.clone(),
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
-                        "{} ratio is {}, which straddles the bound {bound}",
-                        measure.noun(),
+                        "{noun} ratio is {}, which straddles the bound {bound}",
                         shown(lower, upper)
                     ),
                 ),

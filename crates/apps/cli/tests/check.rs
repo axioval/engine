@@ -3438,6 +3438,8 @@ fn storey_metric_definitions(case: &Case) -> PathBuf {
             ("numerator_property", "propertyReference", false),
             ("denominator_property", "propertyReference", false),
             ("measure", "string", false),
+            ("numerator_measure", "string", false),
+            ("denominator_measure", "string", false),
             ("numerator_derivation", "string", false),
             ("empty_numerator_finding", "boolean", false),
             ("overall_width", "propertyReference", false),
@@ -10166,4 +10168,32 @@ fn an_atrium_counts_in_every_storey_its_height_spans() {
         "{result:#}"
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn area_ratio_measures_its_numerator_and_denominator_differently() {
+    let result = storey_rule(
+        "area-ratio-separate-measures",
+        "area-ratio",
+        "IfcBuildingStorey",
+        json!({
+            "numerator_measure": {"type": "string", "value": "facade"},
+            "denominator_measure": {"type": "string", "value": "footprint"},
+            "numerator_selector": {"type": "selector", "value": entity("wall")},
+            "denominator_selector": {"type": "selector", "value": entity("wall")},
+            "maximum": {"type": "number", "value": 5.0},
+            "relationship": {"type": "string", "value": "IfcRelContainedInSpatialStructure"},
+        }),
+    );
+    // The ground storey's wall: its 27 m² outer face net of the window and
+    // two 0.9 m² free ends, over its 10 m × 0.3 m footprint.
+    let findings = finding_messages(&result);
+    assert!(
+        findings.contains(&(
+            "#101".to_owned(),
+            "facade area to plan area ratio is 9.6 (28.8 m² of 3 m²); required at most 5"
+                .to_owned()
+        )),
+        "{result:#}"
+    );
 }

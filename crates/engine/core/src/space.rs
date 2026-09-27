@@ -213,6 +213,7 @@ pub struct UnallocatedRegion {
     storey: ObjectId,
     area_square_metres: f64,
     elements: Vec<ObjectId>,
+    floor_area_square_metres: Option<f64>,
 }
 
 impl UnallocatedRegion {
@@ -232,13 +233,28 @@ impl UnallocatedRegion {
             storey,
             area_square_metres,
             elements,
+            floor_area_square_metres: None,
         })
+    }
+    /// States the storey's gross floor area the region is part of, so a
+    /// rule can judge the region's share of it. A gross area smaller than
+    /// the region, negative or non-finite is refused.
+    pub fn with_floor_area(mut self, square_metres: f64) -> Result<Self, SpaceError> {
+        if !finite_non_negative(square_metres) || square_metres < self.area_square_metres {
+            return Err(SpaceError::InvalidQuantity);
+        }
+        self.floor_area_square_metres = Some(square_metres);
+        Ok(self)
     }
     pub fn storey(&self) -> &ObjectId {
         &self.storey
     }
     pub fn area_square_metres(&self) -> f64 {
         self.area_square_metres
+    }
+    /// The storey's gross floor area, when the service states it.
+    pub fn floor_area_square_metres(&self) -> Option<f64> {
+        self.floor_area_square_metres
     }
     /// The elements surrounding the region, in canonical order.
     pub fn elements(&self) -> &[ObjectId] {
@@ -529,6 +545,18 @@ mod tests {
         assert!(BoundaryGap::try_new(f64::INFINITY, Vec::new()).is_err());
         assert!(SpaceOverlap::try_new(oid("o"), false, -1.0, 1.0, Containment::Partial).is_err());
         assert!(UnallocatedRegion::try_new(oid("st"), f64::NAN, Vec::new()).is_err());
+        let region = UnallocatedRegion::try_new(oid("st"), 5.0, Vec::new()).unwrap();
+        assert_eq!(region.floor_area_square_metres(), None);
+        // A gross area smaller than the region cannot hold it.
+        assert!(region.clone().with_floor_area(4.0).is_err());
+        assert!(region.clone().with_floor_area(f64::INFINITY).is_err());
+        assert_eq!(
+            region
+                .with_floor_area(100.0)
+                .unwrap()
+                .floor_area_square_metres(),
+            Some(100.0)
+        );
     }
 
     #[test]

@@ -559,6 +559,8 @@ impl SpaceService for AxiolidSpaceService {
                 footprint_polygons(&bodies.floor, tolerance).ok_or(SpaceError::Unavailable)?;
             let spaces =
                 footprint_polygons(&bodies.spaces, tolerance).ok_or(SpaceError::Unavailable)?;
+            // The storey's gross floor area, each region's share of it.
+            let gross: f64 = floor.iter().map(polygon_area).sum();
             let left = if spaces.is_empty() || floor.is_empty() {
                 floor
             } else {
@@ -583,11 +585,10 @@ impl SpaceService for AxiolidSpaceService {
                 if area <= AREA_EPSILON_M2 {
                     continue;
                 }
-                regions.push(UnallocatedRegion::try_new(
-                    storey.clone(),
-                    area,
-                    self.surrounding(&region),
-                )?);
+                regions.push(
+                    UnallocatedRegion::try_new(storey.clone(), area, self.surrounding(&region))?
+                        .with_floor_area(gross)?,
+                );
             }
         }
         Ok(regions)

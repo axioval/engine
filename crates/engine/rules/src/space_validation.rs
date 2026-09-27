@@ -11,10 +11,12 @@
 //! Every finding message starts with its sub-check's category code (see
 //! [`SpaceCategory`]), so results can be grouped by problem as well as by space.
 
+use std::collections::BTreeMap;
+
 use axioval_engine::{
     BoundaryRequest, Cap, CapCoverage, CapRequest, CapabilityEvaluation, CompiledRule, Containment,
     Deviation, NotEvaluatedReason, OverlapRequest, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext, SpaceError, SpaceService, SpaceServiceHandle,
+    RuleCapability, RuleContext, SpaceError, SpaceService, SpaceServiceHandle, UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, ObjectId, Severity};
@@ -99,6 +101,7 @@ impl RuleCapability for SpaceValidation {
                 ParameterType::Number,
             ),
             ParameterDescriptor::optional("tolerance_metres", ParameterType::Number),
+            ParameterDescriptor::optional("maximum_unallocated_share", ParameterType::Number),
             ParameterDescriptor::optional("top_cap_elements", ParameterType::Selector),
             ParameterDescriptor::optional("bottom_cap_elements", ParameterType::Selector),
             ParameterDescriptor::optional("boundary_elements", ParameterType::Selector),
@@ -217,6 +220,8 @@ struct Policy {
     check_bottom_cap: bool,
     check_unallocated_area: bool,
     maximum_unallocated_area_square_metres: f64,
+    /// The largest share of a storey's gross floor area no space may cover.
+    maximum_unallocated_share: Option<f64>,
 }
 
 impl Policy {
@@ -240,7 +245,12 @@ impl Policy {
             Some(ParameterValue::Selector { value }) => Some(Some((**value).clone())),
             Some(_) => None,
         };
+        let maximum_unallocated_share = match rule.parameters.get("maximum_unallocated_share") {
+            None => None,
+            Some(_) => Some(number("maximum_unallocated_share").filter(|share| *share <= 1.0)?),
+        };
         Some(Self {
+            maximum_unallocated_share,
             tolerance_metres,
             top_cap_elements: selector("top_cap_elements")?,
             bottom_cap_elements: selector("bottom_cap_elements")?,
@@ -649,6 +659,68 @@ fn cap_shortfall(coverage: &CapCoverage) -> Option<(Severity, f64)> {
     Some((severity, ratio))
 }
 
+/// The share of a storey's gross floor area that its unallocated regions
+/// cover together, against `maximum`. A storey whose gross area is
+/// unmeasured or empty is not evaluated: its share is undefined.
+fn check_unallocated_share(
+    regions: &[&UnallocatedRegion],
+    maximum: f64,
+    rule: &CompiledRule,
+    evidence: &Evidence,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let Some(first) = regions.first() else {
+        return;
+    };
+    let storey = first.storey();
+    let gross = match first.floor_area_square_metres() {
+        Some(gross)
+            if gross > 0.0
+                && regions
+                    .iter()
+                    .all(|region| region.floor_area_square_metres() == Some(gross)) =>
+        {
+            gross
+        }
+        _ => {
+            evaluation.push_object_not_evaluated(
+                storey.clone(),
+                NotEvaluatedReason::IncompleteEvidence,
+                "space-validation: the storey's gross floor area is not measured, so its \
+                 unallocated share is undefined",
+            );
+            return;
+        }
+    };
+    let area: f64 = regions
+        .iter()
+        .map(|region| region.area_square_metres())
+        .sum();
+    let share = area / gross;
+    if share > maximum {
+        evaluation.push_graded_finding(
+            finding(
+                rule,
+                storey.clone(),
+                Severity::Warning,
+                SpaceCategory::UnallocatedArea.message(&format!(
+                    "{:.3}% of the storey's gross floor area ({area:.3} m2 of {gross:.3} m2) \
+                     belongs to no space; required at most {}%",
+                    share * 100.0,
+                    maximum * 100.0
+                )),
+                evidence,
+            )
+            .with_related(
+                regions
+                    .iter()
+                    .flat_map(|region| region.elements().iter().cloned()),
+            ),
+            Deviation::above(maximum, share, share),
+        );
+    }
+}
+
 /// Judges each unallocated region on its own against the allowance, so a
 /// large hole is found while small shafts beside it pass. The deviation is
 /// the region's excess over the allowance, so severity bands can grade it.
@@ -662,7 +734,7 @@ fn check_residuals(
     match service.measure_unallocated_regions() {
         Ok(regions) => {
             let allowance = policy.maximum_unallocated_area_square_metres;
-            for region in regions {
+            for region in &regions {
                 let area = region.area_square_metres();
                 if area > allowance {
                     evaluation.push_graded_finding(
@@ -681,6 +753,15 @@ fn check_residuals(
                         .with_related(region.elements().iter().cloned()),
                         Deviation::above(allowance, area, area),
                     );
+                }
+            }
+            if let Some(maximum) = policy.maximum_unallocated_share {
+                let mut per_storey: BTreeMap<&ObjectId, Vec<&UnallocatedRegion>> = BTreeMap::new();
+                for region in &regions {
+                    per_storey.entry(region.storey()).or_default().push(region);
+                }
+                for storey in per_storey.values() {
+                    check_unallocated_share(storey, maximum, rule, evidence, evaluation);
                 }
             }
         }

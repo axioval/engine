@@ -3385,7 +3385,18 @@ fn with_geometry_walls_are_graded_by_how_much_structure_stands_under_them() {
 /// stand in the vertical plane through `origin` along world x and are swept
 /// towards -y. `PL` and `REP` in `product` become its placement and shape;
 /// the product is `#first + 8`.
-fn profiled(first: u32, [x, y, z]: [f64; 3], points: &[[f64; 2]], product: &str) -> String {
+fn profiled(first: u32, origin: [f64; 3], points: &[[f64; 2]], product: &str) -> String {
+    swept(first, origin, points, 1.2, product)
+}
+
+/// A side profile as [`profiled`], extruded `depth` across.
+fn swept(
+    first: u32,
+    [x, y, z]: [f64; 3],
+    points: &[[f64; 2]],
+    depth: f64,
+    product: &str,
+) -> String {
     let [
         location,
         position,
@@ -3413,7 +3424,7 @@ fn profiled(first: u32, [x, y, z]: [f64; 3], points: &[[f64; 2]], product: &str)
          #{placement}=IFCLOCALPLACEMENT($,#2);\n\
          #{polyline}=IFCPOLYLINE(({}));\n\
          #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{polyline});\n\
-         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#{position},#4,1.2);\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#{position},#4,{depth:.3});\n\
          #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
          #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
          #{object}={};\n",
@@ -3698,6 +3709,167 @@ fn with_geometry_a_shallow_landing_and_a_low_soffit_are_found() {
             .is_none_or(Vec::is_empty),
         "{result:#}"
     );
+}
+
+/// The side profile of a rail 0.05 m deep whose top runs `height` above
+/// the nosing line of a four-riser flight with 0.17 m risers (nosings from
+/// x 0 at 0.17 m to x 0.84 at 0.68 m), level for 0.3 m beyond either end.
+fn rail_profile(height: f64) -> Vec<[f64; 2]> {
+    let top = [
+        [-0.3, 0.17 + height],
+        [0.0, 0.17 + height],
+        [0.84, 0.68 + height],
+        [1.14, 0.68 + height],
+    ];
+    let mut points: Vec<[f64; 2]> = top.iter().map(|[x, z]| [*x, z - 0.05]).collect();
+    points.extend(top.iter().rev());
+    points
+}
+
+/// Stair flight #108 (four 0.17 m risers, x 0 to 1.12, y -1.2 to 0) with
+/// handrail #208 along its left side (y 0 to 0.05, seen climbing) 0.9 m
+/// above its nosing line and handrail #308 along its right (y -1.25 to
+/// -1.2) only 0.75 m above it; ramp flight #408 (a run from x 6 to 12 between
+/// landings of its own) and furnishing element #509 standing on its lower
+/// landing, x 5.05 to 5.35.
+fn handrails_and_ramp_ends() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    let ramp = "IFCRAMPFLIGHT('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        swept(200, [0.0, 0.05, 0.0], &rail_profile(0.9), 0.05, rail),
+        swept(300, [0.0, -1.2, 0.0], &rail_profile(0.75), 0.05, rail),
+        profiled(400, [5.0, 0.0, 0.0], &ramp_profile(6.0), ramp),
+        placed_box(
+            500,
+            [5.2, -0.6, 0.1],
+            [0.3, 0.3, 0.8],
+            "IFCFURNISHINGELEMENT('GID',$,$,$,$,PL,REP,$)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_a_handrail_too_low_above_the_nosing_line_is_found() {
+    let case = Case::new("geometry-stair-handrails");
+    let (output, result) = case.geometry_rule(
+        &handrails_and_ramp_ends(),
+        &[("flight", "IfcStairFlight"), ("rail", "IfcRailing")],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "handrail_objects": {"type": "selector", "value": entity("rail")},
+            "handrail_reach_across": {"type": "quantity", "value": 0.2, "unit": "m"},
+            "handrail_reach_above": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "handrail_height_minimum": {"type": "quantity", "value": 0.8, "unit": "m"},
+            "handrail_height_maximum": {"type": "quantity", "value": 1.1, "unit": "m"},
+            "handrail_extension_minimum": {"type": "quantity", "value": 30, "unit": "cm"},
+            "handrail_sides": {"type": "string", "value": "both"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Both rails reach 0.3 m level past either end and run along a side
+    // each; #308 runs too low.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#108", "{result:#}");
+    assert!(
+        findings[0].1.starts_with("handrail ")
+            && findings[0].1.ends_with(
+                "#308 runs 0.75 m above the pitch line of the flight at its lowest; 0.8 m to \
+                 1.1 m required"
+            ),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_an_obstacle_at_the_foot_of_a_ramp_is_found() {
+    let case = Case::new("geometry-ramp-ends");
+    let (output, result) = case.geometry_rule(
+        &handrails_and_ramp_ends(),
+        &[
+            ("ramp", "IfcRampFlight"),
+            ("furniture", "IfcFurnishingElement"),
+        ],
+        "axioval:capability.ramp-geometry",
+        &registry_signature("axioval:capability.ramp-geometry"),
+        entity("ramp"),
+        json!({
+            "end_space_depth": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "end_space_width": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "end_space_height": {"type": "quantity", "value": 2, "unit": "m"},
+            "end_space_obstacles": {"type": "selector", "value": entity("furniture")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The 1.5 m square before the run's foot (x 4.5 to 6) holds #509; the
+    // one past its head (x 12 to 13.5) is clear.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#408", "{result:#}");
+    assert!(
+        findings[0].1.ends_with(
+            "#509 obstructs the free space at the bottom of the ramp (1.5 m deep, 1.5 m wide)"
+        ),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// A stair near a ramp is the `distance` capability's nearest mode: the
+/// ramp's nearest flight must lie within the maximum.
+#[test]
+fn with_geometry_a_ramp_without_a_stair_nearby_is_found() {
+    let case = Case::new("geometry-stair-near-ramp");
+    let near = |maximum: f64| {
+        case.geometry_rule(
+            &handrails_and_ramp_ends(),
+            &[("ramp", "IfcRampFlight"), ("flight", "IfcStairFlight")],
+            "axioval:capability.distance",
+            &registry_signature("axioval:capability.distance"),
+            entity("ramp"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("flight")},
+                "mode": {"type": "string", "value": "nearest"},
+                "maximum_metres": {"type": "number", "value": maximum},
+                "projection": {"type": "string", "value": "horizontal"},
+            }),
+        )
+    };
+    // The flight ends at x 1.12, the ramp starts at x 5: 3.88 m apart.
+    let (output, result) = near(3.0);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#408"], "{result:#}");
+    let (output, result) = near(4.0);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
 
 /// Lobby #19 (x 0..4) and rooms #29 (x 4.2..8), #39 (x -4..-0.2) and #49

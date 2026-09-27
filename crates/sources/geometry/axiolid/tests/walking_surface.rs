@@ -4,8 +4,9 @@ use axiolid_core::Point3;
 use axiolid_mesh::{TriMesh, compose};
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkingSurfaceService};
 use axioval_engine::{
-    ClearanceBelowRequest, HeadroomRequest, LandingEvidence, LandingRequest, MeasuredInterval,
-    MetricDirection, WalkingEnd, WalkingSurfaceError, WalkingSurfaceService,
+    ClearanceBelowRequest, HandrailEvidence, HandrailRequest, HeadroomRequest, LandingEvidence,
+    LandingRequest, MeasuredInterval, MetricDirection, RailMeasurement, RailSide, WalkingEnd,
+    WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -837,4 +838,223 @@ fn the_clearance_below_a_flight_is_measured_over_space_floors() {
         below("raised", &["missing"]),
         Err(WalkingSurfaceError::UnknownObject(id("missing")))
     );
+}
+
+/// A rail `thickness` deep under the plan polyline of its top, given as
+/// `(along x, top)` points, swept `width` across from `y`.
+fn rail(top: &[[f64; 2]], thickness: f64, y: f64, width: f64) -> TriMesh {
+    let mut profile: Vec<[f64; 2]> = top.iter().map(|[x, z]| [*x, z - thickness]).collect();
+    profile.extend(top.iter().rev());
+    prism(&profile, width, 0.0, [0.0, y, 0.0])
+}
+
+/// The top of a rail `height` above the nosing line of the four-riser
+/// flight (nosings at x = 0 .. 0.84, 0.18 .. 0.72 m), held level `bottom`
+/// before the first and `top` beyond the last.
+fn along_flight(height: f64, bottom: f64, top: f64) -> Vec<[f64; 2]> {
+    vec![
+        [-bottom, 0.18 + height],
+        [0.0, 0.18 + height],
+        [0.84, 0.72 + height],
+        [0.84 + top, 0.72 + height],
+    ]
+}
+
+fn handrails(
+    stairs: &AxiolidWalkingSurfaceService,
+    stretch: WalkingStretch,
+    subject: &str,
+    rails: &[&str],
+) -> Result<HandrailEvidence, WalkingSurfaceError> {
+    stairs.measure_handrails(
+        &HandrailRequest::try_new(
+            id(subject),
+            stretch,
+            rails.iter().map(|local| id(local)),
+            (0.2, 1.5),
+            0.3,
+        )
+        .unwrap(),
+    )
+}
+
+fn rail_of<'a>(evidence: &'a HandrailEvidence, local: &str) -> &'a RailMeasurement {
+    &evidence
+        .rails()
+        .iter()
+        .find(|(rail, _)| *rail == id(local))
+        .unwrap_or_else(|| panic!("{local} is not along: {evidence:?}"))
+        .1
+}
+
+#[test]
+fn handrails_along_a_flight_measure_height_extension_and_side() {
+    // The flight is 1.2 m wide, y 0 .. 1.2: the climber's left at y 1.2.
+    let stairs = flight_with(vec![
+        ("left", rail(&along_flight(0.9, 0.3, 0.3), 0.05, 1.25, 0.05)),
+        (
+            "right",
+            rail(&along_flight(0.75, 0.1, 0.3), 0.05, -0.1, 0.05),
+        ),
+        // Beyond the reach across, and a storey above.
+        ("far", rail(&along_flight(0.9, 0.3, 0.3), 0.05, 2.0, 0.05)),
+        (
+            "above",
+            rail(&along_flight(3.9, 0.3, 0.3), 0.05, 1.25, 0.05),
+        ),
+    ]);
+    let measured = handrails(
+        &stairs,
+        WalkingStretch::Flight,
+        "flight",
+        &["left", "right", "far", "above"],
+    )
+    .unwrap();
+    assert!(!measured.evidence().exact);
+    let names: Vec<_> = measured
+        .rails()
+        .iter()
+        .map(|(rail, _)| rail.clone())
+        .collect();
+    assert_eq!(names, [id("left"), id("right")]);
+
+    let left = rail_of(&measured, "left");
+    assert_eq!(measured.side(left), Some(RailSide::Left));
+    assert!(
+        holds(left.lowest(), 0.9) && holds(left.highest(), 0.9),
+        "{left:?}"
+    );
+    assert!(left.highest().upper() - left.lowest().lower() < 1e-9);
+    assert!(holds(measured.bottom_extension(left), 0.3));
+    assert!(holds(measured.top_extension(left), 0.3));
+    // Level extensions of an exact rail rise by next to nothing.
+    for rise in [left.bottom_rise().unwrap(), left.top_rise().unwrap()] {
+        assert!(rise.lower() == 0.0 && rise.upper() < 1e-12, "{rise:?}");
+    }
+
+    let right = rail_of(&measured, "right");
+    assert_eq!(measured.side(right), Some(RailSide::Right));
+    assert!(holds(right.lowest(), 0.75), "{right:?}");
+    assert!(holds(measured.bottom_extension(right), 0.1));
+    // It stops 0.1 m before the flight: short of the 0.3 m measured.
+    assert_eq!(right.bottom_rise(), None);
+}
+
+#[test]
+fn a_rail_sloping_on_past_the_flight_rises_over_its_extension() {
+    // The rail keeps climbing 0.3 m past the last nosing, then stops.
+    let top = vec![[0.0, 1.08], [1.14, 1.08 + 1.14 * 0.54 / 0.84]];
+    let stairs = flight_with(vec![("rail", rail(&top, 0.05, 1.25, 0.05))]);
+    let measured = handrails(&stairs, WalkingStretch::Flight, "flight", &["rail"]).unwrap();
+    let rail = rail_of(&measured, "rail");
+    assert!(
+        holds(rail.lowest(), 0.9) && holds(rail.highest(), 0.9),
+        "{rail:?}"
+    );
+    let rise = rail.top_rise().unwrap();
+    assert!(holds(rise, 0.3 * 0.54 / 0.84), "{rise:?}");
+    assert_eq!(rail.bottom_rise(), None);
+    assert!(holds(measured.bottom_extension(rail), 0.0));
+}
+
+#[test]
+fn rails_not_parallel_or_unmeasurable_are_refused() {
+    // Turned in plan: its plan is no rectangle along x.
+    let mut turned = rail(&along_flight(0.9, 0.3, 0.3), 0.05, 1.25, 0.05);
+    for point in &mut turned.positions {
+        point.y += 0.1 * point.x;
+    }
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(
+            id("flight"),
+            prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]),
+        )
+        .with_mesh(id("turned"), turned)
+        .with_tessellated_mesh(
+            id("round"),
+            rail(&along_flight(0.9, 0.3, 0.3), 0.05, 1.25, 0.05),
+            0.002,
+        )
+        .with_unmeasured(id("broken"), "no representation")
+        .with_no_body(id("zone"));
+    let stairs = service(geometry);
+    let measure = |rails: &[&str]| handrails(&stairs, WalkingStretch::Flight, "flight", rails);
+    assert!(matches!(
+        measure(&["turned"]),
+        Err(WalkingSurfaceError::Unsupported(m)) if m.contains("rectangle")
+    ));
+    assert!(matches!(
+        measure(&["broken"]),
+        Err(WalkingSurfaceError::Unavailable(_))
+    ));
+    assert_eq!(
+        measure(&["missing"]),
+        Err(WalkingSurfaceError::UnknownObject(id("missing")))
+    );
+    assert!(measure(&["zone"]).unwrap().rails().is_empty());
+    // A tessellated rail is measured, widened by its chord deviation.
+    let round = measure(&["round"]).unwrap();
+    let rail = rail_of(&round, "round");
+    assert!(holds(rail.lowest(), 0.9) && rail.lowest().lower() <= 0.9 - 0.002);
+    assert!(rail.top_rise().unwrap().upper() >= 0.004);
+    // A flight without rails, and a ramp's run on a flight, are told apart.
+    assert!(measure(&[]).unwrap().rails().is_empty());
+    assert!(matches!(
+        handrails(&stairs, WalkingStretch::Run(0), "flight", &[]),
+        Err(WalkingSurfaceError::Unsupported(_))
+    ));
+}
+
+#[test]
+fn a_handrail_along_a_ramp_follows_its_surface() {
+    // The run rises 0.5 m over x 1 .. 7 from 0.1 m, 1.5 m wide.
+    let top = vec![[0.7, 1.0], [1.0, 1.0], [7.0, 1.5], [7.3, 1.5]];
+    let ramps = service(
+        AxiolidGeometry::new()
+            .with_mesh(
+                id("ramp"),
+                prism(&ramp_profile(0.5, 6.0), 1.5, 0.0, [0.0; 3]),
+            )
+            .with_mesh(id("rail"), rail(&top, 0.05, -0.1, 0.05)),
+    );
+    let measured = handrails(&ramps, WalkingStretch::Run(0), "ramp", &["rail"]).unwrap();
+    let rail = rail_of(&measured, "rail");
+    assert_eq!(measured.side(rail), Some(RailSide::Right));
+    assert!(
+        holds(rail.lowest(), 0.9) && holds(rail.highest(), 0.9),
+        "{rail:?}"
+    );
+    assert!(holds(measured.bottom_extension(rail), 0.3));
+    assert!(holds(measured.top_extension(rail), 0.3));
+    assert!(rail.bottom_rise().unwrap().upper() < 1e-12);
+}
+
+#[test]
+fn a_handrail_along_a_turned_flight_measures_within_rounding() {
+    let angle: f64 = 0.5;
+    let (sin, cos) = angle.sin_cos();
+    let top = along_flight(0.9, 0.3, 0.3);
+    let mut profile: Vec<[f64; 2]> = top.iter().map(|[x, z]| [*x, z - 0.05]).collect();
+    profile.extend(top.iter().rev());
+    let stairs = service(
+        AxiolidGeometry::new()
+            .with_mesh(
+                id("flight"),
+                prism(&flight_profile(&[0.18; 4], 0.28), 1.2, angle, [0.0; 3]),
+            )
+            .with_mesh(
+                id("rail"),
+                prism(&profile, 0.05, angle, [-1.25 * sin, 1.25 * cos, 0.0]),
+            ),
+    );
+    let measured = handrails(&stairs, WalkingStretch::Flight, "flight", &["rail"]).unwrap();
+    let rail = rail_of(&measured, "rail");
+    assert_eq!(measured.side(rail), Some(RailSide::Left));
+    assert!(
+        holds(rail.lowest(), 0.9) && holds(rail.highest(), 0.9),
+        "{rail:?}"
+    );
+    assert!(rail.lowest().upper() - rail.lowest().lower() < 1e-9);
+    assert!(holds(measured.top_extension(rail), 0.3));
+    assert!(rail.top_rise().unwrap().upper() < 1e-9);
 }

@@ -24,9 +24,14 @@
 //! ([`ClearanceBelow`]) is its height above the floors of the spaces a
 //! request names.
 //!
+//! Handrails ([`HandrailEvidence`]) along a flight or a run are the rule's
+//! selection, reported as positions along and across the walking direction
+//! and as the height of their top above the pitch line: the nosing line of a
+//! flight, the surface of a run.
+//!
 //! What the seam does not measure yet (Refs #85): winders and turning
-//! flights, open risers, handrails and doors on landings. A service refuses
-//! a shape it cannot decide rather than approximate it.
+//! flights and open risers. A service refuses a shape it cannot decide
+//! rather than approximate it.
 
 use std::sync::Arc;
 
@@ -1119,6 +1124,349 @@ fn governed(
     Ok(governing)
 }
 
+/// The stretch of walking surface a handrail is measured along: a straight
+/// flight, or one run of a ramp by its index in [`SlopedSurface::runs`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum WalkingStretch {
+    /// A straight stair flight, along its nosing line.
+    Flight,
+    /// A ramp's run, along its surface.
+    Run(usize),
+}
+
+/// A request for the handrails along a flight or a run.
+///
+/// The rails are the rule's selection (railings of a handrail type, say):
+/// sorted, deduplicated and without the subject. `reach` is how far outside
+/// the walking surface's sides a rail may run and still be measured along
+/// it, `above` how far above the pitch line's highest point its lowest point
+/// may lie (so the rail of a flight stacked above is not taken for this
+/// one's), and `extension` how far beyond each end of the pitch line the
+/// rise of a rail's top is measured, zero for none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HandrailRequest {
+    subject: ObjectId,
+    stretch: WalkingStretch,
+    rails: Vec<ObjectId>,
+    reach: f64,
+    above: f64,
+    extension: f64,
+}
+
+impl HandrailRequest {
+    /// The handrails along `stretch` of `subject` among `rails`. `reach`,
+    /// `above` and `extension` must be finite and not negative.
+    pub fn try_new(
+        subject: ObjectId,
+        stretch: WalkingStretch,
+        rails: impl IntoIterator<Item = ObjectId>,
+        (reach, above): (f64, f64),
+        extension: f64,
+    ) -> Result<Self, WalkingSurfaceError> {
+        if [reach, above, extension]
+            .iter()
+            .any(|length| !length.is_finite() || *length < 0.0)
+        {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        let mut rails: Vec<ObjectId> = rails.into_iter().filter(|rail| *rail != subject).collect();
+        rails.sort();
+        rails.dedup();
+        Ok(Self {
+            subject,
+            stretch,
+            rails,
+            reach,
+            above,
+            extension,
+        })
+    }
+
+    /// The flight or ramp the rails run along.
+    #[must_use]
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+
+    /// Which stretch of it.
+    #[must_use]
+    pub fn stretch(&self) -> WalkingStretch {
+        self.stretch
+    }
+
+    /// The objects that may be its handrails.
+    #[must_use]
+    pub fn rails(&self) -> &[ObjectId] {
+        &self.rails
+    }
+
+    /// How far outside the walking surface's sides a rail is still measured.
+    #[must_use]
+    pub fn reach(&self) -> f64 {
+        self.reach
+    }
+
+    /// How far above the pitch line's highest point a rail's lowest point
+    /// may lie and still be measured.
+    #[must_use]
+    pub fn above(&self) -> f64 {
+        self.above
+    }
+
+    /// How far beyond each end of the pitch line a rail's rise is measured.
+    #[must_use]
+    pub fn extension(&self) -> f64 {
+        self.extension
+    }
+}
+
+/// The side of a flight or run a handrail runs along, as seen by someone
+/// climbing it. [`across`] points to the climber's left, so the left side
+/// lies at the higher positions across.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RailSide {
+    /// The climber's right: the lower half of the positions across.
+    Right,
+    /// The climber's left: the higher half.
+    Left,
+}
+
+/// One handrail measured along a stretch.
+///
+/// `start` and `end` are the positions of its body's nearest and farthest
+/// points along the stretch's direction, `left` and `right` of its lowest
+/// and highest points across it. `lowest` and `highest` bound the height of
+/// the top of its body above the pitch line (the nosing line of a flight,
+/// the surface of a run) where both run: the least and the greatest height
+/// along it, each as an interval sure to hold it. `bottom_rise` and
+/// `top_rise` are how much the top of its body rises and falls over the
+/// requested extension beyond each end of the pitch line, `None` where it
+/// does not reach that far or no extension was requested.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RailMeasurement {
+    start: ElevationInterval,
+    end: ElevationInterval,
+    left: ElevationInterval,
+    right: ElevationInterval,
+    lowest: MeasuredInterval,
+    highest: MeasuredInterval,
+    bottom_rise: Option<MeasuredInterval>,
+    top_rise: Option<MeasuredInterval>,
+}
+
+impl RailMeasurement {
+    /// A rail spanning `start` to `end` along the stretch and `left` to
+    /// `right` across it, its top `lowest` to `highest` above the pitch
+    /// line. Each pair must be ordered.
+    pub fn try_new(
+        (start, end): (ElevationInterval, ElevationInterval),
+        (left, right): (ElevationInterval, ElevationInterval),
+        lowest: MeasuredInterval,
+        highest: MeasuredInterval,
+    ) -> Result<Self, WalkingSurfaceError> {
+        let (start, end) = sides(start, end)?;
+        let (left, right) = sides(left, right)?;
+        if lowest.lower > highest.lower || lowest.upper > highest.upper {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(Self {
+            start,
+            end,
+            left,
+            right,
+            lowest,
+            highest,
+            bottom_rise: None,
+            top_rise: None,
+        })
+    }
+
+    /// The rail with the rise of its top over the extension beyond the
+    /// bottom and the top of the pitch line. A rise is never negative.
+    pub fn with_rises(
+        mut self,
+        bottom: Option<MeasuredInterval>,
+        top: Option<MeasuredInterval>,
+    ) -> Result<Self, WalkingSurfaceError> {
+        if [bottom, top].iter().flatten().any(|rise| rise.lower < 0.0) {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        self.bottom_rise = bottom;
+        self.top_rise = top;
+        Ok(self)
+    }
+
+    /// Position of the rail's nearest point along the stretch.
+    #[must_use]
+    pub fn start(&self) -> ElevationInterval {
+        self.start
+    }
+
+    /// Position of the rail's farthest point along the stretch.
+    #[must_use]
+    pub fn end(&self) -> ElevationInterval {
+        self.end
+    }
+
+    /// Positions of the rail's lowest and highest points across the stretch.
+    #[must_use]
+    pub fn sides(&self) -> (ElevationInterval, ElevationInterval) {
+        (self.left, self.right)
+    }
+
+    /// The least height of the rail's top above the pitch line.
+    #[must_use]
+    pub fn lowest(&self) -> MeasuredInterval {
+        self.lowest
+    }
+
+    /// The greatest height of the rail's top above the pitch line.
+    #[must_use]
+    pub fn highest(&self) -> MeasuredInterval {
+        self.highest
+    }
+
+    /// How much the rail's top rises and falls over the extension beyond
+    /// the bottom of the pitch line, when it reaches that far.
+    #[must_use]
+    pub fn bottom_rise(&self) -> Option<MeasuredInterval> {
+        self.bottom_rise
+    }
+
+    /// The same beyond the top of the pitch line.
+    #[must_use]
+    pub fn top_rise(&self) -> Option<MeasuredInterval> {
+        self.top_rise
+    }
+}
+
+/// The handrails along a flight or run.
+///
+/// `direction` is the stretch's horizontal walking direction, `pitch` the
+/// positions along it where the pitch line starts and ends (a flight's first
+/// and last nosing, a run's lower and upper end) and `sides` the positions
+/// of the walking surface's sides along [`across`] it. `rails` names every
+/// requested rail whose body runs along the stretch: it overlaps the pitch
+/// line along the direction and lies within the request's reach of the
+/// sides across it. A rail's heights are computed, so the evidence is never
+/// exact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HandrailEvidence {
+    request: HandrailRequest,
+    direction: MetricDirection,
+    pitch: (ElevationInterval, ElevationInterval),
+    sides: (ElevationInterval, ElevationInterval),
+    rails: Vec<(ObjectId, RailMeasurement)>,
+    evidence: Evidence,
+}
+
+impl HandrailEvidence {
+    /// The handrails answering `request`. Every rail must be requested and
+    /// named once; they are kept in identity order.
+    pub fn try_new(
+        request: HandrailRequest,
+        direction: MetricDirection,
+        pitch: (ElevationInterval, ElevationInterval),
+        walking_sides: (ElevationInterval, ElevationInterval),
+        mut rails: Vec<(ObjectId, RailMeasurement)>,
+        evidence: Evidence,
+    ) -> Result<Self, WalkingSurfaceError> {
+        #[allow(clippy::float_cmp)]
+        if direction.components()[2] != 0.0 {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        let pitch = sides(pitch.0, pitch.1)?;
+        let walking_sides = sides(walking_sides.0, walking_sides.1)?;
+        rails.sort_by(|a, b| a.0.cmp(&b.0));
+        let unique = rails.windows(2).all(|pair| pair[0].0 != pair[1].0);
+        let requested = rails
+            .iter()
+            .all(|(rail, _)| request.rails.binary_search(rail).is_ok());
+        if !unique || !requested {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        if evidence.exact || evidence.locator.trim().is_empty() {
+            return Err(WalkingSurfaceError::InexactEvidence);
+        }
+        Ok(Self {
+            request,
+            direction,
+            pitch,
+            sides: walking_sides,
+            rails,
+            evidence,
+        })
+    }
+
+    /// The request this answers.
+    #[must_use]
+    pub fn request(&self) -> &HandrailRequest {
+        &self.request
+    }
+
+    /// The stretch's horizontal walking direction.
+    #[must_use]
+    pub fn direction(&self) -> MetricDirection {
+        self.direction
+    }
+
+    /// Positions along the direction where the pitch line starts and ends.
+    #[must_use]
+    pub fn pitch(&self) -> (ElevationInterval, ElevationInterval) {
+        self.pitch
+    }
+
+    /// Positions of the walking surface's sides across the direction.
+    #[must_use]
+    pub fn sides(&self) -> (ElevationInterval, ElevationInterval) {
+        self.sides
+    }
+
+    /// The rails running along the stretch, in identity order.
+    #[must_use]
+    pub fn rails(&self) -> &[(ObjectId, RailMeasurement)] {
+        &self.rails
+    }
+
+    /// How far a rail reaches beyond the bottom of the pitch line, along
+    /// the direction: negative where it starts above it.
+    #[must_use]
+    pub fn bottom_extension(&self, rail: &RailMeasurement) -> MeasuredInterval {
+        between(self.pitch.0, rail.start)
+    }
+
+    /// How far a rail reaches beyond the top of the pitch line.
+    #[must_use]
+    pub fn top_extension(&self, rail: &RailMeasurement) -> MeasuredInterval {
+        between(rail.end, self.pitch.1)
+    }
+
+    /// The side a rail runs along: the one whose half of the walking
+    /// surface's width holds it wholly across, `None` for a rail that may
+    /// reach over the middle.
+    #[must_use]
+    pub fn side(&self, rail: &RailMeasurement) -> Option<RailSide> {
+        let (left, right) = self.sides;
+        // The midpoint rounds once, by at most half a unit in the last
+        // place, which the neighbouring value covers.
+        let low = f64::midpoint(left.lower_metres(), right.lower_metres()).next_down();
+        let high = f64::midpoint(left.upper_metres(), right.upper_metres()).next_up();
+        if rail.right.upper_metres() < low {
+            Some(RailSide::Right)
+        } else if rail.left.lower_metres() > high {
+            Some(RailSide::Left)
+        } else {
+            None
+        }
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures stair flights, ramps and the headroom above them.
 pub trait WalkingSurfaceService: Send + Sync + 'static {
     /// The treads, base and top of `object` as a straight stair flight.
@@ -1151,6 +1499,19 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
     ) -> Result<ClearanceBelow, WalkingSurfaceError> {
         Err(WalkingSurfaceError::Unsupported(format!(
             "the clearance below {} is not measured by this service",
+            request.subject()
+        )))
+    }
+
+    /// The handrails along the requested stretch. The default refuses: a
+    /// service that does not look for handrails never answers that there is
+    /// none.
+    fn measure_handrails(
+        &self,
+        request: &HandrailRequest,
+    ) -> Result<HandrailEvidence, WalkingSurfaceError> {
+        Err(WalkingSurfaceError::Unsupported(format!(
+            "handrails along {} are not measured by this service",
             request.subject()
         )))
     }
@@ -1228,6 +1589,19 @@ impl WalkingSurfaceServiceHandle {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
         Ok(below)
+    }
+
+    /// The handrails answering `request`; an answer to another request is
+    /// refused.
+    pub fn measure_handrails(
+        &self,
+        request: &HandrailRequest,
+    ) -> Result<HandrailEvidence, WalkingSurfaceError> {
+        let rails = self.0.measure_handrails(request)?;
+        if rails.request() != request {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(rails)
     }
 }
 
@@ -1485,6 +1859,96 @@ mod tests {
             handle.measure_clearance_below(&ClearanceBelowRequest::new(id("b"), [])),
             Err(WalkingSurfaceError::Unsupported(_))
         ));
+        let rails =
+            HandrailRequest::try_new(id("b"), WalkingStretch::Flight, [], (0.1, 1.5), 0.3).unwrap();
+        assert!(matches!(
+            handle.measure_handrails(&rails),
+            Err(WalkingSurfaceError::Unsupported(_))
+        ));
+    }
+
+    fn rail(left: f64, right: f64, lowest: f64) -> RailMeasurement {
+        RailMeasurement::try_new(
+            (point(-0.3), point(1.5)),
+            (point(left), point(right)),
+            MeasuredInterval::try_new(lowest, lowest + 1e-9).unwrap(),
+            MeasuredInterval::try_new(lowest + 0.01, lowest + 0.01 + 1e-9).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn handrails_are_requested_rails_on_a_side_with_extensions() {
+        let request = HandrailRequest::try_new(
+            id("a"),
+            WalkingStretch::Flight,
+            [id("r"), id("a"), id("l"), id("r")],
+            (0.2, 1.5),
+            0.3,
+        )
+        .unwrap();
+        assert_eq!(request.rails(), &[id("l"), id("r")]);
+        assert!(
+            HandrailRequest::try_new(id("a"), WalkingStretch::Flight, [], (-0.1, 1.5), 0.0)
+                .is_err()
+        );
+        let evidence = |exact: bool| Evidence {
+            source: source(),
+            locator: "handrails:a".into(),
+            exact,
+        };
+        let measure = |rails: Vec<(ObjectId, RailMeasurement)>, exact: bool| {
+            HandrailEvidence::try_new(
+                request.clone(),
+                x(),
+                (point(0.0), point(1.12)),
+                (point(0.0), point(1.2)),
+                rails,
+                evidence(exact),
+            )
+        };
+        let rails = vec![
+            (id("r"), rail(-0.05, 0.0, 0.9)),
+            (id("l"), rail(1.2, 1.25, 0.85)),
+        ];
+        let measured = measure(rails.clone(), false).unwrap();
+        assert_eq!(measured.rails()[0].0, id("l"));
+        let (left, right) = (measured.rails()[0].1, measured.rails()[1].1);
+        assert_eq!(measured.side(&left), Some(RailSide::Left));
+        assert_eq!(measured.side(&right), Some(RailSide::Right));
+        assert_eq!(measured.side(&rail(0.5, 0.7, 0.9)), None);
+        assert!(contains(measured.bottom_extension(&left), 0.3));
+        assert!(contains(measured.top_extension(&left), 0.38));
+        // Exact evidence, an unrequested rail and one named twice are
+        // refused.
+        assert_eq!(
+            measure(rails, true),
+            Err(WalkingSurfaceError::InexactEvidence)
+        );
+        for rails in [
+            vec![(id("x"), rail(0.0, 0.1, 0.9))],
+            vec![
+                (id("l"), rail(0.0, 0.1, 0.9)),
+                (id("l"), rail(0.0, 0.1, 0.9)),
+            ],
+        ] {
+            assert_eq!(
+                measure(rails, false),
+                Err(WalkingSurfaceError::InvalidMeasurement)
+            );
+        }
+        // A negative rise or unordered heights are refused.
+        let rise = MeasuredInterval::try_new(-0.1, 0.0).ok();
+        assert!(rail(0.0, 0.1, 0.9).with_rises(rise, None).is_err());
+        assert!(
+            RailMeasurement::try_new(
+                (point(0.0), point(1.0)),
+                (point(0.0), point(0.1)),
+                MeasuredInterval::try_new(1.0, 1.0).unwrap(),
+                MeasuredInterval::try_new(0.9, 0.9).unwrap(),
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -7,15 +7,21 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, ClearanceBelow, ClearanceBelowRequest, ElevationInterval, Headroom,
-    HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval,
-    MetricDirection, SlopedRun, SlopedSurface, Tread, TreadFlight, WalkingEnd, WalkingSurfaceError,
-    WalkingSurfaceService, WalkingSurfaceServiceHandle,
+    CapabilityEvaluation, ClearanceBelow, ClearanceBelowRequest, ClearanceOutcome,
+    ClearanceRequest, ClearanceShape, CompleteClearanceEvidence, ElevationInterval,
+    FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
+    HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing, LandingEvidence,
+    LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, ObstructionEvidence,
+    PlacementOutcome, PlacementRequest, RailMeasurement, SlopedRun, SlopedSurface, Tread,
+    TreadFlight, WalkingEnd, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
+    WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
 use axioval_rules::{RampGeometryCheck, StairGeometryCheck};
-use common::{Model, boolean, findings, id, kind, number, rule, selector, source, unevaluated};
+use common::{
+    Model, boolean, findings, id, kind, number, rule, selector, source, string, unevaluated,
+};
 
 fn metres(value: f64) -> ParameterValue {
     ParameterValue::Quantity {
@@ -113,6 +119,8 @@ struct Stairs {
     landings: BTreeMap<(ObjectId, WalkingEnd), StatedLanding>,
     /// Clearance below per subject and space.
     below: BTreeMap<(ObjectId, ObjectId), f64>,
+    /// Rails per subject and stretch.
+    rails: BTreeMap<(ObjectId, WalkingStretch), Vec<(ObjectId, RailMeasurement)>>,
 }
 
 impl Stairs {
@@ -145,6 +153,20 @@ impl Stairs {
 
     fn below(mut self, subject: &str, space: &str, clearance: f64) -> Self {
         self.below.insert((id(subject), id(space)), clearance);
+        self
+    }
+
+    fn rail(
+        mut self,
+        subject: &str,
+        stretch: WalkingStretch,
+        rail: &str,
+        measurement: RailMeasurement,
+    ) -> Self {
+        self.rails
+            .entry((id(subject), stretch))
+            .or_default()
+            .push((id(rail), measurement));
         self
     }
 }
@@ -240,6 +262,137 @@ impl WalkingSurfaceService for Stairs {
             ),
         }
     }
+
+    /// Rails stated per stretch, found only when requested. A flight's pitch
+    /// line runs from 0 to 0.84 m along x, a run's between its ends.
+    fn measure_handrails(
+        &self,
+        request: &HandrailRequest,
+    ) -> Result<HandrailEvidence, WalkingSurfaceError> {
+        let subject = request.subject();
+        let (pitch, sides) = match request.stretch() {
+            WalkingStretch::Flight => {
+                let flight = self.measure_tread_flight(subject)?;
+                let sides = flight.treads()[0].sides().unwrap();
+                ((point(0.0), point(0.84)), sides)
+            }
+            WalkingStretch::Run(index) => {
+                let ramp = self.measure_sloped_runs(subject)?;
+                let run = ramp.runs()[index];
+                ((run.start(), run.end()), run.sides().unwrap())
+            }
+        };
+        let rails = self
+            .rails
+            .get(&(subject.clone(), request.stretch()))
+            .into_iter()
+            .flatten()
+            .filter(|(rail, _)| request.rails().contains(rail))
+            .cloned()
+            .collect();
+        let evidence = Evidence {
+            source: source(),
+            locator: format!("handrails:{}", subject.local_id),
+            exact: false,
+        };
+        HandrailEvidence::try_new(request.clone(), x(), pitch, sides, rails, evidence)
+    }
+}
+
+/// A rail across `left` .. `right`, along `start` .. `end`, its top
+/// `lowest` .. `highest` above the pitch line; its rises over the extension
+/// beyond each end, where stated.
+fn rail(
+    (left, right): (f64, f64),
+    (start, end): (f64, f64),
+    (lowest, highest): (f64, f64),
+    (bottom, top): (Option<f64>, Option<f64>),
+) -> RailMeasurement {
+    let height = |value: f64| MeasuredInterval::try_new(value - 1e-9, value + 1e-9).unwrap();
+    let rise =
+        |value: Option<f64>| value.map(|value| MeasuredInterval::try_new(value, value).unwrap());
+    RailMeasurement::try_new(
+        (point(start), point(end)),
+        (point(left), point(right)),
+        height(lowest),
+        height(highest),
+    )
+    .unwrap()
+    .with_rises(rise(bottom), rise(top))
+    .unwrap()
+}
+
+/// Boxes in plan that obstruct any clearance footprint they overlap.
+#[derive(Default)]
+struct Floor {
+    blockers: Vec<(ObjectId, [f64; 2], [f64; 2])>,
+}
+
+impl Floor {
+    fn blocker(mut self, object: &str, min: [f64; 2], max: [f64; 2]) -> Self {
+        self.blockers.push((id(object), min, max));
+        self
+    }
+}
+
+impl FreeSpaceService for Floor {
+    fn assess_clearance(
+        &self,
+        request: &ClearanceRequest,
+    ) -> Result<ClearanceOutcome, FreeSpaceError> {
+        let ClearanceShape::Box(shape) = request.shape() else {
+            return Err(FreeSpaceError::Unavailable("boxes only".into()));
+        };
+        let frame = request.frame();
+        let [cx, cy, _] = frame.origin().coordinates_metres();
+        let ([rx, ry, _], [fx, fy, _]) = (frame.right().components(), frame.forward().components());
+        let (w, d) = (shape.width_metres() / 2.0, shape.depth_metres() / 2.0);
+        let corners = [(-w, -d), (w, -d), (w, d), (-w, d)]
+            .map(|(a, b)| [cx + a * rx + b * fx, cy + a * ry + b * fy]);
+        let low = [0, 1].map(|axis| {
+            corners
+                .iter()
+                .map(|c| c[axis])
+                .fold(f64::INFINITY, f64::min)
+        });
+        let high = [0, 1].map(|axis| {
+            corners
+                .iter()
+                .map(|c| c[axis])
+                .fold(f64::NEG_INFINITY, f64::max)
+        });
+        let blockers: Vec<ObjectId> = self
+            .blockers
+            .iter()
+            .filter(|(object, min, max)| {
+                request.obstacles().contains(object)
+                    && (0..2)
+                        .all(|axis| min[axis] < high[axis] - 1e-9 && max[axis] > low[axis] + 1e-9)
+            })
+            .map(|(object, _, _)| object.clone())
+            .collect();
+        let evidence = Evidence::exact(source(), "free-space");
+        if blockers.is_empty() {
+            Ok(ClearanceOutcome::Clear(CompleteClearanceEvidence::try_new(
+                request.clone(),
+                evidence,
+            )?))
+        } else {
+            Ok(ClearanceOutcome::Obstructed(ObstructionEvidence::try_new(
+                request.clone(),
+                blockers,
+                evidence,
+            )?))
+        }
+    }
+
+    fn find_placement(&self, _: &PlacementRequest) -> Result<PlacementOutcome, FreeSpaceError> {
+        Err(FreeSpaceError::Unavailable("no placements".into()))
+    }
+
+    fn measure_free_area(&self, _: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
+        Err(FreeSpaceError::Unavailable("no areas".into()))
+    }
 }
 
 fn model() -> Model {
@@ -254,6 +407,12 @@ fn model() -> Model {
         .object("slab", "slab")
         .object("floor", "slab")
         .object("hall", "space")
+        .object("left_rail", "railing")
+        .object("low_rail", "railing")
+        .object("short_rail", "railing")
+        .object("ramp_rail", "railing")
+        .object("door", "door")
+        .object("bin", "furniture")
 }
 
 fn stairs() -> Stairs {
@@ -793,23 +952,6 @@ fn landing_and_below_declarations_are_checked() {
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
-    // `landings_required` is the stair's only.
-    let evaluation = model().evaluate_with(
-        &RampGeometryCheck,
-        &rule(
-            RAMP,
-            kind("ramp"),
-            vec![
-                ("landing_objects", slabs()),
-                ("landings_required", boolean(true)),
-            ],
-        ),
-        |_| {},
-    );
-    assert_eq!(
-        unevaluated(&evaluation),
-        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
-    );
 }
 
 #[test]
@@ -931,4 +1073,420 @@ fn a_service_without_landings_leaves_them_not_evaluated() {
         .count();
     // Both ends and the clearance below.
     assert_eq!(regular, 3);
+}
+
+fn handrail_parameters(
+    extra: Vec<(&'static str, ParameterValue)>,
+) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        ("handrail_objects", selector(kind("railing"))),
+        ("handrail_reach_across", metres(0.2)),
+        ("handrail_reach_above", metres(1.5)),
+    ];
+    parameters.extend(extra);
+    parameters
+}
+
+const LEVEL: (Option<f64>, Option<f64>) = (Some(0.0), Some(0.0));
+
+#[test]
+fn handrails_too_low_too_short_sloping_or_on_one_side_are_found() {
+    let stairs = stairs()
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "left_rail",
+            rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+        )
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "low_rail",
+            rail((-0.1, -0.05), (-0.1, 1.14), (0.75, 0.76), (None, Some(0.0))),
+        )
+        .rail(
+            "irregular",
+            WalkingStretch::Flight,
+            "short_rail",
+            rail(
+                (1.25, 1.3),
+                (-0.3, 1.14),
+                (0.9, 0.9),
+                (Some(0.0), Some(0.05)),
+            ),
+        );
+    let evaluation = check_stairs(
+        model(),
+        stairs,
+        handrail_parameters(vec![
+            ("handrail_height_minimum", metres(0.8)),
+            ("handrail_height_maximum", metres(1.0)),
+            ("handrail_extension_minimum", metres(0.3)),
+            ("handrail_sides", string("both")),
+        ]),
+    );
+    let (low, short) = (id("low_rail"), id("short_rail"));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "irregular".into(),
+                format!(
+                    "the top of handrail {short} rises or falls 0.05 m over the 0.3 m beyond the \
+                     top of the flight; it must continue level"
+                )
+            ),
+            (
+                "irregular".into(),
+                "a handrail runs along the left side of the flight only (seen climbing); both \
+                 sides required"
+                    .into()
+            ),
+            (
+                "regular".into(),
+                format!(
+                    "handrail {low} runs 0.75 m above the pitch line of the flight at its \
+                     lowest; 0.8 m to 1 m required"
+                )
+            ),
+            (
+                "regular".into(),
+                format!(
+                    "handrail {low} reaches 0.1 m beyond the bottom of the flight; at least 0.3 \
+                     m required"
+                )
+            ),
+        ]
+    );
+    let too_low = &evaluation.findings()[2];
+    assert_eq!(too_low.related, [low]);
+    assert!(
+        too_low
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "handrails:regular")
+    );
+    // The winder is not measured.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn handrails_on_both_sides_are_required_above_a_width() {
+    let stairs = || {
+        stairs().rail(
+            "regular",
+            WalkingStretch::Flight,
+            "left_rail",
+            rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+        )
+    };
+    let sides = |width: f64| {
+        handrail_parameters(vec![
+            ("handrail_sides", string("one")),
+            ("handrail_both_sides_above_width", metres(width)),
+        ])
+    };
+    // Both flights are 1.2 m wide.
+    let evaluation = check_stairs(model(), stairs(), sides(1.0));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "irregular".into(),
+                "no selected handrail runs along a side of the flight; both sides required".into()
+            ),
+            (
+                "regular".into(),
+                "a handrail runs along the left side of the flight only (seen climbing); both \
+                 sides required"
+                    .into()
+            ),
+        ]
+    );
+    let evaluation = check_stairs(model(), stairs(), sides(1.5));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "irregular".into(),
+            "no selected handrail runs along a side of the flight; one side required".into()
+        )]
+    );
+}
+
+#[test]
+fn an_undecided_rail_leaves_a_missing_side_and_a_pass_not_evaluated() {
+    let stairs = stairs().rail(
+        "regular",
+        WalkingStretch::Flight,
+        "left_rail",
+        rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+    );
+    let handrail = Selector::Property {
+        property_set: Some("P".into()),
+        property: "Handrail".into(),
+        operator: ComparisonOperator::Equals,
+        value: Some(boolean(true)),
+        case_sensitive: true,
+        trim: false,
+        quantifier: None,
+        precision: None,
+    };
+    let evaluation = check_stairs(
+        model()
+            .value("left_rail", "P", "Handrail", PropertyValue::Boolean(true))
+            .unreadable("low_rail"),
+        stairs,
+        vec![
+            ("handrail_objects", selector(handrail)),
+            ("handrail_reach_across", metres(0.2)),
+            ("handrail_reach_above", metres(1.5)),
+            ("handrail_height_minimum", metres(0.8)),
+            ("handrail_sides", string("both")),
+        ],
+    );
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    let undecided = unevaluated(&evaluation);
+    for flight in ["regular", "irregular"] {
+        assert!(
+            undecided.contains(&(flight.into(), NotEvaluatedReason::IncompleteEvidence)),
+            "{undecided:?}"
+        );
+    }
+}
+
+#[test]
+fn handrail_and_ramp_end_declarations_are_checked() {
+    for parameters in [
+        vec![("handrail_sides", string("both"))],
+        handrail_parameters(vec![]),
+        handrail_parameters(vec![("handrail_sides", string("three"))]),
+        handrail_parameters(vec![
+            ("handrail_sides", string("both")),
+            ("handrail_both_sides_above_width", metres(1.0)),
+        ]),
+        vec![
+            ("handrail_objects", selector(kind("railing"))),
+            ("handrail_extension_minimum", metres(0.3)),
+        ],
+    ] {
+        let evaluation = check_stairs(model(), stairs(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+    for parameters in [
+        vec![("end_space_depth", metres(1.5))],
+        vec![("landing_doors", selector(kind("door")))],
+        vec![
+            ("landing_doors", selector(kind("door"))),
+            ("landing_door_height", metres(2.0)),
+        ],
+        vec![
+            ("end_space_depth", metres(0.0)),
+            ("end_space_width", metres(1.5)),
+            ("end_space_height", metres(2.0)),
+            ("end_space_obstacles", selector(kind("furniture"))),
+        ],
+    ] {
+        let evaluation = check_ramps(parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+    // End spaces and landing doors are the ramp's only.
+    let evaluation = check_stairs(
+        model(),
+        stairs(),
+        vec![("landing_doors", selector(kind("door")))],
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+/// A service measuring flights only refuses handrails, and the check says
+/// so rather than find them missing.
+#[test]
+fn a_service_without_handrails_leaves_them_not_evaluated() {
+    struct FlightsOnly;
+    impl WalkingSurfaceService for FlightsOnly {
+        fn measure_tread_flight(
+            &self,
+            object: &ObjectId,
+        ) -> Result<TreadFlight, WalkingSurfaceError> {
+            stairs().measure_tread_flight(object)
+        }
+        fn measure_sloped_runs(
+            &self,
+            object: &ObjectId,
+        ) -> Result<SlopedSurface, WalkingSurfaceError> {
+            stairs().measure_sloped_runs(object)
+        }
+        fn measure_headroom(
+            &self,
+            request: &HeadroomRequest,
+        ) -> Result<Headroom, WalkingSurfaceError> {
+            stairs().measure_headroom(request)
+        }
+    }
+    let evaluation = model().evaluate_with(
+        &StairGeometryCheck,
+        &rule(
+            STAIR,
+            kind("flight"),
+            handrail_parameters(vec![("handrail_sides", string("one"))]),
+        ),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(FlightsOnly)))
+                .unwrap();
+        },
+    );
+    assert!(evaluation.findings().is_empty());
+    assert!(
+        unevaluated(&evaluation)
+            .contains(&("regular".into(), NotEvaluatedReason::IncompleteEvidence))
+    );
+}
+
+fn check_ramps_with(
+    stairs: Stairs,
+    floor: Option<Floor>,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model().evaluate_with(
+        &RampGeometryCheck,
+        &rule(RAMP, kind("ramp"), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+            if let Some(floor) = floor {
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(floor)))
+                    .unwrap();
+            }
+        },
+    )
+}
+
+#[test]
+fn ramp_handrails_end_spaces_and_landing_doors_are_found() {
+    // `gentle` runs 0 .. 6 and 7.5 .. 13.5 m along x, `steep` 0 .. 3 m,
+    // both 1.5 m wide from y = 0. Every stated landing runs along x from 0.
+    let stairs = || {
+        stairs()
+            .rail(
+                "gentle",
+                WalkingStretch::Run(0),
+                "ramp_rail",
+                rail((-0.1, -0.05), (-0.3, 6.3), (0.9, 0.9), LEVEL),
+            )
+            .rail(
+                "gentle",
+                WalkingStretch::Run(1),
+                "ramp_rail",
+                rail((-0.1, -0.05), (7.2, 13.8), (0.9, 0.9), LEVEL),
+            )
+            .rail(
+                "steep",
+                WalkingStretch::Run(0),
+                "ramp_rail",
+                rail((-0.1, -0.05), (0.0, 3.3), (0.9, 0.9), (None, Some(0.0))),
+            )
+            .landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)))
+    };
+    let floor = || {
+        Floor::default()
+            .blocker("door", [0.5, 0.2], [1.0, 0.4])
+            .blocker("bin", [3.5, 0.5], [4.0, 1.0])
+    };
+    let parameters = || {
+        handrail_parameters(vec![
+            ("handrail_height_minimum", metres(0.8)),
+            ("handrail_extension_minimum", metres(0.3)),
+            ("handrail_sides", string("one")),
+            ("landing_objects", slabs()),
+            ("landing_doors", selector(kind("door"))),
+            ("landing_door_height", metres(2.0)),
+            ("end_space_depth", metres(1.5)),
+            ("end_space_width", metres(1.5)),
+            ("end_space_height", metres(2.0)),
+            ("end_space_obstacles", selector(kind("furniture"))),
+        ])
+    };
+    let evaluation = check_ramps_with(stairs(), Some(floor()), parameters());
+    let (door, rail, bin) = (id("door"), id("ramp_rail"), id("bin"));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "gentle".into(),
+                format!("door {door} stands on the landing at the top of run 2 of 2")
+            ),
+            (
+                "steep".into(),
+                format!(
+                    "handrail {rail} reaches 0 m beyond the bottom of run 1 of 1; at least 0.3 m \
+                     required"
+                )
+            ),
+            (
+                "steep".into(),
+                format!(
+                    "{bin} obstructs the free space at the top of the ramp (1.5 m deep, 1.5 m \
+                     wide)"
+                )
+            ),
+        ]
+    );
+    assert_eq!(evaluation.findings()[0].related, [door]);
+    assert_eq!(evaluation.findings()[2].related, [bin]);
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        unevaluated(&evaluation)
+    );
+
+    // Without a free-space service, end spaces and doors are not checked.
+    let evaluation = check_ramps_with(stairs(), None, parameters());
+    assert_eq!(findings(&evaluation).len(), 1);
+    let undecided = unevaluated(&evaluation);
+    // Two end spaces each, and the one landing's doors.
+    assert_eq!(undecided.len(), 5, "{undecided:?}");
+}
+
+#[test]
+fn a_ramp_needs_a_landing_at_every_run_end_when_required() {
+    let stairs = stairs()
+        .landing("steep", WalkingEnd::RunBottom(0), "floor", None)
+        .landing("gentle", WalkingEnd::RunBottom(0), "floor", None)
+        .landing("gentle", WalkingEnd::RunTop(0), "gentle", None)
+        .landing("gentle", WalkingEnd::RunBottom(1), "gentle", None)
+        .landing("gentle", WalkingEnd::RunTop(1), "slab", None);
+    let evaluation = check_ramps_with(
+        stairs,
+        None,
+        vec![
+            ("landing_objects", slabs()),
+            ("landings_required", boolean(true)),
+        ],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "steep".into(),
+            "no selected slab or landing meets the top of run 1 of 1".into()
+        )]
+    );
 }

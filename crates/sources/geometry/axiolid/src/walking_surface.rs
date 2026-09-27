@@ -48,6 +48,8 @@
 //!   across the end's width. Several such surfaces are refused, since their
 //!   union is not measured; one that fills a rectangle along the leaving
 //!   direction is measured, any other only found.
+//! - **Handrails** are the requested rails running along a flight's nosing
+//!   line or a run's surface, parallel to it in plan (the `handrail` module).
 //! - The **clearance below** a subject is the least height of its
 //!   downward-facing faces above the downward-facing level faces (the floor)
 //!   of a requested space, over the plan region they share, leaving out the
@@ -56,12 +58,15 @@
 
 use std::collections::BTreeMap;
 
+mod handrail;
+
 use axiolid_core::{Point3, Tolerance};
 use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh, component_count};
 use axioval_engine::{
-    ClearanceBelow, ClearanceBelowRequest, ElevationInterval, Headroom, HeadroomRequest, Landing,
-    LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, SlopedRun,
-    SlopedSurface, Tread, TreadFlight, WalkingEnd, WalkingSurfaceError, WalkingSurfaceService,
+    ClearanceBelow, ClearanceBelowRequest, ElevationInterval, HandrailEvidence, HandrailRequest,
+    Headroom, HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest,
+    MeasuredInterval, MetricDirection, SlopedRun, SlopedSurface, Tread, TreadFlight, WalkingEnd,
+    WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -198,6 +203,13 @@ struct Solid<'a> {
 
 impl AxiolidWalkingSurfaceService {
     fn solid(&self, object: &ObjectId) -> Result<Solid<'_>, WalkingSurfaceError> {
+        self.body(object, false)
+    }
+
+    /// A closed, outward-facing body; with `curved`, a tessellation of
+    /// curved faces too, and the caller widens what it measures by the
+    /// chord deviation.
+    fn body(&self, object: &ObjectId, curved: bool) -> Result<Solid<'_>, WalkingSurfaceError> {
         if self.geometry.has_no_body(object) {
             return Err(WalkingSurfaceError::Unavailable(format!(
                 "{object} is declared to have no body"
@@ -216,7 +228,7 @@ impl AxiolidWalkingSurfaceService {
             .geometry
             .mesh(object)
             .ok_or_else(|| WalkingSurfaceError::UnknownObject(object.clone()))?;
-        if self.geometry.is_tessellated(object) {
+        if !curved && self.geometry.is_tessellated(object) {
             return Err(WalkingSurfaceError::InexactGeometry(format!(
                 "{object} is a tessellation of curved faces, whose faces are chords of its \
                  surface"
@@ -719,6 +731,13 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
             exact: false,
         };
         ClearanceBelow::try_new(request.clone(), least, governing, evidence)
+    }
+
+    fn measure_handrails(
+        &self,
+        request: &HandrailRequest,
+    ) -> Result<HandrailEvidence, WalkingSurfaceError> {
+        self.handrails(request)
     }
 }
 

@@ -6,6 +6,38 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Stair and ramp handrails, ramp end spaces and landing doors.** (Refs
+  #85) `WalkingSurfaceService::measure_handrails` answers a
+  `HandrailRequest` (subject, `WalkingStretch`, the rails a rule selects,
+  how far outside the sides and above the pitch line a rail may lie, and
+  an extension length) with `HandrailEvidence`: the pitch line's ends and
+  the walking surface's sides, and per rail a `RailMeasurement` of its
+  positions along and across, the least and greatest height of its top
+  above the pitch line (a flight's nosing line, a run's surface) and how
+  much its top rises over the extension beyond each end. The contract
+  derives each extension and the `RailSide` a rail runs along; the
+  method refuses by default. `AxiolidWalkingSurfaceService` requires a
+  rail's upward faces to fill one rectangle along the walking direction
+  (any other rail refuses), bounds its top by the upper envelope of its
+  edge lines with a numerical margin, and widens a tessellated rail by
+  its chord deviation. `stair-geometry` and `ramp-geometry` take
+  `handrail_objects`, `handrail_reach_across`, `handrail_reach_above`,
+  `handrail_height_minimum`, `handrail_height_maximum`,
+  `handrail_extension_minimum` (the rail reaching that far beyond each
+  end, level there) and `handrail_sides` (`one` or `both`, with
+  `handrail_both_sides_above_width` for both on wider flights and runs).
+  `ramp-geometry` also takes `landings_required` (a landing at both ends
+  of every run), `end_space_depth`, `end_space_width`, `end_space_height`
+  and `end_space_obstacles` (a free box in front of the lowest and beyond
+  the highest run, through the free-space service), and `landing_doors`
+  with `landing_door_height` (no door standing on a landing at a run's
+  end). A stair near a ramp is a `distance` rule in `nearest` mode.
+  **Breaking:** definitions bound to `stair-geometry` must declare the
+  eight new optional handrail parameters, those bound to `ramp-geometry`
+  those eight and `landings_required`, `end_space_depth`,
+  `end_space_width`, `end_space_height`, `end_space_obstacles`,
+  `landing_doors` and `landing_door_height`. Winders, turning flights and
+  open risers remain open.
 - **Escape routes: multiplied sections and passage widths.**
   `escape-route` takes a `sections` table (`objects`, `factor` of at least
   one, optional `shared_by` and `label`): a metre walked on those objects
@@ -56,8 +88,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   rectangle, or an end the selection leaves undecided, is not evaluated.
   **Breaking:** definitions bound to `stair-geometry` must declare the nine
   new optional parameters, those bound to `ramp-geometry` the eight.
-  Handrails, doors on ramp landings, free space at a ramp's ends, a stair
-  near a ramp, winders and open risers remain open.
+  Winders and open risers remain open.
 - **Surface transparency.** `axioval:presentation.Transparency`
   (`axioval_ir::PRESENTATION_TRANSPARENCY`) lists every distinct
   transparency of an object's styled body surfaces, ascending, from `0.0`

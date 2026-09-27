@@ -980,6 +980,13 @@ Not decided yet (#72): effects that propagate into connected spaces, and the ele
 | `landings_required` | `boolean` | A selected slab or landing meets both ends of the flight. |
 | `minimum_headroom_below` | `quantity` | The least clearance under the flight over the floors of `headroom_below_spaces`. |
 | `headroom_below_spaces` | `selector` | The spaces people walk in under the flight; declared together with `minimum_headroom_below`. |
+| `handrail_objects` | `selector` | The objects that may be the flight's handrails (railings of a handrail type); declared with at least one handrail check. |
+| `handrail_reach_across` | `quantity` | How far outside the flight's sides a rail may run and still belong to it. |
+| `handrail_reach_above` | `quantity` | How far above the nosing line's highest point a rail's lowest point may lie and still belong to it, so the rail of a flight stacked above is not taken for this one's. |
+| `handrail_height_minimum`, `handrail_height_maximum` | `quantity` | The height of each rail's top above the nosing line, wherever both run. |
+| `handrail_extension_minimum` | `quantity` | How far each rail reaches beyond the first and the last nosing, running level over that stretch. |
+| `handrail_sides` | `string` | `one` or `both`: the sides of the flight a rail must run along. |
+| `handrail_both_sides_above_width` | `quantity` | With `handrail_sides` `one`: a flight wider than this needs rails on both sides. |
 
 `axioval:capability.ramp-geometry` measures a ramp's sloped runs: connected upward-facing faces flatter than 45°, each planar, separated by level landings. A run's slope is its rise over its horizontal length along its steepest ascent.
 
@@ -990,7 +997,13 @@ Not decided yet (#72): effects that propagate into connected spaces, and the ele
 | `minimum_headroom`, `headroom_obstacles` | | As for stairs, above the runs and landings. |
 | `width_minimum`, `width_maximum` | `quantity` | Every run's width across its slope. |
 | `landing_objects`, `landing_depth_minimum`, `landing_width_minimum`, `landing_at_least_walking_width` | | As for stairs, at both ends of every run; the ramp's own level faces count as its landings. |
+| `landings_required` | `boolean` | A selected slab or landing (or the ramp's own level face) meets both ends of every run. |
 | `minimum_headroom_below`, `headroom_below_spaces` | | As for stairs, under the ramp. |
+| `handrail_objects`, `handrail_reach_across`, `handrail_reach_above`, `handrail_height_minimum`, `handrail_height_maximum`, `handrail_extension_minimum`, `handrail_sides`, `handrail_both_sides_above_width` | | As for stairs, along every run: the height above the run's surface and the extension beyond its lower and upper end. |
+| `end_space_depth`, `end_space_width`, `end_space_height` | `quantity` | A free space this deep (along the run), wide and high in front of the lowest run's lower end and beyond the highest run's upper end, centred on the run across it; declared together with `end_space_obstacles`. |
+| `end_space_obstacles` | `selector` | The objects that must not reach into the free space at either end. |
+| `landing_doors` | `selector` | Doors (or their openings) that must not stand on a landing at a run's end; needs `landing_objects`. |
+| `landing_door_height` | `quantity` | The height of the column over a landing a door's body must not reach into; declared together with `landing_doors`. |
 
 A ramp limited to 1:12 and 0.76 m of rise per run, or allowed 1:10 over runs of at most 2 m:
 
@@ -1010,7 +1023,13 @@ A landing is the level surface of one `landing_objects` object (or, for a ramp, 
 
 Headroom below is the least height of the flight's or ramp's underside above the floor of a selected space, its body's downward-facing level faces, directly beneath; where the body rests on that floor nobody stands, so it is left out. An open underside meeting the floor at its foot has no headroom there: select the spaces people walk in, and model the low part as another space where it is closed off. As for headroom above, an undecided space can only lower it, and a flight crossing a space's floor, an unmeasured or tessellated space leave it not evaluated.
 
-A flight or ramp the service cannot measure is not evaluated, never passed: a tessellated body, an open or inward-facing mesh, winders or a turning flight, a flight in several pieces (open risers), a flight with a sloped walking face, a ramp whose slopes meet without a landing, or a body with no tread or run. Not measured yet (#85): winders, open risers, handrails (height, extension, continuity, side), doors on ramp landings, free space at a ramp's ends and a stair near a ramp.
+A handrail is a `handrail_objects` object whose body runs along the flight or run: it overlaps the pitch line (the line through the nosings of a flight, the surface of a run along its slope) along the walking direction, lies within `handrail_reach_across` of the walking surface's sides across it and within `handrail_reach_above` above the pitch line, and its top is not below the pitch line's lowest point. It must run parallel to the walking direction: the upward-facing faces of its body fill one rectangle along it in plan. A rail bending in plan, one with posts or brackets standing out of that rectangle, or one at an angle to the flight leaves every handrail check of that flight or run not evaluated, never measured in part. Its height is the top of its body above the pitch line, the least and the greatest wherever both run, each an interval computed with a numerical margin; a rail given as a tessellation of curved faces is widened by its chord deviation, so a bound it straddles is not evaluated. Its extension is how far its body reaches beyond the first and last nosing (a run's ends) along the walking direction, and over `handrail_extension_minimum` beyond each end its top must stay level: a rail rising or falling there by more than a micrometre is a finding, one the chord deviation leaves undecided is not evaluated. A rail runs along the side (the left or the right, seen climbing) whose half of the walking surface's width holds it wholly across; one reaching over the middle counts for neither. Each failing rail is its own finding naming and relating it. An object `handrail_objects` cannot decide might be a rail: a missing side or a passing height or extension is then not evaluated, while a rail found too low stands. A handrail is one object along its side: two pieces along one side are each checked against both ends. A flight or run whose sides are not measured (a tread or run filling no rectangle) leaves its handrails not evaluated.
+
+At a ramp's ends, `end_space_*` places a box of the declared size in front of the lowest run's lower end and beyond the highest run's upper end, standing on the end's elevation and centred on the run, and asks the free-space service whether an `end_space_obstacles` object reaches into it; the ramp itself never obstructs. `landing_doors` asks the same about the column `landing_door_height` high over each landing at a run's end, its rectangle as measured for the landing checks: a door whose body stands on the landing is a finding. A landing that fills no rectangle leaves its doors not evaluated; no landing has nothing to check. Door swing over a landing is not checked (it needs door leaves, openbimrs/ifc#148). Without the free-space service both checks are not evaluated. An undecided obstacle or door leaves a clear box not evaluated; an obstruction stands.
+
+A stair near a ramp is the `distance` capability's `nearest` mode, the ramps as subjects and the flights as `counterparts` within `maximum_metres` (in plan with `projection` `horizontal`), not a parameter of `ramp-geometry`.
+
+A flight or ramp the service cannot measure is not evaluated, never passed: a tessellated body, an open or inward-facing mesh, winders or a turning flight, a flight in several pieces (open risers), a flight with a sloped walking face, a ramp whose slopes meet without a landing, or a body with no tread or run. Not measured yet (#85): winders, turning flights and open risers.
 
 ### Doors
 

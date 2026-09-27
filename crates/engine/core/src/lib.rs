@@ -508,7 +508,7 @@ pub use facade_area::{FacadeArea, FacadeAreaError, FacadeAreaService, FacadeArea
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance,
+    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
     FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence, PlacementDomain,
     PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,

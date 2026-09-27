@@ -18,7 +18,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `NoPlacement` needs the shape shrunk by `KNIFE_EDGE_METRES` (plus the
   rotation margin) to fit nowhere, so a fit by contact refuses. Never drop a
   margin or return `NoPlacement` from an undecided interval. Only the scope's
-  own floor is searched; other supports and frame offsets refuse (#84).
+  own floor is searched (merged scopes must share it, and then no support
+  is answered); other supports refuse. Obstacles are clipped to the
+  request's `effective_band`. A frame-offset domain is a `Window`: witnesses
+  from the box as computed and filtered by the contract's `contains_frame`,
+  absence proven against the box grown by `KNIFE_EDGE_METRES`; never prove
+  absence against the ungrown box. Witness candidates include slab
+  midpoints, so a free region with a hole always offers interior points.
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside

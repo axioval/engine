@@ -3,7 +3,7 @@
 use axioval_engine::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance,
+    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
     FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
     ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
@@ -446,14 +446,70 @@ fn placement_witness_must_satisfy_frame_offset_domain() {
 }
 
 #[test]
-fn relative_domain_anchor_must_match_request_scope() {
+fn relative_domain_anchor_may_stand_on_another_object_but_witnesses_stay_in_scope() {
+    // The anchor is a door's frame; the search scope is the room in front of it.
+    let offsets = FrameOffsetPlacement::new(
+        placement_frame("cad", "door"),
+        SignedDistanceInterval::try_new(-1.0, 1.0).unwrap(),
+        SignedDistanceInterval::try_new(0.0, 2.0).unwrap(),
+        SignedDistanceInterval::exact(0.0).unwrap(),
+    );
     let r = PlacementRequest::new_in_domain(
-        object("cad", "other"),
+        object("cad", "room"),
         placement_shape(),
         vec![],
-        relative_domain("cad"),
+        PlacementDomain::FrameOffsets(offsets.clone()),
+    )
+    .unwrap();
+    let in_room = placement_frame_at("cad", "room", [0.5, 1.0, 0.0]);
+    assert!(offsets.contains_frame(&in_room));
+    assert!(ClearancePlacementEvidence::try_new(r.clone(), in_room, evidence("placement")).is_ok());
+    let on_door = placement_frame_at("cad", "door", [0.5, 1.0, 0.0]);
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(r, on_door, evidence("placement")),
+        Err(FreeSpaceError::PlacementScopeMismatch)
     );
-    assert_eq!(r, Err(FreeSpaceError::PlacementScopeMismatch));
+}
+
+#[test]
+fn elevation_band_defaults_to_the_shape_height_and_rejects_bad_bands() {
+    let r = placement_request("cad", "room");
+    assert_eq!(r.band(), None);
+    assert_eq!(
+        r.effective_band(),
+        ElevationBand::try_new(0.0, 2.0).unwrap()
+    );
+    let band = ElevationBand::try_new(0.1, 0.67).unwrap();
+    let banded = r.clone().with_band(band);
+    assert_eq!(banded.band(), Some(band));
+    assert_eq!(banded.effective_band(), band);
+    assert_ne!(banded, r, "the band is part of the request identity");
+    for (from, to) in [(-0.1, 1.0), (1.0, 1.0), (1.0, 0.5), (0.0, f64::INFINITY)] {
+        assert_eq!(
+            ElevationBand::try_new(from, to),
+            Err(FreeSpaceError::InvalidElevationBand)
+        );
+    }
+}
+
+#[test]
+fn merged_scopes_are_sorted_and_never_the_scope_or_an_obstacle() {
+    let r = placement_request("cad", "room")
+        .with_merged_scopes(vec![
+            object("cad", "b"),
+            object("cad", "a"),
+            object("cad", "b"),
+        ])
+        .unwrap();
+    assert_eq!(r.merged_scopes(), &[object("cad", "a"), object("cad", "b")]);
+    assert_eq!(
+        placement_request("cad", "room").with_merged_scopes(vec![object("cad", "room")]),
+        Err(FreeSpaceError::MergedScopeConflict)
+    );
+    assert_eq!(
+        placement_request("cad", "room").with_merged_scopes(vec![object("cad", "wall")]),
+        Err(FreeSpaceError::MergedScopeConflict)
+    );
 }
 
 fn placement_frame_at(doc: &str, local: &str, xyz: [f64; 3]) -> MetricFrame {

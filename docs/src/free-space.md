@@ -62,7 +62,12 @@ A `PlacementDomain` makes the admissible candidate set explicit:
 - `FrameOffsets` limits right/forward/up translation in an anchor frame;
 - `SupportedFrameOffsets` requires both support and anchor-relative bounds.
 
-Frame-offset witnesses keep the anchor's axes, so a box searched in a frame-offset domain must be `Fixed` to those axes. Any other orientation is refused as `OrientationDomainConflict` when the request is built.
+Frame-offset witnesses keep the anchor's axes, so a box searched in a frame-offset domain must be `Fixed` to those axes. Any other orientation is refused as `OrientationDomainConflict` when the request is built. The anchor may be grounded on another object than the scope, such as the door or fixture whose frame the object-frame service states, with the front axis the rule's statement; the witness is still grounded on the scope. `FrameOffsetPlacement::contains_frame` is the test every witness must pass, and backends may filter with it.
+
+Two request options shape the search:
+
+- `with_band(ElevationBand)` states the band, from and to metres above the scope's floor, in which obstacles count. Without it the band runs from the floor up by the shape's height (`effective_band`). A band must start at or above the floor and end above its start.
+- `with_merged_scopes` searches the union of the scope and further scopes, such as the spaces of one group. A merged scope may be neither the scope nor an obstacle (`MergedScopeConflict`).
 
 - `Found` carries one exact, scope-grounded placement frame. Supported domains additionally require exact evidence that the whole candidate base is supported by the requested source-qualified object at that exact frame and within the requested gap.
 - `NoPlacement` requires complete exact search evidence.
@@ -73,7 +78,7 @@ A bounded or partial search cannot claim that no placement exists.
 
 The Axiolid adapter decides placement in the scope's configuration space: the set of centres at which the shape lies in the scope footprint and meets no obstacle in its height band. That set is the scope eroded by the shape, minus every obstacle footprint dilated by the reflected shape. A point in it is a witness; an empty set proves that no placement exists.
 
-The height band runs from the scope's floor (the bottom of its body) up by the shape's height, and is open at both ends: a body resting on the floor under the shape or starting exactly at its top does not block it. As in clearance, an obstacle counts only by the part of its solid inside the band, never by its height range and plan outline taken apart: its band footprint is its boundary clipped to the band, plus, for a body reaching down to the floor, its section just above the floor. So an L-shaped body with a column along a wall and an arm overhead blocks only the column's strip. Clipping planar triangles to horizontal planes is exact. A body reaching down to the floor must be closed and consistently wound, or the search refuses. An obstacle without a measured body, a tessellated scope, or a tessellated obstacle within reach refuses too.
+The height band runs from the scope's floor (the bottom of its body) up by the shape's height, or over the request's elevation band, and is open at both ends: a body resting on the floor under the shape or starting exactly at its top does not block it. As in clearance, an obstacle counts only by the part of its solid inside the band, never by its height range and plan outline taken apart: its band footprint is its boundary clipped to the band, plus, for a body reaching down to the floor, its section just above the floor. So an L-shaped body with a column along a wall and an arm overhead blocks only the column's strip. Clipping planar triangles to horizontal planes is exact. A body reaching down to the floor must be closed and consistently wound, or the search refuses. An obstacle without a measured body, a tessellated scope, or a tessellated obstacle within reach refuses too.
 
 | Shape | Witness (`Found`) | Proof of absence (`NoPlacement`) |
 |---|---|---|
@@ -83,7 +88,13 @@ The height band runs from the scope's floor (the bottom of its body) up by the s
 
 Anything in between refuses: a fit by contact, a circle whose fit lies inside the disc approximation band (about 0.12 % of the radius), or an angle search whose budget (512 fixed-orientation checks over half a turn, a quarter turn for a square) runs out before every interval is decided. The shrink margins keep rounding from turning a fit by contact into a false proof of absence.
 
-The search runs on the scope's own floor: `Unconstrained` and `Supported` by the scope itself. Other supports and frame-offset domains are refused until their support rules are written down. A `Fixed` frame must be upright. The witness frame stands at the floor elevation and uses the requested axes for `Fixed`, or the found angle for `Any`. Evidence cites the scope's own source.
+The search runs on the scope's own floor: `Unconstrained` and `Supported` by the scope itself, each also with frame offsets. Other supports are refused until their support rules are written down. With merged scopes the footprint searched is the union of all of them; they must share the scope's floor (within 1 nm), every one is checked for tessellation like the scope, and only an unsupported domain is answered, since no single support holds a base spanning several of them. A `Fixed` frame must be upright. The witness frame stands at the floor elevation and uses the requested axes for `Fixed`, the anchor's for a cylinder in a frame-offset domain, or the found angle for `Any`. Evidence cites the scope's own source; its locator names the merged scopes.
+
+A frame-offset domain is searched exactly for fixed orientations: the configuration space is intersected with the box of centres the right and forward offsets allow. The anchor must be exactly upright, and the scope's floor must lie within the up offsets, or the search refuses rather than proving the domain empty. A witness comes from the offset box as computed and must also pass `contains_frame`; a proof of absence needs the configuration space of the shrunk shape to miss even the box grown by 1 µm, so rounding the box's corners cannot hide a centre on its edge. A box pinned to one offset has no area: the configuration space's candidates are moved onto it and re-verified, and its absence is proven with the grown box. For a cylinder the same intersection applies to the inner and outer configuration spaces.
+
+Witness candidates are the free region's centroids and the middle of every interval a line halfway between two consecutive vertex heights cuts from it, so a free region with a hole (a room around a column) is never missed because its centroids fall into the hole.
+
+A free corridor width (a region eroded by half the width that still connects two sides) is not searched here: the sides are not part of a placement request, and deciding which eroded parts connect is not sound where they touch at a point. Corridor widths use metric routing.
 
 Connected corridor requirements use [metric routing](./metric-routing.md) with an appropriate mobility profile rather than inventing a second path contract.
 

@@ -15,14 +15,15 @@ use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
     AreaInterval, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, ClearanceShape,
     CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    ContainmentOutcome, ContainmentRequest, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
-    FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence,
-    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    ContainmentOutcome, ContainmentRequest, FrameOffsetPlacement, FreeAreaEvidence,
+    FreeAreaRequest, FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint,
+    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
+    PlacementShape, SupportedPlacement,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
-use crate::placement::{self, Axis, Scene, Search};
+use crate::placement::{self, Axis, Scene, Search, Window};
 use crate::planar::{plan_frame, polygon_area, projected_polygons};
 use crate::walkable::{band_footprint, trapezoids};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
@@ -384,12 +385,14 @@ fn reach(
 }
 
 impl AxiolidFreeSpaceService {
-    /// The scope footprint and what the obstacles occupy in the shape's height
+    /// The searched footprint and what the obstacles occupy in the elevation
     /// band, and the floor elevation the shape stands on.
     ///
-    /// An obstacle counts only by the part of its solid inside the open band,
-    /// as in clearance: a closed body's band footprint is its boundary clipped
-    /// to the band plus its section just above the floor, so an L-shaped body
+    /// The footprint is the union of the scope's and every merged scope's;
+    /// merged scopes must share the scope's floor. An obstacle counts only
+    /// by the part of its solid inside the open band, as in clearance: a
+    /// closed body's band footprint is its boundary clipped to the band plus
+    /// its section just above the band's bottom, so an L-shaped body
     /// contributes only its foot to a low band. Clipping a planar triangle to
     /// horizontal planes is exact.
     fn placement_scene(
@@ -397,39 +400,55 @@ impl AxiolidFreeSpaceService {
         request: &PlacementRequest,
         tolerance: axiolid_core::Tolerance,
     ) -> Result<(Scene, f64), FreeSpaceError> {
-        let missing = || FreeSpaceError::MissingGeometry(Box::new(request.scope().clone()));
-        let scope_mesh = self.geometry.mesh(request.scope()).ok_or_else(missing)?;
-        let (low, _) = mesh_extent(scope_mesh).ok_or_else(missing)?;
-        let floor = low[2];
-        let (height, reach) = match request.shape() {
-            PlacementShape::Box { shape, .. } => (
-                shape.height_metres(),
-                shape.width_metres().hypot(shape.depth_metres()) / 2.0,
-            ),
-            PlacementShape::Cylinder(c) => (c.height_metres(), c.radius_metres()),
+        let missing = |id: &ObjectId| FreeSpaceError::MissingGeometry(Box::new(id.clone()));
+        let reach = match request.shape() {
+            PlacementShape::Box { shape, .. } => {
+                shape.width_metres().hypot(shape.depth_metres()) / 2.0
+            }
+            PlacementShape::Cylinder(c) => c.radius_metres(),
         };
-
-        // Exact evidence: a tessellated scope, or a tessellated obstacle whose
-        // true body could reach a placement, makes the verdict an estimate.
-        let scope_extent = self
-            .geometry
-            .enclosing_extent(request.scope())
-            .ok_or_else(missing)?;
-        if self.geometry.is_tessellated(request.scope())
-            || self
+        let mut floor = None;
+        let mut scope_triangles = Vec::new();
+        for scope in std::iter::once(request.scope()).chain(request.merged_scopes()) {
+            let mesh = self.geometry.mesh(scope).ok_or_else(|| missing(scope))?;
+            let (low, _) = mesh_extent(mesh).ok_or_else(|| missing(scope))?;
+            match floor {
+                None => floor = Some(low[2]),
+                Some(first) if (low[2] - first).abs() <= FLOOR_AGREEMENT_METRES => {}
+                Some(_) => {
+                    return Err(FreeSpaceError::Unavailable(format!(
+                        "merged scope {scope} stands on another floor than {}",
+                        request.scope()
+                    )));
+                }
+            }
+            // Exact evidence: a tessellated scope, or a tessellated obstacle
+            // whose true body could reach a placement, makes the verdict an
+            // estimate.
+            let extent = self
                 .geometry
-                .tessellated_near(&scope_extent, reach, true, |object| {
-                    !request.obstacles().contains(object)
-                })
-                .is_some()
-        {
-            return Err(FreeSpaceError::InexactPlacementEvidence);
+                .enclosing_extent(scope)
+                .ok_or_else(|| missing(scope))?;
+            if self.geometry.is_tessellated(scope)
+                || self
+                    .geometry
+                    .tessellated_near(&extent, reach, true, |object| {
+                        !request.obstacles().contains(object)
+                    })
+                    .is_some()
+            {
+                return Err(FreeSpaceError::InexactPlacementEvidence);
+            }
+            scope_triangles.extend(triangles(mesh));
         }
+        let floor = floor.ok_or_else(|| missing(request.scope()))?;
 
-        let scope = placement::footprint(&triangles(scope_mesh), tolerance)?;
+        let scope = placement::footprint(&scope_triangles, tolerance)?;
         if scope.is_empty() {
-            return Err(missing());
+            return Err(missing(request.scope()));
         }
+        let band = request.effective_band();
+        let (low, high) = (floor + band.from_metres(), floor + band.to_metres());
         let mut obstacle_rings = Vec::new();
         for obstacle in request.obstacles() {
             if self.geometry.has_no_body(obstacle) {
@@ -440,18 +459,75 @@ impl AxiolidFreeSpaceService {
             let mesh = self
                 .geometry
                 .mesh(obstacle)
-                .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())))?;
-            let occupied = band_footprint(obstacle, mesh, floor, floor + height)
-                .map_err(FreeSpaceError::Unavailable)?;
+                .ok_or_else(|| missing(obstacle))?;
+            let occupied =
+                band_footprint(obstacle, mesh, low, high).map_err(FreeSpaceError::Unavailable)?;
             obstacle_rings.extend(trapezoids(&occupied).into_iter().map(|piece| piece.outer));
         }
         let scene = Scene {
             scope,
             obstacles: placement::union(&obstacle_rings, tolerance)?,
             tolerance,
+            window: None,
         };
         Ok((scene, floor))
     }
+}
+
+/// Merged scopes whose floors differ by more than this are not one floor.
+const FLOOR_AGREEMENT_METRES: f64 = 1.0e-9;
+
+/// The offset box of a frame-offset domain on the floor at `floor`.
+///
+/// The anchor must be exactly upright, so the right and forward offsets of
+/// a centre are its plan offsets and its up offset is the floor's height
+/// above the anchor. A floor outside the up offsets is refused rather than
+/// proven empty.
+fn offset_window(
+    offsets: &FrameOffsetPlacement,
+    scope: &ObjectId,
+    floor: f64,
+) -> Result<Window, FreeSpaceError> {
+    let anchor = offsets.anchor();
+    let [rx, ry, rz] = anchor.right().components();
+    let [fx, fy, fz] = anchor.forward().components();
+    #[allow(clippy::float_cmp)]
+    let upright = rz == 0.0 && fz == 0.0 && anchor.up().components() == [0.0, 0.0, 1.0];
+    if !upright {
+        return Err(FreeSpaceError::Unavailable(
+            "a frame-offset anchor must be exactly upright".into(),
+        ));
+    }
+    let [ax, ay, az] = anchor.origin().coordinates_metres();
+    let up = offsets.up();
+    let rise = floor - az;
+    if rise < up.lower_metres() || rise > up.upper_metres() {
+        return Err(FreeSpaceError::Unavailable(
+            "the scope's floor lies outside the anchor's vertical offsets".into(),
+        ));
+    }
+    let admitted = offsets.clone();
+    let scope = scope.clone();
+    let axes = (anchor.right(), anchor.forward(), anchor.up());
+    Ok(Window {
+        origin: Point2::new(ax, ay),
+        right: Axis { x: rx, y: ry },
+        forward: Axis { x: fx, y: fy },
+        across: (
+            offsets.right().lower_metres(),
+            offsets.right().upper_metres(),
+        ),
+        along: (
+            offsets.forward().lower_metres(),
+            offsets.forward().upper_metres(),
+        ),
+        admits: Box::new(move |centre| {
+            MetricPoint::try_new(scope.clone(), [centre.x, centre.y, floor])
+                .ok()
+                .and_then(|origin| MetricFrame::try_new(origin, axes.0, axes.1, axes.2).ok())
+                .is_some_and(|frame| admitted.contains_frame(&frame))
+        }),
+    })
 }
 
 impl FreeSpaceService for AxiolidFreeSpaceService {
@@ -536,22 +612,32 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         request: &PlacementRequest,
     ) -> Result<PlacementOutcome, FreeSpaceError> {
         let tolerance = tolerance()?;
-        let support = match request.domain() {
-            PlacementDomain::Unconstrained => None,
-            // The scope's own floor is the support: every centre the search
-            // accepts keeps the whole base inside the scope footprint.
-            PlacementDomain::Supported(support) if support.support() == request.scope() => {
-                Some(support)
+        // The scope's own floor is the only support measured: every centre
+        // the search accepts keeps the whole base inside the scope
+        // footprint. A merged search spans several floors, so no single
+        // support holds its base.
+        let own = |support: &SupportedPlacement| {
+            support.support() == request.scope() && request.merged_scopes().is_empty()
+        };
+        let (support, offsets) = match request.domain() {
+            PlacementDomain::Unconstrained => (None, None),
+            PlacementDomain::FrameOffsets(offsets) => (None, Some(offsets)),
+            PlacementDomain::Supported(support) if own(support) => (Some(support), None),
+            PlacementDomain::SupportedFrameOffsets { support, offsets } if own(support) => {
+                (Some(support), Some(offsets))
             }
             _ => {
                 return Err(FreeSpaceError::Unavailable(
-                    "placement is searched on the scope's own floor only; \
-                     other supports and frame offsets are not measured"
+                    "placement is supported by the scope's own floor only; \
+                     other supports and merged scopes with a support are not measured"
                         .into(),
                 ));
             }
         };
-        let (scene, floor) = self.placement_scene(request, tolerance)?;
+        let (mut scene, floor) = self.placement_scene(request, tolerance)?;
+        if let Some(offsets) = offsets {
+            scene.window = Some(offset_window(offsets, request.scope(), floor)?);
+        }
 
         let search = match request.shape() {
             PlacementShape::Cylinder(c) => placement::circle(&scene, c.radius_metres())?,
@@ -581,10 +667,12 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
 
         // Placement is evidence about the scope, so it cites the scope's own
         // source.
-        let evidence = Evidence::exact(
-            request.scope().source.clone(),
-            format!("axiolid:placement:{}", request.scope().local_id),
-        );
+        let mut locator = format!("axiolid:placement:{}", request.scope().local_id);
+        for merged in request.merged_scopes() {
+            locator.push('+');
+            locator.push_str(&merged.to_string());
+        }
+        let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {
             Search::Nowhere => {
                 return Ok(PlacementOutcome::NoPlacement(
@@ -595,10 +683,14 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         };
         let origin = MetricPoint::try_new(request.scope().clone(), [centre.x, centre.y, floor])
             .map_err(|e| FreeSpaceError::Unavailable(format!("witness: {e}")))?;
-        // A fixed orientation's witness uses the requested axes themselves.
+        // A fixed orientation's witness uses the requested axes themselves,
+        // and a frame-offset witness the anchor's.
         let frame = if let Some(PlacementOrientation::Fixed(fixed)) = request.shape().orientation()
         {
             MetricFrame::try_new(origin, fixed.right(), fixed.forward(), fixed.up())?
+        } else if let Some(offsets) = offsets {
+            let anchor = offsets.anchor();
+            MetricFrame::try_new(origin, anchor.right(), anchor.forward(), anchor.up())?
         } else {
             let forward = right.left();
             MetricFrame::try_new(

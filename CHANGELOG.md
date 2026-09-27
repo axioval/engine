@@ -132,6 +132,33 @@ All notable changes are documented here. This project follows Semantic Versionin
   proven to one destination only. **Breaking:** `MetricRoutingError` gains
   `NoTargets`, `InvalidTolerance` and `InconsistentResponse`; the workspace
   requires `axiolid-route` 0.3.2, which is not yet published. (#79)
+- **Free floor space options.** `free-floor-circle` and
+  `free-floor-rectangle` take an `obstacles` selector (default: every other
+  object, as before), an elevation band `band_from_metres` /
+  `band_to_metres` above the floor in which obstacles count (default: the
+  floor up by `height_metres`), and a `merge_path` whose spaces are searched
+  together with the selected one, such as a derived
+  `overlapping-group-space` or a stated grouping. An obstacle the selection
+  cannot decide can only keep a proof of absence open: the proof is asked
+  again without it and stands only if it still holds. Merged spaces are
+  never obstacles, are related to the finding, and make the request
+  unconstrained instead of supported by one space. `PlacementRequest`
+  gains `with_band` (`ElevationBand`) and `with_merged_scopes`; a
+  frame-offset anchor may be grounded on another object than the scope,
+  such as a door, and `FrameOffsetPlacement::contains_frame` is public. The
+  Axiolid placement search clips obstacles to the band, searches the union
+  of merged scopes on one floor, and answers frame-offset domains: the
+  configuration space intersected with the box of admitted offsets, exact
+  for fixed orientations, with absence proven against the box grown by
+  1 µm. Its witness search now also tries slab midpoints, so a free region
+  around a column is no longer refused. A free corridor width is left out:
+  deciding whether an eroded region connects two sides is not sound yet.
+  **Breaking:** definitions bound to either capability must declare the
+  new optional parameters `obstacles`, `band_from_metres`,
+  `band_to_metres` and `merge_path`; `FreeSpaceError` gains
+  `InvalidElevationBand` and `MergedScopeConflict`; a frame-offset anchor
+  grounded on another object is no longer refused as
+  `PlacementScopeMismatch`. (#84)
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m

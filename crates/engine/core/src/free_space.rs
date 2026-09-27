@@ -49,6 +49,10 @@ pub enum FreeSpaceError {
     PlacementOrientationMismatch,
     #[error("frame-offset placement of a box needs a fixed orientation along the anchor axes")]
     OrientationDomainConflict,
+    #[error("placement elevation band must be finite, start at or above the floor and be ordered")]
+    InvalidElevationBand,
+    #[error("a merged scope is the search scope itself or one of its obstacles")]
+    MergedScopeConflict,
     #[error("free-space backend returned evidence for another request")]
     ResponseRequestMismatch,
     #[error("free-space geometry is unavailable for `{0}`")]
@@ -360,7 +364,10 @@ impl FrameOffsetPlacement {
     pub fn up(&self) -> SignedDistanceInterval {
         self.up
     }
-    fn contains_frame(&self, frame: &MetricFrame) -> bool {
+    /// Whether a found frame keeps the anchor's axes and lies within the
+    /// offsets. Placement evidence is validated with exactly this test, so a
+    /// backend may filter its witnesses with it.
+    pub fn contains_frame(&self, frame: &MetricFrame) -> bool {
         let aligned = self.anchor.right() == frame.right()
             && self.anchor.forward() == frame.forward()
             && self.anchor.up() == frame.up();
@@ -421,6 +428,40 @@ pub enum PlacementOrientation {
     Any,
 }
 
+/// The elevations, relative to the scope's floor, in which obstacles count.
+///
+/// Only the part of an obstacle's solid inside the open band blocks a
+/// placement. Without a band, the band runs from the floor up by the shape's
+/// height.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ElevationBand {
+    from_metres: f64,
+    to_metres: f64,
+}
+impl ElevationBand {
+    pub fn try_new(from_metres: f64, to_metres: f64) -> Result<Self, FreeSpaceError> {
+        if !from_metres.is_finite()
+            || !to_metres.is_finite()
+            || from_metres < 0.0
+            || from_metres >= to_metres
+        {
+            return Err(FreeSpaceError::InvalidElevationBand);
+        }
+        Ok(Self {
+            from_metres,
+            to_metres,
+        })
+    }
+    /// Bottom of the band above the floor.
+    pub fn from_metres(&self) -> f64 {
+        self.from_metres
+    }
+    /// Top of the band above the floor.
+    pub fn to_metres(&self) -> f64 {
+        self.to_metres
+    }
+}
+
 /// A clearance shape together with the rotations a placement may use.
 ///
 /// A box carries an explicit orientation so that a request cannot leave open
@@ -459,6 +500,8 @@ pub struct PlacementRequest {
     shape: PlacementShape,
     obstacles: Vec<ObjectId>,
     domain: PlacementDomain,
+    band: Option<ElevationBand>,
+    merged: Vec<ObjectId>,
 }
 impl PlacementRequest {
     pub fn new(scope: ObjectId, shape: PlacementShape, mut obstacles: Vec<ObjectId>) -> Self {
@@ -469,6 +512,8 @@ impl PlacementRequest {
             shape,
             obstacles,
             domain: PlacementDomain::Unconstrained,
+            band: None,
+            merged: Vec::new(),
         }
     }
     pub fn new_in_domain(
@@ -482,9 +527,9 @@ impl PlacementRequest {
             | PlacementDomain::SupportedFrameOffsets { offsets, .. } => Some(offsets),
             _ => None,
         };
-        if offsets.is_some_and(|offsets| offsets.anchor().origin().subject() != &scope) {
-            return Err(FreeSpaceError::PlacementScopeMismatch);
-        }
+        // The anchor may be grounded on another object, such as a door or a
+        // fixture in front of which the shape must fit; the witness is still
+        // grounded on the scope.
         // Offset witnesses must align with the anchor, so a box searched there
         // can only be asked about the anchor's own orientation.
         if let (Some(offsets), Some(orientation)) = (offsets, shape.orientation()) {
@@ -500,7 +545,30 @@ impl PlacementRequest {
             shape,
             obstacles,
             domain,
+            band: None,
+            merged: Vec::new(),
         })
+    }
+    /// Counts obstacles only inside `band` above the scope's floor.
+    #[must_use]
+    pub fn with_band(mut self, band: ElevationBand) -> Self {
+        self.band = Some(band);
+        self
+    }
+    /// Searches the union of the scope and `merged` scopes, such as the
+    /// spaces of one group. The witness stays grounded on the scope. A merged
+    /// scope must be neither the scope nor an obstacle.
+    pub fn with_merged_scopes(mut self, mut merged: Vec<ObjectId>) -> Result<Self, FreeSpaceError> {
+        merged.sort();
+        merged.dedup();
+        if merged
+            .iter()
+            .any(|id| id == &self.scope || self.obstacles.binary_search(id).is_ok())
+        {
+            return Err(FreeSpaceError::MergedScopeConflict);
+        }
+        self.merged = merged;
+        Ok(self)
     }
     pub fn scope(&self) -> &ObjectId {
         &self.scope
@@ -513,6 +581,25 @@ impl PlacementRequest {
     }
     pub fn domain(&self) -> &PlacementDomain {
         &self.domain
+    }
+    /// The band the request states, if any.
+    pub fn band(&self) -> Option<ElevationBand> {
+        self.band
+    }
+    /// The band obstacles count in: the stated one, or from the floor up by
+    /// the shape's height.
+    pub fn effective_band(&self) -> ElevationBand {
+        self.band.unwrap_or(ElevationBand {
+            from_metres: 0.0,
+            to_metres: match &self.shape {
+                PlacementShape::Box { shape, .. } => shape.height_metres(),
+                PlacementShape::Cylinder(shape) => shape.height_metres(),
+            },
+        })
+    }
+    /// Scopes searched together with the scope, sorted.
+    pub fn merged_scopes(&self) -> &[ObjectId] {
+        &self.merged
     }
 }
 

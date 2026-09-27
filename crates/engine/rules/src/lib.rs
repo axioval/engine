@@ -18,6 +18,7 @@ mod distance;
 mod escape_route;
 mod exit_separation;
 mod external_wall_validation;
+mod free_floor;
 mod free_floor_circle;
 mod free_floor_rectangle;
 mod group_composition;

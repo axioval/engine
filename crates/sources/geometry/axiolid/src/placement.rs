@@ -21,6 +21,13 @@
 //!   by how far a rotation within the interval moves any corner can prove the
 //!   whole interval empty. Undecided intervals are split until a budget runs
 //!   out, and then the search refuses.
+//!
+//! A frame-offset domain limits the centre to a box of offsets in an anchor
+//! frame (a [`Window`]). The configuration space is intersected with that
+//! box: witnesses come from the box as computed and must also pass the
+//! contract's own domain test, and proofs of absence use the box grown by
+//! [`KNIFE_EDGE_METRES`], so rounding its corners cannot hide a centre on
+//! its edge. For a fixed orientation this is exact up to the same margins.
 
 use std::f64::consts::PI;
 
@@ -74,6 +81,66 @@ pub(crate) struct Scene {
     pub(crate) scope: Region,
     pub(crate) obstacles: Region,
     pub(crate) tolerance: Tolerance,
+    /// The frame-offset box the centre must also lie in, if any.
+    pub(crate) window: Option<Window>,
+}
+
+/// A box of centres in an anchor frame: offsets along its right axis in
+/// `across` and along its forward axis in `along`.
+pub(crate) struct Window {
+    pub(crate) origin: Point2,
+    pub(crate) right: Axis,
+    pub(crate) forward: Axis,
+    pub(crate) across: (f64, f64),
+    pub(crate) along: (f64, f64),
+    /// The contract's own domain test for a centre, so that no witness is
+    /// offered that the evidence would reject.
+    pub(crate) admits: Box<dyn Fn(Point2) -> bool>,
+}
+
+impl Window {
+    fn at(&self, a: f64, b: f64) -> Point2 {
+        Point2::new(
+            self.origin.x + a * self.right.x + b * self.forward.x,
+            self.origin.y + a * self.right.y + b * self.forward.y,
+        )
+    }
+
+    /// The box grown by `grow` on every side, or `None` when it has no area.
+    fn region(&self, grow: f64, tolerance: Tolerance) -> Result<Option<Region>, FreeSpaceError> {
+        let (a0, a1) = (self.across.0 - grow, self.across.1 + grow);
+        let (b0, b1) = (self.along.0 - grow, self.along.1 + grow);
+        if a1 - a0 <= KNIFE_EDGE_METRES || b1 - b0 <= KNIFE_EDGE_METRES {
+            return Ok(None);
+        }
+        let mut points = vec![
+            self.at(a0, b0),
+            self.at(a1, b0),
+            self.at(a1, b1),
+            self.at(a0, b1),
+        ];
+        // Counter-clockwise needs forward to the left of right.
+        if self.right.x * self.forward.y - self.right.y * self.forward.x < 0.0 {
+            points.reverse();
+        }
+        Region::new(
+            vec![Polygon {
+                outer: Ring { points },
+                holes: Vec::new(),
+            }],
+            tolerance,
+        )
+        .map(Some)
+        .map_err(|e| unavailable("offset box", e))
+    }
+
+    /// The point of the box nearest `p` in offsets.
+    fn clamp(&self, p: Point2) -> Point2 {
+        let (dx, dy) = (p.x - self.origin.x, p.y - self.origin.y);
+        let a = (dx * self.right.x + dy * self.right.y).clamp(self.across.0, self.across.1);
+        let b = (dx * self.forward.x + dy * self.forward.y).clamp(self.along.0, self.along.1);
+        self.at(a, b)
+    }
 }
 
 /// A plan unit vector.
@@ -151,6 +218,39 @@ impl Scene {
             .map_err(|e| unavailable("difference", e))
     }
 
+    /// The part of `free` a witness may come from: inside the offset box as
+    /// computed. A box without area keeps `free`; its candidates are clamped
+    /// onto the box instead.
+    fn for_witness(&self, free: Region) -> Result<Region, FreeSpaceError> {
+        match &self.window {
+            None => Ok(free),
+            Some(window) => match window.region(0.0, self.tolerance)? {
+                Some(inside) if !free.is_empty() => free
+                    .intersection(&inside, self.tolerance)
+                    .map_err(|e| unavailable("offset box", e)),
+                _ => Ok(free),
+            },
+        }
+    }
+
+    /// Whether no centre of `free` lies in the domain: `free` meets not even
+    /// the offset box grown by the knife-edge margin.
+    fn nowhere_in_domain(&self, free: &Region) -> Result<bool, FreeSpaceError> {
+        if free.is_empty() {
+            return Ok(true);
+        }
+        let Some(window) = &self.window else {
+            return Ok(false);
+        };
+        let grown = window
+            .region(KNIFE_EDGE_METRES, self.tolerance)?
+            .ok_or_else(|| FreeSpaceError::Unavailable("offset box has no area".into()))?;
+        Ok(free
+            .intersection(&grown, self.tolerance)
+            .map_err(|e| unavailable("offset box", e))?
+            .is_empty())
+    }
+
     /// Whether `ring` lies in the scope and meets no obstacle, up to contact.
     fn fits(&self, ring: Ring) -> Result<bool, FreeSpaceError> {
         let body = Region::new(
@@ -181,7 +281,15 @@ impl Scene {
         free: &Region,
         place: impl Fn(Point2) -> Ring,
     ) -> Result<Option<Point2>, FreeSpaceError> {
-        for candidate in candidates(free) {
+        let mut offered = candidates(free);
+        if let Some(window) = &self.window {
+            // Candidates of a box without area lie beside it; move them onto
+            // it. Every candidate must pass the contract's domain test.
+            offered = offered.into_iter().map(|c| window.clamp(c)).collect();
+            offered.push(window.clamp(window.origin));
+            offered.retain(|c| (window.admits)(*c));
+        }
+        for candidate in offered {
             if self.fits(place(candidate))? {
                 return Ok(Some(candidate));
             }
@@ -191,8 +299,48 @@ impl Scene {
 }
 
 /// Interior candidates of a region: each outer ring's centroid, then the
-/// centroids of its fan triangles. Rounded boundary points are never offered.
+/// centroids of its fan triangles, then the middle of every interval in
+/// which a line halfway between two vertex heights crosses the polygon.
+/// Rounded boundary points are never offered.
+///
+/// The last kind reaches every polygon, holes included: between two
+/// consecutive vertex heights a polygon is a union of trapezoids, and the
+/// line through their middle crosses each of them.
 fn candidates(region: &Region) -> Vec<Point2> {
+    let mut out = centroids(region);
+    for polygon in region.polygons() {
+        let rings: Vec<&Ring> = std::iter::once(&polygon.outer)
+            .chain(polygon.holes.iter())
+            .collect();
+        let mut heights: Vec<f64> = rings
+            .iter()
+            .flat_map(|ring| ring.points.iter().map(|p| p.y))
+            .collect();
+        heights.sort_by(f64::total_cmp);
+        heights.dedup();
+        for pair in heights.windows(2) {
+            let y = f64::midpoint(pair[0], pair[1]);
+            let mut crossings: Vec<f64> = Vec::new();
+            for ring in &rings {
+                let points = &ring.points;
+                for i in 0..points.len() {
+                    let (a, b) = (points[i], points[(i + 1) % points.len()]);
+                    if (a.y < y) != (b.y < y) {
+                        crossings.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
+                    }
+                }
+            }
+            crossings.sort_by(f64::total_cmp);
+            for inside in crossings.chunks_exact(2) {
+                out.push(Point2::new(f64::midpoint(inside[0], inside[1]), y));
+            }
+        }
+    }
+    out
+}
+
+/// Each outer ring's centroid and the centroids of its fan triangles.
+fn centroids(region: &Region) -> Vec<Point2> {
     let mut out = Vec::new();
     for polygon in region.polygons() {
         let points = &polygon.outer.points;
@@ -238,25 +386,29 @@ pub(crate) fn fixed_rectangle(
     right: Axis,
 ) -> Result<Search, FreeSpaceError> {
     let origin = Point2::new(0.0, 0.0);
-    let free = scene.free_for(&rectangle(origin, width, depth, right))?;
-    if !free.is_empty() {
-        return match scene.witness(&free, |c| rectangle(c, width, depth, right))? {
-            Some(centre) => Ok(Search::Found { centre, right }),
-            None => Err(FreeSpaceError::Unavailable(
-                "no candidate in the free region verifies".into(),
-            )),
-        };
+    let free = scene.for_witness(scene.free_for(&rectangle(origin, width, depth, right))?)?;
+    if !free.is_empty() || scene.window.is_some() {
+        if let Some(centre) = scene.witness(&free, |c| rectangle(c, width, depth, right))? {
+            return Ok(Search::Found { centre, right });
+        }
     }
     let (w, d) = (
         width - 2.0 * KNIFE_EDGE_METRES,
         depth - 2.0 * KNIFE_EDGE_METRES,
     );
-    if w <= 0.0 || d <= 0.0 || !scene.free_for(&rectangle(origin, w, d, right))?.is_empty() {
+    if w <= 0.0 || d <= 0.0 {
         return Err(FreeSpaceError::Unavailable(
-            "the rectangle fits only within the knife-edge margin".into(),
+            "the rectangle is too small to prove absent".into(),
         ));
     }
-    Ok(Search::Nowhere)
+    if scene.nowhere_in_domain(&scene.free_for(&rectangle(origin, w, d, right))?)? {
+        return Ok(Search::Nowhere);
+    }
+    Err(FreeSpaceError::Unavailable(if free.is_empty() {
+        "the rectangle fits only within the knife-edge margin".into()
+    } else {
+        "no candidate in the free region verifies".into()
+    }))
 }
 
 /// A rectangle at any rotation about the vertical.
@@ -271,6 +423,11 @@ pub(crate) fn any_rectangle(
     } else {
         PI
     };
+    if scene.window.is_some() {
+        // Offset witnesses keep the anchor's axes; the contract refuses a box
+        // at any orientation in such a domain.
+        return Err(FreeSpaceError::OrientationDomainConflict);
+    }
     let half_diagonal = width.hypot(depth) / 2.0;
     let origin = Point2::new(0.0, 0.0);
     let mut open: Vec<(f64, f64)> = (0..8)
@@ -319,7 +476,8 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
             .difference(&scene.obstacles.dilate_outer(radius, t).map_err(err)?, t)
             .map_err(err)?
     };
-    if !inner.is_empty()
+    let inner = scene.for_witness(inner)?;
+    if (!inner.is_empty() || scene.window.is_some())
         && let Some(centre) = scene.witness(&inner, |c| circumscribed(c, radius))?
     {
         return Ok(Search::Found {
@@ -344,7 +502,7 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
             .difference(&scene.obstacles.dilate_inner(shrunk, t).map_err(err)?, t)
             .map_err(err)?
     };
-    if outer.is_empty() {
+    if scene.nowhere_in_domain(&outer)? {
         return Ok(Search::Nowhere);
     }
     Err(FreeSpaceError::Unavailable(

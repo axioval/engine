@@ -4,9 +4,10 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
-    BoxClearance, CylinderClearance, FreeSpaceError, FreeSpaceService, MetricDirection,
-    MetricFrame, MetricPoint, PlacementDomain, PlacementOrientation, PlacementOutcome,
-    PlacementRequest, PlacementShape, SupportedPlacement,
+    BoxClearance, CylinderClearance, ElevationBand, FrameOffsetPlacement, FreeSpaceError,
+    FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, PlacementDomain,
+    PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    SignedDistanceInterval, SupportedPlacement,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -348,8 +349,8 @@ fn an_unmeasured_obstacle_refuses() {
     ));
 }
 
-/// Placement is searched on the scope's own floor; any other support or a
-/// frame-offset domain is refused rather than approximated.
+/// Placement is supported by the scope's own floor; any other support is
+/// refused rather than approximated.
 #[test]
 fn other_domains_are_refused() {
     let request = PlacementRequest::new_in_domain(
@@ -362,6 +363,255 @@ fn other_domains_are_refused() {
     let service = AxiolidFreeSpaceService::new(room(&[rect(0.0, 3.0, 0.0, 3.0)]), source());
     assert!(matches!(
         service.find_placement(&request),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+}
+
+fn search(
+    geometry: AxiolidGeometry,
+    request: &PlacementRequest,
+) -> Result<PlacementOutcome, FreeSpaceError> {
+    AxiolidFreeSpaceService::new(geometry, source()).find_placement(request)
+}
+
+/// An elevation band decides which part of an obstacle counts: a table top
+/// from 0.70 m to 0.75 m blocks the default band (the floor up by the shape's
+/// height) but not a band ending at 0.67 m, the knee room under it; a low
+/// plinth below a band starting at 0.10 m does not count either.
+#[test]
+fn an_elevation_band_chooses_which_part_of_an_obstacle_counts() {
+    let geometry = || {
+        room(&[rect(0.0, 2.0, 0.0, 2.0)])
+            .with_mesh(id("table"), prisms(&[rect(0.0, 2.0, 0.0, 1.5)], 0.70, 0.75))
+            .with_mesh(id("plinth"), prisms(&[rect(0.0, 2.0, 1.4, 2.0)], 0.0, 0.05))
+    };
+    let request = || {
+        PlacementRequest::new(
+            id("room"),
+            turning_circle(),
+            vec![id("plinth"), id("table")],
+        )
+    };
+    nowhere(search(geometry(), &request()));
+    let knee_room = request().with_band(ElevationBand::try_new(0.10, 0.67).unwrap());
+    found(search(geometry(), &knee_room));
+    // The plinth alone, counted from the floor, still leaves no room.
+    let from_floor = request().with_band(ElevationBand::try_new(0.0, 0.67).unwrap());
+    nowhere(search(geometry(), &from_floor));
+}
+
+/// Two 1.0 m wide spaces side by side take a 1.50 m turning circle only
+/// together: the search runs on the union of the scope and its merged
+/// scopes, and the witness stays grounded on the scope.
+#[test]
+fn merged_scopes_are_searched_as_one_floor() {
+    let geometry = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, 1.0, 0.0, 2.0)], 0.0, 3.0))
+            .with_mesh(id("alcove"), prisms(&[rect(1.0, 2.0, 0.0, 2.0)], 0.0, 3.0))
+    };
+    let alone = PlacementRequest::new(id("room"), turning_circle(), Vec::new());
+    nowhere(search(geometry(), &alone));
+    let merged = alone
+        .clone()
+        .with_merged_scopes(vec![id("alcove")])
+        .unwrap();
+    match search(geometry(), &merged) {
+        Ok(PlacementOutcome::Found(witness)) => {
+            assert_eq!(witness.frame().origin().subject(), &id("room"));
+            assert!(witness.evidence().locator.contains("alcove"));
+        }
+        other => panic!("expected a placement, got {other:?}"),
+    }
+
+    // A merged space one step up is another floor, not a larger one.
+    let raised = AxiolidGeometry::new()
+        .with_mesh(id("room"), prisms(&[rect(0.0, 1.0, 0.0, 2.0)], 0.0, 3.0))
+        .with_mesh(id("alcove"), prisms(&[rect(1.0, 2.0, 0.0, 2.0)], 0.2, 3.0));
+    assert!(matches!(
+        search(raised, &merged),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+
+    // No single support holds a base spanning both spaces.
+    let supported = PlacementRequest::new_in_domain(
+        id("room"),
+        turning_circle(),
+        Vec::new(),
+        PlacementDomain::Supported(SupportedPlacement::try_new(id("room"), 0.0).unwrap()),
+    )
+    .unwrap()
+    .with_merged_scopes(vec![id("alcove")])
+    .unwrap();
+    assert!(matches!(
+        search(geometry(), &supported),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+}
+
+/// A door frame at `(2, 0)` on the room's south wall, facing north into it.
+fn door() -> MetricFrame {
+    MetricFrame::try_new(
+        MetricPoint::try_new(id("door"), [2.0, 0.0, 0.0]).unwrap(),
+        axis(1.0, 0.0),
+        axis(0.0, 1.0),
+        MetricDirection::try_new([0.0, 0.0, 1.0]).unwrap(),
+    )
+    .unwrap()
+}
+
+fn interval(low: f64, high: f64) -> SignedDistanceInterval {
+    SignedDistanceInterval::try_new(low, high).unwrap()
+}
+
+fn in_front_of_door(
+    shape: PlacementShape,
+    across: (f64, f64),
+    ahead: (f64, f64),
+    obstacles: &[&str],
+) -> PlacementRequest {
+    PlacementRequest::new_in_domain(
+        id("room"),
+        shape,
+        obstacles.iter().map(|o| id(o)).collect(),
+        PlacementDomain::SupportedFrameOffsets {
+            support: SupportedPlacement::try_new(id("room"), 0.0).unwrap(),
+            offsets: FrameOffsetPlacement::new(
+                door(),
+                interval(across.0, across.1),
+                interval(ahead.0, ahead.1),
+                SignedDistanceInterval::exact(0.0).unwrap(),
+            ),
+        },
+    )
+    .unwrap()
+}
+
+fn door_box() -> PlacementShape {
+    rectangle(1.5, 1.5, PlacementOrientation::Fixed(door()))
+}
+
+/// A 1.50 m square in front of a door: its centre may slide 0.2 m either
+/// side of the door's axis and 0.75 m to 1.0 m ahead. The witness keeps the
+/// door's axes and lies within the offsets.
+#[test]
+fn a_box_is_found_within_the_door_offsets() {
+    let geometry = room(&[rect(0.0, 4.0, 0.0, 4.0)]);
+    let request = in_front_of_door(door_box(), (-0.2, 0.2), (0.75, 1.0), &[]);
+    let ([x, y, z], angle) = found(search(geometry, &request));
+    assert!(
+        (1.8..=2.2).contains(&x) && (0.75..=1.0).contains(&y),
+        "({x}, {y})"
+    );
+    assert!(z.abs() < 1e-12 && angle.abs() < 1e-12);
+}
+
+/// A column right in front of the door blocks every offset the domain
+/// admits, although the room has space elsewhere: the configuration space is
+/// intersected with the offset box, not searched as a whole. Letting the box
+/// slide 1 m sideways admits a centre beside the column again.
+#[test]
+fn an_obstacle_in_front_of_the_door_is_decided_within_the_offsets() {
+    let geometry = || {
+        room(&[rect(0.0, 4.0, 0.0, 4.0)])
+            .with_mesh(id("column"), prisms(&[rect(1.9, 2.1, 1.3, 1.5)], 0.0, 3.0))
+    };
+    found(search(
+        geometry(),
+        &PlacementRequest::new(id("room"), door_box(), vec![id("column")]),
+    ));
+    nowhere(search(
+        geometry(),
+        &in_front_of_door(door_box(), (-0.2, 0.2), (0.75, 1.0), &["column"]),
+    ));
+    let ([x, _, _], _) = found(search(
+        geometry(),
+        &in_front_of_door(door_box(), (-1.2, 1.2), (0.75, 1.0), &["column"]),
+    ));
+    assert!(
+        (x - 2.0).abs() >= 0.85 - 1e-9,
+        "the box clears the column, x = {x}"
+    );
+}
+
+/// A box pinned to one offset has no area to search: the single centre is
+/// checked directly, and its absence is still proven with the grown box.
+#[test]
+fn a_pinned_offset_is_decided_both_ways() {
+    let geometry = || {
+        room(&[rect(0.0, 4.0, 0.0, 4.0)])
+            .with_mesh(id("column"), prisms(&[rect(3.5, 3.7, 0.5, 0.7)], 0.0, 3.0))
+    };
+    let pinned = |ahead: f64| in_front_of_door(door_box(), (0.0, 0.0), (ahead, ahead), &["column"]);
+    let ([x, y, _], _) = found(search(geometry(), &pinned(0.75)));
+    assert!((x - 2.0).abs() < 1e-12 && (y - 0.75).abs() < 1e-12);
+    // Ahead by 0.5 m the box would stick out through the wall.
+    nowhere(search(geometry(), &pinned(0.5)));
+}
+
+/// A turning circle in front of a door keeps the door's axes in its witness.
+#[test]
+fn a_circle_is_found_and_proven_absent_within_the_offsets() {
+    let request = in_front_of_door(turning_circle(), (-0.2, 0.2), (0.0, 1.0), &[]);
+    match search(room(&[rect(0.0, 4.0, 0.0, 4.0)]), &request) {
+        Ok(PlacementOutcome::Found(witness)) => {
+            assert_eq!(witness.frame().right(), door().right());
+            let [x, y, _] = witness.frame().origin().coordinates_metres();
+            assert!(
+                (1.8..=2.2).contains(&x) && (0.75..=1.0).contains(&y),
+                "({x}, {y})"
+            );
+        }
+        other => panic!("expected a placement, got {other:?}"),
+    }
+    // Only 0.7 m ahead of the door is admitted: the circle meets the wall.
+    let close = in_front_of_door(turning_circle(), (-0.2, 0.2), (0.0, 0.7), &[]);
+    nowhere(search(room(&[rect(0.0, 4.0, 0.0, 4.0)]), &close));
+}
+
+/// A tilted anchor or a floor outside the vertical offsets is refused, not
+/// approximated or proven empty.
+#[test]
+fn unusable_offset_domains_refuse() {
+    let geometry = || room(&[rect(0.0, 4.0, 0.0, 4.0)]);
+    let raised = PlacementRequest::new_in_domain(
+        id("room"),
+        turning_circle(),
+        Vec::new(),
+        PlacementDomain::FrameOffsets(FrameOffsetPlacement::new(
+            door(),
+            interval(-0.2, 0.2),
+            interval(0.0, 1.0),
+            interval(0.5, 1.0),
+        )),
+    )
+    .unwrap();
+    assert!(matches!(
+        search(geometry(), &raised),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+    let (s, c) = 0.1_f64.sin_cos();
+    let tilted = MetricFrame::try_new(
+        MetricPoint::try_new(id("door"), [2.0, 0.0, 0.0]).unwrap(),
+        axis(1.0, 0.0),
+        MetricDirection::try_new([0.0, c, s]).unwrap(),
+        MetricDirection::try_new([0.0, -s, c]).unwrap(),
+    )
+    .unwrap();
+    let request = PlacementRequest::new_in_domain(
+        id("room"),
+        turning_circle(),
+        Vec::new(),
+        PlacementDomain::FrameOffsets(FrameOffsetPlacement::new(
+            tilted,
+            interval(-0.2, 0.2),
+            interval(0.0, 1.0),
+            interval(-1.0, 1.0),
+        )),
+    )
+    .unwrap();
+    assert!(matches!(
+        search(geometry(), &request),
         Err(FreeSpaceError::Unavailable(_))
     ));
 }

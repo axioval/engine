@@ -19,7 +19,7 @@ use axioval_ir::{Evidence, Object, ObjectId, Severity};
 
 use crate::clash::{
     Exclusions, Outcome, PROFILE_NUMBERS, PROFILE_SWITCHES, Profile, Recorder, exclusion_paths,
-    measure, unless_excluded,
+    exclusion_property, measure, unless_excluded,
 };
 use crate::pairs::{prepare, refuse_declaration, severity};
 use crate::selection::{Selection, discipline_of, selector_matches};
@@ -88,8 +88,9 @@ const COLUMNS: &[TableColumn] = &[
 /// without checking them.
 ///
 /// Exclusions are rule-wide. `exclude_same_system` (on by default) skips
-/// pairs reaching a shared system through `system_path`; `exclude_paths`
-/// and `exclude_same_layer` (off by default) are `clash`'s.
+/// pairs reaching a shared system through `system_path`; `exclude_paths`,
+/// `exclude_target_property` and `exclude_same_layer` (off by default) are
+/// `clash`'s.
 pub struct ClashMatrix;
 
 /// One side's categories in a cell.
@@ -138,6 +139,7 @@ struct Declaration<'a> {
     symmetric: bool,
     report_unmatched: bool,
     exclude_paths: Vec<Vec<String>>,
+    exclude_target_property: Option<PropertyRef<'a>>,
     exclude_same_layer: bool,
 }
 
@@ -203,6 +205,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         symmetric: parameters.boolean("symmetric")?.unwrap_or(true),
         report_unmatched: parameters.boolean("report_unmatched")?.unwrap_or(false),
         exclude_paths,
+        exclude_target_property: exclusion_property(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
     })
 }
@@ -431,6 +434,10 @@ impl RuleCapability for ClashMatrix {
             ParameterDescriptor::optional("exclude_same_system", ParameterType::Boolean),
             ParameterDescriptor::optional("system_path", ParameterType::String),
             ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
+            ParameterDescriptor::optional(
+                "exclude_target_property",
+                ParameterType::PropertyReference,
+            ),
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]);
         parameters
@@ -454,6 +461,7 @@ impl RuleCapability for ClashMatrix {
         let mut exclusions = match Exclusions::new(
             context,
             &declared.exclude_paths,
+            declared.exclude_target_property,
             declared.exclude_same_layer,
         ) {
             Ok(exclusions) => exclusions,

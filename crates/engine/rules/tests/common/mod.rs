@@ -83,11 +83,33 @@ impl Model {
         self.value(local, set, name, PropertyValue::String(value.into()))
     }
 
-    pub fn edge(mut self, relationship: &str, relating: &str, related: &str) -> Self {
+    pub fn edge(self, relationship: &str, relating: &str, related: &str) -> Self {
+        self.edge_between(relationship, id(relating), id(related))
+    }
+
+    /// An edge between objects of any source document.
+    pub fn edge_between(
+        mut self,
+        relationship: &str,
+        relating: ObjectId,
+        related: ObjectId,
+    ) -> Self {
         self.edges
             .entry(relationship.into())
             .or_default()
-            .push((id(relating), id(related)));
+            .push((relating, related));
+        self
+    }
+
+    /// A value of an object of any source document.
+    pub fn value_of(
+        mut self,
+        object: ObjectId,
+        set: &str,
+        name: &str,
+        value: PropertyValue,
+    ) -> Self {
+        self.values.insert((object, set.into(), name.into()), value);
         self
     }
 
@@ -157,7 +179,10 @@ impl PropertyResolutionService for Model {
             Some(((object, set, name), value)) => {
                 let property = Property::new(set.clone(), name.clone(), value.clone())
                     .unwrap()
-                    .with_evidence(Evidence::exact(source(), format!("{object}:{set}.{name}")));
+                    .with_evidence(Evidence::exact(
+                        object.source.clone(),
+                        format!("{object}:{set}.{name}"),
+                    ));
                 Ok(PropertyResolution::Present(ResolvedProperty::try_new(
                     request.clone(),
                     property,
@@ -167,7 +192,7 @@ impl PropertyResolutionService for Model {
                 CompletePropertyAbsenceEvidence::try_new(
                     request.clone(),
                     Evidence::exact(
-                        source(),
+                        request.object_id().source.clone(),
                         format!("absent:{}:{}", request.object_id(), request.property()),
                     ),
                 )?,

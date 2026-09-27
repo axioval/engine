@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Clash exclusions across federated models.** (#136) `clash` and
+  `clash-matrix` take `exclude_target_property`: the targets an exclusion
+  path (or the matrix's `system_path`) reaches from the two members also
+  meet when they state the same value of that property, so a duct and a
+  pipe in two models, assigned to systems both named `SUP-01`, are one
+  system. Only reached targets are compared, never the members; an
+  unreadable value that could match leaves the pair not evaluated.
+  `exclude_same_layer` now holds only within one model: the same layer
+  name in two models no longer excludes a pair. **Breaking:** definitions
+  bound to `clash` or `clash-matrix` must declare the new optional
+  parameter.
+
 - **Window leaves.** (#36) `ObjectFrameService::leaves` answers a window's
   panels as leaves, as it answers a door's: the IFC adapter derives them
   with `openbim-ifc`'s `window_operation` (openbimrs/ifc#170) from the

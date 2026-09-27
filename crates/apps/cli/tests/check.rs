@@ -725,6 +725,77 @@ fn with_geometry_clash_exclusions_read_ifc_systems_and_layers() {
     assert_eq!(finding_ids(&result), vec!["#16"], "{result:#}");
 }
 
+/// The two crossing walls, one per file, each in a system of its own file
+/// named `systems.0` and `systems.1`, and on a layer named `A-WALL`.
+fn walls_in_two_files(case: &Case, systems: [&str; 2]) {
+    for (index, (file, (length, width))) in ["one.ifc", "two.ifc"]
+        .into_iter()
+        .zip([(4.0, 0.2), (0.2, 4.0)])
+        .enumerate()
+    {
+        let extra = format!(
+            "#40=IFCSYSTEM('00000000000000000000{index}0',$,'{}',$,$);\n\
+             #41=IFCRELASSIGNSTOGROUP('00000000000000000000{index}1',$,$,$,(#16),$,#40);\n\
+             #42=IFCPRESENTATIONLAYERASSIGNMENT('A-WALL',$,(#14),$);\n",
+            systems[index]
+        );
+        let model = walls_file(&[(
+            10,
+            2.0,
+            0.0,
+            length,
+            width,
+            &format!("0000000000000000000{index}16"),
+        )])
+        .replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"));
+        case.write(file, &model);
+    }
+}
+
+/// Federated models: one system split across two files is one system when
+/// the systems share a name, and a layer name shared across files is no
+/// shared layer.
+#[test]
+fn with_geometry_clash_exclusions_match_systems_by_name_across_files() {
+    let case = Case::new("clash-federated-exclusions");
+    let clash = |parameters: Value| {
+        let mut bound = json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+        });
+        for (name, value) in parameters.as_object().unwrap() {
+            bound[name] = value.clone();
+        }
+        case.geometry_rule_over(
+            &["one.ifc", "two.ifc"],
+            &[],
+            "axioval:capability.clash",
+            &registry_signature("axioval:capability.clash"),
+            entity("wall"),
+            bound,
+        )
+    };
+    let by_name = json!({
+        "exclude_paths": {"type": "stringList", "value": ["IfcRelAssignsToGroup:backward"]},
+        "exclude_target_property": {"type": "propertyReference",
+                                    "property": "axioval:example.ifc.name",
+                                    "propertySet": "axioval:attributes"},
+    });
+    walls_in_two_files(&case, ["SUP-01", "SUP-01"]);
+    let (output, result) = clash(by_name.clone());
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+
+    walls_in_two_files(&case, ["SUP-01", "RET-01"]);
+    let (output, result) = clash(by_name);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), vec!["#16"], "{result:#}");
+
+    let (output, result) = clash(json!({"exclude_same_layer": {"type": "boolean", "value": true}}));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), vec!["#16"], "{result:#}");
+}
+
 #[test]
 fn without_geometry_geometric_rules_are_not_evaluated_and_say_why() {
     let case = Case::new("geometry-off");
@@ -2000,8 +2071,8 @@ impl Case {
     /// Runs one rule of `capability` with geometry over `model`: the
     /// fixture packages with the rule swapped for it. `types` binds object
     /// types by `(id suffix, IFC name)`; `IsExternal`,
-    /// `SprinklerProtection`, `TotalThickness` and `Access.ClearWidth` are
-    /// always bound.
+    /// `SprinklerProtection`, `TotalThickness`, `Access.ClearWidth` and
+    /// `Name` (`axioval:example.ifc.name`) are always bound.
     fn geometry_rule(
         &self,
         model: &str,
@@ -2091,6 +2162,7 @@ impl Case {
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "TotalThickness"}],
             "citations": [],
         });
+        declare_name(&mut definitions);
         declare_wall_quantities(&mut definitions);
         definitions["definitions"]["axioval:example.under-test"] = json!({
             "id": "axioval:example.under-test",
@@ -7208,6 +7280,17 @@ fn with_geometry_a_door_swinging_over_a_ramp_landing_is_found() {
         ),
         "{result:#}"
     );
+}
+
+/// Declares the `Name` attribute as `axioval:example.ifc.name`.
+fn declare_name(definitions: &mut Value) {
+    definitions["properties"]["axioval:example.ifc.name"] = json!({
+        "id": "axioval:example.ifc.name",
+        "name": {"default": "Name", "translations": {}},
+        "valueKind": "string",
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Name"}],
+        "citations": [],
+    });
 }
 
 /// Declares `Qto_WallBaseQuantities` with its `GrossSideArea` and

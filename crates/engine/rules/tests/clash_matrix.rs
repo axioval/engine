@@ -17,7 +17,9 @@ use axioval_engine::{
     ProximityServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
-use axioval_ir::{Evidence, ObjectId, Severity};
+use axioval_ir::{
+    Evidence, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, Severity, SourceId,
+};
 use axioval_rules::ClashMatrix;
 
 use common::{
@@ -483,4 +485,179 @@ fn invalid_cells_refuse_the_rule() {
             .iter()
             .all(|(_, reason)| *reason == NotEvaluatedReason::InvalidDeclaration)
     );
+}
+
+fn in_hvac(local: &str) -> ObjectId {
+    ObjectId::new(SourceId::new("test", "hvac").unwrap(), local).unwrap()
+}
+
+fn text(value: &str) -> PropertyValue {
+    PropertyValue::String(value.into())
+}
+
+/// A duct of the HVAC model overlapping a pipe of the plumbing model (the
+/// default source), each assigned to a system object of its own model.
+fn federated(duct_system: &str, pipe_system: &str) -> Model {
+    Model::default()
+        .object_in("hvac", "duct", "duct")
+        .object_in("hvac", "supply-a", "system")
+        .object("pipe", "pipe")
+        .object("supply-b", "system")
+        .edge_between("groups", in_hvac("supply-a"), in_hvac("duct"))
+        .edge("groups", "supply-b", "pipe")
+        .value_of(
+            in_hvac("supply-a"),
+            "axioval:attributes",
+            "Name",
+            text(duct_system),
+        )
+        .text("supply-b", "axioval:attributes", "Name", pipe_system)
+}
+
+/// Ducts against pipes, one cell for every pair, systems along `groups`.
+fn systems_rule(extra: Vec<(&str, ParameterValue)>) -> axioval_engine::CompiledRule {
+    let mut parameters = vec![
+        ("counterparts", selector(kind("pipe"))),
+        (
+            "cells",
+            ParameterValue::Table {
+                value: vec![cell(&[("penetration_tolerance_metres", number(0.0))])],
+            },
+        ),
+        ("system_path", string("groups:backward")),
+    ];
+    for (name, value) in extra {
+        parameters.retain(|(existing, _)| *existing != name);
+        parameters.push((name, value));
+    }
+    rule(ID, kind("duct"), parameters)
+}
+
+fn duct_through_pipe() -> Stub {
+    Stub::default()
+        .object("duct", 0.0)
+        .object("pipe", 0.5)
+        .overlap("duct", "pipe", 0.05)
+}
+
+fn by_name() -> Vec<(&'static str, ParameterValue)> {
+    vec![(
+        "exclude_target_property",
+        property(Some("axioval:attributes"), "Name"),
+    )]
+}
+
+/// Parts of one system split across two models are one system when their
+/// system objects carry the same name: the pair is excluded.
+#[test]
+fn systems_of_one_name_in_two_models_are_one_system() {
+    let evaluation = run(
+        federated("SUP-01", "SUP-01"),
+        duct_through_pipe(),
+        &systems_rule(by_name()),
+    );
+    assert!(
+        evaluation.findings().is_empty() && evaluation.not_evaluated_outcomes().is_empty(),
+        "{:?} {:?}",
+        findings(&evaluation),
+        evaluation.not_evaluated_outcomes()
+    );
+
+    // Without the property, two system objects are two systems.
+    let evaluation = run(
+        federated("SUP-01", "SUP-01"),
+        duct_through_pipe(),
+        &systems_rule(vec![]),
+    );
+    assert_eq!(evaluation.findings().len(), 1);
+
+    // Other names are other systems.
+    let evaluation = run(
+        federated("SUP-01", "RET-01"),
+        duct_through_pipe(),
+        &systems_rule(by_name()),
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+    assert_eq!(evaluation.findings().len(), 1);
+
+    // A name that cannot be read may be the same: never hidden, never
+    // reported.
+    let evaluation = run(
+        federated("SUP-01", "SUP-01").unreadable("supply-b"),
+        duct_through_pipe(),
+        &systems_rule(by_name()),
+    );
+    assert!(evaluation.findings().is_empty());
+    let [open] = evaluation.not_evaluated_outcomes() else {
+        panic!("one open pair expected: {:?}", unevaluated(&evaluation));
+    };
+    assert!(
+        open.message().contains("same axioval:attributes.Name"),
+        "{}",
+        open.message()
+    );
+
+    // The members are no targets of their own: a duct and a pipe of one
+    // name, in no system, are not excluded.
+    let evaluation = run(
+        Model::default()
+            .object_in("hvac", "duct", "duct")
+            .object("pipe", "pipe")
+            .value_of(in_hvac("duct"), "axioval:attributes", "Name", text("X"))
+            .text("pipe", "axioval:attributes", "Name", "X")
+            .edge("groups", "pipe", "pipe"),
+        duct_through_pipe(),
+        &systems_rule(by_name()),
+    );
+    assert_eq!(
+        evaluation.findings().len(),
+        1,
+        "{:?}",
+        unevaluated(&evaluation)
+    );
+}
+
+/// A target property without an exclusion path compares nothing.
+#[test]
+fn a_target_property_needs_an_exclusion_path() {
+    let mut extra = by_name();
+    extra.push(("exclude_same_system", boolean(false)));
+    let evaluation = run(
+        federated("SUP-01", "SUP-01"),
+        duct_through_pipe(),
+        &systems_rule(extra),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        vec![("duct".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+/// Presentation layers are named per model: bodies on a same-named layer
+/// of two models still clash; on one layer of one model they do not.
+#[test]
+fn a_shared_layer_excludes_only_within_one_model() {
+    let layer = || PropertyValue::List(vec![text("A-WALL")]);
+    let layered = |duct: ObjectId| {
+        let model = if duct.source == source() {
+            Model::default().object("duct", "duct")
+        } else {
+            Model::default().object_in(&duct.source.document, &duct.local_id, "duct")
+        };
+        model
+            .object("pipe", "pipe")
+            .value_of(duct, PRESENTATION_SET, PRESENTATION_LAYER, layer())
+            .value("pipe", PRESENTATION_SET, PRESENTATION_LAYER, layer())
+    };
+    let rule = systems_rule(vec![
+        ("exclude_same_system", boolean(false)),
+        ("exclude_same_layer", boolean(true)),
+    ]);
+    let evaluation = run(layered(in_hvac("duct")), duct_through_pipe(), &rule);
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+    assert_eq!(evaluation.findings().len(), 1);
+
+    let evaluation = run(layered(common::id("duct")), duct_through_pipe(), &rule);
+    assert!(evaluation.findings().is_empty() && evaluation.not_evaluated_outcomes().is_empty());
 }

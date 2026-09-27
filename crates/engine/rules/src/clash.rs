@@ -52,7 +52,10 @@ use axioval_ir::{
 
 use crate::pairs::{Unevaluated, fidelity_note, prepare, reason, refuse_declaration, severity};
 use crate::selection::property_error;
-use crate::support::{Parameters, Traversal, Unavailable, invalid};
+use crate::support::{
+    Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve, undefined,
+    value_key,
+};
 
 /// Reports duplicates, contained bodies, intersections and clearance
 /// shortfalls between bodies.
@@ -148,10 +151,11 @@ pub(crate) const PROFILE_SWITCHES: [&str; 3] = [
     "report_intersections",
 ];
 
-struct Declaration {
+struct Declaration<'a> {
     profile: Profile,
     /// Relationship paths, each a list of steps.
     exclude_paths: Vec<Vec<String>>,
+    exclude_target_property: Option<PropertyRef<'a>>,
     exclude_same_layer: bool,
 }
 
@@ -174,7 +178,7 @@ pub(crate) fn exclusion_paths(
     Ok(paths)
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
+fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let profile = Profile::read(&|name| parameters.number(name), &|name| {
         parameters.boolean(name)
@@ -187,8 +191,17 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
     Ok(Declaration {
         profile,
         exclude_paths: exclusion_paths(&parameters)?,
+        exclude_target_property: exclusion_property(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
     })
+}
+
+/// The `exclude_target_property` parameter: targets reached through an
+/// exclusion path also meet when they state the same value of it.
+pub(crate) fn exclusion_property<'a>(
+    parameters: &Parameters<'a>,
+) -> Result<Option<PropertyRef<'a>>, Unavailable> {
+    parameters.property("exclude_target_property")
 }
 
 /// A three-valued judgement of an interval against a tolerance.
@@ -443,29 +456,112 @@ type Reached = Result<BTreeSet<ObjectId>, Unavailable>;
 pub(crate) struct Exclusions<'r> {
     context: &'r RuleContext<'r>,
     paths: Vec<Traversal<'r>>,
+    /// Reached targets meet when they state the same value of this property.
+    target_property: Option<PropertyRef<'r>>,
     same_layer: bool,
     everything: Vec<&'r Object>,
     reached: BTreeMap<(usize, ObjectId), Reached>,
     layers: BTreeMap<ObjectId, Result<BTreeSet<String>, Unavailable>>,
+    /// A target's value of `target_property`: its key and how it reads,
+    /// `None` when it states none.
+    labels: BTreeMap<ObjectId, Label>,
+}
+
+type Label = Result<Option<(String, String)>, Unavailable>;
+
+/// Whether two sets of reached targets meet by a stated value.
+enum Labelled {
+    Same(String),
+    Different,
+    Undecided(Unavailable),
 }
 
 impl<'r> Exclusions<'r> {
     pub(crate) fn new(
         context: &'r RuleContext<'r>,
         paths: &'r [Vec<String>],
+        target_property: Option<PropertyRef<'r>>,
         same_layer: bool,
     ) -> Result<Self, Unavailable> {
+        if target_property.is_some() && paths.is_empty() {
+            return Err(invalid(
+                "`exclude_target_property` compares the targets exclusion paths reach, \
+                 but no exclusion path is declared",
+            ));
+        }
         Ok(Self {
             context,
             paths: paths
                 .iter()
                 .map(|path| Traversal::path(path))
                 .collect::<Result<_, _>>()?,
+            target_property,
             same_layer,
             everything: context.project.objects().collect(),
             reached: BTreeMap::new(),
             layers: BTreeMap::new(),
+            labels: BTreeMap::new(),
         })
+    }
+
+    /// The value a reached target states for `property`.
+    fn label(&mut self, property: PropertyRef<'_>, target: &ObjectId) -> &Label {
+        let context = self.context;
+        self.labels.entry(target.clone()).or_insert_with(|| {
+            let Some(object) = context.project.object(target) else {
+                return Err((
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("the reached target {target} is not in the project"),
+                ));
+            };
+            let resolved = resolve(context, object, property)?;
+            Ok(match resolved.value() {
+                Some(value) if !undefined(Some(value)) => {
+                    Some((value_key(value, false, true), display(Some(value))))
+                }
+                _ => None,
+            })
+        })
+    }
+
+    /// Whether a target reached from one member states the same value of
+    /// `property` as a target reached from the other. The members are not
+    /// targets of their own: two walls of one name are not one system.
+    fn labelled(
+        &mut self,
+        property: PropertyRef<'_>,
+        (a, from_a): (&ObjectId, &BTreeSet<ObjectId>),
+        (b, from_b): (&ObjectId, &BTreeSet<ObjectId>),
+    ) -> Labelled {
+        let mut side = |member: &ObjectId, reached: &BTreeSet<ObjectId>| {
+            let mut known = BTreeMap::new();
+            let mut unknown = None;
+            let mut any = false;
+            for target in reached.iter().filter(|target| *target != member) {
+                any = true;
+                match self.label(property, target) {
+                    Ok(Some((key, shown))) => {
+                        known.insert(key.clone(), shown.clone());
+                    }
+                    Ok(None) => {}
+                    Err(why) => {
+                        unknown.get_or_insert_with(|| why.clone());
+                    }
+                }
+            }
+            (known, unknown, any)
+        };
+        let (known_a, unknown_a, any_a) = side(a, from_a);
+        let (known_b, unknown_b, any_b) = side(b, from_b);
+        if let Some((_, shown)) = known_a.iter().find(|(key, _)| known_b.contains_key(*key)) {
+            return Labelled::Same(shown.clone());
+        }
+        // An unread value matters only with a target on the other side.
+        match (unknown_a, unknown_b) {
+            (Some(why), _) if any_b => Labelled::Undecided(why),
+            (_, Some(why)) if any_a => Labelled::Undecided(why),
+            _ => Labelled::Different,
+        }
     }
 
     fn reached(&mut self, path: usize, object: &ObjectId) -> &Reached {
@@ -550,7 +646,31 @@ impl<'r> Exclusions<'r> {
                         self.paths[path].relationship
                     )));
                 }
-                Some(false) => {}
+                Some(false) => {
+                    let (Some(property), Ok(from_a), Ok(from_b)) =
+                        (self.target_property, &from_a, &from_b)
+                    else {
+                        continue;
+                    };
+                    match self.labelled(property, (a, from_a), (b, from_b)) {
+                        Labelled::Same(value) => {
+                            return Ok(Some(format!(
+                                "they reach targets stating {property} {value} through {}",
+                                self.paths[path].relationship
+                            )));
+                        }
+                        Labelled::Different => {}
+                        Labelled::Undecided((reason, message)) => {
+                            undecided.get_or_insert((
+                                reason,
+                                format!(
+                                    "whether they reach targets stating the same {property} through {} cannot be decided: {message}",
+                                    self.paths[path].relationship
+                                ),
+                            ));
+                        }
+                    }
+                }
                 None => {
                     let (reason, message) = from_a
                         .err()
@@ -566,7 +686,9 @@ impl<'r> Exclusions<'r> {
                 }
             }
         }
-        if self.same_layer {
+        // Layers are named per model: one name in two models is a
+        // coincidence, not a shared layer.
+        if self.same_layer && a.source == b.source {
             let (on_a, on_b) = (self.layers(a).clone(), self.layers(b).clone());
             match (on_a, on_b) {
                 (Ok(on_a), Ok(on_b)) => {
@@ -716,6 +838,10 @@ impl RuleCapability for Clash {
         }
         parameters.extend([
             ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
+            ParameterDescriptor::optional(
+                "exclude_target_property",
+                ParameterType::PropertyReference,
+            ),
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]);
         parameters
@@ -738,6 +864,7 @@ impl RuleCapability for Clash {
         let mut exclusions = match Exclusions::new(
             context,
             &declared.exclude_paths,
+            declared.exclude_target_property,
             declared.exclude_same_layer,
         ) {
             Ok(exclusions) => exclusions,

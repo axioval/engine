@@ -308,7 +308,8 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 | `report_containment` | boolean, optional | report bodies inside others; default true |
 | `report_intersections` | boolean, optional | report intersections; default true |
 | `exclude_paths` | string list, optional | relationship paths; pairs reaching a shared target are skipped |
-| `exclude_same_layer` | boolean, optional | skip pairs sharing a presentation layer; default false |
+| `exclude_target_property` | property, optional | reached targets also meet when they state the same value of it |
+| `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
 
 Each pair falls into the first class that holds:
 
@@ -355,8 +356,22 @@ other excludes it too. In IFC:
 | same parent element | `IfcRelAggregates:backward` |
 | connected ports | `IfcRelConnectsPortToElement:backward IfcRelConnectsPorts:either IfcRelConnectsPortToElement:forward` |
 
-`exclude_same_layer` skips pairs whose `axioval:presentation.Layer` lists
-share a name; an object on no layer shares none. An exclusion is decided
+Federated models split one system into a system object per model, so no
+target is ever shared between them. With `exclude_target_property`, the
+targets reached from the two members also meet when they state the same
+value of that property: a duct in the ventilation model and a pipe in the
+plumbing model, each assigned to a system named `SUP-01`, are excluded with
+the path `IfcRelAssignsToGroup:backward` and the property
+`axioval:attributes.Name`. Only reached targets are compared, never the
+members themselves: two walls of one name are not one system. An absent,
+null or blank value matches nothing; a value that cannot be read leaves
+the exclusion undecided when a target on the other side could match it.
+The property needs an exclusion path; alone it is an invalid declaration.
+
+`exclude_same_layer` skips pairs of one model whose
+`axioval:presentation.Layer` lists share a name; an object on no layer
+shares none. Layers are named per model, so the same name in two models is
+no shared layer and never excludes a pair. An exclusion is decided
 before measuring, so an excluded pair costs no narrow phase. One that cannot
 be decided (a relationship the source refuses, a source recording no layers)
 never hides a pair and never reports one: a pair that would be reported is
@@ -387,7 +402,8 @@ classes, switches, interval handling and exclusions included.
 | `exclude_same_system` | boolean, optional | skip pairs in one system; default true |
 | `system_path` | string, optional | the relationship path from an object to its system |
 | `exclude_paths` | string list, optional | further exclusion paths, as for `clash` |
-| `exclude_same_layer` | boolean, optional | skip pairs sharing a presentation layer; default false |
+| `exclude_target_property` | property, optional | as for `clash`, over `system_path` and `exclude_paths` |
+| `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
 
 Each cell keys both sides of the pair: `subject_*` and `counterpart_*`.
 

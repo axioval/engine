@@ -123,6 +123,37 @@ All notable changes are documented here. This project follows Semantic Versionin
   maximum run length and rise, equal slopes, headroom). Winders, open
   risers, headroom under a flight, landing sizes, clear width, handrails and
   the slab connection remain open.
+- **IDS translation of every facet a capability decides exactly.** (#50)
+  The staging IDS importer (`staging/ids`) now translates entity predefined
+  types (resolved as IDS resolves them: type object first, user-defined
+  element, process and object types, `NOTDEFINED` deferring), attribute,
+  classification, material and part-of facets in the applicability and as
+  requirements, entity requirements for other classes, class patterns,
+  prohibited properties and attributes without a value
+  (`property-requirements` rows excluding `not-empty`, one per enumerated
+  name), prohibited classification, material, part-of and attribute facets
+  (`selector-conformance` with the negated selector), `totalDigits` and
+  `fractionDigits`, and specification cardinality (`object-count` per
+  source, so a required specification reports a model without applicable
+  objects and a prohibited one a model with any). What no capability
+  decides exactly stays a reported gap: applicability property facets,
+  property name patterns (openbimrs/ifc#78) and enumerations outside a
+  prohibited facet, prohibited property values, material values,
+  classification systems without a value or given as patterns, part-of
+  without a relation or through voids and fills, and requirements on a
+  prohibited specification. The buildingSMART corpus runs without a
+  mismatch. See the new "IDS import" page.
+- **Chained relationship steps.** A `path` step ending in `+`, such as
+  `IfcRelAggregates:backward+`, is taken one or more times, in `related`
+  selectors and every capability that takes a `path`.
+- **Digit limits in `property-value`.** `total_digits` and `fraction_digits`
+  bound a number's digits as XML Schema counts them; a decimal is counted on
+  its shortest round-trip decimal. Text, booleans and dates are an invalid
+  declaration. **Breaking:** definitions bound to `property-value` must
+  declare the two new optional parameters.
+- `axioval_rules::translate_xsd_pattern` exposes the XML Schema pattern
+  translation behind `property-value` for `matches` selectors.
+
 - **Exit separation.** The new capability `exit-separation` requires each
   selected space's exits, reached through `exit_path` (such as
   `axioval:derived.adjacent-space:backward`) and filtered by

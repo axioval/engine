@@ -15,6 +15,9 @@ publish = false
 [dependencies]
 # The package contracts this importer writes.
 axioval-ir = { path = "../../crates/contracts/ir" }
+# XML Schema patterns in the syntax property selectors match with.
+axioval-rules = { path = "../../crates/engine/rules" }
+regex = "1.11.2"
 # UNPUBLISHED reader: a git dependency until a release carrying
 # `openbim_ids::read` lands on crates.io. To build against a local checkout,
 # add to staging/ids/.cargo/config.toml (untracked):

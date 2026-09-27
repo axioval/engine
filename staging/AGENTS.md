@@ -66,7 +66,11 @@ All four scenarios were verified to fail the gate before it was trusted.
   reports every facet it cannot translate exactly as a `Gap` instead of
   dropping it. An untranslatable applicability facet leaves its whole
   specification without rules, because dropping it would widen the checked
-  population. Depends on `axioval-ir` and the `openbim-ids` reader, which is
+  population. Facets lower onto existing capabilities and selectors only
+  (see `docs/src/ids.md`); a facet no capability decides exactly is a gap.
+  Depends on `axioval-ir`,
+  `axioval-rules` (XML Schema pattern translation only) and the
+  `openbim-ids` reader, which is
   unreleased (openbimrs/ids#5) and is taken from its `feat/ids-reader` branch;
   to build against a local checkout, add a `[patch]` for it in an untracked
   `staging/ids/.cargo/config.toml`. The conformance harness needs the

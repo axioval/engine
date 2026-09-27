@@ -8,14 +8,16 @@
 //!   failure, complete or not;
 //! - a `fail-` case either produces a finding, or its translation reported a
 //!   gap that explains why not. A complete translation with no finding is a
-//!   miss. So is one whose only gap is existence while the model does contain
-//!   an applicable object.
+//!   miss.
+//!
+//! Findings about a whole source count like findings about objects: a
+//! required specification with no applicable object fails that way.
 //!
 //! `invalid-` cases judge the IDS against the IFC schema and are skipped.
 //! The corpus is CC BY-ND 4.0 and is not vendored: point `IDS_TEST_CASES` at
 //! `Documentation/ImplementersDocumentation/TestCases` of
 //! <https://github.com/buildingSMART/IDS> and run
-//! `cargo test -- --ignored corpus`.
+//! `cargo test -- --ignored corpus`. `IDS_CORPUS_VERBOSE` lists every case.
 #![allow(missing_docs, clippy::doc_markdown)]
 
 use std::collections::BTreeMap;
@@ -24,7 +26,7 @@ use std::path::{Path, PathBuf};
 use axioval::default_registry;
 use axioval::engine::{Runtime, compile};
 use axioval::ifc::import_ifc_session;
-use axioval_ids::{Options, Part, Reason, Translation, translate};
+use axioval_ids::{Options, translate};
 
 fn cases() -> Vec<PathBuf> {
     let root = PathBuf::from(
@@ -58,9 +60,6 @@ enum Class {
     SoundPass,
     /// A fail case the rules caught.
     CaughtFail,
-    /// A fail case with no finding, explained by existence: the model has
-    /// no applicable object and reports cannot say so.
-    ExistenceFail,
     /// A fail case with no finding and gaps that may explain it.
     UnjudgedFail,
     /// The adapter refused the model, e.g. an IFC4X3 file.
@@ -69,35 +68,6 @@ enum Class {
     NotEvaluated,
     /// A false failure or an unexplained miss.
     Mismatch,
-}
-
-fn only_existence(translation: &Translation) -> bool {
-    translation
-        .gaps()
-        .all(|(_, gap)| gap.part == Part::Occurrence && gap.reason == Reason::Existence)
-}
-
-/// Objects whose class the applicability names, counted independently of the
-/// engine: the translation selects on entity names only.
-fn applicable_objects(
-    translation: &Translation,
-    session: &axioval::engine::EvidenceSession,
-) -> usize {
-    let names: Vec<&str> = translation
-        .definitions
-        .object_types
-        .values()
-        .map(|concept| concept.name.default.as_str())
-        .collect();
-    session
-        .project()
-        .objects()
-        .filter(|object| {
-            names
-                .iter()
-                .any(|name| object.kind().eq_ignore_ascii_case(name))
-        })
-        .count()
 }
 
 fn classify(case: &Path) -> Option<(Class, String)> {
@@ -131,7 +101,7 @@ fn classify(case: &Path) -> Option<(Class, String)> {
         .run_session(&session, plan)
         .expect("plan runs");
     let findings = report.findings().len();
-    let detail = format!(
+    let mut detail = format!(
         "{} finding(s), {} not evaluated, gaps: [{}]",
         findings,
         report.not_evaluated().len(),
@@ -139,8 +109,18 @@ fn classify(case: &Path) -> Option<(Class, String)> {
             .gaps()
             .map(|(_, gap)| gap.to_string())
             .collect::<Vec<_>>()
-            .join("; ")
+            .join("; "),
     );
+    if std::env::var_os("IDS_CORPUS_VERBOSE").is_some() {
+        for finding in report.findings() {
+            detail.push_str("\n        finding: ");
+            detail.push_str(&finding.message);
+        }
+        for outcome in report.not_evaluated() {
+            detail.push_str("\n        not evaluated: ");
+            detail.push_str(&outcome.message);
+        }
+    }
     let class = match (expected_pass, findings > 0) {
         (true, true) => Class::Mismatch,
         (false, true) => Class::CaughtFail,
@@ -148,13 +128,6 @@ fn classify(case: &Path) -> Option<(Class, String)> {
         (true, false) if translation.is_complete() => Class::ExactPass,
         (true, false) => Class::SoundPass,
         (false, false) if translation.is_complete() => Class::Mismatch,
-        (false, false) if only_existence(&translation) => {
-            if applicable_objects(&translation, &session) == 0 {
-                Class::ExistenceFail
-            } else {
-                Class::Mismatch
-            }
-        }
         (false, false) => Class::UnjudgedFail,
     };
     Some((class, detail))
@@ -162,25 +135,34 @@ fn classify(case: &Path) -> Option<(Class, String)> {
 
 fn run() {
     let mut classes: BTreeMap<Class, Vec<String>> = BTreeMap::new();
+    // Classes per facet directory of the corpus.
+    let mut facets: BTreeMap<String, BTreeMap<Class, usize>> = BTreeMap::new();
     for case in cases() {
         if let Some((class, detail)) = classify(&case) {
             let name = case.file_stem().unwrap().to_string_lossy().into_owned();
+            let facet = case
+                .parent()
+                .and_then(Path::file_name)
+                .map_or_else(String::new, |facet| facet.to_string_lossy().into_owned());
+            *facets.entry(facet).or_default().entry(class).or_default() += 1;
             classes
                 .entry(class)
                 .or_default()
                 .push(format!("{name}: {detail}"));
         }
     }
+    for (facet, counts) in &facets {
+        let shown: Vec<String> = counts
+            .iter()
+            .map(|(class, count)| format!("{class:?} {count}"))
+            .collect();
+        println!("{facet}: {}", shown.join(", "));
+    }
     for (class, cases) in &classes {
         println!("{class:?}: {}", cases.len());
-        if matches!(
-            class,
-            Class::CaughtFail
-                | Class::ExactPass
-                | Class::NotEvaluated
-                | Class::ExistenceFail
-                | Class::ModelRefused
-        ) {
+        if std::env::var_os("IDS_CORPUS_VERBOSE").is_some()
+            || matches!(class, Class::NotEvaluated | Class::ModelRefused)
+        {
             for case in cases {
                 println!("    {case}");
             }

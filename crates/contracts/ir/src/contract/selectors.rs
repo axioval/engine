@@ -59,8 +59,10 @@ pub enum Selector {
     /// Objects by the objects a relationship `path` reaches from them.
     ///
     /// Each step is `Relationship` or `Relationship:direction` (`forward`,
-    /// the default, `backward` or `either`), walked one after another; the
-    /// reached objects are tested against `selector` under `quantifier`.
+    /// the default, `backward` or `either`), walked one after another; a step
+    /// ending in `+` is taken one or more times, reaching every object along
+    /// the relationship's chain. The reached objects are tested against
+    /// `selector` under `quantifier`.
     Related {
         path: Vec<String>,
         /// Which reached objects must match; `any` is omitted when

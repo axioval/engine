@@ -220,6 +220,9 @@ pub(crate) fn resolve(
 pub(crate) struct Step<'a> {
     relationship: &'a str,
     direction: TraversalDirection,
+    /// A trailing `+`: the step is taken one or more times, reaching every
+    /// object along the chain of the relationship.
+    chain: bool,
 }
 
 /// A declared relationship traversal from each anchor.
@@ -228,8 +231,10 @@ pub(crate) struct Step<'a> {
 /// `path` of steps, each `Relationship` or `Relationship:direction`, walked
 /// one after another: `IfcRelVoidsElement:forward` then
 /// `IfcRelFillsElement:forward` goes from a wall through its openings to the
-/// doors and windows filling them. Intermediate objects may be anything; the
-/// objects the last step reaches are restricted to the caller's universe.
+/// doors and windows filling them. A step ending in `+` is taken one or more
+/// times: `IfcRelAggregates:backward+` reaches every whole above an object.
+/// Intermediate objects may be anything; the objects the last step reaches
+/// are restricted to the caller's universe.
 pub(crate) struct Traversal<'a> {
     /// How messages name the traversal: the relationship, or the steps.
     pub(crate) relationship: String,
@@ -254,6 +259,7 @@ impl<'a> Parameters<'a> {
             (Some(relationship), None) => vec![Step {
                 relationship,
                 direction: direction(self.string("direction")?)?,
+                chain: false,
             }],
             (None, Some(path)) => {
                 if self.string("direction")?.is_some() || follow_chain {
@@ -282,7 +288,8 @@ fn direction(value: Option<&str>) -> Result<TraversalDirection, Unavailable> {
     }
 }
 
-/// The steps of a `path`, each `Relationship` or `Relationship:direction`.
+/// The steps of a `path`, each `Relationship` or `Relationship:direction`,
+/// optionally followed by `+` to take the step one or more times.
 ///
 /// A derived identity (`axioval:derived.…`) holds a colon of its own, so
 /// only a colon followed by a direction word ends it.
@@ -292,19 +299,25 @@ fn path_steps(path: &[String]) -> Result<Vec<Step<'_>>, Unavailable> {
     }
     path.iter()
         .map(|step| {
-            let derived = step.trim_start().starts_with(DERIVED_RELATIONSHIP_PREFIX);
+            let trimmed = step.trim();
+            let (step, chain) = match trimmed.strip_suffix('+') {
+                Some(stepped) => (stepped, true),
+                None => (trimmed, false),
+            };
+            let derived = step.starts_with(DERIVED_RELATIONSHIP_PREFIX);
             let (relationship, stated) = match step.rsplit_once(':') {
                 Some((_, stated))
                     if derived && !matches!(stated.trim(), "forward" | "backward" | "either") =>
                 {
-                    (step.as_str(), None)
+                    (step, None)
                 }
                 Some((relationship, stated)) => (relationship, Some(stated)),
-                None => (step.as_str(), None),
+                None => (step, None),
             };
             Ok(Step {
                 relationship: relationship.trim(),
                 direction: direction(stated.map(str::trim))?,
+                chain,
             })
         })
         .collect()
@@ -405,7 +418,8 @@ impl Traversal<'_> {
             let scope = if last { universe } else { &everything[..] };
             let mut reached = std::collections::BTreeSet::new();
             for from in &frontier {
-                let (found, cited) = self.step(service, step, from, scope, self.follow_chain)?;
+                let chain = self.follow_chain || step.chain;
+                let (found, cited) = self.step(service, step, from, scope, chain)?;
                 reached.extend(found);
                 evidence.extend(cited);
             }

@@ -49,6 +49,8 @@ struct Constraints<'r> {
     length: Option<i64>,
     min_length: Option<i64>,
     max_length: Option<i64>,
+    total_digits: Option<i64>,
+    fraction_digits: Option<i64>,
     optional: bool,
     precision: Option<TemporalPrecision>,
 }
@@ -78,6 +80,8 @@ impl<'r> Constraints<'r> {
             length: count("length"),
             min_length: count("min_length"),
             max_length: count("max_length"),
+            total_digits: count("total_digits"),
+            fraction_digits: count("fraction_digits"),
             optional: matches!(
                 rule.parameters.get("optional"),
                 Some(ParameterValue::Boolean { value: true })
@@ -109,6 +113,14 @@ impl<'r> Constraints<'r> {
         {
             return Err("a length is negative".into());
         }
+        // XML Schema: `totalDigits` is a positive integer, `fractionDigits`
+        // a non-negative one.
+        if constraints.total_digits.is_some_and(|digits| digits < 1) {
+            return Err("total_digits is not positive".into());
+        }
+        if constraints.fraction_digits.is_some_and(|digits| digits < 0) {
+            return Err("fraction_digits is negative".into());
+        }
         if constraints.data_type.is_none() && !constraints.constrains_value() {
             return Err("no data type and no value constraint".into());
         }
@@ -120,6 +132,11 @@ impl<'r> Constraints<'r> {
             || !self.patterns.is_empty()
             || self.has_bounds()
             || self.has_lengths()
+            || self.has_digits()
+    }
+
+    fn has_digits(&self) -> bool {
+        self.total_digits.is_some() || self.fraction_digits.is_some()
     }
 
     fn has_bounds(&self) -> bool {
@@ -148,9 +165,11 @@ enum Verdict {
 /// as in `property-data-type`), `values` (any of), `patterns` (XML Schema
 /// regular expressions, any of, whole value), `min_inclusive`,
 /// `max_inclusive`, `min_exclusive`, `max_exclusive`, `length`,
-/// `min_length`, `max_length`, `optional`, and `precision` (`day`, for a date
-/// or date-time value only). All given constraints must
-/// hold. Without `optional`, absence, `null` and blank text are violations;
+/// `min_length`, `max_length`, `total_digits`, `fraction_digits` (for a
+/// number only), `optional`, and `precision` (`day`, for a date or date-time
+/// value only). All given constraints must hold. A decimal's digits are
+/// counted on the shortest decimal that reads back as the same double, the
+/// form a model's literal has. Without `optional`, absence, `null` and blank text are violations;
 /// with it, an absent or `null` property passes and any present value,
 /// empty text included, is checked.
 pub struct PropertyValueConstraint;
@@ -180,7 +199,13 @@ impl RuleCapability for PropertyValueConstraint {
                 ParameterType::StringList,
             ));
         }
-        for name in ["length", "min_length", "max_length"] {
+        for name in [
+            "length",
+            "min_length",
+            "max_length",
+            "total_digits",
+            "fraction_digits",
+        ] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::Integer));
         }
         parameters.push(ParameterDescriptor::optional(
@@ -336,6 +361,17 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
     {
         return invalid("precision applies to a date or date-time value only");
     }
+    if constraints.has_digits()
+        && matches!(
+            value,
+            PropertyValue::String(_)
+                | PropertyValue::Boolean(_)
+                | PropertyValue::Date(_)
+                | PropertyValue::DateTime(_)
+        )
+    {
+        return invalid("total_digits and fraction_digits apply to a number only");
+    }
     match value {
         PropertyValue::Date(_) | PropertyValue::DateTime(_) => temporal_verdict(value, constraints),
         PropertyValue::String(text) => text_verdict(text, constraints),
@@ -373,7 +409,11 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
                 return equal;
             }
             #[allow(clippy::cast_precision_loss)]
-            bounds(Number::Integer(*actual), *actual as f64, constraints)
+            let bounded = bounds(Number::Integer(*actual), *actual as f64, constraints);
+            if !matches!(bounded, Verdict::Meets) {
+                return bounded;
+            }
+            digits(&actual.unsigned_abs().to_string(), constraints)
         }
         PropertyValue::Decimal(actual) => {
             if !constraints.patterns.is_empty() || constraints.has_lengths() {
@@ -391,7 +431,16 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
             if !matches!(equal, Verdict::Meets) {
                 return equal;
             }
-            bounds(Number::Decimal, *actual, constraints)
+            let bounded = bounds(Number::Decimal, *actual, constraints);
+            if !matches!(bounded, Verdict::Meets) || !constraints.has_digits() {
+                return bounded;
+            }
+            if !actual.is_finite() {
+                return invalid("a value that is not finite has no digits");
+            }
+            // Rust prints the shortest decimal that reads back as the same
+            // double, never in exponent notation.
+            digits(&actual.abs().to_string(), constraints)
         }
         PropertyValue::Quantity { .. } => Verdict::Inapplicable(
             NotEvaluatedReason::IncompleteEvidence,
@@ -403,6 +452,34 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
             "the value is a list; compare its elements with a quantified property selector".into(),
         ),
     }
+}
+
+/// `totalDigits` and `fractionDigits` of an unsigned decimal numeral.
+///
+/// As XML Schema counts them: the value is `i / 10^n` with `n` the
+/// fraction digits and `|i|` below `10^totalDigits`, so leading zeros of the
+/// whole part and trailing zeros of the fraction do not count.
+fn digits(numeral: &str, constraints: &Constraints<'_>) -> Verdict {
+    let (whole, fraction) = numeral.split_once('.').unwrap_or((numeral, ""));
+    let whole = whole.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let count = |text: &str| i64::try_from(text.len()).unwrap_or(i64::MAX);
+    let (fraction_digits, total_digits) = (count(fraction), count(whole) + count(fraction));
+    if let Some(limit) = constraints.total_digits
+        && total_digits > limit
+    {
+        return Verdict::Fails(format!(
+            "is {numeral}, with {total_digits} digits, more than {limit}"
+        ));
+    }
+    if let Some(limit) = constraints.fraction_digits
+        && fraction_digits > limit
+    {
+        return Verdict::Fails(format!(
+            "is {numeral}, with {fraction_digits} fraction digits, more than {limit}"
+        ));
+    }
+    Verdict::Meets
 }
 
 /// A date or date-time against lexical date and date-time literals.
@@ -593,7 +670,27 @@ fn parse_double(literal: &str) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_double, parse_integer, within_tolerance};
+    use super::{Constraints, Verdict, digits, parse_double, parse_integer, within_tolerance};
+
+    #[test]
+    fn digits_are_counted_as_xml_schema_counts_them() {
+        let limits = |total, fraction| Constraints {
+            total_digits: total,
+            fraction_digits: fraction,
+            ..Constraints::default()
+        };
+        let meets = |numeral: &str, constraints: &Constraints<'_>| {
+            matches!(digits(numeral, constraints), Verdict::Meets)
+        };
+        assert!(meets("123", &limits(Some(3), None)));
+        assert!(!meets("1234", &limits(Some(3), None)));
+        assert!(meets("120", &limits(Some(3), Some(0))));
+        assert!(meets("0.0012", &limits(Some(4), Some(4))));
+        assert!(!meets("0.0012", &limits(Some(3), None)));
+        assert!(!meets("1.25", &limits(None, Some(1))));
+        assert!(meets("1.25", &limits(Some(3), Some(2))));
+        assert!(meets("0", &limits(Some(1), Some(0))));
+    }
 
     #[test]
     fn number_literals_follow_xml_schema() {

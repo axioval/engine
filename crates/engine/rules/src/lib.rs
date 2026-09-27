@@ -93,6 +93,9 @@ pub use stair_geometry::{RampGeometryCheck, StairGeometryCheck};
 pub use table_allocation::TableAllocation;
 pub use triangle_count::TriangleCountLimit;
 pub use unique_value::UniqueValue;
+/// XML Schema patterns (as IDS and `property-value` write them) in `regex`
+/// syntax, for a property selector's `matches` operator.
+pub use xsd_pattern::translate as translate_xsd_pattern;
 
 /// Registers all maintained built-in capabilities into a host registry.
 ///

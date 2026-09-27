@@ -186,6 +186,46 @@ fn a_refused_relationship_leaves_the_object_undecided() {
 }
 
 #[test]
+fn a_chained_step_reaches_every_whole_above() {
+    // `b1` is part of `a1`, which is part of `s1`; `b2` is part of nothing.
+    let model = || {
+        Model::default()
+            .object("s1", "site")
+            .object("a1", "assembly")
+            .object("b1", "beam")
+            .object("b2", "beam")
+            .edge("aggregates", "s1", "a1")
+            .edge("aggregates", "a1", "b1")
+    };
+    let beams_in = |step: &str| Selector::AllOf {
+        operands: vec![
+            kind("beam"),
+            related(&[step], RelatedQuantifier::Any, kind("site")),
+        ],
+    };
+    assert_eq!(
+        select(model(), beams_in("aggregates:backward")),
+        outcome(&[], &[])
+    );
+    assert_eq!(
+        select(model(), beams_in("aggregates:backward+")),
+        outcome(&["b1"], &[])
+    );
+    // The anchor is never its own relative, even around a chain.
+    let sites = Selector::AllOf {
+        operands: vec![
+            kind("site"),
+            related(
+                &["aggregates:either+"],
+                RelatedQuantifier::Any,
+                kind("site"),
+            ),
+        ],
+    };
+    assert_eq!(select(model(), sites), outcome(&[], &[]));
+}
+
+#[test]
 fn a_malformed_path_is_an_invalid_declaration() {
     for path in [&[][..], &["voids:sideways"]] {
         let selector = related(path, RelatedQuantifier::Any, kind("door"));

@@ -1668,3 +1668,229 @@ impl Case {
         )
     }
 }
+
+/// Rooms #16 (x 0..4) and #26 (x 4.2..8.2) behind a 0.2 m wall, with no
+/// spatial containment stated anywhere. Furniture #36 and #46 stand in #16,
+/// #56 in #26. Door #66 sits in the shared wall, door #76 in the facade at
+/// x -0.2..0, and opening #86 is a void through the shared wall.
+fn rooms_without_containment() -> String {
+    let product = |first: u32, x: f64, length: f64, height: f64, entity: &str| {
+        body(
+            first,
+            x,
+            length,
+            height,
+            &entity.replace("GID", &format!("00000000000000000000{:02}", first + 6)),
+        )
+    };
+    let space = "IFCSPACE('GID',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)";
+    let furniture = "IFCFURNISHINGELEMENT('GID',$,$,$,$,#3,REP,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,#3,REP,$,2.1,4.,$,$,$)";
+    let opening = "IFCOPENINGELEMENT('GID',$,$,$,$,#3,REP,$,.OPENING.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}{}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        product(10, 2.0, 4.0, 3.0, space),
+        product(20, 6.2, 4.0, 3.0, space),
+        product(30, 1.0, 0.5, 0.9, furniture),
+        product(40, 3.0, 0.5, 0.9, furniture),
+        product(50, 7.0, 0.5, 0.9, furniture),
+        product(60, 4.1, 0.1, 2.1, door),
+        product(70, -0.1, 0.1, 2.1, door),
+        product(80, 4.1, 0.2, 2.1, opening),
+    )
+}
+
+/// Runs one `related-count` rule with geometry over
+/// [`rooms_without_containment`]: each `anchor` object has at least
+/// `minimum` `related` objects reached through `relationship`.
+fn derived_count(
+    name: &str,
+    anchor: (&str, &str),
+    related: (&str, &str),
+    relationship: &str,
+    direction: &str,
+    minimum: i64,
+) -> (Output, Value) {
+    let case = Case::new(name);
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    for (id, name) in [anchor, related] {
+        definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
+            "id": format!("axioval:example.ifc.{id}"),
+            "name": {"default": name, "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        });
+    }
+    let declare = |id: &str, kind: &str| {
+        json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": false, "allowedValues": [], "citations": []})
+    };
+    definitions["definitions"]["axioval:example.related-count"] = json!({
+        "id": "axioval:example.related-count",
+        "name": {"default": "Related count", "translations": {}},
+        "description": {"default": "Each anchor has enough related objects.", "translations": {}},
+        "capability": "axioval:capability.related-count",
+        "parameters": {
+            "related_selector": declare("related_selector", "selector"),
+            "minimum": declare("minimum", "integer"),
+            "maximum": declare("maximum", "integer"),
+            "relationship": declare("relationship", "string"),
+            "direction": declare("direction", "string"),
+            "follow_chain": declare("follow_chain", "boolean"),
+            "path": declare("path", "stringList"),
+            "skip_absent_relationship_ends":
+                declare("skip_absent_relationship_ends", "boolean"),
+        },
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("derived-count");
+    rule["definitionId"] = json!("axioval:example.related-count");
+    rule["parameters"] = json!({
+        "related_selector": {"type": "selector", "value": {
+            "kind": "entityType", "objectType": format!("axioval:example.ifc.{}", related.0),
+            "includeSubtypes": true}},
+        "minimum": {"type": "integer", "value": minimum},
+        "relationship": {"type": "string", "value": relationship},
+        "direction": {"type": "string", "value": direction},
+    });
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!(format!("axioval:example.ifc.{}", anchor.0));
+    let model = case.write("model.ifc", &rooms_without_containment());
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let result = std::fs::read_to_string(&saved)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Value::Null);
+    (output, result)
+}
+
+fn finding_ids(result: &Value) -> Vec<String> {
+    result["report"]["findings"]
+        .as_array()
+        .map(|findings| {
+            findings
+                .iter()
+                .map(|finding| {
+                    finding["object_id"]["local_id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned()
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn with_geometry_components_are_counted_in_the_space_that_contains_them() {
+    let (output, result) = derived_count(
+        "geometry-derived-contained",
+        ("space", "IfcSpace"),
+        ("furniture", "IfcFurnishingElement"),
+        "axioval:derived.contained-in-space",
+        "backward",
+        2,
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #16 holds two pieces of furniture; #26 only one.
+    assert_eq!(finding_ids(&result), ["#26"], "{result:#}");
+    let finding = &result["report"]["findings"][0];
+    assert!(
+        finding["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("1 related object(s)"),
+        "{result:#}"
+    );
+    assert!(
+        finding["evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["locator"]
+                .as_str()
+                .unwrap()
+                .starts_with("axioval:derived.contained-in-space")),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_a_door_connects_two_spaces_and_an_exit_one() {
+    let (output, result) = derived_count(
+        "geometry-derived-adjacent",
+        ("door", "IfcDoor"),
+        ("space", "IfcSpace"),
+        "axioval:derived.adjacent-space",
+        "forward",
+        2,
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The internal door #66 reaches both rooms; the exit #76 only #16.
+    assert_eq!(finding_ids(&result), ["#76"], "{result:#}");
+    let evidence = result["report"]["findings"][0]["evidence"]
+        .as_array()
+        .unwrap();
+    assert!(
+        evidence.iter().any(|item| {
+            let locator = item["locator"].as_str().unwrap();
+            locator.contains("/#76:side=-") && locator.contains(":outside")
+        }),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_an_opening_void_connects_the_spaces_it_passes_between() {
+    let (output, result) = derived_count(
+        "geometry-derived-opening",
+        ("opening", "IfcOpeningElement"),
+        ("space", "IfcSpace"),
+        "axioval:derived.adjacent-space",
+        "forward",
+        2,
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+#[test]
+fn with_geometry_a_malformed_derived_relationship_is_not_evaluated() {
+    let (output, result) = derived_count(
+        "geometry-derived-malformed",
+        ("space", "IfcSpace"),
+        ("furniture", "IfcFurnishingElement"),
+        "axioval:derived.contained-in-space;horizontal=-1",
+        "backward",
+        1,
+    );
+    // An invalid request, never an empty count and a finding.
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}

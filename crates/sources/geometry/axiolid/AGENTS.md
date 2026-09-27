@@ -17,6 +17,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the envelope when its plan footprint meets a declared bounding space. The
   declared set is plain `ObjectId` data, so this stays a geometry adapter.
 - `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point. A declared group (`with_group`) measures the union of its members; a member without a body, an unmeasured member or undecided membership refuses, never zero.
+- `src/derived_relationships.rs` implements `DerivedRelationshipService`:
+  element to containing (or nearest) space, opening to the spaces a probe
+  first enters on each side, space to larger covering spaces. Spaces and
+  openings are host-declared `ObjectId`s; bodiless openings are probed through
+  a host-supplied void. Undecided cases (unmeasured or bodiless spaces, points
+  on a boundary, ties, tessellations within reach) refuse the whole answer.
 - `src/vertical_extent.rs` implements `VerticalExtentService`: bottom and top elevations of a mesh's used positions. A tessellation widens each by its chord deviation and is never exact, even at zero deviation.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.

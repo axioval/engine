@@ -214,6 +214,22 @@ be meshed, a group that groups nothing, and a membership the relationship
 service refuses make the footprint unavailable: rules that need it report not
 evaluated, never measure the group as zero.
 
+Relationships the model does not state can be derived from geometry. With
+`--geometry`, every relationship capability accepts the identities
+`axioval:derived.contained-in-space`, `axioval:derived.adjacent-space` and
+`axioval:derived.overlapping-group-space` (see
+[typed host services](./services.md)) as its `relationship` or as a `path`
+step; every other identity still goes to the IFC relationship service. Every
+`IfcSpace` is a space, and every `IfcDoor`, `IfcWindow` and
+`IfcOpeningElement` an opening. An opening element has no body, so the CLI
+meshes its void separately for the derivation alone; a void that cannot be
+meshed makes the derivation refuse for it. For example, `related-count` with
+`relationship: axioval:derived.contained-in-space` and `direction: backward`
+counts the furniture in each space of a model that states no spatial
+containment, and with `axioval:derived.adjacent-space` forward from each door
+counts the spaces it connects. Without `--geometry`, the IFC relationship service
+refuses a derived identity, so its rule is not evaluated.
+
 External-wall validation compares the objects a model declares external with
 the objects on the envelope of a set of bounding spaces. IFC does not say which
 spaces make up the conditioned volume, so `--envelope-zone NAME` names the

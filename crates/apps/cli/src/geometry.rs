@@ -17,6 +17,11 @@
 //!
 //! A group (a zone) has no body, but its plan footprint is the union of its
 //! members', so the bridge also declares every group's membership.
+//!
+//! Relationships derived from geometry (`axioval:derived.*`) need to know
+//! which objects are spaces and which are doors, windows or openings. An
+//! opening occupies no material, so its void is meshed separately and handed
+//! to the derivation alone.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -30,17 +35,18 @@ use axiolid_primitive::Primitive;
 use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
-    AxiolidContactService, AxiolidEnvelopeMembershipService, AxiolidFreeSpaceService,
-    AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService, AxiolidPlanAreaService,
-    AxiolidProximityService, AxiolidSpaceService, AxiolidVerticalExtentService,
+    AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
+    AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService,
+    AxiolidPlanAreaService, AxiolidProximityService, AxiolidSpaceService,
+    AxiolidVerticalExtentService,
 };
 use axioval::engine::{
-    ContactServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession, FreeSpaceServiceHandle,
-    GuardServiceHandle, LinearQuantityServiceHandle, PlanAreaServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
-    VerticalExtentServiceHandle,
+    ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
+    EvidenceSession, FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
+    PlanAreaServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
+    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SourceSnapshot, SpaceServiceHandle,
+    TraversalDirection, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
 };
 use axioval::ir::{ATTRIBUTE_SET, ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -123,6 +129,7 @@ pub fn attach(
     let mut geometry = AxiolidGeometry::new();
     let mut report = GeometryReport::default();
     let mut kinds: BTreeMap<ObjectId, String> = BTreeMap::new();
+    let mut voids: Vec<(ObjectId, Void)> = Vec::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
@@ -132,6 +139,13 @@ pub fn attach(
         let bodiless = !is_a(&kind, "IfcProduct")
             || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&kind, ancestor)));
         if bodiless {
+            if is_a(&kind, "IfcOpeningElement") {
+                let void = entity_id(&id)
+                    .ok_or_else(|| "not a STEP instance id".to_owned())
+                    .and_then(|entity| mesh(&backend, &model, &units, entity))
+                    .and_then(|meshed| meshed.ok_or_else(|| "no body representation".into()));
+                voids.push((id.clone(), void));
+            }
             geometry = geometry.with_no_body(id);
             report.no_body += 1;
             continue;
@@ -189,7 +203,12 @@ pub fn attach(
         None => None,
     };
     let space = space_service(&model, &geometry, &source, &kinds, &is_a);
-    let session = register(session, snapshot, geometry, space, envelope)?;
+    let derived = derived_service(&geometry, &source, &kinds, &is_a, voids);
+    let session = register(session, snapshot, geometry, space, envelope)?
+        .with_derived_relationships(
+            DerivedRelationshipServiceHandle::new(Arc::new(derived)),
+            std::slice::from_ref(snapshot),
+        )?;
     Ok((session, report))
 }
 
@@ -451,6 +470,43 @@ fn envelope_service(
         }
     }
     Ok(service)
+}
+
+/// An opening's meshed void and whether it is exact, or why it has none.
+type Void = Result<(axiolid_mesh::TriMesh, bool), String>;
+
+/// Relationships derived from geometry, over the model's spaces and its
+/// doors, windows and openings.
+///
+/// Every `IfcSpace` is a space and every `IfcDoor`, `IfcWindow` and
+/// `IfcOpeningElement` an opening; both are IFC facts. A void that could not
+/// be meshed is declared unmeasured, so the derivation refuses it rather than
+/// finding no space beside it.
+fn derived_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&str, &str) -> bool,
+    voids: Vec<(ObjectId, Void)>,
+) -> AxiolidDerivedRelationshipService {
+    let mut service = AxiolidDerivedRelationshipService::new(geometry.clone(), source.clone());
+    for (id, kind) in kinds {
+        if is_a(kind, "IfcSpace") {
+            service = service.with_space(id.clone());
+        } else if is_a(kind, "IfcDoor") || is_a(kind, "IfcWindow") {
+            service = service.with_opening(id.clone());
+        }
+    }
+    for (id, void) in voids {
+        service = match void {
+            Ok((mesh, true)) => service.with_opening_void(id, mesh),
+            Ok((mesh, false)) => {
+                service.with_tessellated_opening_void(id, mesh, CHORD_DEVIATION_METRES)
+            }
+            Err(reason) => service.with_unmeasured_opening_void(id, reason),
+        };
+    }
+    service
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {

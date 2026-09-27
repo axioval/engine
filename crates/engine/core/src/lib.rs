@@ -406,6 +406,7 @@ mod classifications;
 mod compiler;
 mod concepts;
 mod contact;
+mod derived_relationships;
 mod envelope_membership;
 mod free_space;
 mod guard;
@@ -434,6 +435,10 @@ pub use concepts::{
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
+};
+pub use derived_relationships::{
+    DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
+    DerivedRelationshipServiceHandle,
 };
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,

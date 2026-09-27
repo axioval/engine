@@ -7,7 +7,8 @@ use std::{
 use axioval_ir::{Project, SourceId};
 use thiserror::Error;
 
-use crate::{ServiceRegistry, ServiceRegistryError};
+use crate::derived_relationships::{DerivedRelationshipServiceHandle, RoutedRelationships};
+use crate::{RelationshipSelectionServiceHandle, ServiceRegistry, ServiceRegistryError};
 
 /// Trusted service that declares the immutable source snapshots it can resolve.
 ///
@@ -212,6 +213,47 @@ impl EvidenceSession {
     ) -> Result<Self, EvidenceSessionError> {
         self.check_bindings(built_from)?;
         self.services.register(service)?;
+        Ok(self)
+    }
+
+    /// Registers a derived-relationship service and routes the session's
+    /// relationship selection through it.
+    ///
+    /// Afterwards the session's [`RelationshipSelectionServiceHandle`]
+    /// answers identities starting with
+    /// [`crate::DERIVED_RELATIONSHIP_PREFIX`] from `service` and every other
+    /// identity from the semantic service registered before, so capabilities
+    /// taking a `relationship` or `path` use derived relationships unchanged.
+    /// Register the semantic service first; one registered afterwards is a
+    /// duplicate. `built_from` is checked as in [`Self::with_host_service`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a binding is missing, repeated or stale, or a
+    /// derived-relationship service is already registered.
+    pub fn with_derived_relationships(
+        mut self,
+        service: DerivedRelationshipServiceHandle,
+        built_from: &[SourceSnapshot],
+    ) -> Result<Self, EvidenceSessionError> {
+        self.check_bindings(built_from)?;
+        let semantic = self
+            .services
+            .get::<RelationshipSelectionServiceHandle>()
+            .cloned();
+        self.services.register(service.clone())?;
+        let snapshots = semantic.as_ref().map_or_else(
+            || built_from.to_vec(),
+            |semantic| semantic.source_snapshots().to_vec(),
+        );
+        self.services
+            .replace(RelationshipSelectionServiceHandle::new(Arc::new(
+                RoutedRelationships {
+                    semantic,
+                    derived: service,
+                    snapshots,
+                },
+            )));
         Ok(self)
     }
 

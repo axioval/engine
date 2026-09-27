@@ -222,6 +222,40 @@ mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even
 for a declared zero deviation. Bodiless and unmeasured objects are refused.
 
+`AxiolidDerivedRelationshipService` derives the relationships of the
+[derived-relationship service](./services.md) from the same meshes. The host
+declares which objects are spaces (`with_space`) and which are doors,
+windows or openings (`with_opening`); an opening the geometry declares
+bodiless is probed through a void shape given with `with_opening_void`
+(`with_tessellated_opening_void`, `with_unmeasured_opening_void`). Spaces must
+be closed solids, since containment is a winding-number test.
+
+- **contained-in-space.** The reference point is the centre of the element's
+  mesh extent. It lies in every space whose winding number there reaches one
+  half. Otherwise the nearest space counts when the offset to its nearest
+  surface point is within both tolerances; two spaces equally near (within
+  1e-9 m) refuse. A reference point within 1e-9 m of a space's surface
+  refuses. A bodiless element occupies no place and lies in no space.
+- **adjacent-space.** The direction through the opening is the narrowest
+  width of its plan footprint's convex hull (rotating calipers); a footprint
+  as wide one way as the other refuses. From each face, at mid-height, a probe
+  sweeps outward `reach` metres, starting 1 µm past the face so a face flush
+  with a room boundary does not start on it. The side's spaces are those
+  entered first; a space holding both starting points encloses the opening (a
+  gross-area space) and is on neither side. Each edge's evidence records the
+  side as `side=+(nx,ny)` or `side=-(nx,ny)` along the canonical normal, and a
+  side that enters nothing records `outside`.
+- **overlapping-group-space.** A space belongs to every declared space with a
+  strictly larger footprint that covers at least the ratio of its own and is
+  vertically within the tolerance. Footprints and overlaps come from the plan
+  overlay the plan-area service uses.
+
+Every derivation compares exact planar bodies: a tessellated subject refuses,
+as does a tessellated space whose enclosing extent comes within the
+derivation's reach of the question. A curved space elsewhere blocks nothing.
+Answers are cached per derivation and subject, so counting per space measures
+each component once.
+
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 
 ## ICDD

@@ -8,6 +8,8 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `relationships.rs` owns exact comparison-candidate requests and request-bound complete selections. The request binds the checked object, canonical candidate universe, and semantic traversal or shared-group query. Providers interpret native relationship structures and must return exact reviewable completeness evidence. Capabilities must not treat the legacy `Object.relationships` map as authoritative.
 
+`derived_relationships.rs` owns relationships derived from geometry: the `axioval:derived.*` identities with their tolerances, the derived-relationship handle, and the routing the session installs over the relationship handle. The handle refuses evidence that does not name its derivation. Derivation algorithms stay in geometry adapters; an unknown derivation or parameter is an invalid request, never an empty answer.
+
 `topology.rs` owns deterministic source-neutral connectivity and route queries over exact typed evidence. It must not infer edges from source relationships or import geometry, IFC, ICDD, Axiolid, or vendor types.
 
 `metric_routing.rs` owns canonical-metre requests, conservative distance bounds, three-valued threshold comparison, and the backend-neutral service handle. Algorithms and native geometry types stay in Axiolid or another geometry provider. A blocked result requires complete exact evidence; a known route through incomplete topology proves existence only.

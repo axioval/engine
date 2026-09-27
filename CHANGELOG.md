@@ -71,6 +71,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ParameterValue`, `ParameterType` and `EngineError` have new variants, and
   `ParameterDefinition` has a `columns` field; it is omitted when empty, so
   existing packages read and write unchanged.
+- **Relationships derived from geometry.** Checks that relate components to
+  the space they stand in, doors and openings to the spaces they connect, or
+  rooms to a larger group space no longer need the model to state those
+  relationships. `DerivedRelationshipServiceHandle` answers the same
+  relationship-selection requests for three identities,
+  `axioval:derived.contained-in-space`, `axioval:derived.adjacent-space` and
+  `axioval:derived.overlapping-group-space`, with their tolerances as
+  `;key=value` parameters and the derivation named in every evidence locator.
+  `EvidenceSession::with_derived_relationships` routes those identities to it
+  and every other one to the semantic service, so every capability taking a
+  `relationship` or `path` (`related-count`, `property-comparison`'s
+  `same_space`, and the rest) uses them unchanged.
+  `AxiolidDerivedRelationshipService` derives them: containment by winding
+  number with a nearest-space fallback, per-side adjacency by a probe swept
+  from each face of the opening (an external door relates to one space and
+  records the outside side), and footprint-overlap grouping. Unmeasured or
+  bodiless spaces, points on a boundary, ties and tessellated geometry near
+  the decision refuse. `axioval check --geometry` declares every `IfcSpace`,
+  `IfcDoor`, `IfcWindow` and `IfcOpeningElement`, meshing opening voids for
+  the derivation alone.
 - **Property comparison along paths, within spaces and buildings.**
   `property-comparison` takes a relationship `path` in `related` mode, and
   new `same_space` and `same_building` modes compare with the objects that

@@ -78,3 +78,35 @@ fn contract_rejects_unknown_fields() {
     );
     assert!(serde_json::from_str::<DefinitionPackage>(&mutated).is_err());
 }
+
+#[test]
+fn property_selector_text_options_default_and_round_trip() {
+    // Without the options a selector reads as before and writes nothing new.
+    let plain = r#"{"kind":"property","propertySet":null,"property":"axioval:example.name","operator":"equals","value":{"type":"string","value":"A"}}"#;
+    let selector: Selector = serde_json::from_str(plain).unwrap();
+    assert!(matches!(
+        selector,
+        Selector::Property {
+            case_sensitive: true,
+            trim: false,
+            ..
+        }
+    ));
+    assert_eq!(
+        serde_json::to_value(&selector).unwrap(),
+        serde_json::from_str::<serde_json::Value>(plain).unwrap()
+    );
+    let folded = r#"{"kind":"property","propertySet":null,"property":"axioval:example.name","operator":"noneOf","value":{"type":"stringList","value":["a","b"]},"caseSensitive":false,"trim":true}"#;
+    let selector: Selector = serde_json::from_str(folded).unwrap();
+    assert_eq!(
+        serde_json::to_value(&selector).unwrap(),
+        serde_json::from_str::<serde_json::Value>(folded).unwrap()
+    );
+    for operator in ["like", "contains", "oneOf", "noneOf"] {
+        let json = plain.replace("\"equals\"", &format!("\"{operator}\""));
+        assert!(
+            serde_json::from_str::<Selector>(&json).is_ok(),
+            "{operator}"
+        );
+    }
+}

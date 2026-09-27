@@ -9,7 +9,8 @@ use regex::{Regex, RegexBuilder};
 
 use crate::selection::select_objects;
 use crate::support::{
-    Parameters, PropertyRef, Tolerance, Unavailable, display, finding, invalid, resolve, undefined,
+    Parameters, PropertyRef, Tolerance, Unavailable, display, exact_f64, finding, invalid, resolve,
+    undefined,
 };
 
 /// Checks one property of each selected object against a declared predicate.
@@ -307,11 +308,6 @@ fn compare(order: Order, left: f64, right: f64, tolerance: &Tolerance) -> bool {
         tolerance.order(left, right)
     };
     ordering.is_some_and(|ordering| order.holds(ordering))
-}
-
-fn exact_f64(value: i64) -> Option<f64> {
-    #[allow(clippy::cast_precision_loss)]
-    (value.unsigned_abs() <= 1 << 53).then_some(value as f64)
 }
 
 fn target(parameters: &Parameters<'_>) -> String {

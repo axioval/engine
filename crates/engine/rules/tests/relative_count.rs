@@ -153,6 +153,8 @@ fn the_rule_selection_bounds_the_counted_objects() {
                 property: "Code".into(),
                 operator: ComparisonOperator::Equals,
                 value: Some(string("A")),
+                case_sensitive: true,
+                trim: false,
             },
             by_code(vec![]),
         ),

@@ -561,6 +561,8 @@ mod scope {
                     property: "LoadBearing".into(),
                     operator: ComparisonOperator::Equals,
                     value: Some(boolean(true)),
+                    case_sensitive: true,
+                    trim: false,
                 },
             ],
         };

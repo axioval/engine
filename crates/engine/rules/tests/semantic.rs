@@ -22,6 +22,8 @@ fn matches(set: &str, name: &str, pattern: &str) -> Selector {
         property: name.into(),
         operator: ComparisonOperator::Matches,
         value: Some(string(pattern)),
+        case_sensitive: true,
+        trim: false,
     }
 }
 
@@ -393,6 +395,8 @@ mod related_count {
             property: "FireRated".into(),
             operator: ComparisonOperator::Equals,
             value: Some(boolean(true)),
+            case_sensitive: true,
+            trim: false,
         };
         let evaluation = model.evaluate(
             &RelatedCount,
@@ -423,6 +427,8 @@ mod related_count {
                             property: "FireRated".into(),
                             operator: ComparisonOperator::Exists,
                             value: None,
+                            case_sensitive: true,
+                            trim: false,
                         }),
                     ),
                     ("relationship", string("bounds")),

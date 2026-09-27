@@ -43,7 +43,9 @@ fn unrated_doors() -> Selector {
                     property_set: Some("Type".into()),
                     property: "Name".into(),
                     operator: ComparisonOperator::Matches,
-                    value: Some(string("^EI\\d+")),
+                    value: Some(string("EI\\d+.*")),
+                    case_sensitive: true,
+                    trim: false,
                 }),
             },
         ],
@@ -61,6 +63,8 @@ fn a_path_reaches_the_doors_filling_a_walls_openings() {
                 property: "IsFireWall".into(),
                 operator: ComparisonOperator::Exists,
                 value: None,
+                case_sensitive: true,
+                trim: false,
             },
             vec![
                 ("related_selector", selector(unrated_doors())),
@@ -81,6 +85,8 @@ fn a_path_reaches_the_doors_filling_a_walls_openings() {
                 property: "IsFireWall".into(),
                 operator: ComparisonOperator::Exists,
                 value: None,
+                case_sensitive: true,
+                trim: false,
             },
             vec![
                 ("related_selector", selector(unrated_doors())),

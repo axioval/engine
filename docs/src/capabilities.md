@@ -65,6 +65,28 @@ Every finding message starts with its sub-check's category code, so results can 
 | `uncovered_top_cap` / `uncovered_bottom_cap` | A cap less than 98 % covered; under 1 % is an error, up to 15 % a warning, otherwise information. |
 | `unallocated_area` | Storey floor area belonging to no space, reported against the storey. |
 
+### Property selectors
+
+A `property` selector (in a rule's selection or any selector-valued parameter) resolves one property exactly, as `property-predicate` does, and compares it with its `value` under an `operator`:
+
+| Operator | `value` | Selects when the resolved value |
+|---|---|---|
+| `exists` | none | is present, even `null` or blank. |
+| `equals`, `notEquals` | boolean, integer, number, quantity, string, enum or reference | equals, or does not equal, the value. |
+| `lessThan`, `lessThanOrEquals`, `greaterThan`, `greaterThanOrEquals` | integer, number, quantity or string | orders against the value; strings by code point. |
+| `matches` | string | matches the regular expression as a whole: `EI\d+` selects `EI30`, not `EI30-T1`. |
+| `like` | string | matches the wildcard pattern as a whole: `*` is any run of characters, `?` one character, and `\` makes the next character literal. |
+| `contains` | string | contains the text. |
+| `oneOf`, `noneOf` | string list | is, or is not, one of the texts. |
+
+Integers and numbers compare with each other. A `quantity` value is written with a unit (`m`, `cm`, `mm`, `km`, `m2`, `cm2`, `mm2`, `m3`, `cm3`, `mm3`, `l`, `rad` or `deg`) and compared in SI with a quantity of the same dimension, allowing the few units in the last place one unit conversion can introduce. Text comparisons are case-sensitive unless `caseSensitive` is `false`, which folds both sides (Unicode lowercase) and makes `matches` and `like` case-insensitive. `trim: true` drops surrounding whitespace from the resolved text first. Both options apply to text comparisons only.
+
+The selector fails closed:
+
+- an exactly absent property, or a `null` value, matches every operator but `exists` as "no", as a comparison presupposes a value;
+- a value of another type than the operator compares (text against an integer, a quantity against a unit-less number or one of another dimension, a boolean with `contains`) leaves the object not evaluated (`InvalidEvidence`), never silently out of the selection; `notEquals` and `noneOf` are no exception;
+- a selector whose `value` does not fit its operator, an unknown unit, an invalid pattern, or a text option on a non-text comparison is an invalid declaration.
+
 ### Numeric tolerance
 
 `property-predicate`, `property-comparison` and `unique-value` take three optional parameters that relax exact numeric comparison. They apply to integers, decimals and quantities; a quantity is compared in its canonical SI unit, so a tolerance on a length is in metres. Text and booleans are never affected, and a tolerance declared with a text, text-list or boolean constant target is an invalid declaration. A definition bound to one of these capabilities must declare all three, as optional parameters (`number`, `number`, `integer`).

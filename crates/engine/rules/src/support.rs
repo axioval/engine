@@ -433,6 +433,12 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
     }
 }
 
+/// `value` as a float, when the conversion is exact (magnitude up to 2^53).
+pub(crate) fn exact_f64(value: i64) -> Option<f64> {
+    #[allow(clippy::cast_precision_loss)]
+    (value.unsigned_abs() <= 1 << 53).then_some(value as f64)
+}
+
 /// A declared quantity in canonical SI: the value and its dimension.
 ///
 /// Units are the ones rule authors write for building checks: lengths
@@ -514,6 +520,19 @@ pub(crate) struct Tolerance {
 const MAX_DECIMALS: i64 = 15;
 
 impl Tolerance {
+    /// Exact up to the binary rounding of one unit conversion.
+    ///
+    /// A quantity declared in `mm` is scaled to metres before it is compared
+    /// with a value the source stated in metres; the product may differ from
+    /// the decimal the author meant in the last place. A few units in the
+    /// last place are equal, anything more is not.
+    pub(crate) fn unit_conversion() -> Self {
+        Self {
+            relative: 4.0 * f64::EPSILON,
+            ..Self::default()
+        }
+    }
+
     /// Whether this is exact comparison: no tolerance and no rounding.
     pub(crate) fn is_exact(&self) -> bool {
         self.decimals.is_none() && self.absolute == 0.0 && self.relative == 0.0

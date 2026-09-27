@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Property selectors on par with `property-predicate`.** Selectors take
+  the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,
+  `oneOf` and `noneOf` (a string list), and the options `caseSensitive`
+  (default `true`) and `trim` (default `false`) for text comparisons.
+  Quantities compare in SI with a quantity of the same dimension, so
+  `2400 mm` selects a length of `2.4 m`. `Selector::property` builds a
+  selector with the default options. **Breaking:** `Selector::Property`
+  has the two new fields; they are omitted from serialized packages when
+  default, so existing packages read and write unchanged. `matches` now
+  matches the whole value, as in `property-predicate`: `EI\d+` no longer
+  selects `EI30-T1` (write `EI\d+.*`). A value of another type than the
+  selector compares (text against a number, a quantity against a unit-less
+  number or another dimension) makes the object not evaluated instead of
+  silently dropping it from the selection, `notEquals` included. A value
+  that does not fit its operator is an invalid declaration.
 - **Relative counts by group, for small counts and at table edges.**
   `relative-count` takes `group_property` to count per property value (a
   location code, say) instead of per anchor, within one source unless

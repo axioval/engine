@@ -7,8 +7,11 @@ use axioval_engine::{
     TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
-use axioval_ir::{Evidence, Object, Property, PropertyValue};
-use regex::Regex;
+use axioval_ir::{Evidence, Object, PropertyValue, QuantityDimension};
+use regex::{Regex, RegexBuilder};
+use std::cmp::Ordering;
+
+use crate::support::{Tolerance, exact_f64, si_quantity};
 
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
@@ -73,13 +76,21 @@ pub(crate) fn selector_matches(
             property,
             operator,
             value,
+            case_sensitive,
+            trim,
         } => property_selector_matches(
             context,
             object,
             property_set.as_deref(),
             property,
-            operator,
-            value.as_ref(),
+            (
+                operator,
+                value.as_ref(),
+                TextOptions {
+                    case_sensitive: *case_sensitive,
+                    trim: *trim,
+                },
+            ),
             evidence,
         ),
     }
@@ -282,18 +293,50 @@ fn classification_matches(
     }
 }
 
+/// How a property selector compares text: case folding and trimming.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TextOptions {
+    pub(crate) case_sensitive: bool,
+    pub(crate) trim: bool,
+}
+
+impl TextOptions {
+    fn is_default(self) -> bool {
+        self.case_sensitive && !self.trim
+    }
+
+    fn fold(self, text: &str) -> String {
+        if self.case_sensitive {
+            text.to_owned()
+        } else {
+            text.to_lowercase()
+        }
+    }
+
+    /// The resolved value as compared: trimmed, then folded, as declared.
+    fn prepare(self, text: &str) -> String {
+        self.fold(if self.trim { text.trim() } else { text })
+    }
+}
+
 fn property_selector_matches(
     context: &RuleContext<'_>,
     object: &Object,
     set: Option<&str>,
     name: &str,
-    operator: &ComparisonOperator,
-    expected: Option<&ParameterValue>,
+    test: (&ComparisonOperator, Option<&ParameterValue>, TextOptions),
     evidence: &mut Vec<Evidence>,
 ) -> Selection {
-    if let Some(message) = selector_declaration_error(operator, expected) {
-        return Selection::NotEvaluated(NotEvaluatedReason::InvalidDeclaration, message);
-    }
+    let (operator, expected, options) = test;
+    let test = match Test::parse(operator, expected, options) {
+        Ok(test) => test,
+        Err(message) => {
+            return Selection::NotEvaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                format!("property selector: {message}"),
+            );
+        }
+    };
     let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
         return Selection::NotEvaluated(
             NotEvaluatedReason::MissingService,
@@ -312,41 +355,15 @@ fn property_selector_matches(
         Ok(PropertyResolution::Present(resolved)) => {
             let property = resolved.property();
             evidence.extend(property.evidence.iter().cloned());
-            if matches!(operator, ComparisonOperator::Exists) {
-                Selection::Match
-            } else if let Some(expected) = expected {
-                match compare_property(property, operator, expected) {
-                    Ok(matches) => verdict(matches),
-                    Err(message) => {
-                        Selection::NotEvaluated(NotEvaluatedReason::InvalidDeclaration, message)
-                    }
-                }
-            } else {
-                Selection::NotEvaluated(
-                    NotEvaluatedReason::InvalidDeclaration,
-                    "property selector comparison has no expected value".into(),
-                )
+            match test.holds(&property.value, options) {
+                Ok(matches) => verdict(matches),
+                Err(message) => Selection::NotEvaluated(
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("property selector on `{name}`: {message}"),
+                ),
             }
         }
         Err(error) => unavailable(error),
-    }
-}
-
-fn selector_declaration_error(
-    operator: &ComparisonOperator,
-    expected: Option<&ParameterValue>,
-) -> Option<String> {
-    match (operator, expected) {
-        (ComparisonOperator::Exists, Some(_)) => {
-            Some("property selector exists operator must not have a value".into())
-        }
-        (ComparisonOperator::Exists, None)
-        | (ComparisonOperator::Matches, Some(ParameterValue::String { .. })) => None,
-        (_, None) => Some("property selector comparison has no expected value".into()),
-        (ComparisonOperator::Matches, Some(_)) => {
-            Some("property selector regex must be a string".into())
-        }
-        (_, Some(_)) => None,
     }
 }
 
@@ -367,70 +384,321 @@ fn unavailable(error: PropertyResolutionError) -> Selection {
     Selection::NotEvaluated(reason, message)
 }
 
-fn compare_property(
-    property: &Property,
-    operator: &ComparisonOperator,
-    expected: &ParameterValue,
-) -> Result<bool, String> {
-    Ok(match operator {
-        ComparisonOperator::Equals => values_equal(&property.value, expected).unwrap_or(false),
-        ComparisonOperator::NotEquals => {
-            values_equal(&property.value, expected).is_some_and(|equal| !equal)
-        }
-        ComparisonOperator::LessThan => {
-            ordered(&property.value, expected).is_some_and(std::cmp::Ordering::is_lt)
-        }
-        ComparisonOperator::LessThanOrEquals => {
-            ordered(&property.value, expected).is_some_and(std::cmp::Ordering::is_le)
-        }
-        ComparisonOperator::GreaterThan => {
-            ordered(&property.value, expected).is_some_and(std::cmp::Ordering::is_gt)
-        }
-        ComparisonOperator::GreaterThanOrEquals => {
-            ordered(&property.value, expected).is_some_and(std::cmp::Ordering::is_ge)
-        }
-        ComparisonOperator::Matches => match (&property.value, expected) {
-            (PropertyValue::String(actual), ParameterValue::String { value }) => Regex::new(value)
-                .map_err(|error| format!("invalid property selector regex: {error}"))?
-                .is_match(actual),
-            _ => false,
-        },
-        ComparisonOperator::Exists => true,
-    })
+#[derive(Clone, Copy, Debug)]
+enum Order {
+    Equal,
+    NotEqual,
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
 }
 
-fn values_equal(actual: &PropertyValue, expected: &ParameterValue) -> Option<bool> {
-    match (actual, expected) {
-        (PropertyValue::Boolean(actual), ParameterValue::Boolean { value }) => {
-            Some(actual == value)
+impl Order {
+    fn of(operator: &ComparisonOperator) -> Option<Self> {
+        Some(match operator {
+            ComparisonOperator::Equals => Self::Equal,
+            ComparisonOperator::NotEquals => Self::NotEqual,
+            ComparisonOperator::LessThan => Self::Less,
+            ComparisonOperator::LessThanOrEquals => Self::LessOrEqual,
+            ComparisonOperator::GreaterThan => Self::Greater,
+            ComparisonOperator::GreaterThanOrEquals => Self::GreaterOrEqual,
+            _ => return None,
+        })
+    }
+
+    fn is_equality(self) -> bool {
+        matches!(self, Self::Equal | Self::NotEqual)
+    }
+
+    fn holds(self, ordering: Ordering) -> bool {
+        match self {
+            Self::Equal => ordering.is_eq(),
+            Self::NotEqual => !ordering.is_eq(),
+            Self::Less => ordering.is_lt(),
+            Self::LessOrEqual => ordering.is_le(),
+            Self::Greater => ordering.is_gt(),
+            Self::GreaterOrEqual => ordering.is_ge(),
         }
-        (PropertyValue::Integer(actual), ParameterValue::Integer { value }) => {
-            Some(actual == value)
-        }
-        (PropertyValue::Decimal(actual), ParameterValue::Number { value }) => {
-            Some(actual.total_cmp(value).is_eq())
-        }
-        (
-            PropertyValue::String(actual),
-            ParameterValue::String { value }
-            | ParameterValue::Enum { value }
-            | ParameterValue::Reference { value },
-        ) => Some(actual == value),
-        _ => None,
     }
 }
 
-fn ordered(actual: &PropertyValue, expected: &ParameterValue) -> Option<std::cmp::Ordering> {
-    match (actual, expected) {
-        (PropertyValue::Integer(actual), ParameterValue::Integer { value }) => {
-            Some(actual.cmp(value))
+/// The declared side of an ordered comparison, in canonical form.
+#[derive(Debug)]
+enum Expected {
+    Boolean(bool),
+    Integer(i64),
+    Number(f64),
+    /// In SI, with its dimension.
+    Quantity(f64, QuantityDimension),
+    /// Folded as declared.
+    Text(String),
+}
+
+/// A property selector's comparison, validated against its declaration.
+#[derive(Debug)]
+enum Test {
+    Exists,
+    Compare(Order, Expected),
+    /// Folded as declared.
+    Contains(String),
+    /// `matches` or `like`, anchored to the whole value.
+    Pattern(Regex),
+    /// Folded as declared; `none` for `noneOf`.
+    Member {
+        texts: Vec<String>,
+        none: bool,
+    },
+}
+
+impl Test {
+    fn parse(
+        operator: &ComparisonOperator,
+        expected: Option<&ParameterValue>,
+        options: TextOptions,
+    ) -> Result<Self, String> {
+        let Some(expected) = expected else {
+            return if matches!(operator, ComparisonOperator::Exists) {
+                if options.is_default() {
+                    Ok(Self::Exists)
+                } else {
+                    Err("`caseSensitive` and `trim` apply to text comparisons only".into())
+                }
+            } else {
+                Err("comparison has no expected value".into())
+            };
+        };
+        let string = |kind: &str| match expected {
+            ParameterValue::String { value } => Ok(value.as_str()),
+            _ => Err(format!("`{}` takes {kind}", operator_name(operator))),
+        };
+        let test = match operator {
+            ComparisonOperator::Exists => {
+                return Err("the exists operator must not have a value".into());
+            }
+            ComparisonOperator::Matches => Self::Pattern(
+                RegexBuilder::new(&format!("^(?:{})$", string("a string")?))
+                    .case_insensitive(!options.case_sensitive)
+                    .build()
+                    .map_err(|error| format!("invalid regular expression: {error}"))?,
+            ),
+            ComparisonOperator::Like => Self::Pattern(
+                RegexBuilder::new(&wildcard(string("a string")?)?)
+                    .case_insensitive(!options.case_sensitive)
+                    .build()
+                    .map_err(|error| format!("invalid wildcard pattern: {error}"))?,
+            ),
+            ComparisonOperator::Contains => Self::Contains(options.fold(string("a string")?)),
+            ComparisonOperator::OneOf | ComparisonOperator::NoneOf => match expected {
+                ParameterValue::StringList { value } => Self::Member {
+                    texts: value.iter().map(|text| options.fold(text)).collect(),
+                    none: matches!(operator, ComparisonOperator::NoneOf),
+                },
+                _ => {
+                    return Err(format!("`{}` takes a string list", operator_name(operator)));
+                }
+            },
+            ordered => {
+                let order = Order::of(ordered).expect("every other operator is ordered");
+                let value = match expected {
+                    ParameterValue::Boolean { value } if order.is_equality() => {
+                        Expected::Boolean(*value)
+                    }
+                    ParameterValue::Integer { value } => Expected::Integer(*value),
+                    ParameterValue::Number { value } if value.is_finite() => {
+                        Expected::Number(*value)
+                    }
+                    ParameterValue::Quantity { value, unit } => {
+                        let (value, dimension) =
+                            si_quantity(*value, unit).map_err(|(_, message)| message)?;
+                        Expected::Quantity(value, dimension)
+                    }
+                    ParameterValue::String { value } => Expected::Text(options.fold(value)),
+                    ParameterValue::Enum { value } | ParameterValue::Reference { value }
+                        if order.is_equality() =>
+                    {
+                        Expected::Text(options.fold(value))
+                    }
+                    _ => {
+                        return Err(format!(
+                            "`{}` does not apply to this value",
+                            operator_name(operator)
+                        ));
+                    }
+                };
+                if !matches!(value, Expected::Text(_)) && !options.is_default() {
+                    return Err("`caseSensitive` and `trim` apply to text comparisons only".into());
+                }
+                Self::Compare(order, value)
+            }
+        };
+        Ok(test)
+    }
+
+    /// Whether `actual` satisfies the test; `Err` when the value's type
+    /// cannot be compared with the declared one, so the object is not
+    /// evaluated rather than silently left out.
+    fn holds(&self, actual: &PropertyValue, options: TextOptions) -> Result<bool, String> {
+        // A comparison presupposes a value: null is no more a match than an
+        // absent property.
+        if matches!(actual, PropertyValue::Null) {
+            return Ok(matches!(self, Self::Exists));
         }
-        (PropertyValue::Decimal(actual), ParameterValue::Number { value }) => {
-            actual.partial_cmp(value)
+        let mismatch = |declared: &str| {
+            Err(format!(
+                "the value is {} but the selector compares {declared}",
+                kind(actual)
+            ))
+        };
+        match self {
+            Self::Exists => Ok(true),
+            Self::Compare(order, expected) => {
+                let ordering = match (expected, actual) {
+                    (Expected::Boolean(expected), PropertyValue::Boolean(actual)) => {
+                        actual.cmp(expected)
+                    }
+                    (Expected::Integer(expected), PropertyValue::Integer(actual)) => {
+                        actual.cmp(expected)
+                    }
+                    (Expected::Integer(expected), PropertyValue::Decimal(actual)) => {
+                        numeric(*actual, exact_f64(*expected))?
+                    }
+                    (Expected::Number(expected), PropertyValue::Decimal(actual)) => {
+                        numeric(*actual, Some(*expected))?
+                    }
+                    (Expected::Number(expected), PropertyValue::Integer(actual)) => {
+                        numeric_integer(*actual, *expected)?
+                    }
+                    (
+                        Expected::Quantity(expected, dimension),
+                        PropertyValue::Quantity {
+                            value,
+                            dimension: held,
+                        },
+                    ) => {
+                        if held != dimension {
+                            return Err(format!(
+                                "a quantity in {} cannot be compared with one in {}",
+                                held.unit_symbol(),
+                                dimension.unit_symbol()
+                            ));
+                        }
+                        Tolerance::unit_conversion()
+                            .order(*value, *expected)
+                            .ok_or("the quantity is not finite")?
+                    }
+                    (Expected::Text(expected), PropertyValue::String(actual)) => {
+                        options.prepare(actual).as_str().cmp(expected.as_str())
+                    }
+                    (Expected::Boolean(_), _) => return mismatch("a boolean"),
+                    (Expected::Integer(_) | Expected::Number(_), _) => {
+                        return mismatch("a unit-less number");
+                    }
+                    (Expected::Quantity(_, dimension), _) => {
+                        return mismatch(&format!("a quantity in {}", dimension.unit_symbol()));
+                    }
+                    (Expected::Text(_), _) => return mismatch("text"),
+                };
+                Ok(order.holds(ordering))
+            }
+            Self::Contains(text) => match actual {
+                PropertyValue::String(actual) => Ok(options.prepare(actual).contains(text)),
+                _ => mismatch("text"),
+            },
+            Self::Pattern(pattern) => match actual {
+                PropertyValue::String(actual) => {
+                    Ok(pattern.is_match(if options.trim { actual.trim() } else { actual }))
+                }
+                _ => mismatch("text"),
+            },
+            Self::Member { texts, none } => match actual {
+                PropertyValue::String(actual) => {
+                    Ok(texts.contains(&options.prepare(actual)) != *none)
+                }
+                _ => mismatch("text"),
+            },
         }
-        (PropertyValue::String(actual), ParameterValue::String { value }) => {
-            Some(actual.cmp(value))
+    }
+}
+
+fn numeric(actual: f64, expected: Option<f64>) -> Result<Ordering, String> {
+    match expected {
+        Some(expected) => actual
+            .partial_cmp(&expected)
+            .ok_or_else(|| "the value is not a finite number".into()),
+        None => Err("an integer beyond 2^53 cannot be compared with a number".into()),
+    }
+}
+
+fn numeric_integer(actual: i64, expected: f64) -> Result<Ordering, String> {
+    let actual = exact_f64(actual)
+        .ok_or_else(|| "an integer beyond 2^53 cannot be compared with a number".to_owned())?;
+    numeric(actual, Some(expected))
+}
+
+fn kind(value: &PropertyValue) -> String {
+    match value {
+        PropertyValue::Null => "null".into(),
+        PropertyValue::Boolean(_) => "a boolean".into(),
+        PropertyValue::Integer(_) => "an integer".into(),
+        PropertyValue::Decimal(_) => "a number".into(),
+        PropertyValue::Quantity { dimension, .. } => {
+            format!("a quantity in {}", dimension.unit_symbol())
         }
-        _ => None,
+        PropertyValue::String(_) => "text".into(),
+    }
+}
+
+fn operator_name(operator: &ComparisonOperator) -> &'static str {
+    match operator {
+        ComparisonOperator::Equals => "equals",
+        ComparisonOperator::NotEquals => "notEquals",
+        ComparisonOperator::LessThan => "lessThan",
+        ComparisonOperator::LessThanOrEquals => "lessThanOrEquals",
+        ComparisonOperator::GreaterThan => "greaterThan",
+        ComparisonOperator::GreaterThanOrEquals => "greaterThanOrEquals",
+        ComparisonOperator::Matches => "matches",
+        ComparisonOperator::Like => "like",
+        ComparisonOperator::Contains => "contains",
+        ComparisonOperator::OneOf => "oneOf",
+        ComparisonOperator::NoneOf => "noneOf",
+        ComparisonOperator::Exists => "exists",
+    }
+}
+
+/// A wildcard pattern as an anchored regular expression.
+///
+/// `*` is any run of characters (none included), `?` exactly one, and a
+/// backslash makes the next character literal (`\*`, `\?`, `\\`). Every
+/// other character is literal.
+fn wildcard(pattern: &str) -> Result<String, String> {
+    let mut out = String::from("(?s)^");
+    let mut chars = pattern.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' => out.push_str(".*"),
+            '?' => out.push('.'),
+            '\\' => {
+                let escaped = chars
+                    .next()
+                    .ok_or("a wildcard pattern ends with a backslash")?;
+                out.push_str(&regex::escape(escaped.encode_utf8(&mut [0; 4])));
+            }
+            other => out.push_str(&regex::escape(other.encode_utf8(&mut [0; 4]))),
+        }
+    }
+    out.push('$');
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wildcard;
+
+    #[test]
+    fn wildcards_translate_to_anchored_literals() {
+        assert_eq!(wildcard("W?-*.1").unwrap(), r"(?s)^W.\-.*\.1$");
+        assert_eq!(wildcard(r"a\*b").unwrap(), r"(?s)^a\*b$");
+        assert!(wildcard("a\\").is_err());
     }
 }

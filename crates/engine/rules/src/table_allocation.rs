@@ -4,12 +4,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, NotEvaluatedReason,
+    ParameterDescriptor, ParameterType, RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Scope};
 
-use crate::counts::{Population, relation_text, tally};
+use crate::counts::{Population, real, relation_text, tally};
 use crate::pairs::severity;
 use crate::plan_area::{Sum, footprint, shown};
 use crate::selection::select_objects;
@@ -217,6 +217,10 @@ pub struct TableAllocation;
 impl RuleCapability for TableAllocation {
     fn id(&self) -> &'static str {
         "axioval:capability.table-allocation"
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
@@ -596,10 +600,12 @@ impl<'a> Declaration<'a> {
                     .count
                     .map(|count| format!("; required exactly {count}"))
                     .unwrap_or_default();
-                report.finding(
+                report.graded(
                     format!("{name} matched no object{place}{required}"),
                     evidence,
                     assigned,
+                    row.count
+                        .map(|count| Deviation::below(real(count), 0.0, 0.0)),
                 );
                 continue;
             }
@@ -607,10 +613,16 @@ impl<'a> Declaration<'a> {
                 let found = i64::try_from(assigned.len()).unwrap_or(i64::MAX);
                 let most = found.saturating_add(i64::try_from(open).unwrap_or(i64::MAX));
                 if found > count || most < count {
-                    report.finding(
+                    let (least, greatest) = (real(found), real(most));
+                    report.graded(
                         format!("{name} has {found} object(s){place}; required exactly {count}"),
                         evidence.clone(),
                         assigned.clone(),
+                        Some(if found > count {
+                            Deviation::above(real(count), least, greatest)
+                        } else {
+                            Deviation::below(real(count), least, greatest)
+                        }),
                     );
                 } else if open > 0 {
                     report.not_evaluated(&format!(
@@ -678,10 +690,16 @@ impl<'a> Declaration<'a> {
         let summed = shown(sum.lower, sum.upper);
         // Objects that may still belong to the row can only add area.
         if sum.lower > high || (open == 0 && sum.upper < low) {
-            report.finding(
+            let deviation = if sum.lower > high {
+                Deviation::above(high, sum.lower, sum.upper)
+            } else {
+                Deviation::below(low, sum.lower, sum.upper)
+            };
+            report.graded(
                 format!("{name} sums {summed} m²{place}; required {required}"),
                 evidence,
                 assigned,
+                Some(deviation),
             );
         } else if open > 0 {
             report.not_evaluated(&format!(
@@ -703,8 +721,15 @@ struct Report<'r, 'e> {
 }
 
 impl Report<'_, '_> {
-    fn finding(&mut self, message: String, evidence: Vec<Evidence>, related: Vec<ObjectId>) {
-        self.evaluation.push_finding(
+    /// A finding of a count or area missing its bound by `deviation`.
+    fn graded(
+        &mut self,
+        message: String,
+        evidence: Vec<Evidence>,
+        related: Vec<ObjectId>,
+        deviation: Option<Deviation>,
+    ) {
+        self.evaluation.push_finding_deviating(
             Finding::new(
                 self.rule.id.clone(),
                 self.scope.clone(),
@@ -713,6 +738,7 @@ impl Report<'_, '_> {
             )
             .with_evidence(evidence)
             .with_related(related),
+            deviation,
         );
     }
 

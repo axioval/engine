@@ -99,6 +99,26 @@ pub struct RuleInstance {
     pub explanatory_images: Vec<ExplanatoryImage>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Severities graded by how far a measured value misses its bound, for
+    /// capabilities that report the deviation; see [`SeverityBand`]. Empty
+    /// keeps the rule's severity and is omitted when serialized.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub severity_bands: Vec<SeverityBand>,
+}
+
+/// One band of a rule's `severityBands`: a finding whose relative deviation
+/// from its bound lies below `below` (and at or above the previous band's
+/// `below`, or zero for the first) takes `severity`.
+///
+/// Bands are ascending; a deviation at or beyond the last band keeps the
+/// rule's severity. The deviation is `|value - bound| / |bound|` for the
+/// bound the value misses. A capability measures it as an interval; one that
+/// straddles bands takes the most severe band it may reach.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SeverityBand {
+    pub below: f64,
+    pub severity: Severity,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

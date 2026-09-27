@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, Deviation, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
@@ -116,6 +116,10 @@ impl RuleCapability for RelatedCount {
         "axioval:capability.related-count"
     }
 
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         vec![
             ParameterDescriptor::optional("related_selector", ParameterType::Selector),
@@ -185,13 +189,24 @@ impl RuleCapability for RelatedCount {
                 (None, None) => unreachable!("parsing requires a bound"),
             };
             if too_few.is_some() || too_many.is_some() {
-                evaluation.push_finding(finding(
-                    rule,
-                    &anchor.id,
-                    format!("{count} related object(s) {via}; required {bound}"),
-                    tally.evidence,
-                    tally.decided,
-                ));
+                // Undecided objects may still count: the count lies in
+                // `[count, most]`.
+                let (least, greatest) = (real(count), real(most));
+                let deviation = match (too_few, too_many) {
+                    (Some(minimum), _) => Deviation::below(real(minimum), least, greatest),
+                    (None, Some(maximum)) => Deviation::above(real(maximum), least, greatest),
+                    (None, None) => unreachable!("a bound was missed"),
+                };
+                evaluation.push_graded_finding(
+                    finding(
+                        rule,
+                        &anchor.id,
+                        format!("{count} related object(s) {via}; required {bound}"),
+                        tally.evidence,
+                        tally.decided,
+                    ),
+                    deviation,
+                );
             } else if undecided {
                 evaluation.push_object_not_evaluated(
                     anchor.id.clone(),
@@ -205,4 +220,11 @@ impl RuleCapability for RelatedCount {
         }
         evaluation
     }
+}
+
+/// A count as a real number for its relative deviation; counts beyond 2^53
+/// round, which moves a deviation by far less than any band.
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn real(count: i64) -> f64 {
+    count as f64
 }

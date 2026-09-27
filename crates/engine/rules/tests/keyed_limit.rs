@@ -16,8 +16,8 @@ use axioval_ir::contract::{ParameterValue, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
 use axioval_rules::KeyedLimit;
 use common::{
-    Model, findings, flagged, id, kind, number, property, rule, source, string, strings,
-    unevaluated,
+    Model, assert_deviation, deviation_of, findings, flagged, id, kind, number, property, rule,
+    source, string, strings, unevaluated,
 };
 
 const ID: &str = "axioval:capability.keyed-limit";
@@ -166,6 +166,12 @@ fn a_compartment_is_limited_by_its_building_fire_class_and_sprinklers() {
         .with("c3", 900.0, 0.0)
         .with("c4", 400.0, 0.0);
     let evaluation = run(model, areas, fire_keys(fire_limits()));
+    // 500 m² against 400 m², 900 m² against 800 m².
+    assert_deviation(deviation_of(&evaluation, "plan area is 500"), (0.25, 0.25));
+    assert_deviation(
+        deviation_of(&evaluation, "plan area is 900"),
+        (0.125, 0.125),
+    );
     assert_eq!(
         findings(&evaluation),
         [
@@ -681,6 +687,9 @@ fn a_window_too_high_above_one_of_its_spaces_floors_is_found() {
         .with("w2", 0.9, 0.0)
         .with("w3", 2.0, 0.0);
     let evaluation = sill(model, bottoms, sill_keys(sill_limits()));
+    // 1.2 m against at most 1 m: 20 % too high.
+    let high = deviation_of(&evaluation, "sill height");
+    assert!(high.0 > 0.19 && high.1 < 0.21, "{high:?}");
     assert_eq!(
         findings(&evaluation),
         [(

@@ -18,17 +18,19 @@ mod handrails;
 mod ramp_ends;
 
 use axioval_engine::{
-    CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, ElevationInterval,
-    FreeSpaceServiceHandle, HeadroomRequest, Landing, LandingEvidence, LandingRequest,
-    MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType, RiserClosure,
-    RuleCapability, RuleContext, SlopedRun, TableColumn, Tread, TreadFlight, TreadFlightRequest,
-    WalkingEnd, WalkingStretch, WalkingSurfaceError, WalkingSurfaceServiceHandle,
+    CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, Deviation,
+    ElevationInterval, FreeSpaceServiceHandle, HeadroomRequest, Landing, LandingEvidence,
+    LandingRequest, MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    RiserClosure, RuleCapability, RuleContext, SlopedRun, TableColumn, Tread, TreadFlight,
+    TreadFlightRequest, WalkingEnd, WalkingStretch, WalkingSurfaceError,
+    WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
+use crate::counts::real;
 use crate::level_spacing::{metres, shown};
-use crate::plan_area::{Verdict, judge};
+use crate::plan_area::{Verdict, deviation, judge};
 use crate::selection::select_objects;
 use crate::support::table::Row;
 use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
@@ -415,7 +417,27 @@ fn shown_ratio(interval: MeasuredInterval) -> String {
 enum Check {
     Pass,
     Fail(String),
+    /// A failure of a value missing a bound by the deviation.
+    Graded(String, Deviation),
     Undecided(String),
+}
+
+impl Check {
+    /// A failure, graded when its deviation is known.
+    fn failed(message: String, deviation: Option<Deviation>) -> Self {
+        match deviation {
+            Some(deviation) => Self::Graded(message, deviation),
+            None => Self::Fail(message),
+        }
+    }
+}
+
+/// The worse of two optional deviations.
+fn worse(one: Option<Deviation>, other: Option<Deviation>) -> Option<Deviation> {
+    match (one, other) {
+        (Some(one), Some(other)) => Some(one.worst(other)),
+        (one, other) => one.or(other),
+    }
 }
 
 /// Every `values` interval against `range`, each named `label n of N`.
@@ -436,6 +458,7 @@ fn every_measured(
     let (low, high) = (minimum.map(|m| m - slack), maximum.map(|m| m + slack));
     let total = values.len();
     let mut failing = Vec::new();
+    let mut missed = None;
     let mut undecided = Vec::new();
     let mut unmeasured = Vec::new();
     for (index, value) in values.iter().enumerate() {
@@ -452,13 +475,19 @@ fn every_measured(
         let named = format!("{label} {} of {total} is {measured}", index + 1);
         match judge(value.lower(), value.upper(), low, high) {
             Verdict::Pass => {}
-            Verdict::Fail(_) => failing.push(named),
+            Verdict::Fail(_) => {
+                failing.push(named);
+                missed = worse(
+                    missed,
+                    deviation(value.lower(), value.upper(), minimum, maximum),
+                );
+            }
             Verdict::Undecided(_) => undecided.push(named),
         }
     }
     let bound = bound_words(minimum, maximum, unit);
     if !failing.is_empty() {
-        Check::Fail(format!("{}; {bound} required", failing.join(", ")))
+        Check::failed(format!("{}; {bound} required", failing.join(", ")), missed)
     } else if !undecided.is_empty() || !unmeasured.is_empty() {
         let mut message = Vec::new();
         if !undecided.is_empty() {
@@ -558,7 +587,10 @@ fn uniform(
     );
     match judge(lower, upper, None, Some(tolerance + slack)) {
         Verdict::Pass => Check::Pass,
-        Verdict::Fail(_) => Check::Fail(format!("{measured}; at most {} allowed", unit(tolerance))),
+        Verdict::Fail(_) => Check::Graded(
+            format!("{measured}; at most {} allowed", unit(tolerance)),
+            Deviation::above(tolerance, lower, upper),
+        ),
         Verdict::Undecided(_) => Check::Undecided(format!(
             "{measured}, which straddles the tolerance {}",
             unit(tolerance)
@@ -580,6 +612,8 @@ fn report(
             Check::Fail(message) => {
                 evaluation.push_finding(finding(rule, object, message, evidence, related));
             }
+            Check::Graded(message, deviation) => evaluation
+                .push_graded_finding(finding(rule, object, message, evidence, related), deviation),
             Check::Undecided(message) => evaluation.push_object_not_evaluated(
                 object.clone(),
                 NotEvaluatedReason::IncompleteEvidence,
@@ -665,7 +699,10 @@ impl Clearance<'_> {
             self.relation,
         );
         match judge(clearance.lower(), clearance.upper(), Some(minimum), None) {
-            Verdict::Fail(_) => Check::Fail(format!("{measured}; {required}")),
+            Verdict::Fail(_) => Check::Graded(
+                format!("{measured}; {required}"),
+                Deviation::below(minimum, clearance.lower(), clearance.upper()),
+            ),
             Verdict::Pass if !undecided => Check::Pass,
             Verdict::Pass => Check::Undecided(format!("{measured}{pending}")),
             Verdict::Undecided(_) => {
@@ -756,7 +793,10 @@ fn flight_width(width: MeasuredInterval, (minimum, maximum): Range, slack: f64) 
         maximum.map(|m| m + slack),
     ) {
         Verdict::Pass => Check::Pass,
-        Verdict::Fail(_) => Check::Fail(format!("{measured}; {bound} required")),
+        Verdict::Fail(_) => Check::failed(
+            format!("{measured}; {bound} required"),
+            deviation(width.lower(), width.upper(), minimum, maximum),
+        ),
         Verdict::Undecided(_) => Check::Undecided(format!("{measured}, which straddles {bound}")),
     }
 }
@@ -940,6 +980,21 @@ struct Dimension<'a> {
 }
 
 impl Dimension<'_> {
+    /// How far the dimension falls short of its requirement, the larger of
+    /// the stated minimum and the walking width, relative to it.
+    fn shortfall(&self) -> Option<Deviation> {
+        let stated = self.stated.unwrap_or(0.0);
+        let (low, high) = self.walking.map_or((stated, stated), |walking| {
+            (stated.max(walking.lower()), stated.max(walking.upper()))
+        });
+        let (lower, upper) = (self.value.lower(), self.value.upper());
+        // A shortfall relative to the requirement grows with it.
+        Deviation::try_new(
+            Deviation::below(low, lower, upper).lower(),
+            Deviation::below(high, lower, upper).upper(),
+        )
+    }
+
     /// The dimension against its requirement; with `pending`, an object the
     /// selection could not decide might carry a larger landing, so a
     /// shortfall is not evaluated.
@@ -966,7 +1021,7 @@ impl Dimension<'_> {
             Verdict::Pass => Check::Pass,
             Verdict::Fail(_) => match pending {
                 Some(pending) => Check::Undecided(format!("{measured}; {required}{pending}")),
-                None => Check::Fail(format!("{measured}; {required}")),
+                None => Check::failed(format!("{measured}; {required}"), self.shortfall()),
             },
             Verdict::Undecided(_) => {
                 Check::Undecided(format!("{measured}, which straddles {required}"))
@@ -1044,6 +1099,10 @@ impl<'a> StairConfig<'a> {
 impl RuleCapability for StairGeometryCheck {
     fn id(&self) -> &'static str {
         "axioval:capability.stair-geometry"
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
@@ -1281,9 +1340,20 @@ fn stair_checks(
                 (_, Some(maximum)) => format!("at most {maximum}"),
                 (None, None) => String::new(),
             };
-            push(Check::Fail(format!(
-                "the flight has {number} risers; {words} allowed"
-            )));
+            let count = |value: usize| real(i64::try_from(value).unwrap_or(i64::MAX));
+            let missed = match (minimum.filter(|_| too_few), maximum.filter(|_| too_many)) {
+                (Some(minimum), _) => {
+                    Deviation::below(count(minimum), count(number), count(number))
+                }
+                (None, Some(maximum)) => {
+                    Deviation::above(count(maximum), count(number), count(number))
+                }
+                (None, None) => unreachable!("a bound was missed"),
+            };
+            push(Check::Graded(
+                format!("the flight has {number} risers; {words} allowed"),
+                missed,
+            ));
         }
     }
     if let Some(maximum) = config.maximum_rise {
@@ -1292,9 +1362,10 @@ fn stair_checks(
         push(
             match judge(rise.lower(), rise.upper(), None, Some(maximum + slack)) {
                 Verdict::Pass => Check::Pass,
-                Verdict::Fail(_) => {
-                    Check::Fail(format!("{measured}; at most {} allowed", metres(maximum)))
-                }
+                Verdict::Fail(_) => Check::Graded(
+                    format!("{measured}; at most {} allowed", metres(maximum)),
+                    Deviation::above(maximum, rise.lower(), rise.upper()),
+                ),
                 Verdict::Undecided(_) => Check::Undecided(format!(
                     "{measured}, which straddles at most {}",
                     metres(maximum)
@@ -1423,6 +1494,10 @@ impl<'a> RampConfig<'a> {
 impl RuleCapability for RampGeometryCheck {
     fn id(&self) -> &'static str {
         "axioval:capability.ramp-geometry"
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
@@ -1658,6 +1733,19 @@ fn slope_slack(run: &SlopedRun) -> f64 {
     slack(run_scale(run)) * (1.0 + run.slope().upper()) / length
 }
 
+/// How far a run violating `limit` misses it: the worst of its failing
+/// quantities, each relative to its bound.
+fn missed(limit: &SlopeLimit, run: &SlopedRun) -> Option<Deviation> {
+    let (slope, length, rise) = (run.slope(), run.length(), run.rise());
+    let over = |value: MeasuredInterval, maximum: Option<f64>| {
+        deviation(value.lower(), value.upper(), None, maximum)
+    };
+    worse(
+        over(slope, Some(limit.slope)),
+        worse(over(length, limit.length), over(rise, limit.rise)),
+    )
+}
+
 /// Whether one row holds for a run: `Some(true)` holds, `Some(false)`
 /// violated, `None` undecided.
 fn holds(limit: &SlopeLimit, run: &SlopedRun) -> Option<bool> {
@@ -1721,7 +1809,19 @@ fn slope_limits(limits: &[SlopeLimit], run: &SlopedRun, index: usize, total: usi
         .collect::<Vec<_>>()
         .join("; or ");
     if verdicts.iter().all(|verdict| *verdict == Some(false)) {
-        Check::Fail(format!("{measured}; required {rows}"))
+        // Any row would do, so the run misses by as little as the nearest
+        // row; a row failing only within the rounding slack grades nothing.
+        let nearest = limits
+            .iter()
+            .map(|limit| missed(limit, run))
+            .try_fold(None, |nearest: Option<Deviation>, missed| {
+                let missed = missed?;
+                Some(Some(
+                    nearest.map_or(missed, |nearest| nearest.least(missed)),
+                ))
+            })
+            .flatten();
+        Check::failed(format!("{measured}; required {rows}"), nearest)
     } else {
         Check::Undecided(format!(
             "{measured}, which straddles a slope limit ({rows})"

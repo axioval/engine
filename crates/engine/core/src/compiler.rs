@@ -12,6 +12,7 @@ use axioval_ir::contract::{
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
 use crate::concepts::{ConceptCatalog, ConceptKind};
+use crate::refinement::{RuleRefinement, validate_bands};
 use crate::{
     CapabilityRegistry, CompiledRule, DeferredRule, EngineError, ExecutionPlan,
     ParameterDescriptor, ParameterType, TableColumn,
@@ -41,6 +42,7 @@ pub fn compile(
     let mut ids = BTreeSet::new();
     let mut rules = Vec::new();
     let mut deferred = Vec::new();
+    let mut refinements = BTreeMap::new();
     for rule in authored.into_iter().filter(|rule| rule.enabled) {
         if !ids.insert(rule.id.as_str()) {
             return Err(EngineError::DuplicateRule(rule.id.clone()));
@@ -54,6 +56,10 @@ pub fn compile(
         }
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
+        let refinement = refinement(registry, rule, &definition.capability)?;
+        if !refinement.is_empty() {
+            refinements.insert(id.clone(), refinement);
+        }
         match applicability_selector(&concepts, rule)? {
             Ok(selector) => rules.push(CompiledRule {
                 id,
@@ -76,6 +82,33 @@ pub fn compile(
         rules,
         deferred,
         concepts: Arc::new(concepts),
+        refinements,
+    })
+}
+
+/// What `rule` asks of its outcomes, checked against the capability.
+fn refinement(
+    registry: &CapabilityRegistry,
+    rule: &RuleInstance,
+    capability: &str,
+) -> Result<RuleRefinement, EngineError> {
+    let invalid = |detail: String| EngineError::InvalidRefinement {
+        rule: rule.id.clone(),
+        detail,
+    };
+    if !rule.severity_bands.is_empty() {
+        validate_bands(&rule.severity_bands).map_err(invalid)?;
+        let grades = registry
+            .get(capability)
+            .is_some_and(|capability| capability.grades_deviation());
+        if !grades {
+            return Err(invalid(format!(
+                "capability `{capability}` reports no deviation to grade by `severityBands`"
+            )));
+        }
+    }
+    Ok(RuleRefinement {
+        severity_bands: rule.severity_bands.clone(),
     })
 }
 

@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, MetricPoint,
+    CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, Deviation, MetricPoint,
     MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan, PlanSpanServiceHandle,
     RuleCapability, RuleContext, TableColumn, VerticalExtentServiceHandle,
@@ -204,6 +204,10 @@ impl RuleCapability for SpaceDistance {
         "axioval:capability.space-distance"
     }
 
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         vec![
             ParameterDescriptor::required("distances", ParameterType::Table(COLUMNS)),
@@ -273,7 +277,9 @@ impl RuleCapability for SpaceDistance {
             };
             for (index, row) in applicable {
                 match judge.row(space, index, row) {
-                    Ok(Some(found)) => evaluation.push_finding(found),
+                    Ok(Some((found, deviation))) => {
+                        evaluation.push_graded_finding(found, deviation);
+                    }
                     Ok(None) => {}
                     Err((reason, message)) => evaluation.push_object_not_evaluated(
                         space.id.clone(),
@@ -758,7 +764,7 @@ impl Judge<'_, '_> {
         space: &Object,
         index: usize,
         row: &Row<'_>,
-    ) -> Result<Option<Finding>, Unavailable> {
+    ) -> Result<Option<(Finding, Deviation)>, Unavailable> {
         let candidates = self.candidates(space, index, row)?;
         let nearest = match row.measure {
             Measure::Straight => self.nearest_straight(&space.id, &candidates),
@@ -769,12 +775,10 @@ impl Judge<'_, '_> {
         if let Some(maximum) = row.maximum
             && least > maximum
         {
-            return Ok(Some(self.too_far(
-                space,
-                row,
-                &candidates,
-                &nearest,
-                maximum,
+            // No reachable destination is infinitely far.
+            return Ok(Some((
+                self.too_far(space, row, &candidates, &nearest, maximum),
+                Deviation::above(maximum, least, most),
             )));
         }
         if let Some(minimum) = row.minimum
@@ -786,16 +790,19 @@ impl Judge<'_, '_> {
                 .expect("a finite upper bound comes from a sure destination");
             let mut evidence = cited.clone();
             evidence.push(distance.evidence().clone());
-            return Ok(Some(finding(
-                self.rule,
-                &space.id,
-                format!(
-                    "{id} is {} m away {how}; {} requires at least {minimum} m",
-                    shown(distance.lower(), distance.upper()),
-                    row.name
+            return Ok(Some((
+                finding(
+                    self.rule,
+                    &space.id,
+                    format!(
+                        "{id} is {} m away {how}; {} requires at least {minimum} m",
+                        shown(distance.lower(), distance.upper()),
+                        row.name
+                    ),
+                    evidence,
+                    vec![id.clone()],
                 ),
-                evidence,
-                vec![id.clone()],
+                Deviation::below(minimum, least, most),
             )));
         }
         let within = row.maximum.is_none_or(|maximum| most <= maximum);

@@ -22,8 +22,8 @@ use axioval_ir::contract::{ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId};
 use axioval_rules::SpaceDistance;
 use common::{
-    Model, boolean, findings, id, kind, number, rule, selector, source, string, strings,
-    unevaluated,
+    Model, assert_deviation, boolean, deviation_of, findings, id, kind, number, rule, selector,
+    source, string, strings, unevaluated,
 };
 
 const ID: &str = "axioval:capability.space-distance";
@@ -365,6 +365,8 @@ fn a_walking_distance_too_long_is_found() {
             .iter()
             .any(|item| item.locator == "route:o1:t1")
     );
+    // 21 to 22.5 m against 20 m: 5 % to 12.5 % too far.
+    assert_deviation(deviation_of(&evaluation, "the nearest"), (0.05, 0.125));
 
     // Within 25 m it passes: the upper bound meets the maximum.
     let evaluation = run(
@@ -481,6 +483,7 @@ fn a_destination_too_close_is_found() {
             )
         )]
     );
+    assert_deviation(deviation_of(&evaluation, &id("t1").to_string()), (0.4, 0.4));
 }
 
 #[test]

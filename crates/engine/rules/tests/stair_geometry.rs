@@ -21,7 +21,8 @@ use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRo
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
 use axioval_rules::{RampGeometryCheck, StairGeometryCheck};
 use common::{
-    Model, boolean, findings, id, kind, number, rule, selector, source, string, unevaluated,
+    Model, assert_deviation, boolean, deviation_of, findings, id, kind, number, rule, selector,
+    source, string, unevaluated,
 };
 
 fn metres(value: f64) -> ParameterValue {
@@ -636,6 +637,12 @@ fn too_many_risers_and_too_high_a_flight_are_found() {
             "the flight rises 0.68 m; at most 0.6 m allowed",
         ]
     );
+    assert_deviation(
+        deviation_of(&evaluation, "the flight has 4 risers"),
+        (1.0 / 3.0, 1.0 / 3.0),
+    );
+    let rise = deviation_of(&evaluation, "the flight rises 0.68 m");
+    assert!(rise.0 > 0.13 && rise.1 < 0.14, "{rise:?}");
 }
 
 #[test]
@@ -798,6 +805,8 @@ fn a_ramp_too_steep_for_its_run_is_found() {
         evaluation.findings()[0].evidence[0].locator,
         "sloped-runs:steep"
     );
+    // The nearest row: 3 m over its 2 m run, 50 % beyond it.
+    assert_deviation(deviation_of(&evaluation, "run 1 of 1"), (0.5, 0.5));
     assert!(evaluation.not_evaluated_outcomes().is_empty());
 }
 

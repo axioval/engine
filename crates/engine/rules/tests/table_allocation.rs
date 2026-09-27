@@ -15,7 +15,8 @@ use axioval_ir::{
 };
 use axioval_rules::TableAllocation;
 use common::{
-    Model, findings, id, integer, kind, property, rule, selector, source, string, unevaluated,
+    Model, assert_deviation, deviation_of, findings, id, integer, kind, property, rule, selector,
+    source, string, unevaluated,
 };
 
 const ID: &str = "axioval:capability.table-allocation";
@@ -365,6 +366,8 @@ fn the_summed_area_of_a_row_lies_within_the_tolerance() {
         ]
     );
     assert_eq!(evaluation.findings()[1].related, [id("a1"), id("a2")]);
+    // 32 m² against at most 31 m².
+    assert_deviation(deviation_of(&evaluation, "row 1"), (1.0 / 31.0, 1.0 / 31.0));
     assert!(evaluation.not_evaluated_outcomes().is_empty());
 }
 

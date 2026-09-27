@@ -16,6 +16,7 @@ use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId, SourceId};
 
 pub mod doors;
+pub mod runtime;
 
 pub fn source() -> SourceId {
     SourceId::new("test", "model").unwrap()
@@ -391,4 +392,31 @@ pub fn unevaluated(
             )
         })
         .collect()
+}
+
+/// The relative deviation the finding whose message starts with `message`
+/// was graded by, as `(lower, upper)`.
+pub fn deviation_of(evaluation: &CapabilityEvaluation, message: &str) -> (f64, f64) {
+    let index = evaluation
+        .findings()
+        .iter()
+        .position(|finding| finding.message.starts_with(message))
+        .unwrap_or_else(|| panic!("no finding starts with {message:?}"));
+    let deviation = evaluation
+        .deviation(index)
+        .unwrap_or_else(|| panic!("{message:?} is not graded"));
+    (deviation.lower(), deviation.upper())
+}
+
+/// Asserts `found` holds `expected` within a rounding.
+pub fn assert_deviation(found: (f64, f64), expected: (f64, f64)) {
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * b.abs().max(1.0);
+    assert!(
+        found.0 <= expected.0 && expected.1 <= found.1,
+        "{found:?} does not hold {expected:?}"
+    );
+    assert!(
+        near(found.0, expected.0) && near(found.1, expected.1),
+        "{found:?} is wider than {expected:?}"
+    );
 }

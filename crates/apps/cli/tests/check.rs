@@ -1542,6 +1542,17 @@ fn plan_area(
     subject: (&str, &str),
     parameters: &Value,
 ) -> (Output, Value) {
+    plan_area_with(name, model, subject, parameters, &json!({}))
+}
+
+/// [`plan_area`] with `extra` fields on the rule, such as `severityBands`.
+fn plan_area_with(
+    name: &str,
+    model: &str,
+    subject: (&str, &str),
+    parameters: &Value,
+    extra: &Value,
+) -> (Output, Value) {
     let case = Case::new(name);
     let definitions = case.definitions(true);
     let mut definitions: Value =
@@ -1585,6 +1596,9 @@ fn plan_area(
     rule["parameters"] = parameters.clone();
     rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
         json!(format!("axioval:example.ifc.{}", subject.0));
+    for (field, value) in extra.as_object().into_iter().flatten() {
+        rule[field] = value.clone();
+    }
     let model = case.write("model.ifc", model);
     let definitions = case.write("definitions.json", &definitions.to_string());
     let ruleset = case.write("ruleset.json", &ruleset.to_string());
@@ -1657,6 +1671,39 @@ fn with_geometry_plan_area_bounds_each_space_boundary_included() {
         result["report"]["findings"][0]["message"], "plan area is 16 m²; required at most 15.99 m²",
         "{result:#}"
     );
+}
+
+#[test]
+fn with_geometry_severity_bands_grade_an_area_by_how_far_it_misses() {
+    // Every space with a body measures 16 m²: 0.06 % over 15.99 m², 6.7 %
+    // over 15 m².
+    let number = |value: f64| json!({"type": "number", "value": value});
+    let bands = json!({"severityBands": [
+        {"below": 0.05, "severity": "info"},
+        {"below": 0.1, "severity": "warning"},
+    ]});
+    let severities = |result: &Value| -> Vec<String> {
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| finding["severity"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    for (name, maximum, severity) in [
+        ("geometry-plan-area-band-info", 15.99, "info"),
+        ("geometry-plan-area-band-warning", 15.0, "warning"),
+    ] {
+        let (output, result) = plan_area_with(
+            name,
+            &spaces_in_a_zone(false),
+            ("space", "IfcSpace"),
+            &json!({"maximum": number(maximum)}),
+            &bands,
+        );
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+        assert_eq!(severities(&result), [severity; 3], "{result:#}");
+    }
 }
 
 #[test]

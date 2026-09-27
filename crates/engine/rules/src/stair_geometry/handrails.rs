@@ -13,15 +13,15 @@
 use std::collections::BTreeSet;
 
 use axioval_engine::{
-    HandrailEvidence, HandrailRequest, MeasuredInterval, ParameterDescriptor, ParameterType,
-    RailMeasurement, RailSide, WalkingStretch, WalkingSurfaceServiceHandle,
+    Deviation, HandrailEvidence, HandrailRequest, MeasuredInterval, ParameterDescriptor,
+    ParameterType, RailMeasurement, RailSide, WalkingStretch, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::ObjectId;
 use axioval_ir::contract::Selector;
 
 use super::{Check, Checks, Range, bound_words, length, range, service_error, slack};
 use crate::level_spacing::{metres, shown};
-use crate::plan_area::{Verdict, judge};
+use crate::plan_area::{Verdict, deviation, judge};
 use crate::support::{Parameters, Unavailable, invalid};
 
 /// A rail's top rising or falling less than this over its extension is
@@ -267,7 +267,15 @@ fn height(
         );
         let check = match judge(value.lower(), value.upper(), limit.0, limit.1) {
             Verdict::Pass => Check::Pass,
-            Verdict::Fail(_) => Check::Fail(format!("{measured}; {bound} required")),
+            Verdict::Fail(_) => Check::failed(
+                format!("{measured}; {bound} required"),
+                deviation(
+                    value.lower(),
+                    value.upper(),
+                    limit.0.and(minimum),
+                    limit.1.and(maximum),
+                ),
+            ),
             Verdict::Undecided(_) => {
                 Check::Undecided(format!("{measured}, which straddles {bound}"))
             }
@@ -311,9 +319,9 @@ impl Judged<'_> {
     /// piece of the handrail: `why` says what it may do.
     fn continued(&self, check: Check, why: &str) -> Check {
         match check {
-            Check::Fail(message) if self.undecided => Check::Undecided(format!(
-                "{message}; a rail the selection could not decide may {why}"
-            )),
+            Check::Fail(message) | Check::Graded(message, _) if self.undecided => Check::Undecided(
+                format!("{message}; a rail the selection could not decide may {why}"),
+            ),
             other => other,
         }
     }
@@ -349,7 +357,7 @@ impl Judged<'_> {
             }
             for end in [End::Bottom, End::Top] {
                 let check = match self.extension(rail, measurement, end, minimum) {
-                    Check::Fail(message) => Check::Undecided(format!(
+                    Check::Fail(message) | Check::Graded(message, _) => Check::Undecided(format!(
                         "{message}; it reaches over the middle of {}, so it may be one piece of a \
                          longer rail",
                         self.along.label
@@ -409,7 +417,10 @@ impl Judged<'_> {
             Some(minimum - self.slack),
             None,
         ) {
-            Verdict::Fail(_) => Check::Fail(format!("{measured}; {required}")),
+            Verdict::Fail(_) => Check::Graded(
+                format!("{measured}; {required}"),
+                Deviation::below(minimum, reach.lower(), reach.upper()),
+            ),
             Verdict::Undecided(_) => {
                 Check::Undecided(format!("{measured}, which straddles {required}"))
             }
@@ -462,7 +473,10 @@ impl Judged<'_> {
                     Some(maximum + 2.0 * self.slack),
                 ) {
                     Verdict::Pass => Check::Pass,
-                    Verdict::Fail(_) => Check::Fail(format!("{measured}; {allowed}")),
+                    Verdict::Fail(_) => Check::Graded(
+                        format!("{measured}; {allowed}"),
+                        Deviation::above(maximum, gap.lower(), gap.upper()),
+                    ),
                     Verdict::Undecided(_) => {
                         Check::Undecided(format!("{measured}, which straddles {allowed}"))
                     }

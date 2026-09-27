@@ -11,7 +11,8 @@ use axioval_rules::{
     SelectorConformance, UniqueValue, register_builtins,
 };
 use common::{
-    Model, boolean, findings, flagged, integer, kind, property, rule, selector, string, unevaluated,
+    Model, assert_deviation, boolean, deviation_of, findings, flagged, integer, kind, property,
+    rule, selector, string, unevaluated,
 };
 
 const ATTR: &str = axioval_ir::ATTRIBUTE_SET;
@@ -387,6 +388,8 @@ mod related_count {
             ]
         );
         assert_eq!(evaluation.findings()[0].related.len(), 2);
+        assert_deviation(deviation_of(&evaluation, "2 related"), (1.0, 1.0));
+        assert_deviation(deviation_of(&evaluation, "0 related"), (1.0, 1.0));
     }
 
     #[test]

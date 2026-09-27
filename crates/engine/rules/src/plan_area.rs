@@ -1,7 +1,7 @@
 //! Judgements over plan-projected areas: area ranges, ratios and plan coverage.
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, FacadeAreaError, FacadeAreaServiceHandle,
+    CapabilityEvaluation, CompiledRule, Deviation, FacadeAreaError, FacadeAreaServiceHandle,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea, PlanAreaError,
     PlanAreaServiceHandle, RuleCapability, RuleContext,
 };
@@ -208,6 +208,27 @@ pub(crate) fn shown(lower: f64, upper: f64) -> String {
     }
 }
 
+/// How far an interval failing [`judge`] misses the bound it fails,
+/// relative to that bound; `None` when it fails neither.
+pub(crate) fn deviation(
+    lower: f64,
+    upper: f64,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+) -> Option<Deviation> {
+    if let Some(minimum) = minimum
+        && upper < minimum
+    {
+        return Some(Deviation::below(minimum, lower, upper));
+    }
+    if let Some(maximum) = maximum
+        && lower > maximum
+    {
+        return Some(Deviation::above(maximum, lower, upper));
+    }
+    None
+}
+
 /// Where a ratio interval stands against inclusive bounds.
 pub(crate) enum Verdict {
     Pass,
@@ -291,6 +312,10 @@ pub struct AreaRatio;
 impl RuleCapability for AreaRatio {
     fn id(&self) -> &'static str {
         "axioval:capability.area-ratio"
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
@@ -534,19 +559,22 @@ impl RuleCapability for AreaRatio {
             };
             match judge(lower, upper, minimum, maximum) {
                 Verdict::Pass => {}
-                Verdict::Fail(bound) => evaluation.push_finding(finding(
-                    rule,
-                    &anchor.id,
-                    format!(
-                        "{} ratio is {} ({} m² of {} m²); required {bound}{provenance}",
-                        measure.noun(),
-                        shown(lower, upper),
-                        (area * 100.0).round() / 100.0,
-                        (of * 100.0).round() / 100.0,
+                Verdict::Fail(bound) => evaluation.push_finding_deviating(
+                    finding(
+                        rule,
+                        &anchor.id,
+                        format!(
+                            "{} ratio is {} ({} m² of {} m²); required {bound}{provenance}",
+                            measure.noun(),
+                            shown(lower, upper),
+                            (area * 100.0).round() / 100.0,
+                            (of * 100.0).round() / 100.0,
+                        ),
+                        evidence,
+                        members,
                     ),
-                    evidence,
-                    members,
-                )),
+                    deviation(lower, upper, minimum, maximum),
+                ),
                 Verdict::Undecided(bound) => evaluation.push_object_not_evaluated(
                     anchor.id.clone(),
                     NotEvaluatedReason::IncompleteEvidence,
@@ -752,6 +780,10 @@ impl RuleCapability for PlanAreaRange {
         "axioval:capability.plan-area"
     }
 
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         vec![
             ParameterDescriptor::optional("minimum", ParameterType::Number),
@@ -842,16 +874,19 @@ impl RuleCapability for PlanAreaRange {
             }
             match judge(sum.lower, sum.upper, minimum, maximum) {
                 Verdict::Pass => {}
-                Verdict::Fail(bound) => evaluation.push_finding(finding(
-                    rule,
-                    &subject.id,
-                    format!(
-                        "{what} is {} m²; required {bound} m²",
-                        shown(sum.lower, sum.upper)
+                Verdict::Fail(bound) => evaluation.push_finding_deviating(
+                    finding(
+                        rule,
+                        &subject.id,
+                        format!(
+                            "{what} is {} m²; required {bound} m²",
+                            shown(sum.lower, sum.upper)
+                        ),
+                        sum.evidence,
+                        related,
                     ),
-                    sum.evidence,
-                    related,
-                )),
+                    deviation(sum.lower, sum.upper, minimum, maximum),
+                ),
                 Verdict::Undecided(bound) => evaluation.push_object_not_evaluated(
                     subject.id.clone(),
                     NotEvaluatedReason::IncompleteEvidence,

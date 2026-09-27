@@ -63,6 +63,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   bound to `clash` or `clash-matrix` must declare the new optional
   parameter.
 
+- **Severity bands.** (#90) A rule instance may declare `severityBands`:
+  ascending thresholds of the relative deviation `|value - bound| /
+  |bound|`, each with a severity, the rule's own severity standing beyond
+  the last. The runtime grades every finding a capability reports with its
+  deviation (`CapabilityEvaluation::push_graded_finding`,
+  `axioval_engine::Deviation`); a deviation interval straddling bands
+  takes the most severe band it may reach and says so in its message.
+  `plan-area`, `area-ratio`, `related-count`, `keyed-limit`,
+  `table-allocation`, `space-distance`, `stair-geometry` and
+  `ramp-geometry` report deviations. Compilation refuses bands on a
+  capability that reports none (`RuleCapability::grades_deviation`) or
+  bands that do not ascend. **Breaking:** `RuleInstance` gains
+  `severity_bands` (omitted when empty, so packages are unchanged),
+  `EngineError` gains `InvalidRefinement`, and
+  `ExecutionPlan::refinement` exposes what a rule declares.
 - **Window leaves.** (#36) `ObjectFrameService::leaves` answers a window's
   panels as leaves, as it answers a door's: the IFC adapter derives them
   with `openbim-ifc`'s `window_operation` (openbimrs/ifc#170) from the

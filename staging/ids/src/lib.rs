@@ -1225,6 +1225,7 @@ impl<'o> Writer<'o> {
             parameter_citations: Vec::new(),
             explanatory_images: Vec::new(),
             tags: vec!["ids".to_owned()],
+            severity_bands: Vec::new(),
         }
     }
 

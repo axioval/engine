@@ -2,7 +2,7 @@
 //! values read from the object or from objects related to it.
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeavesError, NotEvaluatedReason,
+    CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeavesError, NotEvaluatedReason,
     ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
     TableColumn, VerticalExtent,
 };
@@ -11,7 +11,7 @@ use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 use crate::door_swing;
 use crate::level_spacing::{extent, extents};
 use crate::light_area::{LightArea, length};
-use crate::plan_area::{Verdict, footprint, judge, shown};
+use crate::plan_area::{Verdict, deviation, footprint, judge, shown};
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
@@ -327,6 +327,10 @@ impl RuleCapability for KeyedLimit {
         "axioval:capability.keyed-limit"
     }
 
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         let mut parameters = vec![
             ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)),
@@ -365,7 +369,7 @@ impl RuleCapability for KeyedLimit {
         let (subjects, mut evaluation) = select_objects(context, &rule.selector);
         for subject in subjects {
             match check(context, rule, &keys, &limits, &quantity, subject) {
-                Ok(Some(found)) => evaluation.push_finding(found),
+                Ok(Some((found, deviation))) => evaluation.push_finding_deviating(found, deviation),
                 Ok(None) => {}
                 Err((reason, message)) => {
                     evaluation.push_object_not_evaluated(subject.id.clone(), reason, message);
@@ -686,19 +690,22 @@ fn check(
     limits: &[Limit],
     quantity: &Quantity<'_>,
     subject: &Object,
-) -> Result<Option<axioval_ir::Finding>, Unavailable> {
+) -> Result<Option<Graded>, Unavailable> {
     let keys = Keys::read(context, declared, subject)?;
     let (index, limit) =
         match match_rows(limits, RowSelection::MostSpecific, |limit| keys.test(limit)) {
             Matched::Rows(rows) => match rows.first() {
                 Some(&(index, limit)) => (index, limit),
                 None => {
-                    return Ok(Some(finding(
-                        rule,
-                        &subject.id,
-                        format!("no limit defined for {}", keys.describe(declared)),
-                        keys.evidence,
-                        keys.sources,
+                    return Ok(Some((
+                        finding(
+                            rule,
+                            &subject.id,
+                            format!("no limit defined for {}", keys.describe(declared)),
+                            keys.evidence,
+                            keys.sources,
+                        ),
+                        None,
                     )));
                 }
             },
@@ -742,16 +749,19 @@ fn check(
             let described = keys.describe(declared);
             let mut evidence = keys.evidence;
             evidence.extend(measured.evidence);
-            Ok(Some(finding(
-                rule,
-                &subject.id,
-                format!(
-                    "{} is {}{unit}; required {bound}{unit} (limit row {index}: {described})",
-                    measured.what,
-                    shown(measured.lower, measured.upper),
+            Ok(Some((
+                finding(
+                    rule,
+                    &subject.id,
+                    format!(
+                        "{} is {}{unit}; required {bound}{unit} (limit row {index}: {described})",
+                        measured.what,
+                        shown(measured.lower, measured.upper),
+                    ),
+                    evidence,
+                    keys.sources,
                 ),
-                evidence,
-                keys.sources,
+                deviation(measured.lower, measured.upper, limit.minimum, limit.maximum),
             )))
         }
         Verdict::Undecided(bound) => Err((
@@ -827,7 +837,7 @@ fn sill_height(
     limit: &Limit,
     described: &str,
     keys: Keys,
-) -> Result<Option<axioval_ir::Finding>, Unavailable> {
+) -> Result<Option<Graded>, Unavailable> {
     let service = extents(context)?;
     let window = extent(service, &subject.id)?;
     let everything: Vec<&Object> = context.project.objects().collect();
@@ -839,6 +849,7 @@ fn sill_height(
         ));
     }
     let mut failed = Vec::new();
+    let mut worst: Option<Deviation> = None;
     let mut undecided = Vec::new();
     let mut evidence = keys.evidence;
     let mut related = keys.sources;
@@ -858,6 +869,11 @@ fn sill_height(
                 failed.push(format!(
                     "sill height above the floor of {floor} is {height} m; required {bound} m"
                 ));
+                let missed = deviation(lower, upper, limit.minimum, limit.maximum);
+                worst = match (worst, missed) {
+                    (Some(worst), Some(missed)) => Some(worst.worst(missed)),
+                    (worst, missed) => worst.or(missed),
+                };
                 evidence.push(measured.evidence().clone());
                 related.push(floor);
             }
@@ -881,14 +897,20 @@ fn sill_height(
     evidence.extend(cited);
     related.sort();
     related.dedup();
-    Ok(Some(finding(
-        rule,
-        &subject.id,
-        format!("{} ({described})", failed.join("; ")),
-        evidence,
-        related,
+    Ok(Some((
+        finding(
+            rule,
+            &subject.id,
+            format!("{} ({described})", failed.join("; ")),
+            evidence,
+            related,
+        ),
+        worst,
     )))
 }
+
+/// A finding and how far its value misses the bound, when it has one.
+type Graded = (axioval_ir::Finding, Option<Deviation>);
 
 #[cfg(test)]
 mod tests {

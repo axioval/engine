@@ -97,6 +97,11 @@ pub enum EngineError {
     /// One rule reported two tables of one name.
     #[error("rule `{rule}` reported table `{table}` twice")]
     DuplicateReportTable { rule: String, table: String },
+    /// A rule refines its outcomes in a way the package or the capability
+    /// cannot support, such as severity bands on a capability that reports
+    /// no deviation.
+    #[error("rule `{rule}`: {detail}")]
+    InvalidRefinement { rule: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -262,6 +267,8 @@ pub struct CapabilityEvaluation {
     findings: Vec<Finding>,
     not_evaluated: Vec<CapabilityNotEvaluated>,
     tables: Vec<ReportTable>,
+    /// The deviation of each graded finding, by its index in `findings`.
+    graded: Vec<(usize, Deviation)>,
 }
 /// A not-evaluated outcome before the runtime binds its compiled rule ID.
 #[derive(Clone, Debug, PartialEq)]
@@ -337,6 +344,48 @@ impl CapabilityEvaluation {
     pub fn push_finding(&mut self, finding: Finding) {
         self.findings.push(finding);
     }
+    /// Adds a finding of a value missing its bound by `deviation`, so a rule
+    /// declaring severity bands grades it. The finding keeps its own
+    /// severity otherwise; the deviation is never reported.
+    pub fn push_graded_finding(&mut self, finding: Finding, deviation: Deviation) {
+        self.graded.push((self.findings.len(), deviation));
+        self.findings.push(finding);
+    }
+    /// Adds a finding, graded when `deviation` is known.
+    pub fn push_finding_deviating(&mut self, finding: Finding, deviation: Option<Deviation>) {
+        match deviation {
+            Some(deviation) => self.push_graded_finding(finding, deviation),
+            None => self.push_finding(finding),
+        }
+    }
+    /// The deviation a graded finding was pushed with, by its index in
+    /// [`Self::findings`]; `None` for an ungraded one.
+    #[must_use]
+    pub fn deviation(&self, finding: usize) -> Option<Deviation> {
+        self.graded
+            .iter()
+            .find(|(index, _)| *index == finding)
+            .map(|(_, deviation)| *deviation)
+    }
+    /// Grades every graded finding's severity by `bands`, the finding's own
+    /// severity standing beyond the last band.
+    fn grade(&mut self, bands: &[schema::SeverityBand]) {
+        for (index, deviation) in std::mem::take(&mut self.graded) {
+            let finding = &mut self.findings[index];
+            let (severity, mixed) = refinement::grade(bands, &finding.severity, deviation);
+            if mixed {
+                use std::fmt::Write as _;
+                let _ = write!(
+                    finding.message,
+                    "; deviation between {} and {}, graded {} by its most severe band",
+                    percent(deviation.lower()),
+                    percent(deviation.upper()),
+                    refinement::label(&severity)
+                );
+            }
+            finding.severity = severity;
+        }
+    }
     /// Adds a rule-level not-evaluated outcome.
     pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
         self.push_unavailable(Scope::Project, reason, message);
@@ -374,12 +423,28 @@ impl CapabilityEvaluation {
     }
 }
 
+/// A relative deviation as a reviewer reads it, `12.5 %`.
+fn percent(value: f64) -> String {
+    if value.is_finite() {
+        format!("{} %", (value * 1e4).round() / 1e2)
+    } else {
+        "unbounded".to_owned()
+    }
+}
+
 /// Trusted code selected by a package capability ID; packages never supply executable code.
 pub trait RuleCapability: Send + Sync {
     /// Stable trusted capability ID.
     fn id(&self) -> &'static str;
     /// Strict accepted parameters.
     fn parameters(&self) -> Vec<ParameterDescriptor>;
+    /// Whether findings report how far a value misses its bound
+    /// ([`CapabilityEvaluation::push_graded_finding`]), so a rule may grade
+    /// them with severity bands. A rule declaring bands on a capability that
+    /// answers `false` fails compilation.
+    fn grades_deviation(&self) -> bool {
+        false
+    }
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
 }
@@ -435,6 +500,7 @@ pub struct ExecutionPlan {
     rules: Vec<CompiledRule>,
     deferred: Vec<DeferredRule>,
     concepts: Arc<ConceptCatalog>,
+    refinements: BTreeMap<RuleId, RuleRefinement>,
 }
 impl ExecutionPlan {
     /// Rules ordered by stable rule ID.
@@ -448,6 +514,10 @@ impl ExecutionPlan {
     /// Canonical concepts declared by the ruleset's definition packages.
     pub fn concepts(&self) -> &ConceptCatalog {
         &self.concepts
+    }
+    /// How `rule` refines its outcomes; `None` when it declares nothing.
+    pub fn refinement(&self, rule: &RuleId) -> Option<&RuleRefinement> {
+        self.refinements.get(rule)
     }
 }
 
@@ -477,6 +547,7 @@ mod plan_region;
 mod plan_span;
 mod properties;
 mod proximity;
+mod refinement;
 mod relationships;
 mod services;
 mod sight;
@@ -580,6 +651,7 @@ pub use proximity::{
     ProximityServiceHandle, RegionDistanceEvidence, RegionDistanceRequest, VerticalDirection,
     VolumeInterval,
 };
+pub use refinement::{Deviation, RuleRefinement};
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
@@ -784,7 +856,10 @@ impl Runtime {
                 .get(&rule.capability)
                 .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
             let rule_id = rule.id.clone();
-            let evaluation = capability.evaluate(&context, &rule);
+            let mut evaluation = capability.evaluate(&context, &rule);
+            if let Some(refinement) = plan.refinements.get(&rule_id) {
+                evaluation.grade(&refinement.severity_bands);
+            }
             findings.extend(evaluation.findings);
             // The compiled rule is the table's identity, whatever the capability named.
             tables.extend(

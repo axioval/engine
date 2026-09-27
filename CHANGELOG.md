@@ -99,6 +99,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   property service cannot list an object's properties, so a row with a
   wildcard name or a set without a property is reported not evaluated for
   the rule while the other rows are checked.
+- **Filtered requirement templates in `property-requirements`.** A row may
+  now carry a `state` instead of a `requirement`: its statement must hold
+  (`include`), must not hold (`exclude`) or is skipped (`ignore`, also on a
+  `requirement` row, which then is neither checked nor refused). The
+  statement is a `presence` (`defined`, `undefined`, `empty`, `not-empty`)
+  or value conditions, which gain `one_of_like` (`|`-separated wildcard
+  patterns), `contains` (a substring of text, an element of a list) and
+  `decimals` (round a ranged value in the row's unit before bounding it).
+  The rule's selector is the template's element filter and `applies_to` its
+  class. With the new `group_by_value`, findings of one row, result and
+  value found are one finding naming the count and relating the objects;
+  with the new `category_property`, findings start with the object's
+  category in brackets, as in `property-comparison`, and groups split by it.
+  Rows without the new columns behave as before. **Breaking:** the
+  `requirements` table has the new optional columns `state`, `presence`,
+  `one_of_like`, `contains` and `decimals`, and `requirement` is now
+  optional; the capability has the new optional parameters `group_by_value`
+  and `category_property`. A definition bound to `property-requirements`
+  must declare them.
 - **Keyed limit tables.** The new capability `keyed-limit` checks a
   quantity of each selected object against the single applicable row of a
   `limits` table: a fire compartment's area limit by its building's fire

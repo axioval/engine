@@ -303,12 +303,17 @@ This is a numerator mode of `area-ratio` rather than a capability of its own: th
 | `applies_to` | `selector` | Objects the row applies to, such as `{"kind": "entityType", "objectType": "IfcWall", "includeSubtypes": false}` for one exact class or `true` for the class and its subtypes. Blank applies the row to every selected object. |
 | `property_set` | `textPattern` | The property set's exact name. Blank asks for the property by name in any set. |
 | `property` | `textPattern` | The property's exact name. |
-| `requirement` | `string` (required) | `required`, `optional` or `forbidden`. |
+| `requirement` | `string` | `required`, `optional` or `forbidden`. A row declares `requirement` or `state`. |
+| `state` | `string` | `include` (the row's statement must hold), `exclude` (it must not hold) or `ignore` (the row is skipped). On a `requirement` row only `include` (the row as written) and `ignore` are allowed. |
+| `presence` | `string` | The statement of a `state` row about presence: `defined` (present, null included), `undefined` (exactly absent), `empty` (present but null, blank or an empty list) or `not-empty` (present with a value). It takes no value condition. |
 | `value_like` | `textPattern` | A whole-value wildcard pattern the value must match. |
 | `one_of` | `string` | Allowed values separated by `\|`; a backslash escapes the next character (`a\\|b` is one value). |
+| `one_of_like` | `string` | Allowed whole-value wildcard patterns separated by `\|` (`Exist*\|New`); `\|` is a literal bar and `\*`, `\?` literal wildcards. |
+| `contains` | `string` | Text the value contains: a substring of a text value, or an element of a list value (text, booleans and integers compared as text). |
 | `minimum`, `maximum` | `number` | Inclusive numeric bounds, in `unit`. |
 | `unit` | `string` | The bounds' unit, as for quantity parameters (`mm`, `m2`, `l`, `deg` …). Without it, the bounds compare with unit-free numbers only. |
 | `per` | `string` | Divides the value before it is bounded: `measured-area` (the measured plan footprint through `PlanAreaService`, in m²), `stated-area` (the area quantity `area_property` names) or `stated-volume` (`volume_property`, in m³). |
+| `decimals` | `integer` | Rounds the value (or quotient), read in `unit`, half away from zero to 0–15 decimals before it is bounded, as the rule-level `decimals` of the comparison capabilities does: `299.6 mm` rounded to 0 decimals meets `minimum` 300. |
 
 The rule-level `case_sensitive` (default `true`) applies to `value_like` and `one_of`. Every row that applies to an object is checked, through the shared row matcher with all rows selected: an `applies_to` selector that cannot be decided leaves the object not evaluated. Each failing row is one finding against the object, and its message begins with the result:
 
@@ -318,7 +323,29 @@ The rule-level `case_sensitive` (default `true`) applies to `value_like` and `on
 - `forbidden value`: a `forbidden` row with a value condition, and the value meets it.
 - `wrong value`: a `required` or `optional` value that does not meet the row's conditions.
 
-An `optional` property may be absent, null or blank. Conditions must all hold. `value_like` and `one_of` compare text, booleans (`true`/`false`) and integers as text; any other value is not evaluated. A range compares integers and decimals when the row has no `unit`, and quantities of the unit's dimension in canonical SI units when it has one; any other pairing is not evaluated, never a pass. A list value must meet the conditions with every element, and a forbidden value is present when any element meets them. A divided value is an interval when the measured footprint is: a quotient straddling a bound, a footprint that is not positive, or a missing stated area or volume is not evaluated.
+An `optional` property may be absent, null or blank. Conditions must all hold. `value_like`, `one_of` and `one_of_like` compare text, booleans (`true`/`false`) and integers as text; any other value is not evaluated. A range compares integers and decimals when the row has no `unit`, and quantities of the unit's dimension in canonical SI units when it has one; any other pairing is not evaluated, never a pass. A list value must meet the conditions with every element, and a forbidden value is present when any element meets them; `contains` alone reads the list as a whole. A divided value is an interval when the measured footprint is: a quotient straddling a bound, a footprint that is not positive, or a missing stated area or volume is not evaluated.
+
+#### Filtered requirement templates
+
+A filtered requirement template is a table of rows (class, property, operator, value, state) under one element filter. The filter is the rule's selector, the class is `applies_to`, and each row is a `state` row whose statement is a `presence` or value conditions:
+
+| `state` | The statement … | Absent | Null or blank | A value |
+|---|---|---|---|---|
+| `include` with `presence` | must hold | `missing property` unless `undefined` | `missing value` for `not-empty`, `forbidden property present` for `undefined` | `forbidden property present` for `undefined`, `wrong value` for `empty` |
+| `exclude` with `presence` | must not hold | `missing property` for `undefined` | `forbidden property present` for `defined`, `missing value` for `empty` | `forbidden property present` for `defined`, `forbidden value` for `not-empty` |
+| `include` with conditions | must hold | `missing property` | `missing value` | `wrong value` unless every element meets the conditions |
+| `exclude` with conditions | must not hold | passes | passes | `forbidden value` if an element meets the conditions |
+| `ignore` | is skipped | — | — | — |
+
+A `requirement` row is the same thing spelled differently: `required` is `include` (with `not-empty` when it has no condition), `forbidden` is `exclude` (with `defined` when it has no condition), and `optional` is `include` that lets a missing value pass. An ignored row is neither checked nor refused, even when its name is a pattern, and its `applies_to` is not evaluated. A `state` row with neither `presence` nor a value condition, an unknown `state` or `presence`, `presence` together with a value condition or with `requirement`, `exclude` on a `requirement` row, an empty `contains` or `one_of_like` value, `decimals` without bounds or outside 0–15, and a row with neither `requirement` nor `state` are invalid declarations.
+
+#### Grouping and categories
+
+With `group_by_value: true`, the findings of one row that share their result and the value found are one finding, such as ``wrong value: Pset_WallCommon.FireRating is `F30` on 3 objects; required one of `F60`, `F90` (requirement row 1)``. Its scope is the first of those objects in selection order and it relates the others; all objects missing the property form one group. Values group exactly, whatever `case_sensitive` says, so `F30` and `f30` are two findings. A grouped finding does not state per-object quotients of a divided range. Groups are reported after every object is checked, ordered by row, category, result and value.
+
+With `category_property`, every finding of an object starts with that object's value of the property in brackets, such as `[Architecture] `, and cites it, as for `property-comparison`; grouped findings are grouped per category. An absent, null or blank value adds no category. The property is read only for objects with findings; when it cannot be read, the object is not evaluated rather than reported uncategorised.
+
+A definition bound to `property-requirements` declares `requirements` with all fifteen columns above (only the column set, kinds and optionality are compared) and the optional `case_sensitive`, `area_property`, `volume_property`, `group_by_value` and `category_property`.
 
 Names are resolved exactly. The property service answers requests for one named property and cannot list an object's property sets or properties, so a row whose set or property name contains a wildcard (`Pset_*Common`), or that names a set without a property (set presence), cannot be decided: each such row is reported once as not evaluated for the rule (`MissingService`), and the other rows are still checked. A backslash-escaped `*` or `?` is part of an exact name. Missing property sets are therefore reported as missing properties. An unknown requirement, bounds in the wrong order, a `unit` or `per` without bounds, `stated-area` without `area_property`, an empty `one_of` value, or a value condition on a set-only row is an invalid declaration.
 

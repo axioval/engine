@@ -528,14 +528,8 @@ impl Outcome {
         evaluation: &mut CapabilityEvaluation,
     ) {
         if let (Some(category), false) = (config.category, self.findings.is_empty()) {
-            match resolve(context, object, category) {
-                Ok(resolved) => {
-                    let prefix = match resolved.value() {
-                        value if undefined(value) => String::new(),
-                        Some(PropertyValue::String(text)) => format!("[{}] ", text.trim()),
-                        value => format!("[{}] ", crate::support::display(value)),
-                    };
-                    let cited = resolved.evidence();
+            match crate::support::category_prefix(context, object, category) {
+                Ok((prefix, cited)) => {
                     for finding in &mut self.findings {
                         finding.message.insert_str(0, &prefix);
                         finding.evidence = combined(&finding.evidence, &cited, &[]);

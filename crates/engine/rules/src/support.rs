@@ -534,6 +534,26 @@ pub(crate) fn undefined(value: Option<&PropertyValue>) -> bool {
     }
 }
 
+/// The heading a `category_property` puts before an object's findings, such
+/// as `[F90] `, and the evidence it cites.
+///
+/// An absent, null or blank value adds no heading. A value that cannot be
+/// read is an error, so the caller reports the object not evaluated rather
+/// than its findings under the wrong heading.
+pub(crate) fn category_prefix(
+    context: &RuleContext<'_>,
+    object: &Object,
+    category: PropertyRef<'_>,
+) -> Result<(String, Vec<Evidence>), Unavailable> {
+    let resolved = resolve(context, object, category)?;
+    let prefix = match resolved.value() {
+        value if undefined(value) => String::new(),
+        Some(PropertyValue::String(text)) => format!("[{}] ", text.trim()),
+        value => format!("[{}] ", display(value)),
+    };
+    Ok((prefix, resolved.evidence()))
+}
+
 /// The group an object is judged in: its source, and optionally the objects a
 /// declared relationship reaches from it (a storey, a zone).
 ///
@@ -714,7 +734,7 @@ pub(crate) struct Tolerance {
 }
 
 /// The largest number of decimals a rule may round to.
-const MAX_DECIMALS: i64 = 15;
+pub(crate) const MAX_DECIMALS: i64 = 15;
 
 impl Tolerance {
     /// Exact up to the binary rounding of one unit conversion.
@@ -805,7 +825,7 @@ impl Tolerance {
 
 /// Rounds `value` half away from zero to `decimals` places of its shortest
 /// decimal form.
-fn round_decimal(value: f64, decimals: u32) -> f64 {
+pub(crate) fn round_decimal(value: f64, decimals: u32) -> f64 {
     if !value.is_finite() {
         return value;
     }

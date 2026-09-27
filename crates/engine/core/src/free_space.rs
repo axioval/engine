@@ -3,6 +3,7 @@
 //! Geometry algorithms and native shapes remain in Axiolid or another trusted
 //! backend. This module carries canonical metric requests and reviewable evidence.
 
+use crate::circulation::{CirculationMap, CirculationRequest};
 use crate::services::reviewable_exact_evidence;
 use crate::{MetricPoint, MobilityProfile, ThresholdVerdict};
 use axioval_ir::{Evidence, ObjectId};
@@ -956,6 +957,18 @@ pub trait FreeSpaceService: Send + Sync + 'static {
             "this free-space service does not compare clearance footprints with scopes".into(),
         ))
     }
+    /// Where a path of the request's width can run in its space, and which
+    /// entrances and components it comes near (see [`CirculationMap`]). A
+    /// service that does not map circulation refuses.
+    fn map_circulation(
+        &self,
+        request: &CirculationRequest,
+    ) -> Result<CirculationMap, FreeSpaceError> {
+        let _ = request;
+        Err(FreeSpaceError::Unavailable(
+            "this free-space service does not map circulation".into(),
+        ))
+    }
 }
 
 #[derive(Clone)]
@@ -1016,6 +1029,25 @@ impl FreeSpaceServiceHandle {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }
         Ok(outcome)
+    }
+}
+
+impl FreeSpaceServiceHandle {
+    /// Maps circulation and checks that the map answers `request`.
+    ///
+    /// # Errors
+    ///
+    /// The backend's refusal, or [`FreeSpaceError::ResponseRequestMismatch`]
+    /// for a map of another request.
+    pub fn map_circulation(
+        &self,
+        request: &CirculationRequest,
+    ) -> Result<CirculationMap, FreeSpaceError> {
+        let map = self.0.map_circulation(request)?;
+        if map.request() != request {
+            return Err(FreeSpaceError::ResponseRequestMismatch);
+        }
+        Ok(map)
     }
 }
 

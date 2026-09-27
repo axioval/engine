@@ -13,12 +13,12 @@ use axiolid_core::{Point2, Point3};
 use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
-    AreaInterval, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, ClearanceShape,
-    CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    ContainmentOutcome, ContainmentRequest, FrameOffsetPlacement, FreeAreaEvidence,
-    FreeAreaRequest, FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint,
-    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
-    PlacementShape, SupportedPlacement,
+    AreaInterval, CirculationMap, CirculationRequest, ClearanceOutcome, ClearancePlacementEvidence,
+    ClearanceRequest, ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence,
+    CompleteSupportEvidence, ContainmentOutcome, ContainmentRequest, ElevationBand,
+    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
+    MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence, PlacementDomain,
+    PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape, SupportedPlacement,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -52,6 +52,10 @@ impl AxiolidFreeSpaceService {
 
     fn evidence(&self) -> Evidence {
         Evidence::exact(self.source.clone(), "axiolid:free-space")
+    }
+
+    pub(crate) fn geometry(&self) -> &AxiolidGeometry {
+        &self.geometry
     }
 }
 
@@ -400,25 +404,46 @@ impl AxiolidFreeSpaceService {
         request: &PlacementRequest,
         tolerance: axiolid_core::Tolerance,
     ) -> Result<(Scene, f64), FreeSpaceError> {
-        let missing = |id: &ObjectId| FreeSpaceError::MissingGeometry(Box::new(id.clone()));
         let reach = match request.shape() {
             PlacementShape::Box { shape, .. } => {
                 shape.width_metres().hypot(shape.depth_metres()) / 2.0
             }
             PlacementShape::Cylinder(c) => c.radius_metres(),
         };
+        self.floor_scene(
+            request.scope(),
+            request.merged_scopes(),
+            request.obstacles(),
+            request.effective_band(),
+            reach,
+            tolerance,
+        )
+    }
+
+    /// The footprint of `scope` and `merged` (which must share its floor),
+    /// what `obstacles` occupy in `band` above that floor, and the floor's
+    /// elevation. A tessellation within `reach` of a scope refuses.
+    pub(crate) fn floor_scene(
+        &self,
+        scope: &ObjectId,
+        merged: &[ObjectId],
+        obstacles: &[ObjectId],
+        band: ElevationBand,
+        reach: f64,
+        tolerance: axiolid_core::Tolerance,
+    ) -> Result<(Scene, f64), FreeSpaceError> {
+        let missing = |id: &ObjectId| FreeSpaceError::MissingGeometry(Box::new(id.clone()));
         let mut floor = None;
         let mut scope_triangles = Vec::new();
-        for scope in std::iter::once(request.scope()).chain(request.merged_scopes()) {
-            let mesh = self.geometry.mesh(scope).ok_or_else(|| missing(scope))?;
-            let (low, _) = mesh_extent(mesh).ok_or_else(|| missing(scope))?;
+        for part in std::iter::once(scope).chain(merged) {
+            let mesh = self.geometry.mesh(part).ok_or_else(|| missing(part))?;
+            let (low, _) = mesh_extent(mesh).ok_or_else(|| missing(part))?;
             match floor {
                 None => floor = Some(low[2]),
                 Some(first) if (low[2] - first).abs() <= FLOOR_AGREEMENT_METRES => {}
                 Some(_) => {
                     return Err(FreeSpaceError::Unavailable(format!(
-                        "merged scope {scope} stands on another floor than {}",
-                        request.scope()
+                        "merged scope {part} stands on another floor than {scope}"
                     )));
                 }
             }
@@ -427,30 +452,27 @@ impl AxiolidFreeSpaceService {
             // estimate.
             let extent = self
                 .geometry
-                .enclosing_extent(scope)
-                .ok_or_else(|| missing(scope))?;
-            if self.geometry.is_tessellated(scope)
+                .enclosing_extent(part)
+                .ok_or_else(|| missing(part))?;
+            if self.geometry.is_tessellated(part)
                 || self
                     .geometry
-                    .tessellated_near(&extent, reach, true, |object| {
-                        !request.obstacles().contains(object)
-                    })
+                    .tessellated_near(&extent, reach, true, |object| !obstacles.contains(object))
                     .is_some()
             {
                 return Err(FreeSpaceError::InexactPlacementEvidence);
             }
             scope_triangles.extend(triangles(mesh));
         }
-        let floor = floor.ok_or_else(|| missing(request.scope()))?;
+        let floor = floor.ok_or_else(|| missing(scope))?;
 
-        let scope = placement::footprint(&scope_triangles, tolerance)?;
-        if scope.is_empty() {
-            return Err(missing(request.scope()));
+        let footprint = placement::footprint(&scope_triangles, tolerance)?;
+        if footprint.is_empty() {
+            return Err(missing(scope));
         }
-        let band = request.effective_band();
         let (low, high) = (floor + band.from_metres(), floor + band.to_metres());
         let mut obstacle_rings = Vec::new();
-        for obstacle in request.obstacles() {
+        for obstacle in obstacles {
             if self.geometry.has_no_body(obstacle) {
                 continue;
             }
@@ -465,7 +487,7 @@ impl AxiolidFreeSpaceService {
             obstacle_rings.extend(trapezoids(&occupied).into_iter().map(|piece| piece.outer));
         }
         let scene = Scene {
-            scope,
+            scope: footprint,
             obstacles: placement::union(&obstacle_rings, tolerance)?,
             tolerance,
             window: None,
@@ -531,6 +553,13 @@ fn offset_window(
 }
 
 impl FreeSpaceService for AxiolidFreeSpaceService {
+    fn map_circulation(
+        &self,
+        request: &CirculationRequest,
+    ) -> Result<CirculationMap, FreeSpaceError> {
+        self.circulation_map(request)
+    }
+
     fn assess_clearance(
         &self,
         request: &ClearanceRequest,

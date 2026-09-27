@@ -485,9 +485,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-route"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6b48c401ecc107ac4d40b418119050d0e801588dc9237b3de1c7b31e05bd1d"
+checksum = "04e6836fb296b6e48b143309bac5bb49cb5cb348066c2571e20917ef276cc6a3"
 dependencies = [
  "axiolid-contracts",
  "axiolid-core",
@@ -539,9 +539,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-triangulate"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79c9ff5532463e34bda34c3aca000b8e08c96e3aa648346ccda2322ce5752510"
+checksum = "987b8c145123d2a862606d95c27f4f6691ed6d68513f0511698f00d25b2d5a70"
 dependencies = [
  "axiolid-core",
  "axiolid-guarantees",

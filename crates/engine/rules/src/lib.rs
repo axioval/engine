@@ -31,6 +31,7 @@ mod keyed_limit;
 mod level_spacing;
 mod light_area;
 mod light_well;
+mod local_circulation;
 mod manual_issue;
 mod name_sequence;
 mod numbering_consistency;
@@ -95,6 +96,7 @@ pub use horizontal_guard::HorizontalGuard;
 pub use keyed_limit::KeyedLimit;
 pub use level_spacing::LevelSpacing;
 pub use light_well::LightWell;
+pub use local_circulation::LocalCirculation;
 pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
 pub use numbering_consistency::NumberingConsistency;
@@ -190,4 +192,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(ComponentClearance))
         .and_then(|registry| registry.register(ComponentVisibility))
         .and_then(|registry| registry.register(EffectiveCoverage))
+        .and_then(|registry| registry.register(LocalCirculation))
 }

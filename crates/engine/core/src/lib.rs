@@ -451,6 +451,7 @@ impl ExecutionPlan {
     }
 }
 
+mod circulation;
 mod classifications;
 mod compiler;
 mod concepts;
@@ -481,6 +482,9 @@ mod triangle_count;
 mod vertical_extent;
 mod walkability;
 mod walking_surface;
+pub use circulation::{
+    CirculationContact, CirculationMap, CirculationNode, CirculationNodeKind, CirculationRequest,
+};
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,

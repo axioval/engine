@@ -31,6 +31,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   plan outline separately: an L-shaped body satisfies both from different
   parts. Obstacles whose box reaches the prism must be closed, consistently
   and outward wound, or the request refuses.
+- `src/circulation.rs` answers `map_circulation` for the free-space
+  service: the placement scene's free area, pieces from `erode_inner` less
+  `dilate_outer` (proof of connection), possible pieces from `erode_outer`
+  less `dilate_inner` for half the width less `KNIFE_EDGE_METRES` (proof of
+  separation; never drop the margin, or a gap exactly as wide as the path
+  snaps shut and reads as blocked), contacts by footprints grown with the
+  matching one-sided dilation, and `axiolid_route::skeleton` per piece.
+  The skeleton is called directly (axiolid-triangulate 0.3.1 carries the
+  fix for axiolid/kernel#190); a piece whose skeleton the kernel refuses is
+  unmapped, never guessed. Half widths are distances to the free area widened by the grid
+  snapping. Door swings are not subtracted.
 - `src/containment.rs` answers `assess_containment` for the free-space
   service: the overlay difference of the footprint's bounds (the exact
   rectangle, or a cylinder's inscribed and circumscribed 64-gons) less the
@@ -230,6 +241,10 @@ an API.
 - The single-route service still treats the kernel path as a lower bound or
   proposal only; the many-target queries of `axiolid-route` 0.3.2 use a point
   path as a witness only.
+- `src/circulation.rs` builds on `axiolid_route::skeleton` (axiolid/kernel#139,
+  axiolid-route 0.3.3) and needs axiolid-triangulate 0.3.1 with the fix for
+  axiolid/kernel#190; it calls the skeleton directly, without a worker,
+  timeout or retry spacings.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

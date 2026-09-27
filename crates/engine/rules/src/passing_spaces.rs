@@ -226,24 +226,11 @@ fn walk(
             "the measured route crosses no route space".into(),
         ));
     };
-    let segments = segments(route.waypoints());
-    let total = segments
-        .last()
-        .map_or(0.0, |segment| segment.at + segment.length);
-    // The ends count as passing spaces.
-    if total <= passing.spacing {
-        return Ok(Spacing::Met);
-    }
-    let usable = passing.spacing / 2.0 - SLOP;
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::cast_precision_loss
-    )]
-    let (tiles, width) = {
-        let tiles = (total / usable).ceil().max(1.0) as usize;
-        (tiles, total / tiles as f64)
-    };
+    let points: Vec<[f64; 3]> = route
+        .waypoints()
+        .iter()
+        .map(MetricPoint::coordinates_metres)
+        .collect();
     let obstacles: Vec<ObjectId> = ground
         .obstacles
         .iter()
@@ -252,79 +239,134 @@ fn walk(
         .collect();
     let search = Search {
         passing,
-        services,
+        free_space: services.free_space,
         scope,
         merged,
         obstacles: &obstacles,
     };
-    let mut states = Vec::with_capacity(tiles);
-    for tile in 0..tiles {
-        #[allow(clippy::cast_precision_loss)]
-        let (low, high) = (tile as f64 * width, (tile + 1) as f64 * width);
-        states.push(search.tile(&segments, low, high));
+    search.along(&points, &format!("the route from {from}"), evidence)
+}
+
+/// Whether the polyline `points` in `scope` (on its floor) has its passing
+/// spaces, its ends counting as passing spaces; `what` names it in a
+/// finding. `obstacles` must not hold the scope.
+pub(crate) fn judge_path(
+    passing: &PassingSpaces,
+    free_space: &FreeSpaceServiceHandle,
+    scope: &ObjectId,
+    obstacles: &[ObjectId],
+    points: &[[f64; 3]],
+    what: &str,
+) -> Spacing {
+    let search = Search {
+        passing,
+        free_space,
+        scope,
+        merged: &[],
+        obstacles,
+    };
+    match search.along(points, what, Vec::new()) {
+        Ok(spacing) => spacing,
+        Err((reason, message)) => Spacing::Unknown(reason, format!("along {what}, {message}")),
     }
-    // Tiles are shorter than half the spacing and the route is longer, so
-    // there are at least three.
-    let interior = &states[1..tiles - 1];
-    if interior.iter().all(|state| matches!(state, Tile::Found)) {
-        return Ok(Spacing::Met);
-    }
-    // The longest run of tiles proven empty.
-    let mut best: Option<(usize, usize)> = None;
-    let mut start = None;
-    for (index, state) in states.iter().enumerate() {
-        match (state, start) {
-            (Tile::Empty(_), None) => start = Some(index),
-            (Tile::Empty(_), Some(_)) | (_, None) => {}
-            (_, Some(first)) => {
-                best = Some(longer(best, (first, index)));
-                start = None;
+}
+
+impl Search<'_> {
+    /// Judges the polyline `points`, citing `evidence` with a finding.
+    fn along(
+        &self,
+        points: &[[f64; 3]],
+        what: &str,
+        mut evidence: Vec<Evidence>,
+    ) -> Result<Spacing, Unavailable> {
+        let passing = self.passing;
+        let segments = segments(points);
+        let total = segments
+            .last()
+            .map_or(0.0, |segment| segment.at + segment.length);
+        // The ends count as passing spaces.
+        if total <= passing.spacing {
+            return Ok(Spacing::Met);
+        }
+        let usable = passing.spacing / 2.0 - SLOP;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let (tiles, width) = {
+            let tiles = (total / usable).ceil().max(1.0) as usize;
+            (tiles, total / tiles as f64)
+        };
+        let mut states = Vec::with_capacity(tiles);
+        for tile in 0..tiles {
+            #[allow(clippy::cast_precision_loss)]
+            let (low, high) = (tile as f64 * width, (tile + 1) as f64 * width);
+            states.push(self.tile(&segments, low, high));
+        }
+        // Tiles are shorter than half the spacing and the route is longer, so
+        // there are at least three.
+        let interior = &states[1..tiles - 1];
+        if interior.iter().all(|state| matches!(state, Tile::Found)) {
+            return Ok(Spacing::Met);
+        }
+        // The longest run of tiles proven empty.
+        let mut best: Option<(usize, usize)> = None;
+        let mut start = None;
+        for (index, state) in states.iter().enumerate() {
+            match (state, start) {
+                (Tile::Empty(_), None) => start = Some(index),
+                (Tile::Empty(_), Some(_)) | (_, None) => {}
+                (_, Some(first)) => {
+                    best = Some(longer(best, (first, index)));
+                    start = None;
+                }
             }
         }
-    }
-    if let Some(first) = start {
-        best = Some(longer(best, (first, tiles)));
-    }
-    #[allow(clippy::cast_precision_loss)]
-    if let Some((first, end)) = best
-        && (end - first) as f64 * width > passing.spacing
-    {
-        for state in &states[first..end] {
-            if let Tile::Empty(proofs) = state {
-                evidence.extend(proofs.iter().cloned());
-            }
+        if let Some(first) = start {
+            best = Some(longer(best, (first, tiles)));
         }
         #[allow(clippy::cast_precision_loss)]
-        let (low, high) = (first as f64 * width, end as f64 * width);
-        return Ok(Spacing::Missed(
-            format!(
-                "the route from {from} has no passing space ({}) between {} and {} along it, \
-                 a stretch longer than the {} allowed",
-                passing.describe(),
-                metres(low),
-                metres(high),
-                metres(passing.spacing)
-            ),
-            evidence,
-        ));
+        if let Some((first, end)) = best
+            && (end - first) as f64 * width > passing.spacing
+        {
+            for state in &states[first..end] {
+                if let Tile::Empty(proofs) = state {
+                    evidence.extend(proofs.iter().cloned());
+                }
+            }
+            #[allow(clippy::cast_precision_loss)]
+            let (low, high) = (first as f64 * width, end as f64 * width);
+            return Ok(Spacing::Missed(
+                format!(
+                    "{what} has no passing space ({}) between {} and {} along it, \
+                     a stretch longer than the {} allowed",
+                    passing.describe(),
+                    metres(low),
+                    metres(high),
+                    metres(passing.spacing)
+                ),
+                evidence,
+            ));
+        }
+        let reasons: BTreeSet<String> = states
+            .into_iter()
+            .filter_map(|state| match state {
+                Tile::Unknown(reason) => Some(reason),
+                _ => None,
+            })
+            .collect();
+        let mut message = format!(
+            "no passing space ({}) is proven at most every {}, and no longer gap is proven",
+            passing.describe(),
+            metres(passing.spacing)
+        );
+        if !reasons.is_empty() {
+            message.push_str(": ");
+            message.push_str(&reasons.into_iter().collect::<Vec<_>>().join("; "));
+        }
+        Err((NotEvaluatedReason::IncompleteEvidence, message))
     }
-    let reasons: BTreeSet<String> = states
-        .into_iter()
-        .filter_map(|state| match state {
-            Tile::Unknown(reason) => Some(reason),
-            _ => None,
-        })
-        .collect();
-    let mut message = format!(
-        "no passing space ({}) is proven at most every {}, and no longer gap is proven",
-        passing.describe(),
-        metres(passing.spacing)
-    );
-    if !reasons.is_empty() {
-        message.push_str(": ");
-        message.push_str(&reasons.into_iter().collect::<Vec<_>>().join("; "));
-    }
-    Err(incomplete(message))
 }
 
 fn longer(best: Option<(usize, usize)>, run: (usize, usize)) -> (usize, usize) {
@@ -335,11 +377,11 @@ fn longer(best: Option<(usize, usize)>, run: (usize, usize)) -> (usize, usize) {
 }
 
 /// The route's segments with a plan length, in order.
-fn segments(waypoints: &[MetricPoint]) -> Vec<Segment> {
+fn segments(points: &[[f64; 3]]) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut at = 0.0;
-    for pair in waypoints.windows(2) {
-        let (a, b) = (pair[0].coordinates_metres(), pair[1].coordinates_metres());
+    for pair in points.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
         let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
         let length = dx.hypot(dy);
         if length <= f64::EPSILON {
@@ -366,7 +408,7 @@ enum Tile {
 
 struct Search<'a> {
     passing: &'a PassingSpaces,
-    services: &'a Services<'a>,
+    free_space: &'a FreeSpaceServiceHandle,
     scope: &'a ObjectId,
     merged: &'a [ObjectId],
     obstacles: &'a [ObjectId],
@@ -431,9 +473,6 @@ impl Search<'_> {
         )
         .and_then(|request| request.with_merged_scopes(self.merged.to_vec()))
         .map_err(error)?;
-        self.services
-            .free_space
-            .find_placement(&request)
-            .map_err(error)
+        self.free_space.find_placement(&request).map_err(error)
     }
 }

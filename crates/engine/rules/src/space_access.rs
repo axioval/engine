@@ -148,6 +148,15 @@ impl Partners {
     }
 }
 
+/// The entrances of a space.
+#[derive(Default)]
+pub(crate) struct Entrances {
+    /// Surely an entrance, with the relationship evidence.
+    pub(crate) sure: Vec<(ObjectId, Vec<Evidence>)>,
+    /// Possibly an entrance, with why it is not sure.
+    pub(crate) maybe: Vec<(ObjectId, String)>,
+}
+
 /// Whether a space opens directly to the outside.
 pub(crate) enum Exit {
     Sure {
@@ -421,6 +430,40 @@ impl AccessIndex {
             }
         }
         Partners { linked, unknown }
+    }
+
+    /// The doors and openings of the `access` type that reach `space`:
+    /// surely, with their relationship evidence, or possibly, with why. An
+    /// element whose spaces cannot be read may reach any space.
+    pub(crate) fn entrances(&self, space: &ObjectId, access: AccessType) -> Entrances {
+        let mut entrances = Entrances::default();
+        for element in &self.elements {
+            let member = element.member(access);
+            if member == Member::No {
+                continue;
+            }
+            match &element.reach {
+                Err(why) => entrances.maybe.push((element.id.clone(), why.clone())),
+                Ok(reach) if reach.spaces.iter().any(|(reached, _)| reached == space) => {
+                    if member == Member::Yes {
+                        entrances
+                            .sure
+                            .push((element.id.clone(), reach.evidence.clone()));
+                    } else {
+                        entrances.maybe.push((
+                            element.id.clone(),
+                            format!(
+                                "whether {} is a {} is undecided",
+                                element.id,
+                                access.describe()
+                            ),
+                        ));
+                    }
+                }
+                Ok(_) => {}
+            }
+        }
+        entrances
     }
 
     /// Whether `space` opens directly to the outside through an element of

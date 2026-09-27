@@ -96,9 +96,27 @@ A frame-offset domain is searched exactly for fixed orientations: the configurat
 
 Witness candidates are the free region's centroids and the middle of every interval a line halfway between two consecutive vertex heights cuts from it, so a free region with a hole (a room around a column) is never missed because its centroids fall into the hole.
 
-A free corridor width (a region eroded by half the width that still connects two sides) is not searched here: the sides are not part of a placement request, and deciding which eroded parts connect is not sound where they touch at a point. Corridor widths use metric routing.
+A free corridor width (a region eroded by half the width that still connects two sides) is not searched here: the sides are not part of a placement request. Within one space, a [circulation map](#circulation-maps) answers it between entrances and components; across spaces, corridor widths use metric routing.
 
 Connected corridor requirements use [metric routing](./metric-routing.md) with an appropriate mobility profile rather than inventing a second path contract.
+
+## Circulation maps
+
+`FreeSpaceService::map_circulation` answers a `CirculationRequest`: a space, its entrances, its components, the obstacles, a path width, the height the path must be free to and a tolerance. Entrances are never obstacles and the space is none of the three; the constructor removes them. A service that does not map circulation refuses by default. The `CirculationMap` is a measurement:
+
+- **Pieces**: the connected parts of a region inside the space's free area (its floor less what the obstacles occupy in the band from the floor up by the height) eroded by half the width. Every point of a piece is the centre of a free disc as wide as the path, so a path runs between any two points of one piece.
+- **Possible pieces**: the connected parts of a region containing that erosion. A path between two different possible pieces does not exist.
+- **Contacts**: for each entrance and component (the request's subjects, sorted), the pieces proven to come within half the width plus the tolerance of its plan footprint, each with the skeleton node nearest to it, and the possible pieces that may.
+- **Skeleton**: nodes (`CirculationNode`: a point on the floor, a kind by its number of neighbours, `End`, `Path`, `Junction` or `Isolated`, its piece, and bounds on its distance to the free area's boundary, the half width there) and edges within one piece. Node positions are approximate: that a node lies in its piece and its half width are proven, how close it is to the true medial axis is not. The map states the boundary sample spacing it was built with.
+- **Unmapped pieces**: pieces whose skeleton could not be built, with why; their contacts still stand, but where their paths end is unknown.
+
+`CirculationMap::try_new` checks the map's shape: nodes in pieces, edges within one piece, kinds matching the neighbours, one contact per subject naming only pieces and nodes that are there, and exact evidence. The handle rejects a map of another request.
+
+The Axiolid adapter builds the free area as the placement search's scene does. The pieces are the polygons of the scope eroded by `Region::erode_inner` less the obstacles grown by `dilate_outer`; the possible pieces the polygons of `erode_outer` less `dilate_inner`, for half the width less 1 µm, so a gap exactly as wide as the path keeps a sliver and is neither proven nor ruled out. A contact is proven when a piece meets the subject's footprint grown by `dilate_inner`, possible when a possible piece meets it grown by `dilate_outer`. The skeleton is `axiolid_route::skeleton` of each piece with pruning factor 1.5 and a boundary spacing of a tenth of the width (at most 4000 samples per piece); a disconnected skeleton is built once more with the spacing down to half the narrowest width of the erosion. Half widths are distances to the free area's boundary widened by the overlay's grid snapping. A subject without a body, unmeasured or tessellated refuses the map.
+
+A piece whose skeleton the kernel refuses is unmapped, never guessed.
+
+Door swings are not subtracted: no source states a door's swing, so the map counts only what the obstacles occupy.
 
 ## Free-area bounds
 

@@ -39,6 +39,32 @@ All notable changes are documented here. This project follows Semantic Versionin
   to `stair-geometry` must declare the three new optional parameters
   `walking_line_offset`, `winder_angle_maximum` and `forbid_open_risers`;
   the workspace requires `axiolid-inspect` 0.3.2.
+- **Local circulation within rooms.** `local-circulation` requires, within
+  each selected space, a path `width_metres` wide from the entrances
+  (`access_path`, such as `axioval:derived.adjacent-space`, with
+  `door_selector` or `opening_selector`) to the components
+  (`component_selector`, placed in spaces by `space_path`), free up to
+  `clear_height_metres` of what `obstacles` occupy. A component the path
+  cannot reach is a finding (`no entrance of … reaches it on a path … wide`);
+  with `component_mode` `link` the components must be linked with one
+  another instead. Every skeleton end of the path must offer a free area
+  `end_width_metres` by `end_length_metres` within `end_reach_metres`,
+  unless its branch is shorter than `short_end_metres` or its free width
+  narrower than `narrow_end_metres`; the `passing_*` parameters require
+  passing spaces along the path from each entrance to each component, as
+  on accessible routes. `tolerance_metres` (default 0.05 m) says how close
+  the path must pass an entrance or component. Door swings are not
+  subtracted: sources state none. Three-valued throughout. It rests on a
+  new free-space measurement, `FreeSpaceService::map_circulation`
+  (`CirculationRequest`, `CirculationMap`; the default refuses): pieces of
+  the free area eroded by half the width from inside, which prove a path,
+  possible pieces from outside, which prove there is none, which pieces
+  come near each entrance and component, and the skeleton of the pieces
+  with proven half widths. The Axiolid adapter answers it with one-sided
+  disc morphology and `axiolid_route::skeleton`; the workspace now requires
+  `axiolid-route` 0.3.3 and resolves `axiolid-triangulate` and
+  `axiolid-predicates` 0.3.1. `passing_spaces` judges any polyline in one
+  space. (#78)
 - **Stair and ramp handrails, ramp end spaces and landing doors.** (Refs
   #85) `WalkingSurfaceService::measure_handrails` answers a
   `HandrailRequest` (subject, `WalkingStretch`, the rails a rule selects,

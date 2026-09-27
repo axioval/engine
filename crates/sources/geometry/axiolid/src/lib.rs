@@ -6,6 +6,7 @@
 //! producers can participate without an IFC dependency. No geometry kernel is silently
 //! substituted: missing backends return [`AxiolidError::IntegrationUnavailable`].
 
+mod circulation;
 pub mod contact;
 pub(crate) mod containment;
 pub(crate) mod coverage;

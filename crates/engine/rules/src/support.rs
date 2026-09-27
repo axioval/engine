@@ -776,6 +776,557 @@ impl Parameters<'_> {
     }
 }
 
+/// Table-valued parameters and the shared row matching.
+///
+/// The binder has already checked every row against the capability's
+/// declared columns, so a cell of another kind here is a declaration error,
+/// never "absent". Capabilities match rows with [`table::match_rows`] rather
+/// than reimplementing first, most specific or all-rows semantics.
+pub(crate) mod table {
+    #![cfg_attr(
+        not(test),
+        allow(dead_code, reason = "shared helper; no built-in reads a table yet")
+    )]
+
+    use axioval_ir::contract::{ParameterValue, Selector, TableRow};
+    use regex::{Regex, RegexBuilder};
+
+    use super::{Parameters, Unavailable, invalid};
+    use crate::selection::wildcard;
+
+    impl<'a> Parameters<'a> {
+        /// The rows of a table parameter, in declared order.
+        pub(crate) fn table(&self, name: &str) -> Result<Option<Vec<Row<'a>>>, Unavailable> {
+            self.typed(name, |value| match value {
+                ParameterValue::Table { value } => Some(value.iter().map(Row).collect()),
+                _ => None,
+            })
+        }
+    }
+
+    /// Typed read access to one row's cells.
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct Row<'a>(pub(crate) &'a TableRow);
+
+    impl<'a> Row<'a> {
+        fn typed<T>(
+            self,
+            column: &str,
+            read: impl FnOnce(&'a ParameterValue) -> Option<T>,
+        ) -> Result<Option<T>, Unavailable> {
+            match self.0.get(column) {
+                None => Ok(None),
+                Some(value) => read(value)
+                    .map(Some)
+                    .ok_or_else(|| invalid(format!("table column `{column}` has the wrong type"))),
+            }
+        }
+
+        /// A `string` or `textPattern` cell as written.
+        pub(crate) fn text(self, column: &str) -> Result<Option<&'a str>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::String { value } => Some(value.as_str()),
+                _ => None,
+            })
+        }
+
+        /// A `textPattern` cell compiled for matching.
+        pub(crate) fn pattern(
+            self,
+            column: &str,
+            case_sensitive: bool,
+        ) -> Result<Option<TextPattern>, Unavailable> {
+            self.text(column)?
+                .map(|pattern| TextPattern::new(pattern, case_sensitive).map_err(invalid))
+                .transpose()
+        }
+
+        pub(crate) fn reference(self, column: &str) -> Result<Option<&'a str>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Reference { value } => Some(value.as_str()),
+                _ => None,
+            })
+        }
+
+        pub(crate) fn integer(self, column: &str) -> Result<Option<i64>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Integer { value } => Some(*value),
+                _ => None,
+            })
+        }
+
+        pub(crate) fn number(self, column: &str) -> Result<Option<f64>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Number { value } if value.is_finite() => Some(*value),
+                _ => None,
+            })
+        }
+
+        /// A `quantity` cell as its value and unit.
+        pub(crate) fn quantity(self, column: &str) -> Result<Option<(f64, &'a str)>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Quantity { value, unit } if value.is_finite() => {
+                    Some((*value, unit.as_str()))
+                }
+                _ => None,
+            })
+        }
+
+        pub(crate) fn boolean(self, column: &str) -> Result<Option<bool>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Boolean { value } => Some(*value),
+                _ => None,
+            })
+        }
+
+        pub(crate) fn selector(self, column: &str) -> Result<Option<&'a Selector>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Selector { value } => Some(value.as_ref()),
+                _ => None,
+            })
+        }
+    }
+
+    /// A whole-value wildcard pattern, read as `like` reads it in property
+    /// selectors.
+    ///
+    /// Its specificity is the number of literal characters: `Office` is more
+    /// specific than `Off*`, which is more specific than `*`.
+    #[derive(Clone, Debug)]
+    pub(crate) struct TextPattern {
+        regex: Regex,
+        literals: u32,
+    }
+
+    impl TextPattern {
+        pub(crate) fn new(pattern: &str, case_sensitive: bool) -> Result<Self, String> {
+            let regex = RegexBuilder::new(&wildcard(pattern)?)
+                .case_insensitive(!case_sensitive)
+                .build()
+                .map_err(|error| format!("invalid wildcard pattern: {error}"))?;
+            let mut literals = 0_u32;
+            let mut chars = pattern.chars();
+            while let Some(c) = chars.next() {
+                match c {
+                    '*' | '?' => {}
+                    '\\' => {
+                        chars.next();
+                        literals = literals.saturating_add(1);
+                    }
+                    _ => literals = literals.saturating_add(1),
+                }
+            }
+            Ok(Self { regex, literals })
+        }
+
+        /// Whether `text` matches, weighted by this pattern's specificity.
+        pub(crate) fn test(&self, text: &str) -> RowTest {
+            if self.regex.is_match(text) {
+                RowTest::Match(self.literals)
+            } else {
+                RowTest::NoMatch
+            }
+        }
+    }
+
+    /// Whether one row applies to what is being checked.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum RowTest {
+        NoMatch,
+        /// It applies, with this specificity; higher is more specific.
+        Match(u32),
+        /// It cannot be decided, for example because a key value is unknown.
+        Undecided,
+    }
+
+    impl RowTest {
+        /// Two keys of one row: a mismatch decides, specificities add.
+        #[must_use]
+        pub(crate) fn and(self, other: Self) -> Self {
+            match (self, other) {
+                (Self::NoMatch, _) | (_, Self::NoMatch) => Self::NoMatch,
+                (Self::Undecided, _) | (_, Self::Undecided) => Self::Undecided,
+                (Self::Match(left), Self::Match(right)) => Self::Match(left.saturating_add(right)),
+            }
+        }
+    }
+
+    /// Which matching rows a capability wants.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum RowSelection {
+        /// The first matching row in declared order.
+        First,
+        /// The single matching row of highest specificity.
+        MostSpecific,
+        /// Every matching row, in declared order.
+        All,
+    }
+
+    /// The outcome of matching rows; indices are zero-based declared positions.
+    #[derive(Debug, PartialEq)]
+    pub(crate) enum Matched<'r, R> {
+        /// The selected rows; empty when no row matched.
+        Rows(Vec<(usize, &'r R)>),
+        /// A row that could change the outcome is undecided.
+        Undecided,
+        /// Several rows tie for the highest specificity.
+        Ambiguous(Vec<usize>),
+    }
+
+    /// Matches `rows` in declared order and selects as `selection` asks.
+    ///
+    /// Fails closed: `First` is undecided when an undecided row precedes the
+    /// first match or no row matches, `MostSpecific` and `All` whenever any
+    /// row is undecided, since it might be the more specific or another
+    /// matching row. A tie for the most specific row is reported, never
+    /// broken by declaration order.
+    pub(crate) fn match_rows<R>(
+        rows: &[R],
+        selection: RowSelection,
+        mut test: impl FnMut(&R) -> RowTest,
+    ) -> Matched<'_, R> {
+        let mut matches = Vec::new();
+        let mut undecided = false;
+        for (index, row) in rows.iter().enumerate() {
+            match test(row) {
+                RowTest::NoMatch => {}
+                RowTest::Undecided => undecided = true,
+                RowTest::Match(specificity) => {
+                    if selection == RowSelection::First {
+                        return if undecided {
+                            Matched::Undecided
+                        } else {
+                            Matched::Rows(vec![(index, row)])
+                        };
+                    }
+                    matches.push((index, row, specificity));
+                }
+            }
+        }
+        if undecided {
+            return Matched::Undecided;
+        }
+        if selection == RowSelection::MostSpecific {
+            let Some(best) = matches.iter().map(|(_, _, specificity)| *specificity).max() else {
+                return Matched::Rows(Vec::new());
+            };
+            matches.retain(|(_, _, specificity)| *specificity == best);
+            if matches.len() > 1 {
+                return Matched::Ambiguous(matches.iter().map(|(index, _, _)| *index).collect());
+            }
+        }
+        Matched::Rows(
+            matches
+                .into_iter()
+                .map(|(index, row, _)| (index, row))
+                .collect(),
+        )
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use axioval_engine::{
+            CapabilityEvaluation, CapabilityRegistry, ColumnKind, CompiledRule, NotEvaluatedReason,
+            ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime, TableColumn,
+            compile,
+        };
+        use axioval_ir::{DefinitionPackage, Object, ObjectId, Project, RuleSetPackage, SourceId};
+        use serde_json::{Value, json};
+
+        use super::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
+        use crate::support::{Parameters, finding};
+
+        fn indices<R>(matched: &Matched<'_, R>) -> Vec<usize> {
+            match matched {
+                Matched::Rows(rows) => rows.iter().map(|(index, _)| *index).collect(),
+                other => panic!("expected rows, got {:?}", discriminant(other)),
+            }
+        }
+
+        fn discriminant<R>(matched: &Matched<'_, R>) -> &'static str {
+            match matched {
+                Matched::Rows(_) => "rows",
+                Matched::Undecided => "undecided",
+                Matched::Ambiguous(_) => "ambiguous",
+            }
+        }
+
+        use RowTest::{Match, NoMatch, Undecided};
+
+        #[test]
+        fn first_takes_the_earliest_match_unless_an_undecided_row_precedes_it() {
+            let rows = [NoMatch, Match(1), Match(5)];
+            assert_eq!(
+                indices(&match_rows(&rows, RowSelection::First, RowTest::clone)),
+                [1]
+            );
+            let rows = [Match(0), Undecided];
+            assert_eq!(
+                indices(&match_rows(&rows, RowSelection::First, RowTest::clone)),
+                [0]
+            );
+            let rows = [Undecided, Match(3)];
+            assert_eq!(
+                match_rows(&rows, RowSelection::First, RowTest::clone),
+                Matched::Undecided
+            );
+            let rows = [NoMatch, Undecided];
+            assert_eq!(
+                match_rows(&rows, RowSelection::First, RowTest::clone),
+                Matched::Undecided
+            );
+            let rows = [NoMatch, NoMatch];
+            assert!(indices(&match_rows(&rows, RowSelection::First, RowTest::clone)).is_empty());
+        }
+
+        #[test]
+        fn most_specific_takes_the_single_best_row_and_reports_ties() {
+            let rows = [Match(0), Match(6), NoMatch, Match(3)];
+            assert_eq!(
+                indices(&match_rows(
+                    &rows,
+                    RowSelection::MostSpecific,
+                    RowTest::clone
+                )),
+                [1]
+            );
+            let rows = [Match(2), Match(4), Match(4)];
+            assert_eq!(
+                match_rows(&rows, RowSelection::MostSpecific, RowTest::clone),
+                Matched::Ambiguous(vec![1, 2])
+            );
+            let rows = [Match(9), Undecided];
+            assert_eq!(
+                match_rows(&rows, RowSelection::MostSpecific, RowTest::clone),
+                Matched::Undecided
+            );
+            let rows: [RowTest; 0] = [];
+            assert!(
+                indices(&match_rows(
+                    &rows,
+                    RowSelection::MostSpecific,
+                    RowTest::clone
+                ))
+                .is_empty()
+            );
+        }
+
+        #[test]
+        fn all_takes_every_match_in_declared_order() {
+            let rows = [Match(1), NoMatch, Match(0)];
+            assert_eq!(
+                indices(&match_rows(&rows, RowSelection::All, RowTest::clone)),
+                [0, 2]
+            );
+            let rows = [Match(1), Undecided];
+            assert_eq!(
+                match_rows(&rows, RowSelection::All, RowTest::clone),
+                Matched::Undecided
+            );
+        }
+
+        #[test]
+        fn keys_combine_by_conjunction() {
+            assert_eq!(Match(2).and(Match(3)), Match(5));
+            assert_eq!(Match(2).and(NoMatch), NoMatch);
+            assert_eq!(Undecided.and(NoMatch), NoMatch);
+            assert_eq!(Undecided.and(Match(1)), Undecided);
+        }
+
+        #[test]
+        fn text_patterns_match_the_whole_value_and_weigh_literals() {
+            let office = TextPattern::new("Office", true).unwrap();
+            let prefix = TextPattern::new("Off*", true).unwrap();
+            let any = TextPattern::new("*", true).unwrap();
+            let escaped = TextPattern::new(r"A\*?", true).unwrap();
+            assert_eq!(office.test("Office"), Match(6));
+            assert_eq!(office.test("Office 2"), NoMatch);
+            assert_eq!(office.test("office"), NoMatch);
+            assert_eq!(prefix.test("Office 2"), Match(3));
+            assert_eq!(any.test(""), Match(0));
+            assert_eq!(escaped.test("A*x"), Match(2));
+            assert_eq!(escaped.test("Abx"), NoMatch);
+            let folded = TextPattern::new("office", false).unwrap();
+            assert_eq!(folded.test("OFFICE"), Match(6));
+            assert!(TextPattern::new("a\\", true).is_err());
+        }
+
+        #[test]
+        #[allow(clippy::float_cmp)]
+        fn cells_read_as_their_kind_and_another_kind_is_a_declaration_error() {
+            let cells: axioval_ir::contract::TableRow = serde_json::from_value(json!({
+                "text": {"type": "string", "value": "Office*"},
+                "reference": {"type": "reference", "value": "axioval:example.office"},
+                "integer": {"type": "integer", "value": 3},
+                "number": {"type": "number", "value": 0.5},
+                "quantity": {"type": "quantity", "value": 10.0, "unit": "m2"},
+                "boolean": {"type": "boolean", "value": true},
+                "selector": {"type": "selector", "value": {"kind": "all"}},
+            }))
+            .unwrap();
+            let row = Row(&cells);
+            assert_eq!(row.text("text").unwrap(), Some("Office*"));
+            assert_eq!(
+                row.pattern("text", true).unwrap().unwrap().test("Office 1"),
+                Match(6)
+            );
+            assert_eq!(
+                row.reference("reference").unwrap(),
+                Some("axioval:example.office")
+            );
+            assert_eq!(row.integer("integer").unwrap(), Some(3));
+            assert_eq!(row.number("number").unwrap(), Some(0.5));
+            assert_eq!(row.quantity("quantity").unwrap(), Some((10.0, "m2")));
+            assert_eq!(row.boolean("boolean").unwrap(), Some(true));
+            assert!(row.selector("selector").unwrap().is_some());
+            assert_eq!(row.integer("absent").unwrap(), None);
+            let (reason, message) = row.number("integer").unwrap_err();
+            assert_eq!(reason, NotEvaluatedReason::InvalidDeclaration);
+            assert_eq!(message, "table column `integer` has the wrong type");
+        }
+
+        const COLUMNS: &[TableColumn] = &[
+            TableColumn::required("object_type", ColumnKind::TextPattern),
+            TableColumn::required("label", ColumnKind::String),
+        ];
+
+        /// A test capability: labels each object with the most specific row
+        /// whose `object_type` pattern matches its kind.
+        struct Labels;
+        impl RuleCapability for Labels {
+            fn id(&self) -> &'static str {
+                "axioval:capability.property-exists"
+            }
+            fn parameters(&self) -> Vec<ParameterDescriptor> {
+                vec![ParameterDescriptor::required(
+                    "labels",
+                    ParameterType::Table(COLUMNS),
+                )]
+            }
+            fn evaluate(
+                &self,
+                context: &RuleContext<'_>,
+                rule: &CompiledRule,
+            ) -> CapabilityEvaluation {
+                let read = || -> Result<Vec<(TextPattern, &str)>, crate::support::Unavailable> {
+                    let rows = Parameters(rule).table("labels")?.unwrap_or_default();
+                    rows.iter()
+                        .map(|row: &Row<'_>| {
+                            Ok((
+                                row.pattern("object_type", true)?.expect("required"),
+                                row.text("label")?.expect("required"),
+                            ))
+                        })
+                        .collect()
+                };
+                let rows = match read() {
+                    Ok(rows) => rows,
+                    Err((reason, message)) => {
+                        return CapabilityEvaluation::not_evaluated(reason, message);
+                    }
+                };
+                let mut evaluation = CapabilityEvaluation::default();
+                for object in context.project.objects() {
+                    match match_rows(&rows, RowSelection::MostSpecific, |(pattern, _)| {
+                        pattern.test(object.kind())
+                    }) {
+                        Matched::Rows(found) => {
+                            let message = match found.first() {
+                                Some((index, (_, label))) => format!("row {index}: {label}"),
+                                None => "no row".into(),
+                            };
+                            evaluation.push_finding(finding(
+                                rule,
+                                &object.id,
+                                message,
+                                vec![],
+                                vec![],
+                            ));
+                        }
+                        Matched::Undecided | Matched::Ambiguous(_) => evaluation
+                            .push_object_not_evaluated(
+                                object.id.clone(),
+                                NotEvaluatedReason::InvalidDeclaration,
+                                "several rows apply equally",
+                            ),
+                    }
+                }
+                evaluation
+            }
+        }
+
+        fn text(value: &str) -> Value {
+            json!({"default": value, "translations": {}})
+        }
+
+        fn row(pattern: &str, label: &str) -> Value {
+            json!({
+                "object_type": {"type": "string", "value": pattern},
+                "label": {"type": "string", "value": label},
+            })
+        }
+
+        #[test]
+        fn a_capability_matches_the_typed_rows_a_package_declares() {
+            let mut definitions: Value = serde_json::from_str(include_str!(
+                "../../../../fixtures/schema-v0.1.0/definitions.json"
+            ))
+            .unwrap();
+            definitions["definitions"]["axioval:example.property-exists"]["parameters"] = json!({
+                "labels": {
+                    "id": "labels",
+                    "name": text("Labels"),
+                    "kind": "table",
+                    "required": true,
+                    "allowedValues": [],
+                    "columns": [
+                        {"id": "label", "name": text("Label"), "kind": "string", "required": true},
+                        {"id": "object_type", "name": text("Object type"), "kind": "textPattern", "required": true},
+                    ],
+                }
+            });
+            let mut ruleset: Value = serde_json::from_str(include_str!(
+                "../../../../fixtures/schema-v0.1.0/ruleset.json"
+            ))
+            .unwrap();
+            ruleset["root"]["rules"][0]["parameters"] = json!({"labels": {"type": "table", "value": [
+                row("*", "anything"),
+                row("Wall*", "a wall"),
+                row("WallStandard", "a standard wall"),
+                row("Slab?", "slab, one letter"),
+                row("Sla?X", "slab, one letter"),
+            ]}});
+            let definitions: DefinitionPackage = serde_json::from_value(definitions).unwrap();
+            let ruleset: RuleSetPackage = serde_json::from_value(ruleset).unwrap();
+            let registry = || CapabilityRegistry::new().register(Labels).unwrap();
+            let plan = compile(&registry(), &[definitions], &ruleset).unwrap();
+
+            let source = SourceId::new("test", "model").unwrap();
+            let object = |local: &str, kind: &str| {
+                Object::new(ObjectId::new(source.clone(), local).unwrap(), kind)
+            };
+            let project = Project::new(vec![
+                object("a", "WallStandard"),
+                object("b", "WallCurved"),
+                object("c", "Door"),
+                object("d", "SlabX"),
+            ])
+            .unwrap();
+            let report = Runtime::new(registry()).run(&project, plan).unwrap();
+            let messages: Vec<_> = report
+                .findings()
+                .iter()
+                .map(|finding| finding.message.as_str())
+                .collect();
+            assert_eq!(
+                messages,
+                ["row 2: a standard wall", "row 1: a wall", "row 0: anything"]
+            );
+            assert_eq!(report.not_evaluated().len(), 1);
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {

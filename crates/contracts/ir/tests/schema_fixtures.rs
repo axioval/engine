@@ -145,3 +145,60 @@ fn property_selector_text_options_default_and_round_trip() {
         );
     }
 }
+
+#[test]
+fn packages_without_tables_serialize_without_columns() {
+    let d: DefinitionPackage = serde_json::from_str(D).unwrap();
+    let written = serde_json::to_string(&d).unwrap();
+    assert!(!written.contains("columns"));
+    let reread: DefinitionPackage = serde_json::from_str(&written).unwrap();
+    assert_eq!(reread, d);
+}
+
+#[test]
+fn table_parameter_definition_and_value_round_trip() {
+    use axioval_ir::contract::{
+        ColumnKind, ParameterDefinition, ParameterKind, TableColumnDefinition,
+    };
+    let definition = r#"{"id":"limits","name":{"default":"Limits","translations":{}},"description":null,"kind":"table","referencedValueKind":null,"required":true,"defaultValue":null,"allowedValues":[],"unitDimension":null,"citations":[],"columns":[{"id":"space_type","name":{"default":"Space type","translations":{}},"kind":"textPattern","required":true},{"id":"minimum_area","name":{"default":"Minimum area","translations":{}},"kind":"quantity","required":false,"unitDimension":"area"}]}"#;
+    let parsed: ParameterDefinition = serde_json::from_str(definition).unwrap();
+    assert_eq!(parsed.kind, ParameterKind::Table);
+    assert_eq!(parsed.columns[0].kind, ColumnKind::TextPattern);
+    assert!(!parsed.columns[1].required);
+    assert_eq!(
+        serde_json::to_value(&parsed).unwrap(),
+        serde_json::from_str::<serde_json::Value>(definition).unwrap()
+    );
+    // `required` defaults to true, as for parameters.
+    let column: TableColumnDefinition = serde_json::from_str(
+        r#"{"id":"label","name":{"default":"Label","translations":{}},"kind":"string"}"#,
+    )
+    .unwrap();
+    assert!(column.required);
+
+    let value = r#"{"type":"table","value":[{"minimum_area":{"type":"quantity","value":10.0,"unit":"m2"},"space_type":{"type":"string","value":"Office*"}}]}"#;
+    let parsed: ParameterValue = serde_json::from_str(value).unwrap();
+    let ParameterValue::Table { value: rows } = &parsed else {
+        panic!("a table value");
+    };
+    assert_eq!(rows[0].len(), 2);
+    assert_eq!(serde_json::to_string(&parsed).unwrap(), value);
+}
+
+#[test]
+fn table_contracts_reject_unknown_fields_and_kinds() {
+    use axioval_ir::contract::TableColumnDefinition;
+    assert!(
+        serde_json::from_str::<TableColumnDefinition>(
+            r#"{"id":"a","name":{"default":"A","translations":{}},"kind":"string","width":3}"#
+        )
+        .is_err()
+    );
+    assert!(
+        serde_json::from_str::<TableColumnDefinition>(
+            r#"{"id":"a","name":{"default":"A","translations":{}},"kind":"table"}"#
+        )
+        .is_err()
+    );
+    assert!(serde_json::from_str::<ParameterValue>(r#"{"type":"table","rows":[]}"#).is_err());
+}

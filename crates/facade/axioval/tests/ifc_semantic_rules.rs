@@ -88,6 +88,7 @@ fn kind(parameter_type: ParameterType) -> &'static str {
         ParameterType::Selector => "selector",
         ParameterType::StringList => "stringList",
         ParameterType::ReferenceList => "referenceList",
+        ParameterType::Table(_) => "table",
     }
 }
 

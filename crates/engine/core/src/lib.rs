@@ -51,6 +51,15 @@ pub enum EngineError {
         capability: String,
         parameter: String,
     },
+    /// A row of a table-valued binding does not fit the declared columns.
+    #[error("capability `{capability}` parameter `{parameter}` row {row}: {detail}")]
+    InvalidTableRow {
+        capability: String,
+        parameter: String,
+        /// Zero-based row index.
+        row: usize,
+        detail: String,
+    },
     /// A rule binds a parameter more than once.
     #[error("rule has duplicate parameter binding `{0}`")]
     DuplicateBinding(String),
@@ -85,6 +94,39 @@ pub enum EngineError {
     },
 }
 
+pub use schema::ColumnKind;
+
+/// One trusted column of a table parameter.
+///
+/// A definition's columns must match the descriptor's by ID, kind and
+/// requirement, in any order; their names and descriptions are presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TableColumn {
+    pub id: &'static str,
+    pub kind: ColumnKind,
+    pub required: bool,
+}
+impl TableColumn {
+    /// A column every row must fill.
+    #[must_use]
+    pub const fn required(id: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            id,
+            kind,
+            required: true,
+        }
+    }
+    /// A column a row may leave empty.
+    #[must_use]
+    pub const fn optional(id: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            id,
+            kind,
+            required: false,
+        }
+    }
+}
+
 /// Supported declarative parameter types.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParameterType {
@@ -100,6 +142,8 @@ pub enum ParameterType {
     Selector,
     StringList,
     ReferenceList,
+    /// Rows of typed cells in the given columns.
+    Table(&'static [TableColumn]),
 }
 impl ParameterType {
     fn accepts(self, value: &schema::ParameterValue) -> bool {
@@ -126,6 +170,7 @@ impl ParameterType {
                     Self::ReferenceList,
                     schema::ParameterValue::ReferenceList { .. }
                 )
+                | (Self::Table(_), schema::ParameterValue::Table { .. })
         )
     }
 }

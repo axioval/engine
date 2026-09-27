@@ -19,6 +19,27 @@ At runtime, missing evidence does not become a pass. `CapabilityEvaluation` carr
 
 A capability may return findings and not-evaluated outcomes together when only part of its selected universe was computable. Consumers must not interpret an empty findings list as a pass while `not_evaluated` is non-empty.
 
+## Table parameters
+
+Many checks are naturally a table: rows of patterns and limits, such as a minimum area per space type or the components required per class. A `table` parameter carries such a table in one rule instead of one rule per row.
+
+The definition declares the table's columns, each with an `id`, a localized `name`, a `kind` and whether it is `required` (the default). A column kind is one of `string`, `textPattern`, `number`, `quantity` (with a `unitDimension`), `integer`, `boolean`, `selector` and `reference`. A table value is a list of rows; each row maps column IDs to cells written as the scalar value of the column's kind (a `textPattern` cell is a `string` value):
+
+```json
+{"type": "table", "value": [
+  {"space_type": {"type": "string", "value": "Office*"},
+   "minimum_area": {"type": "quantity", "value": 10, "unit": "m2"}}
+]}
+```
+
+A capability declares the same columns in its descriptor, `ParameterType::Table(&[TableColumn::required("space_type", ColumnKind::TextPattern), ...])`. The binder requires the definition's columns to equal the descriptor's by ID, kind and requirement, in any order, and rejects `columns` on any other parameter kind and `allowedValues` on a table. Every row, bound or defaulted, must then fit: a cell in an unknown column, a cell of another kind, a missing required cell, or a text pattern ending in an unpaired backslash fails compilation with `InvalidTableRow`, naming the parameter, the zero-based row and the column. Concepts named in selector cells are checked like any other. Rows keep their declared order; an empty table is valid.
+
+A text pattern reads like the `like` operator of property selectors: it matches the whole value, `*` stands for any run of characters, `?` for exactly one, and a backslash makes the next character literal. Its specificity is its number of literal characters, so `Office` is more specific than `Off*`, which is more specific than `*`.
+
+Capabilities in `axioval-rules` read rows through the shared parameter reader and match them with one helper rather than each reimplementing row semantics. It selects the first matching row, the single most specific one, or all matching rows, and fails closed: a row that cannot be decided (a key value unknown) makes the outcome undecided whenever it could change it, and two rows tied for most specific are reported as ambiguous, never broken by declaration order. Keys of one row combine by conjunction, adding their specificities.
+
+Existing packages are unaffected: `columns` is omitted from serialized definitions that declare none.
+
 ## Built-ins
 
 `axioval-rules` contains reusable, vendor-neutral implementations. Vendor identity, proprietary format handling, localized vendor text and oracle-only ordering remain adapters in the legacy runtime.

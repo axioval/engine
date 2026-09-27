@@ -34,6 +34,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   evaluated; an object without a body, or an anchor with such a member, is
   not evaluated. Undecided members can only add area, so only an excess
   over the maximum stands.
+- **Table-valued rule parameters.** A `table` parameter declares named
+  `columns`, each with a kind (`string`, `textPattern`, `number`,
+  `quantity`, `integer`, `boolean`, `selector` or `reference`) and whether
+  it is required; its value is a list of rows mapping column IDs to cells of
+  those kinds. Capabilities declare the columns with
+  `ParameterType::Table(&[TableColumn])`, and the binder requires the
+  definition to declare the same columns and every row to fit them: an
+  unknown column, a cell of another kind, a missing required cell or a
+  malformed text pattern fails compilation with
+  `EngineError::InvalidTableRow`. `axioval-rules` gains a shared row
+  matcher (first match, most specific match, all matches) that fails closed
+  on undecided rows and reports ties. **Breaking:** `ParameterKind`,
+  `ParameterValue`, `ParameterType` and `EngineError` have new variants, and
+  `ParameterDefinition` has a `columns` field; it is omitted when empty, so
+  existing packages read and write unchanged.
 - **Property comparison along paths, within spaces and buildings.**
   `property-comparison` takes a relationship `path` in `related` mode, and
   new `same_space` and `same_building` modes compare with the objects that

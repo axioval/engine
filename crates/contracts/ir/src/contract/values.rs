@@ -1,6 +1,10 @@
 #![allow(missing_docs)]
 use super::Selector;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// One row of a `table` value: cells keyed by column ID.
+pub type TableRow = BTreeMap<String, ParameterValue>;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ParameterValue {
@@ -45,6 +49,10 @@ pub enum ParameterValue {
     },
     ReferenceList {
         value: Vec<String>,
+    },
+    /// Rows of a `table` parameter, in declared order.
+    Table {
+        value: Vec<TableRow>,
     },
 }
 const fn yes() -> bool {

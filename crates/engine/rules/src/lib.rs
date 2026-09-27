@@ -9,6 +9,7 @@ mod conformance;
 mod consistent_value;
 mod counts;
 mod distance;
+mod exit_separation;
 mod external_wall_validation;
 mod free_floor_circle;
 mod free_floor_rectangle;
@@ -50,6 +51,7 @@ pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
 pub use counts::RelatedCount;
 pub use distance::Distance;
+pub use exit_separation::ExitSeparation;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
@@ -121,4 +123,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(TableAllocation))
         .and_then(|registry| registry.register(OpeningSpaces))
         .and_then(|registry| registry.register(GroupComposition))
+        .and_then(|registry| registry.register(ExitSeparation))
 }

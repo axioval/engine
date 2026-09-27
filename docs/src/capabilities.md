@@ -462,6 +462,31 @@ The `limits` table has the optional columns `key_1` … `key_4` (text patterns, 
 
 Whether a window sits at the end of a corridor is not decided: it needs the corridor's axis (a medial axis of its footprint), which no service provides yet.
 
+### Exit separation
+
+`exit-separation` requires each selected space's exits to lie far enough apart for its size: at least `fraction` (one half by default) of the space's longest plan diagonal, or `flagged_fraction` (say one third) when a boolean `flag` is `true`.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `exit_path` | string list, required | the relationship path from the space to its exits, such as `["axioval:derived.adjacent-space:backward"]` |
+| `exit_selector` | selector, required | which reached objects are exits (doors, or doors marked as exits) |
+| `fraction` | number, optional | share of the diagonal the exits must lie apart; `0.5` by default |
+| `flag` | property reference, optional | a boolean selecting `flagged_fraction`, such as a sprinkler flag |
+| `flag_path` | string list, optional | where `flag` is read: the objects this path reaches from the space (its storey, its building); the space itself without it |
+| `flagged_fraction` | number, optional | the share that applies when `flag` is `true`; required with `flag` |
+| `separation` | string, optional | `closest` (the default), `centres` or `farthest` |
+| `pairs` | string, optional | `any` (the default): some pair of exits lies far enough apart; `all`: every pair does |
+| `minimum_exits` | integer, optional | fewer exits than this is a finding |
+
+The diagonal is the largest distance between two points of the space's footprint, through `PlanSpanService`. `closest` measures the plan distance between the exits' footprints through `ProximityService` (the `horizontal` projection of `distance`); `centres` and `farthest` measure between the footprints' centroids or their farthest points through `PlanSpanService`. A space with fewer than two exits is not checked, unless `minimum_exits` makes the shortfall a finding.
+
+A finding names the pair (with `any`, the pair farthest apart), its separation, the required distance, the fraction and diagonal it comes from and the flag's value; it relates the exits and the objects the flag was read from, and cites the relationship, measurement and flag evidence. Every length is an interval:
+
+- A pair is far enough apart only when its whole interval lies at or above the whole required interval, too close only when it lies wholly below it; otherwise it is unknown, and so is a pair that cannot be measured.
+- The flag must be a boolean and agree across the objects `flag_path` reaches. An absent, null, non-boolean or disagreeing flag, or a path reaching nothing, is unknown: the required interval then spans both fractions, so a pair far enough apart for the larger or too close for the smaller is still decided.
+- An object `exit_selector` cannot decide can only add exits and pairs: with `any` a pair far enough apart stands, with `all` a pair too close stands, and anything else they could change is not evaluated. The same holds for the count against `minimum_exits`.
+- A diagonal that cannot be measured, or a missing service, leaves the space not evaluated.
+
 ### Slab stacks
 
 `slab-stack-spacing` judges `VerticalExtentService` elevations together with `PlanAreaService` footprints, so it needs a geometry adapter. Unlike `level-spacing`, which reads storey elevations, it measures the slabs' own surfaces.

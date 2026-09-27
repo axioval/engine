@@ -446,6 +446,7 @@ mod metric_routing;
 mod object_frame;
 mod pairwise;
 mod plan_area;
+mod plan_span;
 mod properties;
 mod proximity;
 mod relationships;
@@ -508,6 +509,7 @@ pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
 pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
+pub use plan_span::{PlanLength, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,

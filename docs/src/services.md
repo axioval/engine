@@ -43,6 +43,8 @@ Walkable-region topology is exposed through `WalkabilityServiceHandle`. A truste
 
 Plan-projected areas are exposed through `PlanAreaServiceHandle`: an object's footprint and the overlap of two footprints, each a `PlanArea` interval whose evidence is exact exactly when the bounds coincide. Capabilities decide from the whole interval; one straddling a bound is not evaluated.
 
+Plan spans are exposed through `PlanSpanServiceHandle`: an object's longest plan diagonal (the largest distance between two points of its footprint), and the distance between two footprints' centroids or farthest points, each a `PlanLength` interval whose evidence is exact exactly when the bounds coincide. The closest distance between two footprints is the proximity service's `horizontal` projection and is not repeated here. An object without a footprint is refused, never zero, and so is one object measured against itself.
+
 Facade areas are exposed through `FacadeAreaServiceHandle`: the area of an object's steep faces that face the outside, as a `FacadeArea` interval bound to the requested object, whose evidence is exact exactly when the bounds coincide. Which objects are spaces (the interior) is the adapter's host declaration; whether an object is external is the rule's selection, never the service's. An object without a body, or a measurement an unmeasured body could change, is refused, never zero.
 
 Vertical extents are exposed through `VerticalExtentServiceHandle`: the elevations of an object's lowest and highest points as `ElevationInterval`s, bound to the requested object. The evidence is exact exactly when both elevations are points; a tessellated body's elevations are intervals. An object without a body or with an unmeasured one has no extent, never zero.

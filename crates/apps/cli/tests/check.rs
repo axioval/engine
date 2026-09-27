@@ -1955,7 +1955,8 @@ fn signature(parameters: &[(&str, &str, bool)]) -> Value {
 impl Case {
     /// Runs one rule of `capability` with geometry over `model`: the
     /// fixture packages with the rule swapped for it. `types` binds object
-    /// types by `(id suffix, IFC name)`; `IsExternal` is always bound.
+    /// types by `(id suffix, IFC name)`; `IsExternal` and
+    /// `SprinklerProtection` are always bound.
     fn geometry_rule(
         &self,
         model: &str,
@@ -1980,6 +1981,20 @@ impl Case {
             "id": "axioval:example.ifc.pset-space-common",
             "name": {"default": "Pset_SpaceCommon", "translations": {}},
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Pset_SpaceCommon"}],
+            "citations": [],
+        });
+        definitions["propertySets"]["axioval:example.ifc.pset-space-fire-safety"] = json!({
+            "id": "axioval:example.ifc.pset-space-fire-safety",
+            "name": {"default": "Pset_SpaceFireSafetyRequirements", "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM,
+                               "name": "Pset_SpaceFireSafetyRequirements"}],
+            "citations": [],
+        });
+        definitions["properties"]["axioval:example.ifc.sprinkler-protection"] = json!({
+            "id": "axioval:example.ifc.sprinkler-protection",
+            "name": {"default": "SprinklerProtection", "translations": {}},
+            "valueKind": "boolean",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "SprinklerProtection"}],
             "citations": [],
         });
         definitions["properties"]["axioval:example.ifc.is-external"] = json!({
@@ -2255,6 +2270,88 @@ fn with_geometry_a_window_too_high_above_one_rooms_floor_is_found() {
             .is_none_or(Vec::is_empty),
         "{result:#}"
     );
+}
+
+/// Halls #19 (x 0..20, y 0..10) and #29 (x 0..20, y 20..30), both 3 m
+/// high, each with two 1 x 0.1 m doors in its north wall: #39 and #49 at
+/// x 1..2 and 4..5 for #19, #59 and #69 at x 1..2 and 10..11 for #29.
+/// `Pset_SpaceFireSafetyRequirements.SprinklerProtection` is false for #19
+/// and true for #29.
+fn halls_with_exits() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('SprinklerProtection',$,IFCBOOLEAN(.F.),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceFireSafetyRequirements',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('SprinklerProtection',$,IFCBOOLEAN(.T.),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceFireSafetyRequirements',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#29),#211);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [10.0, 5.0, 0.0], [20.0, 10.0, 3.0], space),
+        placed_box(20, [10.0, 25.0, 0.0], [20.0, 10.0, 3.0], space),
+        placed_box(30, [1.5, 10.05, 0.0], [1.0, 0.1, 2.1], door),
+        placed_box(40, [4.5, 10.05, 0.0], [1.0, 0.1, 2.1], door),
+        placed_box(50, [1.5, 30.05, 0.0], [1.0, 0.1, 2.1], door),
+        placed_box(60, [10.5, 30.05, 0.0], [1.0, 0.1, 2.1], door),
+    )
+}
+
+#[test]
+fn with_geometry_exits_too_close_for_their_hall_are_found() {
+    for (separation, apart) in [
+        ("closest", "2 m apart between closest points"),
+        ("centres", "3 m apart between centres"),
+    ] {
+        let case = Case::new(&format!("geometry-exit-separation-{separation}"));
+        let (output, result) = case.geometry_rule(
+            &halls_with_exits(),
+            &[("door", "IfcDoor"), ("space", "IfcSpace")],
+            "axioval:capability.exit-separation",
+            &registry_signature("axioval:capability.exit-separation"),
+            entity("space"),
+            json!({
+                "exit_path": {"type": "stringList",
+                              "value": ["axioval:derived.adjacent-space:backward"]},
+                "exit_selector": {"type": "selector", "value": entity("door")},
+                "separation": {"type": "string", "value": separation},
+                "flag": {"type": "propertyReference",
+                         "property": "axioval:example.ifc.sprinkler-protection",
+                         "propertySet": "axioval:example.ifc.pset-space-fire-safety"},
+                "flagged_fraction": {"type": "number", "value": 1.0 / 3.0},
+            }),
+        );
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+        // #19's doors are too close for half its 22.36 m diagonal; #29's,
+        // 8 m apart, need only a third because it is sprinklered.
+        let findings = finding_messages(&result);
+        assert_eq!(findings.len(), 1, "{result:#}");
+        assert_eq!(findings[0].0, "#19", "{result:#}");
+        assert!(
+            findings[0].1.contains(apart)
+                && findings[0].1.contains(
+                    "required at least 11.1803 m (0.5 × the longest plan diagonal of 22.3607 m, "
+                )
+                && findings[0].1.ends_with("false)"),
+            "{result:#}"
+        );
+        assert!(
+            result["report"]["not_evaluated"]
+                .as_array()
+                .is_none_or(Vec::is_empty),
+            "{result:#}"
+        );
+    }
 }
 
 #[test]

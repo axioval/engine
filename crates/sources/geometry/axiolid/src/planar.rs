@@ -133,12 +133,30 @@ pub(crate) fn footprint_measure(
     triangles: &[Triangle],
     tolerance: axiolid_core::Tolerance,
 ) -> Option<(f64, f64)> {
+    let polygons = footprint_polygons(triangles, tolerance)?;
+    let area = polygons.iter().map(polygon_area).sum();
+    let perimeter = polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .map(ring_perimeter)
+        .sum();
+    Some((area, perimeter))
+}
+
+/// A triangle set's footprint as the polygons of its plan union.
+///
+/// `None` when the overlay cannot be computed; an empty footprint has no
+/// polygons.
+pub(crate) fn footprint_polygons(
+    triangles: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Option<Vec<Polygon>> {
     let input = OverlayInput {
         frame: plan_frame(),
         polygons: projected_polygons(triangles),
     };
     if input.polygons.is_empty() {
-        return Some((0.0, 0.0));
+        return Some(Vec::new());
     }
     let merged = overlay(
         &input,
@@ -148,14 +166,36 @@ pub(crate) fn footprint_measure(
         tolerance,
     )
     .ok()?;
-    let area = merged.polygons.iter().map(polygon_area).sum();
-    let perimeter = merged
-        .polygons
-        .iter()
-        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
-        .map(ring_perimeter)
-        .sum();
-    Some((area, perimeter))
+    Some(merged.polygons)
+}
+
+/// Area and first moments `(A, ∫x, ∫y)` of a polygon, holes subtracted,
+/// whatever the orientation of its rings.
+pub(crate) fn polygon_moments(polygon: &Polygon) -> (f64, f64, f64) {
+    let ring = |ring: &Ring| {
+        let points = &ring.points;
+        let (mut area, mut x, mut y) = (0.0, 0.0, 0.0);
+        for index in 0..points.len() {
+            let current = points[index];
+            let next = points[(index + 1) % points.len()];
+            let cross = current.x * next.y - next.x * current.y;
+            area += cross;
+            x += (current.x + next.x) * cross;
+            y += (current.y + next.y) * cross;
+        }
+        // Shoelace sums are twice the area and six times the moments; the
+        // sign of the area gives the ring's orientation.
+        let sign = if area < 0.0 { -1.0 } else { 1.0 };
+        (sign * area / 2.0, sign * x / 6.0, sign * y / 6.0)
+    };
+    let (mut area, mut x, mut y) = ring(&polygon.outer);
+    for hole in &polygon.holes {
+        let (a, hx, hy) = ring(hole);
+        area -= a;
+        x -= hx;
+        y -= hy;
+    }
+    (area, x, y)
 }
 
 /// Area of the overlap of two triangle sets' footprints.
@@ -208,7 +248,7 @@ pub(crate) fn plan_overlap_polygons(
 
 #[cfg(test)]
 mod polygon_area_tests {
-    use super::{polygon_area, ring_area};
+    use super::{polygon_area, polygon_moments, ring_area};
     use axiolid_core::Point2;
     use axiolid_overlay::{Polygon, Ring};
 
@@ -231,6 +271,21 @@ mod polygon_area_tests {
         };
         // 4.0 outer minus a 1.0 void.
         assert!((polygon_area(&with_hole) - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn moments_subtract_holes_whatever_the_orientation() {
+        let mut hole = rect(0.0, 0.0, 1.0, 1.0);
+        hole.points.reverse();
+        let polygon = Polygon {
+            outer: rect(0.0, 0.0, 4.0, 2.0),
+            holes: vec![hole],
+        };
+        let (area, x, y) = polygon_moments(&polygon);
+        // 8 m² centred at (2, 1) less 1 m² centred at (0.5, 0.5).
+        assert!((area - 7.0).abs() < 1e-9);
+        assert!((x - (16.0 - 0.5)).abs() < 1e-9);
+        assert!((y - (8.0 - 0.5)).abs() < 1e-9);
     }
 
     #[test]

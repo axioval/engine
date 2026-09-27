@@ -243,6 +243,20 @@ footprint is unavailable, never zero, when a member has no body, is
 unmeasured or undescribed, when the membership is undecided, when the group
 groups nothing, or when it contains itself.
 
+`AxiolidPlanSpanService` measures plan spans over the footprints the
+plan-area service gathers, a declared group spanning the union of its
+members. Every point of a footprint lies in the convex hull of its projected
+vertices, and the distance is convex, so the longest diagonal is the largest
+distance between two hull vertices and the farthest span the largest between
+a hull vertex of each footprint; no boundary is walked. A centre is the
+centroid of the plan overlay, overlapping parts counted once. A tessellated
+mesh with chord deviation `d` widens a diagonal by `2d` and a farthest span by
+both deviations. Its centroid can move only through the band of area
+`b = 2·P·d + π·d²` where the true and meshed footprints differ, whose points
+lie within `R + d` of the measured centroid (`R` the farthest hull vertex), so
+by at most `b·(R + d) / (A − b)`; a footprint no larger than its band has no
+bounded centre and is refused.
+
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even

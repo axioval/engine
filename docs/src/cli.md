@@ -194,7 +194,7 @@ axioval report result.json --object '#42' --evidence
 Semantic evidence (properties, relationships, classifications, the type
 hierarchy) is always available. `--geometry` also meshes the model, so
 geometric rules (clash, distance, contact, space, plan-area, facade-area, slab-stack,
-storey-height and free-space checks) can run. It is off by default because meshing costs time a purely semantic ruleset
+storey-height, exit-separation and free-space checks) can run. It is off by default because meshing costs time a purely semantic ruleset
 does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
 

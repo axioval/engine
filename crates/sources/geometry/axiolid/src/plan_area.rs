@@ -27,11 +27,11 @@ const LINEAR_TOLERANCE: f64 = 1e-9;
 const ANGULAR_TOLERANCE: f64 = 1e-9;
 
 /// A measured footprint and the triangles it was measured from.
-struct Footprint {
-    soup: Vec<Triangle>,
-    area: f64,
-    perimeter: f64,
-    deviation: f64,
+pub(crate) struct Footprint {
+    pub(crate) soup: Vec<Triangle>,
+    pub(crate) area: f64,
+    pub(crate) perimeter: f64,
+    pub(crate) deviation: f64,
 }
 
 /// Measures plan areas of registered meshes using Axiolid.
@@ -60,7 +60,7 @@ impl AxiolidPlanAreaService {
 
     /// The object's plan triangles, footprint area and perimeter, and the
     /// largest chord deviation among the meshes they came from.
-    fn measure(&self, object: &ObjectId) -> Result<Footprint, PlanAreaError> {
+    pub(crate) fn measure(&self, object: &ObjectId) -> Result<Footprint, PlanAreaError> {
         let mut soup = Vec::new();
         let mut deviation = 0.0_f64;
         self.collect(object, None, &mut Vec::new(), &mut soup, &mut deviation)?;
@@ -173,13 +173,13 @@ impl AxiolidPlanAreaService {
     }
 }
 
-fn tolerance() -> Result<axiolid_core::Tolerance, PlanAreaError> {
+pub(crate) fn tolerance() -> Result<axiolid_core::Tolerance, PlanAreaError> {
     axiolid_core::Tolerance::new(LINEAR_TOLERANCE, ANGULAR_TOLERANCE)
         .map_err(|_| PlanAreaError::Unavailable("invalid overlay tolerance".into()))
 }
 
 /// Area of the band of width `2d` along a boundary of length `perimeter`.
-fn band(perimeter: f64, deviation: f64) -> f64 {
+pub(crate) fn band(perimeter: f64, deviation: f64) -> f64 {
     2.0 * perimeter * deviation + std::f64::consts::PI * deviation * deviation
 }
 

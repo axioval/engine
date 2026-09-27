@@ -42,14 +42,14 @@ use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
     AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
-    AxiolidLinearQuantityService, AxiolidPlanAreaService, AxiolidProximityService,
-    AxiolidSpaceService, AxiolidVerticalExtentService,
+    AxiolidLinearQuantityService, AxiolidPlanAreaService, AxiolidPlanSpanService,
+    AxiolidProximityService, AxiolidSpaceService, AxiolidVerticalExtentService,
 };
 use axioval::engine::{
     ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
     EvidenceSession, FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
-    LinearQuantityServiceHandle, PlanAreaServiceHandle, PropertyRequest, PropertyResolution,
-    PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
+    LinearQuantityServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
     RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
     SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
     VerticalExtentServiceHandle,
@@ -292,6 +292,13 @@ fn register(
         )?
         .with_host_service(
             PlanAreaServiceHandle::new(Arc::new(AxiolidPlanAreaService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        .with_host_service(
+            PlanSpanServiceHandle::new(Arc::new(AxiolidPlanSpanService::new(
                 geometry.clone(),
                 source.clone(),
             ))),

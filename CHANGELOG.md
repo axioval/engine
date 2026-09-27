@@ -6,6 +6,27 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Exit separation.** The new capability `exit-separation` requires each
+  selected space's exits, reached through `exit_path` (such as
+  `axioval:derived.adjacent-space:backward`) and filtered by
+  `exit_selector`, to lie at least `fraction` (one half by default) of the
+  space's longest plan diagonal apart, or `flagged_fraction` when the boolean
+  `flag`, read on the space or through `flag_path` (its storey, its
+  building), is true: a third when sprinklered. `separation` measures between
+  closest points (the proximity service's `horizontal` distance), `centres`
+  or `farthest` points; `pairs` `any` (the default) needs one pair far
+  enough apart, `all` every pair; `minimum_exits` makes too few exits a
+  finding. Lengths are intervals: a straddling pair is not evaluated, an
+  unknown flag widens the requirement to both fractions, and an exit the
+  selector cannot decide leaves a verdict it could change not evaluated.
+  (#81)
+- **Plan spans.** A new `PlanSpanService` (`PlanSpanServiceHandle`) measures
+  an object's longest plan diagonal and the centre-to-centre and
+  farthest-point distances between two footprints as `PlanLength`
+  intervals. `AxiolidPlanSpanService` measures them from convex-hull vertices
+  and the overlay centroid of the plan-area footprints, exactly for planar
+  meshes and within a derived bound for tessellated ones; the CLI registers
+  it with `--geometry`.
 - **Sill heights in `keyed-limit`.** The new `quantity` `sill-height`
   limits each object's bottom elevation above the floor of every object the
   new parameter `floor_path` reaches from it, through the vertical-extent

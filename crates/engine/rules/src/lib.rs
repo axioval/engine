@@ -8,6 +8,7 @@ mod body_extent;
 mod clash;
 mod clash_matrix;
 mod comparison;
+mod component_clearance;
 mod conformance;
 mod consistent_value;
 mod counterpart_coverage;
@@ -61,6 +62,7 @@ pub use comparison::{
     ComparisonTolerance, Difference, Facet, Measure, Measurement, ModelComparison, ObjectChange,
     Side, SourceComparison, Unresolved, compare_sessions,
 };
+pub use component_clearance::ComponentClearance;
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
 pub use counterpart_coverage::CounterpartCoverage;
@@ -157,4 +159,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(AccessibleRoute))
         .and_then(|registry| registry.register(SpaceConnection))
         .and_then(|registry| registry.register(SpaceDistance))
+        .and_then(|registry| registry.register(ComponentClearance))
 }

@@ -628,6 +628,76 @@ pub enum ClearanceOutcome {
     Obstructed(ObstructionEvidence),
 }
 
+/// Asks whether a clearance volume's plan footprint lies inside the union of
+/// the plan footprints of `scopes`, such as the spaces a component stands in.
+///
+/// Only the plan is compared: the volume's height is carried so the request
+/// names the same volume a clearance request does, not to compare it with
+/// the scopes' heights. The scopes are the rule's selection, sorted and
+/// deduplicated; with none, nothing covers the footprint.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContainmentRequest {
+    frame: MetricFrame,
+    shape: ClearanceShape,
+    scopes: Vec<ObjectId>,
+}
+impl ContainmentRequest {
+    pub fn new(frame: MetricFrame, shape: ClearanceShape, mut scopes: Vec<ObjectId>) -> Self {
+        scopes.sort();
+        scopes.dedup();
+        Self {
+            frame,
+            shape,
+            scopes,
+        }
+    }
+    pub fn frame(&self) -> &MetricFrame {
+        &self.frame
+    }
+    pub fn shape(&self) -> ClearanceShape {
+        self.shape
+    }
+    pub fn scopes(&self) -> &[ObjectId] {
+        &self.scopes
+    }
+}
+
+/// Exact evidence for a containment answer, bound to its request.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContainmentEvidence {
+    request: ContainmentRequest,
+    evidence: Evidence,
+}
+impl ContainmentEvidence {
+    pub fn try_new(
+        request: ContainmentRequest,
+        evidence: Evidence,
+    ) -> Result<Self, FreeSpaceError> {
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(FreeSpaceError::IncompleteClearanceEvidence);
+        }
+        Ok(Self { request, evidence })
+    }
+    pub fn request(&self) -> &ContainmentRequest {
+        &self.request
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// Whether a clearance footprint lies inside its scopes.
+///
+/// Both answers are claims about the whole footprint: `Inside` that no part
+/// of positive area lies outside every scope, `Outside` that some part does.
+/// A backend that can only bound the footprint (a cylinder's disc) answers
+/// neither while the bounds disagree.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ContainmentOutcome {
+    Inside(ContainmentEvidence),
+    Outside(ContainmentEvidence),
+}
+
 /// One exact placement witness. It does not claim exhaustive search coverage.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClearancePlacementEvidence {
@@ -788,6 +858,17 @@ pub trait FreeSpaceService: Send + Sync + 'static {
         &self,
         request: &FreeAreaRequest,
     ) -> Result<FreeAreaEvidence, FreeSpaceError>;
+    /// Whether a clearance footprint lies inside its scopes. A service that
+    /// does not compare footprints refuses, never answering either way.
+    fn assess_containment(
+        &self,
+        request: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        let _ = request;
+        Err(FreeSpaceError::Unavailable(
+            "this free-space service does not compare clearance footprints with scopes".into(),
+        ))
+    }
 }
 
 #[derive(Clone)]
@@ -833,6 +914,21 @@ impl FreeSpaceServiceHandle {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }
         Ok(evidence)
+    }
+    pub fn assess_containment(
+        &self,
+        request: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        let outcome = self.0.assess_containment(request)?;
+        let actual = match &outcome {
+            ContainmentOutcome::Inside(value) | ContainmentOutcome::Outside(value) => {
+                value.request()
+            }
+        };
+        if actual != request {
+            return Err(FreeSpaceError::ResponseRequestMismatch);
+        }
+        Ok(outcome)
     }
 }
 

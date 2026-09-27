@@ -487,9 +487,10 @@ pub use facade_area::{FacadeArea, FacadeAreaError, FacadeAreaService, FacadeArea
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    CylinderClearance, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
-    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
-    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance,
+    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
+    FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence, PlacementDomain,
+    PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
     SignedDistanceInterval, SupportedPlacement,
 };
 pub use guard::{

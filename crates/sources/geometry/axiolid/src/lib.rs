@@ -7,6 +7,7 @@
 //! substituted: missing backends return [`AxiolidError::IntegrationUnavailable`].
 
 pub mod contact;
+pub(crate) mod containment;
 pub mod derived_relationships;
 pub mod envelope_membership;
 pub mod facade_area;

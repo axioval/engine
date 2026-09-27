@@ -11,7 +11,7 @@ Free-space computation is a typed host service. The engine owns validated source
 - a validated box or cylinder;
 - a deterministic source-qualified obstacle candidate set selected by the trusted rule capability.
 
-Semantic filtering stays outside geometry: the provider evaluates exactly the supplied candidate objects. This represents directional component clearance without leaking IFC placements, meshes, B-reps, or kernel types into the engine.
+The frame's origin is the centre of the volume's base: a box extends half its width either side along `right`, half its depth either side along `forward`, and its height up from the origin; a cylinder is centred on the origin. Semantic filtering stays outside geometry: the provider evaluates exactly the supplied candidate objects. This represents directional component clearance without leaking IFC placements, meshes, B-reps, or kernel types into the engine.
 
 The result is asymmetric:
 
@@ -21,6 +21,23 @@ The result is asymmetric:
 Partial geometry therefore cannot produce a false clear result.
 
 The Axiolid adapter measures a box as the exact rectangle along the frame's right and forward axes, and refuses a tilted frame. It bounds a cylinder's disc from both sides with inscribed and circumscribed 64-gons. An obstacle meeting the inscribed polygon obstructs; the volume is clear only when every obstacle misses the circumscribed one. An obstacle between the two (within about 0.12 % of the radius) refuses the request rather than being guessed either way.
+
+## Containment in scopes
+
+`ContainmentRequest` asks whether the same volume's plan footprint lies inside the union of the footprints of source-qualified scopes, such as the spaces a component stands in (merged spaces are several scopes). Only the plan is compared. The scopes are the rule's selection; with none, nothing covers the footprint.
+
+- `Inside` claims that no part of the footprint of positive area lies outside every scope;
+- `Outside` claims that some part does.
+
+Both carry exact evidence bound to the request. The Axiolid adapter takes the overlay difference of the footprint's bounds less the scopes' projected triangles, so the part outside is measured directly rather than as a small difference of two large areas: the outer bound left with nothing is `Inside`, the inner bound left with something is `Outside`, and a cylinder whose band straddles a scope boundary is refused. A scope without a body, unmeasured or tessellated is refused. A service that does not implement containment refuses by default, never answering either way.
+
+## Component clearance
+
+`axioval:capability.component-clearance` places a fixed box or cylinder beside each selected component in the component's own placement frame (see [Capabilities](./capabilities.md#free-space-around-components)). Which frame axis is the component's front is the rule's statement (`front_axis`), or the front the object-frame service states; it is never inferred from the placement axes, the shape or the type, and IFC states none. The volume starts at the component's outermost point on the stated side, measured as a directional extent, so it follows the body rather than the placement origin.
+
+Every measured position is an interval, so the volume's position is too. The capability asks two questions: whether the union of every position the volume could take is clear (then it is clear wherever it is), and whether the part every position shares is obstructed (then it is obstructed wherever it is). Along a coordinate axis the intervals are points and one request answers both. Anything between is not evaluated.
+
+A floating box, one that may slide sideways until it fits, needs the placement search below with a frame-offset domain and is not part of this capability yet (#83).
 
 ## Placement search
 

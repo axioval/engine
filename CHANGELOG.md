@@ -76,6 +76,31 @@ All notable changes are documented here. This project follows Semantic Versionin
   `Outside`, `Undecided`); the handle refuses a centre of another object.
   `AxiolidPlanSpanService` places it against the measured footprint, off
   every edge by more than its radius plus the chord deviation. (#80)
+- **Free space around components.** The new capability
+  `component-clearance` requires a fixed box (`width`, `depth`) or cylinder
+  (`radius`), `height` high, on a stated `side` (`front`, `back`, `left`,
+  `right`, optionally `both_sides`) of each selected component, placed in
+  its placement frame. The rule states which axis is the front
+  (`front_axis`: `forward`, `-forward`, `right`, `-right`, or `stated` for a
+  front the source states); none is inferred. The volume starts at the
+  component's outermost point on that side plus `offset`, is centred on it
+  or flush with an edge (`align`, `lateral_offset`), and rises from the
+  floor of the spaces `space_path` reaches or the component's bottom or top
+  (`height_reference`, `vertical_offset`). `obstacles` less
+  `allowed_intruders` may obstruct it; `protrusion` lets them reach that far
+  in through any plan side; `within_space` also requires its plan inside the
+  (merged) spaces. Measured positions are intervals: the union of every
+  position must be clear, or their common part obstructed, otherwise the
+  side is not evaluated; undecided obstacles can only obstruct. A sliding
+  (floating) volume waits for the placement search. (#83)
+- **Clearance containment.** `FreeSpaceService::assess_containment` answers
+  a `ContainmentRequest` (a clearance frame and shape and the scopes it must
+  lie in) with `ContainmentOutcome::Inside` or `Outside`, exact and bound to
+  the request; the default implementation refuses. `AxiolidFreeSpaceService`
+  implements it from the overlay difference of the footprint's bounds less
+  the scopes' footprints, refusing a cylinder whose band straddles a scope
+  boundary and a scope without a mesh or tessellated. The clearance frame's
+  origin is documented as the centre of the volume's base. (#83)
 - **Walkability and metric routing from geometry.** `axioval-axiolid` now
   implements both contracts, and `--geometry` registers them.
   `AxiolidWalkabilityService` builds a region per selected surface (its floor

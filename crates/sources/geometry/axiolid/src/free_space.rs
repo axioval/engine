@@ -12,8 +12,8 @@
 use axiolid_core::Point2;
 use axioval_engine::{
     AreaInterval, ClearanceOutcome, ClearanceRequest, ClearanceShape, CompleteClearanceEvidence,
-    FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, ObstructionEvidence,
-    PlacementOutcome, PlacementRequest,
+    ContainmentOutcome, ContainmentRequest, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
+    FreeSpaceService, ObstructionEvidence, PlacementOutcome, PlacementRequest,
 };
 use axioval_ir::{Evidence, SourceId};
 
@@ -22,13 +22,13 @@ use crate::planar::{plan_frame, polygon_area, projected_polygons};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
 
 /// The audit tolerance every measurement here shares.
-fn tolerance() -> Result<axiolid_core::Tolerance, FreeSpaceError> {
+pub(crate) fn tolerance() -> Result<axiolid_core::Tolerance, FreeSpaceError> {
     axiolid_core::Tolerance::new(1.0e-9, 1.0e-9)
         .map_err(|error| FreeSpaceError::Unavailable(format!("tolerance: {error:?}")))
 }
 
 /// Areas below this are numerical dust, not real obstruction.
-const AREA_EPSILON_M2: f64 = 1.0e-9;
+pub(crate) const AREA_EPSILON_M2: f64 = 1.0e-9;
 
 /// Measures free space from application-supplied meshes.
 pub struct AxiolidFreeSpaceService {
@@ -58,9 +58,9 @@ const DISC_SIDES: u32 = 64;
 /// certainly does not. For a box both are the exact rectangle along the
 /// frame's axes; for a cylinder they are the inscribed and circumscribed
 /// polygons of its disc.
-struct Footprint {
-    inner: Polygon,
-    outer: Polygon,
+pub(crate) struct Footprint {
+    pub(crate) inner: Polygon,
+    pub(crate) outer: Polygon,
 }
 
 fn ring(points: Vec<Point2>) -> Polygon {
@@ -70,7 +70,7 @@ fn ring(points: Vec<Point2>) -> Polygon {
     }
 }
 
-fn shape_footprint(request: &ClearanceRequest) -> Result<Footprint, FreeSpaceError> {
+pub(crate) fn shape_footprint(request: &ClearanceRequest) -> Result<Footprint, FreeSpaceError> {
     let frame = request.frame();
     let [centre_x, centre_y, _] = frame.origin().coordinates_metres();
     let [rx, ry, rz] = frame.right().components();
@@ -389,5 +389,12 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             AreaInterval::try_new(0.0, free)?,
             self.evidence(),
         )
+    }
+
+    fn assess_containment(
+        &self,
+        request: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        crate::containment::assess(&self.geometry, &self.source, request)
     }
 }

@@ -11,6 +11,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/free_space.rs` implements `FreeSpaceService` for clearance and free
   area. `find_placement` refuses: its `NoPlacement` arm asserts an exhaustive
   search this adapter cannot perform.
+- `src/containment.rs` answers `assess_containment` for the free-space
+  service: the overlay difference of the footprint's bounds (the exact
+  rectangle, or a cylinder's inscribed and circumscribed 64-gons) less the
+  scopes' projected triangles, so the part outside is measured directly
+  rather than as a small difference of two large areas, which rounding could
+  push past the area epsilon for a box flush with a wall. A scope without a
+  mesh or tessellated refuses.
 - `src/space.rs` implements `SpaceService`: seven independent space
   measurements over storey-assigned, role-tagged geometry.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds

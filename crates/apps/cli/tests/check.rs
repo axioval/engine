@@ -4142,3 +4142,76 @@ fn with_geometry_a_walking_distance_too_long_is_found() {
         "{result:#}"
     );
 }
+
+/// Two 3 x 3 m washrooms, #19 (x 0 to 3) and #49 (x 4 to 7), each with a
+/// WC against its south wall, 0.4 m wide, 0.7 m deep and 0.4 m high: #29
+/// at x 1 to 1.4 and #59 at x 5 to 5.4. Vanity unit #39 hangs 0.8 to 1 m
+/// above the floor west of #29, inside its transfer area.
+fn washrooms() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let wc = "IFCSANITARYTERMINAL('GID',$,$,$,$,PL,REP,$,.TOILETPAN.)";
+    let basin = "IFCFURNISHINGELEMENT('GID',$,$,$,$,PL,REP,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [1.5, 1.5, 0.0], [3.0, 3.0, 2.5], space),
+        placed_box(20, [1.2, 0.35, 0.0], [0.4, 0.7, 0.4], wc),
+        placed_box(30, [0.45, 0.35, 0.8], [0.3, 0.3, 0.2], basin),
+        placed_box(40, [5.5, 1.5, 0.0], [3.0, 3.0, 2.5], space),
+        placed_box(50, [5.2, 0.35, 0.0], [0.4, 0.7, 0.4], wc),
+    )
+}
+
+#[test]
+fn with_geometry_an_obstructed_wc_transfer_area_is_found() {
+    let case = Case::new("geometry-component-clearance");
+    let not_a_space = json!({"kind": "not", "operand": entity("space")});
+    let (output, result) = case.geometry_rule(
+        &washrooms(),
+        &[("space", "IfcSpace"), ("terminal", "IfcSanitaryTerminal")],
+        "axioval:capability.component-clearance",
+        &registry_signature("axioval:capability.component-clearance"),
+        entity("terminal"),
+        json!({
+            "side": {"type": "string", "value": "left"},
+            "front_axis": {"type": "string", "value": "forward"},
+            "width": {"type": "quantity", "value": 70, "unit": "cm"},
+            "depth": {"type": "quantity", "value": 90, "unit": "cm"},
+            "height": {"type": "quantity", "value": 2, "unit": "m"},
+            "align": {"type": "string", "value": "right"},
+            "height_reference": {"type": "string", "value": "floor"},
+            "space_path": {"type": "stringList",
+                           "value": ["axioval:derived.contained-in-space:forward"]},
+            "within_space": {"type": "boolean", "value": true},
+            "obstacles": {"type": "selector", "value": not_a_space},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #29's transfer area (x 0.1 to 1, y 0 to 0.7) holds the vanity unit;
+    // #59's is clear and lies inside #49.
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#29".to_owned(),
+            "left clearance (0.7 m wide, 0.9 m deep, 2 m high) is obstructed by \
+             ifc-step:model.ifc/#39"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

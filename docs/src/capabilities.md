@@ -663,6 +663,49 @@ Passing spaces (turning areas at a maximum spacing along the route) are not chec
 
 Elevations and footprints are intervals, and a tessellated slab's are never points. A slab is judged only on the whole interval: a distance straddling a bound, an overlap ratio straddling the minimum, or two tops the intervals cannot order are not evaluated. An object whose selection is undecided still counts as a possible next slab up, and one whose extent cannot be measured leaves every slab not evaluated, since it could sit in any stack. A slab with nothing stacked above it has nothing to check. When a proximity service is registered, its enclosing boxes skip overlap measurements between slabs that cannot meet in plan.
 
+### Free space around components
+
+`axioval:capability.component-clearance` requires a free volume on a stated side of each selected component: a transfer area beside a WC, the space in front of a washbasin or a control panel. It reads the component's placement frame through `ObjectFrameService`, its extents through `VerticalExtentService`, and asks `FreeSpaceService` whether the volume is clear (and, with `within_space`, inside the space), so it needs a semantic adapter that states placements and a geometry adapter. See [Free space and clearance](./free-space.md#component-clearance).
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `side` | `string` | Required. `front`, `back`, `left` or `right` of the component's front; left and right as seen facing along the front (the component's own left and right). |
+| `front_axis` | `string` | Required. Which placement axis is the front: `forward`, `-forward`, `right` or `-right`, or `stated` for the front the source states. A source that states none leaves the component not evaluated; IFC states none. |
+| `both_sides` | `boolean` | Also check the opposite side, as its own finding. |
+| `width`, `depth` | `quantity` | A box: `width` across the side, `depth` away from it. |
+| `radius` | `quantity` | A cylinder instead of a box. |
+| `height` | `quantity` | Required. The volume's height. |
+| `offset` | `quantity` | Gap between the component's outermost point on the side and the volume (default 0; negative overlaps the component). |
+| `align` | `string` | `centre` (default) on the component, or flush with its `left` or `right` edge as seen looking out of the side. |
+| `lateral_offset` | `quantity` | Moves the volume across the side, to the right as seen looking out of it. |
+| `height_reference` | `string` | Required. `floor` (the lowest point of the spaces `space_path` reaches), `bottom` or `top` of the component. |
+| `vertical_offset` | `quantity` | The volume's base above the reference (default 0). |
+| `obstacles` | `selector` | Required. What may obstruct the volume, such as every object but spaces. The component itself never does. |
+| `allowed_intruders` | `selector` | Objects that may stand in the volume. |
+| `protrusion` | `quantity` | How far an obstacle may reach into the volume through any of its plan sides. |
+| `within_space` | `boolean` | Also require the volume's plan to lie inside the union of the spaces `space_path` reaches. |
+| `space_path` | `stringList` | Steps from the component to its spaces, as in `path`; with `axioval:derived.contained-in-space:forward` the spaces its body stands in. Required by `floor` and `within_space`, and refused otherwise. |
+
+Exactly one of the box (`width` and `depth`) and the cylinder (`radius`) is declared. A minimum size is a box of that size: a larger free volume holds it. The WC transfer area 0.9 m deep and 0.7 m wide to the left of a WC facing along its placement's forward axis, flush with its front edge:
+
+```json
+{"side": {"type": "string", "value": "left"},
+ "front_axis": {"type": "string", "value": "forward"},
+ "width": {"type": "quantity", "value": 70, "unit": "cm"},
+ "depth": {"type": "quantity", "value": 90, "unit": "cm"},
+ "height": {"type": "quantity", "value": 2, "unit": "m"},
+ "align": {"type": "string", "value": "right"},
+ "height_reference": {"type": "string", "value": "floor"},
+ "space_path": {"type": "stringList", "value": ["axioval:derived.contained-in-space:forward"]},
+ "obstacles": {"type": "selector", "value": {"kind": "not", "operand": {"kind": "entityType", "objectType": "…space"}}}}
+```
+
+The volume starts at the component's outermost point on the side, whatever the placement origin. With `protrusion`, the volume checked is the declared one shrunk by it on every plan side: an obstacle meeting the shrunk volume reaches further in than allowed, one missing it reaches no further. `protrusion` must leave a volume (less than half the width and depth, or the radius). The containment check uses the declared volume.
+
+Each side and each question (clear, inside the space) is its own finding or not-evaluated outcome. A finding names and relates the obstructing objects (`left clearance (0.7 m wide, 0.9 m deep, 2 m high) is obstructed by …`) or the spaces the volume extends outside, and cites the placement, the extents and the service's evidence. An obstacle the selections cannot decide can only obstruct: a clear volume stands, and a volume obstructed only by undecided objects is not evaluated. Positions are intervals: a component whose sides are off the coordinate axes is measured within the rounding of the projection, and the volume is judged over every position it could take (see [Free space and clearance](./free-space.md#component-clearance)). A cylinder is bounded by inscribed and circumscribed polygons; an obstacle between the two leaves it not evaluated. A tilted component frame, an unmeasured obstacle or a tessellated one near the volume, and a `floor` reference whose `space_path` reaches no space are not evaluated. A `within_space` check whose `space_path` reaches no space is a finding.
+
+Not decided yet (#83): a floating volume that may slide sideways until it fits, which needs the placement search with a frame-offset domain (#18); maximum sizes and tolerances that do not reduce to one fixed volume.
+
 ### Stairs and ramps
 
 `stair-geometry` and `ramp-geometry` judge what `WalkingSurfaceService` measures from each selected object's body (see [Typed host services](./services.md)), so they need a geometry adapter; declared values such as `RiserHeight` or `NumberOfRisers` are checked with `property-predicate` instead. Select the objects the measure fits: single flights (`IfcStairFlight`) and ramp flights (`IfcRampFlight`), not a whole stair whose landing would count as a tread.

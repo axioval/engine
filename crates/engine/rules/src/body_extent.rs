@@ -180,7 +180,7 @@ impl RuleCapability for BodyExtent {
     }
 }
 
-fn frame_error(error: &ObjectFrameError) -> Unavailable {
+pub(crate) fn frame_error(error: &ObjectFrameError) -> Unavailable {
     let reason = match error {
         ObjectFrameError::UncoveredSource(_) => NotEvaluatedReason::MissingService,
         ObjectFrameError::NotPlaced(_)
@@ -194,7 +194,7 @@ fn frame_error(error: &ObjectFrameError) -> Unavailable {
     (reason, format!("object frame: {error}"))
 }
 
-fn extent_error(error: &VerticalExtentError) -> Unavailable {
+pub(crate) fn extent_error(error: &VerticalExtentError) -> Unavailable {
     let reason = match error {
         VerticalExtentError::UnknownObject(_) | VerticalExtentError::Unavailable(_) => {
             NotEvaluatedReason::BackendUnavailable

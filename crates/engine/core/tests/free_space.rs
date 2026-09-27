@@ -3,11 +3,11 @@
 use axioval_engine::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    CylinderClearance, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
-    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint,
-    MobilityProfile, ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome,
-    PlacementRequest, PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportedPlacement,
-    ThresholdVerdict,
+    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance,
+    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
+    FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
+    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
+    PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportedPlacement, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -692,5 +692,66 @@ fn support_proof_must_be_exact_and_reviewable() {
             approximate
         ),
         Err(FreeSpaceError::InexactSupportEvidence)
+    );
+}
+
+fn containment(doc: &str, scopes: Vec<ObjectId>) -> ContainmentRequest {
+    let volume = request(doc, "wc");
+    ContainmentRequest::new(volume.frame().clone(), volume.shape(), scopes)
+}
+
+/// Answers every containment question about another volume.
+struct WrongContainment;
+impl FreeSpaceService for WrongContainment {
+    fn assess_clearance(&self, req: &ClearanceRequest) -> Result<ClearanceOutcome, FreeSpaceError> {
+        DeterministicFreeSpace.assess_clearance(req)
+    }
+    fn find_placement(&self, req: &PlacementRequest) -> Result<PlacementOutcome, FreeSpaceError> {
+        DeterministicFreeSpace.find_placement(req)
+    }
+    fn measure_free_area(&self, req: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
+        DeterministicFreeSpace.measure_free_area(req)
+    }
+    fn assess_containment(
+        &self,
+        _req: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        Ok(ContainmentOutcome::Inside(ContainmentEvidence::try_new(
+            containment("other", vec![object("other", "room")]),
+            evidence("inside-other-room"),
+        )?))
+    }
+}
+
+#[test]
+fn containment_scopes_are_deterministic() {
+    let request = containment(
+        "cad",
+        vec![object("cad", "b"), object("cad", "a"), object("cad", "b")],
+    );
+    assert_eq!(request.scopes(), &[object("cad", "a"), object("cad", "b")]);
+}
+
+#[test]
+fn a_service_without_containment_refuses_rather_than_answering() {
+    let handle = FreeSpaceServiceHandle::new(Arc::new(DeterministicFreeSpace));
+    assert!(matches!(
+        handle.assess_containment(&containment("cad", vec![object("cad", "room")])),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+}
+
+#[test]
+fn containment_evidence_must_be_exact_and_bound_to_the_request() {
+    let mut approximate = evidence("inside");
+    approximate.exact = false;
+    assert_eq!(
+        ContainmentEvidence::try_new(containment("cad", vec![]), approximate),
+        Err(FreeSpaceError::IncompleteClearanceEvidence)
+    );
+    let handle = FreeSpaceServiceHandle::new(Arc::new(WrongContainment));
+    assert_eq!(
+        handle.assess_containment(&containment("cad", vec![object("cad", "room")])),
+        Err(FreeSpaceError::ResponseRequestMismatch)
     );
 }

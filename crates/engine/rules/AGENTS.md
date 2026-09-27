@@ -10,6 +10,8 @@ Capabilities may depend on Axioval IR and typed host-service interfaces, never c
 
 `table_allocation.rs` (`table-allocation`) assigns each object to one row through `support::table::match_rows`; an object that might belong to a row it was not assigned to (tie, undecided key or selection) leaves that row's count and area not evaluated unless an excess already stands. Never break a tie or skip an undecided object.
 
+`keyed_limit.rs` (`keyed-limit`) selects one row of a keyed limit table per object with `match_rows` (most specific) and reuses `plan_area`'s footprint and interval judgement. A key it cannot read exactly (absent, blank, another type, reached on no object, or disagreeing across reached objects) is unknown, never a non-match; no matching row is a "no limit defined" finding, and a tie is not evaluated.
+
 `slab_stack.rs` (`slab-stack-spacing`) pairs slabs by plan-overlap ratio and judges vertical-extent intervals between consecutive slabs, reusing `level_spacing::prevailing` for consistency. An undecided overlap ratio, an unorderable pair of tops, an undecided-selection object that may stack, or any unmeasurable extent is not evaluated; enclosing proximity boxes may only skip overlaps that are provably zero.
 
 `free_floor_circle.rs` and `free_floor_rectangle.rs` own exact grounded vertical-shape profiles. They must request whole-base support and all project objects as candidate obstacles. Missing services, backend failures, and invalid/incomplete proofs emit typed not-evaluated outcomes; they never produce a pass or compliance finding. The rectangle must state its orientation explicitly; never default it to the world axes.

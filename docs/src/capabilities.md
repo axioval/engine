@@ -242,6 +242,21 @@ Rows are judged per group. With `anchor_selector`, each anchor is a group of the
 
 Objects that may belong to a row without being decided (a tie, an undecided key, or an undecided selection) make its count and area not evaluated, unless the row already exceeds its count or area, since they could only add to it. A finding relates the objects assigned to the row.
 
+### Keyed limits
+
+`keyed-limit` looks a limit up in a table keyed by facts about each selected object, then checks one of its quantities against it. A fire compartment's area limit depends on the building's fire class, the compartment's use class and whether its storey is sprinklered; one rule carries the whole table.
+
+Up to four keys, `key_1` (required) to `key_4`, are property references. A key is read from the object itself, or, with `key_<n>_path` (steps as in the `path` parameter), from the objects that path reaches from it: `IfcRelContainedInSpatialStructure:backward` then `IfcRelAggregates:backward` climbs from an element to its building. A key's value is matched as text: a string as stated, a boolean as `true` or `false`, an integer in decimal. It is unknown when it is absent, null, blank or of another type, when the path reaches no object, or when the reached objects state different values; a refused property or relationship answer leaves the object not evaluated outright.
+
+The `limits` table has the optional columns `key_1` … `key_4` (text patterns, as in [Table parameters](#table-parameters); a blank cell accepts any value) and `minimum` and `maximum` (numbers). A row may key only the keys the rule declares. The single most specific matching row applies, through the shared row matcher:
+
+- No row matches: a finding that no limit is defined for the object's keys.
+- A row that tests an unknown key could apply: not evaluated. A row another key already rules out does not matter, so an unknown key no row can reach is harmless.
+- Rows tie for most specific: not evaluated as an invalid declaration, naming the rows; never broken by order.
+- The row has neither bound: no limit applies, and the object passes.
+
+`quantity` names what the row limits. `plan-area` is the object's measured footprint in square metres through `PlanAreaService` (a zone's is the union of its members); like `plan-area`, a footprint straddling a bound, or an empty one, is not evaluated. `property` is the number or quantity `quantity_property` states, compared in canonical SI units; an absent or non-numeric value is not evaluated. Bounds are inclusive. Key patterns are case-sensitive unless `case_sensitive` is `false`. A finding names the row (zero-based) and the key values, relates the objects the keys were read from, and cites the key, relationship and measurement evidence.
+
 ### Slab stacks
 
 `slab-stack-spacing` judges `VerticalExtentService` elevations together with `PlanAreaService` footprints, so it needs a geometry adapter. Unlike `level-spacing`, which reads storey elevations, it measures the slabs' own surfaces.

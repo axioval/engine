@@ -14,6 +14,7 @@ mod free_floor_circle;
 mod free_floor_rectangle;
 mod guard_diagnosis;
 mod horizontal_guard;
+mod keyed_limit;
 mod level_spacing;
 mod manual_issue;
 mod name_sequence;
@@ -50,6 +51,7 @@ pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
+pub use keyed_limit::KeyedLimit;
 pub use level_spacing::LevelSpacing;
 pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
@@ -106,6 +108,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(AreaRatio))
         .and_then(|registry| registry.register(PlanCoverage))
         .and_then(|registry| registry.register(PlanAreaRange))
+        .and_then(|registry| registry.register(KeyedLimit))
         .and_then(|registry| registry.register(SlabStackSpacing))
         .and_then(|registry| registry.register(TableAllocation))
 }

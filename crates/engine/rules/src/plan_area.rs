@@ -108,13 +108,13 @@ pub(crate) fn shown(lower: f64, upper: f64) -> String {
 }
 
 /// Where a ratio interval stands against inclusive bounds.
-enum Verdict {
+pub(crate) enum Verdict {
     Pass,
     Fail(String),
     Undecided(String),
 }
 
-fn judge(lower: f64, upper: f64, minimum: Option<f64>, maximum: Option<f64>) -> Verdict {
+pub(crate) fn judge(lower: f64, upper: f64, minimum: Option<f64>, maximum: Option<f64>) -> Verdict {
     if let Some(minimum) = minimum {
         if upper < minimum {
             return Verdict::Fail(format!("at least {minimum}"));

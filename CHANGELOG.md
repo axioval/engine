@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Keyed limit tables.** The new capability `keyed-limit` checks a
+  quantity of each selected object against the single applicable row of a
+  `limits` table: a fire compartment's area limit by its building's fire
+  class, its use class, and whether its storey is sprinklered. Up to four
+  keys `key_1` … `key_4` are property references, each read from the
+  object or, with `key_<n>_path`, from the objects a relationship path
+  reaches from it; rows key them with text patterns, and the most specific
+  matching row applies. `quantity` is `plan-area` (the measured footprint,
+  three-valued as in `plan-area`) or `property` (`quantity_property`, in SI
+  units), bounded by the row's `minimum` and `maximum`. No matching row is a
+  "no limit defined" finding; a row without bounds sets no limit; a key
+  that is missing or disagrees across reached objects, when a row testing
+  it could apply, and rows tied for most specific are not evaluated.
+
 - **Selecting objects by related objects.** The new selector kind
   `related` follows a relationship `path` from each candidate (steps
   `Relationship` or `Relationship:direction`, as in the `path` parameter)

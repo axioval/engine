@@ -442,6 +442,7 @@ mod guard;
 mod integrity;
 mod linear_quantity;
 mod metric_routing;
+mod object_frame;
 mod pairwise;
 mod plan_area;
 mod properties;
@@ -498,6 +499,9 @@ pub use metric_routing::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
     MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
     MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
+};
+pub use object_frame::{
+    ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,
 };
 pub use pairwise::{CandidatePair, CandidateSearchError, candidate_pairs};
 pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};

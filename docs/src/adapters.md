@@ -174,6 +174,20 @@ with no association, directly or through its type, has no material.
   positions whatever release a file declares; IFC2X3 support waits for it to
   bind to the file's release (openbimrs/ifc#77).
 
+### Object frames
+
+The IFC session registers an object-frame service (`ObjectFrameServiceHandle`; see [typed host services](./services.md)) without geometry. An `IfcProduct`'s frame is its `ObjectPlacement`: the `IfcLocalPlacement` chain is composed by `ifc-geometry`'s placement resolver, the same composition that places meshed bodies, so frames and geometry agree. The slot is read from the file's release, so IFC2X3 and IFC4 are both covered.
+
+- Each link's `IfcAxis2Placement3D` or `IfcAxis2Placement2D` gives the axes. An omitted `Axis` or `RefDirection` takes the schema default, and a `RefDirection` not perpendicular to `Axis` is projected onto the plane normal to it (`IfcBuildAxes`). Local X, Y and Z become right, forward and up.
+- The composed origin is converted from the project length unit to metres through `ifc_properties::exact_unit`. A project whose length unit cannot be resolved exactly is refused, never read as metres.
+- IFC placements cannot mirror: `IfcAxis2Placement3D` derives Y as Z × X, so every frame is right-handed. A component mirrored in plan by placing it with `Axis` (0,0,-1) is reported as that rotation, with up pointing down and forward along -Y. Mirroring stated in a representation (an `IfcCartesianTransformationOperator` of a mapped item) is not part of the placement and does not change the frame.
+- IFC does not state a product's front. The placement's Y axis is an authoring convention, not a statement of which side a component is used from, so every IFC frame reports `ObjectFront::NotStated`.
+- A product without an `ObjectPlacement`, and an object that is not a product, is `NotPlaced`. `IfcGridPlacement`, at the object or anywhere in its chain, is refused as unsupported. Cyclic, over-deep or otherwise malformed chains and parallel `Axis` and `RefDirection` are refused as unreadable.
+
+The locator names the object and its placement chain from the object upwards: `placement:#33:#32<#24<#12`.
+
+Door and window leaves (hinge side, swing sector from `OperationType` and panel definitions) wait for upstream support (openbimrs/ifc#148).
+
 ### Integrity warnings
 
 Besides relationship ends, the integrity scan reports two schema cardinality

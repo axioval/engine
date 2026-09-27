@@ -13,6 +13,9 @@ repository.workspace = true
 axioval-engine.workspace = true
 axioval-ir.workspace = true
 ifc-classification.workspace = true
+# Placement chains only: the workspace entry disables every feature, so no
+# geometry kernel is pulled in.
+ifc-geometry.workspace = true
 ifc-material.workspace = true
 ifc-model.workspace = true
 ifc-properties.workspace = true

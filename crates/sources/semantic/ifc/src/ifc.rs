@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use axioval_engine::{
     ClassificationServiceHandle, CompletePropertyAbsenceEvidence, EvidenceSession,
-    EvidenceSessionError, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
-    ResolvedProperty, SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError,
-    TypeHierarchyService, TypeHierarchyServiceHandle,
+    EvidenceSessionError, ObjectFrameServiceHandle, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RelationshipSelectionServiceHandle, ResolvedProperty, SourceIntegrityServiceHandle,
+    SourceSnapshot, TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
@@ -21,6 +21,7 @@ use thiserror::Error;
 
 use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
+use crate::frames::IfcObjectFrames;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
 use crate::measure::si_value;
@@ -389,6 +390,11 @@ pub fn import_ifc_session(
     let classifications = ClassificationServiceHandle::new(Arc::new(
         IfcClassificationService::new(model.clone(), snapshots.clone()),
     ));
+    let frames = ObjectFrameServiceHandle::new(Arc::new(IfcObjectFrames::new(
+        release,
+        model.clone(),
+        snapshots.clone(),
+    )));
     let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
         IfcRelationshipService::new(release, model, snapshots.clone()),
     ));
@@ -401,6 +407,7 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(hierarchy))
         .and_then(|session| session.with_service(integrity))
         .and_then(|session| session.with_service(classifications))
+        .and_then(|session| session.with_service(frames))
         .map_err(|error| session_error(&error))
 }
 

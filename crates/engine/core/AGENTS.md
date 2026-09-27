@@ -16,6 +16,8 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `free_space.rs` owns source-neutral metric frames, clearance shapes, area bounds, constrained placement searches, and their typed service handle. Keep proof asymmetry explicit: obstruction and placement may use exact witnesses; clear and no-placement require complete exact coverage. Grounded support and frame-offset search predicates belong in requests; every supported found witness also needs exact frame-bound whole-base support evidence. Rasterization, collision, CSG, and search algorithms stay outside the engine.
 
+`object_frame.rs` owns object placement frames and stated fronts. A frame is grounded on the requested object and carries exact reviewable evidence from its source; a front is `Stated` only where the source states one and is never inferred from axes, shape or type. `forward` is a placement axis, not a front.
+
 `session.rs` owns immutable project/source snapshots and the session-authoritative service registry. Every session service must implement `SnapshotBoundService`; reject unbound, duplicate, unknown, or non-identical source/revision/fingerprint/schema bindings before registration.
 
 `walkability.rs` owns complete source-neutral walkable-region snapshots and deterministic three-valued width-constrained routes. Derived region IDs are evidence-local, not model objects. Reject unrequested object mappings, relation-only portals, duplicate passages, incomplete coverage, and backend geometry types.

@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Object frames.** A new `ObjectFrameService` (`ObjectFrameServiceHandle`)
+  supplies an object's placement frame as a `MetricFrame` grounded on the
+  object, in canonical metres with right-handed right, forward and up axes,
+  and an `ObjectFront` that is `Stated` only where the source states one. The
+  handle refuses uncovered sources and frames of another object; evidence
+  must be exact and reviewable. The IFC session registers it without
+  geometry: frames compose the `IfcLocalPlacement` chain through
+  `ifc-geometry`'s placement resolver and convert the origin through the
+  exact project length unit. IFC states no front, so every IFC frame reports
+  `NotStated`; unplaced objects are `NotPlaced`, and `IfcGridPlacement` and
+  unresolvable length units are refused. Door leaves are still to come. (#36)
 - **Derived light-opening area in `area-ratio`.** With
   `numerator_derivation` `light-area`, each numerator member's area is its
   light-transmitting area from the first step that produces one: the area

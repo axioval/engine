@@ -8,6 +8,7 @@
 
 mod attributes;
 mod classifications;
+mod frames;
 mod identity;
 mod ifc;
 mod integrity;

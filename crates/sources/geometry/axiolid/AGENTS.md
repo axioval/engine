@@ -178,7 +178,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   bodies (one-sided with a direction, whose side a tessellated end within the
   combined deviation leaves open); plan overlap uses the overlay. Overlap extents span witnessed
   intersection points (edge crossings both ways, inside vertices tried
-  outermost first) below and the boxes' overlap above; the Hausdorff
+  outermost first) below and the boxes' overlap above; `measure_overlap_along` spans the same witnesses projected onto each stated direction below and the overlap of the bodies' own ranges along it above, widening every projection off a coordinate axis by its rounding bound (`along`), never reported tighter; the Hausdorff
   distance is bounded per triangle by the farthest vertex from one other
   triangle, split twice at most. Never report either as a point you did
   not bound. Intersection volumes come only from `axiolid-inspect`'s

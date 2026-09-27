@@ -28,6 +28,12 @@
 //!   [`VolumeInterval`]s sure to contain the true values, never a point
 //!   estimate.
 //!
+//! - **Extents along the bodies' own axes.** World axes misjudge a wall at
+//!   an angle: a slab edge sunk 10 mm into it reaches far along x and y. An
+//!   [`OverlapAlongRequest`] names the directions to measure along (such as
+//!   each body's placement axes), and [`OverlapAlongEvidence`] answers the
+//!   intersection's extent along each as a [`LengthInterval`].
+//!
 //! A second question rides on the same service: how far a body lies from
 //! one class of another body's faces ([`FaceDistanceRequest`]), signed by
 //! whether the body lies inside the other. It is what cover and protrusion
@@ -37,7 +43,7 @@ use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
 
-use crate::{ConvexPlanRegion, LengthInterval, SignedDistanceInterval};
+use crate::{ConvexPlanRegion, LengthInterval, MetricDirection, SignedDistanceInterval};
 
 /// Why a proximity measurement could not be produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -408,6 +414,103 @@ impl OverlapExtents {
     }
     fn is_empty(&self) -> bool {
         self.axes.iter().all(|axis| axis.lower_metres() == 0.0)
+    }
+}
+
+/// A request for the extents of two bodies' intersection along stated
+/// directions, such as each body's own placement axes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OverlapAlongRequest {
+    subject: ObjectId,
+    counterpart: ObjectId,
+    directions: Vec<MetricDirection>,
+}
+
+impl OverlapAlongRequest {
+    /// The most directions one request may name: two bodies' three axes.
+    pub const MAX_DIRECTIONS: usize = 6;
+
+    /// Refuses one object measured against itself, and no directions or
+    /// more than [`Self::MAX_DIRECTIONS`].
+    pub fn try_new(
+        subject: ObjectId,
+        counterpart: ObjectId,
+        directions: Vec<MetricDirection>,
+    ) -> Result<Self, ProximityError> {
+        if subject == counterpart {
+            return Err(ProximityError::SameObject);
+        }
+        if directions.is_empty() || directions.len() > Self::MAX_DIRECTIONS {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self {
+            subject,
+            counterpart,
+            directions,
+        })
+    }
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+    pub fn counterpart(&self) -> &ObjectId {
+        &self.counterpart
+    }
+    /// The unit directions to measure along, in request order.
+    pub fn directions(&self) -> &[MetricDirection] {
+        &self.directions
+    }
+}
+
+/// How far two bodies' intersection reaches along each direction of an
+/// [`OverlapAlongRequest`].
+///
+/// Each extent is a [`LengthInterval`] as for [`OverlapExtents`]: its lower
+/// bound witnessed (points found in both bodies), its upper bound proven
+/// (the bodies' own extents along the direction overlap no further). An
+/// empty intersection has zero extent along every direction. The evidence
+/// is exact exactly when the geometry is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OverlapAlongEvidence {
+    request: OverlapAlongRequest,
+    extents: Vec<LengthInterval>,
+    fidelity: GeometryFidelity,
+    evidence: Evidence,
+}
+
+impl OverlapAlongEvidence {
+    /// Refuses one extent too many or too few, and evidence whose
+    /// exactness does not match the geometry.
+    pub fn try_new(
+        request: OverlapAlongRequest,
+        extents: Vec<LengthInterval>,
+        fidelity: GeometryFidelity,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        if extents.len() != request.directions.len() {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            extents,
+            fidelity,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &OverlapAlongRequest {
+        &self.request
+    }
+    /// The extent along each requested direction, in request order.
+    pub fn extents(&self) -> &[LengthInterval] {
+        &self.extents
+    }
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
     }
 }
 
@@ -1105,6 +1208,17 @@ pub trait ProximityService: Send + Sync + 'static {
         let _ = request;
         Err(ProximityError::UnsupportedProjection)
     }
+    /// The extents of two bodies' intersection along stated directions.
+    ///
+    /// The default refuses with [`ProximityError::UnsupportedProjection`],
+    /// so a service that does not measure them fails closed.
+    fn measure_overlap_along(
+        &self,
+        request: &OverlapAlongRequest,
+    ) -> Result<OverlapAlongEvidence, ProximityError> {
+        let _ = request;
+        Err(ProximityError::UnsupportedProjection)
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -1145,6 +1259,18 @@ impl ProximityServiceHandle {
         let measured = self.0.measure_face_distance(request)?;
         if measured.request() != request {
             return Err(FaceDistanceError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
+    /// The intersection's extents along stated directions. Evidence
+    /// answering another request is refused.
+    pub fn measure_overlap_along(
+        &self,
+        request: &OverlapAlongRequest,
+    ) -> Result<OverlapAlongEvidence, ProximityError> {
+        let measured = self.0.measure_overlap_along(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
         }
         Ok(measured)
     }
@@ -1696,6 +1822,95 @@ mod tests {
         assert_eq!(
             ProximityServiceHandle::new(Arc::new(Nothing)).measure_region_distance(&request),
             Err(ProximityError::UnsupportedProjection)
+        );
+    }
+
+    /// Extents along stated directions: one per direction, bound to their
+    /// request, refused by default.
+    #[test]
+    fn extents_along_directions_bind_their_request_and_default_to_refusal() {
+        struct Nothing;
+        impl ProximityService for Nothing {
+            fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+            fn measure_proximity(
+                &self,
+                _: &ProximityRequest,
+            ) -> Result<ProximityEvidence, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+        }
+        /// Answers every request with the evidence for another.
+        struct Other(OverlapAlongEvidence);
+        impl ProximityService for Other {
+            fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+            fn measure_proximity(
+                &self,
+                _: &ProximityRequest,
+            ) -> Result<ProximityEvidence, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+            fn measure_overlap_along(
+                &self,
+                _: &OverlapAlongRequest,
+            ) -> Result<OverlapAlongEvidence, ProximityError> {
+                Ok(self.0.clone())
+            }
+        }
+        let axis = |vector| MetricDirection::try_new(vector).unwrap();
+        let along = |directions: Vec<MetricDirection>| {
+            OverlapAlongRequest::try_new(id("pipe"), id("wall"), directions)
+        };
+        assert_eq!(along(Vec::new()), Err(ProximityError::InvalidMeasurement));
+        assert_eq!(
+            along(vec![axis([1.0, 0.0, 0.0]); 7]),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            OverlapAlongRequest::try_new(id("pipe"), id("pipe"), vec![axis([0.0, 0.0, 1.0])]),
+            Err(ProximityError::SameObject)
+        );
+        let request = along(vec![axis([1.0, 1.0, 0.0]), axis([0.0, 0.0, 1.0])]).unwrap();
+        let extent = LengthInterval::try_new(0.01, 0.02).unwrap();
+        assert_eq!(
+            OverlapAlongEvidence::try_new(
+                request.clone(),
+                vec![extent],
+                GeometryFidelity::Exact,
+                exact()
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            OverlapAlongEvidence::try_new(
+                request.clone(),
+                vec![extent, extent],
+                GeometryFidelity::tessellated(0.001).unwrap(),
+                exact()
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        let measured = OverlapAlongEvidence::try_new(
+            request.clone(),
+            vec![extent, extent],
+            GeometryFidelity::Exact,
+            exact(),
+        )
+        .unwrap();
+        assert_eq!(measured.extents(), &[extent, extent]);
+
+        assert_eq!(
+            ProximityServiceHandle::new(Arc::new(Nothing)).measure_overlap_along(&request),
+            Err(ProximityError::UnsupportedProjection)
+        );
+
+        let other = along(vec![axis([0.0, 1.0, 0.0]), axis([0.0, 0.0, 1.0])]).unwrap();
+        assert_eq!(
+            ProximityServiceHandle::new(Arc::new(Other(measured))).measure_overlap_along(&other),
+            Err(ProximityError::InvalidMeasurement)
         );
     }
 }

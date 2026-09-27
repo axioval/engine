@@ -101,6 +101,17 @@ explicit in the contract:
   the shared volume's share of the smaller body, rounded outward. A
   service that does not measure volumes leaves them `None`.
 
+### Extents along the bodies' own axes
+
+`measure_overlap_along(request)` answers what world axes cannot: how far the
+intersection reaches along stated directions, such as each body's placement
+axes. An `OverlapAlongRequest` names the two bodies and one to six unit
+directions; `OverlapAlongEvidence` holds one `LengthInterval` per direction,
+in request order, witnessed below and proven above like `OverlapExtents`,
+and exact exactly when the geometry is. The default method refuses with
+`UnsupportedProjection`, and the handle refuses evidence for another
+request, so a service that does not measure them fails closed.
+
 ### Distance to a class of faces
 
 `measure_face_distance(request)` answers what cover and protrusion checks
@@ -211,6 +222,13 @@ primitives:
   would not widen the box, so the winding test runs only where it can move
   the answer. A tessellation lowers the witnessed extent by twice the
   combined deviation and grows each box by its own deviation.
+- **Extents along stated directions** reuse the same witnesses: each
+  crossing and inside vertex is projected onto the direction, and the upper
+  bound is the overlap of the two bodies' own ranges along it (the
+  intersection lies in both). Along a coordinate axis a projection reads one
+  coordinate exactly; along any other every projection widens by a bound on
+  the dot product's rounding. Two open surfaces share no volume and are
+  refused.
 - **Hausdorff distance** is bounded below by the farthest any vertex lies
   from the other surface. Above, it is bounded per triangle: the distance to
   one triangle is convex, so the farthest point of a triangle from it is a
@@ -312,6 +330,7 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 | `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
 | `group_by`, `per_storey`, `storey_path`, `group_property`, `group_tolerance_metres` | optional | group reported pairs into issues, see [Grouping findings](#grouping-findings) |
 | `severity_by_class`, `grade_by`, `severity_grades`, `duplicate_quantities` | optional | severities by class and size, and what duplicates are compared by, see [Severities and duplicates](#severities-and-duplicates) |
+| `tolerance_cases` | table, optional | intersections excused along the elements' own axes, see [Tolerance cases](#tolerance-cases) |
 
 Each pair falls into the first class that holds:
 
@@ -321,8 +340,9 @@ Each pair falls into the first class that holds:
 3. **Intersection**: a witnessed penetration deeper than the penetration
    tolerance, whose intersection reaches further than the horizontal
    tolerance along both x and y (the narrower plan axis decides) and further
-   than the vertical tolerance in z, and whose certified volume exceeds the
-   volume tolerance. A zero tolerance asks nothing of its axis or of the
+   than the vertical tolerance in z, whose certified volume exceeds the
+   volume tolerance, and that no [tolerance case](#tolerance-cases)
+   excuses. A zero tolerance asks nothing of its axis or of the
    volume. A duct sunk 5 mm into a slab is wide in plan but 5 mm high, so a
    10 mm vertical tolerance lets it pass; a volume tolerance lets small
    overlaps at joints pass however they are shaped.
@@ -379,8 +399,46 @@ be decided (a relationship the source refuses, a source recording no layers)
 never hides a pair and never reports one: a pair that would be reported is
 not evaluated instead, and one that passes stays passed.
 
-Axis extents along an element's own axes, rather than the world's, are
-still open.
+### Tolerance cases
+
+Axis tolerances are measured along the world axes, so they misjudge an
+element at an angle: a slab edge sunk 10 mm into a wall standing at 30°
+reaches metres along x and y. `tolerance_cases` excuses such intersections
+along the elements' own placement axes. Each row names a case, two
+component filters and a tolerance:
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `case` | string, required | `horizontal_orthogonal`, `vertical_orthogonal`, `horizontal_protrusion` or `vertical_protrusion` |
+| `first_selector`, `second_selector` | selector | the first and the second element of the pair, either way round; blank accepts any |
+| `tolerance_metres` | number, required | the extent the case accepts; not negative |
+
+| Case | The intersection's extent along |
+|---|---|
+| `horizontal_orthogonal` | the second element's plan axes (its placement's right and forward), the lesser |
+| `vertical_orthogonal` | the second element's up axis |
+| `horizontal_protrusion` | the first element's plan axes, the lesser |
+| `vertical_protrusion` | the first element's up axis |
+
+An orthogonal case measures how far the first element reaches into the
+second across the second's own axes (the slab edge through the wall's
+thickness); a protrusion how far the first element sticks out along its
+own. The axes are the placement frames the object-frame service states
+(`ObjectFrameServiceHandle`), and the extents come from
+`measure_overlap_along`, one request per pair for both bodies' axes. A case
+is asked only for a pair that would otherwise be an intersection. The slab
+in the 30° wall, with `first_selector` the slabs, `second_selector` the
+walls and a 20 mm `horizontal_orthogonal` case, passes; without the case it
+is a hard clash.
+
+A case excuses a pair when its filters surely match and the whole extent
+lies within the tolerance, and does not when a filter surely fails or the
+whole extent lies beyond. Anything else is open: a filter the selection
+cannot decide, a straddling extent, a missing object-frame service or
+frame, a measurement the proximity service refuses. An open case never
+hides and never reports the intersection; the pair is not evaluated, and
+says which case is open. A finding that a case did not excuse carries the
+frames and the measurement as evidence.
 
 ### Clash matrix
 
@@ -408,6 +466,7 @@ classes, switches, interval handling and exclusions included.
 | `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
 | `group_by`, `per_storey`, `storey_path`, `group_property`, `group_tolerance_metres` | optional | as for `clash`; a group never spans two cells |
 | `severity_by_class`, `grade_by`, `severity_grades`, `duplicate_quantities` | optional | as for `clash`; a cell's `severity` wins over the class's |
+| `tolerance_cases` | table, optional | as for `clash`, for every cell |
 
 Each cell keys both sides of the pair: `subject_*` and `counterpart_*`.
 

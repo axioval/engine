@@ -574,10 +574,11 @@ pub use properties::{
 };
 pub use proximity::{
     BodyContainment, Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence,
-    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds, OverlapExtents,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, ProximityServiceHandle, RegionDistanceEvidence,
-    RegionDistanceRequest, VerticalDirection, VolumeInterval,
+    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds, OverlapAlongEvidence,
+    OverlapAlongRequest, OverlapExtents, ProjectedDistanceEvidence, ProximityError,
+    ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RegionDistanceEvidence, RegionDistanceRequest, VerticalDirection,
+    VolumeInterval,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,

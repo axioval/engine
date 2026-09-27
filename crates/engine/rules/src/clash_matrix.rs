@@ -19,8 +19,9 @@ use axioval_ir::{Evidence, Object, ObjectId, Severity};
 
 use crate::clash::{
     Class, Exclusions, Outcome, PROFILE_NUMBERS, PROFILE_SWITCHES, Profile, Recorder,
-    exclusion_paths, exclusion_property, measure, unless_excluded,
+    exclusion_paths, exclusion_property, judge_with_cases, measure, unless_excluded,
 };
+use crate::clash_cases::{CaseJudge, Cases, case_parameter, cases};
 use crate::clash_groups::{Context, Grouping, Groups, grouping, grouping_parameters};
 use crate::clash_severity::{Severities, parse_severity, severities, severity_parameters};
 use crate::pairs::{prepare, refuse_declaration, severity};
@@ -145,6 +146,7 @@ struct Declaration<'a> {
     exclude_same_layer: bool,
     grouping: Option<Grouping<'a>>,
     severities: Severities,
+    cases: Cases<'a>,
 }
 
 fn row_severity(row: Row<'_>) -> Result<Option<Severity>, Unavailable> {
@@ -204,6 +206,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
         grouping: grouping(&parameters)?,
         severities: severities(&parameters)?,
+        cases: cases(&parameters)?,
     })
 }
 
@@ -439,6 +442,7 @@ impl RuleCapability for ClashMatrix {
         ]);
         parameters.extend(grouping_parameters());
         parameters.extend(severity_parameters());
+        parameters.push(case_parameter());
         parameters
     }
 
@@ -483,6 +487,7 @@ impl RuleCapability for ClashMatrix {
             groups,
         };
         let indices: Vec<usize> = (0..declared.cells.len()).collect();
+        let mut cases = CaseJudge::new(context, &declared.cases);
 
         for pair in &prepared.pairs {
             let (subject, counterpart) = (pair.subject(), pair.counterpart());
@@ -585,13 +590,22 @@ impl RuleCapability for ClashMatrix {
                     continue;
                 }
             };
-            let (outcome, severity, read) = declared.severities.report(
+            let (judged, excuse) = judge_with_cases(
+                &cell.profile,
+                &declared.cases,
+                &mut cases,
+                (prepared.service, &measured),
+            );
+            let (outcome, severity, mut read) = declared.severities.report(
                 context,
                 &measured,
                 (subject, counterpart),
-                cell.profile.judge(&measured, counterpart),
+                judged,
                 (cell.severity.clone(), severity(rule)),
             );
+            if matches!(outcome, Outcome::Finding(..)) {
+                read.extend(excuse.evidence);
+            }
             let outcome = match outcome {
                 Outcome::Finding(class, message) => Outcome::Finding(
                     class,

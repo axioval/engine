@@ -49,6 +49,7 @@ use axioval_ir::{
     Evidence, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, Severity,
 };
 
+use crate::clash_cases::{CaseJudge, Cases, Excuse, case_parameter, cases};
 use crate::clash_groups::{Context, Grouping, Groups, Reported, grouping, grouping_parameters};
 use crate::clash_severity::{Severities, severities, severity_parameters};
 use crate::pairs::{Unevaluated, fidelity_note, prepare, reason, refuse_declaration, severity};
@@ -160,6 +161,7 @@ struct Declaration<'a> {
     exclude_same_layer: bool,
     grouping: Option<Grouping<'a>>,
     severities: Severities,
+    cases: Cases<'a>,
 }
 
 /// The `exclude_paths` parameter, each entry split into its steps.
@@ -198,6 +200,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
         grouping: grouping(&parameters)?,
         severities: severities(&parameters)?,
+        cases: cases(&parameters)?,
     })
 }
 
@@ -210,22 +213,76 @@ pub(crate) fn exclusion_property<'a>(
 }
 
 /// A three-valued judgement of an interval against a tolerance.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Holds {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Holds {
     Yes,
     No,
     Unknown,
 }
 
 impl Holds {
-    fn and(self, other: Self) -> Self {
+    pub(crate) fn and(self, other: Self) -> Self {
         match (self, other) {
             (Self::No, _) | (_, Self::No) => Self::No,
             (Self::Yes, Self::Yes) => Self::Yes,
             _ => Self::Unknown,
         }
     }
+    pub(crate) fn or(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Yes, _) | (_, Self::Yes) => Self::Yes,
+            (Self::No, Self::No) => Self::No,
+            _ => Self::Unknown,
+        }
+    }
+    fn not(self) -> Self {
+        match self {
+            Self::Yes => Self::No,
+            Self::No => Self::Yes,
+            Self::Unknown => Self::Unknown,
+        }
+    }
 }
+
+/// A measured length as a message reads it.
+fn described(interval: Option<axioval_engine::LengthInterval>) -> String {
+    interval.map_or_else(
+        || "unmeasured".to_owned(),
+        |interval| {
+            if interval.is_exact() {
+                format!("{:.4} m", interval.lower_metres())
+            } else {
+                format!(
+                    "{:.4} to {:.4} m",
+                    interval.lower_metres(),
+                    interval.upper_metres()
+                )
+            }
+        },
+    )
+}
+
+/// A measured shared volume as a message reads it.
+fn described_volume(shared: Option<axioval_engine::VolumeInterval>) -> String {
+    shared.map_or_else(
+        || "an unmeasured volume".to_owned(),
+        |shared| {
+            if shared.is_exact() {
+                format!("{:.6} m³", shared.lower_cubic_metres())
+            } else {
+                format!(
+                    "{:.6} to {:.6} m³",
+                    shared.lower_cubic_metres(),
+                    shared.upper_cubic_metres()
+                )
+            }
+        },
+    )
+}
+
+/// Whether a tolerance case excuses a pair's intersection, asked only when
+/// it can change the outcome, and why that is open when it is.
+pub(crate) type Excused<'a> = &'a mut dyn FnMut() -> (Holds, String);
 
 /// The class a reported pair falls into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -274,7 +331,12 @@ impl Outcome {
 }
 
 impl Profile {
-    pub(crate) fn judge(&self, measured: &ProximityEvidence, counterpart: &ObjectId) -> Outcome {
+    pub(crate) fn judge(
+        &self,
+        measured: &ProximityEvidence,
+        counterpart: &ObjectId,
+        excused: Excused<'_>,
+    ) -> Outcome {
         let note = fidelity_note(measured.fidelity());
         let tolerance = self.duplicate_tolerance;
         let (lower, upper) = match measured.hausdorff_interval_metres() {
@@ -304,10 +366,10 @@ impl Profile {
         };
         match duplicate {
             Holds::Yes => reported(),
-            Holds::No => self.distinct(measured, counterpart, &note),
+            Holds::No => self.distinct(measured, counterpart, &note, excused),
             Holds::Unknown => Outcome::either(
                 reported(),
-                self.distinct(measured, counterpart, &note),
+                self.distinct(measured, counterpart, &note, excused),
                 format!(
                     "whether {counterpart} is a duplicate cannot be decided: the surfaces lie between {lower:.4} m and {} of each other, tolerance {tolerance:.4} m{note}",
                     if upper.is_finite() {
@@ -326,6 +388,7 @@ impl Profile {
         measured: &ProximityEvidence,
         counterpart: &ObjectId,
         note: &str,
+        excused: Excused<'_>,
     ) -> Outcome {
         let containment = |message: String| {
             if self.report.containment {
@@ -342,7 +405,7 @@ impl Profile {
                 containment(format!("wholly contains {counterpart}{note}"))
             }
             (None, Some(depth)) if depth > self.penetration_tolerance => {
-                self.intersection(measured, counterpart, depth, note)
+                self.intersection(measured, counterpart, (depth, note), excused)
             }
             (None, None) if measured.separation_metres() == 0.0 => Outcome::Open(
                 NotEvaluatedReason::IncompleteEvidence,
@@ -355,14 +418,14 @@ impl Profile {
     }
 
     /// A penetration past the tolerance: an intersection when it also
-    /// reaches past the axis tolerances and shares more than the volume
-    /// tolerance.
+    /// reaches past the axis tolerances, shares more than the volume
+    /// tolerance, and no tolerance case excuses it.
     fn intersection(
         &self,
         measured: &ProximityEvidence,
         counterpart: &ObjectId,
-        depth: f64,
-        note: &str,
+        (depth, note): (f64, &str),
+        excused: Excused<'_>,
     ) -> Outcome {
         let extents = measured.overlap_extents();
         let exceeds = |tolerance: f64, interval: Option<axioval_engine::LengthInterval>| {
@@ -393,23 +456,14 @@ impl Profile {
                 _ => Holds::Unknown,
             }
         });
-        let axes = self.horizontal_tolerance > 0.0 || self.vertical_tolerance > 0.0;
-        let described = |interval: Option<axioval_engine::LengthInterval>| {
-            interval.map_or_else(
-                || "unmeasured".to_owned(),
-                |interval| {
-                    if interval.is_exact() {
-                        format!("{:.4} m", interval.lower_metres())
-                    } else {
-                        format!(
-                            "{:.4} to {:.4} m",
-                            interval.lower_metres(),
-                            interval.upper_metres()
-                        )
-                    }
-                },
-            )
+        // A case can only excuse what is reported and not already passed.
+        let (holds, case) = if holds == Holds::No || !self.report.intersection {
+            (holds, String::new())
+        } else {
+            let (excuse, case) = excused();
+            (holds.and(excuse.not()), case)
         };
+        let axes = self.horizontal_tolerance > 0.0 || self.vertical_tolerance > 0.0;
         let reach = if axes {
             format!(
                 ", reaching {} in plan and {} vertically",
@@ -420,21 +474,7 @@ impl Profile {
             String::new()
         };
         let reach = if self.volume_tolerance > 0.0 {
-            let volume = shared.map_or_else(
-                || "an unmeasured volume".to_owned(),
-                |shared| {
-                    if shared.is_exact() {
-                        format!("{:.6} m³", shared.lower_cubic_metres())
-                    } else {
-                        format!(
-                            "{:.6} to {:.6} m³",
-                            shared.lower_cubic_metres(),
-                            shared.upper_cubic_metres()
-                        )
-                    }
-                },
-            );
-            format!("{reach}, sharing {volume}")
+            format!("{reach}, sharing {}", described_volume(shared))
         } else {
             reach
         };
@@ -458,7 +498,7 @@ impl Profile {
                 reported(),
                 self.clearance(measured, counterpart, note),
                 format!(
-                    "whether the intersection with {counterpart} exceeds the horizontal tolerance {:.4} m, the vertical tolerance {:.4} m and the volume tolerance {:.6} m³ cannot be decided{reach}{note}",
+                    "whether the intersection with {counterpart} exceeds the horizontal tolerance {:.4} m, the vertical tolerance {:.4} m and the volume tolerance {:.6} m³{case} cannot be decided{reach}{note}",
                     self.horizontal_tolerance, self.vertical_tolerance, self.volume_tolerance
                 ),
             ),
@@ -852,6 +892,31 @@ impl Recorder<'_> {
     }
 }
 
+/// Judges a measured pair with its profile, asking the tolerance cases
+/// only when they can change the outcome, once at most; returns the
+/// outcome and what the cases found.
+pub(crate) fn judge_with_cases(
+    profile: &Profile,
+    declared: &Cases<'_>,
+    cases: &mut CaseJudge<'_>,
+    (service, measured): (&ProximityServiceHandle, &ProximityEvidence),
+) -> (Outcome, Excuse) {
+    let (subject, counterpart) = (
+        measured.request().subject(),
+        measured.request().counterpart(),
+    );
+    if declared.is_empty() {
+        let outcome = profile.judge(measured, counterpart, &mut || (Holds::No, String::new()));
+        return (outcome, Excuse::none());
+    }
+    let mut asked: Option<Excuse> = None;
+    let outcome = profile.judge(measured, counterpart, &mut || {
+        let excuse = asked.get_or_insert_with(|| cases.excuses(service, subject, counterpart));
+        (excuse.holds, excuse.note.clone())
+    });
+    (outcome, asked.unwrap_or_else(Excuse::none))
+}
+
 /// The parameters of a profile, in `clash`'s order.
 pub(crate) fn profile_columns() -> impl Iterator<Item = (&'static str, bool)> {
     PROFILE_NUMBERS
@@ -889,6 +954,7 @@ impl RuleCapability for Clash {
         ]);
         parameters.extend(grouping_parameters());
         parameters.extend(severity_parameters());
+        parameters.push(case_parameter());
         parameters
     }
 
@@ -930,6 +996,7 @@ impl RuleCapability for Clash {
             unevaluated: prepared.unevaluated,
             groups,
         };
+        let mut cases = CaseJudge::new(context, &declared.cases);
         for pair in &prepared.pairs {
             let (subject, counterpart) = (pair.subject(), pair.counterpart());
             let exclusion = exclusions.excluded(subject, counterpart);
@@ -943,15 +1010,24 @@ impl RuleCapability for Clash {
                     continue;
                 }
             };
+            let (judged, excuse) = judge_with_cases(
+                &declared.profile,
+                &declared.cases,
+                &mut cases,
+                (prepared.service, &measured),
+            );
             let (outcome, severity, read) = declared.severities.report(
                 context,
                 &measured,
                 (subject, counterpart),
-                declared.profile.judge(&measured, counterpart),
+                judged,
                 (None, severity(rule)),
             );
             let mut evidence = vec![measured.evidence().clone()];
             evidence.extend(read);
+            if matches!(outcome, Outcome::Finding(..)) {
+                evidence.extend(excuse.evidence);
+            }
             recorder.record(
                 (subject, counterpart),
                 &Context {

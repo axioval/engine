@@ -10,7 +10,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidProximityService};
 use axioval_engine::{
-    BodyContainment, GeometryFidelity, ProximityError, ProximityRequest, ProximityService,
+    BodyContainment, GeometryFidelity, LengthInterval, MetricDirection, OverlapAlongRequest,
+    ProximityError, ProximityRequest, ProximityService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -508,5 +509,86 @@ fn a_tessellated_column_widens_its_volumes() {
     assert!(
         own.lower_cubic_metres() <= cylinder * 4.0 && own.upper_cubic_metres() >= cylinder * 4.0,
         "{own:?}"
+    );
+}
+
+/// A box of `min`..`max` in its own frame, turned by `angle` about the
+/// vertical axis through the origin. A rotation keeps the outward winding.
+fn turned_box(min: [f64; 3], max: [f64; 3], angle: f64) -> TriMesh {
+    let (sin, cos) = angle.sin_cos();
+    let local = cuboid(min, max);
+    let positions = local
+        .positions
+        .iter()
+        .map(|point| {
+            let [u, v, z] = point.to_array();
+            Point3::new(u * cos - v * sin, u * sin + v * cos, z)
+        })
+        .collect();
+    TriMesh::new(positions, local.indices.clone())
+}
+
+/// A slab edge sunk 10 mm into a wall standing at 30°: along the world
+/// axes the intersection reaches metres, along the wall's own thickness
+/// 10 mm, along its length the slab's 3 m, and up the slab's 0.2 m.
+#[test]
+fn extents_along_a_walls_own_axes_measure_its_thickness() {
+    let angle = std::f64::consts::PI / 6.0;
+    let (sin, cos) = angle.sin_cos();
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(
+            id("wall"),
+            turned_box([-2.0, -0.1, 0.0], [2.0, 0.1, 3.0], angle),
+        )
+        .with_mesh(
+            id("slab"),
+            turned_box([-1.5, 0.09, 1.0], [1.5, 3.09, 1.2], angle),
+        );
+    let direction = |vector| MetricDirection::try_new(vector).unwrap();
+    let request = OverlapAlongRequest::try_new(
+        id("slab"),
+        id("wall"),
+        vec![
+            direction([cos, sin, 0.0]),
+            direction([-sin, cos, 0.0]),
+            direction([0.0, 0.0, 1.0]),
+            direction([1.0, 0.0, 0.0]),
+        ],
+    )
+    .unwrap();
+    let service = AxiolidProximityService::new(geometry.clone());
+    let measured = service.measure_overlap_along(&request).expect("solids");
+    assert!(measured.evidence().exact);
+    let close = |interval: LengthInterval, expected: f64| {
+        assert!(
+            interval.lower_metres() <= expected + 1e-9
+                && interval.upper_metres() >= expected - 1e-9
+                && interval.upper_metres() - interval.lower_metres() < 1e-9,
+            "{interval:?}, expected {expected}"
+        );
+    };
+    let [length, thickness, height, world_x] = measured.extents() else {
+        panic!("four extents expected");
+    };
+    close(*length, 3.0);
+    close(*thickness, 0.01);
+    close(*height, 0.2);
+    assert!(world_x.lower_metres() > 2.0, "{world_x:?}");
+
+    // Along the world's x axis the answer is the world-axis extent.
+    let world = measure(geometry, "slab", "wall")
+        .overlap_extents()
+        .expect("solids");
+    assert_eq!(world.x(), *world_x);
+
+    // Two open surfaces share no volume: nothing to measure along.
+    let open = AxiolidGeometry::new()
+        .with_mesh(id("a"), quad(0.5))
+        .with_mesh(id("b"), quad(0.5));
+    let request =
+        OverlapAlongRequest::try_new(id("a"), id("b"), vec![direction([0.0, 0.0, 1.0])]).unwrap();
+    assert_eq!(
+        AxiolidProximityService::new(open).measure_overlap_along(&request),
+        Err(ProximityError::Unavailable)
     );
 }

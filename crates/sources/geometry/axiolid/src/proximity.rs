@@ -26,6 +26,11 @@
 //!   other. For polyhedra those are the intersection's vertices, so the bound
 //!   is tight wherever the crossings are found. The upper bound is the
 //!   overlap of the two bodies' boxes.
+//!   The same measurement answers extents along any stated directions
+//!   ([`ProximityService::measure_overlap_along`]), such as a wall's own
+//!   axes: positions are projections, the upper bound the overlap of the
+//!   two bodies' ranges along the direction, and off the coordinate axes
+//!   every projection widens by a bound on its rounding.
 //! - **Intersection volume** between two closed solids, with each body's
 //!   own volume, from `axiolid-inspect`'s certified volume integrals: every
 //!   value an interval sure to hold the true one. Bodies apart at the
@@ -80,10 +85,11 @@ use axiolid_ray_mesh::intersect_triangle;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
     BodyContainment, Bounds3, ConvexPlanRegion, FaceDistanceError, FaceDistanceEvidence,
-    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, LengthInterval, ObjectBounds,
-    OverlapExtents, ProjectedDistanceEvidence, ProximityError, ProximityEvidence,
-    ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
-    RegionDistanceRequest, VerticalDirection, VolumeInterval,
+    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, LengthInterval, MetricDirection,
+    ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest, OverlapExtents,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, RegionDistanceEvidence, RegionDistanceRequest,
+    VerticalDirection, VolumeInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -912,45 +918,107 @@ pub(crate) fn crossings(body: &Body<'_>, other: &Body<'_>) -> Result<Vec<Point3>
     Ok(points)
 }
 
-/// A box grown to hold witnessed points of the intersection.
-#[derive(Default)]
-struct Witnessed(Option<([f64; 3], [f64; 3])>);
+/// The coordinate axes: the directions of [`OverlapExtents`].
+const AXES: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
-impl Witnessed {
-    fn add(&mut self, point: Point3) {
-        let point = point.to_array();
-        let (min, max) = self.0.get_or_insert((point, point));
-        for axis in 0..3 {
-            min[axis] = min[axis].min(point[axis]);
-            max[axis] = max[axis].max(point[axis]);
+/// A point's position along a unit direction, and a bound on the rounding
+/// of that dot product.
+///
+/// Along a coordinate axis the position is one coordinate, exactly. Along
+/// any other direction three products and two sums lie within
+/// `3u·Σ|terms|` of the exact dot product (`u = ε/2`); `2ε·Σ|terms|` covers
+/// that and the rounding of the bound itself.
+fn along(point: Point3, direction: [f64; 3]) -> (f64, f64) {
+    let p = point.to_array();
+    let terms = [
+        p[0] * direction[0],
+        p[1] * direction[1],
+        p[2] * direction[2],
+    ];
+    let position = terms[0] + terms[1] + terms[2];
+    let on_axis = direction
+        .iter()
+        .filter(|component| **component != 0.0)
+        .count()
+        == 1;
+    let rounding = if on_axis {
+        0.0
+    } else {
+        2.0 * f64::EPSILON * terms.iter().map(|term| term.abs()).sum::<f64>()
+    };
+    (position, rounding)
+}
+
+/// Witnessed points of the intersection, spanned along each direction.
+struct Witnessed<'d> {
+    directions: &'d [[f64; 3]],
+    spans: Vec<Option<Span>>,
+}
+
+/// The positions of witnessed points along one direction.
+#[derive(Clone, Copy)]
+struct Span {
+    least: f64,
+    greatest: f64,
+    /// The greatest position less its rounding and the least plus its: a
+    /// span sure to lie within the true one.
+    inner: (f64, f64),
+}
+
+impl<'d> Witnessed<'d> {
+    fn new(directions: &'d [[f64; 3]]) -> Self {
+        Self {
+            directions,
+            spans: vec![None; directions.len()],
         }
     }
-    /// Whether `value` would widen the box on the given side of `axis`.
-    fn extends(&self, axis: usize, upward: bool, value: f64) -> bool {
-        match self.0 {
+    fn add(&mut self, point: Point3) {
+        for (span, direction) in self.spans.iter_mut().zip(self.directions) {
+            let (position, rounding) = along(point, *direction);
+            let span = span.get_or_insert(Span {
+                least: position,
+                greatest: position,
+                inner: (position - rounding, position + rounding),
+            });
+            span.least = span.least.min(position);
+            span.greatest = span.greatest.max(position);
+            span.inner.0 = span.inner.0.max(position - rounding);
+            span.inner.1 = span.inner.1.min(position + rounding);
+        }
+    }
+    /// Whether a point at `position` would widen the span on the given side
+    /// of direction `index`.
+    fn extends(&self, index: usize, upward: bool, position: f64) -> bool {
+        match self.spans[index] {
             None => true,
-            Some((min, max)) => {
+            Some(span) => {
                 if upward {
-                    value > max[axis]
+                    position > span.greatest
                 } else {
-                    value < min[axis]
+                    position < span.least
                 }
             }
         }
+    }
+    /// The witnessed extent along direction `index`: a lower bound on the
+    /// intersection's.
+    fn extent(&self, index: usize) -> f64 {
+        self.spans[index].map_or(0.0, |span| (span.inner.0 - span.inner.1).max(0.0))
     }
 }
 
 /// Widens `witnessed` by the vertices of `body` that lie inside `other`.
 ///
-/// Only a vertex that would widen the box matters, and on each side of each
-/// axis the outermost inside vertex is the only one that does. So vertices
-/// are tried outermost first and each side stops at its first inside vertex
-/// or at the first that would not widen the box: the winding test, linear in
-/// the other body's size, runs only where it can change the answer.
+/// Only a vertex that would widen the span matters, and on each side of each
+/// direction the outermost inside vertex is the only one that does. So
+/// vertices are tried outermost first and each side stops at its first
+/// inside vertex or at the first that would not widen the span: the winding
+/// test, linear in the other body's size, runs only where it can change the
+/// answer.
 fn add_inside_vertices(
     body: &Body<'_>,
     other: &Body<'_>,
-    witnessed: &mut Witnessed,
+    witnessed: &mut Witnessed<'_>,
 ) -> Result<(), ProximityError> {
     let bounds = other.soup.bounds;
     let points: Vec<Point3> = vertices(body)
@@ -965,27 +1033,30 @@ fn add_inside_vertices(
     let winding =
         WindingMesh::prepare(other.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
     let mut known: Vec<Option<bool>> = vec![None; points.len()];
-    for axis in 0..3 {
+    for (index, direction) in witnessed.directions.iter().enumerate() {
+        let positions: Vec<f64> = points
+            .iter()
+            .map(|point| along(*point, *direction).0)
+            .collect();
         for upward in [false, true] {
             let mut order: Vec<usize> = (0..points.len()).collect();
             order.sort_by(|&a, &b| {
-                let ordering = points[a][axis].total_cmp(&points[b][axis]);
+                let ordering = positions[a].total_cmp(&positions[b]);
                 if upward { ordering.reverse() } else { ordering }
             });
-            for index in order {
-                let point = points[index];
-                if !witnessed.extends(axis, upward, point[axis]) {
+            for point in order {
+                if !witnessed.extends(index, upward, positions[point]) {
                     break;
                 }
-                let inside_other = if let Some(answer) = known[index] {
+                let inside_other = if let Some(answer) = known[point] {
                     answer
                 } else {
-                    let answer = inside(&winding, point)?;
-                    known[index] = Some(answer);
+                    let answer = inside(&winding, points[point])?;
+                    known[point] = Some(answer);
                     answer
                 };
                 if inside_other {
-                    witnessed.add(point);
+                    witnessed.add(points[point]);
                     break;
                 }
             }
@@ -994,20 +1065,33 @@ fn add_inside_vertices(
     Ok(())
 }
 
-/// Extents of the bodies' intersection along each axis, widened for the
-/// geometry's fidelity.
+/// The range of a body's positions along a direction, widened by the
+/// rounding of each and by `deviation`, within which the true surface lies.
+fn body_range(body: &Body<'_>, direction: [f64; 3], deviation: f64) -> (f64, f64) {
+    let (mut least, mut greatest) = (f64::INFINITY, f64::NEG_INFINITY);
+    for point in body.soup.items.iter().flatten() {
+        let (position, rounding) = along(*point, direction);
+        least = least.min(position - rounding);
+        greatest = greatest.max(position + rounding);
+    }
+    (least - deviation, greatest + deviation)
+}
+
+/// Extents of the bodies' intersection along each of `directions` (unit
+/// vectors), widened for the geometry's fidelity.
 ///
 /// The lower bound spans witnessed points of the intersection; the upper
-/// bound is the overlap of the true bodies' enclosing boxes.
-fn overlap_extents(
+/// bound is the overlap of the true bodies' ranges along the direction,
+/// which the intersection, lying in both, cannot exceed.
+fn overlap_along(
     subject: &Body<'_>,
     counterpart: &Body<'_>,
-    separation: f64,
-    containment: Option<BodyContainment>,
+    (separation, containment): (f64, Option<BodyContainment>),
     subject_fidelity: GeometryFidelity,
     counterpart_fidelity: GeometryFidelity,
-) -> Result<OverlapExtents, ProximityError> {
-    let mut witnessed = Witnessed::default();
+    directions: &[[f64; 3]],
+) -> Result<Vec<LengthInterval>, ProximityError> {
+    let mut witnessed = Witnessed::new(directions);
     // Bodies apart at the surface share nothing unless one holds the other.
     let shared = separation <= 0.0 || containment.is_some();
     if shared {
@@ -1027,29 +1111,45 @@ fn overlap_extents(
     let deviation = subject_fidelity
         .combined(counterpart_fidelity)
         .deviation_metres();
-    let (a, b) = (
-        subject
-            .soup
-            .bounds
-            .expanded(subject_fidelity.deviation_metres()),
-        counterpart
-            .soup
-            .bounds
-            .expanded(counterpart_fidelity.deviation_metres()),
-    );
-    let axis = |axis: usize| -> Result<LengthInterval, ProximityError> {
-        if !shared {
-            return LengthInterval::exact(0.0).map_err(|_| ProximityError::InvalidMeasurement);
-        }
-        let upper = (a.max()[axis].min(b.max()[axis]) - a.min()[axis].max(b.min()[axis])).max(0.0);
-        let lower = witnessed.0.map_or(0.0, |(min, max)| {
+    directions
+        .iter()
+        .enumerate()
+        .map(|(index, direction)| {
+            if !shared {
+                return LengthInterval::exact(0.0).map_err(|_| ProximityError::InvalidMeasurement);
+            }
+            let a = body_range(subject, *direction, subject_fidelity.deviation_metres());
+            let b = body_range(
+                counterpart,
+                *direction,
+                counterpart_fidelity.deviation_metres(),
+            );
+            let upper = (a.1.min(b.1) - a.0.max(b.0)).max(0.0);
             // Each end of a tessellated extent may move by the deviation.
-            (max[axis] - min[axis] - 2.0 * deviation).max(0.0)
-        });
-        LengthInterval::try_new(lower.min(upper), upper)
-            .map_err(|_| ProximityError::InvalidMeasurement)
-    };
-    Ok(OverlapExtents::new(axis(0)?, axis(1)?, axis(2)?))
+            let lower = (witnessed.extent(index) - 2.0 * deviation).max(0.0);
+            LengthInterval::try_new(lower.min(upper), upper)
+                .map_err(|_| ProximityError::InvalidMeasurement)
+        })
+        .collect()
+}
+
+/// Extents of the bodies' intersection along each world axis.
+fn overlap_extents(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    contact: (f64, Option<BodyContainment>),
+    subject_fidelity: GeometryFidelity,
+    counterpart_fidelity: GeometryFidelity,
+) -> Result<OverlapExtents, ProximityError> {
+    let axes = overlap_along(
+        subject,
+        counterpart,
+        contact,
+        subject_fidelity,
+        counterpart_fidelity,
+        &AXES,
+    )?;
+    Ok(OverlapExtents::new(axes[0], axes[1], axes[2]))
 }
 
 /// Distance from `point` to one triangle.
@@ -1187,8 +1287,7 @@ impl ProximityService for AxiolidProximityService {
             Some(_) => Some(overlap_extents(
                 &subject,
                 &counterpart,
-                separation,
-                containment,
+                (separation, containment),
                 subject_fidelity,
                 counterpart_fidelity,
             )?),
@@ -1232,6 +1331,54 @@ impl ProximityService for AxiolidProximityService {
             Some(volume) if penetration.is_some() => measured.with_intersection_volume(volume),
             _ => Ok(measured),
         }
+    }
+
+    /// Extents along the request's directions, measured as the world-axis
+    /// extents are: witnessed crossings and inside vertices below, the
+    /// bodies' own ranges along each direction above. Off the coordinate
+    /// axes every position is a rounded dot product, widened by a bound on
+    /// its rounding. Two open surfaces share no volume and are refused.
+    fn measure_overlap_along(
+        &self,
+        request: &OverlapAlongRequest,
+    ) -> Result<OverlapAlongEvidence, ProximityError> {
+        let subject = self.body(request.subject())?;
+        let counterpart = self.body(request.counterpart())?;
+        let subject_fidelity = self.geometry.fidelity(request.subject())?;
+        let counterpart_fidelity = self.geometry.fidelity(request.counterpart())?;
+        let fidelity = subject_fidelity.combined(counterpart_fidelity);
+        let separation = separation(&subject.soup, &counterpart.soup)?;
+        let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
+        if penetration.is_none() {
+            return Err(ProximityError::Unavailable);
+        }
+        let directions: Vec<[f64; 3]> = request
+            .directions()
+            .iter()
+            .map(MetricDirection::components)
+            .collect();
+        let extents = overlap_along(
+            &subject,
+            &counterpart,
+            (separation, containment),
+            subject_fidelity,
+            counterpart_fidelity,
+            &directions,
+        )?;
+        OverlapAlongEvidence::try_new(
+            request.clone(),
+            extents,
+            fidelity,
+            Evidence {
+                source: request.subject().source.clone(),
+                locator: format!(
+                    "axiolid:overlap-along:{}:{}",
+                    request.subject(),
+                    request.counterpart()
+                ),
+                exact: fidelity.is_exact(),
+            },
+        )
     }
 
     fn measure_face_distance(

@@ -6,6 +6,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Clash tolerance cases along the elements' own axes.** (#135)
+  `ProximityService::measure_overlap_along` answers the extents of two
+  bodies' intersection along stated directions (`OverlapAlongRequest`,
+  `OverlapAlongEvidence`), refused by default; the Axiolid adapter
+  measures them from the same witnesses as the world-axis extents, the
+  upper bound the overlap of the bodies' own ranges, widening every
+  projection off a coordinate axis by its rounding. `clash` and
+  `clash-matrix` take `tolerance_cases`: rows of a case
+  (`horizontal_orthogonal`, `vertical_orthogonal`,
+  `horizontal_protrusion`, `vertical_protrusion`), two component filters
+  and a tolerance, measured along the second element's or the first
+  element's placement axes from the object-frame service. A slab edge sunk
+  10 mm into a wall standing at 30° passes a 20 mm orthogonal case and is
+  a hard clash without it. An undecided filter, frame or extent leaves the
+  pair not evaluated. **Breaking:** definitions bound to `clash` or
+  `clash-matrix` must declare the new optional parameter;
+  `ProximityService` gains a defaulted method.
 - **Clash severities by class and size.** (#97) `clash` and
   `clash-matrix` take `severity_by_class` (a severity per class:
   duplicate, containment, intersection, clearance) and grade

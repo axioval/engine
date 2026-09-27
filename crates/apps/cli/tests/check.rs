@@ -796,6 +796,91 @@ fn with_geometry_clash_severities_grade_the_intersection() {
     assert_eq!(severity, "info", "{message}");
 }
 
+/// A wall #26 placed at 30° and a slab #36 placed along it, its edge sunk
+/// 10 mm into the wall.
+fn slab_in_a_turned_wall() -> String {
+    let body = |first: u32, centre: [f64; 2], size: [f64; 2], depth: f64| {
+        let [p, pos, profile, solid, shape, definition] =
+            [0, 1, 2, 3, 4, 5].map(|offset| first + offset);
+        format!(
+            "#{p}=IFCCARTESIANPOINT(({:?},{:?}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{:?},{:?});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth:?});\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n",
+            centre[0], centre[1], size[0], size[1]
+        )
+    };
+    let (sin, cos) = (std::f64::consts::PI / 6.0).sin_cos();
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCDIRECTION(({cos:?},{sin:?},0.));\n\
+         #7=IFCAXIS2PLACEMENT3D(#1,#4,#6);\n\
+         #8=IFCLOCALPLACEMENT($,#7);\n\
+         #9=IFCCARTESIANPOINT((0.,0.,1.));\n\
+         #11=IFCAXIS2PLACEMENT3D(#9,#4,#6);\n\
+         #12=IFCLOCALPLACEMENT($,#11);\n\
+         #13=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #14=IFCUNITASSIGNMENT((#13));\n\
+         #15=IFCPROJECT('0000000000000000000015',$,'P',$,$,$,$,(#5),#14);\n\
+         {}#26=IFCWALL('0000000000000000000026',$,$,$,$,#8,#25,$,$);\n\
+         {}#36=IFCSLAB('0000000000000000000036',$,$,$,$,#12,#35,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        body(20, [0.0, 0.0], [4.0, 0.2], 3.0),
+        body(30, [0.0, 1.59], [3.0, 3.0], 0.2),
+    )
+}
+
+/// The slab edge in the turned wall reaches metres along the world axes but
+/// 10 mm across the wall's own: a 20 mm orthogonal case lets it pass.
+#[test]
+fn with_geometry_clash_tolerance_cases_measure_along_the_walls_axes() {
+    let case = Case::new("clash-tolerance-cases");
+    let check = |cases: Value| {
+        let mut parameters = json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.0},
+        });
+        if !cases.is_null() {
+            parameters["tolerance_cases"] = json!({"type": "table", "value": cases});
+        }
+        case.geometry_rule(
+            &slab_in_a_turned_wall(),
+            &[("slab", "IfcSlab")],
+            "axioval:capability.clash",
+            &registry_signature("axioval:capability.clash"),
+            entity("slab"),
+            parameters,
+        )
+    };
+    let orthogonal = |tolerance: f64| {
+        json!([{
+            "case": {"type": "string", "value": "horizontal_orthogonal"},
+            "first_selector": {"type": "selector", "value": entity("slab")},
+            "second_selector": {"type": "selector", "value": entity("wall")},
+            "tolerance_metres": {"type": "number", "value": tolerance},
+        }])
+    };
+    let (output, result) = check(orthogonal(0.02));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+    let (output, result) = check(Value::Null);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), vec!["#36"], "{result:#}");
+    let (output, _) = check(orthogonal(0.005));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+}
+
 /// The two crossing walls, one per file, each in a system of its own file
 /// named `systems.0` and `systems.1`, and on a layer named `A-WALL`.
 fn walls_in_two_files(case: &Case, systems: [&str; 2]) {

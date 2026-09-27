@@ -146,5 +146,9 @@ Unreachable destinations are none; a refusal leaves the distance unknown.
 See [Distances and connections between spaces](./capabilities.md#distances-and-connections-between-spaces).
 
 `escape-route` measures travel to the nearest exit with `farthest_point`
-from a space's walkable area, or with `nearest_target` from its doors. See
+from a space's walkable area, or with `nearest_target` from its doors.
+Neither answer names the objects a walk crosses, so where metres on a stair
+or a shared section count several times, the multiplied travel is bracketed
+between the plain walk and its upper bound times the largest factor of a
+section within that bound's reach in plan. See
 [Escape routes](./capabilities.md#escape-routes).

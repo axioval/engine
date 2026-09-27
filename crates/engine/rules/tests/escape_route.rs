@@ -11,13 +11,16 @@ use std::sync::Arc;
 
 use axioval_engine::{
     CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ElevationInterval,
-    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint,
-    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
-    MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest,
-    NotEvaluatedReason, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle,
-    PlanCentre, PlanLength, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
-    ServiceRegistry, UnreachableRegionEvidence, UnreachableTargetsEvidence, VerticalExtent,
-    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, GeometryFidelity,
+    LengthInterval, MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome,
+    NearestTargetRequest, NotEvaluatedReason, ObjectBounds, PlanArea, PlanAreaError,
+    PlanAreaService, PlanAreaServiceHandle, PlanCentre, PlanLength, PlanRectangle, PlanSpan,
+    PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProjectedDistanceEvidence,
+    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RectangleOrientation, ServiceRegistry, UnreachableRegionEvidence,
+    UnreachableTargetsEvidence, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, ObjectId, PropertyValue, QuantityDimension};
@@ -37,12 +40,16 @@ enum Walk {
     Refused,
 }
 
-/// Areas, diagonals and walks a test declares. Walks are keyed by their
-/// start (`region` or door) and the sorted names of their targets.
+/// Areas, diagonals, rectangles, plan distances and walks a test declares.
+/// Walks are keyed by their start (`region` or door) and the sorted names of
+/// their targets.
 #[derive(Default)]
 struct Geometry {
     areas: BTreeMap<String, (f64, f64)>,
     diameters: BTreeMap<String, f64>,
+    /// `(width, length, unique orientation)`.
+    rectangles: BTreeMap<String, (f64, f64, bool)>,
+    distances: BTreeMap<(String, String), f64>,
     walks: BTreeMap<(String, String), Walk>,
 }
 
@@ -54,6 +61,17 @@ impl Geometry {
 
     fn diameter(mut self, local: &str, metres: f64) -> Self {
         self.diameters.insert(local.into(), metres);
+        self
+    }
+
+    fn rectangle(mut self, local: &str, width: f64, length: f64, unique: bool) -> Self {
+        self.rectangles
+            .insert(local.into(), (width, length, unique));
+        self
+    }
+
+    fn distance(mut self, from: &str, to: &str, metres: f64) -> Self {
+        self.distances.insert((from.into(), to.into()), metres);
         self
     }
 
@@ -72,6 +90,9 @@ impl Geometry {
             .unwrap();
         services
             .register(VerticalExtentServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(ProximityServiceHandle::new(shared.clone()))
             .unwrap();
         services
             .register(MetricRoutingServiceHandle::new(shared))
@@ -149,6 +170,61 @@ impl PlanSpanService for Geometry {
             0.0,
             CentrePlacement::Inside,
             exact(format!("centre:{}", object.local_id)),
+        )
+    }
+
+    fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
+        let (width, length, unique) = *self
+            .rectangles
+            .get(&object.local_id)
+            .unwrap_or_else(|| panic!("unexpected rectangle of {object}"));
+        let mut evidence = exact(format!("rectangle:{}", object.local_id));
+        evidence.exact = unique;
+        PlanRectangle::try_new(
+            object.clone(),
+            [0.0, 0.0],
+            0.0,
+            [[1.0, 0.0], [0.0, 1.0]],
+            0.0,
+            [(width / 2.0, width / 2.0), (length / 2.0, length / 2.0)],
+            if unique {
+                RectangleOrientation::Unique
+            } else {
+                RectangleOrientation::Tied
+            },
+            evidence,
+        )
+    }
+}
+
+impl ProximityService for Geometry {
+    fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        panic!("escape routes read no bounds of {object}")
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        panic!("escape routes measure plan distances only")
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        assert_eq!(request.projection(), ProximityProjection::Horizontal);
+        let key = (
+            request.subject().local_id.clone(),
+            request.counterpart().local_id.clone(),
+        );
+        let metres = *self
+            .distances
+            .get(&key)
+            .unwrap_or_else(|| panic!("unexpected plan distance {key:?}"));
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            metres,
+            metres,
+            GeometryFidelity::Exact,
+            exact(format!("distance:{}:{}", key.0, key.1)),
         )
     }
 }
@@ -725,6 +801,70 @@ fn declarations_that_cannot_be_judged_are_refused() {
             ("exit_selector", selector(kind("door"))),
             uses(&[("maximum_travel", number(30.0))]),
         ],
+        // A factor below one, sharing without a path or a path without
+        // sharing, and sections without travel.
+        with(
+            base(),
+            vec![
+                uses(&[("maximum_travel", number(30.0))]),
+                sections(&[("stair", 0.5, None)]),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("maximum_travel", number(30.0))]),
+                sections(&[("corridor", 2.0, Some(1))]),
+                ("section_path", strings(&["opens:forward"])),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("maximum_travel", number(30.0))]),
+                sections(&[("corridor", 2.0, Some(2))]),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("maximum_travel", number(30.0))]),
+                sections(&[("stair", 2.0, None)]),
+                ("section_path", strings(&["opens:forward"])),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("exits", integer(1))]),
+                sections(&[("stair", 2.0, None)]),
+            ],
+        ),
+        // Passages need a passage width in every row, and a passage width
+        // needs passages.
+        with(
+            base(),
+            vec![
+                uses(&[("area_per_occupant", number(2.0))]),
+                widths(),
+                ("passage_selector", selector(kind("corridor"))),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("area_per_occupant", number(2.0))]),
+                passage_widths(),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("area_per_occupant", number(2.0))]),
+                widths(),
+                ("passage_path", strings(&["opens:forward"])),
+            ],
+        ),
     ] {
         let evaluation = evaluate(model(), Geometry::default(), parameters);
         assert_eq!(
@@ -786,5 +926,324 @@ fn a_space_no_use_picks_is_not_evaluated() {
     assert_eq!(
         unevaluated(&evaluation),
         [("store".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+fn sections(rows: &[(&str, f64, Option<i64>)]) -> (&'static str, ParameterValue) {
+    (
+        "sections",
+        ParameterValue::Table {
+            value: rows
+                .iter()
+                .map(|(objects, factor, shared_by)| {
+                    let mut row: TableRow = [
+                        ("label".to_owned(), string(objects)),
+                        ("objects".to_owned(), selector(kind(objects))),
+                        ("factor".to_owned(), number(*factor)),
+                    ]
+                    .into_iter()
+                    .collect();
+                    if let Some(count) = shared_by {
+                        row.insert("shared_by".into(), integer(*count));
+                    }
+                    row
+                })
+                .collect(),
+        },
+    )
+}
+
+#[test]
+fn travel_on_a_stair_counts_by_its_factor_where_the_walk_may_reach_it() {
+    // The plain walk is 12 to 12.1 m; on the stair it counts twice.
+    let run = |maximum: f64, stair: Option<f64>| {
+        let mut geometry = Geometry::default().walk("hall", "d1,d2", Walk::Between(12.0, 12.1));
+        if let Some(metres) = stair {
+            geometry = geometry.distance("hall", "st", metres);
+        }
+        evaluate(
+            model().object("st", "stair"),
+            geometry,
+            with(
+                exits(kind("door")),
+                vec![
+                    uses(&[("maximum_travel", number(maximum))]),
+                    sections(&[("stair", 2.0, None)]),
+                ],
+            ),
+        )
+    };
+    // Twice the whole walk is within 30 m: no distance is asked.
+    let evaluation = run(30.0, None);
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
+    // Within 20 m only if the walk cannot reach the stair: 15 m away in
+    // plan it cannot.
+    let evaluation = run(20.0, Some(15.0));
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
+    // 5 m away it may: up to 24.2 m, so neither a pass nor a finding.
+    let evaluation = run(20.0, Some(5.0));
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("hall".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains(
+            "between 12 and 24.2 m walking, counting the walk on section 0 (stair) up to 2 times"
+        ),
+        "{message}"
+    );
+    // The plain walk already exceeds 10 m, whatever it crosses.
+    let evaluation = run(10.0, None);
+    assert_eq!(findings(&evaluation).len(), 1, "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+}
+
+#[test]
+fn a_shared_section_multiplies_only_where_enough_spaces_reach_it() {
+    // Hall and office both open onto corridor `c`, 0 m away in plan.
+    let run = |factor: f64, shared_by: i64| {
+        model()
+            .object("office", "space")
+            .object("d3", "door")
+            .object("c", "corridor")
+            .edge("bounds", "d3", "office")
+            .edge("opens", "hall", "c")
+            .edge("opens", "office", "c")
+            .evaluate_with(
+                &EscapeRoute,
+                &rule(
+                    CAPABILITY,
+                    kind("space"),
+                    with(
+                        exits(kind("door")),
+                        vec![
+                            uses(&[("maximum_travel", number(20.0))]),
+                            sections(&[("corridor", factor, Some(shared_by))]),
+                            ("section_path", strings(&["opens:forward"])),
+                        ],
+                    ),
+                ),
+                |services| {
+                    Geometry::default()
+                        .walk("hall", "d1,d2", Walk::Between(12.0, 12.1))
+                        .walk("office", "d3", Walk::Between(12.0, 12.1))
+                        .distance("hall", "c", 0.0)
+                        .distance("office", "c", 0.0)
+                        .register(services);
+                },
+            )
+    };
+    // Shared by two, at 1.5 times: at most 18.15 m, within 20 m.
+    let evaluation = run(1.5, 2);
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
+    // At twice, up to 24.2 m: neither passes nor fails.
+    let evaluation = run(2.0, 2);
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            ("hall".into(), NotEvaluatedReason::IncompleteEvidence),
+            ("office".into(), NotEvaluatedReason::IncompleteEvidence)
+        ]
+    );
+    // Only two spaces reach it, so a section shared by three is not one.
+    let evaluation = run(2.0, 3);
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
+}
+
+/// Hall `hall` (two exits 1.25 m wide) and `office` (none) open onto
+/// corridor `c`.
+fn corridor_model() -> Model {
+    model()
+        .object("office", "space")
+        .object("c", "corridor")
+        .edge("opens", "hall", "c")
+        .edge("opens", "office", "c")
+        .value("d1", "Access", "ClearWidth", metres(1.25))
+        .value("d2", "Access", "ClearWidth", metres(1.25))
+}
+
+fn passage_widths() -> (&'static str, ParameterValue) {
+    let row = |occupants: i64, width: f64, passage: f64| -> TableRow {
+        [
+            ("occupants".to_owned(), integer(occupants)),
+            ("width".to_owned(), number(width)),
+            ("passage_width".to_owned(), number(passage)),
+        ]
+        .into_iter()
+        .collect()
+    };
+    (
+        "widths",
+        ParameterValue::Table {
+            value: vec![row(20, 0.9, 1.0), row(200, 1.2, 1.5)],
+        },
+    )
+}
+
+fn passage_parameters(uses: (&'static str, ParameterValue)) -> Vec<(&'static str, ParameterValue)> {
+    with(
+        exits(kind("door")),
+        vec![
+            uses,
+            passage_widths(),
+            (
+                "clear_width_property",
+                property(Some("Access"), "ClearWidth"),
+            ),
+            ("passage_path", strings(&["opens:forward"])),
+            ("passage_selector", selector(kind("corridor"))),
+            (
+                "passage_width_property",
+                property(Some("Corridor"), "ClearWidth"),
+            ),
+        ],
+    )
+}
+
+/// 300 m² of hall and 40 m² of office at 2 m² each.
+fn passages(model: Model, geometry: Geometry) -> CapabilityEvaluation {
+    evaluate(
+        model,
+        geometry
+            .area("hall", 300.0, 300.0)
+            .area("office", 40.0, 40.0),
+        passage_parameters(uses(&[("area_per_occupant", number(2.0))])),
+    )
+}
+
+#[test]
+fn a_passage_narrower_than_all_its_occupants_require_is_found() {
+    // 150 occupants from the hall and 20 from the office: 170 need 1.5 m,
+    // though the office's 20 alone would need only 1 m.
+    let evaluation = passages(
+        corridor_model().value("c", "Corridor", "ClearWidth", metres(1.2)),
+        Geometry::default(),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "c".into(),
+            format!(
+                "passage {} is 1.2 m wide (stated clear width); 170 occupant(s) relying on it \
+                 (from {}, {}) require at least 1.5 m",
+                id("c"),
+                id("hall"),
+                id("office")
+            )
+        )]
+    );
+    assert_eq!(
+        evaluation.findings()[0].related,
+        vec![id("hall"), id("office")]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    let evaluation = passages(
+        corridor_model().value("c", "Corridor", "ClearWidth", metres(1.6)),
+        Geometry::default(),
+    );
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn without_a_stated_width_the_enclosing_rectangle_decides_only_a_failure() {
+    let evaluation = passages(
+        corridor_model(),
+        Geometry::default().rectangle("c", 1.2, 30.0, true),
+    );
+    assert_eq!(findings(&evaluation).len(), 1, "{evaluation:?}");
+    assert!(
+        findings(&evaluation)[0]
+            .1
+            .contains("is at most 1.2 m wide (the shorter side of the rectangle"),
+        "{evaluation:?}"
+    );
+    let evaluation = passages(
+        corridor_model(),
+        Geometry::default().rectangle("c", 2.0, 30.0, true),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("c".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // A tied orientation has no known sides, so nothing is decided.
+    let evaluation = passages(
+        corridor_model(),
+        Geometry::default().rectangle("c", 1.2, 30.0, false),
+    );
+    assert!(evaluation.findings().is_empty());
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(message.contains("several orientations"), "{message}");
+}
+
+#[test]
+fn a_passage_serving_a_space_of_unknown_load_is_not_evaluated() {
+    // The office's use states no area per occupant, so it may bring any
+    // number of occupants: even a 3 m corridor is not passed.
+    let row = |spaces: &str, cells: &[(&str, ParameterValue)]| -> TableRow {
+        let mut row: TableRow = cells
+            .iter()
+            .map(|(column, value)| ((*column).to_owned(), value.clone()))
+            .collect();
+        row.insert("spaces".into(), selector(kind(spaces)));
+        row
+    };
+    let evaluation = Model::default()
+        .object("hall", "space")
+        .object("d1", "door")
+        .object("office", "office")
+        .object("c", "corridor")
+        .edge("bounds", "d1", "hall")
+        .edge("opens", "hall", "c")
+        .edge("opens", "office", "c")
+        .value("c", "Corridor", "ClearWidth", metres(3.0))
+        .value("d1", "Access", "ClearWidth", metres(1.25))
+        .evaluate_with(
+            &EscapeRoute,
+            &rule(
+                CAPABILITY,
+                Selector::AnyOf {
+                    operands: vec![kind("space"), kind("office")],
+                },
+                passage_parameters((
+                    "uses",
+                    ParameterValue::Table {
+                        value: vec![
+                            row("space", &[("area_per_occupant", number(2.0))]),
+                            row("office", &[("exits", integer(1))]),
+                        ],
+                    },
+                )),
+            ),
+            |services| {
+                Geometry::default()
+                    .area("hall", 30.0, 30.0)
+                    .register(services);
+            },
+        );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "office".into(),
+            "has 0 exit(s) via bounds; use 1 requires at least 1".into()
+        )]
+    );
+    let outcome = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .find(|outcome| outcome.object_id() == Some(&id("c")))
+        .expect("the corridor is not evaluated");
+    assert!(
+        outcome.message().contains(&format!(
+            "the occupants relying on passage {} are unknown: {}: its use states no \
+             `area_per_occupant`",
+            id("c"),
+            id("office")
+        )),
+        "{}",
+        outcome.message()
     );
 }

@@ -4579,6 +4579,68 @@ fn with_geometry_escape_routes_too_long_and_too_few_exits_are_found() {
     );
 }
 
+#[test]
+fn with_geometry_passages_too_narrow_for_their_occupants_are_found() {
+    // Both halls (200 m², 100 occupants each at 2 m²) are declared their own
+    // passage; the rectangles enclosing them are 10 m wide where 12 m are
+    // asked. Their 1 x 0.1 m doors are at most 1.005 m wide where 1.2 m are.
+    let case = Case::new("geometry-escape-route-passages");
+    let (output, result) = case.geometry_rule(
+        &halls_with_exits(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        entity("space"),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"spaces": {"type": "selector", "value": entity("space")},
+                 "area_per_occupant": {"type": "number", "value": 2.0}},
+            ]},
+            "widths": {"type": "table", "value": [
+                {"occupants": {"type": "integer", "value": 500},
+                 "width": {"type": "number", "value": 1.2},
+                 "passage_width": {"type": "number", "value": 12.0}},
+            ]},
+            "exit_path": {"type": "stringList",
+                          "value": ["axioval:derived.adjacent-space:backward"]},
+            "exit_selector": {"type": "selector", "value": entity("door")},
+            "passage_selector": {"type": "selector", "value": entity("space")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    let passages: Vec<&(String, String)> = findings
+        .iter()
+        .filter(|(_, message)| message.starts_with("passage "))
+        .collect();
+    assert_eq!(passages.len(), 2, "{result:#}");
+    for ((object, message), hall) in passages.into_iter().zip(["#19", "#29"]) {
+        assert_eq!(object, hall, "{result:#}");
+        assert!(
+            message.contains(
+                " is at most 10 m wide (the shorter side of the rectangle enclosing its \
+                 footprint); 100 occupant(s) relying on it (from "
+            ) && message.ends_with(") require at least 12 m"),
+            "{message}"
+        );
+    }
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|(_, message)| message.starts_with("exit ")
+                && message.contains("is at most 1.005 m wide"))
+            .count(),
+        4,
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// An IFC4 file in metres around `body`, instances `#1` to `#8` taken.
 fn metre_model(body: &str) -> String {
     format!(

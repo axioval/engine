@@ -29,19 +29,41 @@
 //! change it. An occupant load straddling two rows of `widths` requires
 //! either row's width, so only what both decide stands.
 //!
-//! Not checked: multipliers for stairs and for route sections shared by
-//! several spaces (routes are measured on one level, and a shared section is
-//! not a measured quantity), the free width of passages (corridors) between
-//! the exits, and whether exit doors open in the direction of escape (door
-//! leaves are not read yet).
+//! **Multiplied sections.** Each row of `sections` names objects (`objects`,
+//! a stair, say) on which a walked metre counts `factor` times, at least
+//! one; with `shared_by`, only a section that many checked spaces reach
+//! along `section_path` multiplies. Metric routing measures the plain walk
+//! and not which sections it crosses, so the multiplied travel is
+//! bracketed: at least the plain walk's lower bound, at most its upper bound
+//! times the largest factor of a section the walk may cross. A walk of at
+//! most `U` metres stays within `U` of its start in plan, so a section whose
+//! horizontal distance from the start (the space, or the door) surely
+//! exceeds `U` is left out; every other one, and one that might be shared,
+//! may be crossed.
+//!
+//! **Passages.** With `passage_selector`, the passages of a checked space
+//! are the `passage_selector` objects `passage_path` reaches from it, and
+//! the space itself where `passage_selector` picks it. A passage carries the
+//! occupants of every checked space it serves, and must be as wide as the
+//! `passage_width` of the rows of `widths` for that load. Its width is its
+//! `passage_width_property`, a length; without one, only a failure decides:
+//! no clear width exceeds the shorter side of the rectangle of least area
+//! enclosing its footprint. A space whose load is unknown (no
+//! `area_per_occupant`, an undecided use or selection, an unmeasured
+//! footprint) leaves every passage it may serve not evaluated.
+//!
+//! Not checked: which passages a measured walk crosses (the routing answer
+//! names no traversed objects), and whether exit doors open in the direction
+//! of escape (door leaves are not read yet).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, FarthestPointOutcome, FarthestPointRequest,
     MetricPoint, MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome,
     NearestTargetRequest, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea,
-    PlanSpanServiceHandle, RuleCapability, RuleContext, TableColumn,
+    PlanSpanServiceHandle, ProximityProjection, ProximityRequest, ProximityServiceHandle,
+    RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension};
@@ -68,6 +90,14 @@ const WIDTHS: &[TableColumn] = &[
     TableColumn::required("occupants", ColumnKind::Integer),
     TableColumn::required("width", ColumnKind::Number),
     TableColumn::optional("total_width", ColumnKind::Number),
+    TableColumn::optional("passage_width", ColumnKind::Number),
+];
+
+const SECTIONS: &[TableColumn] = &[
+    TableColumn::optional("label", ColumnKind::String),
+    TableColumn::required("objects", ColumnKind::Selector),
+    TableColumn::required("factor", ColumnKind::Number),
+    TableColumn::optional("shared_by", ColumnKind::Integer),
 ];
 
 /// How narrow the farthest-point bracket is asked to become, in metres.
@@ -92,11 +122,42 @@ struct Use<'a> {
     area_per_occupant: Option<f64>,
 }
 
+/// One row of `widths`.
+struct WidthRow {
+    /// The row covers loads up to this many occupants.
+    occupants: u64,
+    /// The least width of each exit.
+    width: f64,
+    /// The least width of all exits together.
+    total: Option<f64>,
+    /// The least clear width of each passage.
+    passage: Option<f64>,
+}
+
+/// One row of `sections`: objects on which a walked metre counts `factor`
+/// times.
+struct SectionKind<'a> {
+    name: String,
+    objects: &'a Selector,
+    factor: f64,
+    /// Only a section at least this many checked spaces reach multiplies.
+    shared_by: Option<usize>,
+}
+
+/// The passages a space's occupants rely on.
+struct Passages<'a> {
+    path: Option<Traversal<'a>>,
+    selector: &'a Selector,
+    width: Option<PropertyRef<'a>>,
+}
+
 struct Declaration<'a> {
     uses: Vec<Use<'a>>,
-    /// `(occupants up to, width of each exit, width of all together)`, by
-    /// occupants.
-    widths: Vec<(u64, f64, Option<f64>)>,
+    /// By occupants.
+    widths: Vec<WidthRow>,
+    sections: Vec<SectionKind<'a>>,
+    section_path: Option<Traversal<'a>>,
+    passages: Option<Passages<'a>>,
     exits: Traversal<'a>,
     exit_selector: &'a Selector,
     doors: Option<(Traversal<'a>, &'a Selector)>,
@@ -187,10 +248,19 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         let width = positive(&name, "width", row.number("width")?)?
             .ok_or_else(|| invalid(format!("{name} has no `width`")))?;
         let total = positive(&name, "total_width", row.number("total_width")?)?;
-        widths.push((occupants, width, total));
+        let passage = positive(&name, "passage_width", row.number("passage_width")?)?;
+        widths.push(WidthRow {
+            occupants,
+            width,
+            total,
+            passage,
+        });
     }
-    widths.sort_by_key(|(occupants, _, _)| *occupants);
-    if widths.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+    widths.sort_by_key(|row| row.occupants);
+    if widths
+        .windows(2)
+        .any(|pair| pair[0].occupants == pair[1].occupants)
+    {
         return Err(invalid("two rows of `widths` state the same `occupants`"));
     }
     let loads = uses.iter().any(|use_| use_.area_per_occupant.is_some());
@@ -229,9 +299,14 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             "`maximum_travel` needs `walking_height` and `walking_step`",
         ));
     }
+    let (sections, section_path) = sections(&parameters, &uses)?;
+    let passages = passages(&parameters, &widths)?;
     Ok(Declaration {
         uses,
         widths,
+        sections,
+        section_path,
+        passages,
         exits: Traversal::path(
             parameters
                 .strings("exit_path")?
@@ -242,6 +317,92 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         clear_width: parameters.property("clear_width_property")?,
         profile,
     })
+}
+
+type Sections<'a> = (Vec<SectionKind<'a>>, Option<Traversal<'a>>);
+
+fn sections<'a>(
+    parameters: &Parameters<'a>,
+    uses: &[Use<'_>],
+) -> Result<Sections<'a>, Unavailable> {
+    let mut sections = Vec::new();
+    for (index, row) in parameters
+        .table("sections")?
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+    {
+        let name = match row.text("label")? {
+            Some(label) => format!("section {index} ({label})"),
+            None => format!("section {index}"),
+        };
+        let objects = row
+            .selector("objects")?
+            .ok_or_else(|| invalid(format!("{name} has no `objects`")))?;
+        let factor = row
+            .number("factor")?
+            .filter(|factor| factor.is_finite() && *factor >= 1.0)
+            .ok_or_else(|| invalid(format!("{name}: `factor` must be at least 1")))?;
+        let shared_by = row
+            .integer("shared_by")?
+            .map(|count| {
+                usize::try_from(count)
+                    .ok()
+                    .filter(|count| *count >= 2)
+                    .ok_or_else(|| invalid(format!("{name}: `shared_by` must be at least 2")))
+            })
+            .transpose()?;
+        sections.push(SectionKind {
+            name,
+            objects,
+            factor,
+            shared_by,
+        });
+    }
+    let path = parameters
+        .strings("section_path")?
+        .map(Traversal::path)
+        .transpose()?;
+    let shared = sections.iter().any(|kind| kind.shared_by.is_some());
+    if shared && path.is_none() {
+        return Err(invalid("`shared_by` needs `section_path`"));
+    }
+    if !shared && path.is_some() {
+        return Err(invalid(
+            "`section_path` needs a section stating `shared_by`",
+        ));
+    }
+    if !sections.is_empty() && uses.iter().all(|use_| use_.maximum_travel.is_none()) {
+        return Err(invalid("`sections` needs a use stating `maximum_travel`"));
+    }
+    Ok((sections, path))
+}
+
+fn passages<'a>(
+    parameters: &Parameters<'a>,
+    widths: &[WidthRow],
+) -> Result<Option<Passages<'a>>, Unavailable> {
+    let path = parameters.strings("passage_path")?;
+    let width = parameters.property("passage_width_property")?;
+    let Some(selector) = parameters.selector("passage_selector")? else {
+        if path.is_some() || width.is_some() || widths.iter().any(|row| row.passage.is_some()) {
+            return Err(invalid(
+                "`passage_path`, `passage_width_property` and `passage_width` need \
+                 `passage_selector`",
+            ));
+        }
+        return Ok(None);
+    };
+    if widths.is_empty() || widths.iter().any(|row| row.passage.is_none()) {
+        return Err(invalid(
+            "`passage_selector` needs every row of `widths` to state `passage_width`",
+        ));
+    }
+    Ok(Some(Passages {
+        path: path.map(Traversal::path).transpose()?,
+        selector,
+        width,
+    }))
 }
 
 impl RuleCapability for EscapeRoute {
@@ -260,6 +421,14 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("walking_height", ParameterType::Number),
             ParameterDescriptor::optional("walking_step", ParameterType::Number),
+            ParameterDescriptor::optional("sections", ParameterType::Table(SECTIONS)),
+            ParameterDescriptor::optional("section_path", ParameterType::StringList),
+            ParameterDescriptor::optional("passage_path", ParameterType::StringList),
+            ParameterDescriptor::optional("passage_selector", ParameterType::Selector),
+            ParameterDescriptor::optional(
+                "passage_width_property",
+                ParameterType::PropertyReference,
+            ),
         ]
     }
 
@@ -278,14 +447,22 @@ impl RuleCapability for EscapeRoute {
             .doors
             .as_ref()
             .map(|(_, selector)| Candidates::select(context, selector));
+        let passages = declared
+            .passages
+            .as_ref()
+            .map(|passages| Candidates::select(context, passages.selector));
         let judge = Judge {
             context,
             rule,
             declared: &declared,
             exits,
             doors,
+            sections: possible_sections(context, rule, &declared),
+            passages,
         };
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
+        let mut served = Served::default();
+        let mut results: Vec<(ObjectId, String, Checked)> = Vec::new();
         for space in spaces {
             let matched =
                 match_rows(
@@ -305,6 +482,7 @@ impl RuleCapability for EscapeRoute {
                         NotEvaluatedReason::IncompleteEvidence,
                         "escape-route: no row of `uses` picks this space",
                     );
+                    judge.serve(&space.id, Err("no row of `uses` picks it"), &mut served);
                     continue;
                 }
                 Matched::Undecided | Matched::Ambiguous(_) => {
@@ -313,39 +491,176 @@ impl RuleCapability for EscapeRoute {
                         NotEvaluatedReason::IncompleteEvidence,
                         "escape-route: whether a row of `uses` picks this space is undecided",
                     );
+                    judge.serve(
+                        &space.id,
+                        Err("whether a row of `uses` picks it is undecided"),
+                        &mut served,
+                    );
                     continue;
                 }
             };
             let mut checked = Checked::default();
-            judge.space(space, use_, &mut checked);
-            for found in checked.findings {
-                evaluation.push_finding(found);
+            let load = judge.space(space, use_, &mut checked);
+            let load = match &load {
+                Some(Ok(load)) => Ok(load),
+                Some(Err(_)) => Err("its footprint is not measured"),
+                None => Err("its use states no `area_per_occupant`"),
+            };
+            if let Some(doubt) = judge.serve(&space.id, load, &mut served) {
+                checked.doubts.push(doubt);
             }
-            if !checked.doubts.is_empty() {
-                let reason = if checked
-                    .doubts
-                    .iter()
-                    .any(|(why, _)| *why == NotEvaluatedReason::MissingService)
-                {
-                    NotEvaluatedReason::MissingService
-                } else {
-                    checked.doubts[0].0.clone()
-                };
-                let mut messages: Vec<String> = checked
-                    .doubts
-                    .into_iter()
-                    .map(|(_, message)| message)
-                    .collect();
-                messages.dedup();
-                evaluation.push_object_not_evaluated(
-                    space.id.clone(),
-                    reason,
-                    format!("escape-route {}: {}", use_.name, messages.join("; ")),
+            results.push((
+                space.id.clone(),
+                format!("escape-route {}", use_.name),
+                checked,
+            ));
+        }
+        if judge.passages.is_some() {
+            // A space the rule may select brings occupants nobody counted.
+            for space in Candidates::select(context, &rule.selector).undecided.keys() {
+                judge.serve(
+                    space,
+                    Err("whether the rule selects it is undecided"),
+                    &mut served,
                 );
             }
+            judge.judge_passages(served, &mut results);
+        }
+        for (subject, prefix, checked) in results {
+            emit(&mut evaluation, subject, &prefix, checked);
         }
         evaluation
     }
+}
+
+/// Records what checking one object found.
+fn emit(evaluation: &mut CapabilityEvaluation, subject: ObjectId, prefix: &str, checked: Checked) {
+    for found in checked.findings {
+        evaluation.push_finding(found);
+    }
+    if checked.doubts.is_empty() {
+        return;
+    }
+    let reason = if checked
+        .doubts
+        .iter()
+        .any(|(why, _)| *why == NotEvaluatedReason::MissingService)
+    {
+        NotEvaluatedReason::MissingService
+    } else {
+        checked.doubts[0].0.clone()
+    };
+    let mut messages: Vec<String> = checked
+        .doubts
+        .into_iter()
+        .map(|(_, message)| message)
+        .collect();
+    messages.dedup();
+    evaluation.push_object_not_evaluated(
+        subject,
+        reason,
+        format!("{prefix}: {}", messages.join("; ")),
+    );
+}
+
+/// A section object the walk may cross, and its factor.
+struct Section {
+    object: ObjectId,
+    factor: f64,
+    /// Its row of `sections`.
+    kind: usize,
+}
+
+/// Every object that may be a multiplying section: picked (or perhaps
+/// picked) by a row of `sections`, and, with `shared_by`, reached from
+/// enough checked spaces that it may be shared. A factor of one changes
+/// nothing and is left out.
+fn possible_sections(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    declared: &Declaration<'_>,
+) -> Vec<Section> {
+    if declared.sections.is_empty() {
+        return Vec::new();
+    }
+    let candidates: Vec<Candidates<'_>> = declared
+        .sections
+        .iter()
+        .map(|kind| Candidates::select(context, kind.objects))
+        .collect();
+    // How many checked spaces may reach each shared section; a space whose
+    // sections cannot be read may reach any.
+    let mut reaching: BTreeMap<ObjectId, usize> = BTreeMap::new();
+    let mut unread = 0;
+    if let Some(path) = &declared.section_path {
+        let mut universe: Vec<&Object> = Vec::new();
+        for (kind, candidates) in declared.sections.iter().zip(&candidates) {
+            if kind.shared_by.is_some() {
+                for object in &candidates.universe {
+                    if !universe.iter().any(|known| known.id == object.id) {
+                        universe.push(object);
+                    }
+                }
+            }
+        }
+        for space in Candidates::select(context, &rule.selector).universe {
+            match path.related(context, &space.id, &universe) {
+                Ok((reached, _)) => {
+                    for object in reached {
+                        *reaching.entry(object).or_default() += 1;
+                    }
+                }
+                Err(_) => unread += 1,
+            }
+        }
+    }
+    let mut sections = Vec::new();
+    for (index, (kind, candidates)) in declared.sections.iter().zip(&candidates).enumerate() {
+        if kind.factor <= 1.0 {
+            continue;
+        }
+        for object in &candidates.universe {
+            if let Some(needed) = kind.shared_by
+                && reaching.get(&object.id).copied().unwrap_or(0) + unread < needed
+            {
+                continue;
+            }
+            sections.push(Section {
+                object: object.id.clone(),
+                factor: kind.factor,
+                kind: index,
+            });
+        }
+    }
+    sections
+}
+
+/// A space's occupant load, as an interval, and the area it comes from.
+struct Load {
+    least: u64,
+    most: u64,
+    area: PlanArea,
+}
+
+/// The occupants relying on one passage.
+#[derive(Default)]
+struct Reliance {
+    least: u64,
+    most: u64,
+    /// Why more occupants may rely on it than `most`.
+    unbounded: Vec<String>,
+    /// The checked spaces it serves.
+    spaces: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
+}
+
+/// The occupants relying on every passage reached.
+#[derive(Default)]
+struct Served {
+    passages: BTreeMap<ObjectId, Reliance>,
+    /// Why any passage may serve more occupants: a space whose passages
+    /// cannot be read.
+    anywhere: Vec<String>,
 }
 
 /// What checking one space found: findings that stand, and what could not
@@ -365,6 +680,22 @@ fn missing(service: &str) -> Unavailable {
         NotEvaluatedReason::MissingService,
         format!("{service} service is not registered"),
     )
+}
+
+/// The least and the largest of `values`.
+fn span(values: impl Iterator<Item = f64>) -> (f64, f64) {
+    values.fold((f64::INFINITY, 0.0_f64), |(low, high), value| {
+        (low.min(value), high.max(value))
+    })
+}
+
+/// An occupant load for a message.
+fn occupants(least: u64, most: u64) -> String {
+    if least == most {
+        format!("{least} occupant(s)")
+    } else {
+        format!("between {least} and {most} occupants")
+    }
 }
 
 /// Objects reached from a space, split by whether their selection is sure.
@@ -436,6 +767,18 @@ struct Judge<'r, 'c> {
     declared: &'r Declaration<'r>,
     exits: Candidates<'c>,
     doors: Option<Candidates<'c>>,
+    sections: Vec<Section>,
+    passages: Option<Candidates<'c>>,
+}
+
+/// What bounds a clear width from above where none is stated.
+#[derive(Clone, Copy)]
+enum Bound {
+    /// The footprint's longest plan diagonal.
+    Diagonal,
+    /// The shorter side of the rectangle of least area enclosing the
+    /// footprint.
+    ShortSide,
 }
 
 impl Judge<'_, '_> {
@@ -456,23 +799,215 @@ impl Judge<'_, '_> {
         })
     }
 
-    fn space(&self, space: &Object, use_: &Use<'_>, checked: &mut Checked) {
+    /// Checks one space, and answers its occupant load where its use
+    /// states one.
+    fn space(
+        &self,
+        space: &Object,
+        use_: &Use<'_>,
+        checked: &mut Checked,
+    ) -> Option<Result<Load, Unavailable>> {
+        let load = use_
+            .area_per_occupant
+            .map(|per_occupant| Self::load(self.context, &space.id, per_occupant));
         let exits = match self.reached(&self.declared.exits, &self.exits, &space.id) {
             Ok(exits) => exits,
             Err(unavailable) => {
                 checked.doubts.push(unavailable);
-                return;
+                return load;
             }
         };
         if let Some(required) = use_.exits {
             self.count(space, use_, required, &exits, checked);
         }
-        if let Some(area) = use_.area_per_occupant {
-            self.widths(space, use_, area, &exits, checked);
+        if let (Some(per_occupant), Some(load)) = (use_.area_per_occupant, &load) {
+            match load {
+                Ok(load) => self.widths(space, use_, per_occupant, load, &exits, checked),
+                Err(unavailable) => checked.doubts.push(unavailable.clone()),
+            }
         }
         if let Some(maximum) = use_.maximum_travel {
             self.travel(space, use_, maximum, &exits, checked);
         }
+        load
+    }
+
+    /// The footprint over the area per occupant, rounded up at both ends.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn load(
+        context: &RuleContext<'_>,
+        space: &ObjectId,
+        per_occupant: f64,
+    ) -> Result<Load, Unavailable> {
+        let area = footprint(context, space)?;
+        let load = |area: f64| (area / per_occupant).ceil().max(1.0) as u64;
+        Ok(Load {
+            least: load(area.lower_square_metres()),
+            most: load(area.upper_square_metres()),
+            area,
+        })
+    }
+
+    /// Adds `space`'s occupants to every passage it reaches; answers why its
+    /// passages cannot be read.
+    fn serve(
+        &self,
+        space: &ObjectId,
+        load: Result<&Load, &str>,
+        served: &mut Served,
+    ) -> Option<Unavailable> {
+        let (Some(declared), Some(candidates)) =
+            (self.declared.passages.as_ref(), self.passages.as_ref())
+        else {
+            return None;
+        };
+        let mut reached = Vec::new();
+        let mut evidence = Vec::new();
+        if candidates.universe.iter().any(|object| object.id == *space) {
+            reached.push(space.clone());
+        }
+        if let Some(path) = &declared.path {
+            match path.related(self.context, space, &candidates.universe) {
+                Ok((found, cited)) => {
+                    reached.extend(found);
+                    evidence = cited;
+                }
+                Err((_, message)) => {
+                    served
+                        .anywhere
+                        .push(format!("the passages of {space} cannot be read: {message}"));
+                    return Some(incomplete(format!(
+                        "its passages cannot be read: {message}"
+                    )));
+                }
+            }
+        }
+        for passage in reached {
+            let reliance = served.passages.entry(passage).or_default();
+            match load {
+                Ok(load) => {
+                    reliance.least += load.least;
+                    reliance.most += load.most;
+                    reliance.evidence.push(load.area.evidence().clone());
+                }
+                Err(why) => reliance.unbounded.push(format!("{space}: {why}")),
+            }
+            reliance.spaces.push(space.clone());
+            reliance.evidence.extend(evidence.iter().cloned());
+        }
+        None
+    }
+
+    /// Judges every passage a checked space reaches, adding the outcome to
+    /// that of the passage where it is a checked space itself.
+    fn judge_passages(&self, served: Served, results: &mut Vec<(ObjectId, String, Checked)>) {
+        for (passage, reliance) in served.passages {
+            let mut checked = Checked::default();
+            self.passage(&passage, &reliance, &served.anywhere, &mut checked);
+            if let Some((_, _, own)) = results.iter_mut().find(|(id, _, _)| *id == passage) {
+                own.findings.extend(checked.findings);
+                own.doubts.extend(checked.doubts);
+            } else {
+                results.push((passage, "escape-route passage".to_owned(), checked));
+            }
+        }
+    }
+
+    fn passage(
+        &self,
+        passage: &ObjectId,
+        reliance: &Reliance,
+        anywhere: &[String],
+        checked: &mut Checked,
+    ) {
+        let (Some(declared), Some(candidates)) =
+            (self.declared.passages.as_ref(), self.passages.as_ref())
+        else {
+            return;
+        };
+        let unknown: Vec<&str> = reliance
+            .unbounded
+            .iter()
+            .chain(anywhere)
+            .map(String::as_str)
+            .collect();
+        if !unknown.is_empty() {
+            checked.doubts.push(incomplete(format!(
+                "the occupants relying on passage {passage} are unknown: {}",
+                unknown.join("; ")
+            )));
+            return;
+        }
+        let (least, most) = (reliance.least, reliance.most);
+        let required = self.rows(least, most).and_then(|rows| {
+            rows.iter()
+                .map(|row| row.passage)
+                .collect::<Option<Vec<f64>>>()
+                .map(|widths| span(widths.into_iter()))
+                .ok_or_else(|| "a row of `widths` states no `passage_width`".to_owned())
+        });
+        let (low, high) = match required {
+            Ok(required) => required,
+            Err(why) => {
+                checked.doubts.push(incomplete(why));
+                return;
+            }
+        };
+        let spaces: Vec<String> = reliance.spaces.iter().map(ToString::to_string).collect();
+        let basis = format!(
+            "{} relying on it (from {}) require at least {} m",
+            occupants(least, most),
+            spaces.join(", "),
+            shown(low, high)
+        );
+        let (what, cited) = match self.width(passage, declared.width, Bound::ShortSide) {
+            Width::Stated(width, cited) if width < low => (
+                format!("passage {passage} is {width} m wide (stated clear width)"),
+                cited,
+            ),
+            Width::Stated(width, _) if width >= high => return,
+            Width::Stated(width, _) => {
+                checked.doubts.push(incomplete(format!(
+                    "passage {passage} is {width} m wide, and {basis}"
+                )));
+                return;
+            }
+            Width::AtMost(bound, cited) if bound < low => (
+                format!(
+                    "passage {passage} is at most {} m wide (the shorter side of the rectangle \
+                     enclosing its footprint)",
+                    shown(bound, bound)
+                ),
+                vec![cited],
+            ),
+            Width::AtMost(..) => {
+                checked.doubts.push(incomplete(format!(
+                    "the clear width of passage {passage} is not stated, and {basis}"
+                )));
+                return;
+            }
+            Width::Unknown(why) => {
+                checked.doubts.push(incomplete(format!(
+                    "the width of passage {passage} is unknown: {why}"
+                )));
+                return;
+            }
+        };
+        if let Some(why) = candidates.undecided.get(passage) {
+            checked.doubts.push(incomplete(format!(
+                "whether {passage} is a passage is undecided ({why}), and it may be too narrow"
+            )));
+            return;
+        }
+        let mut evidence = reliance.evidence.clone();
+        evidence.extend(cited);
+        checked.findings.push(finding(
+            self.rule,
+            passage,
+            format!("{what}; {basis}"),
+            evidence,
+            reliance.spaces.clone(),
+        ));
     }
 
     fn count(
@@ -505,17 +1040,16 @@ impl Judge<'_, '_> {
         }
     }
 
-    /// An exit's clear width: stated, else bounded by its footprint.
-    fn width(&self, exit: &ObjectId) -> Width {
-        let objects: BTreeMap<&ObjectId, &Object> = self
-            .context
-            .project
-            .objects()
-            .map(|object| (&object.id, object))
-            .collect();
-        let mut why = "no `clear_width_property` is declared".to_owned();
-        if let Some(property) = self.declared.clear_width {
-            match objects.get(exit) {
+    /// An exit's or passage's clear width: stated in `property` (and the
+    /// parameter declaring it), else bounded by its footprint.
+    fn width(&self, exit: &ObjectId, property: Option<PropertyRef<'_>>, bound: Bound) -> Width {
+        let mut why = match (property, bound) {
+            (Some(_), _) => String::new(),
+            (None, Bound::Diagonal) => "no `clear_width_property` is declared".to_owned(),
+            (None, Bound::ShortSide) => "no `passage_width_property` is declared".to_owned(),
+        };
+        if let Some(property) = property {
+            match self.context.project.object(exit) {
                 None => why = format!("{exit} is not in the project"),
                 Some(object) => match resolve(self.context, object, property) {
                     Ok(resolved) => match resolved.value() {
@@ -546,36 +1080,49 @@ impl Judge<'_, '_> {
                 "{why}, and the plan-span service is not registered"
             ));
         };
-        match spans.measure_diameter(exit) {
-            Ok(diameter) => Width::AtMost(diameter.upper_metres(), diameter.evidence().clone()),
-            Err(error) => Width::Unknown(format!("{why}, and its footprint: {error}")),
+        match bound {
+            Bound::Diagonal => match spans.measure_diameter(exit) {
+                Ok(diameter) => Width::AtMost(diameter.upper_metres(), diameter.evidence().clone()),
+                Err(error) => Width::Unknown(format!("{why}, and its footprint: {error}")),
+            },
+            // A body that passes stands on a disc of its width inside the
+            // footprint, so the footprint is at least that wide across in
+            // every direction, and so is any rectangle enclosing it.
+            Bound::ShortSide => match spans.measure_rectangle(exit) {
+                Ok(rectangle) => match rectangle.width_and_length() {
+                    Ok([(_, width), _]) => Width::AtMost(width, rectangle.evidence().clone()),
+                    Err(reason) => Width::Unknown(format!("{why}, and {reason}")),
+                },
+                Err(error) => Width::Unknown(format!("{why}, and its footprint: {error}")),
+            },
         }
+    }
+
+    /// The rows of `widths` that may apply to a load between `least` and
+    /// `most` occupants.
+    fn rows(&self, least: u64, most: u64) -> Result<&[WidthRow], String> {
+        let rows = &self.declared.widths;
+        let from = rows
+            .iter()
+            .position(|row| row.occupants >= least)
+            .ok_or_else(|| format!("no row of `widths` covers {least} occupant(s)"))?;
+        let to = rows
+            .iter()
+            .position(|row| row.occupants >= most)
+            .ok_or_else(|| format!("no row of `widths` covers {most} occupant(s)"))?;
+        Ok(&rows[from..=to])
     }
 
     /// The widths `widths` requires for any load between `least` and
     /// `most` occupants: of each exit, and of all together where the rows
     /// state it.
     fn required_width(&self, least: u64, most: u64) -> Result<Required, String> {
-        let rows = &self.declared.widths;
-        let from = rows
-            .iter()
-            .position(|(occupants, _, _)| *occupants >= least)
-            .ok_or_else(|| format!("no row of `widths` covers {least} occupant(s)"))?;
-        let to = rows
-            .iter()
-            .position(|(occupants, _, _)| *occupants >= most)
-            .ok_or_else(|| format!("no row of `widths` covers {most} occupant(s)"))?;
-        let span = |values: &mut dyn Iterator<Item = f64>| {
-            values.fold((f64::INFINITY, 0.0_f64), |(low, high), value| {
-                (low.min(value), high.max(value))
-            })
-        };
-        let rows = &rows[from..=to];
-        let totals: Vec<f64> = rows.iter().filter_map(|(_, _, total)| *total).collect();
+        let rows = self.rows(least, most)?;
+        let totals: Vec<f64> = rows.iter().filter_map(|row| row.total).collect();
         let total = if totals.is_empty() {
             None
         } else if totals.len() == rows.len() {
-            Some(span(&mut totals.into_iter()))
+            Some(span(totals.into_iter()))
         } else {
             return Err(format!(
                 "the rows of `widths` for {least} to {most} occupants state `total_width` \
@@ -583,37 +1130,23 @@ impl Judge<'_, '_> {
             ));
         };
         Ok(Required {
-            each: span(&mut rows.iter().map(|(_, width, _)| *width)),
+            each: span(rows.iter().map(|row| row.width)),
             total,
         })
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn widths(
         &self,
         space: &Object,
         use_: &Use<'_>,
         per_occupant: f64,
+        load: &Load,
         exits: &Reached,
         checked: &mut Checked,
     ) {
-        let area = match footprint(self.context, &space.id) {
-            Ok(area) => area,
-            Err(unavailable) => {
-                checked.doubts.push(unavailable);
-                return;
-            }
-        };
-        let load = |area: f64| (area / per_occupant).ceil().max(1.0) as u64;
-        let (least, most) = (
-            load(area.lower_square_metres()),
-            load(area.upper_square_metres()),
-        );
-        let occupants = if least == most {
-            format!("{least} occupant(s)")
-        } else {
-            format!("between {least} and {most} occupants")
-        };
+        let Load { least, most, area } = load;
+        let (least, most) = (*least, *most);
+        let occupants = occupants(least, most);
         let required = match self.required_width(least, most) {
             Ok(required) => required,
             Err(why) => {
@@ -622,8 +1155,9 @@ impl Judge<'_, '_> {
             }
         };
         let (low, high) = required.each;
-        let sure: Vec<Width> = exits.sure.iter().map(|exit| self.width(exit)).collect();
-        let maybe: Vec<Width> = exits.maybe.iter().map(|exit| self.width(exit)).collect();
+        let width = |exit| self.width(exit, self.declared.clear_width, Bound::Diagonal);
+        let sure: Vec<Width> = exits.sure.iter().map(width).collect();
+        let maybe: Vec<Width> = exits.maybe.iter().map(width).collect();
         let basis = format!(
             "{occupants} ({} m² at {per_occupant} m² each) require at least {} m ({})",
             shown(area.lower_square_metres(), area.upper_square_metres()),
@@ -681,9 +1215,7 @@ impl Judge<'_, '_> {
         }
         if let Some(total) = required.total {
             let widths = (sure.as_slice(), maybe.as_slice());
-            self.total_width(
-                space, use_, &occupants, &area, total, exits, widths, checked,
-            );
+            self.total_width(space, use_, &occupants, area, total, exits, widths, checked);
         }
     }
 
@@ -872,11 +1404,24 @@ impl Judge<'_, '_> {
         // Travel is judged at its worst start: a finding needs one sure
         // start whose every route is too long, a pass every possible start
         // within the maximum.
+        // Sections multiply the walk by at least one, so the plain walk's
+        // lower bound stands; its upper bound grows by the largest factor
+        // of a section it may cross.
         let mut most = 0.0_f64;
+        let mut multiplied = 1.0_f64;
+        let mut crossed = BTreeSet::new();
         let mut worst: Option<(Option<ObjectId>, Travel)> = None;
         for (start, sure_start, [lower, upper]) in measured {
             match upper {
-                Ok(upper) => most = most.max(upper.upper),
+                Ok(upper) => {
+                    let from = start.as_ref().unwrap_or(&space.id);
+                    let (factor, kinds) = self.factor(from, upper.upper, maximum);
+                    most = most.max(upper.upper * factor);
+                    if !kinds.is_empty() {
+                        multiplied = multiplied.max(factor);
+                        crossed.extend(kinds);
+                    }
+                }
                 Err(unavailable) => {
                     most = f64::INFINITY;
                     doubts.push(unavailable);
@@ -939,15 +1484,72 @@ impl Judge<'_, '_> {
             return;
         }
         let least = worst.map_or(0.0, |(_, travel)| travel.lower);
+        let counted = if crossed.is_empty() {
+            String::new()
+        } else {
+            let names: Vec<&str> = crossed
+                .iter()
+                .map(|kind: &usize| self.declared.sections[*kind].name.as_str())
+                .collect();
+            format!(
+                ", counting the walk on {} up to {multiplied} times",
+                names.join(", ")
+            )
+        };
         checked.doubts.extend(doubts);
         checked.doubts.push(incomplete(format!(
-            "the longest travel to the nearest exit is {} m walking, and {allows}",
+            "the longest travel to the nearest exit is {} m walking{counted}, and {allows}",
             if most.is_finite() {
                 shown(least, most)
             } else {
                 format!("at least {}", shown(least, least))
             }
         )));
+    }
+
+    /// The largest factor a walk of at most `reach` metres from `from` may
+    /// count its metres by, and the rows of `sections` it may cross.
+    ///
+    /// Such a walk stays within `reach` of `from` in plan, so a section
+    /// surely farther away than that is not crossed. A section that cannot
+    /// be measured may be.
+    fn factor(&self, from: &ObjectId, reach: f64, maximum: f64) -> (f64, BTreeSet<usize>) {
+        let largest = self
+            .sections
+            .iter()
+            .map(|section| section.factor)
+            .fold(1.0_f64, f64::max);
+        if !reach.is_finite() || reach * largest <= maximum {
+            // Unbounded either way, or within the maximum at any factor.
+            return (largest, BTreeSet::new());
+        }
+        if reach > maximum {
+            // No factor makes this start pass: every section may count.
+            return (
+                largest,
+                self.sections.iter().map(|section| section.kind).collect(),
+            );
+        }
+        let proximity = self.context.services.get::<ProximityServiceHandle>();
+        let mut factor = 1.0_f64;
+        let mut kinds = BTreeSet::new();
+        for section in &self.sections {
+            let far = section.object != *from
+                && proximity.is_some_and(|proximity| {
+                    ProximityRequest::projected(
+                        from.clone(),
+                        section.object.clone(),
+                        ProximityProjection::Horizontal,
+                    )
+                    .and_then(|request| proximity.measure_distance(&request))
+                    .is_ok_and(|distance| distance.interval_metres().0 > reach)
+                });
+            if !far {
+                factor = factor.max(section.factor);
+                kinds.insert(section.kind);
+            }
+        }
+        (factor, kinds)
     }
 
     /// The farthest point of `space` from the nearest of `targets`.

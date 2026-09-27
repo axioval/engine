@@ -543,7 +543,8 @@ A finding names the pair (with `any`, the pair farthest apart), its separation, 
 
 `escape-route` checks each selected space against the first row of its
 `uses` table whose `spaces` selector picks it: how far it lies from an exit,
-how many exits it has and how wide they are for its occupants.
+how many exits it has, and how wide its exits and passages are for its
+occupants.
 
 | Column of `uses` | Kind | Meaning |
 |---|---|---|
@@ -559,14 +560,27 @@ how many exits it has and how wide they are for its occupants.
 | `occupants` | integer, required | the row covers loads up to this many occupants |
 | `width` | number, required | the least clear width of each exit, in metres |
 | `total_width` | number | the least width of all exits together |
+| `passage_width` | number | the least clear width of each passage; required in every row by `passage_selector` |
+
+| Column of `sections` | Kind | Meaning |
+|---|---|---|
+| `objects` | selector, required | the section objects, a stair say |
+| `factor` | number, required | how many times a metre walked on them counts, at least 1 |
+| `shared_by` | integer | at least 2: only a section that many checked spaces reach along `section_path` multiplies |
+| `label` | string | named in messages |
 
 | Parameter | Kind | Meaning |
 |---|---|---|
 | `uses` | table, required | the rows above; each states at least one requirement |
 | `widths` | table | required by `area_per_occupant`, and only with it |
+| `sections` | table | needs a use stating `maximum_travel` |
+| `section_path` | string list | from a space to the shared sections it uses; required by `shared_by`, and only with it |
 | `exit_path`, `exit_selector` | string list, selector, required | the exits, reached from the space as `exit-separation` reaches them |
 | `door_path`, `door_selector` | string list, selector | the space's own doors; required by `route_start: door` |
 | `clear_width_property` | property reference | an exit's stated clear width, a length |
+| `passage_selector` | selector | the passages (corridors); checks their widths |
+| `passage_path` | string list | from a space to the passages it relies on; needs `passage_selector` |
+| `passage_width_property` | property reference | a passage's stated clear width, a length; needs `passage_selector` |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
 - **Travel** follows the walking line of a point through the metric-routing
@@ -577,12 +591,40 @@ how many exits it has and how wide they are for its occupants.
   as `space-distance` walks. The farthest distance is a certified bracket;
   part of the space that reaches no exit (proven with complete evidence) is
   a finding at a point of it. See [Metric routing](./metric-routing.md#many-targets).
+- **Multiplied sections**: a metre walked on a `sections` object counts
+  `factor` times. Metric routing answers the plain walk, not the sections it
+  crosses, so the multiplied travel is bracketed: at least the plain walk's
+  lower bound (every factor is at least one), at most its upper bound times
+  the largest factor of a section the walk may cross. A walk of at most `U`
+  metres stays within `U` of its start in plan, so a section whose
+  horizontal distance (`ProximityService`) from the space, or from the door
+  it starts at, surely exceeds `U` is not crossed; a section that is not
+  measured, or undecided, may be. A travel within the maximum only at the
+  plain length is therefore not evaluated, never a pass. A row with
+  `shared_by` multiplies only a section at least that many checked spaces
+  (including those the rule's selector cannot decide) reach along
+  `section_path`; a space whose sections cannot be read may reach any.
 - **Exits** are counted as `exit-separation`'s `minimum_exits` counts them.
 - **Widths**: the occupant load is the space's footprint (`PlanAreaService`)
   divided by `area_per_occupant`, rounded up. Each exit's stated clear width
   must reach the covering row's `width`, and together they must reach its
   `total_width`. Without a stated width, geometry decides only a failure:
   no clear width exceeds the longest plan diagonal of the exit's footprint.
+- **Passages**: the passages of a checked space are the `passage_selector`
+  objects `passage_path` reaches from it, and the space itself where
+  `passage_selector` picks it. A passage carries the occupants of every
+  checked space that reaches it, summed, and must be as wide as the
+  `passage_width` of the rows covering that load. A stated
+  `passage_width_property` decides both ways; without one, geometry
+  decides only a failure: a body that passes stands on a disc of its width
+  inside the footprint, so no clear width exceeds the shorter side of the
+  rectangle of least area enclosing it (`measure_rectangle`; a tied or
+  unproven orientation leaves the width unknown). The finding is the
+  passage's and relates the spaces it serves. A space that may reach a
+  passage but whose load is unknown (its use states no
+  `area_per_occupant`, its use or selection is undecided, its footprint is
+  not measured) leaves that passage not evaluated; so does a space whose
+  passages cannot be read, for every passage.
 
 Every measure is an interval, and a verdict stands only when what is
 unknown cannot change it. The travel is bounded from above through the exits
@@ -591,12 +633,12 @@ that surely are exits and from below through every one that might be; with
 near enough. An exit without a representative point leaves the lower bound
 at zero. A load between two rows of `widths` requires either row's widths.
 
-Not checked yet: multipliers for travel on stairs and for route sections
-shared by several spaces (routes are measured on one level, and which
-sections are shared is not a measured quantity), the free width of passages
-between the exits, and whether exit doors open in the direction of escape,
-which needs door leaves (openbimrs/ifc#148). Travel is measured for a point:
-a body's width is checked at the exits, not along the route.
+Not checked yet: which passages a measured walk actually crosses (the
+routing answer names no traversed objects, so passages are declared), the
+width of the route between passages, and whether exit doors open in the
+direction of escape, which needs door leaves (openbimrs/ifc#148). Travel is
+measured for a point: a body's width is checked at the exits and passages,
+not along the walk.
 
 ### Distances and connections between spaces
 

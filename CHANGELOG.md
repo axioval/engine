@@ -6,6 +6,28 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Escape routes: multiplied sections and passage widths.**
+  `escape-route` takes a `sections` table (`objects`, `factor` of at least
+  one, optional `shared_by` and `label`): a metre walked on those objects
+  counts `factor` times, and with `shared_by` only where at least that many
+  checked spaces reach the section along `section_path`. Metric routing
+  answers the plain walk, so the multiplied travel is bracketed between the
+  plain walk's lower bound and its upper bound times the largest factor of
+  a section the walk may cross; a section whose horizontal distance from
+  the start surely exceeds that bound is left out. Travel within the
+  maximum only unmultiplied is not evaluated, never a pass. With
+  `passage_selector`, passages (reached along `passage_path`, or the space
+  itself) must be as wide as the new `widths` column `passage_width` for
+  the summed load of every checked space relying on them: a stated
+  `passage_width_property` decides both ways, the shorter side of the
+  least-area rectangle enclosing the footprint only a failure, and a space
+  of unknown load leaves the passage not evaluated. Exit door opening
+  direction stays open (openbimrs/ifc#148). **Breaking:** definitions bound
+  to `escape-route` must declare the new optional parameters `sections`,
+  `section_path`, `passage_path`, `passage_selector` and
+  `passage_width_property`, and the new `widths` column `passage_width`.
+  (#79)
+
 - **Surface transparency.** `axioval:presentation.Transparency`
   (`axioval_ir::PRESENTATION_TRANSPARENCY`) lists every distinct
   transparency of an object's styled body surfaces, ascending, from `0.0`

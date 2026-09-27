@@ -551,6 +551,7 @@ mod refinement;
 mod relationships;
 mod services;
 mod sight;
+mod source_metadata;
 mod space;
 mod topology;
 mod triangle_count;
@@ -665,6 +666,7 @@ pub use session::{
 pub use sight::{
     SightError, SightEvidence, SightOutcome, SightRequest, SightService, SightServiceHandle,
 };
+pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{
     BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,
     SpaceOverlap, SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
@@ -786,8 +788,11 @@ impl Runtime {
             project,
             &self.services,
             BTreeMap::new(),
-            SessionSources::new(project.objects().map(|object| object.id.source.clone())),
-            SourceDisciplines::default(),
+            (
+                SessionSources::new(project.objects().map(|object| object.id.source.clone())),
+                SourceDisciplines::default(),
+                SourceMetadataIndex::default(),
+            ),
             plan,
         )
     }
@@ -806,12 +811,15 @@ impl Runtime {
             session.project(),
             session.services(),
             type_systems,
-            SessionSources::new(
-                session
-                    .snapshots()
-                    .map(|snapshot| snapshot.source().clone()),
+            (
+                SessionSources::new(
+                    session
+                        .snapshots()
+                        .map(|snapshot| snapshot.source().clone()),
+                ),
+                SourceDisciplines::new(session.disciplines().clone()),
+                session.metadata_index(),
             ),
-            SourceDisciplines::new(session.disciplines().clone()),
             plan,
         )
     }
@@ -821,8 +829,7 @@ impl Runtime {
         project: &Project,
         services: &ServiceRegistry,
         type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
-        sources: SessionSources,
-        disciplines: SourceDisciplines,
+        (sources, disciplines, metadata): (SessionSources, SourceDisciplines, SourceMetadataIndex),
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
@@ -834,6 +841,8 @@ impl Runtime {
         // Disciplines are the session's declarations; a host-registered copy
         // could claim roles the session never declared.
         services.replace(disciplines);
+        // So is what the session knows about each source as a whole.
+        services.replace(metadata);
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
         let services = &services;

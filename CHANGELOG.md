@@ -78,6 +78,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_bands` (omitted when empty, so packages are unchanged),
   `EngineError` gains `InvalidRefinement`, and
   `ExecutionPlan::refinement` exposes what a rule declares.
+- **Empty and not-empty, classification patterns, source metadata.** (#101)
+  Selectors gain the operators `isEmpty` (present but null, blank or a
+  list of nothing else) and `isNotEmpty` (present with a value), with the
+  meaning `property-requirements` gives `presence` `empty` and
+  `not-empty`; an absent property is neither. A `classification` selector
+  takes `codePattern`, an XML Schema pattern over the whole code
+  (`Ss_25_.*`), and without `code` or `codePattern` selects any
+  classification in its system. A new `source` selector compares a
+  source's metadata (`fileName`, `application`, `schema`, `project`) as a
+  property selector compares a value, so `application like
+  "*Architecture*"` selects the objects of the models an architecture
+  application wrote; a field never read is not evaluated, once per source.
+  `EvidenceSession::with_source_metadata` states `SourceMetadata` field by
+  field and the runtime installs it per run as `SourceMetadataIndex`. The
+  IFC adapter reads the authoring applications (`IfcOwnerHistory`'s
+  `OwningApplication`) and the project names; the CLI states each model's
+  file name. **Breaking:** `Selector::Classification`'s `code` is an
+  `Option` beside the new `code_pattern`; `Selector` gains `Source`,
+  `ComparisonOperator` gains `IsEmpty` and `IsNotEmpty`, and
+  `EvidenceSessionError` gains `ConflictingMetadata`.
 - **Window leaves.** (#36) `ObjectFrameService::leaves` answers a window's
   panels as leaves, as it answers a door's: the IFC adapter derives them
   with `openbim-ifc`'s `window_operation` (openbimrs/ifc#170) from the

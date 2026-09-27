@@ -93,7 +93,8 @@ fn packages(type_system: &str, selector: Selector) -> (DefinitionPackage, RuleSe
 fn classification(code: &str, include_descendants: bool) -> Selector {
     Selector::Classification {
         system: "DIN 276".into(),
-        code: code.into(),
+        code: Some(code.into()),
+        code_pattern: None,
         include_descendants,
     }
 }
@@ -242,4 +243,99 @@ fn without_a_classification_service_nothing_is_read_as_unclassified() {
             .iter()
             .all(|outcome| outcome.reason == NotEvaluatedReason::MissingService)
     );
+}
+
+/// IFC4, none with the required reference: `Ss_25_10` (#1), its child
+/// `Ss_25_10_30` (#2), `Ss_20_05` (#3), in `Uniclass`; #4 in another system;
+/// #5 unclassified.
+const UNICLASS_WALLS: &str = "\
+#1=IFCWALL('a',$,$,$,$,$,$,$,$);
+#2=IFCWALL('b',$,$,$,$,$,$,$,$);
+#3=IFCWALL('c',$,$,$,$,$,$,$,$);
+#4=IFCWALL('d',$,$,$,$,$,$,$,$);
+#5=IFCWALL('e',$,$,$,$,$,$,$,$);
+#10=IFCCLASSIFICATION($,'2015',$,'Uniclass',$,$,$);
+#11=IFCCLASSIFICATIONREFERENCE($,'Ss_25_10','Walls',#10,$,$);
+#12=IFCCLASSIFICATIONREFERENCE($,'Ss_25_10_30','Framed walls',#11,$,$);
+#13=IFCCLASSIFICATIONREFERENCE($,'Ss_20_05','Foundations',#10,$,$);
+#14=IFCCLASSIFICATION($,'2018',$,'DIN 276',$,$,$);
+#15=IFCCLASSIFICATIONREFERENCE($,'Ss_25_10','Lookalike',#14,$,$);
+#20=IFCRELASSOCIATESCLASSIFICATION('r1',$,$,$,(#1),#11);
+#21=IFCRELASSOCIATESCLASSIFICATION('r2',$,$,$,(#2),#12);
+#22=IFCRELASSOCIATESCLASSIFICATION('r3',$,$,$,(#3),#13);
+#23=IFCRELASSOCIATESCLASSIFICATION('r4',$,$,$,(#4),#15);
+";
+
+fn uniclass(code_pattern: Option<&str>, include_descendants: bool) -> Selector {
+    Selector::Classification {
+        system: "Uniclass".into(),
+        code: None,
+        code_pattern: code_pattern.map(str::to_owned),
+        include_descendants,
+    }
+}
+
+#[test]
+fn a_code_pattern_selects_every_code_it_matches_in_its_system() {
+    let session = import_ifc_session("model.ifc", &step("IFC4", UNICLASS_WALLS)).unwrap();
+    let report = run(
+        &session,
+        IFC4_TYPE_SYSTEM,
+        uniclass(Some("Ss_25_.*"), false),
+    );
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    assert_eq!(flagged(&report), ["#1", "#2"]);
+    // Whole codes only: `Ss_25_10` alone is no prefix.
+    let report = run(
+        &session,
+        IFC4_TYPE_SYSTEM,
+        uniclass(Some("Ss_25_10"), false),
+    );
+    assert_eq!(flagged(&report), ["#1"]);
+    // With descendants, a child is selected by its parent's code.
+    let report = run(&session, IFC4_TYPE_SYSTEM, uniclass(Some("Ss_25_10"), true));
+    assert_eq!(flagged(&report), ["#1", "#2"]);
+}
+
+#[test]
+fn a_system_alone_selects_every_object_classified_in_it() {
+    let session = import_ifc_session("model.ifc", &step("IFC4", UNICLASS_WALLS)).unwrap();
+    let report = run(&session, IFC4_TYPE_SYSTEM, uniclass(None, false));
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    assert_eq!(flagged(&report), ["#1", "#2", "#3"]);
+}
+
+#[test]
+fn a_classification_selector_states_one_code_test() {
+    let session = import_ifc_session("model.ifc", &step("IFC4", UNICLASS_WALLS)).unwrap();
+    for selector in [
+        uniclass(None, true),
+        uniclass(Some("Ss_[a-z-[aeiou]]"), false),
+        Selector::Classification {
+            system: "Uniclass".into(),
+            code: Some("Ss_25_10".into()),
+            code_pattern: Some("Ss_.*".into()),
+            include_descendants: false,
+        },
+    ] {
+        let report = run(&session, IFC4_TYPE_SYSTEM, selector);
+        assert!(report.findings().is_empty(), "{:?}", report.findings());
+        assert!(!report.not_evaluated().is_empty());
+        assert!(
+            report
+                .not_evaluated()
+                .iter()
+                .all(|outcome| outcome.reason == NotEvaluatedReason::InvalidDeclaration),
+            "{:?}",
+            report.not_evaluated()
+        );
+    }
 }

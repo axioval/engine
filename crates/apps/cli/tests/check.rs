@@ -3384,6 +3384,120 @@ fn two_models_with_one_file_name_or_a_bad_discipline_are_refused() {
     );
 }
 
+/// An IFC4 file written by `application`: wall `#10`, without the
+/// `Reference` the example rule requires, and a project named `project`.
+fn authored(application: &str, project: &str) -> String {
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCPERSON($,'Doe','Jane',$,$,$,$,$);\n\
+         #2=IFCORGANIZATION($,'Firm',$,$,$);\n\
+         #3=IFCPERSONANDORGANIZATION(#1,#2,$);\n\
+         #4=IFCAPPLICATION(#2,'1','{application}','A');\n\
+         #5=IFCOWNERHISTORY(#3,#4,$,.ADDED.,$,$,$,0);\n\
+         #6=IFCPROJECT('0000000000000000000006',#5,'{project}',$,$,$,$,$,$);\n\
+         #10=IFCWALL('0000000000000000000010',#5,$,$,$,$,$,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+impl Case {
+    /// The example rule over `arch.ifc` (written by an architecture
+    /// application) and `struct.ifc` (by a structure application), its walls
+    /// narrowed by `selector`.
+    fn authored_check(&self, models: &[&str], selector: &Value, extra: &[&str]) -> Output {
+        self.write(
+            "arch.ifc",
+            &authored("Modeller Architecture 2024", "Clinic"),
+        );
+        self.write("struct.ifc", &authored("Modeller Structure 2024", "Clinic"));
+        let definitions = self.definitions(true);
+        let mut ruleset: Value = serde_json::from_str(
+            &std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap(),
+        )
+        .unwrap();
+        ruleset["root"]["rules"][0]["applicability"]["groups"]["walls"]["selector"] = json!({
+            "kind": "allOf",
+            "operands": [
+                {"kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true},
+                selector,
+            ],
+        });
+        let ruleset = self.write("ruleset.json", &ruleset.to_string());
+        let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+        command.current_dir(&self.dir).arg("check");
+        for model in models {
+            command.arg("--model").arg(model);
+        }
+        command
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(extra)
+            .output()
+            .unwrap()
+    }
+}
+
+fn finding_documents(result: &Value) -> Vec<String> {
+    let mut documents: Vec<String> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            finding["object_id"]["source"]["document"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    documents.sort();
+    documents
+}
+
+#[test]
+fn a_source_selector_selects_the_objects_of_models_a_matching_application_wrote() {
+    let case = Case::new("source-application");
+    let output = case.authored_check(
+        &["arch.ifc", "struct.ifc"],
+        &json!({
+            "kind": "source",
+            "field": "application",
+            "operator": "like",
+            "value": {"type": "string", "value": "*Architecture*"},
+        }),
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(finding_documents(&result), ["arch.ifc"], "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+
+    // The file name is the host's, the schema the file's.
+    let output = case.authored_check(
+        &["arch.ifc", "struct.ifc"],
+        &json!({"kind": "anyOf", "operands": [
+            {
+                "kind": "source",
+                "field": "fileName",
+                "operator": "equals",
+                "value": {"type": "string", "value": "struct.ifc"},
+            },
+            {
+                "kind": "source",
+                "field": "schema",
+                "operator": "equals",
+                "value": {"type": "string", "value": "IFC2X3"},
+            },
+        ]}),
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(finding_documents(&result), ["struct.ifc"], "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
 /// A clash matrix cell keyed by discipline on both sides.
 fn discipline_cell(subject: &str, counterpart: &str, tolerance: f64, severity: &str) -> Value {
     json!({

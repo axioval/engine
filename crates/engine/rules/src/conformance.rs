@@ -197,6 +197,7 @@ fn consulted_properties<'a>(selector: &'a Selector, found: &mut Vec<PropertyRef<
         | Selector::EntityType { .. }
         | Selector::Classification { .. }
         | Selector::Discipline { .. }
+        | Selector::Source { .. }
         | Selector::Related { .. } => {}
     }
 }

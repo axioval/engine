@@ -674,3 +674,85 @@ fn a_bounded_value_or_a_table_is_compared_by_its_stated_values() {
         ["a", "b"].map(|object| (object.to_owned(), NotEvaluatedReason::InvalidEvidence))
     );
 }
+
+fn presence(operator: ComparisonOperator) -> Selector {
+    Selector::property(Some(SET.into()), NAME, operator, None)
+}
+
+/// A wall whose fire rating is blank is empty; one without the property is
+/// neither empty nor not empty.
+#[test]
+fn is_empty_and_is_not_empty_judge_present_values_only() {
+    let model = || {
+        Model::default()
+            .object("absent", "thing")
+            .object("blank", "thing")
+            .text("blank", SET, NAME, "  ")
+            .object("null", "thing")
+            .value("null", SET, NAME, PropertyValue::Null)
+            .object("blanks", "thing")
+            .value("blanks", SET, NAME, list(&["", " "]))
+            .object("rated", "thing")
+            .text("rated", SET, NAME, "EI30")
+            .object("zero", "thing")
+            .value("zero", SET, NAME, PropertyValue::Integer(0))
+    };
+    assert_eq!(
+        select(model(), presence(ComparisonOperator::IsEmpty)),
+        selected(&["blank", "blanks", "null"])
+    );
+    assert_eq!(
+        select(model(), presence(ComparisonOperator::IsNotEmpty)),
+        selected(&["rated", "zero"])
+    );
+}
+
+#[test]
+fn presence_operators_take_no_value_quantifier_or_text_options() {
+    let model = || texts(&[("a", "x")]);
+    invalid_everywhere(
+        model(),
+        property(ComparisonOperator::IsEmpty, string("x")),
+        &["a"],
+    );
+    invalid_everywhere(
+        model(),
+        quantified(ComparisonOperator::IsNotEmpty, None, Some(Quantifier::Any)),
+        &["a"],
+    );
+    invalid_everywhere(
+        model(),
+        Selector::Property {
+            property_set: Some(SET.into()),
+            property: NAME.into(),
+            operator: ComparisonOperator::IsEmpty,
+            value: None,
+            case_sensitive: false,
+            trim: false,
+            quantifier: None,
+            precision: None,
+        },
+        &["a"],
+    );
+}
+
+#[test]
+fn a_property_pattern_selector_takes_the_presence_operators() {
+    let model = Model::default()
+        .object("blank", "thing")
+        .text("blank", "Pset_WallCommon", "FireRating", "")
+        .object("rated", "thing")
+        .text("rated", "Pset_WallCommon", "FireRating", "F90");
+    let selector = Selector::PropertyPattern {
+        property_set_pattern: Some("Pset_.*Common".into()),
+        property_pattern: "Fire.*".into(),
+        matched: Quantifier::Any,
+        operator: ComparisonOperator::IsEmpty,
+        value: None,
+        case_sensitive: true,
+        trim: false,
+        quantifier: None,
+        precision: None,
+    };
+    assert_eq!(select(model, selector), selected(&["blank"]));
+}

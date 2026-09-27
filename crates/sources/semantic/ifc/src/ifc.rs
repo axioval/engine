@@ -584,6 +584,7 @@ pub fn import_ifc_session(
             .and_then(|snapshot| snapshot.with_type_system(release.type_system))
             .map_err(|error| session_error(&error))?;
     let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
+    let metadata = crate::metadata::read(release, &model);
     let model = Arc::new(model);
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
         release,
@@ -624,6 +625,7 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(classifications))
         .and_then(|session| session.with_service(frames))
         .and_then(|session| session.with_service(coordinates))
+        .and_then(|session| session.with_source_metadata(&source, metadata))
         .map_err(|error| session_error(&error))
 }
 

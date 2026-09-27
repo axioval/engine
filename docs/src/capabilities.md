@@ -135,6 +135,8 @@ A `property` selector (in a rule's selection or any selector-valued parameter) r
 | Operator | `value` | Selects when the resolved value |
 |---|---|---|
 | `exists` | none | is present, even `null` or blank. |
+| `isEmpty` | none | is present but `null`, blank text, or a list of nothing else: the `empty` presence of `property-requirements`. An absent property is not empty. |
+| `isNotEmpty` | none | is present with a value: the `not-empty` presence of `property-requirements`. |
 | `equals`, `notEquals` | boolean, integer, number, quantity, string, enum, reference, date or dateTime | equals, or does not equal, the value. |
 | `lessThan`, `lessThanOrEquals`, `greaterThan`, `greaterThanOrEquals` | integer, number, quantity, string, date or dateTime | orders against the value; strings by code point, dates chronologically. |
 | `matches` | string | matches the regular expression as a whole: `EI\d+` selects `EI30`, not `EI30-T1`. |
@@ -169,11 +171,11 @@ As a visibility rule's `blockers`, glazing (`[0.7]`) drops out; a window whose f
 
 The selector fails closed:
 
-- an exactly absent property, or a `null` value, matches every operator but `exists` as "no", as a comparison presupposes a value;
+- an exactly absent property, or a `null` value, matches every operator but `exists` as "no", as a comparison presupposes a value; `null` alone is also `isEmpty`;
 - a value of another type than the operator compares (text against an integer, a quantity against a unit-less number or one of another dimension, a boolean with `contains`) leaves the object not evaluated (`InvalidEvidence`), never silently out of the selection; `notEquals` and `noneOf` are no exception;
-- a list value compared without a `quantifier` is not evaluated (`InvalidEvidence`), except by `exists`;
+- a list value compared without a `quantifier` is not evaluated (`InvalidEvidence`), except by `exists`, `isEmpty` and `isNotEmpty`, which judge it whole;
 - a date-time compared with a `date` value without `precision: day` is not evaluated (`InvalidEvidence`), as is text compared with a date;
-- a selector whose `value` does not fit its operator, an unknown unit, an invalid pattern, a text option on a non-text comparison, a `precision` on anything but a date comparison, or a `quantifier` on `exists` is an invalid declaration.
+- a selector whose `value` does not fit its operator, an unknown unit, an invalid pattern, a text option on a non-text comparison, a `precision` on anything but a date comparison, or a `quantifier` or text option on `exists`, `isEmpty` or `isNotEmpty` is an invalid declaration.
 
 ### Dates and date-times
 
@@ -228,6 +230,40 @@ Every object of a source matches or none does. An object whose source declares n
 "counterparts": { "type": "selector",
   "value": { "kind": "discipline", "value": "structure" } }
 ```
+
+### Classification selectors
+
+A `classification` selector selects the objects carrying a classification in `system`, as their source states it through the classification service (see [Adapters](./adapters.md#classifications)). It tests the code in one of three ways:
+
+| Field | Selects an assignment in `system` whose code |
+|---|---|
+| `code` | is the code. |
+| `codePattern` | matches the XML Schema pattern as a whole, as IDS writes classification patterns: `Ss_25_.*` selects `Ss_25_10` and `Ss_25_10_30`, not `Ss_20_05`. |
+| neither | is anything: the system alone. |
+
+```json
+{ "kind": "classification", "system": "Uniclass", "codePattern": "Ss_25_.*" }
+```
+
+`includeDescendants` also tests the codes of the assignment's ancestors, so a parent's code selects its children; it needs a `code` or a `codePattern`. The pattern is translated as `propertyPattern` translates names, and the system and the code are met by one assignment together. An assignment whose system the source does not state leaves the object not evaluated unless another assignment already matches. `code` together with `codePattern`, `includeDescendants` without either, or a pattern that cannot be translated exactly (character-class subtraction, `\i`/`\c`, `\p{Is…}`) is an invalid declaration.
+
+### Source selectors
+
+A `source` selector selects the objects of the sources whose metadata satisfies a comparison, such as the models an architecture application wrote:
+
+```json
+{ "kind": "source", "field": "application", "operator": "like",
+  "value": { "type": "string", "value": "*Architecture*" }, "quantifier": "any" }
+```
+
+| `field` | Holds | With the IFC adapter and the CLI |
+|---|---|---|
+| `fileName` | the file name the host read the source from | the `--model` file's name |
+| `application` | every application the source states wrote it | `ApplicationFullName` of each `IfcOwnerHistory.OwningApplication` |
+| `schema` | the schema the source declares | `IFC2X3` or `IFC4`, from the snapshot |
+| `project` | the name of every project the source describes | `IfcProject.Name` |
+
+The field is compared as a property selector compares a value, with the same `operator`, `value`, `caseSensitive`, `trim` and `quantifier`: one value as a scalar, several (a model written by two applications) as a list that needs a `quantifier`. Every object of a source matches or none does. A field the source states it lacks, such as the application of a file without owner histories, matches no operator, as an absent property does. A field that was never read, because the adapter does not read it or could not read it exactly (an owner history naming no `IfcApplication`), is not evaluated, reported once per rule and source (`not-recorded`), never a non-match. The engine installs the metadata per run as `SourceMetadataIndex`: adapters and hosts state it with `EvidenceSession::with_source_metadata`, field by field, and a field stated twice with other values is refused. Metadata is not part of a snapshot's identity. A selector whose `value` does not fit its operator is an invalid declaration, as for property selectors.
 
 ### Numeric tolerance
 

@@ -1,11 +1,11 @@
 //! Deterministic, fail-closed selector evaluation.
 
 use axioval_engine::{
-    BindingError, CapabilityEvaluation, ClassificationError, ClassificationServiceHandle,
-    ConceptBindings, NameMatch, NamePattern, NotEvaluatedReason, PropertyEnumeration,
-    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionServiceHandle, RuleContext, SourceDisciplines, TypeHierarchyError,
-    TypeHierarchyServiceHandle,
+    BindingError, CapabilityEvaluation, ClassificationAssignment, ClassificationError,
+    ClassificationServiceHandle, ConceptBindings, NameMatch, NamePattern, NotEvaluatedReason,
+    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, SourceDisciplines,
+    SourceMetadataIndex, TypeHierarchyError, TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{
     ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, Selector,
@@ -17,7 +17,7 @@ use axioval_ir::{
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
 
-use crate::support::{Tolerance, Traversal, exact_f64, si_quantity, temporal_order};
+use crate::support::{Tolerance, Traversal, exact_f64, si_quantity, temporal_order, undefined};
 
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
@@ -60,8 +60,18 @@ pub(crate) fn selector_matches(
         Selector::Classification {
             system,
             code,
+            code_pattern,
             include_descendants,
-        } => classification_matches(context, object, system, code, *include_descendants),
+        } => classification_matches(
+            context,
+            object,
+            system,
+            (
+                code.as_deref(),
+                code_pattern.as_deref(),
+                *include_descendants,
+            ),
+        ),
         Selector::AllOf { operands } => all_of(
             operands
                 .iter()
@@ -135,6 +145,79 @@ pub(crate) fn selector_matches(
             selector,
         } => related_matches(context, object, path, *quantifier, selector, evidence),
         Selector::Discipline { value } => discipline_matches(context, object, value),
+        source @ Selector::Source { .. } => source_matches(context, object, source),
+    }
+}
+
+/// Whether `object`'s source metadata `field` satisfies the comparison.
+///
+/// The field is compared as a property's value: one value as a scalar,
+/// several as a list (needing `quantifier`), and a field read and found to
+/// hold nothing as an absent property, which matches nothing. A field never
+/// read is `NotRecorded`, with a message naming the source only, so the
+/// runtime reports it once per rule and source.
+fn source_matches(context: &RuleContext<'_>, object: &Object, selector: &Selector) -> Selection {
+    let Selector::Source {
+        field,
+        operator,
+        value: expected,
+        case_sensitive,
+        trim,
+        quantifier,
+    } = selector
+    else {
+        unreachable!("only `source` selectors are matched here");
+    };
+    let (field, expected, quantifier) = (*field, expected.as_ref(), *quantifier);
+    let options = TextOptions {
+        case_sensitive: *case_sensitive,
+        trim: *trim,
+    };
+    let test = match selector_test(operator, expected, options, quantifier, None) {
+        Ok(test) => test,
+        Err(Selection::NotEvaluated(reason, message)) => {
+            return Selection::NotEvaluated(
+                reason,
+                message.replacen("property selector", "source selector", 1),
+            );
+        }
+        Err(other) => return other,
+    };
+    let Some(index) = context.services.get::<SourceMetadataIndex>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "source metadata is not available outside an evidence session".into(),
+        );
+    };
+    let source = &object.id.source;
+    let Some(values) = index.values(source, field) else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::NotRecorded,
+            format!(
+                "source `{source}` does not record its {}, so the `source` selector cannot decide",
+                field.as_str()
+            ),
+        );
+    };
+    let value = match values {
+        [] => return Selection::NoMatch,
+        [one] => PropertyValue::String(one.clone()),
+        several => PropertyValue::List(
+            several
+                .iter()
+                .map(|value| PropertyValue::String(value.clone()))
+                .collect(),
+        ),
+    };
+    match test.holds_quantified(&value, quantifier, options) {
+        Ok(matches) => verdict(matches),
+        Err(message) => Selection::NotEvaluated(
+            NotEvaluatedReason::InvalidEvidence,
+            format!(
+                "source selector on the {} of `{source}`: {message}",
+                field.as_str()
+            ),
+        ),
     }
 }
 
@@ -392,9 +475,17 @@ fn classification_matches(
     context: &RuleContext<'_>,
     object: &Object,
     system: &str,
-    code: &str,
-    include_descendants: bool,
+    (code, pattern, include_descendants): (Option<&str>, Option<&str>, bool),
 ) -> Selection {
+    let test = match CodeTest::parse(code, pattern, include_descendants) {
+        Ok(test) => test,
+        Err(message) => {
+            return Selection::NotEvaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                format!("classification selector: {message}"),
+            );
+        }
+    };
     let Some(service) = context.services.get::<ClassificationServiceHandle>() else {
         return Selection::NotEvaluated(
             NotEvaluatedReason::MissingService,
@@ -415,7 +506,7 @@ fn classification_matches(
     };
     let mut undecided = false;
     for assignment in &assignments {
-        match assignment.matches(system, code, include_descendants) {
+        match test.matches(assignment, system) {
             Some(true) => return Selection::Match,
             Some(false) => {}
             None => undecided = true,
@@ -428,6 +519,48 @@ fn classification_matches(
         )
     } else {
         Selection::NoMatch
+    }
+}
+
+/// What a classification selector asks of an assignment's code.
+enum CodeTest {
+    /// Any code: the system alone.
+    Any,
+    /// One code exactly.
+    Exact(String, bool),
+    /// Codes matching an XML Schema pattern, whole.
+    Pattern(Regex, bool),
+}
+
+impl CodeTest {
+    fn parse(
+        code: Option<&str>,
+        pattern: Option<&str>,
+        include_descendants: bool,
+    ) -> Result<Self, String> {
+        match (code, pattern) {
+            (Some(_), Some(_)) => Err("`code` and `codePattern` exclude each other".into()),
+            (Some(code), None) => Ok(Self::Exact(code.to_owned(), include_descendants)),
+            (None, Some(pattern)) => crate::xsd_pattern::compile(pattern)
+                .map(|regex| Self::Pattern(regex, include_descendants))
+                .map_err(|error| format!("code pattern {pattern:?}: {error}")),
+            (None, None) if include_descendants => {
+                Err("`includeDescendants` needs a `code` or a `codePattern`".into())
+            }
+            (None, None) => Ok(Self::Any),
+        }
+    }
+
+    /// Whether `assignment` meets the test in `system`; `None` when its
+    /// system is unknown.
+    fn matches(&self, assignment: &ClassificationAssignment, system: &str) -> Option<bool> {
+        match self {
+            Self::Any => assignment.in_system(system),
+            Self::Exact(code, descendants) => assignment.matches(system, code, *descendants),
+            Self::Pattern(regex, descendants) => {
+                assignment.matches_code(system, |code| regex.is_match(code), *descendants)
+            }
+        }
     }
 }
 
@@ -516,8 +649,8 @@ fn selector_test(
 ) -> Result<Test, Selection> {
     Test::parse(operator, expected, options, precision)
         .and_then(|test| {
-            if quantifier.is_some() && matches!(test, Test::Exists) {
-                Err("`quantifier` applies to value comparisons, not to `exists`".into())
+            if quantifier.is_some() && test.judges_presence() {
+                Err("`quantifier` applies to value comparisons, not to presence".into())
             } else {
                 Ok(test)
             }
@@ -786,6 +919,10 @@ enum Expected {
 #[derive(Debug)]
 enum Test {
     Exists,
+    /// Present but null, blank or a list of nothing else.
+    Empty,
+    /// Present with a value.
+    NotEmpty,
     /// With the declared precision of a date or date-time comparison.
     Compare(Order, Expected, Option<TemporalPrecision>),
     /// Folded as declared.
@@ -800,6 +937,11 @@ enum Test {
 }
 
 impl Test {
+    /// Whether the test judges a present value as a whole, never compared.
+    fn judges_presence(&self) -> bool {
+        matches!(self, Self::Exists | Self::Empty | Self::NotEmpty)
+    }
+
     fn parse(
         operator: &ComparisonOperator,
         expected: Option<&ParameterValue>,
@@ -814,9 +956,15 @@ impl Test {
             return Err("`precision` applies to a date or date-time comparison only".into());
         }
         let Some(expected) = expected else {
-            return if matches!(operator, ComparisonOperator::Exists) {
+            let presence = match operator {
+                ComparisonOperator::Exists => Some(Self::Exists),
+                ComparisonOperator::IsEmpty => Some(Self::Empty),
+                ComparisonOperator::IsNotEmpty => Some(Self::NotEmpty),
+                _ => None,
+            };
+            return if let Some(presence) = presence {
                 if options.is_default() {
-                    Ok(Self::Exists)
+                    Ok(presence)
                 } else {
                     Err("`caseSensitive` and `trim` apply to text comparisons only".into())
                 }
@@ -829,8 +977,13 @@ impl Test {
             _ => Err(format!("`{}` takes {kind}", operator_name(operator))),
         };
         let test = match operator {
-            ComparisonOperator::Exists => {
-                return Err("the exists operator must not have a value".into());
+            ComparisonOperator::Exists
+            | ComparisonOperator::IsEmpty
+            | ComparisonOperator::IsNotEmpty => {
+                return Err(format!(
+                    "the {} operator must not have a value",
+                    operator_name(operator)
+                ));
             }
             ComparisonOperator::Matches => Self::Pattern(
                 RegexBuilder::new(&format!("^(?:{})$", string("a string")?))
@@ -909,7 +1062,7 @@ impl Test {
         options: TextOptions,
     ) -> Result<bool, String> {
         let Some(quantifier) = quantifier else {
-            if actual.stated_values().is_some() && !matches!(self, Self::Exists) {
+            if actual.stated_values().is_some() && !self.judges_presence() {
                 return Err(format!(
                     "the value is {}; state `quantifier` `any` or `all` to compare its values",
                     kind(actual)
@@ -950,7 +1103,7 @@ impl Test {
         // A comparison presupposes a value: null is no more a match than an
         // absent property.
         if matches!(actual, PropertyValue::Null) {
-            return Ok(matches!(self, Self::Exists));
+            return Ok(matches!(self, Self::Exists | Self::Empty));
         }
         let mismatch = |declared: &str| {
             Err(format!(
@@ -960,6 +1113,9 @@ impl Test {
         };
         match self {
             Self::Exists => Ok(true),
+            // Emptiness has the meaning `property-requirements` gives presence.
+            Self::Empty => Ok(undefined(Some(actual))),
+            Self::NotEmpty => Ok(!undefined(Some(actual))),
             Self::Compare(order, expected, precision) => {
                 let ordering = match (expected, actual) {
                     (Expected::Date(expected), _) => {
@@ -1089,6 +1245,8 @@ fn operator_name(operator: &ComparisonOperator) -> &'static str {
         ComparisonOperator::OneOf => "oneOf",
         ComparisonOperator::NoneOf => "noneOf",
         ComparisonOperator::Exists => "exists",
+        ComparisonOperator::IsEmpty => "isEmpty",
+        ComparisonOperator::IsNotEmpty => "isNotEmpty",
     }
 }
 

@@ -120,12 +120,26 @@ The session registers a classification service backed by
 `ifc-classification`. For each object it returns every assignment, direct or
 inherited from the object's type, as the classification system's name and
 the chain of codes from the assigned item up to the root. A selector matches
-the leaf code, or any code in the chain when `includeDescendants` is set.
+the leaf code, or any code in the chain when `includeDescendants` is set;
+a `codePattern` matches codes the same way, and a selector without a code
+matches any assignment in its system.
 
 IFC2X3 hierarchies are flat: a reference's `ReferencedSource` may only name
 the system itself. A file that chains references anyway is refused rather
 than flattened. An assignment whose system the file does not state is
 neither a match nor a mismatch, and the object is reported as not evaluated.
+
+### Source metadata
+
+The session states what the file says about itself for `source` selectors
+(see [Source selectors](./capabilities.md#source-selectors)): `application`,
+the `ApplicationFullName` of the `IfcApplication` every `IfcOwnerHistory`
+names as `OwningApplication`, and `project`, every `IfcProject.Name`. Both
+are read over the whole file, so a file without owner histories states no
+application, exactly. An owner history whose application is not an
+`IfcApplication`, or a name that is not text, leaves the field unread, so a
+selector over it is not evaluated rather than a non-match. The schema comes
+from the snapshot; the file name is the host's to state.
 
 ### Attributes
 

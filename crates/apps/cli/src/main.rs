@@ -25,9 +25,15 @@ mod geometry;
 
 use axioval::{
     bcf,
-    engine::{EvidenceSession, IntegritySeverity, Runtime, SourceIntegrityServiceHandle, compile},
+    engine::{
+        EvidenceSession, IntegritySeverity, Runtime, SourceIntegrityServiceHandle, SourceMetadata,
+        compile,
+    },
     ifc::import_ifc_session,
-    ir::{DefinitionPackage, Discipline, Project, Report, RuleSetPackage, SourceId},
+    ir::{
+        DefinitionPackage, Discipline, Project, Report, RuleSetPackage, SourceId,
+        contract::SourceField,
+    },
 };
 use clap::{Args, Parser, Subcommand};
 use digest::{CheckOutput, Filter, IntegrityRecord, Section};
@@ -480,6 +486,12 @@ fn sources(models: &[ModelArg]) -> Result<(EvidenceSession, geometry::ModelBytes
             )
             .into());
         }
+        session = session
+            .with_source_metadata(
+                &source,
+                SourceMetadata::new().with(SourceField::FileName, [source.document.clone()]),
+            )
+            .map_err(|error| format!("{}: {error}", path.display()))?;
         if let Some(discipline) = &model.discipline {
             session = session
                 .with_discipline(&source, discipline.clone())

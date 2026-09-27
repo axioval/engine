@@ -2391,7 +2391,8 @@ fn classification_selector(classification: &Classification) -> Result<Selector, 
         for code in &codes {
             operands.push(Selector::Classification {
                 system: system.clone(),
-                code: code.clone(),
+                code: Some(code.clone()),
+                code_pattern: None,
                 include_descendants: true,
             });
         }

@@ -60,6 +60,9 @@ between an object of one file and an object of another is an ordinary pair.
 The models must share one coordinate system, as models exchanged for
 coordination do; the CLI does not move one onto another.
 
+Each model's file name is stated as its source's `fileName` metadata, beside the application and project the IFC adapter reads, for `source` selectors (see
+[Source selectors](./capabilities.md#source-selectors)).
+
 Reports, `report` and BCF work with several models. Over several documents,
 the summary and listings name objects as `arch.ifc/#42`, and `--object`
 accepts that form.

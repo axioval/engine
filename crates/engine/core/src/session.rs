@@ -8,6 +8,7 @@ use axioval_ir::{Discipline, Project, SourceId};
 use thiserror::Error;
 
 use crate::derived_relationships::{DerivedRelationshipServiceHandle, RoutedRelationships};
+use crate::source_metadata::SourceMetadata;
 use crate::{RelationshipSelectionServiceHandle, ServiceRegistry, ServiceRegistryError};
 
 /// Trusted service that declares the immutable source snapshots it can resolve.
@@ -185,6 +186,9 @@ pub enum EvidenceSessionError {
     /// A source's discipline was declared twice.
     #[error("source already declares a discipline: {0}")]
     DuplicateDiscipline(SourceId),
+    /// A source metadata field was stated twice with different values.
+    #[error("source `{0}` already states its {1} differently")]
+    ConflictingMetadata(SourceId, &'static str),
     /// A federated member holds a service the engine cannot route by source.
     ///
     /// Federation composes the semantic services adapters register; a host
@@ -207,6 +211,7 @@ pub struct EvidenceSession {
     project: Arc<Project>,
     snapshots: BTreeMap<SourceId, SourceSnapshot>,
     disciplines: BTreeMap<SourceId, Discipline>,
+    metadata: BTreeMap<SourceId, SourceMetadata>,
     services: ServiceRegistry,
 }
 
@@ -248,6 +253,7 @@ impl EvidenceSession {
             project: Arc::new(project),
             snapshots: indexed,
             disciplines: BTreeMap::new(),
+            metadata: BTreeMap::new(),
             services: ServiceRegistry::new(),
         })
     }
@@ -311,6 +317,12 @@ impl EvidenceSession {
                     .iter()
                     .map(|(source, discipline)| (source.clone(), discipline.clone())),
             );
+            federated.metadata.extend(
+                member
+                    .metadata
+                    .iter()
+                    .map(|(source, metadata)| (source.clone(), metadata.clone())),
+            );
         }
         let registries: Vec<&ServiceRegistry> =
             members.iter().map(|member| &member.services).collect();
@@ -354,6 +366,58 @@ impl EvidenceSession {
     #[must_use]
     pub fn disciplines(&self) -> &BTreeMap<SourceId, Discipline> {
         &self.disciplines
+    }
+
+    /// States what is known about `source` as a whole: the adapter the
+    /// applications and project it read, the host the file name.
+    ///
+    /// Statements add up field by field; stating a field again with the same
+    /// values is a no-op. Capabilities read the metadata through
+    /// [`crate::SourceMetadataIndex`]; the `source` selector matches on it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the session holds no such source, or a field is
+    /// already stated with other values.
+    pub fn with_source_metadata(
+        mut self,
+        source: &SourceId,
+        metadata: SourceMetadata,
+    ) -> Result<Self, EvidenceSessionError> {
+        if !self.snapshots.contains_key(source) {
+            return Err(EvidenceSessionError::UnknownSource(source.clone()));
+        }
+        let held = self.metadata.remove(source).unwrap_or_default();
+        let merged = held.merged(metadata).map_err(|field| {
+            EvidenceSessionError::ConflictingMetadata(source.clone(), field.as_str())
+        })?;
+        self.metadata.insert(source.clone(), merged);
+        Ok(self)
+    }
+
+    /// Everything stated about `source` as a whole, if anything.
+    #[must_use]
+    pub fn source_metadata(&self, source: &SourceId) -> Option<&SourceMetadata> {
+        self.metadata.get(source)
+    }
+
+    /// Every source's metadata as a run reads it: the schema comes from the
+    /// snapshot unless stated.
+    pub(crate) fn metadata_index(&self) -> crate::SourceMetadataIndex {
+        crate::SourceMetadataIndex::new(self.snapshots.values().map(|snapshot| {
+            let mut metadata = self
+                .metadata
+                .get(&snapshot.source)
+                .cloned()
+                .unwrap_or_default();
+            if let (None, Some(schema)) = (
+                metadata.values(axioval_ir::contract::SourceField::Schema),
+                snapshot.schema(),
+            ) {
+                metadata = metadata.with(axioval_ir::contract::SourceField::Schema, [schema]);
+            }
+            (snapshot.source.clone(), metadata)
+        }))
     }
 
     /// Registers one non-replaceable typed evidence service.

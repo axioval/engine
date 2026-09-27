@@ -18,6 +18,7 @@ mod integrity;
 mod layers;
 mod materials;
 mod measure;
+mod metadata;
 mod relationships;
 mod release;
 mod styles;

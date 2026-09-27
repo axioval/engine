@@ -31,8 +31,21 @@ impl ClassificationAssignment {
     /// when `include_descendants` is set. `None` when the system is unknown.
     #[must_use]
     pub fn matches(&self, system: &str, code: &str, include_descendants: bool) -> Option<bool> {
-        let own = self.system.as_deref()?;
-        if own != system {
+        self.matches_code(system, |level| level == code, include_descendants)
+    }
+
+    /// Whether this assignment is in `system` with a code `code` accepts,
+    /// or, when `include_descendants` is set, an ancestor's code it accepts.
+    /// A level stating no code is never accepted. `None` when the system is
+    /// unknown.
+    #[must_use]
+    pub fn matches_code(
+        &self,
+        system: &str,
+        code: impl Fn(&str) -> bool,
+        include_descendants: bool,
+    ) -> Option<bool> {
+        if !self.in_system(system)? {
             return Some(false);
         }
         let levels = if include_descendants {
@@ -40,7 +53,14 @@ impl ClassificationAssignment {
         } else {
             &self.codes[..self.codes.len().min(1)]
         };
-        Some(levels.iter().any(|level| level.as_deref() == Some(code)))
+        Some(levels.iter().flatten().any(|level| code(level)))
+    }
+
+    /// Whether this assignment is in `system`, whatever its code. `None`
+    /// when the system is unknown.
+    #[must_use]
+    pub fn in_system(&self, system: &str) -> Option<bool> {
+        Some(self.system.as_deref()? == system)
     }
 }
 

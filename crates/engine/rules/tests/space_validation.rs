@@ -595,7 +595,8 @@ fn an_undecided_cap_selection_leaves_only_the_cap_unevaluated() {
     let classified = ParameterValue::Selector {
         value: Box::new(Selector::Classification {
             system: "uniclass".into(),
-            code: "Ss_30".into(),
+            code: Some("Ss_30".into()),
+            code_pattern: None,
             include_descendants: false,
         }),
     };

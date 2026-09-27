@@ -35,7 +35,7 @@ These parts stay explicit gaps:
 - a property facet in the applicability: IDS casts its literal to each property's own type, and a selector compares one declared type and cannot tell null or blank from a value without it;
 - a prohibited property facet with a value or a data type;
 - an attribute declared as a real, a measure, a date, a select, a reference or an aggregate, in a selector;
-- in the applicability, a classification without a value (the system alone) and a classification pattern, which the classification selector cannot state;
+- in the applicability, a classification without a value (the system alone) and a classification pattern: the classification selector states both now (a selector without `code`, and `codePattern`), but the importer does not translate them yet;
 - a material value restricted by several facets at once (an enumeration and patterns, a length), which one name must meet together;
 - part of without a relation (every relation, mixed along the chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`;
 - requirements on a prohibited specification, which IDS declares invalid;

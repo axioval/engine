@@ -78,9 +78,25 @@ pub enum Selector {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         precision: Option<TemporalPrecision>,
     },
+    /// Objects carrying a classification in `system`, as their source
+    /// states it.
+    ///
+    /// `code` names one code exactly and `codePattern` matches codes by an
+    /// XML Schema pattern over the whole code (`Ss_25_.*`), as IDS writes
+    /// classification patterns; at most one of them is given. With neither,
+    /// any classification in `system` matches. `includeDescendants` also
+    /// matches the codes an assignment's ancestors carry, and needs a code or
+    /// a pattern.
     Classification {
         system: String,
-        code: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        code: Option<String>,
+        #[serde(
+            rename = "codePattern",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        code_pattern: Option<String>,
         #[serde(rename = "includeDescendants", default)]
         include_descendants: bool,
     },
@@ -118,6 +134,55 @@ pub enum Selector {
     Discipline {
         value: Discipline,
     },
+    /// Objects of the sources whose metadata `field` satisfies the
+    /// comparison, such as the application that wrote a model.
+    ///
+    /// Source metadata is not an object fact: every object of a source
+    /// matches or none does. A field compares as a property selector's value
+    /// does: one holding several values (a model written by two
+    /// applications) needs `quantifier`, and one the source states it lacks
+    /// matches nothing, as an absent property does. A source whose field was
+    /// never read is not evaluated, never a non-match.
+    Source {
+        field: SourceField,
+        operator: ComparisonOperator,
+        value: Option<ParameterValue>,
+        #[serde(
+            rename = "caseSensitive",
+            default = "yes",
+            skip_serializing_if = "is_true"
+        )]
+        case_sensitive: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        trim: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quantifier: Option<Quantifier>,
+    },
+}
+/// A fact about a whole source that a `source` selector compares.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceField {
+    /// The file name the host read the source from.
+    FileName,
+    /// The name of every application the source states wrote it.
+    Application,
+    /// The schema the source declares, such as `IFC4`.
+    Schema,
+    /// The name of the project the source describes.
+    Project,
+}
+impl SourceField {
+    /// The field's spelling in a package.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::FileName => "fileName",
+            Self::Application => "application",
+            Self::Schema => "schema",
+            Self::Project => "project",
+        }
+    }
 }
 impl Default for Selector {
     fn default() -> Self {
@@ -181,6 +246,7 @@ impl RelatedQuantifier {
 /// run, `?` one character, `\` escapes); both must match the whole value.
 /// `contains` takes a string, `oneOf` and `noneOf` a string list. The ordered
 /// operators also take a `date` or `dateTime`, compared chronologically.
+/// `exists`, `isEmpty` and `isNotEmpty` judge presence and take no value.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ComparisonOperator {
@@ -196,6 +262,12 @@ pub enum ComparisonOperator {
     OneOf,
     NoneOf,
     Exists,
+    /// Present, but null, blank text or a list of nothing else: the `empty`
+    /// presence of `property-requirements`. An absent value is not empty.
+    IsEmpty,
+    /// Present with a value: the `not-empty` presence of
+    /// `property-requirements`. An absent value is not a value.
+    IsNotEmpty,
 }
 const fn yes() -> bool {
     true

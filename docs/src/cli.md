@@ -360,9 +360,11 @@ only the default cap elements: a rule's `top_cap_elements` or
 
 Space-boundary coverage takes every `IfcSpace` and every `IfcRelSpaceBoundary`
 (and subtype) naming one. Each boundary's `ConnectionGeometry` surface is
-lowered in its own frame and placed by the space's placement under its body's
-representation context, exactly as the body is, then meshed; a curve-bounded
-plane with straight boundaries is exact. A boundary with no connection
+lowered in the frame `ifc-geometry`'s `product_representation_frame` gives the
+space's body (the body context's world coordinate system above the space's
+placement), exactly as the body is, then meshed; a curve-bounded plane takes
+the frame on its basis plane only, so its boundaries stay in the plane's
+parameters (openbimrs/ifc#163), and with straight boundaries it is exact. A boundary with no connection
 geometry, a point, curve or volume connection, or a surface the lowering or
 compiler refuses is unmeasured, and its space is not evaluated. Surfaces, face
 surfaces (`IfcFaceSurface`, `IfcAdvancedFace`) and face-based surface models

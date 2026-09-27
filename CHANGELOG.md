@@ -1954,6 +1954,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- The workspace requires `ifc-geometry` 0.4.1 and `openbim-ifc` 0.7.2.
+  Space-boundary coverage lowers each connection surface in the space
+  body's frame from `ifc-geometry`'s `product_representation_frame`
+  (openbimrs/ifc#164) instead of rebuilding the context's world
+  coordinate system and moving the mesh afterwards: a curve-bounded plane
+  under a non-identity frame now keeps its boundaries in the plane's
+  parameters (openbimrs/ifc#163). Measurements are unchanged. (Refs #74)
 - **Breaking.** The workspace requires `ifc-geometry` 0.4.0, `ifc-material`
   0.3.0, `ifc-properties` 0.4.1 and `ifc-spatial` 0.2.2. The CLI reads a
   space boundary's `ConnectionGeometry` through `ifc-spatial`'s

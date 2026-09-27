@@ -645,12 +645,11 @@ fn boundary_service(
 /// lowers its `SurfaceOnRelatingElement`: a surface, a face surface or a
 /// face-based surface model; point, curve and volume connections are refused.
 /// The surface is stated in the relating space's object coordinates, so it
-/// is lowered in its own frame and placed afterwards by the space's
-/// placement under its body's representation context, exactly as the body
-/// is: lowering it with the placement would also move a curve-bounded
-/// plane's boundaries, which lie in the plane's parameters
-/// (openbimrs/ifc#163), and the body's frame is rebuilt here until
-/// `ifc-geometry` exposes it (openbimrs/ifc#164).
+/// is lowered in the frame `ifc-geometry` places the space's body in: the
+/// body context's world coordinate system above the space's placement
+/// (`product_representation_frame`, openbimrs/ifc#164). A curve-bounded
+/// plane takes that frame on its basis plane only, its boundaries staying
+/// in the plane's parameters (openbimrs/ifc#163).
 fn boundary_surface(
     backend: &impl MeshCompiler,
     model: &Model,
@@ -675,11 +674,11 @@ fn boundary_surface(
     };
     let frame = space_frame(model, units, space)?;
     let mut session = LoweringSession::new(model, units);
-    let root = lower_connection_surface(&mut session, connection, Transform::identity())
+    let root = lower_connection_surface(&mut session, connection, frame)
         .map_err(|error| error.to_string())?;
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
     let exact = planar(&lowered.graph, lowered.root, &mut NODE_BUDGET.clone());
-    let mut mesh = backend
+    let mesh = backend
         .compile_mesh(
             &lowered.graph,
             lowered.root,
@@ -689,37 +688,30 @@ fn boundary_surface(
     if mesh.triangle_count() == 0 {
         return Err("mesh compilation produced no triangles".into());
     }
-    for position in &mut mesh.positions {
-        *position = axiolid_core::Point3::from_array(frame.apply(position.to_array()));
-    }
     Ok((mesh, exact))
 }
 
-/// The frame a space's body is placed in: its placement under the world
-/// coordinate system of its body representation's context.
+/// The frame a space's body is placed in, as lowering places it: the world
+/// coordinate system of its body representation's context above its
+/// placement. A space with no body representation has only its placement;
+/// its coverage is refused for want of a body anyway.
 fn space_frame(
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
     space: &ObjectId,
 ) -> Result<Transform, String> {
     let entity = entity_id(space).ok_or("the space is not a STEP instance")?;
-    let placement = ifc_geometry::product_world_transform(model, units, entity)
-        .map_err(|error| error.to_string())?;
-    let context =
-        ifc_geometry::select_product_representation(model, entity, RepresentationPurpose::Body)
-            .map_err(|error| error.to_string())?
-            .and_then(|representation| ifc_geometry::context_of(model, representation))
-            .and_then(|context| context.world_coordinate_system(model));
-    let Some(system) = context else {
-        return Ok(placement);
-    };
-    let entity = model
-        .get(system)
-        .ok_or_else(|| format!("{system} does not exist"))?;
-    let world = ifc_geometry::resource::placement::axis_placement_transform(model, system, entity)
-        .map_err(|error| error.to_string())?
-        .to_metres(units);
-    Ok(world.compose(&placement))
+    match ifc_geometry::product_representation_frame(
+        model,
+        units,
+        entity,
+        RepresentationPurpose::Body,
+    ) {
+        Ok(Some(frame)) => Ok(frame),
+        Ok(None) => ifc_geometry::product_world_transform(model, units, entity)
+            .map_err(|error| error.to_string()),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {

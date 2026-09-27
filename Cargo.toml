@@ -68,7 +68,7 @@ openbim-bcf = "0.3.0"
 # compiles no geometry kernel.
 openbim_ifc = { package = "openbim-ifc", version = "0.7.0", default-features = false, features = ["geometry-select", "properties"] }
 ifc-classification = "0.2.1"
-ifc-geometry = { version = "0.4.0", default-features = false }
+ifc-geometry = { version = "0.4.1", default-features = false }
 ifc-material = "0.3.0"
 ifc-spatial = "0.2.2"
 ifc-model = "0.2.3"

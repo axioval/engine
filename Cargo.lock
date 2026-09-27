@@ -1056,9 +1056,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f671bbeb8bdfb3d80519dbc889d83ed326bbb8fb82b3ca9ef65581e337935976"
+checksum = "3ad0768eec8730b55f309c90a4ff51cb3cfd22ea0e4b7e810aa5f7a99ba9ca15"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",

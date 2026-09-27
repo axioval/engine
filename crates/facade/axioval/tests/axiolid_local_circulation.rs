@@ -18,12 +18,14 @@ use axioval::axiolid::{
 };
 use axioval::engine::{
     CapabilityEvaluation, CompiledRule, CompleteRelationshipSelection,
-    DerivedRelationshipServiceHandle, FreeSpaceServiceHandle, RelationshipSelectionError,
+    DerivedRelationshipServiceHandle, DoorLeaf, DoorLeaves, DoorLeavesError,
+    FreeSpaceServiceHandle, HingeSide, LeafMotion, LeafPosition, MetricDirection, ObjectFrame,
+    ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    RuleCapability, RuleContext, ServiceRegistry,
+    RuleCapability, RuleContext, ServiceRegistry, SourceSnapshot, SwingSector,
 };
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
-use axioval::ir::{NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
+use axioval::ir::{Evidence, NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
 use axioval::rules::LocalCirculation;
 
 const ADJACENT: &str = "axioval:derived.adjacent-space";
@@ -62,6 +64,7 @@ fn cuboid(min: [f64; 3], max: [f64; 3]) -> TriMesh {
 struct Scene {
     objects: Vec<Object>,
     geometry: AxiolidGeometry,
+    leaves: BTreeMap<ObjectId, DoorLeaves>,
 }
 
 impl Scene {
@@ -70,6 +73,7 @@ impl Scene {
         Self {
             objects: Vec::new(),
             geometry: AxiolidGeometry::new(),
+            leaves: BTreeMap::new(),
         }
         .body("room", "room", cuboid([0.0, 0.0, 0.0], [6.0, 4.0, 3.0]))
         .body("door", "door", cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))
@@ -86,6 +90,14 @@ impl Scene {
     fn body(mut self, local: &str, kind: &str, mesh: TriMesh) -> Self {
         self.objects.push(Object::new(id(local), kind));
         self.geometry = self.geometry.with_mesh(id(local), mesh);
+        self
+    }
+
+    /// `local`'s 0.9 m leaf, hinged at `hinge` on the floor, closed along
+    /// `closed` and opening towards `open`.
+    fn swinging(mut self, local: &str, hinge: [f64; 3], closed: [f64; 3], open: [f64; 3]) -> Self {
+        self.leaves
+            .insert(id(local), hinged(local, hinge, closed, open));
         self
     }
 
@@ -124,6 +136,12 @@ impl Scene {
                 AxiolidFreeSpaceService::new(self.geometry, source()),
             )))
             .unwrap();
+        services
+            .register(ObjectFrameServiceHandle::new(Arc::new(Leaves {
+                snapshots: vec![SourceSnapshot::try_new(source(), "r1", "sha256:1").unwrap()],
+                leaves: self.leaves,
+            })))
+            .unwrap();
         LocalCirculation.evaluate(
             &RuleContext {
                 project: &project,
@@ -132,6 +150,66 @@ impl Scene {
             &rule,
         )
     }
+}
+
+/// Door leaves as a source would state them.
+struct Leaves {
+    snapshots: Vec<SourceSnapshot>,
+    leaves: BTreeMap<ObjectId, DoorLeaves>,
+}
+
+impl ObjectFrameService for Leaves {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+
+    fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
+        Err(ObjectFrameError::NotPlaced(object.clone()))
+    }
+
+    fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        self.leaves
+            .get(door)
+            .cloned()
+            .ok_or_else(|| DoorLeavesError::NotADoor(door.clone()))
+    }
+}
+
+fn direction(vector: [f64; 3]) -> MetricDirection {
+    MetricDirection::try_new(vector).unwrap()
+}
+
+/// One hinged leaf 0.9 m wide.
+fn hinged(local: &str, hinge: [f64; 3], closed: [f64; 3], open: [f64; 3]) -> DoorLeaves {
+    let side = if closed[0] * open[1] - closed[1] * open[0] > 0.0 {
+        HingeSide::Left
+    } else {
+        HingeSide::Right
+    };
+    let sector =
+        SwingSector::try_new(hinge, 0.9, direction(closed), direction(open), false).unwrap();
+    let leaf = DoorLeaf::try_new(
+        LeafPosition::NotDefined,
+        LeafMotion::Swing,
+        hinge,
+        direction(closed),
+        direction(open),
+        direction([0.0, 0.0, 1.0]),
+        0.9,
+        Some(0.04),
+        Some(side),
+        Some(sector),
+    )
+    .unwrap();
+    DoorLeaves::try_new(
+        id(local),
+        "SINGLE_SWING",
+        0.9,
+        None,
+        vec![leaf],
+        Evidence::exact(source(), format!("leaves:{local}")),
+    )
+    .unwrap()
 }
 
 /// Every relationship derived from the geometry.
@@ -232,6 +310,51 @@ fn a_wc_behind_a_wide_gap_is_reached() {
 }
 
 #[test]
+fn a_door_swinging_across_the_path_cuts_the_wc_off_once_subtracted() {
+    // 1.1 m are left north of the partition, until a cupboard door hinged
+    // on the north wall at x 2.6 swings south over the gap.
+    let scene = || {
+        Scene::partitioned(2.9)
+            .body(
+                "cupboard",
+                "cupboard",
+                cuboid([2.6, 4.0, 0.0], [3.5, 4.1, 2.0]),
+            )
+            .swinging(
+                "cupboard",
+                [2.6, 4.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+            )
+    };
+    let outcome = scene().check(&[]);
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    let outcome = scene().check(&[("subtract_door_swings", selector(kind("cupboard")))]);
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "wc".to_owned(),
+            "no entrance of cad:model/room reaches it on a path 0.9 m wide".to_owned()
+        )]
+    );
+    // A door whose leaves are unknown leaves the room not evaluated.
+    let outcome = Scene::partitioned(2.9)
+        .body(
+            "hatch",
+            "cupboard",
+            cuboid([2.6, 4.0, 0.0], [3.5, 4.1, 2.0]),
+        )
+        .check(&[("subtract_door_swings", selector(kind("cupboard")))]);
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    assert_eq!(
+        unevaluated(&outcome)[0].1,
+        NotEvaluatedReason::IncompleteEvidence
+    );
+}
+
+#[test]
 fn a_gap_exactly_as_wide_as_the_path_is_not_evaluated() {
     let outcome = Scene::partitioned(3.1).check(&[]);
     assert!(outcome.findings().is_empty(), "{outcome:#?}");
@@ -323,6 +446,7 @@ fn corridor() -> Scene {
     Scene {
         objects: Vec::new(),
         geometry: AxiolidGeometry::new(),
+        leaves: BTreeMap::new(),
     }
     .body("room", "room", cuboid([0.0, 0.0, 0.0], [20.0, 1.8, 3.0]))
     .body("door", "door", cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))

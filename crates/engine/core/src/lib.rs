@@ -603,7 +603,7 @@ pub use discipline_map::{
 };
 pub use door_leaves::{
     DoorLeaf, DoorLeaves, DoorLeavesError, HingeSide, LeafMotion, LeafPosition, PlanRing,
-    SwingSector,
+    SWEPT_FLOOR_REACH_METRES, SweptDoor, SwingSector,
 };
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,

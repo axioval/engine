@@ -28,11 +28,14 @@
 //!   size at most every `passing_spacing_metres` (see
 //!   [`crate::passing_spaces`]).
 //!
-//! Door swings are not subtracted: the swing of a door is not known.
+//! With `subtract_door_swings`, the sectors the selected doors' leaves sweep
+//! are obstacles too, for the path, its end areas and its passing spaces;
+//! an entrance of the space is walked through, so its own swing never is.
 //!
 //! Three-valued throughout: a proof is a finding, a witness passes, and
 //! anything between is not evaluated. An obstacle the selection cannot
-//! decide leaves every space not evaluated.
+//! decide, and a door whose swing may count but is unknown, leave every
+//! space not evaluated.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -41,11 +44,12 @@ use axioval_engine::{
     CompiledRule, FrameOffsetPlacement, FreeSpaceError, FreeSpaceServiceHandle, MetricDirection,
     MetricFrame, MetricPoint, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    RuleCapability, RuleContext, SignedDistanceInterval,
+    RuleCapability, RuleContext, SignedDistanceInterval, SweptDoor,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
+use crate::door_swing::Swings;
 use crate::level_spacing::metres;
 use crate::passing_spaces::{self, PassingSpaces, Spacing};
 use crate::selection::select_objects;
@@ -87,6 +91,7 @@ struct Declaration<'a> {
     spaces: Traversal<'a>,
     access: AccessDeclaration<'a>,
     obstacles: Option<&'a Selector>,
+    swings: Option<&'a Selector>,
     width: f64,
     height: f64,
     tolerance: f64,
@@ -164,6 +169,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         spaces,
         access,
         obstacles: parameters.selector("obstacles")?,
+        swings: parameters.selector("subtract_door_swings")?,
         width: positive(&parameters, "width_metres")?
             .ok_or_else(|| invalid("parameter `width_metres` is required"))?,
         height,
@@ -190,6 +196,7 @@ impl RuleCapability for LocalCirculation {
             ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
             ParameterDescriptor::optional("space_selector", ParameterType::Selector),
             ParameterDescriptor::optional("obstacles", ParameterType::Selector),
+            ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
             ParameterDescriptor::required("width_metres", ParameterType::Number),
             ParameterDescriptor::required("clear_height_metres", ParameterType::Number),
             ParameterDescriptor::optional("tolerance_metres", ParameterType::Number),
@@ -244,6 +251,22 @@ impl RuleCapability for LocalCirculation {
                 return evaluation;
             }
         };
+        let swept = match Swings::select(context, declared.swings) {
+            Ok(swings) => match swings.undecided() {
+                None => swings.sure,
+                Some(why) => {
+                    refuse(
+                        &mut evaluation,
+                        incomplete(format!("the door swings are not all known: {why}")),
+                    );
+                    return evaluation;
+                }
+            },
+            Err(unavailable) => {
+                refuse(&mut evaluation, unavailable);
+                return evaluation;
+            }
+        };
         let members = match components(context, &declared, &spaces, &mut evaluation) {
             Ok(members) => members,
             Err(unavailable) => {
@@ -258,6 +281,7 @@ impl RuleCapability for LocalCirculation {
             free_space,
             index: &index,
             obstacles: &obstacles,
+            swept: &swept,
         };
         for space in &spaces {
             let inside = members.get(&space.id).cloned().unwrap_or_default();
@@ -390,6 +414,7 @@ struct Judge<'a> {
     free_space: &'a FreeSpaceServiceHandle,
     index: &'a AccessIndex,
     obstacles: &'a [ObjectId],
+    swept: &'a [SweptDoor],
 }
 
 /// The entrances of one space.
@@ -437,6 +462,7 @@ impl Judge<'_> {
             self.declared.height,
             self.declared.tolerance,
         )
+        .and_then(|request| request.with_swept_doors(self.swept.to_vec()))
         .and_then(|request| self.free_space.map_circulation(&request));
         let map = match map {
             Ok(map) => map,
@@ -607,7 +633,7 @@ impl Context<'_> {
             passing,
             self.judge.free_space,
             self.space,
-            self.obstacles,
+            (self.obstacles, self.judge.swept),
             &points,
             &format!("the path from {door}"),
         ) {
@@ -784,7 +810,8 @@ impl Context<'_> {
             shape,
             self.obstacles.to_vec(),
             PlacementDomain::FrameOffsets(offsets),
-        )?;
+        )?
+        .with_swept_doors(self.judge.swept.to_vec())?;
         self.judge.free_space.find_placement(&request)
     }
 }

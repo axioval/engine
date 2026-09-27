@@ -6,6 +6,7 @@ use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
     CirculationMap, CirculationNodeKind, CirculationRequest, FreeSpaceError, FreeSpaceService,
+    MetricDirection, SweptDoor, SwingSector,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -187,4 +188,67 @@ fn a_dead_end_corridor_ends_where_it_meets_its_end_wall() {
         ends[1].0[0] > 5.0 && (ends[1].0[1] - 0.6).abs() < 0.05,
         "{ends:?}"
     );
+}
+
+/// A 0.9 m leaf of `door` hinged at `(x, y)`, closed along +x and opening
+/// towards -y.
+fn swinging_south(door: &str, x: f64, y: f64) -> SweptDoor {
+    SweptDoor::try_new(
+        id(door),
+        vec![
+            SwingSector::try_new(
+                [x, y, 0.0],
+                0.9,
+                MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap(),
+                MetricDirection::try_new([0.0, -1.0, 0.0]).unwrap(),
+                false,
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_swing_across_the_gap_cuts_the_wc_off() {
+    // 1.1 m are left north of the partition until a hatch hinged on the
+    // north wall at x 2.6 swings south over the gap.
+    let request = |swept: Vec<SweptDoor>| {
+        CirculationRequest::try_new(
+            id("room"),
+            vec![id("door")],
+            vec![id("wc")],
+            vec![id("partition"), id("wc"), id("door")],
+            0.9,
+            2.0,
+            0.05,
+        )
+        .unwrap()
+        .with_swept_doors(swept)
+        .unwrap()
+    };
+    let service = AxiolidFreeSpaceService::new(room(2.9), source());
+    let open = service.map_circulation(&request(Vec::new())).unwrap();
+    let wc = open.contact(&id("wc")).unwrap();
+    let door = open.contact(&id("door")).unwrap();
+    assert!(wc.reaches(door.reached()[0].0), "{open:#?}");
+    let closed = service
+        .map_circulation(&request(vec![swinging_south("hatch", 2.6, 4.0)]))
+        .unwrap();
+    let wc = closed.contact(&id("wc")).unwrap();
+    let door = closed.contact(&id("door")).unwrap();
+    assert!(
+        door.possible()
+            .iter()
+            .all(|piece| !wc.possible().contains(piece)),
+        "{closed:#?}"
+    );
+    // Half widths along the path are bracketed by the swing's polygons.
+    for node in closed.nodes() {
+        let half = node.half_width();
+        assert!(half.lower_metres() <= half.upper_metres(), "{node:?}");
+    }
+    // The entrance's own swing is walked through: the request drops it.
+    let own = request(vec![swinging_south("door", 0.5, 0.0)]);
+    assert!(own.swept_doors().is_empty());
 }

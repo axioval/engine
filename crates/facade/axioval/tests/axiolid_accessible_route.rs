@@ -16,10 +16,12 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval::axiolid::{AxiolidGeometry, AxiolidWalkabilityService};
 use axioval::engine::{
-    CapabilityEvaluation, CompiledRule, CompletePropertyAbsenceEvidence, PropertyRequest,
+    CapabilityEvaluation, CompiledRule, CompletePropertyAbsenceEvidence, DoorLeaf, DoorLeaves,
+    DoorLeavesError, HingeSide, LeafMotion, LeafPosition, MetricDirection, ObjectFrame,
+    ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, PropertyRequest,
     PropertyResolution, PropertyResolutionError, PropertyResolutionService,
     PropertyResolutionServiceHandle, ResolvedProperty, RuleCapability, RuleContext,
-    ServiceRegistry, WalkabilityServiceHandle,
+    ServiceRegistry, SourceSnapshot, SwingSector, WalkabilityServiceHandle,
 };
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
 use axioval::ir::{
@@ -69,15 +71,12 @@ struct Scene {
     objects: Vec<Object>,
     geometry: AxiolidGeometry,
     widths: BTreeMap<ObjectId, f64>,
+    leaves: BTreeMap<ObjectId, DoorLeaves>,
 }
 
 impl Scene {
     fn new() -> Self {
-        let mut scene = Self {
-            objects: Vec::new(),
-            geometry: AxiolidGeometry::new(),
-            widths: BTreeMap::new(),
-        };
+        let mut scene = Self::empty();
         for (local, kind, min, max) in [
             ("a", "lobby", [0.0, 0.0, 0.0], [4.0, 4.0, 3.0]),
             ("b", "room", [4.2, 0.0, 0.0], [8.0, 4.0, 3.0]),
@@ -117,6 +116,93 @@ impl Scene {
             .width("narrow", 0.75)
     }
 
+    fn empty() -> Self {
+        Self {
+            objects: Vec::new(),
+            geometry: AxiolidGeometry::new(),
+            widths: BTreeMap::new(),
+            leaves: BTreeMap::new(),
+        }
+    }
+
+    /// Lobby `a` (x 0..4) opens through `door` onto corridor `e`, 1.2 m
+    /// wide (y 1..2.2) and 6 m long, which opens through `far` onto room
+    /// `f` (x 10.2..14). Cupboard `hatch`, in the corridor's north wall at
+    /// x 6.5..7.4, has a 0.9 m leaf that swings south across the corridor.
+    fn corridor() -> Self {
+        let mut scene = Self::empty();
+        for (local, kind, min, max) in [
+            ("a", "lobby", [0.0, 0.0, 0.0], [4.0, 4.0, 3.0]),
+            ("e", "corridor", [4.2, 1.0, 0.0], [10.0, 2.2, 3.0]),
+            ("f", "room", [10.2, 0.0, 0.0], [14.0, 4.0, 3.0]),
+        ] {
+            scene = scene.body(local, kind, cuboid(min, max));
+        }
+        for (x0, x1, door) in [(4.0, 4.2, "door"), (10.0, 10.2, "far")] {
+            scene = scene
+                .body(
+                    &format!("{door}-wall-s"),
+                    "wall",
+                    cuboid([x0, 0.0, 0.0], [x1, 1.15, 3.0]),
+                )
+                .body(
+                    &format!("{door}-wall-n"),
+                    "wall",
+                    cuboid([x0, 2.05, 0.0], [x1, 4.0, 3.0]),
+                )
+                .body(
+                    &format!("{door}-lintel"),
+                    "wall",
+                    cuboid([x0, 1.15, 2.1], [x1, 2.05, 3.0]),
+                )
+                .body(
+                    door,
+                    "door",
+                    cuboid([x0 + 0.05, 1.15, 0.0], [x1 - 0.05, 2.05, 2.1]),
+                )
+                .width(door, 0.85);
+        }
+        scene = scene.body(
+            "hatch",
+            "cupboard",
+            cuboid([6.5, 2.2, 0.0], [7.4, 2.3, 2.0]),
+        );
+        let sector = SwingSector::try_new(
+            [6.5, 2.2, 0.0],
+            0.9,
+            direction([1.0, 0.0, 0.0]),
+            direction([0.0, -1.0, 0.0]),
+            false,
+        )
+        .unwrap();
+        let leaf = DoorLeaf::try_new(
+            LeafPosition::NotDefined,
+            LeafMotion::Swing,
+            [6.5, 2.2, 0.0],
+            direction([1.0, 0.0, 0.0]),
+            direction([0.0, -1.0, 0.0]),
+            direction([0.0, 0.0, 1.0]),
+            0.9,
+            Some(0.04),
+            Some(HingeSide::Right),
+            Some(sector),
+        )
+        .unwrap();
+        scene.leaves.insert(
+            id("hatch"),
+            DoorLeaves::try_new(
+                id("hatch"),
+                "SINGLE_SWING_RIGHT",
+                0.9,
+                None,
+                vec![leaf],
+                Evidence::exact(source(), "leaves:hatch"),
+            )
+            .unwrap(),
+        );
+        scene
+    }
+
     fn body(mut self, local: &str, kind: &str, mesh: TriMesh) -> Self {
         self.objects.push(Object::new(id(local), kind));
         self.geometry = self.geometry.with_mesh(id(local), mesh);
@@ -139,7 +225,7 @@ impl Scene {
             (
                 "route_selector".to_owned(),
                 selector(Selector::AnyOf {
-                    operands: vec![kind("lobby"), kind("room")],
+                    operands: vec![kind("lobby"), kind("room"), kind("corridor")],
                 }),
             ),
             ("start_selector".to_owned(), selector(kind("lobby"))),
@@ -171,6 +257,12 @@ impl Scene {
         let mut services = ServiceRegistry::new();
         services
             .register(WalkabilityServiceHandle::new(Arc::new(walkability)))
+            .unwrap();
+        services
+            .register(ObjectFrameServiceHandle::new(Arc::new(Leaves {
+                snapshots: vec![SourceSnapshot::try_new(source(), "r1", "sha256:1").unwrap()],
+                leaves: self.leaves.clone(),
+            })))
             .unwrap();
         services
             .register(PropertyResolutionServiceHandle::new(Arc::new(self)))
@@ -215,6 +307,33 @@ impl PropertyResolutionService for Scene {
             )),
         }
     }
+}
+
+/// Door leaves as a source would state them.
+struct Leaves {
+    snapshots: Vec<SourceSnapshot>,
+    leaves: BTreeMap<ObjectId, DoorLeaves>,
+}
+
+impl ObjectFrameService for Leaves {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+
+    fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
+        Err(ObjectFrameError::NotPlaced(object.clone()))
+    }
+
+    fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        self.leaves
+            .get(door)
+            .cloned()
+            .ok_or_else(|| DoorLeavesError::NotADoor(door.clone()))
+    }
+}
+
+fn direction(vector: [f64; 3]) -> MetricDirection {
+    MetricDirection::try_new(vector).unwrap()
 }
 
 fn kind(kind: &str) -> Selector {
@@ -367,4 +486,31 @@ fn without_stated_widths_a_door_that_could_pass_is_undecided() {
     let found = findings(&outcome);
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].0, "c");
+}
+
+#[test]
+fn a_corridor_narrowed_by_an_open_leaf_blocks_the_room_beyond() {
+    // Without the swing, the 1.2 m corridor carries the 0.8 m body to `f`.
+    let outcome = Scene::corridor().check(&[]);
+    assert!(findings(&outcome).is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // The hatch's leaf leaves 0.3 m of it: `f` is cut off.
+    let outcome = Scene::corridor().check(&[("subtract_door_swings", selector(kind("cupboard")))]);
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    let found = findings(&outcome);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].0, "f");
+    assert!(
+        found[0]
+            .2
+            .starts_with("no accessible route reaches cad:model/f for a body 0.8 m wide"),
+        "{found:#?}"
+    );
+    assert!(
+        outcome.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator.contains(":separated")),
+        "{outcome:#?}"
+    );
 }

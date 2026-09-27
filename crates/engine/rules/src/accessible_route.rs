@@ -18,6 +18,11 @@
 //! portal's from the geometry's bound otherwise; a stated portal width also
 //! goes into the request, so the geometry can admit the body through a door.
 //!
+//! With `subtract_door_swings`, the sectors the selected doors' leaves sweep
+//! are obstacles on the surfaces they stand on: a body walks through its
+//! own door's swing, never past another's. A door whose swing may count but
+//! is unknown leaves every destination not evaluated.
+//!
 //! With `passing_width_metres`, `passing_length_metres` and
 //! `passing_spacing_metres`, a proven route must also offer a free box that
 //! size at most every `passing_spacing_metres` along it (see
@@ -33,13 +38,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, LengthInterval, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PassageAdmission, RuleCapability, RuleContext, VerifiedWalkablePassage,
-    VerticalConnector, VerticalConnectorKind, WalkabilityError, WalkabilityRegionId,
-    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle, WalkabilitySnapshot,
+    ParameterType, PassageAdmission, RuleCapability, RuleContext, SweptDoor,
+    VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind, WalkabilityError,
+    WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle,
+    WalkabilitySnapshot,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
+use crate::door_swing::Swings;
 use crate::passing_spaces::{self, Ground, PassingSpaces, Spacing};
 use crate::plan_area::shown;
 use crate::selection::{Selection, select_objects, selector_matches};
@@ -55,6 +62,7 @@ struct Declaration<'a> {
     portals: Option<&'a Selector>,
     connectors: [(VerticalConnectorKind, Option<&'a Selector>); 3],
     obstacles: Option<&'a Selector>,
+    swings: Option<&'a Selector>,
     width: f64,
     clear_height: Option<f64>,
     door_width: Option<f64>,
@@ -94,6 +102,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             ),
         ],
         obstacles: parameters.selector("obstacle_selector")?,
+        swings: parameters.selector("subtract_door_swings")?,
         width: length(&parameters, "width_metres")?
             .ok_or_else(|| invalid("parameter `width_metres` is required"))?,
         clear_height,
@@ -120,6 +129,7 @@ impl RuleCapability for AccessibleRoute {
             ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
             ParameterDescriptor::optional("stair_selector", ParameterType::Selector),
             ParameterDescriptor::optional("obstacle_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
             ParameterDescriptor::required("width_metres", ParameterType::Number),
             ParameterDescriptor::optional("clear_height_metres", ParameterType::Number),
             ParameterDescriptor::optional("door_width_metres", ParameterType::Number),
@@ -281,6 +291,7 @@ struct Scene {
     portals: Picked,
     connectors: BTreeMap<ObjectId, (VerticalConnectorKind, Option<String>)>,
     obstacles: Vec<ObjectId>,
+    swept: Vec<SweptDoor>,
     destinations: BTreeSet<ObjectId>,
     widths: BTreeMap<ObjectId, Stated>,
 }
@@ -296,6 +307,13 @@ impl Scene {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
                 format!("whether {object} is an obstacle is undecided: {why}"),
+            ));
+        }
+        let swings = Swings::select(context, declared.swings)?;
+        if let Some(why) = swings.undecided() {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("the door swings are not all known: {why}"),
             ));
         }
         let mut connectors = BTreeMap::new();
@@ -329,6 +347,7 @@ impl Scene {
             portals: Picked::select(context, declared.portals),
             connectors,
             obstacles: obstacles.decided.into_iter().collect(),
+            swept: swings.sure,
             destinations: destinations
                 .iter()
                 .map(|object| object.id.clone())
@@ -406,6 +425,7 @@ impl Scene {
             )
         })
         .and_then(|request| request.with_stated_clear_widths(stated))
+        .and_then(|request| request.with_swept_doors(self.swept.clone()))
         .map_err(|error| invalid(format!("walkability request: {error}")))
     }
 }
@@ -865,6 +885,7 @@ impl Judge<'_> {
             spaces: &spaces,
             portals: &scene.portals.decided,
             obstacles: &scene.obstacles,
+            swept: &scene.swept,
             body: self.declared.width,
         };
         passing_spaces::judge(passing, &services, &ground, start, destination)

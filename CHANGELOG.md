@@ -23,6 +23,30 @@ All notable changes are documented here. This project follows Semantic Versionin
   pair not evaluated. **Breaking:** definitions bound to `clash` or
   `clash-matrix` must declare the new optional parameter;
   `ProximityService` gains a defaulted method.
+- **Door swings as obstacles.** (#122) `free-floor-circle`,
+  `free-floor-rectangle`, `local-circulation` and `accessible-route` take
+  `subtract_door_swings`: the floor the selected doors' hinged leaves
+  sweep is an obstacle too, read from the object-frame service's leaves
+  (`SweptDoor`, `SweptDoor::of`) and sent with the placement, circulation
+  and walkability requests (`with_swept_doors`). Backends bracket each
+  sector with `SwingSector::plan_bounds`: a witness, piece or definite
+  passage keeps clear of the circumscribed polygon, a proof of absence,
+  possible piece or separation holds against the inscribed one. A sector
+  counts on a floor its hinge stands on (at most
+  `SWEPT_FLOOR_REACH_METRES`, 0.5 m, below it), never on another storey.
+  An entrance is walked through: a circulation request drops its own
+  swing, and walkability never counts a portal's swing against a passage
+  through it. A room whose path to a WC is crossed by a cupboard door
+  standing open is cut off; a corridor narrowed by an open leaf blocks the
+  room beyond it. The Axiolid walkability backend now splits a surface
+  touching no other surface into its possible pieces (the footprint
+  eroded from outside by half the width, less the obstacles and inscribed
+  swings grown from inside), so a gap narrower than the body inside such
+  a surface proves a route `Unreachable` rather than leaving it
+  `Indeterminate`. **Breaking:** definitions bound to any of the four
+  capabilities must declare `subtract_door_swings`; `FreeSpaceError` and
+  `WalkabilityError` gain `ConflictingSweptDoors`; a walkability snapshot
+  may map one surface to several regions (`surface:{id}#{k}`).
 - **Clash severities by class and size.** (#97) `clash` and
   `clash-matrix` take `severity_by_class` (a severity per class:
   duplicate, containment, intersection, clearance) and grade

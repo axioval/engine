@@ -7,7 +7,7 @@ use axioval_engine::{
     BoxClearance, CylinderClearance, ElevationBand, FrameOffsetPlacement, FreeSpaceError,
     FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, PlacementDomain,
     PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    SignedDistanceInterval, SupportedPlacement,
+    SignedDistanceInterval, SupportedPlacement, SweptDoor, SwingSector,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -614,4 +614,77 @@ fn unusable_offset_domains_refuse() {
         search(geometry(), &request),
         Err(FreeSpaceError::Unavailable(_))
     ));
+}
+
+/// A door's sector hinged at `(x, y, z)`, its 0.9 m leaf closed along +x
+/// and opening towards -y: it sweeps the quarter disc x ≥ `x`, y ≤ `y`.
+fn swinging_south(x: f64, y: f64, z: f64) -> SweptDoor {
+    SweptDoor::try_new(
+        id("door"),
+        vec![
+            SwingSector::try_new(
+                [x, y, z],
+                0.9,
+                MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap(),
+                MetricDirection::try_new([0.0, -1.0, 0.0]).unwrap(),
+                false,
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap()
+}
+
+fn place_swept(
+    geometry: AxiolidGeometry,
+    shape: PlacementShape,
+    swept: Vec<SweptDoor>,
+) -> Result<PlacementOutcome, FreeSpaceError> {
+    let request = PlacementRequest::new_in_domain(
+        id("room"),
+        shape,
+        Vec::new(),
+        PlacementDomain::Supported(SupportedPlacement::try_new(id("room"), 0.0).unwrap()),
+    )
+    .unwrap()
+    .with_swept_doors(swept)
+    .unwrap();
+    AxiolidFreeSpaceService::new(geometry, source()).find_placement(&request)
+}
+
+/// A turning circle fits in a room 2.6 m by 1.6 m, but not once a door in
+/// its north wall swings into the middle of it; a door a storey up, or one
+/// swinging over one end of a longer room, leaves a place.
+#[test]
+fn a_door_swing_is_an_obstacle() {
+    let strip = || room(&[rect(0.0, 2.6, 0.0, 1.6)]);
+    found(place_swept(strip(), turning_circle(), Vec::new()));
+    nowhere(place_swept(
+        strip(),
+        turning_circle(),
+        vec![swinging_south(1.3, 1.6, 0.0)],
+    ));
+    // Hinged 3 m up, on the storey above: it stands on another floor.
+    found(place_swept(
+        strip(),
+        turning_circle(),
+        vec![swinging_south(1.3, 1.6, 3.0)],
+    ));
+    let (centre, _) = found(place_swept(
+        room(&[rect(0.0, 4.0, 0.0, 1.6)]),
+        turning_circle(),
+        vec![swinging_south(1.3, 1.6, 0.0)],
+    ));
+    // Only east of the sector is there room.
+    assert!(centre[0] > 2.2, "{centre:?}");
+    // One door given twice with different sectors is refused.
+    assert_eq!(
+        PlacementRequest::new(id("room"), turning_circle(), Vec::new())
+            .with_swept_doors(vec![
+                swinging_south(1.3, 1.6, 0.0),
+                swinging_south(2.3, 1.6, 0.0)
+            ])
+            .unwrap_err(),
+        FreeSpaceError::ConflictingSweptDoors
+    );
 }

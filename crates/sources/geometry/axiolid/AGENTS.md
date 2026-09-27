@@ -24,6 +24,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   absence proven against the box grown by `KNIFE_EDGE_METRES`; never prove
   absence against the ungrown box. Witness candidates include slab
   midpoints, so a free region with a hole always offers interior points.
+  Swept door sectors (`swept_rings`, `SWEEP_SEGMENTS` chords per quarter
+  turn) join the scene twice: circumscribed in `Scene::obstacles`, which
+  witnesses avoid, inscribed in `Scene::sure`, against which absence is
+  proven; never prove absence against `obstacles` or find a witness
+  against `sure`.
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside
@@ -41,7 +46,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   The skeleton is called directly (axiolid-triangulate 0.3.1 carries the
   fix for axiolid/kernel#190); a piece whose skeleton the kernel refuses is
   unmapped, never guessed. Half widths are distances to the free area widened by the grid
-  snapping. Door swings are not subtracted.
+  snapping. Swept sectors are in the scene as for placement: pieces avoid
+  the circumscribed polygons, possible pieces the inscribed ones, and a
+  half width runs from the free area less the former to the free area
+  less the latter.
 - `src/containment.rs` answers `assess_containment` for the free-space
   service: the overlay difference of the footprint's bounds (the exact
   rectangle, or a cylinder's inscribed and circumscribed 64-gons) less the
@@ -114,7 +122,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   width (`with_clear_width`, or the request's
   `with_stated_clear_widths`; the narrower of the two counts, and a stated
   width bounds a void's crossing from above). Connector passages are never
-  definite.
+  definite. Swept sectors (`Ground`): hubs stand clear of every
+  circumscribed swing, a portal's landings, spokes and crossing clear of
+  every swing but its own (`Ground::past`); mid-line bounds ignore swings.
+  A surface touching no other and joined by no connector is split into
+  possible pieces (`Parts::split`: `erode_outer` by the radius less
+  `MARGIN`, less obstacles and inscribed swings `dilate_inner`ed by as
+  much); a face reaches the pieces within the radius plus `MARGIN` of its
+  half band and its own swing (`dilate_outer`), and the hub's piece always,
+  with width zero when out of reach, and faces whose zones meet are joined.
+  Never split a surface that touches another or a connector joins: a body
+  may stand across the shared boundary.
 - `src/metric_routing.rs` implements `MetricRoutingService` on the origin's
   level. `Blocked` needs complete evidence (every declared surface and portal
   measured, no connector touching the level) and a separation of the free
@@ -263,10 +281,9 @@ an API.
 - axiolid/kernel#174: publish certified `boundary_distance`/`boundary_clearance`,
   so curved parts can get exact clearances instead of tessellated estimates.
 - One-sided disc morphology (`Region::erode_inner` and friends, #163) is
-  published in axiolid-overlay 0.3.2, but walkability does not use it yet.
-  With it, walkability could erode free regions by half the width and prove
-  gaps inside surfaces blocking, and metric routing could report such routes
-  blocked instead of refusing them.
+  published in axiolid-overlay 0.3.2. Walkability splits surfaces touching
+  nothing into possible pieces with it; surfaces touching others stay
+  whole, and metric routing still refuses routes it could report blocked.
 - The single-route service still treats the kernel path as a lower bound or
   proposal only; the many-target queries of `axiolid-route` 0.3.2 use a point
   path as a witness only.

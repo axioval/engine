@@ -16,7 +16,10 @@ The request supplies deterministic source-qualified sets of:
   (`WalkabilityRequest::with_stated_clear_widths`): what the rule reads from
   its source as the width a door's leaf and lining leave. Each must be
   finite, positive and name a requested entrance once, or the request is
-  refused (`InvalidStatedClearWidth`).
+  refused (`InvalidStatedClearWidth`);
+- optionally, swept doors (`WalkabilityRequest::with_swept_doors`): the
+  doors whose leaves' swing sectors are obstacles (see
+  [Door swings as obstacles](./free-space.md#door-swings-as-obstacles)).
 
 Semantic selectors run before this service. IFC placements, meshes, B-reps, and native kernel types never enter the request.
 
@@ -112,8 +115,31 @@ counts, and a stated width bounds even an opening's void from above.
   face, the connector of a climb), so in a set federating several files it
   names that object's own file. The snapshot's completeness is set-level and
   cites the source the host gave the service.
-- **Refusals.** `WalkabilityError::Unavailable` for moving envelopes (door
-  swings are not measured), unmeasured or undescribed obstacles, tessellated
+- **Door swings.** The request's swept doors (`with_swept_doors`, see
+  [Door swings as obstacles](./free-space.md#door-swings-as-obstacles)) are
+  obstacles on every surface a sector stands on. Hubs stand clear of every
+  swing's circumscribed polygon; a portal's landings, spokes and crossing
+  are proven clear of every swing but the portal's own, which the body
+  walks through. Mid-line width bounds ignore swings, so they stay upper
+  bounds.
+- **Pieces.** A surface that touches no other selected surface and that no
+  connector joins is split into its possible pieces: its footprint eroded
+  from outside (`Region::erode_outer`) by half the width less 0.1 mm, less
+  the obstacles' band footprint and every swing's inscribed polygon grown
+  from inside by as much. Every centre of the body clear of walls,
+  obstacles and swings lies in one piece with a 0.1 mm disc around it.
+  `surface:{id}` is the piece holding the hub (the first when there is no
+  hub) and `surface:{id}#{k}` every other one, all mapped to the surface. A
+  body leaves the surface only through a portal's half on that side or the
+  portal's own swing, so a portal face is joined to each piece within half
+  the width (and 0.1 mm) of them, grown from outside, and to the hub's piece
+  always, with no width (`:separated` in its locator) when it is not within
+  reach. Two faces whose such zones meet are joined without a width bound,
+  since a body may pass between them without standing wholly on the
+  surface. A surface touching another, or joined by a connector, stays one
+  region.
+- **Refusals.** `WalkabilityError::Unavailable` for moving envelopes (use
+  swept doors instead), unmeasured or undescribed obstacles, tessellated
   surfaces, portals or obstacles inside a band, surfaces that are not closed
   or not flat underneath, portals without a single through-direction and
   portals opening onto two surfaces at the same distance.
@@ -124,10 +150,10 @@ Verdicts available today: `Reachable` wherever a sweep is proven;
 nothing joins the surfaces at all; `Indeterminate` otherwise, notably for a
 door whose clear width is not stated, a crossing whose landing is obstructed,
 and any route through a connector. A gap narrower than the width inside a
-surface is not detected; it can only make a route `Indeterminate`, never
-`Unreachable`. Once one-sided erosion (`Region::erode_inner`,
-axiolid-overlay 0.3.1) is published, the free region eroded by half the width
-on its inner side can bound surfaces and gaps as well.
+surface that touches no other surface splits it into pieces, so a route
+needing that gap is `Unreachable`, its cut the face-to-piece passages of
+width zero; inside surfaces that touch, such a gap is still not detected
+and can only make a route `Indeterminate`.
 
 The `accessible-route` capability (see [capabilities](./capabilities.md#accessible-route)) is built on this contract: one snapshot for its mobility profile, its own admission per passage, and the blocking passages as the related elements of a finding.
 

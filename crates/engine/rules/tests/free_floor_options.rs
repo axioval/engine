@@ -11,11 +11,12 @@ use axioval_engine::{
     CompiledRule, CompletePlacementEvidence, CompleteSupportEvidence, ElevationBand,
     FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
     MetricDirection, MetricFrame, MetricPoint, NotEvaluatedReason, PlacementDomain,
-    PlacementOutcome, PlacementRequest, RuleCapability,
+    PlacementOutcome, PlacementRequest, RuleCapability, SweptDoor,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, ObjectId};
 use axioval_rules::{FreeFloorCircle, FreeFloorRectangle};
+use common::doors::{Doors, hinged, sliding};
 use common::{Model, id, kind, number, rule, selector, source, string, strings, unevaluated};
 
 /// Finds a placement unless a blocking object is among the obstacles, and
@@ -41,6 +42,7 @@ impl FreeSpaceService for Scripted {
         if request
             .obstacles()
             .iter()
+            .chain(request.swept_doors().iter().map(SweptDoor::door))
             .any(|obstacle| self.blocking.contains(obstacle))
         {
             return Ok(PlacementOutcome::NoPlacement(
@@ -98,6 +100,16 @@ fn run(
     rule: &CompiledRule,
     blocking: &[&str],
 ) -> (CapabilityEvaluation, Vec<PlacementRequest>) {
+    run_with_doors(model, capability, rule, blocking, Doors::default())
+}
+
+fn run_with_doors(
+    model: Model,
+    capability: &dyn RuleCapability,
+    rule: &CompiledRule,
+    blocking: &[&str],
+    doors: Doors,
+) -> (CapabilityEvaluation, Vec<PlacementRequest>) {
     let service = Arc::new(Scripted {
         blocking: blocking.iter().map(|local| id(local)).collect(),
         requests: Mutex::new(Vec::new()),
@@ -107,6 +119,7 @@ fn run(
         services
             .register(FreeSpaceServiceHandle::new(handle))
             .unwrap();
+        services.register(doors.handle()).unwrap();
     });
     let requests = service.requests.lock().unwrap().clone();
     (evaluation, requests)
@@ -316,4 +329,83 @@ fn the_rectangle_takes_the_same_options() {
         evaluation.findings()[0].message,
         "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE"
     );
+}
+
+fn with_doors() -> Model {
+    model()
+        .object("door", "door")
+        .object("slider", "door")
+        .object("hatch", "door")
+}
+
+fn doors() -> Doors {
+    Doors::default()
+        .door(
+            "door",
+            vec![hinged(
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                0.9,
+                false,
+            )],
+            0.9,
+            None,
+        )
+        .door(
+            "slider",
+            vec![sliding([3.0, 0.0, 0.0], [1.0, 0.0, 0.0], 0.9)],
+            0.9,
+            None,
+        )
+}
+
+/// `subtract_door_swings` sends the swings of the selected doors that sweep
+/// floor; a sliding door sweeps none.
+#[test]
+fn selected_door_swings_are_sent_as_obstacles() {
+    let rule = circle(vec![
+        ("obstacles", selector(kind("furniture"))),
+        ("subtract_door_swings", selector(kind("door"))),
+    ]);
+    let doors = doors().unknown(
+        "hatch",
+        axioval_engine::DoorLeavesError::NotStated("no operation".into()),
+    );
+    // The hatch's leaves are unknown: its swing may cover a fit.
+    let (evaluation, requests) = run_with_doors(with_doors(), &FreeFloorCircle, &rule, &[], doors);
+    assert_eq!(
+        requests[0]
+            .swept_doors()
+            .iter()
+            .map(|door| door.door().clone())
+            .collect::<Vec<_>>(),
+        ids(&["door"])
+    );
+    assert!(evaluation.findings().is_empty());
+    let open = unevaluated(&evaluation);
+    assert_eq!(open.len(), 1, "{evaluation:#?}");
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("test:model/hatch"),
+        "{open:?}"
+    );
+    // A proof of absence stands whatever the unknown swing covers.
+    let doors = self::doors().unknown(
+        "hatch",
+        axioval_engine::DoorLeavesError::NotStated("no operation".into()),
+    );
+    let (evaluation, _) = run_with_doors(with_doors(), &FreeFloorCircle, &rule, &["door"], doors);
+    assert_eq!(evaluation.findings().len(), 1, "{evaluation:#?}");
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+    // Without the option no swing is sent.
+    let (_, requests) = run_with_doors(
+        with_doors(),
+        &FreeFloorCircle,
+        &circle(vec![("obstacles", selector(kind("furniture")))]),
+        &[],
+        self::doors(),
+    );
+    assert!(requests[0].swept_doors().is_empty());
 }

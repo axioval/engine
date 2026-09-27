@@ -12,9 +12,9 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkabilityService};
 use axioval_engine::{
-    LengthInterval, VerticalConnector, VerticalConnectorKind, WalkabilityError,
-    WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle,
-    WalkabilitySnapshot,
+    LengthInterval, MetricDirection, PassageAdmission, SweptDoor, SwingSector, VerticalConnector,
+    VerticalConnectorKind, WalkabilityError, WalkabilityRegionId, WalkabilityRequest,
+    WalkabilityRouteOutcome, WalkabilityServiceHandle, WalkabilitySnapshot,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -245,13 +245,142 @@ fn an_obstacle_in_front_of_the_door_is_not_proven_passable() {
         false,
     )
     .unwrap();
-    // The landing behind the door is taken, so no sweep is proven; the
-    // cabinet does not close the door either, so the route stays undecided.
+    // The cabinet stands 0.1 m in front of the doorway and reaches past it
+    // on both sides: no body 0.8 m wide leaves the door into `b`, so every
+    // possible piece of `b` lies beyond the door's reach.
+    let snapshot = snapshot(service, &request).unwrap();
+    let outcome = snapshot.route_between(&id("a"), &id("b")).unwrap();
+    assert_eq!(outcome, WalkabilityRouteOutcome::Unreachable);
+    let blocking = snapshot
+        .blocking_passages(&id("a"), &id("b"), |_| PassageAdmission::Admitted)
+        .unwrap();
+    assert!(
+        blocking
+            .iter()
+            .all(|passage| passage.evidence().locator.contains(":separated")),
+        "{blocking:#?}"
+    );
+    assert!(!blocking.is_empty());
+}
+
+#[test]
+fn a_cabinet_beside_the_door_leaves_room_to_pass() {
+    // Moved 1 m into `b`, the cabinet leaves a 0.8 m body room between it
+    // and the wall; the route is still undecided, as no sweep is proven
+    // round it, but it is no longer ruled out.
+    let geometry = model(0.9).with_mesh(id("cabinet"), cuboid([5.3, 0.5, 0.0], [6.0, 2.5, 2.0]));
+    let service =
+        AxiolidWalkabilityService::new(geometry, source()).with_clear_width(id("door"), 0.85);
+    let mut obstacles: Vec<ObjectId> = WALLS.iter().map(|local| id(local)).collect();
+    obstacles.push(id("cabinet"));
+    let request = WalkabilityRequest::try_new(
+        vec![id("a"), id("b")],
+        vec![id("door")],
+        obstacles,
+        0.8,
+        None,
+        true,
+        false,
+    )
+    .unwrap();
     let outcome = snapshot(service, &request)
         .unwrap()
         .route_between(&id("a"), &id("b"))
         .unwrap();
-    assert_eq!(outcome, WalkabilityRouteOutcome::Indeterminate);
+    assert_ne!(outcome, WalkabilityRouteOutcome::Unreachable);
+}
+
+/// A 0.9 m leaf hinged at `(x, y)`, closed along +x and opening towards -y.
+fn leaf_swinging_south(door: &str, x: f64, y: f64) -> SweptDoor {
+    SweptDoor::try_new(
+        id(door),
+        vec![
+            SwingSector::try_new(
+                [x, y, 0.0],
+                0.9,
+                MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap(),
+                MetricDirection::try_new([0.0, -1.0, 0.0]).unwrap(),
+                false,
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_swing_across_a_room_separates_it_but_not_its_own_door() {
+    // A hatch hinged on `b`'s north wall at x 5 swings south over y 3.1..4;
+    // a leaf hinged at the door's north jamb swings over the door's
+    // landing. Neither closes `b`: the door's own swing is walked through.
+    let service =
+        AxiolidWalkabilityService::new(model(0.9), source()).with_clear_width(id("door"), 0.85);
+    let request = request(0.8)
+        .with_swept_doors(vec![
+            leaf_swinging_south("hatch", 5.0, 4.0),
+            SweptDoor::try_new(
+                id("door"),
+                vec![
+                    SwingSector::try_new(
+                        [4.2, 1.9, 0.0],
+                        0.9,
+                        MetricDirection::try_new([0.0, -1.0, 0.0]).unwrap(),
+                        MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap(),
+                        false,
+                    )
+                    .unwrap(),
+                ],
+            )
+            .unwrap(),
+        ])
+        .unwrap();
+    let snapshot = snapshot(service, &request).unwrap();
+    assert!(matches!(
+        snapshot.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    assert!(snapshot.evidence().locator.contains(":swept=2:"));
+}
+
+#[test]
+fn a_swing_closing_a_corridor_cuts_off_the_room_beyond() {
+    // `b` is cut down to a corridor 1.2 m wide (y 1..2.2) by walls north
+    // and south of it; a hatch in its north wall at x 6 swings across it.
+    let geometry = model(0.9)
+        .with_mesh(id("south"), cuboid([4.2, 0.0, 0.0], [8.0, 1.0, 3.0]))
+        .with_mesh(id("north"), cuboid([4.2, 2.2, 0.0], [8.0, 4.0, 3.0]));
+    let mut obstacles: Vec<ObjectId> = WALLS.iter().map(|local| id(local)).collect();
+    obstacles.extend([id("south"), id("north")]);
+    let corridor = |swept: Vec<SweptDoor>| {
+        let service = AxiolidWalkabilityService::new(geometry.clone(), source())
+            .with_clear_width(id("door"), 0.85);
+        let request = WalkabilityRequest::try_new(
+            vec![id("a"), id("b")],
+            vec![id("door")],
+            obstacles.clone(),
+            0.8,
+            None,
+            true,
+            false,
+        )
+        .unwrap()
+        .with_swept_doors(swept)
+        .unwrap();
+        snapshot(service, &request).unwrap()
+    };
+    // The corridor's far end is its own piece of `b` once the swing is
+    // subtracted; `b` is still reached, but its east end is not.
+    let open = corridor(Vec::new());
+    let closed = corridor(vec![leaf_swinging_south("hatch", 6.0, 2.2)]);
+    let pieces = |snapshot: &WalkabilitySnapshot| {
+        snapshot
+            .regions()
+            .iter()
+            .filter(|region| region.id().as_str().starts_with("surface:cad:model/b"))
+            .count()
+    };
+    assert_eq!(pieces(&open), 1);
+    assert_eq!(pieces(&closed), 2);
 }
 
 #[test]

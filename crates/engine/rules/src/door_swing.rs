@@ -14,12 +14,107 @@
 use axioval_engine::{
     BoxClearance, ClearanceShape, ContainmentOutcome, ContainmentRequest, ConvexPlanRegion,
     DoorLeaves, DoorLeavesError, FreeSpaceServiceHandle, LeafMotion, MetricDirection, MetricFrame,
-    MetricPoint, NotEvaluatedReason, ObjectFrameServiceHandle, SwingSector,
+    MetricPoint, NotEvaluatedReason, ObjectFrameServiceHandle, RuleContext, SweptDoor, SwingSector,
 };
+use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::component_clearance::free_space_error;
+use crate::selection::select_objects;
 use crate::support::Unavailable;
+
+/// The doors whose swings a rule subtracts (its `subtract_door_swings`
+/// selection), each with the sectors its leaves sweep.
+#[derive(Default)]
+pub(crate) struct Swings {
+    /// Surely selected doors that sweep floor.
+    pub(crate) sure: Vec<SweptDoor>,
+    /// Doors the selection cannot decide that sweep floor.
+    pub(crate) maybe: Vec<SweptDoor>,
+    /// Doors that may be selected but whose leaves are unknown, with why.
+    pub(crate) unknown: Vec<(ObjectId, String)>,
+    /// The leaves' provenance.
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+impl Swings {
+    /// Reads the swings of every door `selector` picks or cannot decide. A
+    /// door without a hinged leaf sweeps nothing; a door whose leaves
+    /// cannot be read is unknown, never left out.
+    ///
+    /// # Errors
+    ///
+    /// A selection undecided for no one object.
+    pub(crate) fn select(
+        context: &RuleContext<'_>,
+        selector: Option<&Selector>,
+    ) -> Result<Self, Unavailable> {
+        let mut swings = Self::default();
+        let Some(selector) = selector else {
+            return Ok(swings);
+        };
+        let (picked, outcomes) = select_objects(context, selector);
+        let mut doors: Vec<(ObjectId, bool)> = picked
+            .iter()
+            .map(|object| (object.id.clone(), true))
+            .collect();
+        for outcome in outcomes.not_evaluated_outcomes() {
+            match outcome.object_id() {
+                Some(object) => doors.push((object.clone(), false)),
+                None => {
+                    return Err((
+                        outcome.reason().clone(),
+                        format!(
+                            "the door swing selection is undecided: {}",
+                            outcome.message()
+                        ),
+                    ));
+                }
+            }
+        }
+        let Some(frames) = context.services.get::<ObjectFrameServiceHandle>() else {
+            for (door, _) in doors {
+                swings
+                    .unknown
+                    .push((door, "the object-frame service is not registered".into()));
+            }
+            return Ok(swings);
+        };
+        for (door, sure) in doors {
+            let swept = leaves(frames, &door).and_then(|leaves| {
+                swings.evidence.push(leaves.evidence().clone());
+                SweptDoor::of(&leaves).map_err(|error| (reason(&error), error.to_string()))
+            });
+            match swept {
+                Ok(None) => {}
+                Ok(Some(swept)) if sure => swings.sure.push(swept),
+                Ok(Some(swept)) => swings.maybe.push(swept),
+                Err((_, why)) => swings.unknown.push((door, why)),
+            }
+        }
+        Ok(swings)
+    }
+
+    /// Why the swings are not all decided, if they are not.
+    pub(crate) fn undecided(&self) -> Option<String> {
+        let mut why: Vec<String> = self
+            .maybe
+            .iter()
+            .map(|door| {
+                format!(
+                    "whether the swing of {} is subtracted is undecided",
+                    door.door()
+                )
+            })
+            .collect();
+        why.extend(
+            self.unknown
+                .iter()
+                .map(|(door, why)| format!("{door}: {why}")),
+        );
+        (!why.is_empty()).then(|| why.join("; "))
+    }
+}
 
 /// Chords per quarter turn: the radial gap is under 0.12 mm per metre.
 pub(crate) const SEGMENTS: usize = 64;

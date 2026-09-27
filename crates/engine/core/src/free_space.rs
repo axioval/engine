@@ -4,6 +4,7 @@
 //! backend. This module carries canonical metric requests and reviewable evidence.
 
 use crate::circulation::{CirculationMap, CirculationRequest};
+use crate::door_leaves::{SweptDoor, tidy_swept};
 use crate::services::reviewable_exact_evidence;
 use crate::{MetricPoint, MobilityProfile, ThresholdVerdict};
 use axioval_ir::{Evidence, ObjectId};
@@ -54,6 +55,9 @@ pub enum FreeSpaceError {
     InvalidElevationBand,
     #[error("a merged scope is the search scope itself or one of its obstacles")]
     MergedScopeConflict,
+    /// One door is given twice with different swept sectors.
+    #[error("a swept door is given twice with different sectors")]
+    ConflictingSweptDoors,
     #[error("free-space backend returned evidence for another request")]
     ResponseRequestMismatch,
     #[error("free-space geometry is unavailable for `{0}`")]
@@ -503,6 +507,7 @@ pub struct PlacementRequest {
     domain: PlacementDomain,
     band: Option<ElevationBand>,
     merged: Vec<ObjectId>,
+    swept: Vec<SweptDoor>,
 }
 impl PlacementRequest {
     pub fn new(scope: ObjectId, shape: PlacementShape, mut obstacles: Vec<ObjectId>) -> Self {
@@ -515,6 +520,7 @@ impl PlacementRequest {
             domain: PlacementDomain::Unconstrained,
             band: None,
             merged: Vec::new(),
+            swept: Vec::new(),
         }
     }
     pub fn new_in_domain(
@@ -548,6 +554,7 @@ impl PlacementRequest {
             domain,
             band: None,
             merged: Vec::new(),
+            swept: Vec::new(),
         })
     }
     /// Counts obstacles only inside `band` above the scope's floor.
@@ -570,6 +577,22 @@ impl PlacementRequest {
         }
         self.merged = merged;
         Ok(self)
+    }
+    /// Counts the sectors `swept` doors sweep as obstacles (see
+    /// [`SweptDoor`]): a witness must stay clear of their circumscribed
+    /// polygons, a proof of absence holds against their inscribed ones.
+    ///
+    /// # Errors
+    ///
+    /// [`FreeSpaceError::ConflictingSweptDoors`] when one door is given
+    /// twice with different sectors.
+    pub fn with_swept_doors(mut self, swept: Vec<SweptDoor>) -> Result<Self, FreeSpaceError> {
+        self.swept = tidy_swept(swept).ok_or(FreeSpaceError::ConflictingSweptDoors)?;
+        Ok(self)
+    }
+    /// The doors whose swept sectors are obstacles, sorted by door.
+    pub fn swept_doors(&self) -> &[SweptDoor] {
+        &self.swept
     }
     pub fn scope(&self) -> &ObjectId {
         &self.scope

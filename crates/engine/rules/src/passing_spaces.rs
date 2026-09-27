@@ -22,7 +22,7 @@ use axioval_engine::{
     MetricFrame, MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingServiceHandle,
     MobilityProfile, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlacementDomain,
     PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape, RuleContext,
-    SignedDistanceInterval,
+    SignedDistanceInterval, SweptDoor,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -151,6 +151,8 @@ pub(crate) struct Ground<'a> {
     /// Portals the route may pass.
     pub(crate) portals: &'a BTreeSet<ObjectId>,
     pub(crate) obstacles: &'a [ObjectId],
+    /// Doors whose swept sectors obstruct a passing space too.
+    pub(crate) swept: &'a [SweptDoor],
     /// The body's width, which the route is walked for.
     pub(crate) body: f64,
 }
@@ -243,18 +245,20 @@ fn walk(
         scope,
         merged,
         obstacles: &obstacles,
+        swept: ground.swept,
     };
     search.along(&points, &format!("the route from {from}"), evidence)
 }
 
 /// Whether the polyline `points` in `scope` (on its floor) has its passing
 /// spaces, its ends counting as passing spaces; `what` names it in a
-/// finding. `obstacles` must not hold the scope.
+/// finding. `obstacles` must not hold the scope; the sectors `swept`
+/// doors sweep obstruct a passing space as well.
 pub(crate) fn judge_path(
     passing: &PassingSpaces,
     free_space: &FreeSpaceServiceHandle,
     scope: &ObjectId,
-    obstacles: &[ObjectId],
+    (obstacles, swept): (&[ObjectId], &[SweptDoor]),
     points: &[[f64; 3]],
     what: &str,
 ) -> Spacing {
@@ -264,6 +268,7 @@ pub(crate) fn judge_path(
         scope,
         merged: &[],
         obstacles,
+        swept,
     };
     match search.along(points, what, Vec::new()) {
         Ok(spacing) => spacing,
@@ -412,6 +417,7 @@ struct Search<'a> {
     scope: &'a ObjectId,
     merged: &'a [ObjectId],
     obstacles: &'a [ObjectId],
+    swept: &'a [SweptDoor],
 }
 
 impl Search<'_> {
@@ -472,6 +478,7 @@ impl Search<'_> {
             PlacementDomain::FrameOffsets(offsets),
         )
         .and_then(|request| request.with_merged_scopes(self.merged.to_vec()))
+        .and_then(|request| request.with_swept_doors(self.swept.to_vec()))
         .map_err(error)?;
         self.free_space.find_placement(&request).map_err(error)
     }

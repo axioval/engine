@@ -77,9 +77,15 @@ pub(crate) fn union(rings: &[Ring], tolerance: Tolerance) -> Result<Region, Free
 }
 
 /// A search scene: where a centre may lie, and what it must avoid.
+///
+/// What the obstacles occupy is bracketed: `obstacles` contains it and
+/// `sure` lies inside it. They differ only by swept door sectors, whose
+/// footprints are polygonised from both sides. A witness must avoid
+/// `obstacles`; an absence is proven against `sure`.
 pub(crate) struct Scene {
     pub(crate) scope: Region,
     pub(crate) obstacles: Region,
+    pub(crate) sure: Region,
     pub(crate) tolerance: Tolerance,
     /// The frame-offset box the centre must also lie in, if any.
     pub(crate) window: Option<Window>,
@@ -202,16 +208,19 @@ fn circumscribed(centre: Point2, radius: f64) -> Ring {
 impl Scene {
     /// Centres where the convex, centrally symmetric `shape` (centred on the
     /// origin) fits. Symmetry makes the reflected shape the shape itself.
-    fn free_for(&self, shape: &Ring) -> Result<Region, FreeSpaceError> {
+    /// A witness is sought among the centres clear of every possible
+    /// obstacle; an absence (`absence`) is proven among those clear of the
+    /// sure ones.
+    fn free_for(&self, shape: &Ring, absence: bool) -> Result<Region, FreeSpaceError> {
+        let obstacles = if absence { &self.sure } else { &self.obstacles };
         let room = self
             .scope
             .minkowski_erosion(shape, self.tolerance)
             .map_err(|e| unavailable("erosion", e))?;
-        if room.is_empty() || self.obstacles.is_empty() {
+        if room.is_empty() || obstacles.is_empty() {
             return Ok(room);
         }
-        let blocked = self
-            .obstacles
+        let blocked = obstacles
             .minkowski_sum(shape, self.tolerance)
             .map_err(|e| unavailable("dilation", e))?;
         room.difference(&blocked, self.tolerance)
@@ -386,7 +395,8 @@ pub(crate) fn fixed_rectangle(
     right: Axis,
 ) -> Result<Search, FreeSpaceError> {
     let origin = Point2::new(0.0, 0.0);
-    let free = scene.for_witness(scene.free_for(&rectangle(origin, width, depth, right))?)?;
+    let free =
+        scene.for_witness(scene.free_for(&rectangle(origin, width, depth, right), false)?)?;
     if !free.is_empty() || scene.window.is_some() {
         if let Some(centre) = scene.witness(&free, |c| rectangle(c, width, depth, right))? {
             return Ok(Search::Found { centre, right });
@@ -401,7 +411,7 @@ pub(crate) fn fixed_rectangle(
             "the rectangle is too small to prove absent".into(),
         ));
     }
-    if scene.nowhere_in_domain(&scene.free_for(&rectangle(origin, w, d, right))?)? {
+    if scene.nowhere_in_domain(&scene.free_for(&rectangle(origin, w, d, right), true)?)? {
         return Ok(Search::Nowhere);
     }
     Err(FreeSpaceError::Unavailable(if free.is_empty() {
@@ -443,7 +453,7 @@ pub(crate) fn any_rectangle(
         spent += 1;
         let middle = f64::midpoint(low, high);
         let right = Axis::at(middle);
-        let free = scene.free_for(&rectangle(origin, width, depth, right))?;
+        let free = scene.free_for(&rectangle(origin, width, depth, right), false)?;
         if !free.is_empty()
             && let Some(centre) = scene.witness(&free, |c| rectangle(c, width, depth, right))?
         {
@@ -454,7 +464,12 @@ pub(crate) fn any_rectangle(
         // rectangle that deep inside the middle one is inside every rotation.
         let shrink = half_diagonal * (high - low) / 2.0 + KNIFE_EDGE_METRES;
         let (w, d) = (width - 2.0 * shrink, depth - 2.0 * shrink);
-        if w > 0.0 && d > 0.0 && scene.free_for(&rectangle(origin, w, d, right))?.is_empty() {
+        if w > 0.0
+            && d > 0.0
+            && scene
+                .free_for(&rectangle(origin, w, d, right), true)?
+                .is_empty()
+        {
             continue;
         }
         open.push((low, middle));
@@ -495,11 +510,11 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
         ));
     }
     let outer = scene.scope.erode_outer(shrunk, t).map_err(err)?;
-    let outer = if scene.obstacles.is_empty() || outer.is_empty() {
+    let outer = if scene.sure.is_empty() || outer.is_empty() {
         outer
     } else {
         outer
-            .difference(&scene.obstacles.dilate_inner(shrunk, t).map_err(err)?, t)
+            .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
             .map_err(err)?
     };
     if scene.nowhere_in_domain(&outer)? {

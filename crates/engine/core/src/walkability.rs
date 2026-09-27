@@ -1,4 +1,5 @@
 //! Source-neutral walkable-region topology and service contracts.
+use crate::door_leaves::{SweptDoor, tidy_swept};
 use crate::{LengthInterval, ServiceRegistry, ServiceRegistryError};
 use axioval_ir::{Evidence, ObjectId};
 use std::{
@@ -42,6 +43,9 @@ pub enum WalkabilityError {
     /// that is not a requested entrance, or is stated twice.
     #[error("stated clear width is invalid or names no requested entrance")]
     InvalidStatedClearWidth,
+    /// One door is given twice with different swept sectors.
+    #[error("a swept door is given twice with different sectors")]
+    ConflictingSweptDoors,
     /// The backend refused: evidence it would need is missing, approximate
     /// or outside what it can measure. Never a negative verdict.
     #[error("walkability unavailable: {0}")]
@@ -96,6 +100,7 @@ pub struct WalkabilityRequest {
     include_motion_envelopes: bool,
     connectors: Vec<VerticalConnector>,
     stated_clear_widths: BTreeMap<ObjectId, f64>,
+    swept: Vec<SweptDoor>,
 }
 impl WalkabilityRequest {
     pub fn try_new(
@@ -126,7 +131,27 @@ impl WalkabilityRequest {
             include_motion_envelopes,
             connectors: Vec::new(),
             stated_clear_widths: BTreeMap::new(),
+            swept: Vec::new(),
         })
+    }
+    /// Counts the sectors `swept` doors sweep as obstacles on the surfaces
+    /// they stand on (see [`SweptDoor`]): a definite passage stays clear of
+    /// their circumscribed polygons, a proof that none exists holds against
+    /// their inscribed ones. A requested entrance is walked through, so a
+    /// backend never counts its own swing against a passage through it,
+    /// only against passages past it.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::ConflictingSweptDoors`] when one door is given
+    /// twice with different sectors.
+    pub fn with_swept_doors(mut self, swept: Vec<SweptDoor>) -> Result<Self, WalkabilityError> {
+        self.swept = tidy_swept(swept).ok_or(WalkabilityError::ConflictingSweptDoors)?;
+        Ok(self)
+    }
+    /// The doors whose swept sectors are obstacles, sorted by door.
+    pub fn swept_doors(&self) -> &[SweptDoor] {
+        &self.swept
     }
     /// States, in metres, the clear width a requested entrance's leaf and
     /// lining leave, as the rule reads it from its source (a door's stated

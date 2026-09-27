@@ -30,9 +30,12 @@
 //!   positions are approximate. Each node's half width is its distance to
 //!   the free area's boundary, widened by the overlay's grid snapping.
 //!
-//! Door swings are not subtracted: a door's leaf and its sweep are not
-//! known (the source reports no swing), so only what the obstacles occupy
-//! counts.
+//! - Swept door sectors (the request's) are obstacles over the whole band,
+//!   bracketed by `SwingSector::plan_bounds`: pieces keep clear of the
+//!   circumscribed polygons, possible pieces only of the inscribed ones,
+//!   and a node's half width runs from the free area less the former to
+//!   the free area less the latter. An entrance's own swing is never among
+//!   them: the request drops it.
 
 use axiolid_core::{Point2, Tolerance};
 use axiolid_overlay::{Polygon, Region};
@@ -184,18 +187,26 @@ impl AxiolidFreeSpaceService {
             request.scope(),
             &[],
             request.obstacles(),
+            request.swept_doors(),
             request.band(),
             request.width_metres() + request.tolerance_metres(),
             t,
         )?;
-        let free = if scene.obstacles.is_empty() {
-            scene.scope.clone()
-        } else {
-            scene
-                .scope
-                .difference(&scene.obstacles, t)
-                .map_err(|e| unavailable("free area", e))?
+        // The free area bracketed: less every possible obstacle (`free`),
+        // and less the sure ones only (`roomy`). They differ by the swept
+        // sectors' polygonisation.
+        let less = |obstacles: &Region| {
+            if obstacles.is_empty() {
+                Ok(scene.scope.clone())
+            } else {
+                scene
+                    .scope
+                    .difference(obstacles, t)
+                    .map_err(|e| unavailable("free area", e))
+            }
         };
+        let free = less(&scene.obstacles)?;
+        let roomy = less(&scene.sure)?;
         let mut inner = scene.scope.erode_inner(radius, t).map_err(err)?;
         if !scene.obstacles.is_empty() && !inner.is_empty() {
             inner = inner
@@ -206,9 +217,9 @@ impl AxiolidFreeSpaceService {
         // as the path keeps a sliver rather than being snapped shut.
         let shrunk = radius - KNIFE_EDGE_METRES;
         let mut outer = scene.scope.erode_outer(shrunk, t).map_err(err)?;
-        if !scene.obstacles.is_empty() && !outer.is_empty() {
+        if !scene.sure.is_empty() && !outer.is_empty() {
             outer = outer
-                .difference(&scene.obstacles.dilate_inner(shrunk, t).map_err(err)?, t)
+                .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
                 .map_err(err)?;
         }
         let pieces: Vec<Region> = inner
@@ -277,9 +288,14 @@ impl AxiolidFreeSpaceService {
                     NodeKind::Isolated => CirculationNodeKind::Isolated,
                     other => return Err(unavailable("skeleton node", other)),
                 };
-                let distance = boundary_distance(node.point, &free);
+                // The node lies in `free`, which lies in `roomy`: the free
+                // area's true boundary lies between theirs.
+                let (near, far) = (
+                    boundary_distance(node.point, &free),
+                    boundary_distance(node.point, &roomy),
+                );
                 let half_width =
-                    LengthInterval::try_new((distance - margin).max(0.0), distance + margin)
+                    LengthInterval::try_new((near - margin).max(0.0), far.max(near) + margin)
                         .map_err(|e| unavailable("half width", e))?;
                 nodes.push(CirculationNode::try_new(
                     [node.point.x, node.point.y, floor],

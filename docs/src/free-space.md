@@ -80,6 +80,7 @@ Two request options shape the search:
 
 - `with_band(ElevationBand)` states the band, from and to metres above the scope's floor, in which obstacles count. Without it the band runs from the floor up by the shape's height (`effective_band`). A band must start at or above the floor and end above its start.
 - `with_merged_scopes` searches the union of the scope and further scopes, such as the spaces of one group. A merged scope may be neither the scope nor an obstacle (`MergedScopeConflict`).
+- `with_swept_doors` counts the floor the given doors' leaves sweep as obstacles (see [Door swings as obstacles](#door-swings-as-obstacles)).
 
 - `Found` carries one exact, scope-grounded placement frame. Supported domains additionally require exact evidence that the whole candidate base is supported by the requested source-qualified object at that exact frame and within the requested gap.
 - `NoPlacement` requires complete exact search evidence.
@@ -104,6 +105,8 @@ The search runs on the scope's own floor: `Unconstrained` and `Supported` by the
 
 A frame-offset domain is searched exactly for fixed orientations: the configuration space is intersected with the box of centres the right and forward offsets allow. The anchor must be exactly upright, and the scope's floor must lie within the up offsets, or the search refuses rather than proving the domain empty. A witness comes from the offset box as computed and must also pass `contains_frame`; a proof of absence needs the configuration space of the shrunk shape to miss even the box grown by 1 µm, so rounding the box's corners cannot hide a centre on its edge. A box pinned to one offset has no area: the configuration space's candidates are moved onto it and re-verified, and its absence is proven with the grown box. For a cylinder the same intersection applies to the inner and outer configuration spaces.
 
+Swept door sectors join the obstacles as their circumscribed polygons (32 chords per quarter turn) for every witness, and as their inscribed polygons for every proof of absence; with no swept door both are the same obstacles.
+
 Witness candidates are the free region's centroids and the middle of every interval a line halfway between two consecutive vertex heights cuts from it, so a free region with a hole (a room around a column) is never missed because its centroids fall into the hole.
 
 A free corridor width (a region eroded by half the width that still connects two sides) is not searched here: the sides are not part of a placement request. Within one space, a [circulation map](#circulation-maps) answers it between entrances and components; across spaces, corridor widths use metric routing.
@@ -126,7 +129,18 @@ The Axiolid adapter builds the free area as the placement search's scene does. T
 
 A piece whose skeleton the kernel refuses is unmapped, never guessed.
 
-Door swings are not subtracted: the map counts only what the obstacles occupy, although a source may state door leaves (`ObjectFrameService::leaves`).
+Swept door sectors (`with_swept_doors`) are obstacles over the whole band: the pieces keep clear of their circumscribed polygons, the possible pieces only of their inscribed ones, and a node's half width runs from its distance to the free area less the former to its distance to the free area less the latter. An entrance's own swing is dropped from the request.
+
+## Door swings as obstacles
+
+A rule may count the floor a door's leaves sweep as an obstacle. It reads the door's leaves (`ObjectFrameService::leaves`) and sends each door as a `SweptDoor`: the door and the horizontal `SwingSector`s of its hinged leaves (`SweptDoor::of`; a sliding or fixed door sweeps nothing and is not sent). Placement (`PlacementRequest::with_swept_doors`), circulation (`CirculationRequest::with_swept_doors`) and walkability (`WalkabilityRequest::with_swept_doors`) requests carry them sorted by door; one door given twice with different sectors is refused (`ConflictingSweptDoors`). Swings are never measured from a door's body.
+
+A swept sector is an obstacle in plan over the whole band of a floor it stands on: its hinge at most `SWEPT_FLOOR_REACH_METRES` (0.5 m) below the floor and below the band's top (`SweptDoor::stands_on`), so a door on the storey above or below never counts. Its footprint is not a polygon, so a backend brackets it with `SwingSector::plan_bounds` and uses each side where it is sound:
+
+- a witness (a placement, a piece of a circulation map, a definite walkability passage) keeps clear of the **circumscribed** polygon, which contains the sector;
+- a proof of absence (no placement, a possible piece, a separation between surfaces or pieces) holds against the **inscribed** polygon, which the sector contains.
+
+An entrance is walked through. A circulation request drops an entrance's own swing, as it drops the entrance from the obstacles; walkability never counts a portal's swing against a passage through that portal, only against passages past it.
 
 ## Free-area bounds
 

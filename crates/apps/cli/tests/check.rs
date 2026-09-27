@@ -8451,3 +8451,65 @@ fn openings_near_a_mitred_wall_end_are_checked_against_its_plan_outline() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north
+/// wall: hinged at (1.2, 1.7), its 0.9 m leaf closed westward and opening
+/// south over the quarter disc south-west of its hinge.
+fn room_with_a_door_swinging_in() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    model_with(&format!(
+        "{}{}",
+        placed_box(10, [1.2, 0.8, 0.0], [2.4, 1.6, 3.0], space),
+        swinging_door(
+            40,
+            [1.2, 1.7, 0.0],
+            [-1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+    ))
+}
+
+#[test]
+fn with_geometry_a_turning_circle_needs_the_floor_a_door_swings_over() {
+    let case = Case::new("geometry-free-floor-door-swing");
+    let check = |extra: Value| {
+        let mut parameters = json!({
+            "diameter_metres": {"type": "number", "value": 1.5},
+            "height_metres": {"type": "number", "value": 2.0},
+        });
+        for (name, value) in extra.as_object().unwrap() {
+            parameters[name] = value.clone();
+        }
+        case.geometry_rule(
+            &room_with_a_door_swinging_in(),
+            &[("door", "IfcDoor"), ("space", "IfcSpace")],
+            "axioval:capability.free-floor-circle",
+            &registry_signature("axioval:capability.free-floor-circle"),
+            entity("space"),
+            parameters,
+        )
+    };
+    let (output, result) = check(json!({}));
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let (output, result) = check(json!({
+        "subtract_door_swings": {"type": "selector", "value": entity("door")},
+    }));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#19".to_owned(),
+            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE".to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

@@ -697,6 +697,98 @@ impl DoorLeaves {
     }
 }
 
+/// How far below a floor a swept sector's hinge may lie and still stand
+/// on that floor: a door's leaf starts at its sill, which may sit below
+/// the finished floor of the space it opens into, but never a storey
+/// below it.
+pub const SWEPT_FLOOR_REACH_METRES: f64 = 0.5;
+
+/// The floor sectors a door's hinged leaves sweep, counted as obstacles by
+/// a free-space or walkability request whose rule chose the door.
+///
+/// A swept sector is an obstacle in plan, over the whole elevation band of
+/// a floor it stands on ([`Self::stands_on`]). Its footprint is never
+/// measured from a door's body: a backend brackets each sector with
+/// [`SwingSector::plan_bounds`] and proves a fit, a path or a connection
+/// against the circumscribed polygon, and an absence, a narrowing or a
+/// separation against the inscribed one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SweptDoor {
+    door: ObjectId,
+    sectors: Vec<SwingSector>,
+}
+
+impl SweptDoor {
+    /// The sectors `door` sweeps.
+    ///
+    /// # Errors
+    ///
+    /// [`DoorLeavesError::InvalidLeaves`] for no sector or a sector that
+    /// is not horizontal, which sweeps no plan area of its own shape.
+    pub fn try_new(door: ObjectId, sectors: Vec<SwingSector>) -> Result<Self, DoorLeavesError> {
+        if sectors.is_empty() {
+            return Err(invalid("a swept door sweeps at least one sector"));
+        }
+        if sectors.iter().any(|sector| !sector.is_horizontal()) {
+            return Err(invalid("a swept sector must lie in a horizontal plane"));
+        }
+        Ok(Self { door, sectors })
+    }
+
+    /// Every sector the hinged leaves of `leaves` sweep, or `None` when no
+    /// leaf swings on a side hinge (a sliding or fixed door sweeps no
+    /// floor).
+    ///
+    /// # Errors
+    ///
+    /// [`DoorLeavesError::InvalidLeaves`] for a leaf swinging outside a
+    /// horizontal plane.
+    pub fn of(leaves: &DoorLeaves) -> Result<Option<Self>, DoorLeavesError> {
+        let sectors: Vec<SwingSector> = leaves
+            .hinged()
+            .filter_map(DoorLeaf::swing)
+            .copied()
+            .collect();
+        if sectors.is_empty() {
+            return Ok(None);
+        }
+        Self::try_new(leaves.door().clone(), sectors).map(Some)
+    }
+
+    /// The door.
+    #[must_use]
+    pub fn door(&self) -> &ObjectId {
+        &self.door
+    }
+
+    /// The sectors, in the source's leaf order.
+    #[must_use]
+    pub fn sectors(&self) -> &[SwingSector] {
+        &self.sectors
+    }
+
+    /// The sectors that stand on a floor at `floor` metres whose band
+    /// reaches up to `top`: those whose hinge lies at most
+    /// [`SWEPT_FLOOR_REACH_METRES`] below the floor and below the top.
+    pub fn stands_on(&self, floor: f64, top: f64) -> impl Iterator<Item = &SwingSector> {
+        self.sectors.iter().filter(move |sector| {
+            let z = sector.hinge()[2];
+            z >= floor - SWEPT_FLOOR_REACH_METRES && z < top
+        })
+    }
+}
+
+/// `swept` sorted by door, each door once; `None` when a door is given
+/// twice with different sectors.
+pub(crate) fn tidy_swept(mut swept: Vec<SweptDoor>) -> Option<Vec<SweptDoor>> {
+    swept.sort_by(|a, b| a.door.cmp(&b.door));
+    swept.dedup();
+    if swept.windows(2).any(|pair| pair[0].door == pair[1].door) {
+        return None;
+    }
+    Some(swept)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -771,6 +863,46 @@ mod tests {
         let (inner, _) = sector.plan_bounds(8).unwrap();
         assert!(inner.iter().any(|[_, y]| *y < -0.5));
         assert!(inner.iter().any(|[_, y]| *y > 0.5));
+    }
+
+    #[test]
+    fn a_swept_door_takes_its_hinged_leaves_sectors() {
+        let exact = Evidence::exact(source(), "leaves");
+        let leaves = DoorLeaves::try_new(
+            door(),
+            "SINGLE_SWING_LEFT",
+            0.9,
+            None,
+            vec![left_hinged(false)],
+            exact,
+        )
+        .unwrap();
+        let swept = SweptDoor::of(&leaves).unwrap().unwrap();
+        assert_eq!(swept.door(), &door());
+        assert_eq!(swept.sectors().len(), 1);
+        // It stands on a floor up to half a metre above its hinge, below
+        // the band's top; not on the storey above or below.
+        assert_eq!(swept.stands_on(0.4, 2.0).count(), 1);
+        assert_eq!(swept.stands_on(-0.2, 2.0).count(), 1);
+        assert_eq!(swept.stands_on(0.6, 2.6).count(), 0);
+        assert_eq!(swept.stands_on(-3.0, -0.9).count(), 0);
+        assert!(SweptDoor::try_new(door(), Vec::new()).is_err());
+        let vertical = SwingSector::try_new(
+            [0.0; 3],
+            1.0,
+            direction([1.0, 0.0, 0.0]),
+            direction([0.0, 0.0, 1.0]),
+            false,
+        )
+        .unwrap();
+        assert!(SweptDoor::try_new(door(), vec![vertical]).is_err());
+        // One door twice is kept once; with other sectors it conflicts.
+        let other = SweptDoor::try_new(door(), vec![*left_hinged(true).swing().unwrap()]).unwrap();
+        assert_eq!(
+            tidy_swept(vec![swept.clone(), swept.clone()]),
+            Some(vec![swept.clone()])
+        );
+        assert_eq!(tidy_swept(vec![swept, other]), None);
     }
 
     #[test]

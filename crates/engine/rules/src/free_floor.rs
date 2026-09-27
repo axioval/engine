@@ -1,16 +1,17 @@
-//! Shared policy of the free-floor capabilities: obstacles, elevation band,
-//! merged spaces and the three-valued placement judgement.
+//! Shared policy of the free-floor capabilities: obstacles, door swings,
+//! elevation band, merged spaces and the three-valued placement judgement.
 
 use std::collections::BTreeSet;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ElevationBand, FreeSpaceError, FreeSpaceServiceHandle,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, PlacementDomain, PlacementOutcome,
-    PlacementRequest, PlacementShape, RuleContext, SupportedPlacement,
+    PlacementRequest, PlacementShape, RuleContext, SupportedPlacement, SweptDoor,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Severity};
 
+use crate::door_swing::Swings;
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
@@ -21,6 +22,7 @@ pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
         ParameterDescriptor::optional("band_from_metres", ParameterType::Number),
         ParameterDescriptor::optional("band_to_metres", ParameterType::Number),
         ParameterDescriptor::optional("merge_path", ParameterType::StringList),
+        ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
     ]
 }
 
@@ -32,6 +34,8 @@ pub(crate) struct Options<'a> {
     band: Option<ElevationBand>,
     /// The path from each space to the spaces searched with it.
     merge: Option<Traversal<'a>>,
+    /// The doors whose swings are obstacles.
+    swings: Option<&'a Selector>,
 }
 
 impl<'a> Options<'a> {
@@ -59,6 +63,7 @@ impl<'a> Options<'a> {
             obstacles: parameters.selector("obstacles")?,
             band,
             merge,
+            swings: parameters.selector("subtract_door_swings")?,
         })
     }
 }
@@ -124,7 +129,9 @@ impl Obstacles {
 ///
 /// Obstacles the selection cannot decide are sent as candidates, so a
 /// witness stands; a proof of absence with them is asked again without
-/// them, and stands only if it holds there too.
+/// them, and stands only if it holds there too. Door swings follow the
+/// same rule, and a door whose leaves are unknown can only spoil a
+/// witness: its swing may cover it.
 pub(crate) fn evaluate(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
@@ -146,12 +153,17 @@ pub(crate) fn evaluate(
         Ok(obstacles) => obstacles,
         Err((reason, message)) => return unavailable(selected, &reason, &message, evaluation),
     };
+    let swings = match Swings::select(context, options.swings) {
+        Ok(swings) => swings,
+        Err((reason, message)) => return unavailable(selected, &reason, &message, evaluation),
+    };
     let everything: Vec<&Object> = context.project.objects().collect();
     for space in selected {
         match judge(
             context,
             service,
             &obstacles,
+            &swings,
             &everything,
             space,
             shape,
@@ -178,10 +190,12 @@ pub(crate) fn evaluate(
 /// witness.
 type Judged = Result<Option<(Vec<ObjectId>, Vec<Evidence>)>, Unavailable>;
 
+#[allow(clippy::too_many_arguments)]
 fn judge(
     context: &RuleContext<'_>,
     service: &FreeSpaceServiceHandle,
     obstacles: &Obstacles,
+    swings: &Swings,
     everything: &[&Object],
     space: &Object,
     shape: &PlacementShape,
@@ -193,7 +207,9 @@ fn judge(
     };
     let spaces: BTreeSet<&ObjectId> = std::iter::once(&space.id).chain(&merged).collect();
     let (sure, maybe) = obstacles.around(&spaces);
-    let ask = |candidates: Vec<ObjectId>| -> Result<PlacementOutcome, Unavailable> {
+    let ask = |candidates: Vec<ObjectId>,
+               swept: Vec<SweptDoor>|
+     -> Result<PlacementOutcome, Unavailable> {
         // A merged search spans several floors, so no single support holds
         // its base; the search is still bounded by the spaces' footprints.
         let domain = if merged.is_empty() {
@@ -211,21 +227,50 @@ fn judge(
         if let Some(band) = options.band {
             request = request.with_band(band);
         }
+        if !swept.is_empty() {
+            request = request.with_swept_doors(swept).map_err(|e| error(&e))?;
+        }
         service.find_placement(&request).map_err(|e| error(&e))
     };
     let mut candidates = sure.clone();
     candidates.extend(maybe.iter().cloned());
-    let proof = match ask(candidates)? {
-        PlacementOutcome::Found(_) => return Ok(None),
+    let mut swept = swings.sure.clone();
+    swept.extend(swings.maybe.iter().cloned());
+    let proof = match ask(candidates, swept)? {
+        PlacementOutcome::Found(_) if swings.unknown.is_empty() => return Ok(None),
+        PlacementOutcome::Found(_) => {
+            let names: Vec<String> = swings
+                .unknown
+                .iter()
+                .map(|(door, why)| format!("{door} ({why})"))
+                .collect();
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "the shape fits, but the swing of a door whose leaves are unknown may \
+                     cover every fit: {}",
+                    names.join(", ")
+                ),
+            ));
+        }
         PlacementOutcome::NoPlacement(proof) => proof,
     };
-    let proof = if maybe.is_empty() {
+    let proof = if maybe.is_empty() && swings.maybe.is_empty() {
         proof
     } else {
-        match ask(sure)? {
+        match ask(sure, swings.sure.clone())? {
             PlacementOutcome::NoPlacement(proof) => proof,
             PlacementOutcome::Found(_) => {
-                let names: Vec<String> = maybe.iter().map(ToString::to_string).collect();
+                let names: Vec<String> = maybe
+                    .iter()
+                    .map(ToString::to_string)
+                    .chain(
+                        swings
+                            .maybe
+                            .iter()
+                            .map(|door| format!("the swing of {}", door.door())),
+                    )
+                    .collect();
                 return Err((
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
@@ -238,6 +283,7 @@ fn judge(
         }
     };
     evidence.push(proof.evidence().clone());
+    evidence.extend(swings.evidence.iter().cloned());
     Ok(Some((merged, evidence)))
 }
 

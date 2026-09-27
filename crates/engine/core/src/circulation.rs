@@ -27,6 +27,7 @@
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::LengthInterval;
+use crate::door_leaves::{SweptDoor, tidy_swept};
 use crate::free_space::{ElevationBand, FreeSpaceError};
 use crate::services::reviewable_exact_evidence;
 
@@ -44,6 +45,7 @@ pub struct CirculationRequest {
     width_metres: f64,
     height_metres: f64,
     tolerance_metres: f64,
+    swept: Vec<SweptDoor>,
 }
 
 impl CirculationRequest {
@@ -91,7 +93,31 @@ impl CirculationRequest {
             width_metres,
             height_metres,
             tolerance_metres,
+            swept: Vec::new(),
         })
+    }
+
+    /// Counts the sectors `swept` doors sweep as obstacles (see
+    /// [`SweptDoor`]): a piece stays clear of their circumscribed
+    /// polygons, a possible piece only of their inscribed ones. An entrance
+    /// is walked through, so its own swing is dropped, as the entrance is
+    /// from the obstacles.
+    ///
+    /// # Errors
+    ///
+    /// [`FreeSpaceError::ConflictingSweptDoors`] when one door is given
+    /// twice with different sectors.
+    pub fn with_swept_doors(mut self, swept: Vec<SweptDoor>) -> Result<Self, FreeSpaceError> {
+        let mut swept = tidy_swept(swept).ok_or(FreeSpaceError::ConflictingSweptDoors)?;
+        swept.retain(|door| self.entrances.binary_search(door.door()).is_err());
+        self.swept = swept;
+        Ok(self)
+    }
+
+    /// The doors whose swept sectors are obstacles, sorted by door.
+    #[must_use]
+    pub fn swept_doors(&self) -> &[SweptDoor] {
+        &self.swept
     }
 
     /// The space the path runs in.

@@ -19,6 +19,7 @@ use axioval_engine::{
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
     MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence, PlacementDomain,
     PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape, SupportedPlacement,
+    SweptDoor,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -414,6 +415,7 @@ impl AxiolidFreeSpaceService {
             request.scope(),
             request.merged_scopes(),
             request.obstacles(),
+            request.swept_doors(),
             request.effective_band(),
             reach,
             tolerance,
@@ -421,13 +423,16 @@ impl AxiolidFreeSpaceService {
     }
 
     /// The footprint of `scope` and `merged` (which must share its floor),
-    /// what `obstacles` occupy in `band` above that floor, and the floor's
-    /// elevation. A tessellation within `reach` of a scope refuses.
+    /// what `obstacles` and the sectors of `swept` doors occupy in `band`
+    /// above that floor, and the floor's elevation. A tessellation within
+    /// `reach` of a scope refuses.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn floor_scene(
         &self,
         scope: &ObjectId,
         merged: &[ObjectId],
         obstacles: &[ObjectId],
+        swept: &[SweptDoor],
         band: ElevationBand,
         reach: f64,
         tolerance: axiolid_core::Tolerance,
@@ -486,14 +491,58 @@ impl AxiolidFreeSpaceService {
                 band_footprint(obstacle, mesh, low, high).map_err(FreeSpaceError::Unavailable)?;
             obstacle_rings.extend(trapezoids(&occupied).into_iter().map(|piece| piece.outer));
         }
-        let scene = Scene {
-            scope: footprint,
-            obstacles: placement::union(&obstacle_rings, tolerance)?,
-            tolerance,
-            window: None,
+        let (inner, outer) = swept_rings(swept, floor, high);
+        let scene = if inner.is_empty() {
+            let obstacles = placement::union(&obstacle_rings, tolerance)?;
+            Scene {
+                scope: footprint,
+                sure: obstacles.clone(),
+                obstacles,
+                tolerance,
+                window: None,
+            }
+        } else {
+            let with = |sectors: Vec<Ring>| {
+                let mut rings = obstacle_rings.clone();
+                rings.extend(sectors);
+                placement::union(&rings, tolerance)
+            };
+            Scene {
+                scope: footprint,
+                obstacles: with(outer)?,
+                sure: with(inner)?,
+                tolerance,
+                window: None,
+            }
         };
         Ok((scene, floor))
     }
+}
+
+/// Chords (and tangents) per quarter turn of a swept sector: its polygons
+/// lie within `r · (1 / cos(π / 128) − 1)`, under 0.3 mm per metre, of
+/// the arc.
+pub(crate) const SWEEP_SEGMENTS: usize = 32;
+
+/// The plan polygons of every sector of `swept` standing on the floor at
+/// `floor` whose band reaches up to `top`, anticlockwise: inscribed ones
+/// (inside the sectors) and circumscribed ones (around them).
+pub(crate) fn swept_rings(swept: &[SweptDoor], floor: f64, top: f64) -> (Vec<Ring>, Vec<Ring>) {
+    let ring = |points: Vec<[f64; 2]>| Ring {
+        points: points.into_iter().map(|[x, y]| Point2::new(x, y)).collect(),
+    };
+    let mut inner = Vec::new();
+    let mut outer = Vec::new();
+    for door in swept {
+        for sector in door.stands_on(floor, top) {
+            // A swept door's sectors are horizontal, so they have bounds.
+            if let Some((low, high)) = sector.plan_bounds(SWEEP_SEGMENTS) {
+                inner.push(ring(low));
+                outer.push(ring(high));
+            }
+        }
+    }
+    (inner, outer)
 }
 
 /// Merged scopes whose floors differ by more than this are not one floor.

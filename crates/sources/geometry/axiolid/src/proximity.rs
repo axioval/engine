@@ -18,6 +18,23 @@
 //!   edges cross both wall faces and the midpoint between the crossings lies
 //!   half a wall deep. The deepest witness is a lower bound on the true depth.
 //!
+//! Two shape comparisons ride along:
+//!
+//! - **Overlap extents** bound the intersection's box along each axis. The
+//!   lower bound spans points witnessed in both bodies: where an edge of
+//!   either crosses the other's surface, and vertices of either inside the
+//!   other. For polyhedra those are the intersection's vertices, so the bound
+//!   is tight wherever the crossings are found. The upper bound is the
+//!   overlap of the two bodies' boxes. The intersection's volume is not
+//!   measured: that needs a certified mesh boolean (axiolid/kernel#183).
+//! - **Hausdorff distance** between the surfaces. Its lower bound is the
+//!   farthest any vertex lies from the other surface. Its upper bound holds
+//!   per triangle: a distance to one convex triangle is convex, so the
+//!   farthest point of a triangle from it is a vertex, and the least over
+//!   the other body's triangles of that farthest vertex distance bounds the
+//!   whole triangle. Triangles whose bound exceeds the lower bound are split
+//!   a few times to tighten it. Identical meshes come out exactly zero.
+//!
 //! Winding numbers need an inside, so points are only tested against a closed
 //! two-manifold mesh. A surface reaching into a solid is measured; two open
 //! surfaces share no volume and report `None` rather than a depth of zero.
@@ -50,8 +67,9 @@ use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
-    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, ProjectedDistanceEvidence,
-    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    BodyContainment, Bounds3, GeometryFidelity, LengthInterval, ObjectBounds, OverlapExtents,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -73,6 +91,9 @@ const OVERLAP_AREA_TOLERANCE: f64 = 1e-9;
 
 /// A point is inside a closed body when its winding number reaches one half.
 const INSIDE_WINDING: f64 = 0.5;
+
+/// How often a triangle is split in four to tighten its Hausdorff bound.
+const HAUSDORFF_REFINEMENT: u32 = 2;
 
 /// Measures pairwise proximity between registered meshes using Axiolid.
 #[derive(Debug)]
@@ -517,6 +538,16 @@ fn ring_distance(ring: &[axiolid_core::Point2], point: axiolid_core::Point2) -> 
 /// The triangle whose box is nearest bounds the answer from above; only
 /// triangles within that bound can improve on it.
 fn surface_distance(point: Point3, body: &Body<'_>) -> Result<f64, ProximityError> {
+    surface_distance_above(point, body, 0.0)
+}
+
+/// [`surface_distance`] when it exceeds `floor`; otherwise some distance no
+/// greater than `floor`, found without the full search.
+fn surface_distance_above(
+    point: Point3,
+    body: &Body<'_>,
+    floor: f64,
+) -> Result<f64, ProximityError> {
     let to = |index: usize| -> Result<f64, ProximityError> {
         closest_point_on_triangle(point, body.soup.items[index])
             .map(|closest| closest.distance(point))
@@ -528,6 +559,9 @@ fn surface_distance(point: Point3, body: &Body<'_>) -> Result<f64, ProximityErro
         .nearest_to(&Aabb::from_point(point), |_| true)
         .ok_or(ProximityError::Unavailable)?;
     let mut best = to(nearest.key)?;
+    if best <= floor {
+        return Ok(best);
+    }
     let probe = Bounds3::try_new(point.to_array(), point.to_array())?.expanded(best);
     for index in body.soup.near(&probe) {
         best = best.min(to(index)?);
@@ -695,6 +729,287 @@ fn penetration(
     Ok((Some(into_counterpart.max(into_subject)), None))
 }
 
+/// Every distinct vertex the body's triangles use.
+fn vertices(body: &Body<'_>) -> Vec<Point3> {
+    let mut points: Vec<Point3> = body.soup.items.iter().flatten().copied().collect();
+    points.sort_by(|a, b| {
+        a.to_array()
+            .partial_cmp(&b.to_array())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    points.dedup_by(|a, b| a.to_array().map(f64::to_bits) == b.to_array().map(f64::to_bits));
+    points
+}
+
+/// Points where the edges of `body` cross the surface of `other`.
+fn crossings(body: &Body<'_>, other: &Body<'_>) -> Result<Vec<Point3>, ProximityError> {
+    let tolerance = tolerance()?;
+    let mut points = Vec::new();
+    for [a, b, c] in &body.soup.items {
+        for (start, end) in [(*a, *b), (*b, *c), (*c, *a)] {
+            let direction = end - start;
+            if direction.length_squared() == 0.0 {
+                continue;
+            }
+            let segment = Bounds3::try_new(start.min(end).to_array(), start.max(end).to_array())?;
+            if segment.gap(&other.soup.bounds) > 0.0 {
+                continue;
+            }
+            let ray = Ray3 {
+                origin: start,
+                direction,
+            };
+            for index in other.soup.near(&segment) {
+                let hit = intersect_triangle(&ray, other.soup.items[index], tolerance, index)
+                    .map_err(|_| ProximityError::Unavailable)?;
+                if let Some(hit) = hit.filter(|hit| (0.0..=1.0).contains(&hit.t)) {
+                    points.push(start + direction * hit.t);
+                }
+            }
+        }
+    }
+    Ok(points)
+}
+
+/// A box grown to hold witnessed points of the intersection.
+#[derive(Default)]
+struct Witnessed(Option<([f64; 3], [f64; 3])>);
+
+impl Witnessed {
+    fn add(&mut self, point: Point3) {
+        let point = point.to_array();
+        let (min, max) = self.0.get_or_insert((point, point));
+        for axis in 0..3 {
+            min[axis] = min[axis].min(point[axis]);
+            max[axis] = max[axis].max(point[axis]);
+        }
+    }
+    /// Whether `value` would widen the box on the given side of `axis`.
+    fn extends(&self, axis: usize, upward: bool, value: f64) -> bool {
+        match self.0 {
+            None => true,
+            Some((min, max)) => {
+                if upward {
+                    value > max[axis]
+                } else {
+                    value < min[axis]
+                }
+            }
+        }
+    }
+}
+
+/// Widens `witnessed` by the vertices of `body` that lie inside `other`.
+///
+/// Only a vertex that would widen the box matters, and on each side of each
+/// axis the outermost inside vertex is the only one that does. So vertices
+/// are tried outermost first and each side stops at its first inside vertex
+/// or at the first that would not widen the box: the winding test, linear in
+/// the other body's size, runs only where it can change the answer.
+fn add_inside_vertices(
+    body: &Body<'_>,
+    other: &Body<'_>,
+    witnessed: &mut Witnessed,
+) -> Result<(), ProximityError> {
+    let bounds = other.soup.bounds;
+    let points: Vec<Point3> = vertices(body)
+        .into_iter()
+        .filter(|point| {
+            (0..3).all(|axis| (bounds.min()[axis]..=bounds.max()[axis]).contains(&point[axis]))
+        })
+        .collect();
+    if points.is_empty() {
+        return Ok(());
+    }
+    let winding =
+        WindingMesh::prepare(other.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
+    let mut known: Vec<Option<bool>> = vec![None; points.len()];
+    for axis in 0..3 {
+        for upward in [false, true] {
+            let mut order: Vec<usize> = (0..points.len()).collect();
+            order.sort_by(|&a, &b| {
+                let ordering = points[a][axis].total_cmp(&points[b][axis]);
+                if upward { ordering.reverse() } else { ordering }
+            });
+            for index in order {
+                let point = points[index];
+                if !witnessed.extends(axis, upward, point[axis]) {
+                    break;
+                }
+                let inside_other = if let Some(answer) = known[index] {
+                    answer
+                } else {
+                    let answer = inside(&winding, point)?;
+                    known[index] = Some(answer);
+                    answer
+                };
+                if inside_other {
+                    witnessed.add(point);
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Extents of the bodies' intersection along each axis, widened for the
+/// geometry's fidelity.
+///
+/// The lower bound spans witnessed points of the intersection; the upper
+/// bound is the overlap of the true bodies' enclosing boxes.
+fn overlap_extents(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    separation: f64,
+    containment: Option<BodyContainment>,
+    subject_fidelity: GeometryFidelity,
+    counterpart_fidelity: GeometryFidelity,
+) -> Result<OverlapExtents, ProximityError> {
+    let mut witnessed = Witnessed::default();
+    // Bodies apart at the surface share nothing unless one holds the other.
+    let shared = separation <= 0.0 || containment.is_some();
+    if shared {
+        for point in crossings(subject, counterpart)?
+            .into_iter()
+            .chain(crossings(counterpart, subject)?)
+        {
+            witnessed.add(point);
+        }
+        if counterpart.solid {
+            add_inside_vertices(subject, counterpart, &mut witnessed)?;
+        }
+        if subject.solid {
+            add_inside_vertices(counterpart, subject, &mut witnessed)?;
+        }
+    }
+    let deviation = subject_fidelity
+        .combined(counterpart_fidelity)
+        .deviation_metres();
+    let (a, b) = (
+        subject
+            .soup
+            .bounds
+            .expanded(subject_fidelity.deviation_metres()),
+        counterpart
+            .soup
+            .bounds
+            .expanded(counterpart_fidelity.deviation_metres()),
+    );
+    let axis = |axis: usize| -> Result<LengthInterval, ProximityError> {
+        if !shared {
+            return LengthInterval::exact(0.0).map_err(|_| ProximityError::InvalidMeasurement);
+        }
+        let upper = (a.max()[axis].min(b.max()[axis]) - a.min()[axis].max(b.min()[axis])).max(0.0);
+        let lower = witnessed.0.map_or(0.0, |(min, max)| {
+            // Each end of a tessellated extent may move by the deviation.
+            (max[axis] - min[axis] - 2.0 * deviation).max(0.0)
+        });
+        LengthInterval::try_new(lower.min(upper), upper)
+            .map_err(|_| ProximityError::InvalidMeasurement)
+    };
+    Ok(OverlapExtents::new(axis(0)?, axis(1)?, axis(2)?))
+}
+
+/// Distance from `point` to one triangle.
+fn triangle_distance(point: Point3, triangle: Triangle) -> Result<f64, ProximityError> {
+    closest_point_on_triangle(point, triangle)
+        .map(|closest| closest.distance(point))
+        .map_err(|_| ProximityError::Unavailable)
+}
+
+/// An upper bound on how far any point of `triangle` lies from `other`'s
+/// surface: the least, over `other`'s triangles, of the farthest vertex
+/// distance to that one triangle.
+///
+/// A bound already no greater than `floor` is returned as soon as it is
+/// found: it cannot raise a maximum that has reached `floor`.
+fn triangle_bound(triangle: Triangle, other: &Body<'_>, floor: f64) -> Result<f64, ProximityError> {
+    let farthest = |target: Triangle| -> Result<f64, ProximityError> {
+        let mut worst = 0.0_f64;
+        for vertex in triangle {
+            worst = worst.max(triangle_distance(vertex, target)?);
+        }
+        Ok(worst)
+    };
+    let [a, b, c] = triangle;
+    let centre = (a + b + c) / 3.0;
+    let first = other
+        .soup
+        .index
+        .nearest_to(&Aabb::from_point(centre), |_| true)
+        .ok_or(ProximityError::Unavailable)?;
+    let mut best = farthest(other.soup.items[first.key])?;
+    if best <= floor {
+        return Ok(best);
+    }
+    // A triangle doing better comes within `best` of every vertex of this
+    // one, so its box meets the box around each vertex grown by `best`:
+    // it reaches up to the highest vertex less `best` and down to the lowest
+    // plus `best` on every axis. Only those are measured.
+    let (highest, lowest) = (a.max(b).max(c).to_array(), a.min(b).min(c).to_array());
+    for index in other.soup.near(&triangle_box(&triangle).expanded(best)) {
+        let candidate = &other.soup.boxes[index];
+        let reaches = (0..3).all(|axis| {
+            candidate.max()[axis] >= highest[axis] - best
+                && candidate.min()[axis] <= lowest[axis] + best
+        });
+        if reaches {
+            best = best.min(farthest(other.soup.items[index])?);
+        }
+    }
+    Ok(best)
+}
+
+/// [`triangle_bound`], tightened by splitting the triangle while its bound
+/// exceeds `floor`, a distance the answer is already known to reach.
+fn refined_bound(
+    triangle: Triangle,
+    other: &Body<'_>,
+    floor: f64,
+    depth: u32,
+) -> Result<f64, ProximityError> {
+    let bound = triangle_bound(triangle, other, floor)?;
+    if bound <= floor || depth == 0 {
+        return Ok(bound);
+    }
+    let [a, b, c] = triangle;
+    let (ab, bc, ca) = ((a + b) / 2.0, (b + c) / 2.0, (c + a) / 2.0);
+    let mut split = 0.0_f64;
+    for child in [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]] {
+        split = split.max(refined_bound(child, other, floor, depth - 1)?);
+        if split >= bound {
+            return Ok(bound);
+        }
+    }
+    Ok(split)
+}
+
+/// The Hausdorff distance between the two meshes' surfaces, as `(lower,
+/// upper)`.
+fn hausdorff(first: &Body<'_>, second: &Body<'_>) -> Result<(f64, f64), ProximityError> {
+    let mut lower = 0.0_f64;
+    for (from, to) in [(first, second), (second, first)] {
+        for vertex in vertices(from) {
+            lower = lower.max(surface_distance_above(vertex, to, lower)?);
+        }
+    }
+    let mut upper = lower;
+    for (from, to) in [(first, second), (second, first)] {
+        for triangle in &from.soup.items {
+            upper = upper.max(refined_bound(*triangle, to, upper, HAUSDORFF_REFINEMENT)?);
+        }
+    }
+    let snap = |value: f64| {
+        if value <= LINEAR_TOLERANCE {
+            0.0
+        } else {
+            value
+        }
+    };
+    Ok((snap(lower), snap(upper)))
+}
+
 impl ProximityService for AxiolidProximityService {
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.body(object)?;
@@ -725,8 +1040,25 @@ impl ProximityService for AxiolidProximityService {
                 .ok_or(ProximityError::Unavailable)?;
 
         let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
+        let subject_fidelity = self.geometry.fidelity(request.subject())?;
+        let counterpart_fidelity = self.geometry.fidelity(request.counterpart())?;
+        let extents = match penetration {
+            Some(_) => Some(overlap_extents(
+                &subject,
+                &counterpart,
+                separation,
+                containment,
+                subject_fidelity,
+                counterpart_fidelity,
+            )?),
+            None => None,
+        };
+        let deviation = fidelity.deviation_metres();
+        let (lower, upper) = hausdorff(&subject, &counterpart)?;
+        let hausdorff = LengthInterval::try_new((lower - deviation).max(0.0), upper + deviation)
+            .map_err(|_| ProximityError::InvalidMeasurement)?;
 
-        ProximityEvidence::try_new(
+        let measured = ProximityEvidence::try_new(
             request.clone(),
             separation,
             penetration,
@@ -742,7 +1074,12 @@ impl ProximityService for AxiolidProximityService {
                 ),
                 exact: fidelity.is_exact(),
             },
-        )
+        )?
+        .with_hausdorff(hausdorff)?;
+        match extents {
+            Some(extents) => measured.with_overlap_extents(extents),
+            None => Ok(measured),
+        }
     }
 
     fn measure_distance(

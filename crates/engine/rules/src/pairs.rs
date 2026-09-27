@@ -45,20 +45,6 @@ pub(crate) struct Prepared<'a> {
     pub(crate) unevaluated: Unevaluated,
 }
 
-/// A declared length that is not a finite, non-negative number.
-pub(crate) struct InvalidLength;
-
-/// An optional declared length in metres; absent is `Ok(None)`.
-pub(crate) fn length(rule: &CompiledRule, key: &str) -> Result<Option<f64>, InvalidLength> {
-    match rule.parameters.get(key) {
-        None => Ok(None),
-        Some(ParameterValue::Number { value }) if value.is_finite() && *value >= 0.0 => {
-            Ok(Some(*value))
-        }
-        Some(_) => Err(InvalidLength),
-    }
-}
-
 pub(crate) fn severity(rule: &CompiledRule) -> Severity {
     match rule.severity {
         axioval_ir::contract::Severity::Error => Severity::Error,

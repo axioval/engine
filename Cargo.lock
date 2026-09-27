@@ -483,6 +483,8 @@ dependencies = [
 name = "axioval"
 version = "0.2.0"
 dependencies = [
+ "axiolid-core",
+ "axiolid-mesh",
  "axioval-axiolid",
  "axioval-bcf",
  "axioval-engine",

@@ -18,10 +18,17 @@
 //!   the true depth. Only a closed solid has an inside; a surface entering a
 //!   solid is measured against the solid, and two open surfaces, which share
 //!   no volume, report `None`.
+//! - **Shape comparisons are intervals.** The extent of the intersection
+//!   along each axis ([`OverlapExtents`]) and the Hausdorff distance between
+//!   the two surfaces are reported as [`LengthInterval`]s the true values lie
+//!   in, so a policy judging them against a tolerance can tell a certain
+//!   answer from an open one. The intersection's volume is not measured.
 
 use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
+
+use crate::LengthInterval;
 
 /// Why a proximity measurement could not be produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -307,6 +314,52 @@ impl ProximityRequest {
     }
 }
 
+/// How far the intersection of two bodies reaches along each world axis.
+///
+/// Each axis carries a [`LengthInterval`]: the extent of the intersection's
+/// axis-aligned box along it. The lower bound is witnessed (points found in
+/// both bodies), the upper bound proven (the bodies' boxes overlap no
+/// further), so exact geometry need not report a point. An empty
+/// intersection has zero extent on every axis.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OverlapExtents {
+    axes: [LengthInterval; 3],
+}
+
+impl OverlapExtents {
+    /// The extents along x, y and z.
+    #[must_use]
+    pub fn new(x: LengthInterval, y: LengthInterval, z: LengthInterval) -> Self {
+        Self { axes: [x, y, z] }
+    }
+    pub fn x(&self) -> LengthInterval {
+        self.axes[0]
+    }
+    pub fn y(&self) -> LengthInterval {
+        self.axes[1]
+    }
+    pub fn z(&self) -> LengthInterval {
+        self.axes[2]
+    }
+    /// The lesser of the x and y extents: how far the intersection reaches in
+    /// plan along its narrower axis.
+    pub fn horizontal(&self) -> LengthInterval {
+        let (x, y) = (self.axes[0], self.axes[1]);
+        LengthInterval::try_new(
+            x.lower_metres().min(y.lower_metres()),
+            x.upper_metres().min(y.upper_metres()),
+        )
+        .unwrap_or_else(|_| unreachable!("the lesser of two intervals is an interval"))
+    }
+    /// The z extent.
+    pub fn vertical(&self) -> LengthInterval {
+        self.axes[2]
+    }
+    fn is_empty(&self) -> bool {
+        self.axes.iter().all(|axis| axis.lower_metres() == 0.0)
+    }
+}
+
 /// One body lying wholly inside the other without their surfaces meeting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BodyContainment {
@@ -322,6 +375,8 @@ pub struct ProximityEvidence {
     penetration_metres: Option<f64>,
     plan_overlap_square_metres: f64,
     containment: Option<BodyContainment>,
+    overlap_extents: Option<OverlapExtents>,
+    hausdorff: Option<LengthInterval>,
     fidelity: GeometryFidelity,
     evidence: Evidence,
 }
@@ -373,9 +428,38 @@ impl ProximityEvidence {
             penetration_metres,
             plan_overlap_square_metres,
             containment,
+            overlap_extents: None,
+            hausdorff: None,
             fidelity,
             evidence,
         })
+    }
+
+    /// Adds the extents of the bodies' intersection along each axis.
+    ///
+    /// Refused when no penetration was measured (two open surfaces share no
+    /// volume), and when bodies apart at the surface and not contained in
+    /// one another claim a non-empty intersection.
+    pub fn with_overlap_extents(mut self, extents: OverlapExtents) -> Result<Self, ProximityError> {
+        let disjoint = self.separation_metres > 0.0 && self.containment.is_none();
+        if self.penetration_metres.is_none() || (disjoint && !extents.is_empty()) {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.overlap_extents = Some(extents);
+        Ok(self)
+    }
+
+    /// Adds the Hausdorff distance between the two surfaces: the farthest
+    /// any point of either surface lies from the other surface.
+    ///
+    /// It is never smaller than the separation, so an interval lying wholly
+    /// below the separation's own interval is refused.
+    pub fn with_hausdorff(mut self, interval: LengthInterval) -> Result<Self, ProximityError> {
+        if interval.upper_metres() < self.separation_interval_metres().0 {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.hausdorff = Some(interval);
+        Ok(self)
     }
 
     pub fn request(&self) -> &ProximityRequest {
@@ -404,6 +488,17 @@ impl ProximityEvidence {
     }
     pub fn containment(&self) -> Option<BodyContainment> {
         self.containment
+    }
+    /// Extents of the intersection along each axis; `None` when the service
+    /// did not measure them or neither body is a closed solid.
+    pub fn overlap_extents(&self) -> Option<OverlapExtents> {
+        self.overlap_extents
+    }
+    /// Hausdorff distance between the two surfaces; `None` when the service
+    /// did not measure it. Zero exactly when the surfaces coincide, so it is
+    /// what tells a duplicate from a mere overlap.
+    pub fn hausdorff_interval_metres(&self) -> Option<LengthInterval> {
+        self.hausdorff
     }
     pub fn fidelity(&self) -> GeometryFidelity {
         self.fidelity
@@ -773,6 +868,83 @@ mod tests {
         assert_eq!(
             ProjectedDistanceEvidence::try_new(request(), 0.3, 0.2, tessellated, approximate()),
             Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// The narrower plan axis bounds how far an intersection reaches in plan.
+    #[test]
+    fn horizontal_extent_is_the_narrower_plan_axis() {
+        let extents = OverlapExtents::new(
+            LengthInterval::try_new(0.1, 0.3).unwrap(),
+            LengthInterval::try_new(0.2, 0.25).unwrap(),
+            LengthInterval::exact(1.0).unwrap(),
+        );
+        assert_eq!(
+            extents.horizontal(),
+            LengthInterval::try_new(0.1, 0.25).unwrap()
+        );
+        assert_eq!(extents.vertical(), LengthInterval::exact(1.0).unwrap());
+    }
+
+    #[test]
+    fn overlap_extents_need_a_shared_volume() {
+        let extents = OverlapExtents::new(
+            LengthInterval::exact(0.1).unwrap(),
+            LengthInterval::exact(0.1).unwrap(),
+            LengthInterval::exact(0.1).unwrap(),
+        );
+        let measured = |separation: f64, penetration: Option<f64>| {
+            ProximityEvidence::try_new(
+                request(),
+                separation,
+                penetration,
+                0.0,
+                None,
+                GeometryFidelity::Exact,
+                exact(),
+            )
+            .unwrap()
+        };
+        assert!(
+            measured(0.0, Some(0.1))
+                .with_overlap_extents(extents)
+                .is_ok()
+        );
+        // Two open surfaces have no inside to share.
+        assert_eq!(
+            measured(0.0, None).with_overlap_extents(extents),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        // Bodies apart at the surface, neither inside the other, share nothing.
+        assert_eq!(
+            measured(0.2, Some(0.0)).with_overlap_extents(extents),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// No point of a surface lies closer to the other than the separation.
+    #[test]
+    fn hausdorff_distance_is_never_below_the_separation() {
+        let measured = ProximityEvidence::try_new(
+            request(),
+            0.2,
+            Some(0.0),
+            0.0,
+            None,
+            GeometryFidelity::Exact,
+            exact(),
+        )
+        .unwrap();
+        assert_eq!(
+            measured
+                .clone()
+                .with_hausdorff(LengthInterval::try_new(0.0, 0.1).unwrap()),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert!(
+            measured
+                .with_hausdorff(LengthInterval::try_new(0.2, 0.5).unwrap())
+                .is_ok()
         );
     }
 

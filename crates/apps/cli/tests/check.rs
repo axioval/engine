@@ -457,21 +457,12 @@ impl Case {
         let definitions = self.definitions(true);
         let mut definitions: Value =
             serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
-        let parameter = |id: &str, kind: &str, required: bool| {
-            json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
-                   "required": required, "allowedValues": [], "citations": []})
-        };
         definitions["definitions"]["axioval:example.clash"] = json!({
             "id": "axioval:example.clash",
             "name": {"default": "Clash", "translations": {}},
             "description": {"default": "Bodies must not interpenetrate.", "translations": {}},
             "capability": "axioval:capability.clash",
-            "parameters": {
-                "counterparts": parameter("counterparts", "selector", true),
-                "penetration_tolerance_metres":
-                    parameter("penetration_tolerance_metres", "number", true),
-                "clearance_metres": parameter("clearance_metres", "number", false),
-            },
+            "parameters": registry_signature("axioval:capability.clash"),
             "citations": [],
             "tags": [],
         });
@@ -549,6 +540,107 @@ fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
         listing.contains("#30 IFCBUILDINGELEMENTPROXY 0000000000000000000030"),
         "{listing}"
     );
+}
+
+/// The crossing walls with `extra` entities added to the model.
+fn crossing_walls_with(extra: &str) -> String {
+    crossing_walls().replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"))
+}
+
+impl Case {
+    /// Runs a wall/wall clash rule with the registry's full signature.
+    fn wall_clash(&self, model: &str, parameters: &Value) -> (Output, Value) {
+        let mut bound = json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+        });
+        for (name, value) in parameters.as_object().unwrap() {
+            bound[name] = value.clone();
+        }
+        self.geometry_rule(
+            model,
+            &[],
+            "axioval:capability.clash",
+            &registry_signature("axioval:capability.clash"),
+            entity("wall"),
+            bound,
+        )
+    }
+}
+
+/// The two walls cross 0.2 m wide in plan and 3 m high. Axis tolerances
+/// below that keep the clash; one above it hides it.
+#[test]
+fn with_geometry_clash_axis_tolerances_are_read_from_the_ifc_bodies() {
+    let case = Case::new("clash-axis-tolerances");
+    let (output, result) = case.wall_clash(
+        &crossing_walls(),
+        &json!({"horizontal_tolerance_metres": {"type": "number", "value": 0.15},
+               "vertical_tolerance_metres": {"type": "number", "value": 2.5}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = sorted_findings(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .contains("reaching 0.2000 m in plan and 3.0000 m vertically"),
+        "{findings:?}"
+    );
+
+    let (output, result) = case.wall_clash(
+        &crossing_walls(),
+        &json!({"vertical_tolerance_metres": {"type": "number", "value": 3.5}}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// Walls assigned to one system, or drawn on one layer, are not checked
+/// against each other; the same walls in different systems still clash.
+#[test]
+fn with_geometry_clash_exclusions_read_ifc_systems_and_layers() {
+    let case = Case::new("clash-exclusions");
+    let same_system = crossing_walls_with(
+        "#40=IFCSYSTEM('0000000000000000000040',$,'Structure',$,$);\n\
+         #41=IFCRELASSIGNSTOGROUP('0000000000000000000041',$,$,$,(#16,#26),$,#40);\n",
+    );
+    let by_system = json!({"exclude_paths": {"type": "stringList",
+                                             "value": ["IfcRelAssignsToGroup:backward"]}});
+    let (output, result) = case.wall_clash(&same_system, &by_system);
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+
+    let two_systems = crossing_walls_with(
+        "#40=IFCSYSTEM('0000000000000000000040',$,'Structure',$,$);\n\
+         #41=IFCRELASSIGNSTOGROUP('0000000000000000000041',$,$,$,(#16),$,#40);\n\
+         #42=IFCSYSTEM('0000000000000000000042',$,'Partitions',$,$);\n\
+         #43=IFCRELASSIGNSTOGROUP('0000000000000000000043',$,$,$,(#26),$,#42);\n",
+    );
+    let (output, result) = case.wall_clash(&two_systems, &by_system);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), vec!["#16"], "{result:#}");
+
+    let by_layer = json!({"exclude_same_layer": {"type": "boolean", "value": true}});
+    let one_layer =
+        crossing_walls_with("#40=IFCPRESENTATIONLAYERASSIGNMENT('A-WALL',$,(#14,#24),$);\n");
+    let (output, result) = case.wall_clash(&one_layer, &by_layer);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+
+    let two_layers = crossing_walls_with(
+        "#40=IFCPRESENTATIONLAYERASSIGNMENT('A-WALL',$,(#14),$);\n\
+         #41=IFCPRESENTATIONLAYERASSIGNMENT('S-WALL',$,(#24),$);\n",
+    );
+    let (output, result) = case.wall_clash(&two_layers, &by_layer);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), vec!["#16"], "{result:#}");
 }
 
 #[test]

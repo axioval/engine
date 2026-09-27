@@ -50,7 +50,13 @@ A `ProximityService` answers two questions:
   - the **separation** between the surfaces (zero when they meet);
   - the **plan overlap** area of the two footprints;
   - the witnessed **penetration** depth;
-  - an optional **containment**, when one body lies wholly inside the other.
+  - an optional **containment**, when one body lies wholly inside the other;
+  - the **overlap extents**: how far the intersection reaches along x, y
+    and z (`OverlapExtents`), with `horizontal()` the narrower plan axis and
+    `vertical()` the z extent;
+  - the **Hausdorff distance** between the two surfaces: the farthest any
+    point of either surface lies from the other, zero exactly when they
+    coincide.
 
 The service measures and never decides. Two limits of the measurement are
 explicit in the contract:
@@ -68,6 +74,19 @@ explicit in the contract:
   `separation_interval_metres()`: the range the true separation can lie in.
   `ProximityEvidence::try_new` refuses evidence whose exactness disagrees with
   the fidelity, so a tessellation cannot be presented as fact.
+- **Shape comparisons are intervals.** Overlap extents and the Hausdorff
+  distance are `LengthInterval`s the true values lie in, attached with
+  `with_overlap_extents` and `with_hausdorff`. They are not points even for
+  exact geometry: an extent's lower bound is witnessed and its upper bound
+  proven. Extents need a penetration measurement (two open surfaces share no
+  volume), and bodies apart at the surface that do not contain one another
+  report an empty intersection. A Hausdorff distance below the separation is
+  refused. Both are optional: a service that does not measure them leaves
+  the questions they answer open.
+
+The intersection's **volume** is not measured. A sound volume bound needs a
+certified mesh boolean, which waits on axiolid/kernel#183; there is no
+volume tolerance until then.
 
 ### Distances in a projection
 
@@ -113,6 +132,25 @@ primitives:
   the other surface (found with `axiolid-ray-mesh`). A pipe through a wall has
   no vertex inside the wall, but the midpoint of each long edge's crossings
   lies half a wall deep. An exact duplicate is found through its centre.
+
+- **Overlap extents** span points witnessed in both bodies: every point
+  where an edge of either body crosses the other's surface, and the
+  vertices of either that lie inside the other. For polyhedra those include
+  every vertex of the intersection, so the lower bound is the true extent
+  wherever the crossings are found; the upper bound is the overlap of the
+  bodies' boxes. Inside vertices are tried outermost first on each side of
+  each axis, and a side stops at the first vertex inside or the first that
+  would not widen the box, so the winding test runs only where it can move
+  the answer. A tessellation lowers the witnessed extent by twice the
+  combined deviation and grows each box by its own deviation.
+- **Hausdorff distance** is bounded below by the farthest any vertex lies
+  from the other surface. Above, it is bounded per triangle: the distance to
+  one triangle is convex, so the farthest point of a triangle from it is a
+  vertex, and the least over the other body's triangles of that farthest
+  vertex distance bounds the whole triangle. A triangle whose bound exceeds
+  the largest distance already known is split in four, twice at most.
+  Identical meshes come out exactly zero; a tessellation widens both bounds
+  by the combined deviation.
 
 Both bodies are indexed with an `axiolid-spatial` bounding-volume hierarchy,
 so each query touches only nearby triangles. Samples are ranked by their
@@ -162,11 +200,66 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 | `counterparts` | selector | the objects checked against |
 | `penetration_tolerance_metres` | number, required | overlap accepted at joints |
 | `clearance_metres` | number, optional | minimum separation; positive |
+| `duplicate_tolerance_metres` | number, optional | surfaces this close are duplicates; default zero |
+| `horizontal_tolerance_metres` | number, optional | an intersection must reach further along both plan axes; default zero |
+| `vertical_tolerance_metres` | number, optional | an intersection must reach further in height; default zero |
+| `report_duplicates` | boolean, optional | report duplicates; default true |
+| `report_containment` | boolean, optional | report bodies inside others; default true |
+| `report_intersections` | boolean, optional | report intersections; default true |
+| `exclude_paths` | string list, optional | relationship paths; pairs reaching a shared target are skipped |
+| `exclude_same_layer` | boolean, optional | skip pairs sharing a presentation layer; default false |
 
-A **hard clash** is a witnessed penetration deeper than the tolerance, or one
-body wholly inside another. A **clearance clash** is a separation below the
-clearance, when there is no hard clash. Surfaces that meet with no penetration
-measurement are reported as not evaluated.
+Each pair falls into the first class that holds:
+
+1. **Duplicate**: the Hausdorff distance between the surfaces is within
+   `duplicate_tolerance_metres`.
+2. **Containment**: one body lies wholly inside the other.
+3. **Intersection**: a witnessed penetration deeper than the penetration
+   tolerance, whose intersection reaches further than the horizontal
+   tolerance along both x and y (the narrower plan axis decides) and further
+   than the vertical tolerance in z. A zero axis tolerance asks nothing of
+   that axis. A duct sunk 5 mm into a slab is wide in plan but 5 mm high, so
+   a 10 mm vertical tolerance lets it pass.
+4. **Clearance**: a separation below the clearance, when no class above
+   holds.
+
+A class switched off is not reported, and its pairs are not reported as
+anything else: a duplicate is not also an intersection. Surfaces that meet
+with no penetration measurement are reported as not evaluated. Axis
+extents are taken along the world axes, so an intersection with a wall at an
+angle reaches further along x and y than its depth into the wall; the
+penetration tolerance still bounds that depth.
+
+**Judging intervals.** A class holds when the whole measured interval says
+so and fails when none of it does. When a Hausdorff distance or an extent
+straddles its tolerance, the pair is judged both ways: it is reported when
+both readings are findings (with the finding that holds either way) and
+passes when both pass; otherwise it is not evaluated. A service that
+measures no Hausdorff distance therefore leaves touching pairs open while
+duplicates are reported.
+
+**Exclusions.** Each `exclude_paths` entry is a relationship path, its
+steps separated by spaces and written like the `path` of the distance
+traversal (`Relationship` or `Relationship:direction`). A pair is skipped
+when the objects reached from its two members through the same path meet,
+counting each member as reaching itself, so a path from one member to the
+other excludes it too. In IFC:
+
+| Exclusion | Path |
+|---|---|
+| same system | `IfcRelAssignsToGroup:backward` |
+| same parent element | `IfcRelAggregates:backward` |
+| connected ports | `IfcRelConnectsPortToElement:backward IfcRelConnectsPorts:either IfcRelConnectsPortToElement:forward` |
+
+`exclude_same_layer` skips pairs whose `axioval:presentation.Layer` lists
+share a name; an object on no layer shares none. An exclusion is decided
+before measuring, so an excluded pair costs no narrow phase. One that cannot
+be decided (a relationship the source refuses, a source recording no layers)
+never hides a pair and never reports one: a pair that would be reported is
+not evaluated instead, and one that passes stays passed.
+
+The intersection volume and a volume tolerance wait on
+axiolid/kernel#183.
 
 `axioval:capability.distance` requires each subject's counterparts to keep a
 declared distance. It takes these parameters:

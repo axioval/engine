@@ -59,7 +59,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `measure_distance` answers projections: horizontal distance folds 2D
   closest points over projected triangles (edge-on ones as segments), exact
   for non-convex footprints; vertical is the extent gap of footprint-related
-  bodies; plan overlap uses the overlay. A tessellated overlap is asserted
+  bodies; plan overlap uses the overlay. Overlap extents span witnessed
+  intersection points (edge crossings both ways, inside vertices tried
+  outermost first) below and the boxes' overlap above; the Hausdorff
+  distance is bounded per triangle by the farthest vertex from one other
+  triangle, split twice at most. Never report either as a point you did
+  not bound, and never measure a volume without a certified boolean
+  (axiolid/kernel#183). A tessellated overlap is asserted
   only from a witness deeper than the deviations and denied only beyond the
   combined deviation; otherwise it stays open. Never decide it on the mesh.
 - **Every service honours fidelity.** Proximity reports approximate evidence.

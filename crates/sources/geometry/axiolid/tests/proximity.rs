@@ -291,3 +291,123 @@ fn missing_geometry_and_bad_deviation_are_refused() {
         ProximityError::InvalidMeasurement
     );
 }
+
+fn assert_interval(interval: axioval_engine::LengthInterval, lower: f64, upper: f64) {
+    assert!(
+        (interval.lower_metres() - lower).abs() < 1e-9
+            && (interval.upper_metres() - upper).abs() < 1e-9,
+        "{interval:?}, expected [{lower}, {upper}]"
+    );
+}
+
+/// For two boxes the intersection's vertices are all witnessed, so each
+/// extent is known exactly: the pipe's width in x and z, the wall's
+/// thickness in y.
+#[test]
+fn a_pipe_through_a_wall_overlaps_by_its_section_and_the_wall_thickness() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_mesh(id("pipe"), cuboid([1.0, -1.0, 1.0], [1.1, 1.2, 1.1]));
+    let extents = measure(geometry, "pipe", "wall")
+        .overlap_extents()
+        .expect("both are solids");
+    assert_interval(extents.x(), 0.1, 0.1);
+    assert_interval(extents.y(), 0.2, 0.2);
+    assert_interval(extents.z(), 0.1, 0.1);
+    assert_interval(extents.horizontal(), 0.1, 0.1);
+    assert_interval(extents.vertical(), 0.1, 0.1);
+}
+
+/// A duct sunk 5 mm into a slab overlaps it widely in plan and barely in
+/// height: the extents tell the two apart.
+#[test]
+fn a_shallow_overlap_is_thin_vertically() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), cuboid([0.0, 0.0, 3.0], [4.0, 4.0, 3.2]))
+        .with_mesh(id("duct"), cuboid([1.0, 1.0, 2.5], [3.0, 1.5, 3.005]));
+    let extents = measure(geometry, "duct", "slab")
+        .overlap_extents()
+        .expect("solids");
+    assert_interval(extents.horizontal(), 0.5, 0.5);
+    assert_interval(extents.vertical(), 0.005, 0.005);
+}
+
+#[test]
+fn a_contained_body_overlaps_by_its_own_extent_and_apart_bodies_by_none() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 3.0]))
+        .with_mesh(id("box"), cuboid([1.0, 1.0, 1.0], [2.0, 2.5, 2.0]));
+    let extents = measure(geometry, "box", "room").overlap_extents().unwrap();
+    assert_interval(extents.x(), 1.0, 1.0);
+    assert_interval(extents.y(), 1.5, 1.5);
+    assert_interval(extents.z(), 1.0, 1.0);
+
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_mesh(id("duct"), cuboid([0.0, 0.5, 1.0], [1.0, 1.0, 1.5]));
+    let extents = measure(geometry, "duct", "wall").overlap_extents().unwrap();
+    for axis in [extents.x(), extents.y(), extents.z()] {
+        assert_interval(axis, 0.0, 0.0);
+    }
+    // Two open surfaces share no volume to have extents.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), quad(1.0))
+        .with_mesh(id("b"), quad(1.0));
+    assert_eq!(measure(geometry, "a", "b").overlap_extents(), None);
+}
+
+#[test]
+fn identical_bodies_are_zero_apart_in_hausdorff_distance() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), wall())
+        .with_mesh(id("b"), wall());
+    let hausdorff = measure(geometry, "a", "b")
+        .hausdorff_interval_metres()
+        .unwrap();
+    assert_interval(hausdorff, 0.0, 0.0);
+}
+
+/// A copy shifted by 3 mm is 3 mm away at its ends, and the bound on every
+/// face holds it close to that.
+#[test]
+fn a_shifted_copy_is_as_far_as_its_shift() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), wall())
+        .with_mesh(id("b"), cuboid([0.003, 0.0, 0.0], [4.003, 0.2, 3.0]));
+    let hausdorff = measure(geometry, "a", "b")
+        .hausdorff_interval_metres()
+        .unwrap();
+    assert!(
+        (hausdorff.lower_metres() - 0.003).abs() < 1e-9,
+        "{hausdorff:?}"
+    );
+    assert!(hausdorff.upper_metres() < 0.0035, "{hausdorff:?}");
+}
+
+#[test]
+fn different_bodies_are_far_apart_in_hausdorff_distance() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_mesh(id("pipe"), cuboid([1.0, -1.0, 1.0], [1.1, 1.2, 1.1]));
+    let hausdorff = measure(geometry, "pipe", "wall")
+        .hausdorff_interval_metres()
+        .unwrap();
+    // The wall's far corner lies metres from the pipe.
+    assert!(hausdorff.lower_metres() > 2.0, "{hausdorff:?}");
+    assert!(hausdorff.upper_metres() >= hausdorff.lower_metres());
+}
+
+/// Each tessellated surface may lie its deviation from its mesh, so two
+/// identical meshes bound the true distance by both deviations.
+#[test]
+fn tessellated_duplicates_widen_by_the_deviations() {
+    let geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(id("a"), column([0.0, 0.0], 0.2, [0.0, 3.0], 16), 0.002)
+        .with_tessellated_mesh(id("b"), column([0.0, 0.0], 0.2, [0.0, 3.0], 16), 0.001);
+    let measured = measure(geometry, "a", "b");
+    assert_interval(measured.hausdorff_interval_metres().unwrap(), 0.0, 0.003);
+    let extents = measured.overlap_extents().unwrap();
+    // Witnessed across the whole column less both ends' deviations; the
+    // boxes grown by each deviation bound it above.
+    assert_interval(extents.z(), 3.0 - 0.006, 3.002);
+}

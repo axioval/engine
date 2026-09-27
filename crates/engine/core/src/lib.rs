@@ -521,9 +521,9 @@ pub use properties::{
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use proximity::{
-    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, ProjectedDistanceEvidence,
-    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
-    ProximityServiceHandle,
+    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, OverlapExtents,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, ProximityServiceHandle,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,

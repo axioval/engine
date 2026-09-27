@@ -4,45 +4,486 @@
 //! whether a measured overlap is a clash is decided here, against declared
 //! tolerances.
 //!
-//! - A **hard clash** is one body reaching into another deeper than the
-//!   declared penetration tolerance, or lying wholly inside it. Zero
-//!   separation alone is not a clash: a slab resting on a wall has its
-//!   surfaces meeting and nothing interpenetrating.
-//! - A **clearance clash** is two bodies coming closer than the declared
-//!   clearance without a hard clash.
+//! Each pair falls into one class, tried in this order:
+//!
+//! - **Duplicate**: the two surfaces lie within `duplicate_tolerance_metres`
+//!   of each other (their Hausdorff distance), whatever else is true of them.
+//! - **Containment**: one body lies wholly inside the other.
+//! - **Intersection**: one body reaches into the other deeper than the
+//!   penetration tolerance, and the intersection reaches further than the
+//!   horizontal tolerance along both plan axes and further than the vertical
+//!   tolerance in height. Zero separation alone is not a clash: a slab
+//!   resting on a wall has its surfaces meeting and nothing interpenetrating.
+//! - **Clearance**: two bodies coming closer than the declared clearance
+//!   without falling into a class above.
+//!
+//! Each of the first three classes has a switch. A switched-off class is not
+//! reported, and its pairs are not reported as anything else either: a
+//! duplicate is not an intersection.
+//!
+//! Every comparison is made on the measured interval. A class holds when the
+//! whole interval says so and fails when none of it does; a pair whose
+//! interval straddles a tolerance is reported only when both readings lead to
+//! a finding, and is otherwise not evaluated.
+//!
+//! Pairs can be excluded: pairs whose objects reach a shared target through a
+//! declared relationship path (the same system, the same parent element,
+//! connected ports), and pairs on a shared presentation layer. An exclusion
+//! that cannot be decided leaves a pair that would be reported not evaluated.
 //!
 //! When neither body is a closed solid there is no inside to measure, so
 //! surfaces that meet cannot be classified: the pair is reported not
-//! evaluated rather than passed. Measurements on tessellated geometry are reported, and marked
-//! approximate in both the message and the evidence.
+//! evaluated rather than passed. Measurements on tessellated geometry are
+//! reported, and marked approximate in both the message and the evidence.
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     BodyContainment, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, ProximityProjection, ProximityRequest, RuleCapability, RuleContext,
+    ParameterType, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
+    ProximityEvidence, ProximityProjection, ProximityRequest, RuleCapability, RuleContext,
 };
-use axioval_ir::Finding;
+use axioval_ir::{Finding, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue};
 
-use crate::pairs::{fidelity_note, length, prepare, reason, severity};
+use crate::pairs::{fidelity_note, prepare, reason, refuse_declaration, severity};
+use crate::selection::property_error;
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
-/// Reports bodies that interpenetrate, or come closer than a clearance.
+/// Reports duplicates, contained bodies, intersections and clearance
+/// shortfalls between bodies.
 pub struct Clash;
+
+/// Which classes are reported.
+struct Report {
+    duplicate: bool,
+    containment: bool,
+    intersection: bool,
+}
 
 struct Declaration {
     penetration_tolerance: f64,
     clearance: Option<f64>,
+    duplicate_tolerance: f64,
+    horizontal_tolerance: f64,
+    vertical_tolerance: f64,
+    report: Report,
+    /// Relationship paths, each a list of steps.
+    exclude_paths: Vec<Vec<String>>,
+    exclude_same_layer: bool,
 }
 
-fn declaration(rule: &CompiledRule) -> Option<Declaration> {
-    let penetration_tolerance = length(rule, "penetration_tolerance_metres").ok()??;
-    // A zero clearance is no clearance requirement; say so by omitting it.
-    let clearance = length(rule, "clearance_metres").ok()?;
-    if clearance == Some(0.0) {
-        return None;
+fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
+    match parameters.number(name)? {
+        Some(value) if value < 0.0 => Err(invalid(format!("`{name}` must not be negative"))),
+        other => Ok(other),
     }
-    Some(Declaration {
+}
+
+fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
+    let parameters = Parameters(rule);
+    let penetration_tolerance = length(&parameters, "penetration_tolerance_metres")?
+        .ok_or_else(|| invalid("parameter `penetration_tolerance_metres` is required"))?;
+    let clearance = length(&parameters, "clearance_metres")?;
+    if clearance == Some(0.0) {
+        return Err(invalid("`clearance_metres` must be positive"));
+    }
+    let switch =
+        |name: &str| -> Result<bool, Unavailable> { Ok(parameters.boolean(name)?.unwrap_or(true)) };
+    let report = Report {
+        duplicate: switch("report_duplicates")?,
+        containment: switch("report_containment")?,
+        intersection: switch("report_intersections")?,
+    };
+    if !(report.duplicate || report.containment || report.intersection) && clearance.is_none() {
+        return Err(invalid(
+            "every class is switched off and no clearance is declared: nothing is checked",
+        ));
+    }
+    let exclude_paths: Vec<Vec<String>> = parameters
+        .strings("exclude_paths")?
+        .unwrap_or_default()
+        .iter()
+        .map(|path| path.split_whitespace().map(str::to_owned).collect())
+        .collect();
+    for path in &exclude_paths {
+        if path.is_empty() {
+            return Err(invalid("an `exclude_paths` entry has no steps"));
+        }
+        Traversal::path(path)?;
+    }
+    Ok(Declaration {
         penetration_tolerance,
         clearance,
+        duplicate_tolerance: length(&parameters, "duplicate_tolerance_metres")?.unwrap_or(0.0),
+        horizontal_tolerance: length(&parameters, "horizontal_tolerance_metres")?.unwrap_or(0.0),
+        vertical_tolerance: length(&parameters, "vertical_tolerance_metres")?.unwrap_or(0.0),
+        report,
+        exclude_paths,
+        exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
     })
+}
+
+/// A three-valued judgement of an interval against a tolerance.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Holds {
+    Yes,
+    No,
+    Unknown,
+}
+
+impl Holds {
+    fn and(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::No, _) | (_, Self::No) => Self::No,
+            (Self::Yes, Self::Yes) => Self::Yes,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// What a pair amounts to.
+enum Outcome {
+    Pass,
+    Finding(String),
+    Open(NotEvaluatedReason, String),
+}
+
+impl Outcome {
+    /// The outcome when the measurement cannot tell `yes` from `no`: it
+    /// stands only where both agree. Two findings keep the one that holds
+    /// either way, `no`.
+    fn either(yes: Self, no: Self, undecided: String) -> Self {
+        match (yes, no) {
+            (Self::Pass, Self::Pass) => Self::Pass,
+            (Self::Finding(_), Self::Finding(message)) => Self::Finding(message),
+            (_, Self::Open(reason, message)) | (Self::Open(reason, message), _) => {
+                Self::Open(reason, message)
+            }
+            _ => Self::Open(NotEvaluatedReason::IncompleteEvidence, undecided),
+        }
+    }
+}
+
+impl Declaration {
+    fn judge(&self, measured: &ProximityEvidence, counterpart: &ObjectId) -> Outcome {
+        let note = fidelity_note(measured.fidelity());
+        let tolerance = self.duplicate_tolerance;
+        let (lower, upper) = match measured.hausdorff_interval_metres() {
+            Some(interval) => (interval.lower_metres(), interval.upper_metres()),
+            None => (0.0, f64::INFINITY),
+        };
+        // No point of a surface lies nearer the other than the separation.
+        let lower = lower.max(measured.separation_interval_metres().0);
+        let duplicate = if upper <= tolerance {
+            Holds::Yes
+        } else if lower > tolerance {
+            Holds::No
+        } else {
+            Holds::Unknown
+        };
+        let reported = || {
+            if self.report.duplicate {
+                Outcome::Finding(format!(
+                    "duplicate of {counterpart}: the surfaces lie within {upper:.4} m of each other, tolerance {tolerance:.4} m{note}"
+                ))
+            } else {
+                Outcome::Pass
+            }
+        };
+        match duplicate {
+            Holds::Yes => reported(),
+            Holds::No => self.distinct(measured, counterpart, &note),
+            Holds::Unknown => Outcome::either(
+                reported(),
+                self.distinct(measured, counterpart, &note),
+                format!(
+                    "whether {counterpart} is a duplicate cannot be decided: the surfaces lie between {lower:.4} m and {} of each other, tolerance {tolerance:.4} m{note}",
+                    if upper.is_finite() {
+                        format!("{upper:.4} m")
+                    } else {
+                        "an unmeasured distance".to_owned()
+                    }
+                ),
+            ),
+        }
+    }
+
+    /// The outcome for a pair that is not a duplicate.
+    fn distinct(
+        &self,
+        measured: &ProximityEvidence,
+        counterpart: &ObjectId,
+        note: &str,
+    ) -> Outcome {
+        let containment = |message: String| {
+            if self.report.containment {
+                Outcome::Finding(message)
+            } else {
+                Outcome::Pass
+            }
+        };
+        match (measured.containment(), measured.penetration_metres()) {
+            (Some(BodyContainment::SubjectInsideCounterpart), _) => {
+                containment(format!("lies wholly inside {counterpart}{note}"))
+            }
+            (Some(BodyContainment::CounterpartInsideSubject), _) => {
+                containment(format!("wholly contains {counterpart}{note}"))
+            }
+            (None, Some(depth)) if depth > self.penetration_tolerance => {
+                self.intersection(measured, counterpart, depth, note)
+            }
+            (None, None) if measured.separation_metres() == 0.0 => Outcome::Open(
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "surfaces meet {counterpart}, but neither body is a closed solid, so touching cannot be told from crossing"
+                ),
+            ),
+            (None, _) => self.clearance(measured, counterpart, note),
+        }
+    }
+
+    /// A penetration past the tolerance: an intersection when it also
+    /// reaches past the axis tolerances.
+    fn intersection(
+        &self,
+        measured: &ProximityEvidence,
+        counterpart: &ObjectId,
+        depth: f64,
+        note: &str,
+    ) -> Outcome {
+        let extents = measured.overlap_extents();
+        let exceeds = |tolerance: f64, interval: Option<axioval_engine::LengthInterval>| {
+            if tolerance == 0.0 {
+                return Holds::Yes;
+            }
+            match interval {
+                Some(interval) if interval.lower_metres() > tolerance => Holds::Yes,
+                Some(interval) if interval.upper_metres() <= tolerance => Holds::No,
+                _ => Holds::Unknown,
+            }
+        };
+        let holds = exceeds(
+            self.horizontal_tolerance,
+            extents.map(|extents| extents.horizontal()),
+        )
+        .and(exceeds(
+            self.vertical_tolerance,
+            extents.map(|extents| extents.vertical()),
+        ));
+        let axes = self.horizontal_tolerance > 0.0 || self.vertical_tolerance > 0.0;
+        let described = |interval: Option<axioval_engine::LengthInterval>| {
+            interval.map_or_else(
+                || "unmeasured".to_owned(),
+                |interval| {
+                    if interval.is_exact() {
+                        format!("{:.4} m", interval.lower_metres())
+                    } else {
+                        format!(
+                            "{:.4} to {:.4} m",
+                            interval.lower_metres(),
+                            interval.upper_metres()
+                        )
+                    }
+                },
+            )
+        };
+        let reach = if axes {
+            format!(
+                ", reaching {} in plan and {} vertically",
+                described(extents.map(|extents| extents.horizontal())),
+                described(extents.map(|extents| extents.vertical()))
+            )
+        } else {
+            String::new()
+        };
+        let reported = || {
+            if self.report.intersection {
+                Outcome::Finding(format!(
+                    "hard clash with {counterpart}: penetration {depth:.4} m exceeds tolerance {:.4} m{reach}{note}",
+                    self.penetration_tolerance
+                ))
+            } else {
+                Outcome::Pass
+            }
+        };
+        match holds {
+            Holds::Yes => reported(),
+            Holds::No => self.clearance(measured, counterpart, note),
+            Holds::Unknown => Outcome::either(
+                reported(),
+                self.clearance(measured, counterpart, note),
+                format!(
+                    "whether the intersection with {counterpart} exceeds the horizontal tolerance {:.4} m and the vertical tolerance {:.4} m cannot be decided{reach}{note}",
+                    self.horizontal_tolerance, self.vertical_tolerance
+                ),
+            ),
+        }
+    }
+
+    fn clearance(
+        &self,
+        measured: &ProximityEvidence,
+        counterpart: &ObjectId,
+        note: &str,
+    ) -> Outcome {
+        match self.clearance {
+            Some(clearance) if measured.separation_metres() < clearance => {
+                Outcome::Finding(format!(
+                    "clearance clash with {counterpart}: separation {:.4} m below required {clearance:.4} m{note}",
+                    measured.separation_metres()
+                ))
+            }
+            _ => Outcome::Pass,
+        }
+    }
+}
+
+type Reached = Result<BTreeSet<ObjectId>, Unavailable>;
+
+/// Whether pairs share a relationship target or a presentation layer, with
+/// every walk and layer read cached per object.
+struct Exclusions<'r> {
+    context: &'r RuleContext<'r>,
+    paths: Vec<Traversal<'r>>,
+    same_layer: bool,
+    everything: Vec<&'r Object>,
+    reached: BTreeMap<(usize, ObjectId), Reached>,
+    layers: BTreeMap<ObjectId, Result<BTreeSet<String>, Unavailable>>,
+}
+
+impl<'r> Exclusions<'r> {
+    fn new(context: &'r RuleContext<'r>, declared: &'r Declaration) -> Result<Self, Unavailable> {
+        Ok(Self {
+            context,
+            paths: declared
+                .exclude_paths
+                .iter()
+                .map(|path| Traversal::path(path))
+                .collect::<Result<_, _>>()?,
+            same_layer: declared.exclude_same_layer,
+            everything: context.project.objects().collect(),
+            reached: BTreeMap::new(),
+            layers: BTreeMap::new(),
+        })
+    }
+
+    fn reached(&mut self, path: usize, object: &ObjectId) -> &Reached {
+        let Self {
+            context,
+            paths,
+            everything,
+            reached,
+            ..
+        } = self;
+        reached.entry((path, object.clone())).or_insert_with(|| {
+            paths[path]
+                .related(context, object, everything)
+                .map(|(found, _)| found.into_iter().collect())
+        })
+    }
+
+    fn layers(&mut self, object: &ObjectId) -> &Result<BTreeSet<String>, Unavailable> {
+        let context = self.context;
+        self.layers.entry(object.clone()).or_insert_with(|| {
+            let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
+                return Err((
+                    NotEvaluatedReason::MissingService,
+                    "property-resolution service is not registered".into(),
+                ));
+            };
+            // The presentation layer is engine vocabulary, not a package
+            // concept: it is asked for by its own name in every source.
+            let request = PropertyRequest::try_new(
+                object.clone(),
+                Some(PRESENTATION_SET.to_owned()),
+                PRESENTATION_LAYER,
+            )
+            .map_err(|error| invalid(error.to_string()))?;
+            let resolved = match service.resolve(&request).map_err(property_error)? {
+                PropertyResolution::Present(resolved) => Some(resolved.property().value.clone()),
+                PropertyResolution::Absent(_) => None,
+            };
+            match resolved.as_ref() {
+                None => Ok(BTreeSet::new()),
+                Some(PropertyValue::List(values)) => values
+                    .iter()
+                    .map(|value| match value {
+                        PropertyValue::String(layer) => Ok(layer.clone()),
+                        _ => Err((
+                            NotEvaluatedReason::InvalidEvidence,
+                            format!("a presentation layer of {object} is not text"),
+                        )),
+                    })
+                    .collect(),
+                Some(_) => Err((
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("the presentation layers of {object} are not a list"),
+                )),
+            }
+        })
+    }
+
+    /// Why the pair is excluded, `None` when it is not, or why that cannot
+    /// be decided.
+    fn excluded(&mut self, a: &ObjectId, b: &ObjectId) -> Result<Option<String>, Unavailable> {
+        let mut undecided = None;
+        for path in 0..self.paths.len() {
+            let from_a = self.reached(path, a).clone();
+            let from_b = self.reached(path, b).clone();
+            // Each object counts as reaching itself, so a path from one
+            // object to the other excludes the pair as well.
+            let shared = match (&from_a, &from_b) {
+                (Ok(from_a), _) if from_a.contains(b) => Some(true),
+                (_, Ok(from_b)) if from_b.contains(a) => Some(true),
+                (Ok(from_a), Ok(from_b)) => Some(!from_a.is_disjoint(from_b)),
+                _ => None,
+            };
+            match shared {
+                Some(true) => {
+                    return Ok(Some(format!(
+                        "they share a target through {}",
+                        self.paths[path].relationship
+                    )));
+                }
+                Some(false) => {}
+                None => {
+                    let (reason, message) = from_a
+                        .err()
+                        .or(from_b.err())
+                        .unwrap_or_else(|| unreachable!("an undecided path has a failed walk"));
+                    undecided.get_or_insert((
+                        reason,
+                        format!(
+                            "whether they share a target through {} cannot be decided: {message}",
+                            self.paths[path].relationship
+                        ),
+                    ));
+                }
+            }
+        }
+        if self.same_layer {
+            let (on_a, on_b) = (self.layers(a).clone(), self.layers(b).clone());
+            match (on_a, on_b) {
+                (Ok(on_a), Ok(on_b)) => {
+                    if let Some(layer) = on_a.intersection(&on_b).next() {
+                        return Ok(Some(format!("they share the presentation layer {layer}")));
+                    }
+                }
+                (Err((reason, message)), _) | (_, Err((reason, message))) => {
+                    undecided.get_or_insert((
+                        reason,
+                        format!(
+                            "whether they share a presentation layer cannot be decided: {message}"
+                        ),
+                    ));
+                }
+            }
+        }
+        match undecided {
+            Some(unavailable) => Err(unavailable),
+            None => Ok(None),
+        }
+    }
 }
 
 impl RuleCapability for Clash {
@@ -55,26 +496,44 @@ impl RuleCapability for Clash {
             ParameterDescriptor::required("counterparts", ParameterType::Selector),
             ParameterDescriptor::required("penetration_tolerance_metres", ParameterType::Number),
             ParameterDescriptor::optional("clearance_metres", ParameterType::Number),
+            ParameterDescriptor::optional("duplicate_tolerance_metres", ParameterType::Number),
+            ParameterDescriptor::optional("horizontal_tolerance_metres", ParameterType::Number),
+            ParameterDescriptor::optional("vertical_tolerance_metres", ParameterType::Number),
+            ParameterDescriptor::optional("report_duplicates", ParameterType::Boolean),
+            ParameterDescriptor::optional("report_containment", ParameterType::Boolean),
+            ParameterDescriptor::optional("report_intersections", ParameterType::Boolean),
+            ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
+            ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = declaration(rule);
-        let margin = declared
-            .as_ref()
-            .map(|declared| declared.clearance.unwrap_or(0.0));
-        let prepared = match prepare(context, rule, margin, ProximityProjection::Minimum3d) {
+        let declared = match declaration(rule) {
+            Ok(declared) => declared,
+            Err((_, message)) => return refuse_declaration(context, rule, &message),
+        };
+        let prepared = match prepare(
+            context,
+            rule,
+            Some(declared.clearance.unwrap_or(0.0)),
+            ProximityProjection::Minimum3d,
+        ) {
             Ok(prepared) => prepared,
             Err(refused) => return refused,
         };
-        let Some(declared) = declared else {
-            unreachable!("prepare refuses a missing margin");
+        let mut exclusions = match Exclusions::new(context, &declared) {
+            Ok(exclusions) => exclusions,
+            Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
         let mut evaluation = CapabilityEvaluation::default();
         let mut unevaluated = prepared.unevaluated;
 
         for pair in &prepared.pairs {
             let (subject, counterpart) = (pair.subject(), pair.counterpart());
+            let exclusion = exclusions.excluded(subject, counterpart);
+            if matches!(exclusion, Ok(Some(_))) {
+                continue;
+            }
             let measured = ProximityRequest::try_new(subject.clone(), counterpart.clone())
                 .and_then(|request| prepared.service.measure_proximity(&request))
                 .and_then(|measured| {
@@ -98,46 +557,24 @@ impl RuleCapability for Clash {
                     continue;
                 }
             };
-            let note = fidelity_note(measured.fidelity());
-            let hard = match (measured.containment(), measured.penetration_metres()) {
-                (Some(BodyContainment::SubjectInsideCounterpart), _) => {
-                    Some(format!("lies wholly inside {counterpart}{note}"))
-                }
-                (Some(BodyContainment::CounterpartInsideSubject), _) => {
-                    Some(format!("wholly contains {counterpart}{note}"))
-                }
-                (None, Some(depth)) if depth > declared.penetration_tolerance => Some(format!(
-                    "hard clash with {counterpart}: penetration {depth:.4} m exceeds tolerance {:.4} m{note}",
-                    declared.penetration_tolerance
-                )),
-                (None, Some(_)) => None,
-                (None, None) => {
-                    if measured.separation_metres() == 0.0 {
-                        unevaluated.push(
-                            subject.clone(),
-                            NotEvaluatedReason::IncompleteEvidence,
-                            format!(
-                                "surfaces meet {counterpart}, but neither body is a closed solid, so touching cannot be told from crossing"
-                            ),
-                        );
-                        continue;
-                    }
-                    None
-                }
+            let outcome = declared.judge(&measured, counterpart);
+            let outcome = match (outcome, exclusion) {
+                (Outcome::Pass, _) => continue,
+                // A fact the source records for nothing is about the source,
+                // not the pair: keep its message free of object names, so the
+                // runtime reports it once per source.
+                (_, Err((NotEvaluatedReason::NotRecorded, message))) => Outcome::Open(
+                    NotEvaluatedReason::NotRecorded,
+                    format!("a clash may be excluded: {message}"),
+                ),
+                (_, Err((reason, message))) => Outcome::Open(
+                    reason,
+                    format!("the pair with {counterpart} may be excluded: {message}"),
+                ),
+                (outcome, _) => outcome,
             };
-            let message = hard.or_else(|| {
-                declared
-                    .clearance
-                    .filter(|clearance| measured.separation_metres() < *clearance)
-                    .map(|clearance| {
-                        format!(
-                            "clearance clash with {counterpart}: separation {:.4} m below required {clearance:.4} m{note}",
-                            measured.separation_metres()
-                        )
-                    })
-            });
-            if let Some(message) = message {
-                evaluation.push_finding(
+            match outcome {
+                Outcome::Finding(message) => evaluation.push_finding(
                     Finding {
                         rule_id: rule.id.clone(),
                         scope: axioval_ir::Scope::Object(subject.clone()),
@@ -147,7 +584,11 @@ impl RuleCapability for Clash {
                         evidence: vec![measured.evidence().clone()],
                     }
                     .with_related([counterpart.clone()]),
-                );
+                ),
+                Outcome::Open(reason, message) => {
+                    unevaluated.push(subject.clone(), reason, message);
+                }
+                Outcome::Pass => {}
             }
         }
         unevaluated.drain_into(&mut evaluation);

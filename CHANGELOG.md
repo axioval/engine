@@ -6,6 +6,31 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Clash classes, axis tolerances and pair exclusions.** `clash` now puts
+  each pair in one class: a **duplicate** (the two surfaces lie within
+  `duplicate_tolerance_metres` of each other, default zero), one body
+  **inside** the other, or an **intersection**, which counts only when its
+  extent exceeds `horizontal_tolerance_metres` along both plan axes and
+  `vertical_tolerance_metres` in height. `report_duplicates`,
+  `report_containment` and `report_intersections` switch each class off; a
+  switched-off class is not reported as another. `exclude_paths` skips pairs
+  whose objects reach a shared target, or each other, through a relationship
+  path (`IfcRelAssignsToGroup:backward` for the same system,
+  `IfcRelAggregates:backward` for the same parent element, a port path for
+  connected elements), and `exclude_same_layer` pairs on a shared
+  presentation layer. Every comparison is on an interval: a straddling
+  tolerance or an exclusion that cannot be decided leaves a pair not
+  evaluated unless it is a finding either way. The contract gains
+  `OverlapExtents` (the intersection's extent along x, y and z as intervals)
+  and the Hausdorff distance between two surfaces on `ProximityEvidence`
+  (`with_overlap_extents`, `with_hausdorff`); `AxiolidProximityService`
+  measures both, witnessing the intersection's vertices from edge crossings
+  and inside vertices and bounding the Hausdorff distance per triangle. The
+  intersection volume, and a volume tolerance, wait on a certified mesh
+  boolean (axiolid/kernel#183). **Breaking:** definitions bound to `clash`
+  must declare the eight new optional parameters; a service that measures
+  no Hausdorff distance leaves touching pairs not evaluated while duplicates
+  are reported. (#57)
 - **Exit separation.** The new capability `exit-separation` requires each
   selected space's exits, reached through `exit_path` (such as
   `axioval:derived.adjacent-space:backward`) and filtered by

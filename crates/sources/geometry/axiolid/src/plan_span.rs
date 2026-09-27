@@ -30,7 +30,7 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::plan_area::{AxiolidPlanAreaService, Footprint, band, tolerance};
-use crate::planar::{footprint_polygons, polygon_moments};
+use crate::planar::{footprint_polygons, hull_of, polygon_moments};
 
 /// A point in plan.
 type Point = (f64, f64);
@@ -148,42 +148,16 @@ fn distance(a: Point, b: Point) -> f64 {
     (a.0 - b.0).hypot(a.1 - b.1)
 }
 
-fn cross(o: Point, a: Point, b: Point) -> f64 {
-    (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
-}
-
-/// The convex hull of the triangles' plan vertices (monotone chain), with
-/// collinear points dropped; a segment's hull is its two ends.
+/// The convex hull of the triangles' plan vertices, with collinear points
+/// dropped; a segment's hull is its two ends.
 fn convex_hull(triangles: &[Triangle]) -> Vec<Point> {
-    let mut points: Vec<Point> = triangles
-        .iter()
-        .flatten()
-        .map(|point| (point.x, point.y))
-        .collect();
-    points.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
-    points.dedup();
-    if points.len() < 3 {
-        return points;
-    }
-    let mut hull: Vec<Point> = Vec::with_capacity(2 * points.len());
-    for pass in [false, true] {
-        let floor = hull.len() + 1;
-        let ordered: Box<dyn Iterator<Item = &Point>> = if pass {
-            Box::new(points.iter().rev().skip(1))
-        } else {
-            Box::new(points.iter())
-        };
-        for point in ordered {
-            while hull.len() >= floor.max(2)
-                && cross(hull[hull.len() - 2], hull[hull.len() - 1], *point) <= 0.0
-            {
-                hull.pop();
-            }
-            hull.push(*point);
-        }
-    }
-    hull.pop();
-    hull
+    hull_of(
+        triangles
+            .iter()
+            .flatten()
+            .map(|point| (point.x, point.y))
+            .collect(),
+    )
 }
 
 /// The largest distance between a point of `first` and a point of `second`.

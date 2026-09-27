@@ -146,6 +146,87 @@ impl VerticalExtent {
     pub fn evidence(&self) -> &Evidence {
         &self.evidence
     }
+
+    /// The height, top less bottom, as `(lower, upper)` metres sure to hold
+    /// the exact difference of the two elevations.
+    #[must_use]
+    pub fn height_metres(&self) -> (f64, f64) {
+        let (low, _) = difference(self.top.lower, self.bottom.upper);
+        let (_, high) = difference(self.top.upper, self.bottom.lower);
+        (low.max(0.0), high.max(0.0))
+    }
+
+    /// Bounds `(lower, upper)`, in metres, on the height of this extent that
+    /// no member of `cover` spans once each is grown by `growth_metres` below
+    /// its bottom and above its top: the vertical difference between this
+    /// object and its counterparts.
+    ///
+    /// The uncovered height only grows as this extent widens and as a cover
+    /// narrows, so the upper bound measures this extent at its widest
+    /// against every cover at its narrowest, and the lower bound the reverse;
+    /// both hold the exact value whatever the elevations are within their
+    /// intervals. A cover whose narrowest extent is empty spans nothing. A
+    /// growth that is negative or not finite is refused.
+    pub fn uncovered_height(
+        &self,
+        cover: &[&VerticalExtent],
+        growth_metres: f64,
+    ) -> Result<(f64, f64), VerticalExtentError> {
+        if !growth_metres.is_finite() || growth_metres < 0.0 {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        let upper = uncovered_length(
+            (self.bottom.lower, self.top.upper),
+            cover.iter().map(|extent| {
+                (
+                    extent.bottom.upper - growth_metres,
+                    extent.top.lower + growth_metres,
+                )
+            }),
+            true,
+        );
+        let lower = uncovered_length(
+            (self.bottom.upper, self.top.lower),
+            cover.iter().map(|extent| {
+                (
+                    extent.bottom.lower - growth_metres,
+                    extent.top.upper + growth_metres,
+                )
+            }),
+            false,
+        );
+        Ok((lower.min(upper), upper))
+    }
+}
+
+/// The length of `span` outside every interval of `cover`, the upper bound
+/// of each gap's rounded length when `upper`, else the lower.
+fn uncovered_length(span: (f64, f64), cover: impl Iterator<Item = (f64, f64)>, upper: bool) -> f64 {
+    let (start, end) = span;
+    if start >= end {
+        return 0.0;
+    }
+    let mut clipped: Vec<(f64, f64)> = cover
+        .map(|(low, high)| (low.max(start), high.min(end)))
+        .filter(|(low, high)| low < high)
+        .collect();
+    clipped.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let gap = |from: f64, to: f64| {
+        let (low, high) = difference(to, from);
+        if upper { high } else { low }.max(0.0)
+    };
+    let mut cursor = start;
+    let mut uncovered = 0.0;
+    for (low, high) in clipped {
+        if low > cursor {
+            uncovered += gap(cursor, low);
+        }
+        cursor = cursor.max(high);
+    }
+    if cursor < end {
+        uncovered += gap(cursor, end);
+    }
+    uncovered
 }
 
 /// The lowest and highest positions of one object's body projected onto a
@@ -376,6 +457,58 @@ mod tests {
         ) -> Result<VerticalExtent, VerticalExtentError> {
             VerticalExtent::try_new(id("b"), point(0.0), point(1.0), exact())
         }
+    }
+
+    fn extent(bottom: (f64, f64), top: (f64, f64)) -> VerticalExtent {
+        let mut evidence = exact();
+        #[allow(clippy::float_cmp)]
+        {
+            evidence.exact = bottom.0 == bottom.1 && top.0 == top.1;
+        }
+        VerticalExtent::try_new(
+            id("a"),
+            ElevationInterval::try_new(bottom.0, bottom.1).unwrap(),
+            ElevationInterval::try_new(top.0, top.1).unwrap(),
+            evidence,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn the_uncovered_height_is_what_no_grown_cover_spans() {
+        let wall = extent((0.0, 0.0), (3.0, 3.0));
+        // Nothing covers the whole height.
+        assert_eq!(wall.uncovered_height(&[], 0.0).unwrap(), (3.0, 3.0));
+        // Two overlapping covers leave 0.5 m at the bottom and 0.25 m at the top.
+        let low = extent((0.5, 0.5), (2.0, 2.0));
+        let high = extent((1.5, 1.5), (2.75, 2.75));
+        assert_eq!(
+            wall.uncovered_height(&[&high, &low], 0.0).unwrap(),
+            (0.75, 0.75)
+        );
+        // Grown by 0.25 m the covers reach the top and 0.25 m from the bottom.
+        assert_eq!(
+            wall.uncovered_height(&[&high, &low], 0.25).unwrap(),
+            (0.25, 0.25)
+        );
+        // A cover beyond the extent spans none of it.
+        let above = extent((4.0, 4.0), (5.0, 5.0));
+        assert_eq!(wall.uncovered_height(&[&above], 0.5).unwrap(), (3.0, 3.0));
+        assert!(wall.uncovered_height(&[], -0.1).is_err());
+        assert!(wall.uncovered_height(&[], f64::NAN).is_err());
+    }
+
+    #[test]
+    fn an_uncertain_extent_bounds_its_uncovered_height_from_both_sides() {
+        let wall = extent((-0.01, 0.01), (2.99, 3.01));
+        let cover = extent((-0.01, 0.01), (1.99, 2.01));
+        let (lower, upper) = wall.uncovered_height(&[&cover], 0.0).unwrap();
+        // Exactly 1 m at the nominal elevations; the narrowest wall against
+        // the widest cover leaves 0.98 m, the widest against the narrowest 1.04 m.
+        assert!((lower - 0.98).abs() < 1e-9 && (upper - 1.04).abs() < 1e-9);
+        let (short, tall) = wall.height_metres();
+        assert!((short - 2.98).abs() < 1e-9 && (tall - 3.02).abs() < 1e-9);
     }
 
     #[test]

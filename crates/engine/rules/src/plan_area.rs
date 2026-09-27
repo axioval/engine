@@ -22,7 +22,7 @@ fn service<'a>(context: &RuleContext<'a>) -> Result<&'a PlanAreaServiceHandle, U
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn unavailable(error: PlanAreaError) -> Unavailable {
+pub(crate) fn unavailable(error: PlanAreaError) -> Unavailable {
     let reason = match error {
         PlanAreaError::Unavailable(_) | PlanAreaError::UnknownObject(_) => {
             NotEvaluatedReason::BackendUnavailable

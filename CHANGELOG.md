@@ -31,6 +31,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   must declare the eight new optional parameters; a service that measures
   no Hausdorff distance leaves touching pairs not evaluated while duplicates
   are reported. (#57)
+- **Counterpart coverage.** The new capability `counterpart-coverage` checks
+  that each selected element is covered by the objects `counterparts` picks,
+  typically another discipline's elements (a `discipline` selector with an
+  entity type), in plan and in height: the share of its footprint outside
+  the union of the counterparts' footprints grown by the horizontal
+  tolerance, and the share of its vertical extent outside the vertical
+  extents, grown by the vertical tolerance, of the counterparts overlapping
+  it in plan. Coverage declares one `tolerance`, conformity
+  `horizontal_tolerance` and `vertical_tolerance`; a negative tolerance
+  switches its check off. `info_above`, `warning_above` and `error_above`
+  grade the uncovered share into severities. Shares are intervals: one
+  straddling the lowest threshold is not evaluated, and undecided or
+  unmeasurable counterparts leave only a pass standing. Counterparts are not
+  filtered by axis yet. (#63)
+- **Uncovered areas and vertical differences.** `PlanAreaService` gains
+  `measure_uncovered_area`: an object's footprint outside the union of a
+  cover's footprints grown by a stated length, refused by default.
+  `AxiolidPlanAreaService` measures it exactly for planar meshes where the
+  growth is zero or the grown corners lie outside the element, and otherwise
+  brackets the grown disc between an inscribed and a circumscribed 16-gon and
+  widens by the chord deviations. `VerticalExtent` gains `height_metres` and
+  `uncovered_height`, the height of an extent outside a set of grown extents
+  as sure bounds.
 - **Exit separation.** The new capability `exit-separation` requires each
   selected space's exits, reached through `exit_path` (such as
   `axioval:derived.adjacent-space:backward`) and filtered by

@@ -8,6 +8,7 @@ mod clash;
 mod comparison;
 mod conformance;
 mod consistent_value;
+mod counterpart_coverage;
 mod counts;
 mod distance;
 mod exit_separation;
@@ -54,6 +55,7 @@ pub use comparison::{
 };
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
+pub use counterpart_coverage::CounterpartCoverage;
 pub use counts::RelatedCount;
 pub use distance::Distance;
 pub use exit_separation::ExitSeparation;
@@ -131,6 +133,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(OpeningSpaces))
         .and_then(|registry| registry.register(GroupComposition))
         .and_then(|registry| registry.register(ExitSeparation))
+        .and_then(|registry| registry.register(CounterpartCoverage))
         .and_then(|registry| registry.register(BodyExtent))
         .and_then(|registry| registry.register(TriangleCountLimit))
         .and_then(|registry| registry.register(SameContainer))

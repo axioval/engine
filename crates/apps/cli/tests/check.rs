@@ -2058,6 +2058,28 @@ impl Case {
         applicability: Value,
         parameters: Value,
     ) -> (Output, Value) {
+        self.write("model.ifc", model);
+        self.geometry_rule_over(
+            &["model.ifc"],
+            types,
+            capability,
+            signature,
+            applicability,
+            parameters,
+        )
+    }
+
+    /// As [`Case::geometry_rule`], over the files `models` names in the
+    /// case directory, each `PATH[:DISCIPLINE]` as `--model` takes it.
+    fn geometry_rule_over(
+        &self,
+        models: &[&str],
+        types: &[(&str, &str)],
+        capability: &str,
+        signature: &Value,
+        applicability: Value,
+        parameters: Value,
+    ) -> (Output, Value) {
         let definitions = self.definitions(true);
         let mut definitions: Value =
             serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
@@ -2119,14 +2141,15 @@ impl Case {
         rule["definitionId"] = json!("axioval:example.under-test");
         rule["parameters"] = parameters;
         rule["applicability"]["groups"]["walls"]["selector"] = applicability;
-        let model = self.write("model.ifc", model);
         let definitions = self.write("definitions.json", &definitions.to_string());
         let ruleset = self.write("ruleset.json", &ruleset.to_string());
         let saved = self.path("result.json");
-        let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
-            .arg("check")
-            .arg("--model")
-            .arg(model)
+        let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+        command.current_dir(&self.dir).arg("check");
+        for model in models {
+            command.arg("--model").arg(model);
+        }
+        let output = command
             .arg("--definitions")
             .arg(definitions)
             .arg("--ruleset")
@@ -2806,6 +2829,11 @@ fn with_geometry_storey_heights_and_window_to_wall_ratios_are_measured() {
 /// A file of 3 m-high rectangular walls: `(first id, centre x, centre y,
 /// x extent, y extent, GlobalId)`. Each wall's product is `first + 6`.
 fn walls_file(walls: &[(u32, f64, f64, f64, f64, &str)]) -> String {
+    walls_of_height(walls, 3.0)
+}
+
+/// As [`walls_file`], with walls `height` metres high.
+fn walls_of_height(walls: &[(u32, f64, f64, f64, f64, &str)], height: f64) -> String {
     let mut data = String::new();
     for &(first, x, y, length, width, global) in walls {
         let [p, pos, profile, solid, shape, product, wall] =
@@ -2815,7 +2843,7 @@ fn walls_file(walls: &[(u32, f64, f64, f64, f64, &str)]) -> String {
             "#{p}=IFCCARTESIANPOINT(({x},{y}));\n\
              #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
              #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},{width});\n\
-             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{height:?});\n\
              #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
              #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
              #{wall}=IFCWALL('{global}',$,$,$,$,#3,#{product},$,$);\n"
@@ -3080,6 +3108,114 @@ fn with_geometry_meshes_with_too_many_triangles_are_found() {
         findings
             .iter()
             .all(|(_, message)| message == "mesh has 12 triangles; at most 11 allowed"),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_walls_are_graded_by_how_much_structure_stands_under_them() {
+    let case = Case::new("geometry-counterpart-coverage");
+    // #16 stands on a structural wall of its own size, #26 on nothing, and
+    // #36 on one along half of it.
+    case.write(
+        "arch.ifc",
+        &walls_file(&[
+            (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000A16"),
+            (20, 2.0, 5.0, 4.0, 0.2, "0000000000000000000A26"),
+            (30, 2.0, 10.0, 4.0, 0.2, "0000000000000000000A36"),
+        ]),
+    );
+    // The structural walls stop 5 cm below the architectural ones' tops.
+    case.write(
+        "struct.ifc",
+        &walls_of_height(
+            &[
+                (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000S16"),
+                (20, 1.0, 10.0, 2.0, 0.2, "0000000000000000000S26"),
+            ],
+            2.95,
+        ),
+    );
+    let walls_of = |discipline: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("wall"), {"kind": "discipline", "value": discipline},
+        ]})
+    };
+    let (output, result) = case.geometry_rule_over(
+        &["arch.ifc:architecture", "struct.ifc:structure"],
+        &[],
+        "axioval:capability.counterpart-coverage",
+        &registry_signature("axioval:capability.counterpart-coverage"),
+        walls_of("architecture"),
+        json!({
+            "counterparts": {"type": "selector", "value": walls_of("structure")},
+            "horizontal_tolerance": {"type": "quantity", "value": 0.02, "unit": "m"},
+            "vertical_tolerance": {"type": "quantity", "value": 0.1, "unit": "m"},
+            "info_above": {"type": "number", "value": 0.01},
+            "warning_above": {"type": "number", "value": 0.25},
+            "error_above": {"type": "number", "value": 0.75},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let mut findings: Vec<(String, String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            assert_eq!(
+                finding["object_id"]["source"]["document"], "arch.ifc",
+                "{finding:#}"
+            );
+            (
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["severity"].as_str().unwrap().to_owned(),
+                finding["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    findings.sort();
+    assert_eq!(findings.len(), 3, "{result:#}");
+    // Nothing of the structure stands under #26, in plan or in height.
+    assert_eq!(findings[0].0, "#26");
+    assert_eq!(findings[0].1, "error");
+    assert!(
+        findings[0].2.starts_with("height: 1 of the height"),
+        "{findings:#?}"
+    );
+    assert_eq!(findings[1].0, "#26");
+    assert_eq!(findings[1].1, "error");
+    assert!(
+        findings[1]
+            .2
+            .starts_with("plan: 1 of the footprint (0.8 of 0.8 m²)"),
+        "{findings:#?}"
+    );
+    // Half of #36 is uncovered, less the 2 cm tolerance past the end; its
+    // height is covered within 10 cm, and so is all of #16.
+    assert_eq!(findings[2].0, "#36");
+    assert_eq!(findings[2].1, "warning");
+    assert!(
+        findings[2]
+            .2
+            .starts_with("plan: 0.495 of the footprint (0.396 of 0.8 m²)"),
+        "{findings:#?}"
+    );
+    assert_eq!(
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| finding["object_id"]["local_id"] == "#36")
+            .unwrap()["related"][0]["source"]["document"],
+        "struct.ifc"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
         "{result:#}"
     );
 }

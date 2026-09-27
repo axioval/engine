@@ -241,6 +241,21 @@ mesh with chord deviation `d` and footprint perimeter `P` measures within
 `2·P·d + π·d²`, the area of the band where the true and meshed boundaries can
 differ.
 
+An uncovered area is the footprint less its overlap with the union of the
+cover's footprints grown by a radius `r`. A disc has no exact polygon, so each
+projected cover triangle is grown by a regular 16-gon inside the disc and by
+one around it (the convex hull of the triangle's vertices moved to the
+polygon's vertices): the true area lies between the two results. Both
+polygons reach exactly `r` along the plan axes, so only the rounded corners
+of a grown cover can differ, and they do not where the corner lies outside
+the element. A tessellated cover with deviation `d` is bracketed between
+growth by `r − d` and `r + d`; when `r < d` the inner growth is the measured
+cover widened by its band. The element's own band widens both ends. The
+evidence is exact exactly when the two ends coincide. A cover member that is
+unmeasured, undescribed or a group that cannot give a footprint refuses the
+measurement, never zero. The 0.3.0 overlay's region dilation is not used: it
+does not state on which side of the true offset its polygon lies.
+
 A bodiless group, such as a zone that makes up a fire compartment, has no
 mesh of its own. Membership is a semantic fact, so the host declares it:
 `with_group(group, members)`, or `with_undecided_group(group, reason)` when it

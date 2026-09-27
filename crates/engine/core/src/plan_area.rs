@@ -8,6 +8,10 @@
 //! exactly; one that approximates curved faces measures within a bound the
 //! adapter derives from its declared chord deviation, and a rule must decide
 //! from the whole interval, never from its midpoint.
+//!
+//! The uncovered area of a footprint is what remains of it once the union of
+//! other footprints, each grown in plan by a stated length, is taken away:
+//! how much of an architectural wall no structural wall stands under.
 
 use std::sync::Arc;
 
@@ -97,6 +101,25 @@ pub trait PlanAreaService: Send + Sync + 'static {
         first: &ObjectId,
         second: &ObjectId,
     ) -> Result<PlanArea, PlanAreaError>;
+
+    /// The area of `object`'s footprint outside the union of the footprints
+    /// of `cover`, each grown by `growth_metres` in every plan direction (the
+    /// set of points within that distance of it).
+    ///
+    /// An empty `cover` leaves the whole footprint uncovered. A service that
+    /// does not measure uncovered areas refuses; it never answers with the
+    /// footprint or with zero.
+    fn measure_uncovered_area(
+        &self,
+        object: &ObjectId,
+        cover: &[ObjectId],
+        growth_metres: f64,
+    ) -> Result<PlanArea, PlanAreaError> {
+        let _ = (object, cover, growth_metres);
+        Err(PlanAreaError::Unavailable(
+            "this plan-area service does not measure uncovered areas".into(),
+        ))
+    }
 }
 
 /// Registry handle for a [`PlanAreaService`].
@@ -124,12 +147,120 @@ impl PlanAreaServiceHandle {
     ) -> Result<PlanArea, PlanAreaError> {
         self.0.measure_plan_overlap(first, second)
     }
+
+    /// The area of `object`'s footprint that the footprints of `cover`, grown
+    /// by `growth_metres`, leave uncovered.
+    ///
+    /// A growth that is negative or not finite, or an object covering itself,
+    /// is refused rather than measured; `cover` reaches the service sorted
+    /// and without repeats.
+    pub fn measure_uncovered_area(
+        &self,
+        object: &ObjectId,
+        cover: &[ObjectId],
+        growth_metres: f64,
+    ) -> Result<PlanArea, PlanAreaError> {
+        if !growth_metres.is_finite() || growth_metres < 0.0 {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a growth of {growth_metres} m is not a non-negative length"
+            )));
+        }
+        if cover.contains(object) {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{object} cannot cover its own footprint"
+            )));
+        }
+        let mut cover = cover.to_vec();
+        cover.sort();
+        cover.dedup();
+        self.0.measure_uncovered_area(object, &cover, growth_metres)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PlanArea, PlanAreaError};
-    use axioval_ir::{Evidence, SourceId};
+    use std::sync::{Arc, Mutex};
+
+    use super::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
+    use axioval_ir::{Evidence, ObjectId, SourceId};
+
+    /// Measures only footprints, and records the cover it was asked about.
+    #[derive(Default)]
+    struct FootprintsOnly(Mutex<Vec<Vec<ObjectId>>>);
+
+    impl PlanAreaService for FootprintsOnly {
+        fn measure_footprint(&self, _: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+            PlanArea::try_new(1.0, 1.0, exact())
+        }
+        fn measure_plan_overlap(
+            &self,
+            _: &ObjectId,
+            _: &ObjectId,
+        ) -> Result<PlanArea, PlanAreaError> {
+            PlanArea::try_new(0.0, 0.0, exact())
+        }
+    }
+
+    struct Recording(Arc<FootprintsOnly>);
+
+    impl PlanAreaService for Recording {
+        fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+            self.0.measure_footprint(object)
+        }
+        fn measure_plan_overlap(
+            &self,
+            first: &ObjectId,
+            second: &ObjectId,
+        ) -> Result<PlanArea, PlanAreaError> {
+            self.0.measure_plan_overlap(first, second)
+        }
+        fn measure_uncovered_area(
+            &self,
+            _: &ObjectId,
+            cover: &[ObjectId],
+            _: f64,
+        ) -> Result<PlanArea, PlanAreaError> {
+            self.0.0.lock().unwrap().push(cover.to_vec());
+            PlanArea::try_new(0.5, 0.5, exact())
+        }
+    }
+
+    fn id(local: &str) -> ObjectId {
+        ObjectId::new(SourceId::new("cad", "m").unwrap(), local).unwrap()
+    }
+
+    #[test]
+    fn a_service_without_uncovered_areas_refuses_rather_than_answering() {
+        let handle = PlanAreaServiceHandle::new(Arc::new(FootprintsOnly::default()));
+        assert!(matches!(
+            handle.measure_uncovered_area(&id("a"), &[id("b")], 0.0),
+            Err(PlanAreaError::Unavailable(_))
+        ));
+    }
+
+    #[test]
+    fn the_handle_refuses_a_bad_growth_or_self_cover_and_orders_the_cover() {
+        let log = Arc::new(FootprintsOnly::default());
+        let handle = PlanAreaServiceHandle::new(Arc::new(Recording(log.clone())));
+        for growth in [-0.01, f64::NAN, f64::INFINITY] {
+            assert!(
+                handle
+                    .measure_uncovered_area(&id("a"), &[id("b")], growth)
+                    .is_err(),
+                "{growth}"
+            );
+        }
+        assert!(
+            handle
+                .measure_uncovered_area(&id("a"), &[id("b"), id("a")], 0.0)
+                .is_err()
+        );
+        assert!(log.0.lock().unwrap().is_empty(), "refused before measuring");
+        handle
+            .measure_uncovered_area(&id("a"), &[id("c"), id("b"), id("c")], 0.1)
+            .unwrap();
+        assert_eq!(*log.0.lock().unwrap(), vec![vec![id("b"), id("c")]]);
+    }
 
     fn exact() -> Evidence {
         Evidence::exact(SourceId::new("cad", "m").unwrap(), "footprint:a")

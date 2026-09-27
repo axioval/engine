@@ -14,12 +14,27 @@
 //! A bodiless group the host declares (a zone) has the union of its members'
 //! footprints. Membership is semantic, so the host states it; a member without
 //! a body, an unmeasured member or undecided membership refuses, never zero.
+//!
+//! An uncovered area is the footprint less its overlap with the union of the
+//! cover's footprints grown by a radius `r`. A disc has no exact polygon, so
+//! the grown cover is bracketed between the cover grown by a regular polygon
+//! inside the disc and one around it: the uncovered area lies between the
+//! two, and both reach exactly `r` along the plan axes, so only corners can
+//! differ. A tessellated cover with deviation `d` is bracketed the same way
+//! between growth by `r − d` and `r + d` (every point within `r − d` of the
+//! measured cover lies within `r` of the true one, and every point within `r`
+//! of the true cover within `r + d` of the measured one). When `r < d` the
+//! inner growth is the measured cover itself, widened by its band. The
+//! subject's own band widens both ends.
 
 use axioval_engine::{GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService};
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{footprint_measure, plan_overlap_area};
+use crate::planar::{
+    Disc, footprint_measure, grown_polygons, plan_overlap_area, polygons_overlap_area,
+    projected_polygons,
+};
 
 /// Overlay tolerance: tight, because exact evidence must not be laundered
 /// through a loose one.
@@ -217,6 +232,85 @@ impl PlanAreaService for AxiolidPlanAreaService {
             slack,
             cap,
             format!("plan-overlap:{first}:{second}"),
+        )
+    }
+
+    fn measure_uncovered_area(
+        &self,
+        object: &ObjectId,
+        cover: &[ObjectId],
+        growth_metres: f64,
+    ) -> Result<PlanArea, PlanAreaError> {
+        if !growth_metres.is_finite() || growth_metres < 0.0 {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a growth of {growth_metres} m is not a non-negative length"
+            )));
+        }
+        let subject = self.measure(object)?;
+        let mut soup = Vec::new();
+        let mut deviation = 0.0_f64;
+        for member in cover {
+            let footprint = self.measure(member)?;
+            soup.extend(footprint.soup);
+            deviation = deviation.max(footprint.deviation);
+        }
+        let tolerance = tolerance()?;
+        let overlap = |polygons| {
+            polygons_overlap_area(projected_polygons(&subject.soup), polygons, tolerance)
+                .map(|area| area.min(subject.area))
+                .ok_or_else(|| {
+                    PlanAreaError::Unavailable(format!("the cover of {object} cannot be computed"))
+                })
+        };
+        // Surely covered: the cover grown by less than the true growth, or
+        // the measured cover less its band.
+        let (inner, inner_band) = if growth_metres >= deviation {
+            (
+                overlap(grown_polygons(
+                    &soup,
+                    growth_metres - deviation,
+                    Disc::Inscribed,
+                ))?,
+                0.0,
+            )
+        } else {
+            let (_, perimeter) = footprint_measure(&soup, tolerance).ok_or_else(|| {
+                PlanAreaError::Unavailable(format!("the cover of {object} cannot be computed"))
+            })?;
+            (
+                overlap(projected_polygons(&soup))?,
+                band(perimeter, deviation),
+            )
+        };
+        // Possibly covered: the cover grown by more than the true growth.
+        let outer = overlap(grown_polygons(
+            &soup,
+            growth_metres + deviation,
+            Disc::Circumscribed,
+        ))?;
+        let subject_band = band(subject.perimeter, subject.deviation);
+        let upper = (subject.area - inner + subject_band + inner_band)
+            .min(subject.area + subject_band)
+            .max(0.0);
+        let lower = (subject.area - outer - subject_band).max(0.0).min(upper);
+        let locator = format!(
+            "uncovered-area:{object}:{growth_metres}:{}",
+            cover
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        PlanArea::try_new(
+            lower,
+            upper,
+            Evidence {
+                source: self.source.clone(),
+                locator,
+                exact,
+            },
         )
     }
 }

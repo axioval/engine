@@ -273,7 +273,7 @@ These judge `PlanAreaService` measurements, so they need a geometry adapter.
 | Capability | Checks |
 |---|---|
 | `area-ratio` | At each anchor, the summed footprints of `numerator_selector` over those of `denominator_selector` (or the anchor's own footprint) lie within `minimum` and `maximum`. `numerator_property` / `denominator_property` take a population's areas from an area-quantity property instead, e.g. glazing areas. `numerator_derivation` `light-area` derives each numerator member's light-transmitting area by a fallback (below). |
-| `plan-coverage` | Each subject's footprint lies within one `candidate_selector` object by at least `minimum_ratio`, e.g. a space within a fire compartment. |
+| `plan-coverage` | Each subject's footprint lies within one `candidate_selector` object by at least `minimum_ratio`, e.g. a space within a fire compartment. How much of an element the union of several counterparts leaves uncovered is `counterpart-coverage` (below). |
 | `plan-area` | Each selected object's footprint lies within `minimum` and `maximum` square metres, e.g. a space of at least 8 m² or a fire compartment (a zone, measured as the union of its members) of at most 400 m². With `member_selector`, the summed footprints of the members each anchor reaches lie within the range instead, e.g. the space area of each storey. |
 
 All bounds are inclusive, and `area-ratio` and `plan-area` need at least one of `minimum` and `maximum`. Areas are intervals: a tessellated body measures within a bound derived from its chord deviation. A verdict needs the whole interval on one side of a bound, so an area that straddles one is not evaluated rather than judged from a midpoint.
@@ -486,6 +486,26 @@ A finding names the pair (with `any`, the pair farthest apart), its separation, 
 - The flag must be a boolean and agree across the objects `flag_path` reaches. An absent, null, non-boolean or disagreeing flag, or a path reaching nothing, is unknown: the required interval then spans both fractions, so a pair far enough apart for the larger or too close for the smaller is still decided.
 - An object `exit_selector` cannot decide can only add exits and pairs: with `any` a pair far enough apart stands, with `all` a pair too close stands, and anything else they could change is not evaluated. The same holds for the count against `minimum_exits`.
 - A diagonal that cannot be measured, or a missing service, leaves the space not evaluated.
+
+### Counterpart coverage
+
+`counterpart-coverage` checks that each selected element is covered by its counterparts, in plan and in height: architectural walls by structural walls, or the reverse. The counterparts are the objects `counterparts` picks, typically another discipline's elements of matching kinds (a [`discipline` selector](#discipline-selectors) with an entity type), so a check across two models declares `--model arch.ifc:architecture --model struct.ifc:structure`. It needs the plan-area, proximity and (for the height check) vertical-extent services.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `counterparts` | selector, required | the objects that should cover each element |
+| `tolerance` | length, optional | coverage: one growth for both checks |
+| `horizontal_tolerance`, `vertical_tolerance` | lengths, optional | conformity: separate growths, declared together instead of `tolerance` |
+| `info_above`, `warning_above`, `error_above` | numbers, optional | uncovered shares in `[0, 1)` above which a finding has that severity; at least one, ascending in that order |
+
+- **Plan**: the share of the element's footprint outside the union of the counterparts' footprints, each grown by the horizontal tolerance in every plan direction, through `PlanAreaService`'s uncovered area.
+- **Height**: the share of the element's vertical extent outside the union of the vertical extents, each grown by the vertical tolerance below and above, of the counterparts that overlap it in plan (their grown footprint covers part of its footprint).
+
+A negative tolerance switches its check off, so conformity with `vertical_tolerance: -1 m` checks plan only; switching every check off is an invalid declaration. A share above the lowest declared threshold is a finding of the most severe band it exceeds, and the rule's own severity is not used; a share at or below it passes. Each check reports on its own: an element with nothing under it has a plan finding and a height finding. A finding states the share, the uncovered area or height, and the tolerance; it relates the counterparts that surely cover part of the element, and adds "no counterpart overlaps it" when none may.
+
+Shares are intervals: a tessellated body's footprint and extent are, and so is a footprint grown by a disc, which the plan-area service brackets between two polygons. A share straddling the lowest threshold is not evaluated; one above it that straddles a higher threshold is graded by the most severe band it may reach, and the message says so. A counterpart the selector cannot decide, whose extent cannot be read, or whose cover cannot be measured can only cover more, so a pass stands and anything else is not evaluated. Measured areas carry the plan overlay's rounding (around 10⁻⁸ of the extent), so a threshold of exactly 0 can flag a fully covered element; use a small positive one.
+
+Counterparts are not filtered by direction: a perpendicular wall meeting the element within the horizontal tolerance overlaps it in plan and counts towards its height. Keeping only axis-compatible counterparts needs a minimum-area rectangle per footprint, which no geometry service provides yet.
 
 ### Slab stacks
 

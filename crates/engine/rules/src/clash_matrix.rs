@@ -28,7 +28,7 @@ use crate::pairs::{prepare, refuse_declaration, severity};
 use crate::selection::{Selection, discipline_of, selector_matches};
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, invalid};
-use crate::table_allocation::{KEYS, Key, key_properties, read_keys};
+use crate::table_allocation::{KEY_COUNT, KEYS, Key, KeyProperties, key_properties, read_keys};
 
 /// The two sides of a pair, as the cell columns name them.
 const SIDES: [&str; 2] = ["subject", "counterpart"];
@@ -100,18 +100,18 @@ pub struct ClashMatrix;
 struct Side<'a> {
     discipline: Option<TextPattern>,
     selector: Option<&'a Selector>,
-    keys: [Option<TextPattern>; 3],
+    keys: [Option<TextPattern>; KEY_COUNT],
 }
 
 impl Side<'_> {
     fn read<'a>(
         row: Row<'a>,
         side: &str,
-        properties: &[Option<PropertyRef<'_>>; 3],
+        properties: &KeyProperties<'_>,
         case_sensitive: bool,
     ) -> Result<Side<'a>, Unavailable> {
-        let mut keys = [None, None, None];
-        for ((slot, key), property) in keys.iter_mut().zip(KEYS).zip(properties) {
+        let mut keys = [None, None, None, None];
+        for ((slot, key), property) in keys.iter_mut().zip(&KEYS[..3]).zip(properties) {
             let column = format!("{side}_{key}");
             *slot = row.pattern(&column, case_sensitive)?;
             if slot.is_some() && property.is_none() {
@@ -138,7 +138,7 @@ struct Cell<'a> {
 
 struct Declaration<'a> {
     cells: Vec<Cell<'a>>,
-    properties: [Option<PropertyRef<'a>>; 3],
+    properties: KeyProperties<'a>,
     symmetric: bool,
     report_unmatched: bool,
     exclude_paths: Vec<Vec<String>>,
@@ -231,7 +231,7 @@ fn either(forward: RowTest, backward: RowTest) -> RowTest {
 /// An object's categories, read once and only where a cell tests them.
 struct Category {
     discipline: Option<Result<String, Unavailable>>,
-    keys: [Option<Key>; 3],
+    keys: [Option<Key>; KEY_COUNT],
     evidence: Vec<Evidence>,
 }
 
@@ -240,7 +240,7 @@ struct Categories<'r, 'd> {
     context: &'r RuleContext<'r>,
     declared: &'d Declaration<'d>,
     /// Which key properties any cell tests.
-    keys_used: [bool; 3],
+    keys_used: [bool; KEY_COUNT],
     discipline_used: bool,
     objects: BTreeMap<ObjectId, Category>,
     selections: BTreeMap<(usize, usize, ObjectId), Selection>,
@@ -249,7 +249,7 @@ struct Categories<'r, 'd> {
 impl<'r, 'd> Categories<'r, 'd> {
     fn new(context: &'r RuleContext<'r>, declared: &'d Declaration<'d>) -> Self {
         let sides = || declared.cells.iter().flat_map(|cell| &cell.sides);
-        let mut keys_used = [false; 3];
+        let mut keys_used = [false; KEY_COUNT];
         for side in sides() {
             for (used, key) in keys_used.iter_mut().zip(&side.keys) {
                 *used |= key.is_some();
@@ -421,7 +421,8 @@ impl RuleCapability for ClashMatrix {
             ParameterDescriptor::required("counterparts", ParameterType::Selector),
             ParameterDescriptor::required("cells", ParameterType::Table(COLUMNS)),
         ];
-        for key in KEYS {
+        // The matrix keys three properties; `key_4` is not among them.
+        for key in KEYS.into_iter().take(3) {
             parameters.push(ParameterDescriptor::optional(
                 key,
                 ParameterType::PropertyReference,

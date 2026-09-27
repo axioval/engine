@@ -13,10 +13,10 @@ use axioval_ir::{Evidence, Object, ObjectId};
 use crate::counts::{Population, relation_text};
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, match_rows};
-use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, finding, invalid};
+use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 use crate::table_allocation::{
-    Key, KeyCells, describe_keys, key_cells, key_properties, read_keys, row_name, test_keys,
-    unknown_key,
+    KEY_COUNT, Key, KeyCells, KeyProperties, describe_keys, key_cells, key_properties, read_keys,
+    row_name, test_keys, unknown_key,
 };
 
 const COLUMNS: &[TableColumn] = &[
@@ -233,8 +233,8 @@ struct Row<'a> {
 
 struct Declaration<'a> {
     rows: Vec<Row<'a>>,
-    properties: [Option<PropertyRef<'a>>; 3],
-    group_key: [Option<PropertyRef<'a>>; 3],
+    properties: KeyProperties<'a>,
+    group_key: KeyProperties<'a>,
     members: &'a Selector,
     ungrouped: Option<&'a Selector>,
     traversal: Traversal<'a>,
@@ -245,7 +245,7 @@ impl<'a> Declaration<'a> {
         let parameters = Parameters(rule);
         let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
         let properties = key_properties(&parameters)?;
-        let group_key = [parameters.property("group_key")?, None, None];
+        let group_key = [parameters.property("group_key")?, None, None, None];
         let traversal = parameters.traversal()?.ok_or_else(|| {
             invalid("a group reaches its members only through `relationship` or `path`")
         })?;
@@ -260,7 +260,7 @@ impl<'a> Declaration<'a> {
             let number = index + 1;
             let keys = key_cells(row, number, &properties, case_sensitive)?;
             let group = match row.text("group")? {
-                None => [None, None, None],
+                None => [None, None, None, None],
                 Some(_) if group_key[0].is_none() => {
                     return Err(invalid(format!(
                         "row {number} fills `group`, but no `group_key` property is declared"
@@ -272,6 +272,7 @@ impl<'a> Declaration<'a> {
                             .expect("a filled cell compiles"),
                         text,
                     )),
+                    None,
                     None,
                     None,
                 ],
@@ -321,7 +322,7 @@ impl<'a> Declaration<'a> {
 
 /// A member's key values, read once however many groups hold it.
 struct MemberKeys {
-    keys: [Option<Key>; 3],
+    keys: [Option<Key>; KEY_COUNT],
     evidence: Vec<Evidence>,
 }
 
@@ -358,7 +359,7 @@ impl Judge<'_, '_> {
             self.context,
             group,
             &declaration.group_key,
-            [true, false, false],
+            [true, false, false, false],
         );
         evidence.extend(cited);
         let test = |row: &Row<'_>| {
@@ -519,8 +520,8 @@ impl Judge<'_, '_> {
     fn keys_of(&mut self, member: &ObjectId) -> &MemberKeys {
         let (context, declaration) = (self.context, self.declaration);
         self.keys.entry(member.clone()).or_insert_with(|| {
-            let used =
-                [0, 1, 2].map(|index| declaration.rows.iter().any(|row| row.keys[index].is_some()));
+            let used = [0, 1, 2, 3]
+                .map(|index| declaration.rows.iter().any(|row| row.keys[index].is_some()));
             match context.project.object(member) {
                 Some(object) => {
                     let (keys, evidence) =

@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Table allocation per anchor, a fourth key, relative tolerances and
+  per-object areas.** (#111) `table-allocation` rows take an `anchor`
+  pattern over the anchor's `anchor_key` value, so one rule states
+  different rows per storey; `key_4`; an `area_tolerance_ratio` column (a
+  share of `area`); and `area_mode` `each`, under which a row's area is a
+  match condition on each object's own area, so a row of 12 m² ± 10 %
+  takes an 11 m² space but not a 10 m² one. **Breaking:** the `rows` table
+  gains `key_4`, `anchor` and `area_tolerance_ratio`, and the capability the
+  optional `key_4`, `anchor_key` and `area_mode`, so a definition bound to
+  it must declare them.
 - **Exclusive and date bounds, and measured volume and face divisors, in
   property requirements.** (#110) `property-requirements` rows take
   `minimum_exclusive` and `maximum_exclusive`, so `> 0` fails on 0; date

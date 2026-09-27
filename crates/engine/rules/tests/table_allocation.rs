@@ -439,3 +439,238 @@ fn a_key_cell_without_its_property_is_an_invalid_declaration() {
         "table-allocation: row 1 fills `key_2`, but no `key_2` property is declared"
     );
 }
+
+/// `storeys` with storey `a` named `EG` and `b` named `OG`.
+fn named_storeys() -> Model {
+    storeys()
+        .text("a", "Pset", "Name", "EG")
+        .text("b", "Pset", "Name", "OG")
+}
+
+/// Offices per storey: `eg` in the ground storey, `og` in the upper one.
+fn per_named_storey(eg: i64, og: i64) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "rows",
+            table(vec![
+                row(&[
+                    ("anchor", string("EG")),
+                    ("key_1", string("Office*")),
+                    ("count", integer(eg)),
+                ]),
+                row(&[
+                    ("anchor", string("OG")),
+                    ("key_1", string("Office*")),
+                    ("count", integer(og)),
+                ]),
+                row(&[("anchor", string("OG")), ("key_1", string("Lobby"))]),
+            ]),
+        ),
+        ("key_1", property(Some("Pset"), "Type")),
+        ("anchor_key", property(Some("Pset"), "Name")),
+        ("anchor_selector", selector(kind("storey"))),
+        ("relationship", string("contains")),
+    ]
+}
+
+#[test]
+fn one_rule_states_different_rows_per_anchor() {
+    // Two offices in `EG`, one in `OG`: both rows hold.
+    let evaluation = named_storeys().evaluate(
+        &TableAllocation,
+        &rule(ID, kind("space"), per_named_storey(2, 1)),
+    );
+    assert!(
+        evaluation.findings().is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+
+    // Two offices required in `OG` as well: only `OG` is short, and the
+    // `EG` row is never judged there.
+    let evaluation = named_storeys().evaluate(
+        &TableAllocation,
+        &rule(ID, kind("space"), per_named_storey(2, 2)),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "b".into(),
+            "row 2 (Pset.Type like `Office*`) in anchors like `OG` has 1 object(s); required \
+             exactly 2"
+                .into()
+        )]
+    );
+}
+
+#[test]
+fn an_anchor_whose_key_cannot_be_read_is_not_evaluated() {
+    let model = storeys().text("a", "Pset", "Name", "EG").value(
+        "b",
+        "Pset",
+        "Name",
+        PropertyValue::Integer(1),
+    );
+    let evaluation = model.evaluate(
+        &TableAllocation,
+        &rule(ID, kind("space"), per_named_storey(2, 1)),
+    );
+    assert!(
+        evaluation.findings().is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("b".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_fourth_key_narrows_a_row() {
+    let model = storeys()
+        .text("a1", "Pset", "Number", "1.01")
+        .text("a2", "Pset", "Number", "2.01");
+    let parameters = vec![
+        (
+            "rows",
+            table(vec![row(&[
+                ("key_1", string("Office*")),
+                ("key_4", string("1.*")),
+            ])]),
+        ),
+        ("key_1", property(Some("Pset"), "Type")),
+        ("key_4", property(Some("Pset"), "Number")),
+        ("anchor_selector", selector(kind("storey"))),
+        ("relationship", string("contains")),
+    ];
+    let evaluation = model.evaluate(&TableAllocation, &rule(ID, kind("space"), parameters));
+    let extras: Vec<String> = findings(&evaluation)
+        .into_iter()
+        .filter(|(_, message)| message.starts_with("no row matches"))
+        .map(|(object, _)| object)
+        .collect();
+    // `b2` states no number, so it matches no pattern.
+    assert_eq!(extras, ["a2", "b1", "b2"]);
+}
+
+/// Offices of 12 m² ± 10 %, each on its own.
+fn office_sizes(mode: &str) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "rows",
+            table(vec![
+                row(&[
+                    ("key_1", string("Office*")),
+                    ("area", number(12.0)),
+                    ("area_tolerance_ratio", number(0.1)),
+                ]),
+                row(&[("key_1", string("Lobby")), ("count", integer(1))]),
+            ]),
+        ),
+        ("key_1", property(Some("Pset"), "Type")),
+        ("area_mode", string(mode)),
+        ("anchor_selector", selector(kind("storey"))),
+        ("relationship", string("contains")),
+    ]
+}
+
+#[test]
+fn a_row_of_relative_tolerance_takes_each_object_within_it() {
+    // 12 m² ± 10 % takes 11 m² but not 10 m²; 10.8 ± 0.1 straddles 10.8.
+    let areas = Areas::default()
+        .with("a1", 11.0, 0.0)
+        .with("a2", 10.0, 0.0)
+        .with("b1", 40.0, 0.0)
+        .with("b2", 10.8, 0.1);
+    let evaluation = run(storeys(), areas, office_sizes("each"));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "a2".into(),
+                "no row matches (Pset.Type is `Office 2`)".into()
+            ),
+            (
+                "a".into(),
+                "row 2 (Pset.Type like `Lobby`) matched no object; required exactly 1".into()
+            ),
+        ]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("b2".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("straddles 12 m² ± 10 %"),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+
+    // Summed, the same row is judged as 12 m² ± 10 % over both offices.
+    let areas = Areas::default()
+        .with("a1", 6.0, 0.0)
+        .with("a2", 5.0, 0.0)
+        .with("b1", 40.0, 0.0)
+        .with("b2", 20.0, 0.0);
+    let evaluation = run(storeys(), areas, office_sizes("sum"));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "a".into(),
+                "row 2 (Pset.Type like `Lobby`) matched no object; required exactly 1".into()
+            ),
+            (
+                "b".into(),
+                "row 1 (Pset.Type like `Office*`) sums 20 m²; required 12 m² ± 10 %".into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn malformed_anchors_tolerances_and_modes_are_invalid_declarations() {
+    let base = || {
+        vec![
+            ("key_1", property(Some("Pset"), "Type")),
+            ("anchor_selector", selector(kind("storey"))),
+            ("relationship", string("contains")),
+        ]
+    };
+    let cases: Vec<Vec<(&'static str, ParameterValue)>> = vec![
+        vec![("rows", table(vec![row(&[("anchor", string("EG"))])]))],
+        vec![
+            ("rows", table(vec![row(&[("key_1", string("*"))])])),
+            ("anchor_key", property(Some("Pset"), "Name")),
+        ],
+        vec![(
+            "rows",
+            table(vec![row(&[
+                ("area", number(12.0)),
+                ("area_tolerance", number(1.0)),
+                ("area_tolerance_ratio", number(0.1)),
+            ])]),
+        )],
+        vec![
+            ("rows", table(vec![row(&[("key_1", string("*"))])])),
+            ("area_mode", string("average")),
+        ],
+    ];
+    for extra in cases {
+        let mut parameters = base();
+        parameters.extend(extra);
+        let evaluation = storeys().evaluate(
+            &TableAllocation,
+            &rule(ID, kind("space"), parameters.clone()),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)],
+            "{parameters:?}"
+        );
+    }
+}

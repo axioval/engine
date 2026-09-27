@@ -494,13 +494,19 @@ Tables need no parameter: a definition's signature is unchanged. An anchor that 
 
 | Column | Kind | Meaning |
 |---|---|---|
-| `key_1`, `key_2`, `key_3` | `textPattern` | Pattern over the property the same-named rule parameter names. |
+| `key_1` … `key_4` | `textPattern` | Pattern over the property the same-named rule parameter names. |
+| `anchor` | `textPattern` | Pattern over the anchor's `anchor_key` value: the row applies only in the anchors it matches, such as `EG*` for the ground storeys. Blank applies the row in every anchor. |
 | `label` | `string` | How findings name the row; otherwise by its number and patterns. |
 | `count` | `integer` | Exactly this many objects are assigned to the row. |
-| `area` | `number` | Their summed plan area, in square metres. |
+| `area` | `number` | Their summed plan area, in square metres, or with `area_mode` `each` every object's own area. |
 | `area_tolerance` | `number` | Allowed deviation from `area`, in square metres (0 by default). |
+| `area_tolerance_ratio` | `number` | Allowed deviation as a share of `area` (`0.1` is ± 10 %), instead of `area_tolerance`. |
 
-All columns are optional. The keyed properties are rule parameters, not cells: `key_1` might be `{"type": "propertyReference", "propertySet": "Pset_SpaceCommon", "property": "Reference"}` and `key_2` the name, and each row fills the pattern columns it tests. A row matches an object when every key cell it fills matches the object's value, compared case-sensitively unless `case_sensitive` is false; a row with no key cell matches everything, which makes a catch-all last row. A key value that is absent or null matches no pattern, not even `*`; one that is not text, or cannot be read, leaves the rows testing it undecided. A key cell whose parameter is not declared, a negative count, area or tolerance, and a tolerance without an area are invalid declarations.
+All columns are optional. The keyed properties are rule parameters, not cells: `key_1` might be `{"type": "propertyReference", "propertySet": "Pset_SpaceCommon", "property": "Reference"}` and `key_2` the name, and each row fills the pattern columns it tests. A row matches an object when every key cell it fills matches the object's value, compared case-sensitively unless `case_sensitive` is false; a row with no key cell matches everything, which makes a catch-all last row. A key value that is absent or null matches no pattern, not even `*`; one that is not text, or cannot be read, leaves the rows testing it undecided. A key cell whose parameter is not declared, a negative count, area or tolerance, a tolerance without an area or both tolerances in one row, an `anchor` cell without `anchor_key`, `anchor_key` without `anchor_selector` or without a row filling `anchor`, and an `area_mode` other than `sum` or `each` are invalid declarations.
+
+With `anchor_key` (a property of the anchors, such as a storey's name), one rule states different rows per anchor: "two offices in `EG`, one in `OG`". In each anchor only the rows whose `anchor` cell matches its value (or is blank) apply, objects are assigned among them, and the anchor pattern's literal characters add to a row's specificity. An anchor whose key is not text or cannot be read is not evaluated; an object is reported extra or undecided once, however many anchors reach it.
+
+With `area_mode` `each` (the default is `sum`), a row's area is a match condition beside its keys, as individual-area space programmes use it: an object fits the row only when its own area lies within `area` ± the tolerance, so a row of 12 m² ± 10 % takes an 11 m² space but not a 10 m² one, which matches another row or is an extra. An object whose area straddles the bounds, or cannot be measured, leaves the rows it might fit undecided; the summed-area check does not apply.
 
 `mode` is `first` (the default), the first matching row in declared order, or `most_specific`, the matching row with the most literal pattern characters, the specificities of a row's keys adding up. Matching goes through the shared row matcher above, so it fails closed: an object whose row an undecided key could change, or whose most specific rows tie, is not evaluated.
 

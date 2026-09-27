@@ -9942,3 +9942,94 @@ fn with_geometry_a_stated_side_area_is_divided_by_the_measured_face() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// Runs one rule of `capability` (its registry signature) over
+/// [`storeys_with_facades`], applied to `applies_to`, with the storey
+/// metric definitions and the `Name` attribute bound.
+fn storey_rule(name: &str, capability: &str, applies_to: &str, parameters: Value) -> Value {
+    let case = Case::new(name);
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(storey_metric_definitions(&case)).unwrap())
+            .unwrap();
+    definitions["properties"]["axioval:example.ifc.Name"] = json!({
+        "id": "axioval:example.ifc.Name", "name": text("Name"), "valueKind": "string",
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Name"}], "citations": [],
+    });
+    let capability = format!("axioval:capability.{capability}");
+    definitions["definitions"]["axioval:example.under-test"] = json!({
+        "id": "axioval:example.under-test", "name": text("under test"),
+        "description": text("under test"), "capability": capability,
+        "parameters": registry_signature(&capability), "citations": [], "tags": [],
+    });
+    let text_file = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text_file).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("under-test");
+    rule["definitionId"] = json!("axioval:example.under-test");
+    rule["parameters"] = parameters;
+    rule["applicability"]["groups"]["walls"]["selector"] = entity(applies_to);
+    let model = case.write("model.ifc", &storeys_with_facades());
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap())
+        .unwrap_or_else(|_| panic!("{}", stderr(&output)));
+    assert_eq!(
+        output.status.code(),
+        Some(if finding_messages(&result).is_empty() {
+            0
+        } else {
+            3
+        }),
+        "{}",
+        stderr(&output)
+    );
+    result
+}
+
+fn name_attribute() -> Value {
+    json!({"type": "propertyReference", "property": "axioval:example.ifc.Name",
+           "propertySet": "axioval:attributes"})
+}
+
+#[test]
+fn table_allocation_rows_are_keyed_per_storey() {
+    let row = |anchor: &str, count: i64| {
+        json!({"anchor": {"type": "string", "value": anchor},
+               "count": {"type": "integer", "value": count}})
+    };
+    let result = storey_rule(
+        "table-allocation-per-storey",
+        "table-allocation",
+        "IfcSpace",
+        json!({
+            "rows": {"type": "table", "value": [row("EG", 2), row("OG", 1)]},
+            "anchor_key": name_attribute(),
+            "anchor_selector": {"type": "selector", "value": entity("IfcBuildingStorey")},
+            "relationship": {"type": "string", "value": "IfcRelAggregates"},
+        }),
+    );
+    // Each storey holds one space: the ground storey's row asks for two.
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#101".to_owned(),
+            "row 1 (any object) in anchors like `EG` has 1 object(s); required exactly 2"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

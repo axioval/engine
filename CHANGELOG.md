@@ -168,6 +168,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Turning flights' landings and handrails.** (Closes #85) A turning
+  flight's landing is placed along its end tread's direction, square to
+  that tread's nosing, in plan positions rather than arc lengths, and
+  `landing_at_least_walking_width` compares it with that tread's width; an
+  end on a winder stays refused. Its handrails are measured in its
+  straight parts: `HandrailEvidence::try_in_parts` takes `StretchPart`s
+  (direction and sides) and each `RailMeasurement` is measured `in_part`;
+  sides come from the rail's part, the extension beyond an end only from a
+  rail along the part holding it, and a side's pieces are ordered part by
+  part. The Axiolid adapter gives consecutive treads whose nosings are
+  parallel within their uncertainty one frame, assigns each rail to the one
+  part it runs straight along on one side, and measures its height above
+  the nosings' ends on that side; around a turn the pitch line is bounded
+  by the neighbouring treads' elevations. A rail at an angle to every part,
+  over the middle, or along a tessellated turning flight whose parts turn
+  with its chords refuses. **Breaking:**
+  `HandrailEvidence::bottom_extension` and `top_extension` return an
+  `Option`; `WalkingEnd::FlightBottom` and `FlightTop` and
+  `WalkingStretch::Flight` cover turning flights.
 - **Handrails in pieces.** (Refs #85) The rails along one side of a flight
   or run are the pieces of one handrail: `HandrailEvidence::side_rail`
   puts them in order from the bottom (each starting and ending decidably

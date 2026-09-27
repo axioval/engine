@@ -21,7 +21,7 @@ use axioval_engine::{
     CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, ElevationInterval,
     FreeSpaceServiceHandle, HeadroomRequest, Landing, LandingEvidence, LandingRequest,
     MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType, RiserClosure,
-    RuleCapability, RuleContext, SlopedRun, TableColumn, TreadFlight, TreadFlightRequest,
+    RuleCapability, RuleContext, SlopedRun, TableColumn, Tread, TreadFlight, TreadFlightRequest,
     WalkingEnd, WalkingStretch, WalkingSurfaceError, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
@@ -81,10 +81,12 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 ///   `handrail_reach_across` of its sides and `handrail_reach_above` above
 ///   its nosing line.
 ///
-/// A turning flight's landings and handrails are measured along no one
-/// direction, so the service refuses them and those checks are not
-/// evaluated; its headroom above and below is measured as a straight
-/// flight's.
+/// A turning flight's landing is placed along the tread meeting it and
+/// compared with that tread's width; its handrails are measured in its
+/// straight parts, a side's extension taken from the parts at its ends. A
+/// service refusing them (a winder at an end, a rail it cannot place)
+/// leaves those checks not evaluated; its headroom above and below is
+/// measured as a straight flight's.
 pub struct StairGeometryCheck;
 
 /// Requires each selected ramp's sloped runs, measured from its body, to fit
@@ -1168,11 +1170,22 @@ fn flight_landings(
         (WalkingEnd::FlightBottom, "the bottom of the flight"),
         (WalkingEnd::FlightTop, "the top of the flight"),
     ] {
+        // A turning flight's winders have no width: its landing is compared
+        // with the tread that meets it.
+        let width = if flight.walking_line().is_turning() {
+            let tread = match end {
+                WalkingEnd::FlightBottom => flight.treads().first(),
+                _ => flight.treads().last(),
+            };
+            tread.and_then(Tread::width)
+        } else {
+            flight.width()
+        };
         let at = End {
             object: flight.object(),
             which: end,
             label,
-            width: flight.width(),
+            width,
             noun: "flight",
         };
         let (found, measured) = landing(stairs, check, candidates, &at);

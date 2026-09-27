@@ -219,8 +219,11 @@ fn push_all(
 /// The largest magnitude among the positions of the measurement.
 fn scale(measured: &HandrailEvidence) -> f64 {
     let (start, end) = measured.pitch();
-    let (left, right) = measured.sides();
-    let mut positions = vec![start, end, left, right];
+    let mut positions = vec![start, end];
+    for part in measured.parts() {
+        let (left, right) = part.sides();
+        positions.extend([left, right]);
+    }
     for (_, rail) in measured.rails() {
         let (low, high) = rail.sides();
         positions.extend([rail.start(), rail.end(), low, high]);
@@ -381,6 +384,20 @@ impl Judged<'_> {
             ),
         };
         let place = format!("beyond the {words} of {}", self.along.label);
+        let Some(reach) = reach else {
+            // Measured along another part of a turning flight: the handrail
+            // does not run along the end part at all.
+            let other = match end {
+                End::Bottom => "a later",
+                End::Top => "an earlier",
+            };
+            return Check::Fail(format!(
+                "handrail {rail} runs along {other} straight part of {} only, so it does not \
+                 reach {place}; at least {} required",
+                self.along.label,
+                metres(minimum)
+            ));
+        };
         let measured = format!(
             "handrail {rail} reaches {} {place}",
             shown(reach.lower(), reach.upper())

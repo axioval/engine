@@ -36,7 +36,10 @@
 //!   direction square to its nosing for a turning flight's tread whose
 //!   nosing and back edge are parallel. A winder tapers and fills no such
 //!   rectangle, so it has no sides and the flight no width; a tessellated
-//!   tread's sides widen by the chord deviation.
+//!   tread's sides widen by the chord deviation. A turning flight's tread
+//!   whose nosing is parallel to the one below within their uncertainty
+//!   walks in that tread's frame, so a straight run of treads is one frame:
+//!   a part its landings and handrails are placed in ([`TreadFrame`]).
 //! - A tread's **nosing** is the boundary edge the walking line climbs onto
 //!   it across, extended over the tread's boundary edges on its line.
 //! - A **riser** between two treads is open where a boundary edge on the
@@ -154,11 +157,34 @@ fn along(origin: Plan, direction: Plan, t: f64) -> Plan {
     ]
 }
 
+/// A tread filling a rectangle along its walking direction, in plan
+/// positions along that direction and across it ([`PlanFrame`]): the
+/// frame a turning flight's landings and handrails are placed in.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TreadFrame {
+    /// The horizontal direction the tread climbs: the flight's, or square
+    /// to its nosing on a turning flight.
+    pub(crate) direction: MetricDirection,
+    /// Its front edge (the nosing) and back edge along the direction.
+    pub(crate) along: (ElevationInterval, ElevationInterval),
+    /// Its sides across the direction, as the tread states them.
+    pub(crate) sides: (ElevationInterval, ElevationInterval),
+}
+
 /// Measures the stair flight of a closed, outward, one-piece body.
 pub(crate) fn measure(
     request: &TreadFlightRequest,
     solid: &Solid<'_>,
 ) -> Result<TreadFlight, WalkingSurfaceError> {
+    measure_framed(request, solid).map(|(flight, _)| flight)
+}
+
+/// The stair flight of a closed, outward, one-piece body, and each tread's
+/// rectangle where it fills one along its walking direction.
+pub(crate) fn measure_framed(
+    request: &TreadFlightRequest,
+    solid: &Solid<'_>,
+) -> Result<(TreadFlight, Vec<Option<TreadFrame>>), WalkingSurfaceError> {
     let object = request.object();
     let deviation = solid.deviation;
     let scale = solid.soup.iter().flatten().fold(1.0_f64, |scale, p| {
@@ -192,9 +218,11 @@ pub(crate) fn measure(
         });
     let linear = MARGIN.mul_add(scale, 2.0 * deviation);
     let mut treads = Vec::with_capacity(regions.len());
+    let mut frames = Vec::with_capacity(regions.len());
     for (index, (region, walk)) in regions.iter().zip(&walks).enumerate() {
         let elevation = interval(region.low - deviation, region.high + deviation)?;
         let mut tread = Tread::try_new(elevation, walk.front, walk.back)?;
+        let mut tread_frame = None;
         if let Some(direction) = walk.frame {
             let faces: Vec<Triangle> = region
                 .members
@@ -205,10 +233,19 @@ pub(crate) fn measure(
             // surface, whose sides so lie within twice that of the mesh's
             // extremes; the true sides lie within the deviation beyond.
             let frame = PlanFrame::new(direction);
-            if let Some([_, (left, right)]) = rectangle(&faces, &frame, 2.0 * deviation)? {
-                tread = tread.with_sides(widened(left, deviation)?, widened(right, deviation)?)?;
+            if let Some([(front, back), (left, right)]) =
+                rectangle(&faces, &frame, 2.0 * deviation)?
+            {
+                let sides = (widened(left, deviation)?, widened(right, deviation)?);
+                tread = tread.with_sides(sides.0, sides.1)?;
+                tread_frame = Some(TreadFrame {
+                    direction,
+                    along: (widened(front, deviation)?, widened(back, deviation)?),
+                    sides,
+                });
             }
         }
+        frames.push(tread_frame);
         let nosing = walk
             .entry
             .and_then(|entry| on_line(region, entry.edge, linear))
@@ -240,7 +277,7 @@ pub(crate) fn measure(
     let final_riser = walks[last].exit.map_or(RiserClosure::NotMeasured, |exit| {
         riser_between(solid.mesh, &edges, &regions[last], exit, tolerance, linear)
     });
-    Ok(TreadFlight::try_new(
+    let flight = TreadFlight::try_new(
         request.clone(),
         line,
         interval(base - deviation, base + deviation)?,
@@ -248,7 +285,8 @@ pub(crate) fn measure(
         treads,
         evidence,
     )?
-    .with_final_riser(final_riser))
+    .with_final_riser(final_riser);
+    Ok((flight, frames))
 }
 
 /// The upward level planes of the body, grouped by elevation, lowest
@@ -579,7 +617,10 @@ fn turning_walk(
     };
     let mut vertices = Vec::with_capacity(count);
     let mut frames = Vec::with_capacity(count);
-    for (index, (region, (mut across, parallel, walking))) in regions.iter().zip(shapes).enumerate()
+    // The frame of the tread below and its nosing, while it has one.
+    let mut previous: Option<(MetricDirection, [Plan; 2])> = None;
+    for (index, (region, (mut across, parallel, walking, nosing))) in
+        regions.iter().zip(shapes).enumerate()
     {
         let number = index + 1;
         // Point it at the inner side: left of the walking direction when
@@ -607,17 +648,26 @@ fn turning_walk(
         };
         vertices.push(along(region.centroid, across, offset));
         // A parallel tread walks square to its nosing, the way the flight
-        // climbs over it; exactly along an axis when its nosing is.
-        frames.push(if parallel {
+        // climbs over it; exactly along an axis when its nosing is. A tread
+        // whose nosing is parallel to the one below within its uncertainty
+        // shares that tread's frame, so a straight run of treads is one
+        // frame however its nosings round.
+        let frame = if parallel {
             let square = if cross(across, walking) > 0.0 {
                 [-across[1], across[0]]
             } else {
                 [across[1], -across[0]]
             };
-            Some(plan_direction([0.0, 0.0], square)?)
+            let own = plan_direction([0.0, 0.0], square)?;
+            Some(match previous {
+                Some((below, lower)) if same_frame(below, own, lower, nosing, deviation) => below,
+                _ => own,
+            })
         } else {
             None
-        });
+        };
+        previous = frame.map(|direction| (direction, nosing));
+        frames.push(frame);
     }
     let (arc, _) = arc_lengths(object, &vertices)?;
     let edges = crossings(object, regions, &vertices, slack)?;
@@ -638,9 +688,30 @@ fn turning_walk(
     Ok((WalkingLine::Turning(vertices), walks, false))
 }
 
+/// Whether a tread climbing along `own` over the nosing `upper` walks in
+/// the frame `below` of the tread under it, whose nosing is `lower`: the
+/// two nosings are parallel within their ends' uncertainty and the
+/// directions point the same way.
+fn same_frame(
+    below: MetricDirection,
+    own: MetricDirection,
+    lower: [Plan; 2],
+    upper: [Plan; 2],
+    deviation: f64,
+) -> bool {
+    let [bx, by, _] = below.components();
+    let [ox, oy, _] = own.components();
+    let parallel = PlanSegment::try_new(lower[0], lower[1], deviation)
+        .and_then(|a| PlanSegment::try_new(upper[0], upper[1], deviation).map(|b| (a, b)))
+        .ok()
+        .and_then(|(a, b)| a.angle_to(&b))
+        .is_some_and(|angle| angle.lower() == 0.0);
+    parallel && bx.mul_add(ox, by * oy) > 0.0
+}
+
 /// A tread's crossing direction, whether its nosing and back edge are
-/// parallel, and its walking direction.
-type Shape = (Plan, bool, Plan);
+/// parallel, its walking direction and its nosing's ends.
+type Shape = (Plan, bool, Plan, [Plan; 2]);
 
 /// Each tread's [`Shape`], and whether any winder turns left or right
 /// about where its nosing's line meets its back edge's.
@@ -679,7 +750,7 @@ fn shapes(
             left |= turn > 0.0;
             right |= turn < 0.0;
         }
-        shapes.push((across, parallel, walking));
+        shapes.push((across, parallel, walking, [nosing_from, nosing_to]));
     }
     Ok((shapes, left, right))
 }

@@ -4132,6 +4132,11 @@ fn stepped(points: &[[f64; 2]], cells: &[(Vec<usize>, f64)]) -> (Vec<[f64; 3]>, 
 /// 30° each about the inner corner (0.84, 1), three straight treads along
 /// +y, every riser 0.18 m and closed, the last tread its top.
 fn quarter_turn_flight() -> String {
+    quarter_turn_flight_with("")
+}
+
+/// [`quarter_turn_flight`] with more instances.
+fn quarter_turn_flight_with(records: &str) -> String {
     let slope = 1.0 / 3.0_f64.sqrt();
     let points = [
         [0.0, 0.0],
@@ -4193,9 +4198,156 @@ fn quarter_turn_flight() -> String {
          #103=IFCPRODUCTDEFINITIONSHAPE($,$,(#102));\n\
          #104=IFCLOCALPLACEMENT($,#2);\n\
          #105=IFCSTAIRFLIGHT('{:022}',$,$,$,$,#104,#103,$,$,$,$,$,$);\n\
-         ENDSEC;\nEND-ISO-10303-21;\n",
+         {records}ENDSEC;\nEND-ISO-10303-21;\n",
         105
     )
+}
+
+/// A side profile as [`swept`], but standing in the vertical plane through
+/// `origin` along world y and swept `depth` towards +x.
+fn swept_along_y(
+    first: u32,
+    [x, y, z]: [f64; 3],
+    points: &[[f64; 2]],
+    depth: f64,
+    product: &str,
+) -> String {
+    let at = |offset: u32| first + offset;
+    let mut text = String::new();
+    let mut corners = Vec::new();
+    for (index, [along, up]) in points.iter().chain(points.first()).enumerate() {
+        let corner = first + 20 + u32::try_from(index).unwrap();
+        writeln!(text, "#{corner}=IFCCARTESIANPOINT(({along:.3},{up:.3}));").unwrap();
+        corners.push(format!("#{corner}"));
+    }
+    // The profile's x along world y, its normal and so the sweep along
+    // world +x: local y is then world up.
+    write!(
+        text,
+        "#{a}=IFCDIRECTION((1.,0.,0.));\n\
+         #{b}=IFCDIRECTION((0.,1.,0.));\n\
+         #{c}=IFCCARTESIANPOINT(({x:.2},{y:.2},{z:.2}));\n\
+         #{d}=IFCAXIS2PLACEMENT3D(#{c},#{a},#{b});\n\
+         #{e}=IFCLOCALPLACEMENT($,#2);\n\
+         #{f}=IFCPOLYLINE(({}));\n\
+         #{g}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{f});\n\
+         #{h}=IFCDIRECTION((0.,0.,1.));\n\
+         #{i}=IFCEXTRUDEDAREASOLID(#{g},#{d},#{h},{depth:.3});\n\
+         #{j}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{i}));\n\
+         #{k}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{j}));\n\
+         #{l}={};\n",
+        corners.join(","),
+        product
+            .replace("GID", &format!("{:022}", at(11)))
+            .replace("PL", &format!("#{}", at(4)))
+            .replace("REP", &format!("#{}", at(10))),
+        a = at(0),
+        b = at(1),
+        c = at(2),
+        d = at(3),
+        e = at(4),
+        f = at(5),
+        g = at(6),
+        h = at(7),
+        i = at(8),
+        j = at(9),
+        k = at(10),
+        l = at(11),
+    )
+    .unwrap();
+    text
+}
+
+/// [`quarter_turn_flight`] with floor slab #209 before its foot (x -1.5
+/// to 0, y -0.2 to 1.2, top at 0), landing slab #309 beyond its top tread
+/// (x 0.84 to 1.84, y 1.84 to 3, top at 1.62 m) and its outer handrail in
+/// two pieces meeting at the corner (1.84, 0): #408 along y = 0 from x
+/// -0.3, #511 along x = 1.84 to y 1.86, their top 0.9 m above the nosings'
+/// outer ends and level 0.3 m beyond either end.
+fn quarter_turn_with_landings_and_rail() -> String {
+    let slope = 1.0 / 3.0_f64.sqrt();
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    let profile = |top: &[[f64; 2]]| {
+        let mut points: Vec<[f64; 2]> = top.iter().map(|[a, z]| [*a, z - 0.05]).collect();
+        points.extend(top.iter().rev());
+        points
+    };
+    let lower = profile(&[
+        [-0.3, 1.08],
+        [0.0, 1.08],
+        [0.84, 1.62],
+        [0.84 + slope, 1.80],
+        [1.89, 1.98],
+    ]);
+    let upper = profile(&[
+        [-0.1, 1.98],
+        [1.0 - slope, 1.98],
+        [1.0, 2.16],
+        [1.28, 2.34],
+        [1.56, 2.52],
+        [1.86, 2.52],
+    ]);
+    let slab = "IFCSLAB('GID',$,$,$,$,PL,REP,$,.FLOOR.)";
+    quarter_turn_flight_with(&format!(
+        "#4=IFCDIRECTION((0.,0.,1.));\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}",
+        placed_box(200, [-0.75, 0.5, -0.2], [1.5, 1.4, 0.2], slab),
+        placed_box(300, [1.34, 2.42, 1.42], [1.0, 1.16, 0.2], slab),
+        swept(400, [0.0, -0.05, 0.0], &lower, 0.05, rail),
+        swept_along_y(500, [1.84, 0.0, 0.0], &upper, 0.05, rail),
+    ))
+}
+
+#[test]
+fn with_geometry_a_quarter_turns_landings_and_handrail_are_placed_in_its_parts() {
+    let case = Case::new("geometry-quarter-turn-ends");
+    let (output, result) = case.geometry_rule(
+        &quarter_turn_with_landings_and_rail(),
+        &[
+            ("flight", "IfcStairFlight"),
+            ("slab", "IfcSlab"),
+            ("rail", "IfcRailing"),
+        ],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "landing_objects": {"type": "selector", "value": entity("slab")},
+            "landing_depth_minimum": {"type": "quantity", "value": 1.45, "unit": "m"},
+            "landing_at_least_walking_width": {"type": "boolean", "value": true},
+            "handrail_objects": {"type": "selector", "value": entity("rail")},
+            "handrail_reach_across": {"type": "quantity", "value": 0.2, "unit": "m"},
+            "handrail_reach_above": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "handrail_height_minimum": {"type": "quantity", "value": 0.7, "unit": "m"},
+            "handrail_height_maximum": {"type": "quantity", "value": 1.2, "unit": "m"},
+            "handrail_extension_minimum": {"type": "quantity", "value": 0.3, "unit": "m"},
+            "handrail_gap_maximum": {"type": "quantity", "value": 0.05, "unit": "m"},
+            "handrail_sides": {"type": "string", "value": "one"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The floor gives the foot 1.5 m along -x; the top landing reaches
+    // 1.44 m along +y from the top tread's nosing. The handrail's pieces
+    // meet at the corner, reach 0.3 m level beyond either end and stand
+    // high enough wherever the pitch line is known or bracketed.
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#105".to_owned(),
+            "the landing at the top of the flight is 1.44 m deep; at least 1.45 m and the \
+             flight's width (1 m) required"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
 }
 
 #[test]

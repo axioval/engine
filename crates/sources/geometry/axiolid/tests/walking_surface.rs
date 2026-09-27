@@ -947,8 +947,8 @@ fn handrails_along_a_flight_measure_height_extension_and_side() {
         "{left:?}"
     );
     assert!(left.highest().upper() - left.lowest().lower() < 1e-9);
-    assert!(holds(measured.bottom_extension(left), 0.3));
-    assert!(holds(measured.top_extension(left), 0.3));
+    assert!(holds(measured.bottom_extension(left).unwrap(), 0.3));
+    assert!(holds(measured.top_extension(left).unwrap(), 0.3));
     // Level extensions of an exact rail rise by next to nothing.
     for rise in [left.bottom_rise().unwrap(), left.top_rise().unwrap()] {
         assert!(rise.lower() == 0.0 && rise.upper() < 1e-12, "{rise:?}");
@@ -957,7 +957,7 @@ fn handrails_along_a_flight_measure_height_extension_and_side() {
     let right = rail_of(&measured, "right");
     assert_eq!(measured.side(right), Some(RailSide::Right));
     assert!(holds(right.lowest(), 0.75), "{right:?}");
-    assert!(holds(measured.bottom_extension(right), 0.1));
+    assert!(holds(measured.bottom_extension(right).unwrap(), 0.1));
     // It stops 0.1 m before the flight: short of the 0.3 m measured.
     assert_eq!(right.bottom_rise(), None);
 }
@@ -993,9 +993,9 @@ fn a_rail_in_pieces_is_measured_piece_by_piece_and_put_in_order() {
     // The first piece reaches beyond the bottom, level; the last beyond the
     // top.
     let (first, last) = (&pieces[0].1, &pieces[1].1);
-    assert!(holds(measured.bottom_extension(first), 0.3));
+    assert!(holds(measured.bottom_extension(first).unwrap(), 0.3));
     assert!(first.bottom_rise().unwrap().upper() < 1e-12);
-    assert!(holds(measured.top_extension(last), 0.3));
+    assert!(holds(measured.top_extension(last).unwrap(), 0.3));
     assert!(last.top_rise().unwrap().upper() < 1e-12);
     let gap = measured.gap(first, last).unwrap();
     assert!(
@@ -1018,7 +1018,7 @@ fn a_rail_sloping_on_past_the_flight_rises_over_its_extension() {
     let rise = rail.top_rise().unwrap();
     assert!(holds(rise, 0.3 * 0.54 / 0.84), "{rise:?}");
     assert_eq!(rail.bottom_rise(), None);
-    assert!(holds(measured.bottom_extension(rail), 0.0));
+    assert!(holds(measured.bottom_extension(rail).unwrap(), 0.0));
 }
 
 #[test]
@@ -1088,8 +1088,8 @@ fn a_handrail_along_a_ramp_follows_its_surface() {
         holds(rail.lowest(), 0.9) && holds(rail.highest(), 0.9),
         "{rail:?}"
     );
-    assert!(holds(measured.bottom_extension(rail), 0.3));
-    assert!(holds(measured.top_extension(rail), 0.3));
+    assert!(holds(measured.bottom_extension(rail).unwrap(), 0.3));
+    assert!(holds(measured.top_extension(rail).unwrap(), 0.3));
     assert!(rail.bottom_rise().unwrap().upper() < 1e-12);
 }
 
@@ -1119,7 +1119,7 @@ fn a_handrail_along_a_turned_flight_measures_within_rounding() {
         "{rail:?}"
     );
     assert!(rail.lowest().upper() - rail.lowest().lower() < 1e-9);
-    assert!(holds(measured.top_extension(rail), 0.3));
+    assert!(holds(measured.top_extension(rail).unwrap(), 0.3));
     assert!(rail.top_rise().unwrap().upper() < 1e-9);
 }
 
@@ -1549,20 +1549,39 @@ fn a_flight_turning_both_ways_has_no_inner_side() {
     );
 }
 
-#[test]
-fn a_quarter_turn_flight_measures_headroom_below_and_refuses_landings_rails_and_width() {
-    // The quarter turn raised 2 m above a hall's floor.
+/// The quarter turn raised 2 m above a hall's floor, a floor slab before
+/// its foot (x -1.5 .. 0, y -0.2 .. 1.2, top at 2 m) and the upper floor
+/// beyond its top tread (x 0.84 .. 1.84, y 1.84 .. 3, top at 3.62 m).
+fn raised_quarter_turn(objects: Vec<(&str, TriMesh)>) -> AxiolidWalkingSurfaceService {
     let mut mesh = quarter_turn();
     for point in &mut mesh.positions {
         point.z += 2.0;
     }
-    let stairs = service(
-        AxiolidGeometry::new()
-            .with_mesh(id("flight"), mesh)
-            .with_mesh(id("hall"), cuboid([-1.0, -1.0, 0.0], [3.0, 3.0, 2.5]))
-            .with_mesh(id("upper"), cuboid([0.84, 1.84, 3.42], [1.84, 3.0, 3.62]))
-            .with_mesh(id("rail"), cuboid([0.0, -0.1, 2.9], [0.84, -0.05, 2.95])),
-    );
+    let mut geometry = AxiolidGeometry::new()
+        .with_mesh(id("flight"), mesh)
+        .with_mesh(id("hall"), cuboid([-1.0, -1.0, 0.0], [3.0, 3.0, 2.5]))
+        .with_mesh(id("floor"), cuboid([-1.5, -0.2, 1.8], [0.0, 1.2, 2.0]))
+        .with_mesh(id("upper"), cuboid([0.84, 1.84, 3.42], [1.84, 3.0, 3.62]));
+    for (local, mesh) in objects {
+        geometry = geometry.with_mesh(id(local), mesh);
+    }
+    service(geometry)
+}
+
+/// `mesh` turned a quarter anticlockwise in plan about the origin and moved
+/// by `offset`: exactly, coordinates swapped.
+fn turned(mut mesh: TriMesh, offset: [f64; 2]) -> TriMesh {
+    for point in &mut mesh.positions {
+        let (x, y) = (point.x, point.y);
+        point.x = offset[0] - y;
+        point.y = offset[1] + x;
+    }
+    mesh
+}
+
+#[test]
+fn a_quarter_turn_flight_measures_headroom_below_landings_and_width() {
+    let stairs = raised_quarter_turn(vec![]);
     let flight = walk(&stairs, "flight").unwrap();
     assert!(flight.walking_line().is_turning());
     // Its straight treads fill rectangles, its winders taper: no width.
@@ -1574,19 +1593,169 @@ fn a_quarter_turn_flight_measures_headroom_below_and_refuses_landings_rails_and_
         .measure_clearance_below(&ClearanceBelowRequest::new(id("flight"), [id("hall")]))
         .unwrap();
     assert!(holds(below.clearance().unwrap(), 2.0), "{below:?}");
-    // Landings and handrails are placed along one direction, which a
-    // turning flight does not have: refused, never measured in another
-    // frame.
-    for end in [WalkingEnd::FlightBottom, WalkingEnd::FlightTop] {
-        let refused = landing(&stairs, end, &["upper", "hall"]);
-        assert!(
-            matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("turning")),
-            "{refused:?}"
-        );
-    }
-    let rails = handrails(&stairs, WalkingStretch::Flight, "flight", &["rail"]);
+    // Each end is placed along its own tread's direction, square to its
+    // nosing: back along -x at the foot, on along +y at the top, where the
+    // top tread counts towards the landing.
+    let bottom = landing(
+        &stairs,
+        WalkingEnd::FlightBottom,
+        &["floor", "upper", "hall"],
+    )
+    .unwrap();
+    assert!(bottom.direction() == MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap());
+    assert_eq!(bottom.landing().unwrap().carrier(), &id("floor"));
+    assert!(holds(bottom.depth().unwrap(), 1.5), "{bottom:?}");
+    assert!(holds(bottom.width().unwrap(), 1.4), "{bottom:?}");
+    let top = landing(&stairs, WalkingEnd::FlightTop, &["floor", "upper", "hall"]).unwrap();
+    assert!(top.direction() == MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap());
+    assert_eq!(top.landing().unwrap().carrier(), &id("upper"));
+    assert!(holds(top.depth().unwrap(), 3.0 - 1.56), "{top:?}");
+    assert!(holds(top.width().unwrap(), 1.0), "{top:?}");
+    // Along axes, the positions are exact.
+    assert!(top.evidence().exact);
+}
+
+#[test]
+fn handrails_along_a_quarter_turn_are_measured_part_by_part() {
+    let slope = 1.0 / 3.0_f64.sqrt();
+    // The outer rail in two pieces meeting at the corner (1.84, 0), its top
+    // 0.9 m above the nosings' outer ends: along y = 0 over the lower
+    // straight treads and the first winder (x 0 .. 0.84 + slope), along
+    // x = 1.84 from the second winder (y 1 - slope) on, level 0.3 m beyond
+    // either end and rising around the corner.
+    let lower = vec![
+        [-0.3, 3.08],
+        [0.0, 3.08],
+        [0.84, 3.62],
+        [0.84 + slope, 3.80],
+        [1.89, 3.98],
+    ];
+    let upper = vec![
+        [-0.1, 3.98],
+        [1.0 - slope, 3.98],
+        [1.0, 4.16],
+        [1.28, 4.34],
+        [1.56, 4.52],
+        [1.86, 4.52],
+    ];
+    let stairs = raised_quarter_turn(vec![
+        ("lower", rail(&lower, 0.05, -0.1, 0.05)),
+        (
+            "upper_rail",
+            turned(rail(&upper, 0.05, 0.0, 0.05), [1.89, 0.0]),
+        ),
+    ]);
+    let measured = handrails(
+        &stairs,
+        WalkingStretch::Flight,
+        "flight",
+        &["lower", "upper_rail"],
+    )
+    .unwrap();
+    assert_eq!(measured.parts().len(), 2, "{measured:?}");
+    assert!(measured.parts()[1].direction() == MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap());
+    let (first, last) = (
+        rail_of(&measured, "lower"),
+        rail_of(&measured, "upper_rail"),
+    );
+    assert_eq!((first.part(), last.part()), (0, 1));
+    assert_eq!(measured.side(first), Some(RailSide::Right));
+    assert_eq!(measured.side(last), Some(RailSide::Right));
+    let pieces = measured.side_rail(RailSide::Right).unwrap();
+    assert_eq!(pieces.len(), 2);
+    assert_eq!(pieces[0].0, id("lower"));
+    // They meet at the corner.
+    let gap = measured.gap(first, last).unwrap();
+    assert!(gap.lower() == 0.0 && gap.upper() < 1e-9, "{gap:?}");
+    // Where the nosings end on its side the rail runs 0.9 m above them;
+    // around the corner, between two nosings on different walls, the pitch
+    // line may lie anywhere between their elevations, one riser apart.
     assert!(
-        matches!(&rails, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("turning")),
-        "{rails:?}"
+        holds(first.lowest(), 0.72) && holds(first.lowest(), 0.9),
+        "{first:?}"
+    );
+    assert!(first.lowest().upper() < 0.9 + 1e-9, "{first:?}");
+    assert!(
+        holds(first.highest(), 0.9) && first.highest().upper() > 1.0,
+        "{first:?}"
+    );
+    assert!(
+        holds(last.lowest(), 0.9) && last.lowest().upper() - last.lowest().lower() < 1e-9,
+        "{last:?}"
+    );
+    assert!(
+        holds(last.highest(), 1.08) && last.highest().upper() < 1.08 + 1e-9,
+        "{last:?}"
+    );
+    // The first piece reaches level beyond the foot, the last beyond the
+    // top; neither is measured beyond the other end.
+    assert!(holds(measured.bottom_extension(first).unwrap(), 0.3));
+    assert!(first.bottom_rise().unwrap().upper() < 1e-12);
+    assert_eq!(measured.top_extension(first), None);
+    assert!(holds(measured.top_extension(last).unwrap(), 0.3));
+    assert!(last.top_rise().unwrap().upper() < 1e-12);
+    assert_eq!(measured.bottom_extension(last), None);
+}
+
+#[test]
+fn rails_a_quarter_turn_cannot_place_are_refused() {
+    let top = vec![[0.0, 3.08], [0.84, 3.62]];
+    // Down the middle of the lower straight treads, whose pitch line
+    // differs from side to side.
+    let middle = raised_quarter_turn(vec![("rail", rail(&top, 0.05, 0.45, 0.1))]);
+    let refused = handrails(&middle, WalkingStretch::Flight, "flight", &["rail"]);
+    assert!(
+        matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("middle")),
+        "{refused:?}"
+    );
+    // At an angle to both straight parts.
+    let mut slanted = rail(&top, 0.05, -0.1, 0.05);
+    for point in &mut slanted.positions {
+        point.y -= 0.1 * point.x;
+    }
+    let slanted = raised_quarter_turn(vec![("rail", slanted)]);
+    let refused = handrails(&slanted, WalkingStretch::Flight, "flight", &["rail"]);
+    assert!(
+        matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("straight")),
+        "{refused:?}"
+    );
+    // Inside the turn, beside the flight but along neither straight part:
+    // it might be a piece of a handrail, so it is not dropped.
+    let short = [[0.0, 3.08], [0.6, 3.46]];
+    let inside = raised_quarter_turn(vec![("rail", rail(&short, 0.05, 1.5, 0.05))]);
+    let refused = handrails(&inside, WalkingStretch::Flight, "flight", &["rail"]);
+    assert!(
+        matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("along none")),
+        "{refused:?}"
+    );
+    // Far from the flight, a rail is not along it.
+    let far = raised_quarter_turn(vec![("rail", rail(&top, 0.05, -2.0, 0.05))]);
+    let measured = handrails(&far, WalkingStretch::Flight, "flight", &["rail"]).unwrap();
+    assert!(measured.rails().is_empty());
+
+    // A tessellated quarter turn's straight parts climb along directions
+    // its chords turn: a rail straight along the wall runs along none of
+    // them exactly, and is refused rather than measured in a frame it
+    // does not fill.
+    let deviation = 0.001;
+    let mut mesh = quarter_turn();
+    let mut state = 131;
+    for point in &mut mesh.positions {
+        point.x += 0.4 * deviation * wobble(&mut state);
+        point.y += 0.4 * deviation * wobble(&mut state);
+    }
+    let stairs = service(
+        AxiolidGeometry::new()
+            .with_tessellated_mesh(id("flight"), mesh, deviation)
+            .with_mesh(
+                id("rail"),
+                rail(&[[0.0, 1.08], [0.84, 1.62]], 0.05, -0.1, 0.05),
+            ),
+    );
+    assert!(walk(&stairs, "flight").unwrap().walking_line().is_turning());
+    let refused = handrails(&stairs, WalkingStretch::Flight, "flight", &["rail"]);
+    assert!(
+        matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("straight")),
+        "{refused:?}"
     );
 }

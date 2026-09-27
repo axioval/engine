@@ -39,9 +39,12 @@
 //!   walking surface and the end of its body, grown by [`LANDING_REACH`],
 //!   across the end's width. Several such surfaces are refused, since their
 //!   union is not measured; one that fills a rectangle along the leaving
-//!   direction is measured, any other only found.
+//!   direction is measured, any other only found. A turning flight's end is
+//!   placed along its end tread's own direction, square to its nosing; an
+//!   end on a winder is refused.
 //! - **Handrails** are the requested rails running along a flight's nosing
-//!   line or a run's surface, parallel to it in plan (the `handrail` module).
+//!   line or a run's surface, parallel to it in plan, a turning flight's
+//!   part by part (the `handrail` module).
 //! - The **clearance below** a subject is the least height of its
 //!   downward-facing faces above the downward-facing level faces (the floor)
 //!   of a requested space, over the plan region they share, leaving out the
@@ -62,6 +65,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId};
 
+use crate::flight::TreadFrame;
 use crate::geometry::{AxiolidGeometry, Triangle, mesh_extent, triangles};
 
 /// Mesh audit tolerance, as tight as the other services'.
@@ -329,6 +333,24 @@ pub(crate) fn plan_direction(
         [dx, dy, 0.0]
     };
     MetricDirection::try_new(vector).map_err(|_| WalkingSurfaceError::InvalidMeasurement)
+}
+
+impl AxiolidWalkingSurfaceService {
+    /// The flight of `object` walked along its centre line, and each
+    /// tread's rectangle along its walking direction where it fills one.
+    pub(crate) fn framed_flight(
+        &self,
+        object: &ObjectId,
+    ) -> Result<(TreadFlight, Vec<Option<TreadFrame>>), WalkingSurfaceError> {
+        let solid = self.body(object, true)?;
+        if component_count(solid.mesh) != 1 {
+            return Err(WalkingSurfaceError::Unsupported(format!(
+                "{object} is in several pieces (separate treads); its first riser needs the \
+                 floor it starts from, which it does not carry"
+            )));
+        }
+        crate::flight::measure_framed(&TreadFlightRequest::new(object.clone()), &solid)
+    }
 }
 
 impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
@@ -876,23 +898,6 @@ impl PlanFrame {
     }
 }
 
-/// The direction a straight flight climbs. A turning flight has none: its
-/// treads' positions are arc lengths along its walking line and their sides
-/// lie across each tread's own direction, so `what` (landings, handrails)
-/// is refused rather than measured in a frame the flight does not have.
-pub(crate) fn straight_direction(
-    flight: &TreadFlight,
-    what: &str,
-) -> Result<MetricDirection, WalkingSurfaceError> {
-    match flight.walking_line() {
-        WalkingLine::Straight(direction) => Ok(*direction),
-        WalkingLine::Turning(_) => Err(WalkingSurfaceError::Unsupported(format!(
-            "{} is a turning flight; its {what} are measured only along a straight one",
-            flight.object()
-        ))),
-    }
-}
-
 /// The direction opposite `direction`.
 fn reversed(direction: MetricDirection) -> Result<MetricDirection, WalkingSurfaceError> {
     let [x, y, z] = direction.components();
@@ -1061,14 +1066,37 @@ impl AxiolidWalkingSurfaceService {
     ) -> Result<EndGeometry, WalkingSurfaceError> {
         match end {
             WalkingEnd::FlightBottom | WalkingEnd::FlightTop => {
-                let flight =
-                    self.measure_tread_flight(&TreadFlightRequest::new(subject.clone()))?;
-                let (Some(first), Some(last)) = (flight.treads().first(), flight.treads().last())
+                let (flight, frames) = self.framed_flight(subject)?;
+                let bottom = end == WalkingEnd::FlightBottom;
+                let index = if bottom {
+                    0
+                } else {
+                    flight.treads().len().saturating_sub(1)
+                };
+                let (Some(tread), Some(last)) =
+                    (flight.treads().get(index), flight.treads().last())
                 else {
                     return Err(WalkingSurfaceError::InvalidMeasurement);
                 };
-                let climbing = straight_direction(&flight, "landings")?;
-                let bottom = end == WalkingEnd::FlightBottom;
+                // The end tread's direction and its positions along it: a
+                // straight flight's own, a turning flight's end tread's
+                // rectangle square to its nosing.
+                let (climbing, (front, back), sides) = match flight.walking_line() {
+                    WalkingLine::Straight(direction) => {
+                        (*direction, (tread.front(), tread.back()), tread.sides())
+                    }
+                    WalkingLine::Turning(_) => {
+                        let which = if bottom { "bottom" } else { "top" };
+                        let frame = frames.get(index).copied().flatten().ok_or_else(|| {
+                            WalkingSurfaceError::Unsupported(format!(
+                                "{subject} is a turning flight whose {which} tread fills no \
+                                 rectangle square to its nosing (a winder), so the landing at \
+                                 its {which} has no direction"
+                            ))
+                        })?;
+                        (frame.direction, frame.along, Some(frame.sides))
+                    }
+                };
                 let direction = if bottom {
                     reversed(climbing)?
                 } else {
@@ -1085,28 +1113,28 @@ impl AxiolidWalkingSurfaceService {
                         end.max(frame.map(p.x, p.y)[0] + frame.rounding(p.x, p.y))
                     });
                 if bottom {
-                    let edge = negated(first.front())?;
+                    let edge = negated(front)?;
                     Ok(EndGeometry {
                         ramp: false,
                         direction,
                         edge,
                         elevation: flight.base(),
                         reach: (edge.lower_metres(), body_end),
-                        across: sides_across(first.sides(), true, subject)?,
+                        across: sides_across(sides, true, subject)?,
                     })
                 } else {
                     let (edge, elevation) = if flight.ends_in_riser() {
-                        (last.back(), flight.top())
+                        (back, flight.top())
                     } else {
-                        (last.front(), last.elevation())
+                        (front, last.elevation())
                     };
                     Ok(EndGeometry {
                         ramp: false,
                         direction,
                         edge,
                         elevation,
-                        reach: (last.back().lower_metres(), body_end),
-                        across: sides_across(last.sides(), false, subject)?,
+                        reach: (back.lower_metres(), body_end),
+                        across: sides_across(sides, false, subject)?,
                     })
                 }
             }

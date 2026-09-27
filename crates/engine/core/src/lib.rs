@@ -614,9 +614,10 @@ pub use walkability::{
 pub use walking_surface::{
     ClearanceBelow, ClearanceBelowRequest, HandrailEvidence, HandrailRequest, Headroom,
     HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval,
-    PlanSegment, RailMeasurement, RailSide, RiserClosure, SlopedRun, SlopedSurface, Tread,
-    TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingLinePlacement, WalkingStretch,
-    WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle, across,
+    PlanSegment, RailMeasurement, RailSide, RiserClosure, SlopedRun, SlopedSurface, StretchPart,
+    Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingLinePlacement,
+    WalkingStretch, WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle,
+    across,
 };
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.

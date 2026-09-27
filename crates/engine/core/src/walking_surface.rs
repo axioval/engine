@@ -40,7 +40,9 @@
 //! Handrails ([`HandrailEvidence`]) along a flight or a run are the rule's
 //! selection, reported as positions along and across the walking direction
 //! and as the height of their top above the pitch line: the nosing line of a
-//! flight, the surface of a run. The rails along one side are the pieces of
+//! flight, the surface of a run. A turning flight's handrails are measured
+//! part by part ([`StretchPart`]): each rail along one of its straight runs
+//! of treads, in that run's frame. The rails along one side are the pieces of
 //! its handrail, ordered bottom to top here ([`HandrailEvidence::side_rail`])
 //! with the gaps between them ([`HandrailEvidence::gap`]), never by an
 //! adapter.
@@ -1037,14 +1039,17 @@ impl Headroom {
 
 /// One end of a stair flight or of a ramp's run.
 ///
-/// A flight's ends are placed along the one direction a straight flight
-/// climbs; a turning flight has none, and a service refuses its ends rather
-/// than measure them in a frame its treads' positions are not given in.
+/// A flight's end is placed along the direction its end tread climbs: the
+/// flight's own for a straight flight, the direction square to the end
+/// tread's nosing for a turning flight, whose landing positions are then
+/// projections onto that direction in plan, never arc lengths along its
+/// walking line. A turning flight ending on a winder has no such direction,
+/// and a service refuses that end.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WalkingEnd {
-    /// Where a straight flight starts, in front of its first riser.
+    /// Where a flight starts, in front of its first riser.
     FlightBottom,
-    /// Where a straight flight arrives, beyond its last riser.
+    /// Where a flight arrives, beyond its last riser.
     FlightTop,
     /// The lower end of a ramp's run, by its index in
     /// [`SlopedSurface::runs`].
@@ -1409,13 +1414,12 @@ fn governed(
     Ok(governing)
 }
 
-/// The stretch of walking surface a handrail is measured along: a straight
-/// flight, or one run of a ramp by its index in [`SlopedSurface::runs`]. A
-/// turning flight has no one direction to measure along, and a service
-/// refuses it.
+/// The stretch of walking surface a handrail is measured along: a stair
+/// flight, or one run of a ramp by its index in [`SlopedSurface::runs`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WalkingStretch {
-    /// A straight stair flight, along its nosing line.
+    /// A stair flight, along its nosing line: in one part when straight, in
+    /// its straight parts when it turns ([`StretchPart`]).
     Flight,
     /// A ramp's run, along its surface.
     Run(usize),
@@ -1518,19 +1522,66 @@ pub enum RailSide {
     Left,
 }
 
+/// One straight part of a stretch a handrail is measured along: the
+/// horizontal direction it climbs and the positions of the walking
+/// surface's sides along [`across`] it.
+///
+/// A straight flight or a ramp's run is one part. A turning flight's parts
+/// are its runs of consecutive treads filling rectangles square to parallel
+/// nosings, bottom to top; its winders belong to none, and a rail beside
+/// them is measured in the frame of the part it runs on from.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StretchPart {
+    direction: MetricDirection,
+    sides: (ElevationInterval, ElevationInterval),
+}
+
+impl StretchPart {
+    /// A part climbing along the horizontal `direction`, its walking
+    /// surface between the ordered sides `left` and `right` across it.
+    pub fn try_new(
+        direction: MetricDirection,
+        (left, right): (ElevationInterval, ElevationInterval),
+    ) -> Result<Self, WalkingSurfaceError> {
+        #[allow(clippy::float_cmp)]
+        if direction.components()[2] != 0.0 {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(Self {
+            direction,
+            sides: sides(left, right)?,
+        })
+    }
+
+    /// The horizontal direction the part climbs.
+    #[must_use]
+    pub fn direction(&self) -> MetricDirection {
+        self.direction
+    }
+
+    /// Positions of the walking surface's sides across the direction.
+    #[must_use]
+    pub fn sides(&self) -> (ElevationInterval, ElevationInterval) {
+        self.sides
+    }
+}
+
 /// One handrail measured along a stretch.
 ///
-/// `start` and `end` are the positions of its body's nearest and farthest
-/// points along the stretch's direction, `left` and `right` of its lowest
-/// and highest points across it. `lowest` and `highest` bound the height of
-/// the top of its body above the pitch line (the nosing line of a flight,
-/// the surface of a run) where both run: the least and the greatest height
-/// along it, each as an interval sure to hold it. `bottom_rise` and
-/// `top_rise` are how much the top of its body rises and falls over the
-/// requested extension beyond each end of the pitch line, `None` where it
-/// does not reach that far or no extension was requested.
+/// A rail is measured in the frame of one part of the stretch, the first
+/// unless stated ([`Self::in_part`]). `start` and `end` are the positions
+/// of its body's nearest and farthest points along that part's direction,
+/// `left` and `right` of its lowest and highest points across it. `lowest`
+/// and `highest` bound the height of the top of its body above the pitch
+/// line (the nosing line of a flight, the surface of a run) where both run:
+/// the least and the greatest height along it, each as an interval sure to
+/// hold it. `bottom_rise` and `top_rise` are how much the top of its body
+/// rises and falls over the requested extension beyond each end of the
+/// pitch line, `None` where it does not reach that far or no extension was
+/// requested.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RailMeasurement {
+    part: usize,
     start: ElevationInterval,
     end: ElevationInterval,
     left: ElevationInterval,
@@ -1557,6 +1608,7 @@ impl RailMeasurement {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
         Ok(Self {
+            part: 0,
             start,
             end,
             left,
@@ -1566,6 +1618,20 @@ impl RailMeasurement {
             bottom_rise: None,
             top_rise: None,
         })
+    }
+
+    /// The rail measured in the frame of the stretch's part `part`, by its
+    /// index in [`HandrailEvidence::parts`].
+    #[must_use]
+    pub fn in_part(mut self, part: usize) -> Self {
+        self.part = part;
+        self
+    }
+
+    /// The index of the part the rail is measured in.
+    #[must_use]
+    pub fn part(&self) -> usize {
+        self.part
     }
 
     /// The rail with the rise of its top over the extension beyond the
@@ -1665,46 +1731,64 @@ impl RailMeasurement {
 
 /// The handrails along a flight or run.
 ///
-/// `direction` is the stretch's horizontal walking direction, `pitch` the
-/// positions along it where the pitch line starts and ends (a flight's first
-/// and last nosing, a run's lower and upper end) and `sides` the positions
-/// of the walking surface's sides along [`across`] it. `rails` names every
-/// requested rail whose body runs along the stretch: it overlaps the pitch
-/// line along the direction and lies within the request's reach of the
-/// sides across it. A rail's heights are computed, so the evidence is never
-/// exact.
+/// `parts` are the stretch's straight parts ([`StretchPart`]), bottom to
+/// top: one for a straight flight or a run. `pitch` holds the positions
+/// where the pitch line starts, along the first part's direction (a
+/// flight's first nosing, a run's lower end), and where it ends, along the
+/// last part's (the last nosing or the upper floor's edge, a run's upper
+/// end). `rails` names every requested rail whose body runs along the
+/// stretch, each measured in the frame of one part: it overlaps the
+/// stretch along that part's direction and lies within the request's reach
+/// of its sides across it. A rail's heights are computed, so the evidence
+/// is never exact.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HandrailEvidence {
     request: HandrailRequest,
-    direction: MetricDirection,
+    parts: Vec<StretchPart>,
     pitch: (ElevationInterval, ElevationInterval),
-    sides: (ElevationInterval, ElevationInterval),
     rails: Vec<(ObjectId, RailMeasurement)>,
     evidence: Evidence,
 }
 
 impl HandrailEvidence {
-    /// The handrails answering `request`. Every rail must be requested and
-    /// named once; they are kept in identity order.
+    /// The handrails answering `request` along one straight part: the
+    /// horizontal `direction` and the walking surface's sides across it.
+    /// Every rail must be requested, named once and measured in that part;
+    /// they are kept in identity order.
     pub fn try_new(
         request: HandrailRequest,
         direction: MetricDirection,
         pitch: (ElevationInterval, ElevationInterval),
         walking_sides: (ElevationInterval, ElevationInterval),
+        rails: Vec<(ObjectId, RailMeasurement)>,
+        evidence: Evidence,
+    ) -> Result<Self, WalkingSurfaceError> {
+        let part = StretchPart::try_new(direction, walking_sides)?;
+        Self::try_in_parts(request, vec![part], pitch, rails, evidence)
+    }
+
+    /// The handrails answering `request` along the straight `parts`, bottom
+    /// to top, at least one. Every rail must be requested, named once and
+    /// measured in one of the parts; they are kept in identity order.
+    pub fn try_in_parts(
+        request: HandrailRequest,
+        parts: Vec<StretchPart>,
+        pitch: (ElevationInterval, ElevationInterval),
         mut rails: Vec<(ObjectId, RailMeasurement)>,
         evidence: Evidence,
     ) -> Result<Self, WalkingSurfaceError> {
-        #[allow(clippy::float_cmp)]
-        if direction.components()[2] != 0.0 {
+        if parts.is_empty() {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
-        let pitch = sides(pitch.0, pitch.1)?;
-        let walking_sides = sides(walking_sides.0, walking_sides.1)?;
+        if parts.len() == 1 {
+            // Both ends lie along the one direction, so they are ordered.
+            sides(pitch.0, pitch.1)?;
+        }
         rails.sort_by(|a, b| a.0.cmp(&b.0));
         let unique = rails.windows(2).all(|pair| pair[0].0 != pair[1].0);
-        let requested = rails
-            .iter()
-            .all(|(rail, _)| request.rails.binary_search(rail).is_ok());
+        let requested = rails.iter().all(|(rail, measurement)| {
+            request.rails.binary_search(rail).is_ok() && measurement.part < parts.len()
+        });
         if !unique || !requested {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -1713,9 +1797,8 @@ impl HandrailEvidence {
         }
         Ok(Self {
             request,
-            direction,
+            parts,
             pitch,
-            sides: walking_sides,
             rails,
             evidence,
         })
@@ -1727,22 +1810,39 @@ impl HandrailEvidence {
         &self.request
     }
 
-    /// The stretch's horizontal walking direction.
+    /// The stretch's straight parts, bottom to top.
     #[must_use]
-    pub fn direction(&self) -> MetricDirection {
-        self.direction
+    pub fn parts(&self) -> &[StretchPart] {
+        &self.parts
     }
 
-    /// Positions along the direction where the pitch line starts and ends.
+    /// The first part's horizontal walking direction: the stretch's, when
+    /// it is one part.
+    #[must_use]
+    pub fn direction(&self) -> MetricDirection {
+        self.first().direction
+    }
+
+    /// Where the pitch line starts, along the first part's direction, and
+    /// where it ends, along the last part's.
     #[must_use]
     pub fn pitch(&self) -> (ElevationInterval, ElevationInterval) {
         self.pitch
     }
 
-    /// Positions of the walking surface's sides across the direction.
+    /// Positions of the walking surface's sides across the first part's
+    /// direction: the stretch's, when it is one part.
     #[must_use]
     pub fn sides(&self) -> (ElevationInterval, ElevationInterval) {
-        self.sides
+        self.first().sides
+    }
+
+    fn first(&self) -> &StretchPart {
+        &self.parts[0]
+    }
+
+    fn part(&self, rail: &RailMeasurement) -> &StretchPart {
+        &self.parts[rail.part]
     }
 
     /// The rails running along the stretch, in identity order.
@@ -1752,25 +1852,30 @@ impl HandrailEvidence {
     }
 
     /// How far a rail reaches beyond the bottom of the pitch line, along
-    /// the direction: negative where it starts above it.
+    /// the first part's direction: negative where it starts above it.
+    /// `None` for a rail measured along a later part, which does not run
+    /// along the first.
     #[must_use]
-    pub fn bottom_extension(&self, rail: &RailMeasurement) -> MeasuredInterval {
-        between(self.pitch.0, rail.start)
+    pub fn bottom_extension(&self, rail: &RailMeasurement) -> Option<MeasuredInterval> {
+        (rail.part == 0).then(|| between(self.pitch.0, rail.start))
     }
 
-    /// How far a rail reaches beyond the top of the pitch line.
+    /// How far a rail reaches beyond the top of the pitch line, along the
+    /// last part's direction; `None` for a rail measured along an earlier
+    /// part.
     #[must_use]
-    pub fn top_extension(&self, rail: &RailMeasurement) -> MeasuredInterval {
-        between(rail.end, self.pitch.1)
+    pub fn top_extension(&self, rail: &RailMeasurement) -> Option<MeasuredInterval> {
+        (rail.part + 1 == self.parts.len()).then(|| between(rail.end, self.pitch.1))
     }
 
     /// The pieces of the handrail along `side`: every measured rail running
-    /// along it ([`Self::side`]), bottom to top. Pieces are consecutive when
-    /// each starts and ends decidably further along than the one before;
-    /// two starting or ending where the positions cannot tell apart, or one
-    /// lying within another's stretch (a second rail beside or below it),
-    /// leave the order undecided, and the pieces are returned as `Err`,
-    /// named. No rail along the side is an empty rail.
+    /// along it ([`Self::side`]), bottom to top, part by part. Within a part,
+    /// pieces are consecutive when each starts and ends decidably further
+    /// along than the one before; two starting or ending where the
+    /// positions cannot tell apart, or one lying within another's stretch
+    /// (a second rail beside or below it), leave the order undecided, and
+    /// the pieces are returned as `Err`, named. No rail along the side is an
+    /// empty rail.
     pub fn side_rail(
         &self,
         side: RailSide,
@@ -1781,15 +1886,20 @@ impl HandrailEvidence {
             .filter(|(_, rail)| self.side(rail) == Some(side))
             .collect();
         pieces.sort_by(|a, b| {
-            a.1.start
-                .lower_metres()
-                .total_cmp(&b.1.start.lower_metres())
+            a.1.part
+                .cmp(&b.1.part)
+                .then_with(|| {
+                    a.1.start
+                        .lower_metres()
+                        .total_cmp(&b.1.start.lower_metres())
+                })
                 .then_with(|| a.0.cmp(&b.0))
         });
         let ordered = pieces.windows(2).all(|pair| {
             let (lower, upper) = (&pair[0].1, &pair[1].1);
-            lower.start.upper_metres() < upper.start.lower_metres()
-                && lower.end.upper_metres() < upper.end.lower_metres()
+            lower.part < upper.part
+                || (lower.start.upper_metres() < upper.start.lower_metres()
+                    && lower.end.upper_metres() < upper.end.lower_metres())
         });
         if ordered {
             Ok(pieces)
@@ -1799,14 +1909,15 @@ impl HandrailEvidence {
     }
 
     /// The gap in plan between two rails: the least horizontal distance
-    /// between the rectangles their bodies fill, zero where they touch or
-    /// overlap, as an interval sure to hold it. `None` when a rail's
-    /// positions leave no rectangle it surely fills, so no upper bound.
+    /// between the rectangles their bodies fill, each along its own part,
+    /// zero where they touch or overlap, as an interval sure to hold it.
+    /// `None` when a rail's positions leave no rectangle it surely fills,
+    /// so no upper bound.
     #[must_use]
     pub fn gap(&self, a: &RailMeasurement, b: &RailMeasurement) -> Option<MeasuredInterval> {
-        let direction = self.direction;
-        let (outer_a, inner_a) = (a.plan(direction, true)?, a.plan(direction, false));
-        let (outer_b, inner_b) = (b.plan(direction, true)?, b.plan(direction, false));
+        let (along_a, along_b) = (self.part(a).direction, self.part(b).direction);
+        let (outer_a, inner_a) = (a.plan(along_a, true)?, a.plan(along_a, false));
+        let (outer_b, inner_b) = (b.plan(along_b, true)?, b.plan(along_b, false));
         let (inner_a, inner_b) = (inner_a?, inner_b?);
         let scale = [&outer_a, &outer_b]
             .iter()
@@ -1821,12 +1932,12 @@ impl HandrailEvidence {
         MeasuredInterval::try_new(lower, upper.max(lower)).ok()
     }
 
-    /// The side a rail runs along: the one whose half of the walking
-    /// surface's width holds it wholly across, `None` for a rail that may
-    /// reach over the middle.
+    /// The side a rail runs along: the one whose half of its part's walking
+    /// surface holds it wholly across, `None` for a rail that may reach over
+    /// the middle.
     #[must_use]
     pub fn side(&self, rail: &RailMeasurement) -> Option<RailSide> {
-        let (left, right) = self.sides;
+        let (left, right) = self.part(rail).sides;
         // The midpoint rounds once, by at most half a unit in the last
         // place, which the neighbouring value covers.
         let low = f64::midpoint(left.lower_metres(), right.lower_metres()).next_down();
@@ -2337,8 +2448,8 @@ mod tests {
         assert_eq!(measured.side(&left), Some(RailSide::Left));
         assert_eq!(measured.side(&right), Some(RailSide::Right));
         assert_eq!(measured.side(&rail(0.5, 0.7, 0.9)), None);
-        assert!(contains(measured.bottom_extension(&left), 0.3));
-        assert!(contains(measured.top_extension(&left), 0.38));
+        assert!(contains(measured.bottom_extension(&left).unwrap(), 0.3));
+        assert!(contains(measured.top_extension(&left).unwrap(), 0.38));
         // Exact evidence, an unrequested rail and one named twice are
         // refused.
         assert_eq!(
@@ -2447,6 +2558,81 @@ mod tests {
         )
         .unwrap();
         assert_eq!(measured.gap(&left[0].1, &blurred), None);
+    }
+
+    #[test]
+    fn a_turning_flights_rails_are_measured_part_by_part() {
+        // A quarter turn: along +x over y 0 .. 1, then along +y over x
+        // 0.84 .. 1.84, whose sides across +y (towards -x) lie at -1.84 and
+        // -0.84. The outer rail is two pieces meeting at the corner.
+        let y = MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap();
+        let parts = vec![
+            StretchPart::try_new(x(), (point(0.0), point(1.0))).unwrap(),
+            StretchPart::try_new(y, (point(-1.84), point(-0.84))).unwrap(),
+        ];
+        let request = HandrailRequest::try_new(
+            id("a"),
+            WalkingStretch::Flight,
+            [id("p"), id("q"), id("r")],
+            (0.2, 1.5),
+            0.3,
+        )
+        .unwrap();
+        let measure = |rails: Vec<(ObjectId, RailMeasurement)>| {
+            HandrailEvidence::try_in_parts(
+                request.clone(),
+                parts.clone(),
+                (point(0.0), point(1.56)),
+                rails,
+                evidence(false),
+            )
+        };
+        // `p` along +x at y -0.1 .. -0.05 up to the corner, `q` along +y at
+        // x 1.84 .. 1.89 from it, `r` along the inner side of the top part.
+        let measured = measure(vec![
+            (id("p"), piece(-0.3, 1.89, -0.1, -0.05)),
+            (id("q"), piece(-0.1, 1.86, -1.89, -1.84).in_part(1)),
+            (id("r"), piece(1.0, 1.86, -0.84, -0.79).in_part(1)),
+        ])
+        .unwrap();
+        assert_eq!(measured.parts().len(), 2);
+        let (p, q, r) = (
+            &measured.rails()[0].1,
+            &measured.rails()[1].1,
+            &measured.rails()[2].1,
+        );
+        assert_eq!(measured.side(p), Some(RailSide::Right));
+        assert_eq!(measured.side(q), Some(RailSide::Right));
+        assert_eq!(measured.side(r), Some(RailSide::Left));
+        let outer = measured.side_rail(RailSide::Right).unwrap();
+        let names: Vec<&ObjectId> = outer.iter().map(|(rail, _)| rail).collect();
+        assert_eq!(names, [&id("p"), &id("q")]);
+        // They meet at the corner.
+        let gap = measured.gap(p, q).unwrap();
+        assert!(gap.lower() == 0.0 && gap.upper() < 1e-12, "{gap:?}");
+        // The first piece reaches beyond the bottom, the last beyond the
+        // top; neither is measured beyond the other end.
+        assert!(contains(measured.bottom_extension(p).unwrap(), 0.3));
+        assert_eq!(measured.top_extension(p), None);
+        assert!(contains(measured.top_extension(q).unwrap(), 0.3));
+        assert_eq!(measured.bottom_extension(q), None);
+        // A rail in a part the stretch does not have is refused.
+        assert_eq!(
+            measure(vec![(id("p"), piece(0.0, 1.0, -0.1, -0.05).in_part(2))]),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            HandrailEvidence::try_in_parts(
+                request.clone(),
+                vec![],
+                (point(0.0), point(1.56)),
+                vec![],
+                evidence(false)
+            ),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        let sloped = MetricDirection::try_new([1.0, 0.0, 1.0]).unwrap();
+        assert!(StretchPart::try_new(sloped, (point(0.0), point(1.0))).is_err());
     }
 
     fn around(value: f64, margin: f64) -> ElevationInterval {

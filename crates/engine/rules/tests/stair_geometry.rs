@@ -13,7 +13,7 @@ use axioval_engine::{
     HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing, LandingEvidence,
     LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, ObstructionEvidence,
     PlacementOutcome, PlacementRequest, PlanSegment, RailMeasurement, RiserClosure, SlopedRun,
-    SlopedSurface, Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine,
+    SlopedSurface, StretchPart, Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine,
     WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
     WalkingSurfaceServiceHandle,
 };
@@ -177,6 +177,9 @@ struct Stairs {
     below: BTreeMap<(ObjectId, ObjectId), f64>,
     /// Rails per subject and stretch.
     rails: BTreeMap<(ObjectId, WalkingStretch), Vec<(ObjectId, RailMeasurement)>>,
+    /// A turning flight's straight parts, per subject; a turning flight
+    /// without them has its landings and handrails refused.
+    turning: BTreeMap<ObjectId, Vec<StretchPart>>,
 }
 
 impl Stairs {
@@ -234,12 +237,20 @@ impl Stairs {
 }
 
 impl Stairs {
-    /// Refuses `what` of a turning flight.
+    /// Measures a turning flight's landings and handrails in `parts`.
+    fn in_parts(mut self, object: &str, parts: Vec<StretchPart>) -> Self {
+        self.turning.insert(id(object), parts);
+        self
+    }
+
+    /// Refuses `what` of a turning flight whose parts are not stated.
     fn straight(&self, subject: &ObjectId, what: &str) -> Result<(), WalkingSurfaceError> {
         match self.flights.get(subject) {
-            Some(parts) if parts.line.is_turning() => Err(WalkingSurfaceError::Unsupported(
-                format!("{subject} is a turning flight; its {what} are not measured"),
-            )),
+            Some(parts) if parts.line.is_turning() && !self.turning.contains_key(subject) => {
+                Err(WalkingSurfaceError::Unsupported(format!(
+                    "{subject} is a turning flight; its {what} are not measured"
+                )))
+            }
             _ => Ok(()),
         }
     }
@@ -376,6 +387,19 @@ impl WalkingSurfaceService for Stairs {
             locator: format!("handrails:{}", subject.local_id),
             exact: false,
         };
+        if let (WalkingStretch::Flight, Some(parts)) =
+            (request.stretch(), self.turning.get(subject))
+        {
+            // A turning flight's pitch line ends at 1.12 m along its last
+            // part.
+            return HandrailEvidence::try_in_parts(
+                request.clone(),
+                parts.clone(),
+                (point(0.0), point(1.12)),
+                rails,
+                evidence,
+            );
+        }
         HandrailEvidence::try_new(request.clone(), x(), pitch, sides, rails, evidence)
     }
 }
@@ -1852,9 +1876,9 @@ fn walking_line_and_winder_declarations_are_checked() {
 }
 
 /// A turning flight has headroom below it measured as any flight's, but no
-/// width (its winders taper), and the service refuses its landings and
-/// handrails: those checks are not evaluated rather than judged on a frame
-/// the flight does not have.
+/// width (its winders taper); a service refusing its landings and handrails
+/// (a winder at an end, a rail it cannot place) leaves those checks not
+/// evaluated rather than judged on a frame the flight does not have.
 #[test]
 fn a_turning_flight_keeps_its_headroom_below_and_leaves_width_landings_and_rails_open() {
     let stairs = Stairs::default()
@@ -1914,6 +1938,89 @@ fn a_turning_flight_keeps_its_headroom_below_and_leaves_width_landings_and_rails
             .iter()
             .any(|message| message.contains("handrails") && message.contains("turning flight")),
         "{messages:?}"
+    );
+}
+
+/// A service placing a turning flight's landings and handrails in its
+/// straight parts: the landing compared with the tread meeting it, and the
+/// handrail along a side extending from its first piece's part at the
+/// bottom and its last piece's at the top.
+#[test]
+fn a_turning_flights_landings_and_rails_are_judged_in_its_parts() {
+    // `winder` climbs along x over its first two treads (0.9 m wide), then
+    // along y; across y (towards -x) its upper part spans -1.2 .. -0.3.
+    let y = MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap();
+    let parts = vec![
+        StretchPart::try_new(x(), (point(0.0), point(0.9))).unwrap(),
+        StretchPart::try_new(y, (point(-1.2), point(-0.3))).unwrap(),
+    ];
+    let stairs = Stairs::default()
+        .parts("winder", winder())
+        .in_parts("winder", parts)
+        .landing("winder", WalkingEnd::FlightTop, "slab", Some((2.0, 0.8)))
+        // The left rail: along the lower part from 0.3 m before the foot,
+        // on along the upper part to 0.3 m past the top, overlapping at
+        // the turn.
+        .rail(
+            "winder",
+            WalkingStretch::Flight,
+            "left_rail",
+            rail((0.95, 1.0), (-0.3, 0.6), (0.9, 0.9), (Some(0.0), None)),
+        )
+        .rail(
+            "winder",
+            WalkingStretch::Flight,
+            "upper_piece",
+            rail((-0.25, -0.2), (0.5, 1.42), (0.9, 0.9), (None, Some(0.0))).in_part(1),
+        )
+        // The right rail runs along the upper part only.
+        .rail(
+            "winder",
+            WalkingStretch::Flight,
+            "low_rail",
+            rail((-1.3, -1.25), (0.5, 1.42), (0.9, 0.9), (None, Some(0.0))).in_part(1),
+        );
+    let evaluation = check_stairs(
+        model(),
+        stairs,
+        handrail_parameters(vec![
+            ("landing_objects", slabs()),
+            ("landing_at_least_walking_width", boolean(true)),
+            ("handrail_height_minimum", metres(0.8)),
+            ("handrail_extension_minimum", metres(0.3)),
+            ("handrail_gap_maximum", metres(0.05)),
+            ("handrail_sides", string("both")),
+        ]),
+    );
+    let low = id("low_rail");
+    let winder: Vec<(String, String)> = findings(&evaluation)
+        .into_iter()
+        .filter(|(object, _)| object == "winder")
+        .collect();
+    assert_eq!(
+        winder,
+        [
+            (
+                "winder".into(),
+                "the landing at the top of the flight is 0.8 m wide; at least the flight's width \
+                 (0.9 m) required"
+                    .into()
+            ),
+            (
+                "winder".into(),
+                format!(
+                    "handrail {low} runs along a later straight part of the flight only, so it \
+                     does not reach beyond the bottom of the flight; at least 0.3 m required"
+                )
+            ),
+        ]
+    );
+    assert!(
+        !unevaluated(&evaluation)
+            .iter()
+            .any(|(object, _)| object == "winder"),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
     );
 }
 

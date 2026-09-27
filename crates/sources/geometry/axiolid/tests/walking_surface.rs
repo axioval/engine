@@ -6,10 +6,11 @@ use axiolid_core::{Point3, Tolerance};
 use axiolid_mesh::{TriMesh, audit_mesh, compose};
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkingSurfaceService};
 use axioval_engine::{
-    ClearanceBelowRequest, HandrailEvidence, HandrailRequest, HeadroomRequest, LandingEvidence,
-    LandingRequest, MeasuredInterval, MetricDirection, RailMeasurement, RailSide, RiserClosure,
-    Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingStretch,
-    WalkingSurfaceError, WalkingSurfaceService,
+    ClearWidthEvidence, ClearWidthRequest, ClearanceBelowRequest, HandrailEvidence,
+    HandrailRequest, HeadroomRequest, LandingEvidence, LandingRequest, MeasuredInterval,
+    MetricDirection, RailMeasurement, RailSide, RiserClosure, Tread, TreadFlight,
+    TreadFlightRequest, WalkingEnd, WalkingLine, WalkingStretch, WalkingSurfaceError,
+    WalkingSurfaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -1758,4 +1759,79 @@ fn rails_a_quarter_turn_cannot_place_are_refused() {
         matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("straight")),
         "{refused:?}"
     );
+}
+
+fn clear_width(
+    stairs: &AxiolidWalkingSurfaceService,
+    obstacles: &[&str],
+) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
+    stairs.measure_clear_width(
+        &ClearWidthRequest::try_new(
+            id("flight"),
+            WalkingStretch::Flight,
+            obstacles.iter().map(|local| id(local)),
+            (0.5, 1.5),
+        )
+        .unwrap(),
+    )
+}
+
+#[test]
+fn the_clear_width_is_the_narrowest_free_width_between_rails_and_walls() {
+    // The flight is 1.2 m wide, y 0 .. 1.2. Rails 0.1 m wide stand inside
+    // it along both sides 0.85 to 0.9 m above the nosing line; a wall runs
+    // along its right side; a rail lower than the band stands in its
+    // middle; a post stands over the middle.
+    let stairs = flight_with(vec![
+        ("right", rail(&along_flight(0.9, 0.3, 0.3), 0.05, 0.0, 0.1)),
+        ("left", rail(&along_flight(0.9, 0.3, 0.3), 0.05, 1.1, 0.1)),
+        ("wall", cuboid([-1.0, -0.2, 0.0], [2.0, 0.0, 3.0])),
+        ("low", rail(&along_flight(0.2, 0.3, 0.3), 0.05, 0.5, 0.1)),
+        ("post", cuboid([0.3, 0.55, 0.0], [0.5, 0.65, 3.0])),
+    ]);
+    let both = clear_width(&stairs, &["right", "left", "wall", "low"]).unwrap();
+    assert!(!both.evidence().exact);
+    assert!(holds(both.width(), 1.0), "{both:?}");
+    assert!(
+        both.width().upper() - both.width().lower() < 1e-6,
+        "{both:?}"
+    );
+    assert_eq!(both.governing(), [id("left"), id("right")]);
+    let one = clear_width(&stairs, &["right", "wall"]).unwrap();
+    assert!(holds(one.width(), 1.1), "{one:?}");
+    assert_eq!(one.governing(), [id("right")]);
+    // Nothing reaching in: the walking surface's own width.
+    let none = clear_width(&stairs, &["wall", "low"]).unwrap();
+    assert!(holds(none.width(), 1.2), "{none:?}");
+    assert!(none.governing().is_empty());
+    assert!(matches!(
+        clear_width(&stairs, &["post"]),
+        Err(WalkingSurfaceError::Unsupported(_))
+    ));
+}
+
+#[test]
+fn the_clear_width_along_a_ramp_follows_its_surface() {
+    // A run rising 0.5 m over 5 m between 1 m landings, 1.5 m wide from y 0;
+    // a rail inside its left side 0.9 m above the surface.
+    let ramp = prism(&ramp_profile(0.5, 5.0), 1.5, 0.0, [0.0; 3]);
+    let top = [[1.0, 0.1 + 0.9], [6.0, 0.6 + 0.9]];
+    let stairs = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("ramp"), ramp)
+            .with_mesh(id("rail"), rail(&top, 0.05, 1.35, 0.15)),
+    );
+    let measured = stairs
+        .measure_clear_width(
+            &ClearWidthRequest::try_new(
+                id("ramp"),
+                WalkingStretch::Run(0),
+                [id("rail")],
+                (0.5, 1.5),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    assert!(holds(measured.width(), 1.35), "{measured:?}");
+    assert_eq!(measured.governing(), [id("rail")]);
 }

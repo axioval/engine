@@ -68,11 +68,11 @@ const SIDE_LINE: f64 = 1e-9;
 
 /// The pitch line of a stretch (or one part of a turning flight, along one
 /// side) and the walking surface's sides.
-struct Pitch {
-    direction: MetricDirection,
+pub(super) struct Pitch {
+    pub(super) direction: MetricDirection,
     /// Points of the line, `(position along, elevation)`, ascending along.
     points: Vec<(ElevationInterval, ElevationInterval)>,
-    sides: (ElevationInterval, ElevationInterval),
+    pub(super) sides: (ElevationInterval, ElevationInterval),
     /// The elevation of the nosing before the first point and after the
     /// last where the line goes on around a turn: over the rest of the part
     /// its height lies between that and the nearest point's.
@@ -114,7 +114,7 @@ impl Pitch {
 
     /// The line through the middles of its points, dropping any that does
     /// not lie further along than the one before.
-    fn nominal(&self) -> Vec<(f64, f64)> {
+    pub(super) fn nominal(&self) -> Vec<(f64, f64)> {
         let mut line: Vec<(f64, f64)> = Vec::new();
         for (along, elevation) in &self.points {
             let point = (middle(*along), middle(*elevation));
@@ -126,7 +126,7 @@ impl Pitch {
     }
 
     /// The steepest segment of the nominal line.
-    fn slope(line: &[(f64, f64)]) -> f64 {
+    pub(super) fn slope(line: &[(f64, f64)]) -> f64 {
         line.windows(2)
             .map(|pair| ((pair[1].1 - pair[0].1) / (pair[1].0 - pair[0].0)).abs())
             .fold(0.0, f64::max)
@@ -135,7 +135,7 @@ impl Pitch {
     /// How far the nominal line may lie from the true one in height: each
     /// point off by half its intervals' widths, and the elevations beyond
     /// by half theirs.
-    fn error(&self, slope: f64) -> f64 {
+    pub(super) fn error(&self, slope: f64) -> f64 {
         self.points
             .iter()
             .map(|(along, elevation)| half_width(*along) * slope + half_width(*elevation))
@@ -149,7 +149,7 @@ impl Pitch {
     }
 
     /// The widest position interval along, which moves an extension's ends.
-    fn along_error(&self) -> f64 {
+    pub(super) fn along_error(&self) -> f64 {
         self.points
             .iter()
             .map(|(along, _)| half_width(*along))
@@ -159,7 +159,7 @@ impl Pitch {
 
 /// The nominal pitch line's elevation at `along`, held level beyond its
 /// ends.
-fn pitch_at(line: &[(f64, f64)], along: f64) -> f64 {
+pub(super) fn pitch_at(line: &[(f64, f64)], along: f64) -> f64 {
     let Some(first) = line.first() else {
         return 0.0;
     };
@@ -377,7 +377,10 @@ type Located = Option<([f64; 3], [f64; 3])>;
 
 /// The pitch line of a straight flight: through its nosings, and the upper
 /// floor's edge where it ends in a riser.
-fn flight_pitch(subject: &ObjectId, flight: &TreadFlight) -> Result<Pitch, WalkingSurfaceError> {
+pub(super) fn flight_pitch(
+    subject: &ObjectId,
+    flight: &TreadFlight,
+) -> Result<Pitch, WalkingSurfaceError> {
     let WalkingLine::Straight(direction) = flight.walking_line() else {
         return Err(WalkingSurfaceError::InvalidMeasurement);
     };
@@ -407,7 +410,11 @@ fn unmeasured(subject: &ObjectId) -> WalkingSurfaceError {
 
 impl AxiolidWalkingSurfaceService {
     /// The pitch line of a ramp's run: the line of its surface.
-    fn run_pitch(&self, subject: &ObjectId, index: usize) -> Result<Pitch, WalkingSurfaceError> {
+    pub(super) fn run_pitch(
+        &self,
+        subject: &ObjectId,
+        index: usize,
+    ) -> Result<Pitch, WalkingSurfaceError> {
         let ramp = self.measure_sloped_runs(subject)?;
         let run = ramp.runs().get(index).ok_or_else(|| {
             WalkingSurfaceError::Unsupported(format!(

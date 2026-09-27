@@ -8913,6 +8913,66 @@ fn with_geometry_a_narrow_or_missing_tactile_strip_is_found() {
     );
 }
 
+/// Stair flight #108 (four 0.17 m risers, x 0 to 1.12, 1.2 m wide in y
+/// -1.2 to 0) with 0.1 m wide handrails #208 (y -0.1 to 0) and #308 (y -1.2
+/// to -1.1) inside both its sides, 0.9 m above its nosing line.
+fn a_flight_narrowed_by_its_rails() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        swept(200, [0.0, 0.0, 0.0], &rail_profile(0.9), 0.1, rail),
+        swept(300, [0.0, -1.1, 0.0], &rail_profile(0.9), 0.1, rail),
+    )
+}
+
+#[test]
+fn with_geometry_a_flight_narrowed_by_its_rails_is_found() {
+    let case = Case::new("geometry-stair-clear-width");
+    let (output, result) = case.geometry_rule(
+        &a_flight_narrowed_by_its_rails(),
+        &[("flight", "IfcStairFlight"), ("rail", "IfcRailing")],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "clear_width_minimum": {"type": "quantity", "value": 1.1, "unit": "m"},
+            "clear_width_obstacles": {"type": "selector", "value": entity("rail")},
+            "clear_width_band_from": {"type": "quantity", "value": 0.5, "unit": "m"},
+            "clear_width_band_to": {"type": "quantity", "value": 1.5, "unit": "m"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // 1.2 m less 0.1 m on each side leaves 1 m.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#108", "{result:#}");
+    assert!(
+        findings[0].1.starts_with(
+            "the clear width of the flight 0.5 m to 1.5 m above its pitch line is 1 m beside "
+        ) && findings[0].1.ends_with("#308; at least 1.1 m required"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Metres. Wall #10, 0.2 m thick and 3 m high, is extruded up from a plan
 /// polyline mitred at its far end: 5 m long on its face y = 0, 5.2 m on
 /// y = 0.2. Windows of 1 m x 1.2 m run through it along -y at x 2 to 3

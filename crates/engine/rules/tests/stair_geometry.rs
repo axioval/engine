@@ -20,9 +20,10 @@ use axioval_engine::{
     WalkingSurfaceServiceHandle,
 };
 use axioval_engine::{
-    PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanLength, PlanRectangle,
-    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
-    VerticalExtent, VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    ClearWidthEvidence, ClearWidthRequest, PlanArea, PlanAreaError, PlanAreaService,
+    PlanAreaServiceHandle, PlanLength, PlanRectangle, PlanSpan, PlanSpanError, PlanSpanService,
+    PlanSpanServiceHandle, RectangleOrientation, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
@@ -2970,4 +2971,166 @@ fn tactile_strips_on_intermediate_landings_are_asked_for() {
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
     );
+}
+
+/// A clear width and the obstacles leaving it.
+type Narrowing = (f64, Vec<ObjectId>);
+
+/// Clear widths per subject and stretch: the width each set of obstacles
+/// leaves; the walking surface's 1.2 m where no requested set applies.
+#[derive(Default)]
+struct Narrowed {
+    stairs: Stairs,
+    widths: BTreeMap<(ObjectId, WalkingStretch), Vec<Narrowing>>,
+}
+
+impl Narrowed {
+    fn width(mut self, subject: &str, stretch: WalkingStretch, width: f64, by: &[&str]) -> Self {
+        self.widths
+            .entry((id(subject), stretch))
+            .or_default()
+            .push((width, by.iter().map(|local| id(local)).collect()));
+        self
+    }
+}
+
+impl WalkingSurfaceService for Narrowed {
+    fn measure_tread_flight(
+        &self,
+        request: &TreadFlightRequest,
+    ) -> Result<TreadFlight, WalkingSurfaceError> {
+        self.stairs.measure_tread_flight(request)
+    }
+
+    fn measure_sloped_runs(&self, object: &ObjectId) -> Result<SlopedSurface, WalkingSurfaceError> {
+        self.stairs.measure_sloped_runs(object)
+    }
+
+    fn measure_headroom(&self, request: &HeadroomRequest) -> Result<Headroom, WalkingSurfaceError> {
+        self.stairs.measure_headroom(request)
+    }
+
+    fn measure_clear_width(
+        &self,
+        request: &ClearWidthRequest,
+    ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
+        let (width, governing) = self
+            .widths
+            .get(&(request.subject().clone(), request.stretch()))
+            .into_iter()
+            .flatten()
+            .filter(|(_, by)| by.iter().all(|object| request.obstacles().contains(object)))
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .cloned()
+            .unwrap_or((1.2, vec![]));
+        ClearWidthEvidence::try_new(
+            request.clone(),
+            MeasuredInterval::try_new(width - 1e-9, width + 1e-9)?,
+            governing,
+            Evidence {
+                source: source(),
+                locator: format!("clear-width:{}", request.subject().local_id),
+                exact: false,
+            },
+        )
+    }
+}
+
+fn check_clear(
+    stairs: Narrowed,
+    capability: &dyn axioval_engine::RuleCapability,
+    selected: &str,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    let id = if selected == "ramp" { RAMP } else { STAIR };
+    model().object("wall", "wall").evaluate_with(
+        capability,
+        &rule(id, kind(selected), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+        },
+    )
+}
+
+fn clear_parameters(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        ("clear_width_minimum", metres(minimum)),
+        ("clear_width_obstacles", selector(kind("railing"))),
+        ("clear_width_band_from", metres(0.5)),
+        ("clear_width_band_to", metres(1.5)),
+    ]
+}
+
+/// A 1.2 m flight with 0.1 m rails inside both sides fails a 1.1 m clear
+/// width; its walking surface alone would not.
+#[test]
+fn a_flight_narrowed_by_its_rails_fails_its_clear_width() {
+    let narrowed = || {
+        Narrowed {
+            stairs: stairs(),
+            widths: BTreeMap::new(),
+        }
+        .width(
+            "regular",
+            WalkingStretch::Flight,
+            1.0,
+            &["left_rail", "low_rail"],
+        )
+        .width("gentle", WalkingStretch::Run(1), 1.3, &["ramp_rail"])
+    };
+    let evaluation = check_clear(
+        narrowed(),
+        &StairGeometryCheck,
+        "flight",
+        clear_parameters(1.1),
+    );
+    let (left, low) = (id("left_rail"), id("low_rail"));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            format!(
+                "the clear width of the flight 0.5 m to 1.5 m above its pitch line is 1 m beside \
+                 {left} and {low}; at least 1.1 m required"
+            )
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [left, low]);
+    // A ramp's runs are judged one by one.
+    let evaluation = check_clear(
+        narrowed(),
+        &RampGeometryCheck,
+        "ramp",
+        clear_parameters(1.4),
+    );
+    let found = findings(&evaluation);
+    assert_eq!(found.len(), 3, "{found:?}");
+    assert!(
+        found[0]
+            .1
+            .starts_with("the clear width of run 1 of 2 0.5 m to 1.5 m")
+    );
+    assert!(found[1].1.contains("is 1.3 m beside"), "{found:?}");
+    // The band's bottom lies below its top, and the four come together.
+    for parameters in [
+        vec![
+            ("clear_width_minimum", metres(1.1)),
+            ("clear_width_obstacles", selector(kind("railing"))),
+        ],
+        {
+            let mut parameters = clear_parameters(1.1);
+            parameters.push(("clear_width_band_to", metres(0.4)));
+            parameters
+                .retain(|(name, value)| *name != "clear_width_band_to" || *value == metres(0.4));
+            parameters
+        },
+    ] {
+        let evaluation = check_clear(narrowed(), &StairGeometryCheck, "flight", parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
 }

@@ -14,6 +14,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+mod clear_width;
 mod handrails;
 mod ramp_ends;
 mod tactile;
@@ -90,6 +91,11 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// - `end_space_depth`, `end_space_width` and `end_space_height` place a
 ///   free space before the first riser and beyond the last, which no
 ///   `end_space_obstacles` object may reach into.
+///
+/// `clear_width_minimum` bounds the narrowest free width across the flight
+/// the `clear_width_obstacles` leave between `clear_width_band_from` and
+/// `clear_width_band_to` above its pitch line, as the walking-surface
+/// service measures it; ramps take the same per run.
 ///
 /// With `tactile_objects`, `tactile_offset` and `tactile_depth`, a tactile
 /// strip that deep must lie that far before the first riser and beyond the
@@ -316,6 +322,7 @@ fn walking_descriptors() -> Vec<ParameterDescriptor> {
     parameters.extend(handrails::descriptors());
     parameters.extend(ramp_ends::door_descriptors());
     parameters.extend(ramp_ends::end_space_descriptors());
+    parameters.extend(clear_width::descriptors());
     parameters
 }
 
@@ -328,6 +335,7 @@ struct WalkingConfig<'a> {
     handrail: Option<handrails::HandrailCheck<'a>>,
     end_space: Option<ramp_ends::EndSpaceCheck<'a>>,
     doors: Option<ramp_ends::DoorCheck<'a>>,
+    clear: Option<clear_width::ClearWidthCheck<'a>>,
 }
 
 impl<'a> WalkingConfig<'a> {
@@ -342,6 +350,7 @@ impl<'a> WalkingConfig<'a> {
             handrail: handrails::parse(parameters, ramp)?,
             end_space,
             doors,
+            clear: clear_width::parse(parameters)?,
         })
     }
 
@@ -351,6 +360,7 @@ impl<'a> WalkingConfig<'a> {
             || self.below.is_some()
             || self.handrail.is_some()
             || self.end_space.is_some()
+            || self.clear.is_some()
     }
 }
 
@@ -363,6 +373,7 @@ struct Selections {
     rails: Option<Selected>,
     ends: Option<Selected>,
     doors: Option<Selected>,
+    clear: Option<Selected>,
     /// The selected landing doors' swings, with `landing_door_swing`.
     swings: Option<Vec<ramp_ends::DoorSwing>>,
 }
@@ -406,6 +417,10 @@ impl Selections {
                 .as_ref()
                 .map(|check| selected(context, check.obstacles, "end-space obstacle selection")),
             doors,
+            clear: walking
+                .clear
+                .as_ref()
+                .map(|check| selected(context, check.obstacles, "clear-width obstacle selection")),
             swings,
         }
     }
@@ -1367,6 +1382,15 @@ impl Flights<'_, '_> {
         if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
             checks.push(below(stairs, check, spaces, object, "flight"));
         }
+        if let (Some(check), Some(obstacles)) = (&config.walking.clear, &selections.clear) {
+            checks.push(clear_width::clear_width(
+                stairs,
+                check,
+                obstacles,
+                (object, WalkingStretch::Flight),
+                "the flight",
+            ));
+        }
         if let (Some(check), Some(rails)) = (&config.walking.handrail, &selections.rails) {
             let along = handrails::Along {
                 object,
@@ -1942,6 +1966,18 @@ fn rails_and_ends(
                 risers: None,
             };
             checks.extend(handrails::handrails(stairs, check, rails, &along));
+        }
+    }
+    if let (Some(check), Some(obstacles)) = (&config.walking.clear, &selections.clear) {
+        let total = runs.len();
+        for index in 0..total {
+            checks.push(clear_width::clear_width(
+                stairs,
+                check,
+                obstacles,
+                (&object.id, WalkingStretch::Run(index)),
+                &format!("run {} of {total}", index + 1),
+            ));
         }
     }
     if let (Some(check), Some(obstacles)) = (&config.walking.end_space, &selections.ends) {

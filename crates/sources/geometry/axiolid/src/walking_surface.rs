@@ -53,15 +53,17 @@
 
 use std::collections::BTreeMap;
 
+mod clear_width;
 mod handrail;
 
 use axiolid_core::{Point3, Tolerance};
 use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh, component_count};
 use axioval_engine::{
-    ClearanceBelow, ClearanceBelowRequest, ElevationInterval, HandrailEvidence, HandrailRequest,
-    Headroom, HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest,
-    MeasuredInterval, MetricDirection, SlopedRun, SlopedSurface, TreadFlight, TreadFlightRequest,
-    WalkingEnd, WalkingLine, WalkingSurfaceError, WalkingSurfaceService,
+    ClearWidthEvidence, ClearWidthRequest, ClearanceBelow, ClearanceBelowRequest,
+    ElevationInterval, HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing,
+    LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, SlopedRun,
+    SlopedSurface, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingSurfaceError,
+    WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -656,6 +658,13 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
         request: &HandrailRequest,
     ) -> Result<HandrailEvidence, WalkingSurfaceError> {
         self.handrails(request)
+    }
+
+    fn measure_clear_width(
+        &self,
+        request: &ClearWidthRequest,
+    ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
+        self.clear_width(request)
     }
 }
 

@@ -332,6 +332,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates' plan triangles, never exactly. **Breaking:** definitions
   bound to `component-clearance` must declare the optional parameters
   `wall_selector`, `wall_reach` and `wall_inset`.
+- **Clear widths of stairs and ramps.** (Closes #132) The walking-surface
+  service gains `measure_clear_width`: a `ClearWidthRequest` names a flight
+  or a ramp's run, the obstacles and a band above its pitch line, and
+  `ClearWidthEvidence` answers with the narrowest free width across the
+  stretch the obstacles leave within the band (the walking surface's own
+  side where none reaches in) and the obstacles bounding it; the method
+  refuses by default. The Axiolid adapter clips each obstacle's triangles
+  to the band, one convex piece per pitch-line segment, and evaluates the
+  width at the clipped vertices and the ends, as an interval: the lower
+  bound grows the band and tessellated obstacles, the upper bound shrinks
+  the band and leaves them out. `stair-geometry` and `ramp-geometry` gain
+  `clear_width_minimum`, `clear_width_obstacles`, `clear_width_band_from`
+  and `clear_width_band_to`: a 1.2 m flight with 0.1 m rails inside both
+  sides fails a 1.1 m clear width. **Breaking:** definitions bound to
+  `stair-geometry` or `ramp-geometry` must declare the four new optional
+  parameters.
+
 - **Tactile strips at stairs.** (Refs #132) `stair-geometry` takes
   `tactile_objects`, `tactile_offset` and `tactile_depth`: a strip that
   deep, starting that far before the first riser and beyond the last,

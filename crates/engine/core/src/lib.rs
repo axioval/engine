@@ -731,12 +731,12 @@ pub use walkability::{
     WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
 };
 pub use walking_surface::{
-    ClearanceBelow, ClearanceBelowRequest, HandrailEvidence, HandrailRequest, Headroom,
-    HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval,
-    PlanSegment, RailMeasurement, RailSide, RiserClosure, SlopedRun, SlopedSurface, StretchPart,
-    Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingLinePlacement,
-    WalkingStretch, WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle,
-    across,
+    ClearWidthEvidence, ClearWidthRequest, ClearanceBelow, ClearanceBelowRequest, HandrailEvidence,
+    HandrailRequest, Headroom, HeadroomRequest, Landing, LandingEvidence, LandingExtent,
+    LandingRequest, MeasuredInterval, PlanSegment, RailMeasurement, RailSide, RiserClosure,
+    SlopedRun, SlopedSurface, StretchPart, Tread, TreadFlight, TreadFlightRequest, WalkingEnd,
+    WalkingLine, WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
+    WalkingSurfaceServiceHandle, across,
 };
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.

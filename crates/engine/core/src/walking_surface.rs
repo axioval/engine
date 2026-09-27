@@ -1511,6 +1511,145 @@ impl HandrailRequest {
     }
 }
 
+/// A request for the clear width of a flight or a ramp's run: the free
+/// width across it that the requested obstacles leave (handrails, walls,
+/// anything standing beside or over the walking surface) between two
+/// heights above its pitch line.
+///
+/// The obstacles are the rule's selection, sorted, deduplicated and without
+/// the subject. `band` is `(from, to)`, how far above the pitch line (a
+/// flight's nosing line, a run's surface) the band starts and ends, `0 <=
+/// from < to`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClearWidthRequest {
+    subject: ObjectId,
+    stretch: WalkingStretch,
+    obstacles: Vec<ObjectId>,
+    band: (f64, f64),
+}
+
+impl ClearWidthRequest {
+    /// The clear width along `stretch` of `subject` that `obstacles` leave
+    /// within `band` above its pitch line.
+    pub fn try_new(
+        subject: ObjectId,
+        stretch: WalkingStretch,
+        obstacles: impl IntoIterator<Item = ObjectId>,
+        band: (f64, f64),
+    ) -> Result<Self, WalkingSurfaceError> {
+        let (from, to) = band;
+        if !from.is_finite() || !to.is_finite() || from < 0.0 || to <= from {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        let mut obstacles: Vec<ObjectId> = obstacles
+            .into_iter()
+            .filter(|obstacle| *obstacle != subject)
+            .collect();
+        obstacles.sort();
+        obstacles.dedup();
+        Ok(Self {
+            subject,
+            stretch,
+            obstacles,
+            band,
+        })
+    }
+
+    /// The flight or ramp measured.
+    #[must_use]
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+
+    /// Which stretch of it.
+    #[must_use]
+    pub fn stretch(&self) -> WalkingStretch {
+        self.stretch
+    }
+
+    /// The objects that may narrow it.
+    #[must_use]
+    pub fn obstacles(&self) -> &[ObjectId] {
+        &self.obstacles
+    }
+
+    /// How far above the pitch line the band starts and ends.
+    #[must_use]
+    pub fn band(&self) -> (f64, f64) {
+        self.band
+    }
+}
+
+/// The narrowest clear width along a flight or run.
+///
+/// At each position along the stretch, between its ends, the free width is
+/// the distance across between the innermost points the requested
+/// obstacles reach within the band from the left and from the right, where
+/// no obstacle reaches in, the walking surface's own side; the clear width
+/// is the least of these. `governing` names the obstacles bounding the
+/// narrowest place, none when the walking surface's own sides do.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClearWidthEvidence {
+    request: ClearWidthRequest,
+    width: MeasuredInterval,
+    governing: Vec<ObjectId>,
+    evidence: Evidence,
+}
+
+impl ClearWidthEvidence {
+    /// The clear width answering `request`: never negative, `governing`
+    /// among the requested obstacles, and exact evidence only for a point.
+    pub fn try_new(
+        request: ClearWidthRequest,
+        width: MeasuredInterval,
+        mut governing: Vec<ObjectId>,
+        evidence: Evidence,
+    ) -> Result<Self, WalkingSurfaceError> {
+        governing.sort();
+        governing.dedup();
+        if width.lower < 0.0
+            || !governing
+                .iter()
+                .all(|object| request.obstacles.binary_search(object).is_ok())
+        {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        if evidence.locator.trim().is_empty() || (evidence.exact && !width.is_point()) {
+            return Err(WalkingSurfaceError::InexactEvidence);
+        }
+        Ok(Self {
+            request,
+            width,
+            governing,
+            evidence,
+        })
+    }
+
+    /// The request this answers.
+    #[must_use]
+    pub fn request(&self) -> &ClearWidthRequest {
+        &self.request
+    }
+
+    /// The narrowest clear width.
+    #[must_use]
+    pub fn width(&self) -> MeasuredInterval {
+        self.width
+    }
+
+    /// The obstacles bounding the narrowest place.
+    #[must_use]
+    pub fn governing(&self) -> &[ObjectId] {
+        &self.governing
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// The side of a flight or run a handrail runs along, as seen by someone
 /// climbing it. [`across`] points to the climber's left, so the left side
 /// lies at the higher positions across.
@@ -2010,6 +2149,19 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
             request.subject()
         )))
     }
+
+    /// The clear width along the requested stretch. The default refuses: a
+    /// service that does not measure clear widths never answers with the
+    /// walking surface's own width.
+    fn measure_clear_width(
+        &self,
+        request: &ClearWidthRequest,
+    ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
+        Err(WalkingSurfaceError::Unsupported(format!(
+            "the clear width along {} is not measured by this service",
+            request.subject()
+        )))
+    }
 }
 
 /// Registry handle for a [`WalkingSurfaceService`].
@@ -2098,6 +2250,19 @@ impl WalkingSurfaceServiceHandle {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
         Ok(rails)
+    }
+
+    /// The clear width answering `request`; an answer to another request is
+    /// refused.
+    pub fn measure_clear_width(
+        &self,
+        request: &ClearWidthRequest,
+    ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
+        let width = self.0.measure_clear_width(request)?;
+        if width.request() != request {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(width)
     }
 }
 
@@ -2867,6 +3032,35 @@ mod tests {
         assert_eq!(
             PlanSegment::try_new([0.0, 0.0], [1.0, 0.0], -1.0),
             Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn clear_widths_name_requested_obstacles_and_a_band_above_the_pitch_line() {
+        let request = ClearWidthRequest::try_new(
+            id("f"),
+            WalkingStretch::Flight,
+            [id("rail"), id("f"), id("rail")],
+            (0.5, 1.5),
+        )
+        .unwrap();
+        assert_eq!(request.obstacles(), [id("rail")]);
+        assert_eq!(request.band(), (0.5, 1.5));
+        for band in [(1.5, 0.5), (-0.1, 1.0), (0.5, f64::NAN)] {
+            assert!(ClearWidthRequest::try_new(id("f"), WalkingStretch::Flight, [], band).is_err());
+        }
+        let width = MeasuredInterval::try_new(0.99, 1.01).unwrap();
+        let measured =
+            ClearWidthEvidence::try_new(request.clone(), width, vec![id("rail")], evidence(false))
+                .unwrap();
+        assert_eq!(measured.governing(), [id("rail")]);
+        assert_eq!(
+            ClearWidthEvidence::try_new(request.clone(), width, vec![id("wall")], evidence(false)),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            ClearWidthEvidence::try_new(request, width, vec![], evidence(true)),
+            Err(WalkingSurfaceError::InexactEvidence)
         );
     }
 

@@ -850,7 +850,7 @@ pub(crate) struct PortalFacts {
 pub(crate) enum Clearance {
     /// A bodiless opening: its corridor is its clear passage.
     Void,
-    /// A body whose clear width the host stated.
+    /// A body whose clear width the host or the request stated.
     Stated(f64),
     /// A body with a leaf and lining nobody measured.
     Unstated,
@@ -866,6 +866,16 @@ impl Clearance {
             Self::Void => true,
             Self::Stated(stated) => stated >= width,
             Self::Unstated => false,
+        }
+    }
+
+    /// Adds a clear width a request states: the narrower statement wins,
+    /// and an opening's void stays its clear passage.
+    pub(crate) fn with_stated(self, stated: Option<f64>) -> Self {
+        match (self, stated) {
+            (Self::Stated(own), Some(stated)) => Self::Stated(own.min(stated)),
+            (Self::Unstated, Some(stated)) => Self::Stated(stated),
+            (clearance, _) => clearance,
         }
     }
 

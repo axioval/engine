@@ -3,6 +3,7 @@
 
 use axioval_engine::{CapabilityRegistry, EngineError};
 
+mod accessible_route;
 mod body_extent;
 mod clash;
 mod clash_matrix;
@@ -48,6 +49,7 @@ mod triangle_count;
 mod unique_value;
 mod xsd_pattern;
 
+pub use accessible_route::AccessibleRoute;
 pub use body_extent::BodyExtent;
 pub use clash::Clash;
 pub use clash_matrix::ClashMatrix;
@@ -147,4 +149,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(SameContainer))
         .and_then(|registry| registry.register(StairGeometryCheck))
         .and_then(|registry| registry.register(RampGeometryCheck))
+        .and_then(|registry| registry.register(AccessibleRoute))
 }

@@ -38,6 +38,10 @@ pub enum WalkabilityError {
     PortalConnectorPassage,
     #[error("connector passage violates the request connector declaration")]
     ForbiddenConnectorPassage,
+    /// A stated clear width is not finite and positive, names an object
+    /// that is not a requested entrance, or is stated twice.
+    #[error("stated clear width is invalid or names no requested entrance")]
+    InvalidStatedClearWidth,
     /// The backend refused: evidence it would need is missing, approximate
     /// or outside what it can measure. Never a negative verdict.
     #[error("walkability unavailable: {0}")]
@@ -91,6 +95,7 @@ pub struct WalkabilityRequest {
     traverse_verified_portals: bool,
     include_motion_envelopes: bool,
     connectors: Vec<VerticalConnector>,
+    stated_clear_widths: BTreeMap<ObjectId, f64>,
 }
 impl WalkabilityRequest {
     pub fn try_new(
@@ -120,7 +125,44 @@ impl WalkabilityRequest {
             traverse_verified_portals,
             include_motion_envelopes,
             connectors: Vec::new(),
+            stated_clear_widths: BTreeMap::new(),
         })
+    }
+    /// States, in metres, the clear width a requested entrance's leaf and
+    /// lining leave, as the rule reads it from its source (a door's stated
+    /// clear width, say). A backend bounds the entrance's crossing by it
+    /// from above and may use it to admit the body; it never widens what
+    /// the geometry shows.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::InvalidStatedClearWidth`] when a width is not
+    /// finite and positive, an object is not a requested entrance, or one
+    /// entrance is stated twice.
+    pub fn with_stated_clear_widths(
+        mut self,
+        widths: impl IntoIterator<Item = (ObjectId, f64)>,
+    ) -> Result<Self, WalkabilityError> {
+        let mut stated = BTreeMap::new();
+        for (object, metres) in widths {
+            if !metres.is_finite()
+                || metres <= 0.0
+                || self.entrances.binary_search(&object).is_err()
+                || stated.insert(object, metres).is_some()
+            {
+                return Err(WalkabilityError::InvalidStatedClearWidth);
+            }
+        }
+        self.stated_clear_widths = stated;
+        Ok(self)
+    }
+    /// The clear width stated for `entrance`, if any.
+    pub fn stated_clear_width(&self, entrance: &ObjectId) -> Option<f64> {
+        self.stated_clear_widths.get(entrance).copied()
+    }
+    /// Every stated clear width, ordered by entrance.
+    pub fn stated_clear_widths(&self) -> &BTreeMap<ObjectId, f64> {
+        &self.stated_clear_widths
     }
     /// Declares the vertical connectors the backend may join levels through.
     ///
@@ -398,6 +440,100 @@ impl WalkabilitySnapshot {
         to: &ObjectId,
         forbidden: &[VerticalConnectorKind],
     ) -> Result<WalkabilityRouteOutcome, WalkabilityError> {
+        self.route_between_admitting(from, to, |passage| {
+            if passage
+                .connector
+                .as_ref()
+                .is_some_and(|connector| forbidden.contains(&connector.kind))
+            {
+                PassageAdmission::Refused
+            } else {
+                PassageAdmission::Admitted
+            }
+        })
+    }
+    /// Routes as [`Self::route_between`], with a rule's own judgement of
+    /// each passage on top of the width: the definite graph keeps only
+    /// passages it [admits](PassageAdmission::Admitted), the possible graph
+    /// drops only those it [refuses](PassageAdmission::Refused). A rule
+    /// that cannot decide a passage (a door whose required width it cannot
+    /// read) can therefore only turn a verdict `Indeterminate`.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::ObjectUnavailable`] when an endpoint is mapped to
+    /// no region.
+    pub fn route_between_admitting(
+        &self,
+        from: &ObjectId,
+        to: &ObjectId,
+        admit: impl Fn(&VerifiedWalkablePassage) -> PassageAdmission,
+    ) -> Result<WalkabilityRouteOutcome, WalkabilityError> {
+        let (starts, goals) = self.endpoints(from, to)?;
+        if let Some(path) = self.path(starts, goals, false, &admit) {
+            return Ok(WalkabilityRouteOutcome::Reachable(path));
+        }
+        if self.path(starts, goals, true, &admit).is_some() {
+            Ok(WalkabilityRouteOutcome::Indeterminate)
+        } else {
+            Ok(WalkabilityRouteOutcome::Unreachable)
+        }
+    }
+    /// The passages that block every route from `from` to `to`: those
+    /// leaving the regions the possible graph reaches from `from` (too
+    /// narrow, or refused by `admit`) towards a region from which `to` can
+    /// be reached, widths and admission ignored, without re-entering them.
+    /// Empty when a possible route exists, and when nothing joins the two
+    /// at all.
+    ///
+    /// Any route, once it last leaves the reached regions, crosses a
+    /// returned passage: they form a cut, ordered as the snapshot orders
+    /// its passages. A block that only guards some other region is left
+    /// out.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::ObjectUnavailable`] when an endpoint is mapped to
+    /// no region.
+    pub fn blocking_passages(
+        &self,
+        from: &ObjectId,
+        to: &ObjectId,
+        admit: impl Fn(&VerifiedWalkablePassage) -> PassageAdmission,
+    ) -> Result<Vec<&VerifiedWalkablePassage>, WalkabilityError> {
+        let (starts, goals) = self.endpoints(from, to)?;
+        let reached = self.reach(starts, |edge| self.usable(edge, true, &admit));
+        if goals.iter().any(|goal| reached.contains(goal)) {
+            return Ok(Vec::new());
+        }
+        // Regions the goal reaches, ignoring widths and admission, without
+        // passing through the reached side: a block behind another
+        // reached region is not this goal's.
+        let graph = self.graph(|_| true);
+        let mut leads_to_goal: BTreeSet<WalkabilityRegionId> = goals.iter().cloned().collect();
+        let mut queue: VecDeque<WalkabilityRegionId> = leads_to_goal.iter().cloned().collect();
+        while let Some(node) = queue.pop_front() {
+            for next in graph.get(&node).into_iter().flatten() {
+                if !reached.contains(next) && leads_to_goal.insert(next.clone()) {
+                    queue.push_back(next.clone());
+                }
+            }
+        }
+        Ok(self
+            .passages
+            .iter()
+            .filter(|edge| {
+                let (a, b) = (reached.contains(&edge.a), reached.contains(&edge.b));
+                (a && !b && leads_to_goal.contains(&edge.b))
+                    || (b && !a && leads_to_goal.contains(&edge.a))
+            })
+            .collect())
+    }
+    fn endpoints(
+        &self,
+        from: &ObjectId,
+        to: &ObjectId,
+    ) -> Result<(&[WalkabilityRegionId], &[WalkabilityRegionId]), WalkabilityError> {
         let starts = self
             .object_regions
             .get(from)
@@ -406,51 +542,69 @@ impl WalkabilitySnapshot {
             .object_regions
             .get(to)
             .ok_or(WalkabilityError::ObjectUnavailable)?;
-        if let Some(path) = self.path(starts, goals, false, forbidden) {
-            return Ok(WalkabilityRouteOutcome::Reachable(path));
-        }
-        if self.path(starts, goals, true, forbidden).is_some() {
-            Ok(WalkabilityRouteOutcome::Indeterminate)
+        Ok((starts, goals))
+    }
+    /// Whether `edge` belongs to the possible or the definite graph.
+    fn usable(
+        &self,
+        edge: &VerifiedWalkablePassage,
+        possible: bool,
+        admit: &impl Fn(&VerifiedWalkablePassage) -> PassageAdmission,
+    ) -> bool {
+        let minimum = self.request.minimum_width;
+        if possible {
+            edge.clear_width.upper_metres() >= minimum && admit(edge) != PassageAdmission::Refused
         } else {
-            Ok(WalkabilityRouteOutcome::Unreachable)
+            edge.clear_width.lower_metres() >= minimum && admit(edge) == PassageAdmission::Admitted
         }
+    }
+    /// Every region reachable from `starts` through passages `keep` keeps.
+    fn reach(
+        &self,
+        starts: &[WalkabilityRegionId],
+        keep: impl Fn(&VerifiedWalkablePassage) -> bool,
+    ) -> BTreeSet<WalkabilityRegionId> {
+        let graph = self.graph(keep);
+        let mut seen: BTreeSet<WalkabilityRegionId> = starts.iter().cloned().collect();
+        let mut queue: VecDeque<WalkabilityRegionId> = seen.iter().cloned().collect();
+        while let Some(node) = queue.pop_front() {
+            for next in graph.get(&node).into_iter().flatten() {
+                if seen.insert(next.clone()) {
+                    queue.push_back(next.clone());
+                }
+            }
+        }
+        seen
+    }
+    fn graph(
+        &self,
+        keep: impl Fn(&VerifiedWalkablePassage) -> bool,
+    ) -> BTreeMap<WalkabilityRegionId, Vec<WalkabilityRegionId>> {
+        let mut graph: BTreeMap<WalkabilityRegionId, Vec<WalkabilityRegionId>> = BTreeMap::new();
+        for edge in self.passages.iter().filter(|edge| keep(edge)) {
+            graph
+                .entry(edge.a.clone())
+                .or_default()
+                .push(edge.b.clone());
+            graph
+                .entry(edge.b.clone())
+                .or_default()
+                .push(edge.a.clone());
+        }
+        for neighbors in graph.values_mut() {
+            neighbors.sort();
+            neighbors.dedup();
+        }
+        graph
     }
     fn path(
         &self,
         starts: &[WalkabilityRegionId],
         goals: &[WalkabilityRegionId],
         possible: bool,
-        forbidden: &[VerticalConnectorKind],
+        admit: &impl Fn(&VerifiedWalkablePassage) -> PassageAdmission,
     ) -> Option<Vec<WalkabilityRegionId>> {
-        let mut graph: BTreeMap<WalkabilityRegionId, Vec<WalkabilityRegionId>> = BTreeMap::new();
-        for edge in &self.passages {
-            if edge
-                .connector
-                .as_ref()
-                .is_some_and(|connector| forbidden.contains(&connector.kind))
-            {
-                continue;
-            }
-            let usable = if possible {
-                edge.clear_width.upper_metres() >= self.request.minimum_width
-            } else {
-                edge.clear_width.lower_metres() >= self.request.minimum_width
-            };
-            if usable {
-                graph
-                    .entry(edge.a.clone())
-                    .or_default()
-                    .push(edge.b.clone());
-                graph
-                    .entry(edge.b.clone())
-                    .or_default()
-                    .push(edge.a.clone());
-            }
-        }
-        for neighbors in graph.values_mut() {
-            neighbors.sort();
-            neighbors.dedup();
-        }
+        let graph = self.graph(|edge| self.usable(edge, possible, admit));
         let goal_set: BTreeSet<_> = goals.iter().cloned().collect();
         let mut queue = VecDeque::new();
         let mut parent: BTreeMap<WalkabilityRegionId, Option<WalkabilityRegionId>> =
@@ -480,6 +634,17 @@ impl WalkabilitySnapshot {
         }
         None
     }
+}
+/// A rule's judgement of one passage, on top of its width (see
+/// [`WalkabilitySnapshot::route_between_admitting`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PassageAdmission {
+    /// The rule accepts the passage.
+    Admitted,
+    /// The rule cannot decide: the passage stays possible, never definite.
+    Undecided,
+    /// The rule rejects the passage: it is in neither graph.
+    Refused,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum WalkabilityRouteOutcome {

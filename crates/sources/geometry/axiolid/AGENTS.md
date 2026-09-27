@@ -51,7 +51,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   a proven sweep; never add a hub-like region whose passages are definite
   without a sweep from a shared point. A door's leaf and lining are unknown,
   so a crossing is definite only for a bodiless opening or a stated clear
-  width (`with_clear_width`). Connector passages are never definite.
+  width (`with_clear_width`, or the request's
+  `with_stated_clear_widths`; the narrower of the two counts, and a stated
+  width bounds a void's crossing from above). Connector passages are never
+  definite.
 - `src/metric_routing.rs` implements `MetricRoutingService` on the origin's
   level. `Blocked` needs complete evidence (every declared surface and portal
   measured, no connector touching the level) and a separation of the free

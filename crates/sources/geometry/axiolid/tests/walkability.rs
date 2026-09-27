@@ -156,6 +156,56 @@ fn a_stated_clear_width_below_the_route_width_blocks_a_wide_opening() {
 }
 
 #[test]
+fn a_clear_width_the_request_states_decides_a_door() {
+    // The rule reads the width from its source; the host states none.
+    let stated = |metres: f64| {
+        request(0.8)
+            .with_stated_clear_widths([(id("door"), metres)])
+            .unwrap()
+    };
+    let service = || AxiolidWalkabilityService::new(model(0.9), source());
+    let wide = snapshot(service(), &stated(0.85)).unwrap();
+    assert!(matches!(
+        wide.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    let crossing = wide
+        .passages()
+        .iter()
+        .find(|passage| passage.portal() == Some(&id("door")))
+        .unwrap();
+    assert_eq!(crossing.clear_width().upper_metres(), 0.85);
+    assert!(
+        crossing
+            .evidence()
+            .locator
+            .contains("clearance=stated=0.85")
+    );
+    let narrow = snapshot(service(), &stated(0.75)).unwrap();
+    assert_eq!(
+        narrow.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Unreachable
+    );
+    // Where host and request both state one, the narrower counts.
+    let both = snapshot(service().with_clear_width(id("door"), 0.85), &stated(0.75)).unwrap();
+    assert_eq!(
+        both.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Unreachable
+    );
+    // A stated width bounds an opening's void as well.
+    let geometry = model(0.9).with_no_body(id("door"));
+    let opening = AxiolidWalkabilityService::new(geometry, source())
+        .with_opening_void(id("door"), cuboid([4.0, 1.0, 0.0], [4.2, 1.9, 2.1]));
+    assert_eq!(
+        snapshot(opening, &stated(0.75))
+            .unwrap()
+            .route_between(&id("a"), &id("b"))
+            .unwrap(),
+        WalkabilityRouteOutcome::Unreachable
+    );
+}
+
+#[test]
 fn a_door_without_a_stated_clear_width_is_undecided_when_it_could_pass() {
     // The leaf and lining could narrow the 0.9 m opening below 0.8 m.
     let service = AxiolidWalkabilityService::new(model(0.9), source());

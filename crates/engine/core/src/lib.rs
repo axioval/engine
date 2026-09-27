@@ -550,9 +550,9 @@ pub use vertical_extent::{
     VerticalExtentService, VerticalExtentServiceHandle,
 };
 pub use walkability::{
-    VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind, WalkabilityError,
-    WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome,
-    WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
+    PassageAdmission, VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind,
+    WalkabilityError, WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest,
+    WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
 };
 pub use walking_surface::{
     Headroom, HeadroomRequest, MeasuredInterval, SlopedRun, SlopedSurface, Tread, TreadFlight,

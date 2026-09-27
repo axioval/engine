@@ -6,6 +6,30 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Accessible route.** `accessible-route` requires each selected
+  destination to be reachable from a start point through the route spaces
+  for a mobility profile (`width_metres`, `clear_height_metres`), through
+  the selected portals and the lifts, ramps and stairs selected by kind.
+  Portals must be at least `door_width_metres` wide, ramps and stairs
+  `ramp_width_metres` and `stair_width_metres`, read from
+  `clear_width_property` where the model states them and from the
+  geometry's upper bound otherwise; `forbid_stairs` (the default) makes a
+  room reached by stairs only a finding. A proven route passes, a proven
+  block is a finding that relates the blocking doors, stairs or rooms, and
+  anything else is not evaluated. Stated door widths go into the
+  walkability request, so a model that states them lets the geometry prove
+  a door passable. Passing spaces are not checked yet: they need the
+  placement search. (#77)
+- **Rule judgement of walkable passages.**
+  `WalkabilitySnapshot::route_between_admitting` routes with a
+  `PassageAdmission` (`Admitted`, `Undecided`, `Refused`) per passage on
+  top of its width, and `blocking_passages` returns the cut of passages
+  that blocks an unreachable route. `WalkabilityRequest::with_stated_clear_widths`
+  carries clear widths a rule reads from its source; `AxiolidWalkabilityService`
+  treats them as host-stated ones (the narrower wins) and bounds even an
+  opening's crossing by them. `WalkabilityError` gains
+  `InvalidStatedClearWidth`; matching it exhaustively is a breaking change.
+  (#77)
 - **Walkability and metric routing from geometry.** `axioval-axiolid` now
   implements both contracts, and `--geometry` registers them.
   `AxiolidWalkabilityService` builds a region per selected surface (its floor

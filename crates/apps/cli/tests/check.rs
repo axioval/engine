@@ -2048,7 +2048,8 @@ impl Case {
     /// Runs one rule of `capability` with geometry over `model`: the
     /// fixture packages with the rule swapped for it. `types` binds object
     /// types by `(id suffix, IFC name)`; `IsExternal`,
-    /// `SprinklerProtection` and `TotalThickness` are always bound.
+    /// `SprinklerProtection`, `TotalThickness` and `Access.ClearWidth` are
+    /// always bound.
     fn geometry_rule(
         &self,
         model: &str,
@@ -2116,6 +2117,19 @@ impl Case {
             "name": {"default": "IsExternal", "translations": {}},
             "valueKind": "boolean",
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IsExternal"}],
+            "citations": [],
+        });
+        definitions["propertySets"]["axioval:example.ifc.pset-access"] = json!({
+            "id": "axioval:example.ifc.pset-access",
+            "name": {"default": "Access", "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Access"}],
+            "citations": [],
+        });
+        definitions["properties"]["axioval:example.ifc.clear-width"] = json!({
+            "id": "axioval:example.ifc.clear-width",
+            "name": {"default": "ClearWidth", "translations": {}},
+            "valueKind": "quantity",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "ClearWidth"}],
             "citations": [],
         });
         definitions["properties"]["axioval:example.ifc.total-thickness"] = json!({
@@ -3559,6 +3573,125 @@ fn with_geometry_a_ramp_too_steep_for_its_run_is_found() {
         )],
         "{result:#}"
     );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// Lobby #19 (x 0..4) and rooms #29 (x 4.2..8), #39 (x -4..-0.2) and #49
+/// (above the lobby, floor at 3.3 m), all 4 m deep in y. Door #59, 0.9 m
+/// wide, joins the lobby to #29 and states a clear width of 0.85 m; door
+/// #69, as wide, joins it to #39 and states 0.75 m. Stair #79 climbs from
+/// the lobby to #49 and is the only way up. `Pset_SpaceCommon.Reference`
+/// is `Lobby` for #19 and `Room` for the rest.
+fn rooms_doors_and_a_stair() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,0.9,$,$,$)";
+    let stair = "IFCSTAIR('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Lobby'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Room'),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceCommon',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#29,#39,#49),#211);\n\
+         #220=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(0.85),$);\n\
+         #221=IFCPROPERTYSET('0000000000000000000221',$,'Access',$,(#220));\n\
+         #222=IFCRELDEFINESBYPROPERTIES('0000000000000000000222',$,$,$,(#59),#221);\n\
+         #230=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(0.75),$);\n\
+         #231=IFCPROPERTYSET('0000000000000000000231',$,'Access',$,(#230));\n\
+         #232=IFCRELDEFINESBYPROPERTIES('0000000000000000000232',$,$,$,(#69),#231);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [6.1, 2.0, 0.0], [3.8, 4.0, 3.0], space),
+        placed_box(30, [-2.1, 2.0, 0.0], [3.8, 4.0, 3.0], space),
+        placed_box(40, [2.0, 2.0, 3.3], [4.0, 4.0, 3.0], space),
+        placed_box(50, [4.1, 1.45, 0.0], [0.1, 0.9, 2.1], door),
+        placed_box(60, [-0.1, 1.45, 0.0], [0.1, 0.9, 2.1], door),
+        placed_box(70, [2.0, 1.75, 0.0], [1.0, 2.5, 3.3], stair),
+    )
+}
+
+#[test]
+fn with_geometry_an_accessible_route_finds_a_narrow_door_and_a_stairs_only_room() {
+    let case = Case::new("geometry-accessible-route");
+    let reference = |value: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("space"),
+            {"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+             "property": "axioval:example.ifc.reference", "operator": "equals",
+             "value": {"type": "string", "value": value}},
+        ]})
+    };
+    let (output, result) = case.geometry_rule(
+        &rooms_doors_and_a_stair(),
+        &[
+            ("space", "IfcSpace"),
+            ("door", "IfcDoor"),
+            ("stair", "IfcStair"),
+        ],
+        "axioval:capability.accessible-route",
+        &registry_signature("axioval:capability.accessible-route"),
+        reference("Room"),
+        json!({
+            "route_selector": {"type": "selector", "value": entity("space")},
+            "start_selector": {"type": "selector", "value": reference("Lobby")},
+            "portal_selector": {"type": "selector", "value": entity("door")},
+            "stair_selector": {"type": "selector", "value": entity("stair")},
+            "width_metres": {"type": "number", "value": 0.8},
+            "door_width_metres": {"type": "number", "value": 0.8},
+            "clear_width_property": {"type": "propertyReference",
+                                     "property": "axioval:example.ifc.clear-width",
+                                     "propertySet": "axioval:example.ifc.pset-access"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #29 is reached through #59 and passes: the stated clear width lets
+    // the geometry prove the body through the door.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .contains("#69 states a clear width of 0.75 m, less than the 0.8 m required"),
+        "{result:#}"
+    );
+    assert_eq!(findings[1].0, "#49", "{result:#}");
+    assert!(
+        findings[1]
+            .1
+            .contains("is connected to the starts by stairs only"),
+        "{result:#}"
+    );
+    let related = |local: &str| -> Vec<String> {
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| finding["object_id"]["local_id"] == local)
+            .unwrap()["related"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|related| related["local_id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(related("#39"), ["#69"]);
+    assert_eq!(related("#49"), ["#79"]);
     assert!(
         result["report"]["not_evaluated"]
             .as_array()

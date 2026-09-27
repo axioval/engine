@@ -1,6 +1,6 @@
 //! Walkability topology contract tests.
 use axioval_engine::{
-    LengthInterval, ServiceRegistry, VerifiedWalkablePassage, VerticalConnector,
+    LengthInterval, PassageAdmission, ServiceRegistry, VerifiedWalkablePassage, VerticalConnector,
     VerticalConnectorKind, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
     WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
     WalkabilitySnapshot,
@@ -301,5 +301,165 @@ fn forbidding_a_connector_kind_makes_a_route_through_it_unreachable() {
             .route_between_avoiding(&from, &to, &[VerticalConnectorKind::Stair])
             .unwrap(),
         WalkabilityRouteOutcome::Unreachable
+    );
+}
+
+#[test]
+fn stated_clear_widths_name_requested_entrances_once() {
+    let door = oid("cad", "door");
+    let stated = req("cad")
+        .with_stated_clear_widths([(door.clone(), 0.85)])
+        .unwrap();
+    assert_eq!(stated.stated_clear_width(&door), Some(0.85));
+    assert_eq!(stated.stated_clear_width(&oid("cad", "space")), None);
+    assert_ne!(stated, req("cad"));
+    for bad in [
+        vec![(oid("cad", "space"), 0.85)],
+        vec![(door.clone(), 0.0)],
+        vec![(door.clone(), f64::INFINITY)],
+        vec![(door.clone(), 0.85), (door.clone(), 0.9)],
+    ] {
+        assert_eq!(
+            req("cad").with_stated_clear_widths(bad),
+            Err(WalkabilityError::InvalidStatedClearWidth)
+        );
+    }
+}
+
+/// `a` (the space) to `d` (the door) through `m`: `a`–`m` crosses the
+/// gate, `m`–`d` climbs a stair; `x` (far), off to the side of `a`, lies
+/// behind a crossing too narrow for the width.
+fn chain() -> (WalkabilitySnapshot, VerifiedWalkablePassage) {
+    let request = WalkabilityRequest::try_new(
+        vec![oid("cad", "space"), oid("cad", "far")],
+        vec![oid("cad", "door"), oid("cad", "gate"), oid("cad", "side")],
+        vec![],
+        0.9,
+        None,
+        true,
+        false,
+    )
+    .unwrap()
+    .with_connectors(vec![VerticalConnector::new(
+        oid("cad", "stair"),
+        VerticalConnectorKind::Stair,
+    )])
+    .unwrap();
+    let gate = VerifiedWalkablePassage::try_new(
+        rid("a"),
+        rid("m"),
+        Some(oid("cad", "gate")),
+        LengthInterval::try_new(1.0, 1.0).unwrap(),
+        ev("gate"),
+    )
+    .unwrap();
+    let stair = edge("m", "d", 1.0, 1.0)
+        .with_connector(VerticalConnector::new(
+            oid("cad", "stair"),
+            VerticalConnectorKind::Stair,
+        ))
+        .unwrap();
+    let side = VerifiedWalkablePassage::try_new(
+        rid("a"),
+        rid("x"),
+        Some(oid("cad", "side")),
+        LengthInterval::try_new(0.0, 0.5).unwrap(),
+        ev("side"),
+    )
+    .unwrap();
+    let snapshot = WalkabilitySnapshot::try_new(
+        request,
+        vec![
+            region("a", vec![oid("cad", "space")]),
+            region("m", vec![oid("cad", "gate")]),
+            region("d", vec![oid("cad", "door")]),
+            region("x", vec![oid("cad", "far")]),
+        ],
+        vec![gate.clone(), stair, side],
+        ev("complete"),
+    )
+    .unwrap();
+    (snapshot, gate)
+}
+
+#[test]
+fn a_rules_admission_narrows_both_graphs_three_valued() {
+    let (snapshot, gate) = chain();
+    let (from, to) = (oid("cad", "space"), oid("cad", "door"));
+    let admit_all = |_: &VerifiedWalkablePassage| PassageAdmission::Admitted;
+    assert!(matches!(
+        snapshot
+            .route_between_admitting(&from, &to, admit_all)
+            .unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    // An undecided gate keeps the route possible, never definite.
+    let undecided_gate = |passage: &VerifiedWalkablePassage| {
+        if passage == &gate {
+            PassageAdmission::Undecided
+        } else {
+            PassageAdmission::Admitted
+        }
+    };
+    assert_eq!(
+        snapshot
+            .route_between_admitting(&from, &to, undecided_gate)
+            .unwrap(),
+        WalkabilityRouteOutcome::Indeterminate
+    );
+    assert!(
+        snapshot
+            .blocking_passages(&from, &to, undecided_gate)
+            .unwrap()
+            .is_empty()
+    );
+    // Forbidding stairs is a refusal: the stair is the cut, and the
+    // narrow side crossing, which guards only `far`, is not part of it.
+    assert_eq!(
+        snapshot
+            .route_between_avoiding(&from, &to, &[VerticalConnectorKind::Stair])
+            .unwrap(),
+        WalkabilityRouteOutcome::Unreachable
+    );
+    let no_stairs = |passage: &VerifiedWalkablePassage| {
+        if passage.connector().is_some() {
+            PassageAdmission::Refused
+        } else {
+            PassageAdmission::Admitted
+        }
+    };
+    let blocking = snapshot.blocking_passages(&from, &to, no_stairs).unwrap();
+    assert_eq!(blocking.len(), 1, "{blocking:?}");
+    assert_eq!(
+        blocking[0].connector().map(VerticalConnector::object),
+        Some(&oid("cad", "stair"))
+    );
+    // The side crossing is too narrow for the width: it blocks `far`.
+    let far = oid("cad", "far");
+    let blocking = snapshot.blocking_passages(&from, &far, admit_all).unwrap();
+    assert_eq!(blocking.len(), 1, "{blocking:?}");
+    assert_eq!(blocking[0].portal(), Some(&oid("cad", "side")));
+    assert_eq!(
+        snapshot.blocking_passages(&from, &oid("cad", "nowhere"), admit_all),
+        Err(WalkabilityError::ObjectUnavailable)
+    );
+}
+
+#[test]
+fn nothing_blocks_a_region_nothing_joins() {
+    let snapshot = snapshot(vec![]);
+    let admit_all = |_: &VerifiedWalkablePassage| PassageAdmission::Admitted;
+    let (from, to) = (oid("cad", "space"), oid("cad", "door"));
+    assert_eq!(
+        snapshot
+            .route_between_admitting(&from, &to, admit_all)
+            .unwrap(),
+        WalkabilityRouteOutcome::Unreachable
+    );
+    assert!(
+        snapshot
+            .blocking_passages(&from, &to, admit_all)
+            .unwrap()
+            .is_empty()
     );
 }

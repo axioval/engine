@@ -509,6 +509,36 @@ Shares are intervals: a tessellated body's footprint and extent are, and so is a
 
 Counterparts are not filtered by direction: a perpendicular wall meeting the element within the horizontal tolerance overlaps it in plan and counts towards its height. Keeping only axis-compatible counterparts needs a minimum-area rectangle per footprint, which no geometry service provides yet.
 
+### Accessible route
+
+`accessible-route` requires each selected destination (an accessible room, say) to be reachable from a start point (an entrance) through the route spaces, for a mobility profile: a body `width_metres` wide under `clear_height_metres` of headroom. It needs the [walkability service](./walkability.md) and, for stated widths, property resolution.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `route_selector` | selector, required | the spaces a route may cross |
+| `start_selector` | selector, required | the start points; a destination some start reaches passes |
+| `portal_selector` | selector, optional | the doors and openings a route may pass |
+| `lift_selector`, `ramp_selector`, `stair_selector` | selectors, optional | the vertical connectors between levels, by kind; one object in two of them is an invalid declaration |
+| `obstacle_selector` | selector, optional | what obstructs the route spaces and portals inside the headroom band (furniture, walls around a doorway) |
+| `width_metres` | number, required | the body's width, the route's minimum clear width |
+| `clear_height_metres` | number, optional | the headroom band above each floor; without it, each space's own height |
+| `door_width_metres` | number, optional | the minimum clear width of every portal on the route |
+| `ramp_width_metres`, `stair_width_metres` | numbers, optional | the minimum clear width of a ramp or stair on the route |
+| `forbid_stairs` | boolean, optional | `true` (the default): no route may use a stair, so a room reached by stairs only is a finding |
+| `clear_width_property` | property reference, optional | where the source states a portal's or connector's clear width, as a length |
+
+A start or destination the portal selector picks is an entrance (its two faces); any other is a walkable surface. A route may cross only route spaces and portals, besides its own start and destination: a room that is a destination but not a route space is never passed through on the way to another.
+
+The rule takes one walkability snapshot for the profile and judges every passage on top of its width bounds:
+
+- **Portals.** A stated clear width below `door_width_metres` blocks; so does a door the geometry shows narrower (the upper bound of its crossing). A stated width at or above the minimum, or a crossing proven at least that wide, admits it; otherwise the door is undecided. A stated width is also sent with the request (`WalkabilityRequest::with_stated_clear_widths`), so the geometry can prove the body passes the leaf and lining: without one, a door from IFC can bound a route from above only, never pass it, because its `OverallWidth` includes the lining.
+- **Connectors.** With `forbid_stairs`, a stair blocks. A ramp or stair with a minimum width is admitted by a stated clear width at or above it, blocked by one below it, and undecided without one; the geometry does not measure connector widths. Climbs are not measured either, so a route through any connector is never proven.
+- **Start and destination portals.** A route begins on either face of a start door, so the door's own crossing is judged separately: too narrow for the body, it blocks every route from it.
+
+Outcomes are three-valued. A destination some decided start reaches definitely passes. One that every start is proven cut off from is a finding that relates the blocking elements: the passages leaving what the starts can reach that lead on towards the destination (`WalkabilitySnapshot::blocking_passages`), each with its reason, or "connected to the starts by stairs only" when every block is a forbidden stair, or "no route space connects" when nothing joins them at all. Anything else is not evaluated, listing the undecided elements. A start, route space, portal or connector whose selection is undecided can only add routes: it keeps its passages possible but never definite, so it cannot turn a block into a pass. An undecided obstacle could block or free any route and leaves every destination not evaluated. A backend refusal (see [the Axiolid backend](./walkability.md#the-axiolid-backend)) is not evaluated, never a pass.
+
+Passing spaces (turning areas at a maximum spacing along the route) are not checked yet: they need the placement search, which no geometry service performs.
+
 ### Slab stacks
 
 `slab-stack-spacing` judges `VerticalExtentService` elevations together with `PlanAreaService` footprints, so it needs a geometry adapter. Unlike `level-spacing`, which reads storey elevations, it measures the slabs' own surfaces.

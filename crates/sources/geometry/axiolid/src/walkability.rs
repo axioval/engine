@@ -58,7 +58,10 @@ use crate::walkable::{
 /// Surfaces, entrances, obstacles and vertical connectors are the request's
 /// (the rule's selection). What a mesh cannot show is the host's to declare:
 /// the void of a bodiless opening ([`Self::with_opening_void`]) and the clear
-/// width a door's leaf and lining leave ([`Self::with_clear_width`]).
+/// width a door's leaf and lining leave ([`Self::with_clear_width`]). A
+/// request may state clear widths too
+/// ([`WalkabilityRequest::with_stated_clear_widths`], read by the rule from
+/// its source); where both state one, the narrower counts.
 pub struct AxiolidWalkabilityService {
     geometry: AxiolidGeometry,
     source: SourceId,
@@ -204,7 +207,10 @@ impl AxiolidWalkabilityService {
             };
             let blocked = obstruction(&obstacles, &bounds, lo, hi)?;
             let corridor = corridor(&frame, &sides, &blocked)?;
-            let clearance = self.facts.clearance(entrance)?;
+            let clearance = self
+                .facts
+                .clearance(entrance)?
+                .with_stated(request.stated_clear_width(entrance));
             portals.push(Portal {
                 frame,
                 sides,
@@ -346,6 +352,10 @@ impl AxiolidWalkabilityService {
             }
             let mut upper = crossing_bounds[index];
             if let Clearance::Stated(stated) = portal.clearance {
+                upper = upper.min(stated);
+            }
+            // A width the request states bounds even an opening's void.
+            if let Some(stated) = request.stated_clear_width(id) {
                 upper = upper.min(stated);
             }
             let proven = match mid_points[index] {

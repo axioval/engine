@@ -302,7 +302,7 @@ axioval report result.json --object '#42' --evidence
 Semantic evidence (properties, relationships, classifications, the type
 hierarchy) is always available. `--geometry` also meshes the model, so
 geometric rules (clash, distance, contact, space, plan-area, facade-area, slab-stack,
-storey-height, exit-separation, counterpart-coverage, body-extent, triangle-count, stair-geometry, ramp-geometry and free-space checks) can run, and registers the walkability
+storey-height, exit-separation, counterpart-coverage, accessible-route, body-extent, triangle-count, stair-geometry, ramp-geometry and free-space checks) can run, and registers the walkability
 and metric-routing services. It is off by default because meshing costs time a purely semantic ruleset
 does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
@@ -395,7 +395,9 @@ a walkable surface, every `IfcDoor` and opening element a portal, and every
 including a window filling an opening. IFC states no door clear width the CLI
 trusts (a door's overall width includes its lining), so none is declared: a
 door bounds a route's width from above only, and a route through a door that
-could pass is undecided rather than reachable. See
+could pass is undecided rather than reachable. A rule can state door clear
+widths itself: `accessible-route` reads them from its `clear_width_property`
+and sends them with its walkability request. See
 [Walkability topology](./walkability.md) and
 [Metric routing](./metric-routing.md).
 

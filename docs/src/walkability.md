@@ -11,7 +11,12 @@ The request supplies deterministic source-qualified sets of:
 - verified-portal and moving-envelope policy;
 - typed vertical connectors (`VerticalConnector`: an object and its
   `VerticalConnectorKind`, `Lift`, `Ramp` or `Stair`), given with
-  `WalkabilityRequest::with_connectors`.
+  `WalkabilityRequest::with_connectors`;
+- optionally, stated clear widths of entrances
+  (`WalkabilityRequest::with_stated_clear_widths`): what the rule reads from
+  its source as the width a door's leaf and lining leave. Each must be
+  finite, positive and name a requested entrance once, or the request is
+  refused (`InvalidStatedClearWidth`).
 
 Semantic selectors run before this service. IFC placements, meshes, B-reps, and native kernel types never enter the request.
 
@@ -37,12 +42,30 @@ graphs without the passages of the forbidden kinds, so a rule that forbids
 
 A route in the definite graph is `Reachable`. No route in the possible graph is `Unreachable`. A route only in the possible graph is `Indeterminate`. Approximate width evidence therefore cannot become a pass or a false negative.
 
+A rule can judge passages itself on top of their widths with
+`route_between_admitting`: a `PassageAdmission` per passage, `Admitted`,
+`Undecided` or `Refused`. The definite graph keeps only admitted passages and
+the possible graph drops only refused ones, so a passage the rule cannot
+decide (a door whose required width it cannot read) can only make a route
+`Indeterminate`. `route_between_avoiding` is the admission that refuses the
+forbidden connector kinds.
+
+When a route is `Unreachable`, `blocking_passages` names what blocks it: the
+passages leaving the regions the possible graph reaches from the origin
+that lead, widths and admission ignored, towards the destination without
+re-entering those regions. Every route crosses one of them after it last
+leaves the reached regions, so they form a cut; a block that only guards
+some other region is left out. The list is empty when nothing joins the
+two at all.
+
 ## The Axiolid backend
 
 `AxiolidWalkabilityService` (in `axioval-axiolid`) implements this contract
 over host-supplied meshes. Surfaces, entrances, obstacles and connectors are
 the request's; the host declares only what a mesh cannot show: the void of a
-bodiless opening and, optionally, a door's clear width.
+bodiless opening and, optionally, a door's clear width. A clear width the
+request states counts as one the host states; where both do, the narrower
+counts, and a stated width bounds even an opening's void from above.
 
 - **Surfaces.** Each selected surface must be an exact closed body whose
   underside is one horizontal floor. Its free region is its plan footprint
@@ -105,5 +128,7 @@ surface is not detected; it can only make a route `Indeterminate`, never
 `Unreachable`. Once one-sided erosion (`Region::erode_inner`,
 axiolid-overlay 0.3.1) is published, the free region eroded by half the width
 on its inner side can bound surfaces and gaps as well.
+
+The `accessible-route` capability (see [capabilities](./capabilities.md#accessible-route)) is built on this contract: one snapshot for its mobility profile, its own admission per passage, and the blocking passages as the related elements of a finding.
 
 Corridor metric lengths remain owned by the separate metric-routing service. End-clearance placement remains owned by the free-space placement service.

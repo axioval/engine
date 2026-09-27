@@ -45,6 +45,7 @@ use axioval::axiolid::{
     AxiolidLinearQuantityService, AxiolidMetricRoutingService, AxiolidPlanAreaService,
     AxiolidPlanSpanService, AxiolidProximityService, AxiolidSpaceService,
     AxiolidTriangleCountService, AxiolidVerticalExtentService, AxiolidWalkabilityService,
+    AxiolidWalkingSurfaceService,
 };
 use axioval::engine::{
     ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
@@ -54,7 +55,7 @@ use axioval::engine::{
     ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
     RelationshipSelectionServiceHandle, SemanticRelationship, SourceSnapshot, SpaceServiceHandle,
     TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
-    VerticalExtentServiceHandle, WalkabilityServiceHandle,
+    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -318,6 +319,14 @@ fn register(
         )?
         .with_host_service(
             VerticalExtentServiceHandle::new(Arc::new(AxiolidVerticalExtentService::new(
+                geometry.clone(),
+            ))),
+            bound,
+        )?
+        // Treads, ramp runs and headroom from the same meshes; obstacles are
+        // the rule's selection, carried in each request.
+        .with_host_service(
+            WalkingSurfaceServiceHandle::new(Arc::new(AxiolidWalkingSurfaceService::new(
                 geometry.clone(),
             ))),
             bound,

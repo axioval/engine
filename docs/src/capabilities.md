@@ -519,6 +519,46 @@ Counterparts are not filtered by direction: a perpendicular wall meeting the ele
 
 Elevations and footprints are intervals, and a tessellated slab's are never points. A slab is judged only on the whole interval: a distance straddling a bound, an overlap ratio straddling the minimum, or two tops the intervals cannot order are not evaluated. An object whose selection is undecided still counts as a possible next slab up, and one whose extent cannot be measured leaves every slab not evaluated, since it could sit in any stack. A slab with nothing stacked above it has nothing to check. When a proximity service is registered, its enclosing boxes skip overlap measurements between slabs that cannot meet in plan.
 
+### Stairs and ramps
+
+`stair-geometry` and `ramp-geometry` judge what `WalkingSurfaceService` measures from each selected object's body (see [Typed host services](./services.md)), so they need a geometry adapter; declared values such as `RiserHeight` or `NumberOfRisers` are checked with `property-predicate` instead. Select the objects the measure fits: single flights (`IfcStairFlight`) and ramp flights (`IfcRampFlight`), not a whole stair whose landing would count as a tread.
+
+`axioval:capability.stair-geometry` measures a straight flight: its treads are its upward-facing level faces, its risers the height differences from its lowest point through each tread to its top (the first riser starts at the body's lowest point, so the flight is taken to stand on the level it starts from; a top above the last tread is a final riser to the upper floor), its goings the horizontal distances from nosing to nosing along the direction it climbs, which is derived from the treads rather than the placement. At least one check is declared:
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `riser_minimum`, `riser_maximum` | `quantity` | Every riser, inclusive. |
+| `going_minimum`, `going_maximum` | `quantity` | Every going (a flight of `n` treads has `n - 1`). |
+| `step_length_minimum`, `step_length_maximum` | `quantity` | `2r + g` for every tread, `r` the riser climbing onto it and `g` the going leaving it. |
+| `nosing_minimum`, `nosing_maximum` | `quantity` | How far each tread reaches over the one below. |
+| `minimum_risers`, `maximum_risers` | `integer` | The number of risers. |
+| `maximum_rise` | `quantity` | The flight's rise, base to top of its last riser. |
+| `riser_tolerance`, `going_tolerance` | `quantity` | The difference between the flight's largest and smallest riser or going. |
+| `minimum_headroom` | `quantity` | The least vertical clearance above the treads, with `headroom_obstacles`. |
+| `headroom_obstacles` | `selector` | The objects that may stand above (slabs, beams, ducts); declared together with `minimum_headroom`. |
+
+`axioval:capability.ramp-geometry` measures a ramp's sloped runs: connected upward-facing faces flatter than 45°, each planar, separated by level landings. A run's slope is its rise over its horizontal length along its steepest ascent.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `slope_limits` | `table` | Rows of `maximum_slope` (`number`, rise over length: `0.0833` for 1:12, required), `maximum_length` and `maximum_rise` (`quantity`, optional). A run conforms when some row holds all its columns, so a slope depending on the run's length or rise is one row per step. |
+| `slope_tolerance` | `number` | The difference between the ramp's steepest and shallowest run. |
+| `minimum_headroom`, `headroom_obstacles` | | As for stairs, above the runs and landings. |
+
+A ramp limited to 1:12 and 0.76 m of rise per run, or allowed 1:10 over runs of at most 2 m:
+
+```json
+{"slope_limits": {"type": "table", "value": [
+  {"maximum_slope": {"type": "number", "value": 0.0833},
+   "maximum_rise": {"type": "quantity", "value": 0.76, "unit": "m"}},
+  {"maximum_slope": {"type": "number", "value": 0.1},
+   "maximum_length": {"type": "quantity", "value": 2, "unit": "m"}}]}}
+```
+
+Every length and slope is an interval. Each check is judged on its own and each failing check is its own finding naming the values (`riser 3 of 4 is 0.21 m; at most 0.19 m required`) and citing the measurement; a check whose interval straddles its bound, widened by a few units in the last place for the binary rounding of decimal coordinates, is not evaluated while the others still decide. Headroom is the least vertical distance from the walking surface (treads, runs and landings) to a selected obstacle's body directly above it, measured from the surface, not from the pitch line; a finding names and relates the lowest obstacle. An obstacle `headroom_obstacles` cannot decide can only lower the headroom: too little stands, enough is not evaluated. An obstacle crossing the walking surface, an unmeasured or nearby tessellated one leaves headroom not evaluated.
+
+A flight or ramp the service cannot measure is not evaluated, never passed: a tessellated body, an open or inward-facing mesh, winders or a turning flight, a flight in several pieces (open risers), a flight with a sloped walking face, a ramp whose slopes meet without a landing, or a body with no tread or run. Not measured yet (#85): winders, open risers, headroom under a flight, landing sizes, clear width, handrails (height, extension, continuity, side), the slab connection, doors on landings, free space at a ramp's ends and a stair nearby.
+
 ### Model quality
 
 Checks on how a model is built rather than on what it designs. Each sub-check maps to one rule:

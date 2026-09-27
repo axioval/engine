@@ -27,6 +27,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   a host-supplied void. Undecided cases (unmeasured or bodiless spaces, points
   on a boundary, ties, tessellations within reach) refuse the whole answer.
 - `src/vertical_extent.rs` implements `VerticalExtentService`: bottom and top elevations of a mesh's used positions. A tessellation widens each by its chord deviation and is never exact, even at zero deviation. Directional extents project the same positions; only a coordinate axis projects exactly, any other direction widens by the dot product's rounding bound and is approximate.
+- `src/walking_surface.rs` implements `WalkingSurfaceService`: treads are upward level faces (corners within `LEVEL_TOLERANCE`, the rounding a placement leaves) of a closed, outward, exact, one-piece mesh; the walking direction comes from the treads' centres, never the placement; ramp runs are connected planar upward faces flatter than 45°. Tessellated subjects and nearby tessellated obstacles refuse, and headroom is never exact. Winders, open risers and warped runs refuse until plane detection (axiolid/kernel#131) and the #85 follow-ups land.
 - `src/triangle_count.rs` implements `TriangleCountService`: the triangles of the registered mesh. Exact evidence only for a planar mesh; bodiless counts zero, unmeasured refuses.
 - `src/facade_area.rs` implements `FacadeAreaService`: steep faces that look outside, classified at four samples each. A face held against another body or a host-declared space, or whose ray first meets itself or a space within `REACH`, is not facade; meeting nothing or another body is. A face whose samples disagree widens the interval, never a guess. Unmeasured bodies anywhere, bodiless declared spaces and tessellations within reach refuse.
 - `src/walkable.rs` (internal) builds walkable plan domains for the two route
@@ -127,7 +128,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - A geometry set may hold several sources. Evidence about one object (contact,
   proximity, facade area, vertical and directional extent, triangle count, shelf
   length, clear height, derived relationships, a walkability passage, a
-  reachable metric route's origin) cites that object's source; only
+  reachable metric route's origin, a tread flight, sloped runs and the headroom
+  above a subject) cites that object's source; only
   set-level measurements (a walkability snapshot, a blocked route's
   completeness) take the source given to their constructor.
 - `src/lib.rs` keeps the source-scoping contracts and the in-memory conformance

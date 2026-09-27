@@ -3355,6 +3355,210 @@ fn with_geometry_walls_are_graded_by_how_much_structure_stands_under_them() {
             .unwrap()["related"][0]["source"]["document"],
         "struct.ifc"
     );
+}
+
+/// A side profile extruded 1.2 m across, as instances `#first` to
+/// `#first + 8` and its corners from `#first + 10`: `points` (along, up)
+/// stand in the vertical plane through `origin` along world x and are swept
+/// towards -y. `PL` and `REP` in `product` become its placement and shape;
+/// the product is `#first + 8`.
+fn profiled(first: u32, [x, y, z]: [f64; 3], points: &[[f64; 2]], product: &str) -> String {
+    let [
+        location,
+        position,
+        placement,
+        polyline,
+        profile,
+        solid,
+        shape,
+        definition,
+        object,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(|offset| first + offset);
+    let mut text = String::new();
+    let mut corners = Vec::new();
+    for (index, [along, up]) in points.iter().chain(points.first()).enumerate() {
+        let corner = first + 10 + u32::try_from(index).unwrap();
+        writeln!(text, "#{corner}=IFCCARTESIANPOINT(({along:.3},{up:.3}));").unwrap();
+        corners.push(format!("#{corner}"));
+    }
+    // The profile's plane stands upright: its x along world x (#10), its
+    // normal and so the sweep along world -y (#9).
+    write!(
+        text,
+        "#{location}=IFCCARTESIANPOINT(({x:.2},{y:.2},{z:.2}));\n\
+         #{position}=IFCAXIS2PLACEMENT3D(#{location},#9,#10);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#2);\n\
+         #{polyline}=IFCPOLYLINE(({}));\n\
+         #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{polyline});\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#{position},#4,1.2);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        corners.join(","),
+        product
+            .replace("GID", &format!("{object:022}"))
+            .replace("PL", &format!("#{placement}"))
+            .replace("REP", &format!("#{definition}")),
+    )
+    .unwrap();
+    text
+}
+
+/// A stair side profile on a flat base: `risers` high, 0.28 m goings, the
+/// last tread its top.
+fn stair_profile(risers: &[f64]) -> Vec<[f64; 2]> {
+    let top: f64 = risers.iter().sum();
+    let mut points = vec![
+        [0.0, 0.0],
+        [0.28 * f64::from(u32::try_from(risers.len()).unwrap()), 0.0],
+    ];
+    points.push([points[1][0], top]);
+    let mut elevation = top;
+    for step in (0..risers.len()).rev() {
+        let front = 0.28 * f64::from(u32::try_from(step).unwrap());
+        points.push([front, elevation]);
+        elevation -= risers[step];
+        if step > 0 {
+            points.push([front, elevation]);
+        }
+    }
+    points
+}
+
+/// A ramp side profile: a 1 m landing at 0.1 m, a run rising 0.5 m over
+/// `length`, and a 1 m landing at 0.6 m.
+fn ramp_profile(length: f64) -> Vec<[f64; 2]> {
+    vec![
+        [0.0, 0.0],
+        [length + 2.0, 0.0],
+        [length + 2.0, 0.6],
+        [length + 1.0, 0.6],
+        [1.0, 0.1],
+        [0.0, 0.1],
+    ]
+}
+
+/// Stair flights #108 (four 0.17 m risers) and #208 (its third riser
+/// 0.21 m), ramp flights #308 (0.5 m over 6 m) and #408 (0.5 m over 3 m),
+/// and beam #509, its underside 2.5 m up across #108's second and third
+/// treads (x 0.41 to 0.71). Every flight is 1.2 m wide.
+fn stairs_and_ramps() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let ramp = "IFCRAMPFLIGHT('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        profiled(
+            200,
+            [0.0, 5.0, 0.0],
+            &stair_profile(&[0.17, 0.17, 0.21, 0.17]),
+            flight
+        ),
+        profiled(300, [5.0, 0.0, 0.0], &ramp_profile(6.0), ramp),
+        profiled(400, [5.0, 5.0, 0.0], &ramp_profile(3.0), ramp),
+        placed_box(
+            500,
+            [0.56, -0.6, 2.5],
+            [0.3, 2.0, 0.3],
+            "IFCBEAM('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_an_irregular_riser_and_too_little_headroom_are_found() {
+    let case = Case::new("geometry-stair-flights");
+    let (output, result) = case.geometry_rule(
+        &stairs_and_ramps(),
+        &[("flight", "IfcStairFlight"), ("beam", "IfcBeam")],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "riser_minimum": {"type": "quantity", "value": 14, "unit": "cm"},
+            "riser_maximum": {"type": "quantity", "value": 19, "unit": "cm"},
+            "riser_tolerance": {"type": "quantity", "value": 5, "unit": "mm"},
+            "going_minimum": {"type": "quantity", "value": 26, "unit": "cm"},
+            "minimum_headroom": {"type": "quantity", "value": 2, "unit": "m"},
+            "headroom_obstacles": {"type": "selector", "value": entity("beam")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #208's third riser is found twice, too high and irregular; #108 is
+    // regular, but the beam leaves 2.5 - 0.51 m above its third tread.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 3, "{result:#}");
+    assert_eq!(findings[0].0, "#108", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .starts_with("headroom above the walking surface is 1.99 m under ")
+            && findings[0].1.ends_with("#509; at least 2 m required"),
+        "{result:#}"
+    );
+    assert_eq!(
+        findings[1..],
+        [
+            (
+                "#208".to_owned(),
+                "riser 3 of 4 is 0.21 m; 0.14 m to 0.19 m required".to_owned()
+            ),
+            (
+                "#208".to_owned(),
+                "risers differ by 0.04 m (0.17 m, 0.17 m, 0.21 m, 0.17 m); at most 0.005 m \
+                 allowed"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_a_ramp_too_steep_for_its_run_is_found() {
+    let case = Case::new("geometry-ramps");
+    let (output, result) = case.geometry_rule(
+        &stairs_and_ramps(),
+        &[("ramp", "IfcRampFlight")],
+        "axioval:capability.ramp-geometry",
+        &registry_signature("axioval:capability.ramp-geometry"),
+        entity("ramp"),
+        json!({
+            "slope_limits": {"type": "table", "value": [
+                {"maximum_slope": {"type": "number", "value": 0.0834},
+                 "maximum_rise": {"type": "quantity", "value": 0.76, "unit": "m"}},
+            ]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#408".to_owned(),
+            "run 1 of 1 rises 0.5 m over 3 m, a slope of 0.166667; required slope at most \
+             0.0834 rising at most 0.76 m"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
     assert!(
         result["report"]["not_evaluated"]
             .as_array()

@@ -457,6 +457,7 @@ mod topology;
 mod triangle_count;
 mod vertical_extent;
 mod walkability;
+mod walking_surface;
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,
@@ -552,6 +553,10 @@ pub use walkability::{
     VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind, WalkabilityError,
     WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome,
     WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
+};
+pub use walking_surface::{
+    Headroom, HeadroomRequest, MeasuredInterval, SlopedRun, SlopedSurface, Tread, TreadFlight,
+    WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle,
 };
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.

@@ -106,6 +106,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   widens by the chord deviations. `VerticalExtent` gains `height_metres` and
   `uncovered_height`, the height of an extent outside a set of grown extents
   as sure bounds.
+- **Stair and ramp geometry.** (Refs #85) A new `WalkingSurfaceService`
+  (`WalkingSurfaceServiceHandle`) measures a straight stair flight's base,
+  top and treads (elevation, nosing and back edge along the direction it
+  climbs), a ramp's sloped runs, and the headroom above a walking surface to
+  the obstacles a request names. Risers, goings, nosings, rises, run lengths
+  and slopes are derived in the contract as intervals sure to hold the exact
+  value. `AxiolidWalkingSurfaceService` measures exact, closed, outward
+  meshes: treads are upward level faces, the walking direction comes from
+  the treads' centres, runs are planar upward faces flatter than 45°;
+  tessellations, winders and turning flights, flights in several pieces and
+  warped runs are refused. The CLI registers it with `--geometry`. Two
+  capabilities judge it: `stair-geometry` (riser, going, `2r + g`, nosing
+  ranges, riser count, flight rise, riser and going uniformity, headroom)
+  and `ramp-geometry` (`slope_limits` rows of maximum slope with optional
+  maximum run length and rise, equal slopes, headroom). Winders, open
+  risers, headroom under a flight, landing sizes, clear width, handrails and
+  the slab connection remain open.
 - **Exit separation.** The new capability `exit-separation` requires each
   selected space's exits, reached through `exit_path` (such as
   `axioval:derived.adjacent-space:backward`) and filtered by

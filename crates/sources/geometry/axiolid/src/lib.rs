@@ -24,6 +24,7 @@ pub mod triangle_count;
 pub mod vertical_extent;
 pub mod walkability;
 pub(crate) mod walkable;
+pub mod walking_surface;
 
 pub use contact::AxiolidContactService;
 pub use derived_relationships::AxiolidDerivedRelationshipService;
@@ -41,6 +42,7 @@ pub use space::AxiolidSpaceService;
 pub use triangle_count::AxiolidTriangleCountService;
 pub use vertical_extent::AxiolidVerticalExtentService;
 pub use walkability::AxiolidWalkabilityService;
+pub use walking_surface::AxiolidWalkingSurfaceService;
 
 use std::collections::BTreeMap;
 

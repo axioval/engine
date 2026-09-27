@@ -11,21 +11,20 @@ use axioval_engine::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, ShelfGeometry,
 };
-use axioval_ir::{Evidence, SourceId};
+use axioval_ir::Evidence;
 
 use crate::geometry::AxiolidGeometry;
 
 /// Measures shelf capacity from application-supplied meshes.
 pub struct AxiolidLinearQuantityService {
     geometry: AxiolidGeometry,
-    source: SourceId,
 }
 
 impl AxiolidLinearQuantityService {
     /// Binds a geometry set to the source that identifies its objects.
     #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self { geometry, source }
+    pub fn new(geometry: AxiolidGeometry) -> Self {
+        Self { geometry }
     }
 }
 
@@ -167,7 +166,7 @@ impl LinearQuantityService for AxiolidLinearQuantityService {
             request.clone(),
             measured,
             Evidence::exact(
-                self.source.clone(),
+                request.scope().source.clone(),
                 format!("axiolid:shelf:{}", request.scope().local_id),
             ),
         )

@@ -275,7 +275,7 @@ fn validate_selector_concepts(
     selector: &Selector,
 ) -> Result<(), EngineError> {
     match selector {
-        Selector::All | Selector::Classification { .. } => Ok(()),
+        Selector::All | Selector::Classification { .. } | Selector::Discipline { .. } => Ok(()),
         Selector::EntityType { object_type, .. } => {
             require_concept(concepts, rule, ConceptKind::ObjectType, object_type)
         }

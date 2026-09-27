@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 use super::ParameterValue;
-use crate::TemporalPrecision;
+use crate::{Discipline, TemporalPrecision};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
@@ -68,6 +68,16 @@ pub enum Selector {
         #[serde(default, skip_serializing_if = "RelatedQuantifier::is_any")]
         quantifier: RelatedQuantifier,
         selector: Box<Selector>,
+    },
+    /// Objects of the sources the host declared to play `value`, such as
+    /// `structure`.
+    ///
+    /// A discipline is source metadata, not an object fact: every object of
+    /// a source matches or none does. An object whose source declares no
+    /// discipline is not evaluated, never a non-match, so a discipline-scoped
+    /// rule cannot pass vacuously over a model nobody classified.
+    Discipline {
+        value: Discipline,
     },
 }
 impl Default for Selector {

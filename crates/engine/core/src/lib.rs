@@ -437,6 +437,7 @@ mod contact;
 mod derived_relationships;
 mod envelope_membership;
 mod facade_area;
+mod federation;
 mod free_space;
 mod guard;
 mod integrity;
@@ -522,7 +523,9 @@ pub use relationships::{
     SemanticRelationship, TraversalDirection,
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
-pub use session::{EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceSnapshot};
+pub use session::{
+    EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceDisciplines, SourceSnapshot,
+};
 pub use space::{
     BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,
     SpaceOverlap, SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
@@ -629,7 +632,13 @@ impl Runtime {
     /// concepts bind to nothing and concept-based selection is reported as not
     /// evaluated. Hosts that want concept binding run an [`EvidenceSession`].
     pub fn run(&self, project: &Project, plan: ExecutionPlan) -> Result<Report, EngineError> {
-        self.run_with_services(project, &self.services, BTreeMap::new(), plan)
+        self.run_with_services(
+            project,
+            &self.services,
+            BTreeMap::new(),
+            SourceDisciplines::default(),
+            plan,
+        )
     }
 
     /// Executes a plan against one immutable source/evidence snapshot.
@@ -642,7 +651,13 @@ impl Runtime {
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), snapshot.type_systems().to_vec()))
             .collect();
-        self.run_with_services(session.project(), session.services(), type_systems, plan)
+        self.run_with_services(
+            session.project(),
+            session.services(),
+            type_systems,
+            SourceDisciplines::new(session.disciplines().clone()),
+            plan,
+        )
     }
 
     fn run_with_services(
@@ -650,6 +665,7 @@ impl Runtime {
         project: &Project,
         services: &ServiceRegistry,
         type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
+        disciplines: SourceDisciplines,
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
@@ -658,6 +674,9 @@ impl Runtime {
         // trusted, because it could bind concepts the packages never declared.
         let mut services = services.clone();
         services.replace(ConceptBindings::new(plan.concepts.clone(), type_systems));
+        // Disciplines are the session's declarations; a host-registered copy
+        // could claim roles the session never declared.
+        services.replace(disciplines);
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();

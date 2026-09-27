@@ -1,12 +1,14 @@
 //! Command-line validation of normalized Axioval packages.
 //!
-//! `validate` binds a ruleset without a model. `check` runs it over a model and
+//! `validate` binds a ruleset without a model. `check` runs it over one or
+//! more models, each a source of one session with an optional discipline, and
 //! writes the report as JSON, and optionally as a BCF archive. `report` reads
 //! a saved result back as a bounded summary or a filtered, paged listing.
 //!
 //! Exit status is part of the automation contract; see [`Outcome`].
 
 use std::{
+    collections::BTreeMap,
     error::Error,
     fmt::Write as _,
     fs,
@@ -22,7 +24,7 @@ use axioval::{
     bcf,
     engine::{EvidenceSession, IntegritySeverity, Runtime, SourceIntegrityServiceHandle, compile},
     ifc::import_ifc_session,
-    ir::{DefinitionPackage, Report, RuleSetPackage},
+    ir::{DefinitionPackage, Discipline, Report, RuleSetPackage, SourceId},
 };
 use clap::{Args, Parser, Subcommand};
 use digest::{CheckOutput, Filter, IntegrityRecord, Section};
@@ -57,9 +59,13 @@ enum Command {
 
 #[derive(Args)]
 struct CheckArgs {
-    /// The model to check: an IFC2X3 or IFC4 STEP file.
-    #[arg(long)]
-    model: PathBuf,
+    /// A model to check: an IFC2X3 or IFC4 STEP file, optionally followed by
+    /// `:DISCIPLINE`, the role it plays (`arch.ifc:architecture`). Repeat for
+    /// several models; each is one source of the check, named by its file
+    /// name. A discipline is a lowercase token (`a-z`, `0-9`, `-`, `_`). A
+    /// file whose name itself ends in `:name` takes a trailing `:`.
+    #[arg(long = "model", required = true, value_name = "PATH[:DISCIPLINE]", value_parser = model_arg)]
+    models: Vec<ModelArg>,
     #[arg(long, required = true)]
     definitions: Vec<PathBuf>,
     #[arg(long)]
@@ -120,6 +126,51 @@ struct ReportArgs {
     /// Print JSON instead of text.
     #[arg(long)]
     json: bool,
+}
+
+/// One `--model` argument: a file and the discipline declared for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ModelArg {
+    path: PathBuf,
+    discipline: Option<Discipline>,
+}
+
+/// Parses `PATH[:DISCIPLINE]`.
+///
+/// The discipline is the text after the last `:` when that text is a
+/// discipline name, so a Windows drive (`C:\m.ifc`) or a directory with a
+/// colon stays part of the path. A trailing `:` declares no discipline and
+/// keeps everything before it as the path. Text after the last `:` that
+/// looks like a name but is not a valid one (`m.ifc:Structure`) is refused
+/// rather than read as part of a file name.
+fn model_arg(value: &str) -> Result<ModelArg, String> {
+    let whole = || ModelArg {
+        path: PathBuf::from(value),
+        discipline: None,
+    };
+    let Some((path, suffix)) = value.rsplit_once(':') else {
+        return Ok(whole());
+    };
+    if path.is_empty() {
+        return Ok(whole());
+    }
+    if suffix.is_empty() {
+        return Ok(ModelArg {
+            path: PathBuf::from(path),
+            discipline: None,
+        });
+    }
+    let name_like = suffix
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+    if !name_like {
+        return Ok(whole());
+    }
+    let discipline = Discipline::new(suffix).map_err(|error| error.to_string())?;
+    Ok(ModelArg {
+        path: PathBuf::from(path),
+        discipline: Some(discipline),
+    })
 }
 
 /// How a completed run ends. Errors exit 1 and usage errors 2 (clap).
@@ -191,12 +242,10 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let (definitions, ruleset) = packages(&args.definitions, &args.ruleset)?;
     let registry = axioval::default_registry()?;
     let plan = compile(&registry, &definitions, &ruleset)?;
-    let bytes =
-        fs::read(&args.model).map_err(|error| format!("{}: {error}", args.model.display()))?;
-    let session = import(&args.model, &bytes)?;
+    let (session, bytes) = sources(&args.models)?;
     let (session, meshed) = if args.geometry {
-        let (session, report) = geometry::attach(session, &bytes)
-            .map_err(|error| format!("{}: geometry: {error}", args.model.display()))?;
+        let (session, report) =
+            geometry::attach(session, &bytes).map_err(|error| format!("geometry: {error}"))?;
         (session, Some(report))
     } else {
         (session, None)
@@ -374,6 +423,43 @@ fn listing_command(path: &str, args: &ReportArgs) -> String {
     command
 }
 
+/// Imports every model as one source of one session, with its discipline.
+///
+/// Returns the session and each source's bytes, for meshing. Two models with
+/// the same file name would be the same source, so they are refused.
+fn sources(models: &[ModelArg]) -> Result<(EvidenceSession, geometry::ModelBytes), Box<dyn Error>> {
+    let mut members = Vec::with_capacity(models.len());
+    let mut bytes = geometry::ModelBytes::new();
+    let mut paths: BTreeMap<SourceId, &Path> = BTreeMap::new();
+    for model in models {
+        let path = model.path.as_path();
+        let content = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+        let mut session = import(path, &content)?;
+        let source = session
+            .snapshots()
+            .next()
+            .map(|snapshot| snapshot.source().clone())
+            .ok_or_else(|| format!("{}: the import produced no source", path.display()))?;
+        if let Some(first) = paths.insert(source.clone(), path) {
+            return Err(format!(
+                "{} and {} share the file name `{}`, which names the source; rename one",
+                first.display(),
+                path.display(),
+                source.document
+            )
+            .into());
+        }
+        if let Some(discipline) = &model.discipline {
+            session = session
+                .with_discipline(&source, discipline.clone())
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+        }
+        bytes.insert(source, content);
+        members.push(session);
+    }
+    Ok((EvidenceSession::federate(members)?, bytes))
+}
+
 /// Imports the model, named by its file name so a report does not depend on
 /// where the file was checked from.
 fn import(model: &Path, bytes: &[u8]) -> Result<EvidenceSession, Box<dyn Error>> {
@@ -464,7 +550,48 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::utc;
+    use super::{ModelArg, model_arg, utc};
+    use axioval::ir::Discipline;
+    use std::path::PathBuf;
+
+    fn parsed(path: &str, discipline: Option<&str>) -> ModelArg {
+        ModelArg {
+            path: PathBuf::from(path),
+            discipline: discipline.map(|name| Discipline::new(name).unwrap()),
+        }
+    }
+
+    #[test]
+    fn a_model_argument_splits_off_its_discipline() {
+        assert_eq!(model_arg("m.ifc"), Ok(parsed("m.ifc", None)));
+        assert_eq!(
+            model_arg("dir/m.ifc:structure"),
+            Ok(parsed("dir/m.ifc", Some("structure")))
+        );
+        assert_eq!(
+            model_arg("m.ifc:building_services"),
+            Ok(parsed("m.ifc", Some("building_services")))
+        );
+        // A drive letter or a colon inside the path is not a discipline.
+        assert_eq!(
+            model_arg("C:\\models\\m.ifc"),
+            Ok(parsed("C:\\models\\m.ifc", None))
+        );
+        assert_eq!(
+            model_arg("C:\\m.ifc:mep"),
+            Ok(parsed("C:\\m.ifc", Some("mep")))
+        );
+        assert_eq!(model_arg("a:b/m.ifc"), Ok(parsed("a:b/m.ifc", None)));
+        // A trailing colon keeps a file name that ends in `:name`.
+        assert_eq!(model_arg("odd:arch:"), Ok(parsed("odd:arch", None)));
+        assert_eq!(model_arg(":arch"), Ok(parsed(":arch", None)));
+    }
+
+    #[test]
+    fn a_discipline_that_is_not_a_lowercase_token_is_refused() {
+        assert!(model_arg("m.ifc:Structure").is_err());
+        assert!(model_arg("m.ifc:-structure").is_err());
+    }
 
     #[test]
     fn utc_formats_known_instants() {

@@ -34,6 +34,11 @@ pub enum IrError {
     /// Two objects of one source claim the same external identity.
     #[error("external id {} is claimed by both {} and {}", .0.id, .0.first, .0.second)]
     DuplicateExternalId(Box<ExternalIdClash>),
+    /// A discipline name is not a lowercase token.
+    #[error(
+        "invalid discipline `{0}`: use 1 to 64 lowercase ASCII letters, digits, `-` or `_`, starting with a letter or digit"
+    )]
+    InvalidDiscipline(String),
 }
 
 /// Two objects of one source claiming one external id, in identity order.
@@ -121,6 +126,60 @@ impl ExternalId {
 impl fmt::Display for ExternalId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.scheme, self.value)
+    }
+}
+
+/// The discipline a source plays in a check, such as `architecture` or
+/// `structure`.
+///
+/// A host declaration about a source, never read from it: IFC carries no
+/// discipline. The name is a lowercase token (`[a-z0-9][a-z0-9_-]{0,63}`), so
+/// two spellings of one discipline cannot silently differ by case or
+/// whitespace, and it compares exactly. The engine attaches no vocabulary;
+/// hosts and packages agree on the names.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Discipline(String);
+impl Discipline {
+    /// Longest accepted discipline name, in bytes.
+    pub const MAX_LEN: usize = 64;
+    /// Validates a discipline name.
+    pub fn new(name: impl Into<String>) -> Result<Self, IrError> {
+        let name = name.into();
+        let mut bytes = name.bytes();
+        let valid = name.len() <= Self::MAX_LEN
+            && bytes
+                .next()
+                .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit())
+            && bytes.all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b'_'
+            });
+        if valid {
+            Ok(Self(name))
+        } else {
+            Err(IrError::InvalidDiscipline(name))
+        }
+    }
+    /// The discipline name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl TryFrom<String> for Discipline {
+    type Error = IrError;
+    fn try_from(name: String) -> Result<Self, IrError> {
+        Self::new(name)
+    }
+}
+impl From<Discipline> for String {
+    fn from(discipline: Discipline) -> Self {
+        discipline.0
+    }
+}
+impl fmt::Display for Discipline {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 

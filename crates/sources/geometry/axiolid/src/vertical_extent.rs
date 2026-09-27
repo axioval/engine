@@ -13,7 +13,7 @@ use axiolid_mesh::audit_mesh;
 use axioval_engine::{
     ElevationInterval, VerticalExtent, VerticalExtentError, VerticalExtentService,
 };
-use axioval_ir::{Evidence, ObjectId, SourceId};
+use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, triangles};
 
@@ -25,14 +25,13 @@ const ANGULAR_TOLERANCE: f64 = 1e-9;
 #[derive(Debug)]
 pub struct AxiolidVerticalExtentService {
     geometry: AxiolidGeometry,
-    source: SourceId,
 }
 
 impl AxiolidVerticalExtentService {
     /// Creates a service over the supplied geometry.
     #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self { geometry, source }
+    pub fn new(geometry: AxiolidGeometry) -> Self {
+        Self { geometry }
     }
 }
 
@@ -86,7 +85,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
         // A tessellation is never exact, even with a zero declared deviation.
         let tessellated = !fidelity.is_exact();
         let evidence = Evidence {
-            source: self.source.clone(),
+            source: object.source.clone(),
             locator: format!("vertical-extent:{object}"),
             exact: !tessellated,
         };

@@ -16,15 +16,53 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise.
 ## `axioval check`
 
 ```bash
-axioval check --model building.ifc \
+axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
   --definitions definitions.json --ruleset ruleset.json \
   [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
 ```
 
-Runs the ruleset over an IFC2X3 or IFC4 STEP model. The source document is
-named by the model's file name, so a result does not depend on the directory
-it was checked from.
+Runs the ruleset over one or more IFC2X3 or IFC4 STEP models. Each model is
+one source, named by its file name, so a result does not depend on the
+directory it was checked from.
+
+### Several models and disciplines
+
+`--model` may be repeated. Every model is imported as its own source and all
+of them are checked in one session, so a rule sees every object of every
+model under its source-qualified identity (`ifc-step:arch.ifc/#42` and
+`ifc-step:struct.ifc/#42` are two objects). Two models with the same file name
+would be one source and are refused (status 1); rename one.
+
+A model may declare the discipline it plays with `:DISCIPLINE` after the path:
+
+```bash
+axioval check --model arch.ifc:architecture --model struct.ifc:structure \
+  --definitions d.json --ruleset clash-matrix.json --geometry
+```
+
+A discipline is a lowercase token: letters `a`–`z`, digits, `-` and `_`,
+starting with a letter or digit, at most 64 characters. The text after the
+last `:` is the discipline when it is such a name, so a Windows drive
+(`C:\models\arch.ifc`) or a directory containing `:` stays part of the path.
+Text after the last `:` that looks like a name but is not a valid one
+(`arch.ifc:Architecture`) is a usage error (status 2), never read as part of
+the file name. A trailing `:` declares no discipline, for a file whose name
+itself ends in `:name` (`--model 'odd:name:'`).
+
+Rules scope themselves to disciplines with the `discipline` selector (see
+[Discipline selectors](./capabilities.md#discipline-selectors)). A model
+without a discipline has none: a discipline-scoped rule reports its objects
+not evaluated, once for the model, and the check exits 4 rather than pass.
+
+With `--geometry`, every model is meshed into one geometry set, so a clash
+between an object of one file and an object of another is an ordinary pair.
+The models must share one coordinate system, as models exchanged for
+coordination do; the CLI does not move one onto another.
+
+Reports, `report` and BCF work with several models. Over several documents,
+the summary and listings name objects as `arch.ifc/#42`, and `--object`
+accepts that form.
 
 ### Output
 
@@ -161,7 +199,10 @@ does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
 
 The CLI meshes each product's net body, with openings subtracted, using
-`ifc-geometry` and hands the meshes to the Axiolid geometry services. That
+`ifc-geometry` and hands the meshes to the Axiolid geometry services, one set
+over every model, bound to every model's snapshot. Evidence about one object
+cites that object's model; set-level evidence (free space, guards, envelope,
+storey residuals) cites the first model in source order. That
 bridge lives in the CLI, not in an adapter, because the IFC and Axiolid
 adapters must not depend on each other. Every object ends in one of four
 states:

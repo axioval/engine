@@ -62,7 +62,7 @@ fn rooms() -> AxiolidGeometry {
 }
 
 fn service(geometry: AxiolidGeometry) -> AxiolidDerivedRelationshipService {
-    AxiolidDerivedRelationshipService::new(geometry, source())
+    AxiolidDerivedRelationshipService::new(geometry)
         .with_space(id("a"))
         .with_space(id("b"))
         .with_opening(id("door"))

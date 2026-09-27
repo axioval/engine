@@ -38,7 +38,7 @@ fn slab(z0: f64, z1: f64) -> TriMesh {
 }
 
 fn service(geometry: AxiolidGeometry) -> AxiolidVerticalExtentService {
-    AxiolidVerticalExtentService::new(geometry, source())
+    AxiolidVerticalExtentService::new(geometry)
 }
 
 #[test]

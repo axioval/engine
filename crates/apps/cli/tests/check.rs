@@ -2606,3 +2606,180 @@ fn with_geometry_storey_heights_and_window_to_wall_ratios_are_measured() {
         "{result:#}"
     );
 }
+
+/// A file of 3 m-high rectangular walls: `(first id, centre x, centre y,
+/// x extent, y extent, GlobalId)`. Each wall's product is `first + 6`.
+fn walls_file(walls: &[(u32, f64, f64, f64, f64, &str)]) -> String {
+    let mut data = String::new();
+    for &(first, x, y, length, width, global) in walls {
+        let [p, pos, profile, solid, shape, product, wall] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        let _ = write!(
+            data,
+            "#{p}=IFCCARTESIANPOINT(({x},{y}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},{width});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{wall}=IFCWALL('{global}',$,$,$,$,#3,#{product},$,$);\n"
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+impl Case {
+    /// Architectural walls (subjects) against structural bodies
+    /// (counterparts), in two files of one check.
+    fn discipline_clash(&self, models: &[&str], extra: &[&str]) -> Output {
+        // Two crossing architectural walls: they clash with each other, but
+        // the rule only compares architecture with structure.
+        self.write(
+            "arch.ifc",
+            &walls_file(&[
+                (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000A16"),
+                (20, 2.0, 0.0, 0.2, 4.0, "0000000000000000000A26"),
+            ]),
+        );
+        // A structural wall through the first architectural wall at x = 0.5.
+        self.write(
+            "struct.ifc",
+            &walls_file(&[(10, 0.5, 0.0, 0.2, 4.0, "0000000000000000000S16")]),
+        );
+        let (definitions, ruleset) = self.clash_packages();
+        let mut ruleset: Value =
+            serde_json::from_str(&std::fs::read_to_string(&ruleset).unwrap()).unwrap();
+        let rule = &mut ruleset["root"]["rules"][0];
+        rule["applicability"]["groups"]["walls"]["selector"] = json!({"kind": "allOf", "operands": [
+            {"kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true},
+            {"kind": "discipline", "value": "architecture"},
+        ]});
+        rule["parameters"]["counterparts"]["value"] =
+            json!({"kind": "discipline", "value": "structure"});
+        let ruleset = self.write("ruleset.json", &ruleset.to_string());
+        let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+        command.current_dir(&self.dir).arg("check");
+        for model in models {
+            command.arg("--model").arg(model);
+        }
+        command
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(extra)
+            .env("SOURCE_DATE_EPOCH", "1790416800")
+            .output()
+            .unwrap()
+    }
+}
+
+#[test]
+fn a_clash_rule_between_two_disciplines_finds_a_clash_across_files() {
+    let case = Case::new("discipline-clash");
+    let saved = case.path("result.json");
+    let bcf = case.path("issues.bcfzip");
+    let output = case.discipline_clash(
+        &["arch.ifc:architecture", "struct.ifc:structure"],
+        &[
+            "--geometry",
+            "--report",
+            saved.to_str().unwrap(),
+            "--bcf",
+            bcf.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    // One clash: the architectural wall against the structural one. The two
+    // architectural walls also cross, but neither is a counterpart.
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["source"]["document"], "arch.ifc");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#16");
+    assert_eq!(
+        findings[0]["related"][0]["source"]["document"],
+        "struct.ifc"
+    );
+    assert_eq!(findings[0]["related"][0]["local_id"], "#16");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(message.contains("penetration 0.1000 m"), "{message}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    // Both files were meshed into one set: three walls, all exact.
+    assert_eq!(result["geometry"]["exact"], 3, "{result:#}");
+    assert_eq!(
+        result["objects"]["ifc-step:struct.ifc/#16"]["global_id"], "0000000000000000000S16",
+        "{result:#}"
+    );
+    assert!(std::fs::metadata(&bcf).unwrap().len() > 0);
+
+    // Over two documents the summary qualifies ids, and its hint runs.
+    let summary = stdout(&report(&[saved.to_str().unwrap()]));
+    assert!(summary.contains("arch.ifc/#16"), "{summary}");
+    let listing = stdout(&report(&[
+        saved.to_str().unwrap(),
+        "--object",
+        "arch.ifc/#16",
+    ]));
+    assert!(listing.contains("showing 1–1 of 1"), "{listing}");
+}
+
+#[test]
+fn a_discipline_scoped_rule_over_an_undeclared_model_is_not_evaluated() {
+    let case = Case::new("discipline-undeclared");
+    let output = case.discipline_clash(&["arch.ifc:architecture", "struct.ifc"], &["--geometry"]);
+    // The structural file declares no discipline, so whether its wall is a
+    // counterpart is unknown: never a pass.
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    let outcomes = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(
+        outcomes
+            .iter()
+            .any(|outcome| outcome["source"]["document"] == "struct.ifc"
+                && outcome["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("declares no discipline")),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn two_models_with_one_file_name_or_a_bad_discipline_are_refused() {
+    let case = Case::new("discipline-refused");
+    std::fs::create_dir_all(case.path("other")).unwrap();
+    std::fs::write(
+        case.path("other/arch.ifc"),
+        walls_file(&[(10, 0.0, 0.0, 1.0, 0.2, "0000000000000000000O16")]),
+    )
+    .unwrap();
+    let output = case.discipline_clash(&["arch.ifc", "other/arch.ifc"], &[]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("share the file name `arch.ifc`"),
+        "{}",
+        stderr(&output)
+    );
+
+    let output = case.discipline_clash(&["arch.ifc:Architecture"], &[]);
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("invalid discipline"),
+        "{}",
+        stderr(&output)
+    );
+}

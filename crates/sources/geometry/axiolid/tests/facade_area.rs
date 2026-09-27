@@ -76,7 +76,7 @@ fn a_wall_facing_a_room_counts_its_outer_face_and_free_ends() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("wall"), wall())
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     let area = service.measure_facade_area(&id("wall")).unwrap();
     // The 10 x 3 outer face and the two 0.3 x 3 ends; the inner face is
     // flush with the room, and the top and bottom are not steep.
@@ -92,7 +92,7 @@ fn only_a_declared_space_makes_a_face_interior() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("wall"), wall())
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source());
+    let service = AxiolidFacadeAreaService::new(geometry);
     let area = service.measure_facade_area(&id("wall")).unwrap();
     assert!(close(area.lower_square_metres(), 31.8), "{area:?}");
 
@@ -101,13 +101,10 @@ fn only_a_declared_space_makes_a_face_interior() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("wall"), wall())
         .with_mesh(id("room"), cuboid([0.0, 0.2, 0.0], [10.0, 4.0, 3.0]));
-    let declared = AxiolidFacadeAreaService::new(geometry.clone(), source()).with_space(id("room"));
+    let declared = AxiolidFacadeAreaService::new(geometry.clone()).with_space(id("room"));
     let area = declared.measure_facade_area(&id("wall")).unwrap();
     assert!(close(area.lower_square_metres(), 31.8), "{area:?}");
-    let alone = AxiolidFacadeAreaService::new(
-        AxiolidGeometry::new().with_mesh(id("wall"), wall()),
-        source(),
-    );
+    let alone = AxiolidFacadeAreaService::new(AxiolidGeometry::new().with_mesh(id("wall"), wall()));
     let area = alone.measure_facade_area(&id("wall")).unwrap();
     assert!(close(area.lower_square_metres(), 61.8), "{area:?}");
 }
@@ -120,7 +117,7 @@ fn a_window_between_wall_panels_covers_their_ends() {
         .with_mesh(id("east"), cuboid([6.0, -0.3, 0.0], [10.0, 0.0, 3.0]))
         .with_mesh(id("window"), cuboid([4.0, -0.3, 0.0], [6.0, 0.0, 3.0]))
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     let west = service.measure_facade_area(&id("west")).unwrap();
     assert!(close(west.lower_square_metres(), 12.9), "{west:?}");
     let window = service.measure_facade_area(&id("window")).unwrap();
@@ -139,7 +136,7 @@ fn a_reveal_facing_its_own_body_is_not_facade() {
             ]),
         )
         .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [8.8, 4.0, 3.0]));
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     let area = service.measure_facade_area(&id("wall")).unwrap();
     assert!(close(area.lower_square_metres(), 25.8), "{area:?}");
 }
@@ -152,7 +149,7 @@ fn a_body_in_front_of_a_face_does_not_make_it_interior() {
         .with_mesh(id("wall"), wall())
         .with_mesh(id("opposite"), cuboid([0.0, -1.0, 0.0], [10.0, -0.8, 3.0]))
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     let area = service.measure_facade_area(&id("wall")).unwrap();
     assert!(close(area.lower_square_metres(), 31.8), "{area:?}");
 }
@@ -165,7 +162,7 @@ fn a_partly_covered_face_widens_the_interval_instead_of_being_guessed() {
         .with_mesh(id("wall"), wall())
         .with_mesh(id("annex"), cuboid([0.0, -2.0, 0.0], [2.0, -0.3, 3.0]))
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     let area = service.measure_facade_area(&id("wall")).unwrap();
     assert!(!area.is_exact());
     assert!(close(area.lower_square_metres(), 16.8), "{area:?}");
@@ -178,7 +175,7 @@ fn a_tessellated_wall_measures_an_interval_around_its_mesh() {
     let geometry = AxiolidGeometry::new()
         .with_tessellated_mesh(id("wall"), wall(), 0.001)
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     let area = service.measure_facade_area(&id("wall")).unwrap();
     assert!(!area.is_exact() && !area.evidence().exact);
     assert!(area.lower_square_metres() < 31.8 && 31.8 < area.upper_square_metres());
@@ -187,7 +184,7 @@ fn a_tessellated_wall_measures_an_interval_around_its_mesh() {
     let geometry = AxiolidGeometry::new()
         .with_tessellated_mesh(id("wall"), wall(), 0.0)
         .with_mesh(id("room"), room());
-    let service = AxiolidFacadeAreaService::new(geometry, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
     assert!(!service.measure_facade_area(&id("wall")).unwrap().is_exact());
 }
 
@@ -196,7 +193,7 @@ fn a_tessellation_within_reach_refuses_and_one_beyond_it_does_not() {
     let near = AxiolidGeometry::new()
         .with_mesh(id("wall"), wall())
         .with_tessellated_mesh(id("room"), room(), 0.001);
-    let service = AxiolidFacadeAreaService::new(near, source()).with_space(id("room"));
+    let service = AxiolidFacadeAreaService::new(near).with_space(id("room"));
     assert!(matches!(
         service.measure_facade_area(&id("wall")),
         Err(FacadeAreaError::Unavailable(_))
@@ -209,36 +206,35 @@ fn a_tessellation_within_reach_refuses_and_one_beyond_it_does_not() {
             cuboid([20.0, 0.0, 0.0], [22.0, 2.0, 3.0]),
             0.001,
         );
-    let service = AxiolidFacadeAreaService::new(far, source());
+    let service = AxiolidFacadeAreaService::new(far);
     assert!(service.measure_facade_area(&id("wall")).is_ok());
 }
 
 #[test]
 fn unknown_bodiless_and_unmeasured_objects_refuse() {
     let base = || AxiolidGeometry::new().with_mesh(id("wall"), wall());
-    let service = AxiolidFacadeAreaService::new(base(), source());
+    let service = AxiolidFacadeAreaService::new(base());
     assert_eq!(
         service.measure_facade_area(&id("ghost")),
         Err(FacadeAreaError::UnknownObject(id("ghost")))
     );
 
-    let service = AxiolidFacadeAreaService::new(base().with_no_body(id("storey")), source());
+    let service = AxiolidFacadeAreaService::new(base().with_no_body(id("storey")));
     assert!(matches!(
         service.measure_facade_area(&id("storey")),
         Err(FacadeAreaError::Unavailable(_))
     ));
 
     // An unmeasured body could stand against any face.
-    let service =
-        AxiolidFacadeAreaService::new(base().with_unmeasured(id("pipe"), "no mesh"), source());
+    let service = AxiolidFacadeAreaService::new(base().with_unmeasured(id("pipe"), "no mesh"));
     assert!(matches!(
         service.measure_facade_area(&id("wall")),
         Err(FacadeAreaError::Unavailable(_))
     ));
 
     // So could a declared space without a body.
-    let service = AxiolidFacadeAreaService::new(base().with_no_body(id("room")), source())
-        .with_space(id("room"));
+    let service =
+        AxiolidFacadeAreaService::new(base().with_no_body(id("room"))).with_space(id("room"));
     assert!(matches!(
         service.measure_facade_area(&id("wall")),
         Err(FacadeAreaError::Unavailable(_))

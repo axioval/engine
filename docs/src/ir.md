@@ -16,6 +16,8 @@ The IR describes what a checker can observe without mirroring any source schema.
 
 Adapters may expose external aliases, but aliases never replace source-qualified identity.
 
+A `Discipline` names the role a source plays in a check (`architecture`, `structure`): a lowercase token of 1 to 64 ASCII letters, digits, `-` or `_`, starting with a letter or digit, validated when constructed or deserialized. It is a host declaration about a source, never read from it, and the IR attaches no vocabulary to it. The `discipline` selector (`{"kind": "discipline", "value": "structure"}`) selects by it; see [Discipline selectors](./capabilities.md#discipline-selectors).
+
 An alias is an `ExternalId`: an adapter-defined `scheme` and a `value`, listed in `Object::external_ids` and read with `Object::external_id(scheme)`. It exists so output formats and cross-revision tools can name an object the way other software does; capabilities never key on it. `Project::new` rejects an object with two ids in one scheme and two objects of one source sharing an id, because any consumer resolving that alias would pick one silently. Two sources may share an alias: two revisions of one model do.
 
 ## Semantic data

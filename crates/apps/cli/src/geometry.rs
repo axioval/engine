@@ -6,6 +6,11 @@
 //! hands the meshes to the geometry services under the object identities the
 //! IFC session already uses.
 //!
+//! With several models, every source is meshed into one geometry set under
+//! its own source-qualified identities, in one shared coordinate system, and
+//! every service is bound to all the session's snapshots. A clash between
+//! objects of two files is then an ordinary pair of the set.
+//!
 //! Every object ends up in exactly one of three states, because the geometry
 //! services treat them differently:
 //!
@@ -89,52 +94,94 @@ pub struct GeometryReport {
     pub unmeasured: Vec<(ObjectId, String)>,
 }
 
-/// Meshes the model in `bytes` and registers geometry services for `session`.
+/// Each source's model bytes, keyed by the source the session imported them as.
+pub type ModelBytes = BTreeMap<SourceId, Vec<u8>>;
+
+/// One parsed model and its unit scale, per source.
+struct Parsed {
+    model: Model,
+    units: ifc_geometry::units::UnitScale,
+}
+
+/// Parses the model of every snapshot's source.
+fn parse(
+    snapshots: &[SourceSnapshot],
+    models: &ModelBytes,
+) -> Result<BTreeMap<SourceId, Parsed>, Box<dyn Error>> {
+    let mut parsed = BTreeMap::new();
+    for snapshot in snapshots {
+        let source = snapshot.source();
+        let bytes = models
+            .get(source)
+            .ok_or_else(|| format!("no model bytes for source `{source}`"))?;
+        let model = StepCodec
+            .read_bytes(bytes)
+            .map_err(|error| format!("{}: {error}", source.document))?;
+        let units = ifc_geometry::units::resolve(&model);
+        parsed.insert(source.clone(), Parsed { model, units });
+    }
+    Ok(parsed)
+}
+
+/// Meshes every source's model and registers geometry services for
+/// `session`, bound to all its snapshots.
 ///
-/// Policy choices IFC does not state, such as which surfaces are walkable or
-/// which spaces bound the envelope, are the rules' own selections, carried in
-/// each request; the bridge declares none of them.
+/// `models` holds each source's bytes, keyed by the source the session
+/// imported them as. Policy choices IFC does not state, such as which
+/// surfaces are walkable or which spaces bound the envelope, are the rules'
+/// own selections, carried in each request; the bridge declares none of them.
 ///
 /// # Errors
 ///
-/// Returns an error when the bytes do not parse (the session already parsed
-/// them, so this means they changed) or a service cannot be registered.
+/// Returns an error when a source has no bytes, the bytes do not parse (the
+/// session already parsed them, so this means they changed) or a service
+/// cannot be registered.
 pub fn attach(
     session: EvidenceSession,
-    bytes: &[u8],
+    models: &ModelBytes,
 ) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error>> {
-    let model = StepCodec.read_bytes(bytes)?;
-    let snapshots: Vec<_> = session.snapshots().cloned().collect();
-    let [snapshot] = snapshots.as_slice() else {
-        return Err("geometry needs a session over exactly one source".into());
+    let snapshots: Vec<SourceSnapshot> = session.snapshots().cloned().collect();
+    let Some(first) = snapshots.first() else {
+        return Err("geometry needs a session over at least one source".into());
     };
-    let source = snapshot.source().clone();
+    // Set-level evidence (free space, guard, envelope, storey residuals) is
+    // cited under one source; evidence about one object cites its own.
+    let source = first.source().clone();
+    let parsed = parse(&snapshots, models)?;
     let hierarchy = session
         .service::<TypeHierarchyServiceHandle>()
         .ok_or("the session has no type hierarchy to classify objects with")?
         .clone();
-    let is_a =
-        |kind: &str, ancestor: &str| hierarchy.is_a(&source, kind, ancestor).unwrap_or(false);
+    let is_a = |id: &ObjectId, ancestor: &str, kinds: &BTreeMap<ObjectId, String>| {
+        kinds
+            .get(id)
+            .is_some_and(|kind| hierarchy.is_a(&id.source, kind, ancestor).unwrap_or(false))
+    };
+    let kinds: BTreeMap<ObjectId, String> = session
+        .project()
+        .objects()
+        .map(|object| (object.id.clone(), object.kind().to_owned()))
+        .collect();
+    let is_a = |id: &ObjectId, ancestor: &str| is_a(id, ancestor, &kinds);
 
     let backend = ifc_geometry::compile::default_backend();
-    let units = ifc_geometry::units::resolve(&model);
     let mut geometry = AxiolidGeometry::new();
     let mut report = GeometryReport::default();
-    let mut kinds: BTreeMap<ObjectId, String> = BTreeMap::new();
     let mut voids: Vec<(ObjectId, Void)> = Vec::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
-        let kind = object.kind().to_owned();
-        kinds.insert(id.clone(), kind.clone());
-        let is_space = is_a(&kind, "IfcSpace");
-        let bodiless = !is_a(&kind, "IfcProduct")
-            || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&kind, ancestor)));
+        let Some(Parsed { model, units }) = parsed.get(&id.source) else {
+            return Err(format!("no model for source `{}`", id.source).into());
+        };
+        let is_space = is_a(&id, "IfcSpace");
+        let bodiless = !is_a(&id, "IfcProduct")
+            || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&id, ancestor)));
         if bodiless {
-            if is_a(&kind, "IfcOpeningElement") {
+            if is_a(&id, "IfcOpeningElement") {
                 let void = entity_id(&id)
                     .ok_or_else(|| "not a STEP instance id".to_owned())
-                    .and_then(|entity| mesh(&backend, &model, &units, entity))
+                    .and_then(|entity| mesh(&backend, model, units, entity))
                     .and_then(|meshed| meshed.ok_or_else(|| "no body representation".into()));
                 voids.push((id.clone(), void));
             }
@@ -149,7 +196,7 @@ pub fn attach(
             geometry = geometry.with_unmeasured(id, "not a STEP instance id");
             continue;
         };
-        match mesh(&backend, &model, &units, entity) {
+        match mesh(&backend, model, units, entity) {
             Ok(Some((mesh, true))) => {
                 geometry = geometry.with_mesh(id, mesh);
                 report.exact += 1;
@@ -189,37 +236,35 @@ pub fn attach(
         };
     }
     let envelope = envelope_service(&session, &geometry, &source, &kinds)?;
-    let space = space_service(&model, &geometry, &source, &kinds, &is_a);
-    let derived = derived_service(&geometry, &source, &kinds, &is_a, voids);
-    let facade = facade_service(&geometry, &source, &kinds, &is_a);
-    let session = register(session, snapshot, geometry, space, envelope)?
-        .with_host_service(
-            FacadeAreaServiceHandle::new(Arc::new(facade)),
-            std::slice::from_ref(snapshot),
-        )?
+    let space = space_service(&parsed, &geometry, &source, &kinds, &is_a);
+    let derived = derived_service(&geometry, &kinds, &is_a, voids);
+    let facade = facade_service(&geometry, &kinds, &is_a);
+    let session = register(session, &snapshots, geometry, space, envelope)?
+        .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
         .with_derived_relationships(
             DerivedRelationshipServiceHandle::new(Arc::new(derived)),
-            std::slice::from_ref(snapshot),
+            &snapshots,
         )?;
     Ok((session, report))
 }
 
-/// Registers every geometry service over `geometry` for `snapshot`.
+/// Registers every geometry service over `geometry`, bound to `snapshots`.
 fn register(
     session: EvidenceSession,
-    snapshot: &SourceSnapshot,
+    snapshots: &[SourceSnapshot],
     geometry: AxiolidGeometry,
     space: AxiolidSpaceService,
     envelope: AxiolidEnvelopeMembershipService,
 ) -> Result<EvidenceSession, Box<dyn Error>> {
-    let source = snapshot.source().clone();
-    let bound = std::slice::from_ref(snapshot);
+    let source = snapshots
+        .first()
+        .ok_or("geometry needs a session over at least one source")?
+        .source()
+        .clone();
+    let bound = snapshots;
     let session = session
         .with_host_service(
-            ContactServiceHandle::new(Arc::new(AxiolidContactService::new(
-                geometry.clone(),
-                source.clone(),
-            ))),
+            ContactServiceHandle::new(Arc::new(AxiolidContactService::new(geometry.clone()))),
             bound,
         )?
         .with_host_service(
@@ -242,7 +287,6 @@ fn register(
         .with_host_service(
             LinearQuantityServiceHandle::new(Arc::new(AxiolidLinearQuantityService::new(
                 geometry.clone(),
-                source.clone(),
             ))),
             bound,
         )?
@@ -256,7 +300,6 @@ fn register(
         .with_host_service(
             VerticalExtentServiceHandle::new(Arc::new(AxiolidVerticalExtentService::new(
                 geometry.clone(),
-                source.clone(),
             ))),
             bound,
         )?
@@ -288,13 +331,13 @@ fn register(
 fn doorways(
     relationships: &RelationshipSelectionServiceHandle,
     kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&str, &str) -> bool,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
 ) -> Vec<(ObjectId, usize)> {
     let of_kind = |ancestor: &str| -> Vec<ObjectId> {
         kinds
-            .iter()
-            .filter(|(_, kind)| is_a(kind, ancestor))
-            .map(|(id, _)| id.clone())
+            .keys()
+            .filter(|id| is_a(id, ancestor))
+            .cloned()
             .collect()
     };
     let doors = of_kind("IfcDoor");
@@ -350,7 +393,7 @@ fn doorways(
 fn groups(
     relationships: Option<&RelationshipSelectionServiceHandle>,
     kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&str, &str) -> bool,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
 ) -> Vec<(ObjectId, Result<Vec<ObjectId>, String>)> {
     let everything: Vec<ObjectId> = kinds.keys().cloned().collect();
     let members = |group: &ObjectId| -> Result<Vec<ObjectId>, String> {
@@ -371,9 +414,9 @@ fn groups(
         Ok(selection.candidates().to_vec())
     };
     kinds
-        .iter()
-        .filter(|(_, kind)| is_a(kind, "IfcGroup"))
-        .map(|(group, _)| (group.clone(), members(group)))
+        .keys()
+        .filter(|id| is_a(id, "IfcGroup"))
+        .map(|group| (group.clone(), members(group)))
         .collect()
 }
 
@@ -432,16 +475,15 @@ type Void = Result<(axiolid_mesh::TriMesh, bool), String>;
 /// finding no space beside it.
 fn derived_service(
     geometry: &AxiolidGeometry,
-    source: &SourceId,
     kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&str, &str) -> bool,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
     voids: Vec<(ObjectId, Void)>,
 ) -> AxiolidDerivedRelationshipService {
-    let mut service = AxiolidDerivedRelationshipService::new(geometry.clone(), source.clone());
-    for (id, kind) in kinds {
-        if is_a(kind, "IfcSpace") {
+    let mut service = AxiolidDerivedRelationshipService::new(geometry.clone());
+    for id in kinds.keys() {
+        if is_a(id, "IfcSpace") {
             service = service.with_space(id.clone());
-        } else if is_a(kind, "IfcDoor") || is_a(kind, "IfcWindow") {
+        } else if is_a(id, "IfcDoor") || is_a(id, "IfcWindow") {
             service = service.with_opening(id.clone());
         }
     }
@@ -463,17 +505,13 @@ fn derived_service(
 /// not this bridge's to decide: the rule selects the walls it measures.
 fn facade_service(
     geometry: &AxiolidGeometry,
-    source: &SourceId,
     kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&str, &str) -> bool,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
 ) -> AxiolidFacadeAreaService {
-    kinds
-        .iter()
-        .filter(|(_, kind)| is_a(kind, "IfcSpace"))
-        .fold(
-            AxiolidFacadeAreaService::new(geometry.clone(), source.clone()),
-            |service, (id, _)| service.with_space(id.clone()),
-        )
+    kinds.keys().filter(|id| is_a(id, "IfcSpace")).fold(
+        AxiolidFacadeAreaService::new(geometry.clone()),
+        |service, id| service.with_space(id.clone()),
+    )
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {
@@ -580,28 +618,38 @@ fn polygonal(profile: &Profile) -> bool {
 
 /// Space validation needs roles and storeys, which are IFC facts.
 ///
-/// Storeys come from the spatial tree. An element the file places twice, or
-/// anything under a structure aggregated twice, gets no storey: the tree keeps
-/// one of the two parents, and a guessed storey would move floor area between
-/// storeys without saying so.
+/// Storeys come from each source's own spatial tree, so an object's storey
+/// is always one of its own model's. An element the file places twice, or
+/// anything under a structure aggregated twice, gets no storey: the tree
+/// keeps one of the two parents, and a guessed storey would move floor area
+/// between storeys without saying so.
 fn space_service(
-    model: &Model,
+    parsed: &BTreeMap<SourceId, Parsed>,
     geometry: &AxiolidGeometry,
     source: &SourceId,
     kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&str, &str) -> bool,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
 ) -> AxiolidSpaceService {
-    let tree = SpatialTree::build(model);
-    let ambiguous: BTreeSet<EntityId> = tree
-        .anomalies()
+    let trees: BTreeMap<&SourceId, (SpatialTree, BTreeSet<EntityId>)> = parsed
         .iter()
-        .filter_map(|anomaly| match anomaly {
-            SpatialAnomaly::ContainedTwice { element, .. } => Some(*element),
-            SpatialAnomaly::AggregatedTwice { child, .. } => Some(*child),
-            _ => None,
+        .map(|(source, Parsed { model, .. })| {
+            let tree = SpatialTree::build(model);
+            let ambiguous: BTreeSet<EntityId> = tree
+                .anomalies()
+                .iter()
+                .filter_map(|anomaly| match anomaly {
+                    SpatialAnomaly::ContainedTwice { element, .. } => Some(*element),
+                    SpatialAnomaly::AggregatedTwice { child, .. } => Some(*child),
+                    _ => None,
+                })
+                .collect();
+            (source, (tree, ambiguous))
         })
         .collect();
-    let storey_of = |entity: EntityId| -> Option<EntityId> {
+    let storey_of = |tree: &SpatialTree,
+                     ambiguous: &BTreeSet<EntityId>,
+                     entity: EntityId|
+     -> Option<EntityId> {
         let mut chain = vec![entity];
         chain.extend(tree.container_of(entity));
         let start = *chain.last()?;
@@ -616,26 +664,26 @@ fn space_service(
     };
 
     let mut service = AxiolidSpaceService::new(geometry.clone(), source.clone());
-    for (id, kind) in kinds {
-        let Some(entity) = entity_id(id) else {
+    for id in kinds.keys() {
+        let (Some(entity), Some((tree, ambiguous))) = (entity_id(id), trees.get(&id.source)) else {
             continue;
         };
-        if is_a(kind, "IfcSpace") {
+        if is_a(id, "IfcSpace") {
             service = service.with_space(id.clone());
-        } else if is_a(kind, "IfcSlab") {
+        } else if is_a(id, "IfcSlab") {
             service = service.with_slab(id.clone());
-        } else if is_a(kind, "IfcRoof") {
+        } else if is_a(id, "IfcRoof") {
             service = service.with_roof(id.clone());
-        } else if is_a(kind, "IfcBuilding") {
+        } else if is_a(id, "IfcBuilding") {
             service = service.with_building(id.clone());
         }
         let is_structure = tree.node(entity).is_some();
-        if (!is_structure || is_a(kind, "IfcSpace"))
+        if (!is_structure || is_a(id, "IfcSpace"))
             && !geometry.has_no_body(id)
-            && let Some(storey) = storey_of(entity)
+            && let Some(storey) = storey_of(tree, ambiguous, entity)
         {
             let storey = ObjectId {
-                source: source.clone(),
+                source: id.source.clone(),
                 local_id: storey.to_string(),
             };
             service = service.with_storey(id.clone(), storey);

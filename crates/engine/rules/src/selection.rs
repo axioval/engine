@@ -3,14 +3,15 @@
 use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationError, ClassificationServiceHandle,
     ConceptBindings, NotEvaluatedReason, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, TypeHierarchyError,
-    TypeHierarchyServiceHandle,
+    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, SourceDisciplines,
+    TypeHierarchyError, TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{
     ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, Selector,
 };
 use axioval_ir::{
-    Date, DateTime, Evidence, Object, PropertyValue, QuantityDimension, TemporalPrecision,
+    Date, DateTime, Discipline, Evidence, Object, PropertyValue, QuantityDimension,
+    TemporalPrecision,
 };
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
@@ -106,6 +107,37 @@ pub(crate) fn selector_matches(
             quantifier,
             selector,
         } => related_matches(context, object, path, *quantifier, selector, evidence),
+        Selector::Discipline { value } => discipline_matches(context, object, value),
+    }
+}
+
+/// Whether `object`'s source plays `discipline`.
+///
+/// The discipline is the session's declaration about the source. A source
+/// that declares none is unknown, reported once per source (`NotRecorded`
+/// with a source-only message), never a non-match: otherwise a rule scoped to
+/// a discipline would pass over a model nobody classified.
+fn discipline_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    discipline: &Discipline,
+) -> Selection {
+    let Some(disciplines) = context.services.get::<SourceDisciplines>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "source disciplines are not available outside an evidence session".into(),
+        );
+    };
+    match disciplines.of(&object.id.source) {
+        Some(declared) if declared == discipline => Selection::Match,
+        Some(_) => Selection::NoMatch,
+        None => Selection::NotEvaluated(
+            NotEvaluatedReason::NotRecorded,
+            format!(
+                "source `{}` declares no discipline, so the `discipline` selector cannot decide",
+                object.id.source
+            ),
+        ),
     }
 }
 

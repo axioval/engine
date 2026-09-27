@@ -320,7 +320,11 @@ impl SpaceService for AxiolidSpaceService {
         let subject = self.triangles_of(space)?;
         self.require_exact(space, 0.0, false, |_| false)?;
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
-        ClearHeightEvidence::try_new(space.clone(), (ceiling - floor).max(0.0), self.evidence())
+        ClearHeightEvidence::try_new(
+            space.clone(),
+            (ceiling - floor).max(0.0),
+            Evidence::exact(space.source.clone(), "axiolid:space"),
+        )
     }
 
     fn measure_boundary_gaps(

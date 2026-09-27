@@ -23,7 +23,7 @@ use axioval_engine::{
     CompleteRelationshipSelection, Derivation, DerivedRelationshipService, RelationshipQuery,
     RelationshipSelectionError, RelationshipSelectionRequest, TraversalDirection,
 };
-use axioval_ir::{Evidence, ObjectId, SourceId};
+use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::planar::{footprint_measure, plan_overlap_area};
@@ -87,7 +87,6 @@ struct SpaceBody<'a> {
 /// [`Self::with_opening_void`].
 pub struct AxiolidDerivedRelationshipService {
     geometry: AxiolidGeometry,
-    source: SourceId,
     spaces: BTreeSet<ObjectId>,
     openings: BTreeSet<ObjectId>,
     voids: BTreeMap<ObjectId, Void>,
@@ -97,10 +96,9 @@ pub struct AxiolidDerivedRelationshipService {
 impl AxiolidDerivedRelationshipService {
     /// Creates a service over the supplied geometry.
     #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
+    pub fn new(geometry: AxiolidGeometry) -> Self {
         Self {
             geometry,
-            source,
             spaces: BTreeSet::new(),
             openings: BTreeSet::new(),
             voids: BTreeMap::new(),
@@ -528,10 +526,6 @@ impl AxiolidDerivedRelationshipService {
         }
         Ok(derived)
     }
-
-    fn evidence(&self, locator: String) -> Evidence {
-        Evidence::exact(self.source.clone(), locator)
-    }
 }
 
 /// One request's traversal: the subjects' edges and the evidence cited.
@@ -689,11 +683,14 @@ impl DerivedRelationshipService for AxiolidDerivedRelationshipService {
             .collect();
         // The scan locator makes an empty answer reviewable: every subject
         // was measured against every declared space.
-        let mut evidence = vec![self.evidence(format!(
+        // Cited under the anchor's source: in a set over several sources the
+        // derivation is about the anchor.
+        let cite = |locator| Evidence::exact(anchor.source.clone(), locator);
+        let mut evidence = vec![cite(format!(
             "{identity}:derived-from:{anchor}:{} space(s)",
             self.spaces.len()
         ))];
-        evidence.extend(walk.cited.into_iter().map(|locator| self.evidence(locator)));
+        evidence.extend(walk.cited.into_iter().map(cite));
         CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
     }
 }

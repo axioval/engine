@@ -10,7 +10,7 @@
 
 use axiolid_measure::{closest_points_on_triangles, surface_properties};
 use axioval_engine::{ContactError, ContactEvidence, ContactRequest, ContactService, ContactSide};
-use axioval_ir::{Evidence, SourceId};
+use axioval_ir::Evidence;
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::plan_overlap_area;
@@ -27,14 +27,13 @@ const AUDIT_ANGULAR_TOLERANCE: f64 = 1e-9;
 #[derive(Debug)]
 pub struct AxiolidContactService {
     geometry: AxiolidGeometry,
-    source: SourceId,
 }
 
 impl AxiolidContactService {
     /// Creates a service over the supplied geometry.
     #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self { geometry, source }
+    pub fn new(geometry: AxiolidGeometry) -> Self {
+        Self { geometry }
     }
 }
 
@@ -211,7 +210,7 @@ impl ContactService for AxiolidContactService {
             nearest,
             touching,
             Evidence::exact(
-                self.source.clone(),
+                request.subject().source.clone(),
                 format!("axiolid:contact:{}", request.subject().local_id),
             ),
         )

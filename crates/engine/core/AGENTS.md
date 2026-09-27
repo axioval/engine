@@ -19,6 +19,9 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 `object_frame.rs` owns object placement frames and stated fronts. A frame is grounded on the requested object and carries exact reviewable evidence from its source; a front is `Stated` only where the source states one and is never inferred from axes, shape or type. `forward` is a placement axis, not a front.
 
 `session.rs` owns immutable project/source snapshots and the session-authoritative service registry. Every session service must implement `SnapshotBoundService`; reject unbound, duplicate, unknown, or non-identical source/revision/fingerprint/schema bindings before registration.
+`session.rs` owns immutable project/source snapshots and the session-authoritative service registry. Every session service must implement `SnapshotBoundService`; reject unbound, duplicate, unknown, or non-identical source/revision/fingerprint/schema bindings before registration. It also holds each source's declared `Discipline`, beside the snapshot and never in its identity, which the runtime installs per run as `SourceDisciplines` (replacing any host copy, like `ConceptBindings`).
+
+`federation.rs` routes a federated session's semantic services to the member owning each request's source. A source no member covers is refused, never answered empty; a relationship request is narrowed to the anchor member's part of the universe and bound back to the whole request. `EvidenceSession::federate` refuses any member service it cannot route: add a routed interface to `routed` and `register` together, or the count check turns it into `UnfederableService`.
 
 `walkability.rs` owns complete source-neutral walkable-region snapshots and deterministic three-valued width-constrained routes. Derived region IDs are evidence-local, not model objects. Reject unrequested object mappings, relation-only portals, duplicate passages, incomplete coverage, and backend geometry types.
 

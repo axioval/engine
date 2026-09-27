@@ -55,7 +55,7 @@ fn measure_as_declared(
     geometry: AxiolidGeometry,
     scope: ObjectId,
 ) -> Result<f64, LinearQuantityError> {
-    let service = AxiolidLinearQuantityService::new(geometry, source());
+    let service = AxiolidLinearQuantityService::new(geometry);
     let request =
         LinearQuantityRequest::new(scope, LinearQuantityKind::ShelfRunningLength(shelf()));
     service
@@ -157,7 +157,7 @@ fn a_footprint_bound_is_not_reported_as_exact() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("room"), room(6.0, 6.0, 3.0))
         .with_doorways(id("room"), 0);
-    let service = AxiolidLinearQuantityService::new(geometry, source());
+    let service = AxiolidLinearQuantityService::new(geometry);
     let request =
         LinearQuantityRequest::new(id("room"), LinearQuantityKind::ShelfRunningLength(shelf()));
     let evidence = service

@@ -65,7 +65,7 @@ fn a_slab_resting_on_a_wall_reports_full_contact() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))
@@ -90,7 +90,7 @@ fn a_counterpart_beyond_the_gap_tolerance_is_not_touching() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.5, 2.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))
@@ -111,7 +111,7 @@ fn partial_coverage_is_measured_as_a_fraction_not_rounded_to_all_or_nothing() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad_at(0.005, 1.0, 1.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))
@@ -133,7 +133,7 @@ fn a_counterpart_on_the_other_side_is_not_contact_for_the_requested_side() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(-0.005, 2.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))
@@ -154,7 +154,7 @@ fn a_counterpart_on_the_other_side_is_not_contact_for_the_requested_side() {
 
 #[test]
 fn an_unknown_subject_is_unavailable_rather_than_silently_zero() {
-    let service = AxiolidContactService::new(AxiolidGeometry::new(), source());
+    let service = AxiolidContactService::new(AxiolidGeometry::new());
     let outcome = service.measure_contact(&request("absent", &["wall"], ContactSide::Above));
     assert_eq!(outcome.unwrap_err(), ContactError::Unavailable);
 }
@@ -164,7 +164,7 @@ fn contact_evidence_is_exact_and_locates_its_subject() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))
@@ -189,7 +189,7 @@ fn overlapping_counterparts_cannot_report_more_than_the_whole_face() {
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall-a"), quad(0.005, 2.0))
         .with_mesh(id("wall-b"), quad(0.005, 2.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["wall-a", "wall-b"], ContactSide::Above))
@@ -213,7 +213,7 @@ fn a_void_between_counterparts_is_not_reported_as_contact() {
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("left"), quad_at(0.005, 0.5, 0.0))
         .with_mesh(id("right"), quad_at(0.005, 0.5, 1.5));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let evidence = service
         .measure_contact(&request("slab", &["left", "right"], ContactSide::Above))
@@ -241,7 +241,7 @@ fn an_overlap_below_the_minimum_polygon_area_is_discarded() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad_at(0.005, 2.0, 1.999));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
     // Minimum polygon area 0.01 m2 is five times the sliver.
     let strict = ContactTolerance::try_new(0.01, 0.01, 0.01).expect("valid tolerance");
     let measured = service
@@ -268,7 +268,7 @@ fn an_unmeasured_candidate_makes_contact_unavailable() {
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0))
         .with_unmeasured(id("beam"), "unsupported representation");
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
     assert_eq!(
         service.measure_contact(&request("slab", &["wall", "beam"], ContactSide::Above)),
         Err(ContactError::Unavailable)
@@ -283,7 +283,7 @@ fn an_unmeasured_object_outside_the_candidates_is_ignored() {
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0))
         .with_unmeasured(id("beam"), "unsupported representation");
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
     let evidence = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))
         .expect("the beam was not asked about");
@@ -298,7 +298,7 @@ fn an_undescribed_candidate_is_unavailable_but_a_bodiless_one_is_skipped() {
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad(0.005, 2.0))
         .with_no_body(id("storey"));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
     assert_eq!(
         service.measure_contact(&request("slab", &["wall", "ghost"], ContactSide::Above)),
         Err(ContactError::Unavailable)
@@ -317,7 +317,7 @@ fn only_requested_candidates_count_as_contact() {
         .with_mesh(id("slab"), quad(0.0, 2.0))
         .with_mesh(id("wall"), quad_at(0.005, 1.0, 1.0))
         .with_mesh(id("column"), quad(0.005, 2.0));
-    let service = AxiolidContactService::new(geometry, source());
+    let service = AxiolidContactService::new(geometry);
 
     let walls_only = service
         .measure_contact(&request("slab", &["wall"], ContactSide::Above))

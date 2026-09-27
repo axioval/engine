@@ -33,6 +33,39 @@ All notable changes are documented here. This project follows Semantic Versionin
   exact project length unit. IFC states no front, so every IFC frame reports
   `NotStated`; unplaced objects are `NotPlaced`, and `IfcGridPlacement` and
   unresolvable length units are refused. Door leaves are still to come. (#36)
+- **Several models in one check, with a discipline per source.**
+  `axioval check` takes `--model` repeatedly; each file is one source of one
+  session, under source-qualified identities, and `--model PATH:DISCIPLINE`
+  declares the discipline it plays (`arch.ifc:architecture`). With
+  `--geometry` every model is meshed into one geometry set bound to all
+  snapshots, so a clash between two files is an ordinary pair. Two models
+  with one file name are refused, and an invalid discipline is a usage
+  error. Summaries over several documents name objects `arch.ifc/#42`, and
+  `report --object` now accepts that form. `EvidenceSession::federate`
+  combines sessions over disjoint sources and routes each semantic service
+  (properties, relationships, type hierarchy, classifications, integrity,
+  object frames) to the member owning the request's source, refusing an
+  uncovered source
+  and a member holding a service it cannot route (`UnfederableService`).
+  `EvidenceSession::with_discipline` declares a source's `Discipline` (a
+  lowercase token, new in `axioval-ir`), kept beside the snapshot rather
+  than in its identity; the runtime installs the declarations per run as
+  `SourceDisciplines`. The new `discipline` selector
+  (`{"kind": "discipline", "value": "structure"}`) selects every object of
+  the sources playing that discipline; an object whose source declares none
+  is not evaluated, once per rule and source, never a non-match. Axiolid
+  contact, facade-area, vertical-extent, shelf-length, clear-height and
+  derived-relationship evidence now cites the measured object's source.
+  **Breaking:** `Selector` and `IrError` gain the `Discipline` and
+  `InvalidDiscipline` variants, `EvidenceSessionError` gains `UnknownSource`,
+  `DuplicateDiscipline` and `UnfederableService`;
+  `TypeHierarchyServiceHandle` is no longer a tuple struct;
+  `AxiolidContactService::new`, `AxiolidDerivedRelationshipService::new`,
+  `AxiolidFacadeAreaService::new`, `AxiolidLinearQuantityService::new` and
+  `AxiolidVerticalExtentService::new` no longer take a `SourceId`; the CLI's
+  `--model` value is parsed as `PATH[:DISCIPLINE]`. The MCS package schema
+  needs the matching `discipline` selector. (#28)
+
 - **Derived light-opening area in `area-ratio`.** With
   `numerator_derivation` `light-area`, each numerator member's area is its
   light-transmitting area from the first step that produces one: the area

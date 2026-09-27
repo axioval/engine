@@ -212,14 +212,38 @@ pub trait TypeHierarchyService: Send + Sync {
 }
 
 /// Cloneable, type-erased type-hierarchy service registered by an adapter.
+///
+/// A handle may hold several services over disjoint sources, as a federated
+/// session does; each question goes to the service covering the source.
 #[derive(Clone)]
-pub struct TypeHierarchyServiceHandle(Arc<dyn TypeHierarchyService>);
+pub struct TypeHierarchyServiceHandle {
+    members: Arc<[Arc<dyn TypeHierarchyService>]>,
+    snapshots: Arc<[SourceSnapshot]>,
+}
 
 impl TypeHierarchyServiceHandle {
     /// Wraps a trusted hierarchy service.
     #[must_use]
     pub fn new(service: Arc<dyn TypeHierarchyService>) -> Self {
-        Self(service)
+        let snapshots = service.source_snapshots().into();
+        Self {
+            members: Arc::from([service]),
+            snapshots,
+        }
+    }
+
+    /// One handle answering from each of `handles` for its own sources.
+    pub(crate) fn federated(handles: &[&Self]) -> Self {
+        Self {
+            members: handles
+                .iter()
+                .flat_map(|handle| handle.members.iter().cloned())
+                .collect(),
+            snapshots: handles
+                .iter()
+                .flat_map(|handle| handle.snapshots.iter().cloned())
+                .collect(),
+        }
     }
 
     /// Answers for one object's source, refusing sources the service does not cover.
@@ -229,20 +253,21 @@ impl TypeHierarchyServiceHandle {
         kind: &str,
         ancestor: &str,
     ) -> Result<bool, TypeHierarchyError> {
-        if !self
-            .0
-            .source_snapshots()
+        self.members
             .iter()
-            .any(|snapshot| snapshot.source() == source)
-        {
-            return Err(TypeHierarchyError::UncoveredSource(source.clone()));
-        }
-        self.0.is_a(kind, ancestor)
+            .find(|member| {
+                member
+                    .source_snapshots()
+                    .iter()
+                    .any(|snapshot| snapshot.source() == source)
+            })
+            .ok_or_else(|| TypeHierarchyError::UncoveredSource(source.clone()))?
+            .is_a(kind, ancestor)
     }
 }
 
 impl SnapshotBoundService for TypeHierarchyServiceHandle {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
-        self.0.source_snapshots()
+        &self.snapshots
     }
 }

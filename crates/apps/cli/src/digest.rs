@@ -186,11 +186,16 @@ impl CheckOutput {
         }
     }
 
-    /// Whether `query` names `id`: its full id, its local id, or its GlobalId.
+    /// Whether `query` names `id`: its full id, its local id, its local id
+    /// qualified by its document (`model.ifc/#2`, as a summary over several
+    /// documents prints it), or its GlobalId.
     fn names(&self, id: &ObjectId, query: &str) -> bool {
         let full = id.to_string();
         full == query
             || id.local_id == query
+            || query.split_once('/').is_some_and(|(document, local)| {
+                document == id.source.document && local == id.local_id
+            })
             || self
                 .objects
                 .get(&full)

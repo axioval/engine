@@ -86,6 +86,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   them is unmeasured or undescribed; space refuses while a declared role,
   storey member or requested cap element is; free space refuses it as an
   obstacle.
+- A geometry set may hold several sources. Evidence about one object (contact,
+  proximity, facade area, vertical extent, shelf length, clear height, derived
+  relationships) cites that object's source; only set-level measurements take
+  the source given to their constructor.
 - `src/lib.rs` keeps the source-scoping contracts and the in-memory conformance
   double. `UnavailableGeometryBackend` remains the explicit "no kernel linked"
   placeholder.

@@ -176,6 +176,26 @@ Fire-wall doors are doors whose wall states `Compartmentation` true; with IFC:
 
 The other direction, walls holding at least one unrated door, is `IfcRelVoidsElement` then `IfcRelFillsElement` forward from the wall. A `related` selector fails closed as well: a relationship answer the service refuses (an unknown relationship, an unresolved relationship end, an unavailable backend) leaves the object not evaluated, since the objects it would reach are unknown. So does a reached object the nested selector cannot decide, unless the others already settle the verdict: one match settles `any` and `none`, one non-match settles `all`. An empty or malformed `path` is an invalid declaration. Relationship names are the source's own, as in capability parameters; the nested selector names concepts like any selector and is bound per source. In `selector-conformance`, the properties of related objects are not among the checked object's consulted properties.
 
+### Discipline selectors
+
+A `discipline` selector selects the objects of the sources that play a discipline in the check, such as `architecture` or `structure`:
+
+```json
+{ "kind": "discipline", "value": "structure" }
+```
+
+IFC carries no discipline, so the host declares one per source (the CLI's `--model PATH:DISCIPLINE`, or `EvidenceSession::with_discipline`); the engine keeps it next to the source's snapshot and installs it per run as `SourceDisciplines`, which any capability may read. The value is a lowercase token: 1 to 64 ASCII letters, digits, `-` or `_`, starting with a letter or digit. A package with any other value does not load. Names compare exactly and the engine attaches no vocabulary to them; a project agrees on its names as it agrees on its rules.
+
+Every object of a source matches or none does. An object whose source declares no discipline is not evaluated, never a non-match, so a discipline-scoped rule cannot pass over a model nobody classified; the outcome is reported once per rule and source (`not-recorded`), not once per object. A clash matrix between two disciplines selects its subjects and its `counterparts` with one discipline each:
+
+```json
+"applicability": { "kind": "allOf", "operands": [
+  { "kind": "entityType", "objectType": "…wall", "includeSubtypes": true },
+  { "kind": "discipline", "value": "architecture" } ] },
+"counterparts": { "type": "selector",
+  "value": { "kind": "discipline", "value": "structure" } }
+```
+
 ### Numeric tolerance
 
 `property-predicate`, `property-comparison` and `unique-value` take three optional parameters that relax exact numeric comparison. They apply to integers, decimals and quantities; a quantity is compared in its canonical SI unit, so a tolerance on a length is in metres. Text and booleans are never affected, and a tolerance declared with a text, text-list or boolean constant target is an invalid declaration. A definition bound to one of these capabilities must declare all three, as optional parameters (`number`, `number`, `integer`).

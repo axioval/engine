@@ -39,7 +39,7 @@ use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axioval_engine::{FacadeArea, FacadeAreaError, FacadeAreaService, GeometryFidelity};
-use axioval_ir::{Evidence, ObjectId, SourceId};
+use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 
@@ -85,17 +85,15 @@ struct Near<'a> {
 #[derive(Debug)]
 pub struct AxiolidFacadeAreaService {
     geometry: AxiolidGeometry,
-    source: SourceId,
     spaces: BTreeSet<ObjectId>,
 }
 
 impl AxiolidFacadeAreaService {
     /// Creates a service over the supplied geometry, with no spaces yet.
     #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
+    pub fn new(geometry: AxiolidGeometry) -> Self {
         Self {
             geometry,
-            source,
             spaces: BTreeSet::new(),
         }
     }
@@ -253,7 +251,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 .max(f64::EPSILON * (certain + possible).max(1.0))
         });
         let evidence = Evidence {
-            source: self.source.clone(),
+            source: object.source.clone(),
             locator: format!("facade-area:{object}:faces={faces}:partial={partial}"),
             exact: deviation.is_none() && partial == 0,
         };

@@ -33,7 +33,7 @@
 //!   kernel refuses (open, self-intersecting, no volume) leaves the volume
 //!   unmeasured rather than failing the measurement. A tessellation widens
 //!   each volume by the volume within its chord deviation of the mesh
-//!   ([`tube_volume`]).
+//!   (`tube_volume`).
 //! - **Hausdorff distance** between the surfaces. Its lower bound is the
 //!   farthest any vertex lies from the other surface. Its upper bound holds
 //!   per triangle: a distance to one convex triangle is convex, so the

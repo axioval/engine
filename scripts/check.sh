@@ -44,7 +44,7 @@ check_test() {
 
 check_docs() {
   require mdbook
-  cargo doc --workspace --all-features --no-deps
+  RUSTDOCFLAGS="${RUSTDOCFLAGS:--D warnings}" cargo doc --workspace --all-features --no-deps
   mdbook build docs
 }
 

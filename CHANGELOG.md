@@ -78,6 +78,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_bands` (omitted when empty, so packages are unchanged),
   `EngineError` gains `InvalidRefinement`, and
   `ExecutionPlan::refinement` exposes what a rule declares.
+- **Several rulesets in one check.** (#103) `compile_rulesets` compiles
+  several rulesets into one plan, each against its own definition packages
+  exactly as `compile` compiles it, and qualifies every rule id by its
+  ruleset's package id (`package-id/rule-id`), so two rulesets may both
+  define `r1` and report both findings under distinct ids, grouped by
+  package in rule id order. One ruleset keeps its ids. The CLI's `check`
+  and `validate` take `--ruleset` repeatedly. Two rulesets sharing a
+  package id are refused (`EngineError::DuplicateRuleSet`), as is an empty
+  list (`EngineError::NoRuleSet`).
 - **Disciplines from source metadata.** (#102) A `DisciplineMap` of
   ordered wildcard rules over a source metadata field
   (`EvidenceSession::with_discipline_map`) assigns a discipline to each

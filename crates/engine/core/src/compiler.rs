@@ -112,6 +112,80 @@ fn refinement(
     })
 }
 
+/// Separates a ruleset's package ID from a rule ID in a qualified rule ID.
+pub const QUALIFIED_RULE_SEPARATOR: char = '/';
+
+/// Compiles several rulesets into one plan, each rule ID qualified by its
+/// ruleset's package ID.
+///
+/// Every ruleset is compiled on its own, against its own declared definition
+/// packages, exactly as [`compile`] compiles it. Its rule IDs then become
+/// `package-id/rule-id` ([`QUALIFIED_RULE_SEPARATOR`]), so two rulesets may
+/// both define `r1` and report both findings under distinct IDs, and the
+/// plan's ID order groups rules by package. One ruleset compiles as
+/// [`compile`] does, with its IDs unqualified. The plan's concepts are those
+/// of every definition package any ruleset declares.
+///
+/// # Errors
+///
+/// Returns every error [`compile`] returns for any ruleset, and an error
+/// when no ruleset is given, two rulesets share a package ID, or two
+/// declared definition packages declare one concept.
+pub fn compile_rulesets(
+    registry: &CapabilityRegistry,
+    definitions: &[DefinitionPackage],
+    rulesets: &[RuleSetPackage],
+) -> Result<ExecutionPlan, EngineError> {
+    let [first, rest @ ..] = rulesets else {
+        return Err(EngineError::NoRuleSet);
+    };
+    if rest.is_empty() {
+        return compile(registry, definitions, first);
+    }
+    let mut packages_seen = BTreeSet::new();
+    let mut declared: Vec<&String> = Vec::new();
+    let mut rules = Vec::new();
+    let mut deferred = Vec::new();
+    let mut refinements = BTreeMap::new();
+    for ruleset in rulesets {
+        let package = &ruleset.package.id;
+        if !packages_seen.insert(package.as_str()) {
+            return Err(EngineError::DuplicateRuleSet(package.clone()));
+        }
+        for id in &ruleset.definition_packages {
+            if !declared.contains(&id) {
+                declared.push(id);
+            }
+        }
+        let plan = compile(registry, definitions, ruleset)?;
+        let qualify = |id: &RuleId| {
+            let qualified = format!("{package}{QUALIFIED_RULE_SEPARATOR}{id}");
+            RuleId::new(qualified.clone()).map_err(|_| EngineError::InvalidRuleId(qualified))
+        };
+        for mut rule in plan.rules {
+            rule.id = qualify(&rule.id)?;
+            rules.push(rule);
+        }
+        for (id, refinement) in plan.refinements {
+            refinements.insert(qualify(&id)?, refinement);
+        }
+        for mut rule in plan.deferred {
+            rule.id = qualify(&rule.id)?;
+            deferred.push(rule);
+        }
+    }
+    rules.sort_by(|left, right| left.id.cmp(&right.id));
+    deferred.sort_by(|left, right| left.id.cmp(&right.id));
+    let packages = collect_definition_packages(definitions)?;
+    let concepts = concepts_of(declared.into_iter(), &packages)?;
+    Ok(ExecutionPlan {
+        rules,
+        deferred,
+        concepts: Arc::new(concepts),
+        refinements,
+    })
+}
+
 /// Every rule definition the ruleset's declared packages provide, by ID.
 fn definition_catalog<'a>(
     ruleset: &RuleSetPackage,
@@ -242,8 +316,16 @@ fn concept_catalog(
     ruleset: &RuleSetPackage,
     packages: &BTreeMap<&str, &DefinitionPackage>,
 ) -> Result<ConceptCatalog, EngineError> {
+    concepts_of(ruleset.definition_packages.iter(), packages)
+}
+
+/// Every concept the packages `package_ids` names declare, each once.
+fn concepts_of<'a>(
+    package_ids: impl Iterator<Item = &'a String>,
+    packages: &BTreeMap<&str, &DefinitionPackage>,
+) -> Result<ConceptCatalog, EngineError> {
     let mut catalog = ConceptCatalog::default();
-    for package_id in &ruleset.definition_packages {
+    for package_id in package_ids {
         let package = packages[package_id.as_str()];
         let entries = package
             .object_types

@@ -84,6 +84,12 @@ pub enum EngineError {
     /// Rule IDs must be unique throughout the recursive folder tree.
     #[error("duplicate rule id `{0}`")]
     DuplicateRule(String),
+    /// Two rulesets compiled together share a package ID.
+    #[error("duplicate ruleset package `{0}`")]
+    DuplicateRuleSet(String),
+    /// No ruleset was given to compile.
+    #[error("no ruleset to compile")]
+    NoRuleSet,
     /// Two loaded definition packages declare the same concept identity.
     #[error("duplicate concept `{0}` across definition packages")]
     DuplicateConcept(String),
@@ -571,7 +577,7 @@ pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,
 };
-pub use compiler::{SUPPORTED_SCHEMA_VERSION, compile};
+pub use compiler::{QUALIFIED_RULE_SEPARATOR, SUPPORTED_SCHEMA_VERSION, compile, compile_rulesets};
 pub use concepts::{
     BindingError, ConceptBindings, ConceptCatalog, ConceptKind, TypeHierarchyError,
     TypeHierarchyService, TypeHierarchyServiceHandle,

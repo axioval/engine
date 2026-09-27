@@ -3592,6 +3592,80 @@ fn a_malformed_discipline_map_is_a_usage_error() {
     }
 }
 
+impl Case {
+    /// The example ruleset as package `package`, its rule named `r1`.
+    fn ruleset_as(&self, package: &str) -> PathBuf {
+        let mut ruleset: Value = serde_json::from_str(
+            &std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap(),
+        )
+        .unwrap();
+        ruleset["package"]["id"] = json!(package);
+        ruleset["root"]["rules"][0]["id"] = json!("r1");
+        self.write(&format!("{package}.json"), &ruleset.to_string())
+    }
+
+    fn check_rulesets(&self, rulesets: &[PathBuf]) -> Output {
+        let model = self.write("model.ifc", &ifc("0000000000000000000002", false));
+        let definitions = self.definitions(true);
+        let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+        command
+            .arg("check")
+            .arg("--model")
+            .arg(model)
+            .arg("--definitions")
+            .arg(definitions);
+        for ruleset in rulesets {
+            command.arg("--ruleset").arg(ruleset);
+        }
+        command.output().unwrap()
+    }
+}
+
+#[test]
+fn several_rulesets_run_in_one_check_under_ids_qualified_by_package() {
+    let case = Case::new("several-rulesets");
+    let rulesets = [
+        case.ruleset_as("org.example.client"),
+        case.ruleset_as("org.example.discipline"),
+    ];
+    let output = case.check_rulesets(&rulesets);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    // Both define `r1`; wall #2 lacks the reference under each, grouped by
+    // package in rule id order.
+    let findings: Vec<(&str, &str)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            (
+                finding["rule_id"].as_str().unwrap(),
+                finding["object_id"]["local_id"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        findings,
+        [
+            ("org.example.client/r1", "#2"),
+            ("org.example.discipline/r1", "#2"),
+        ],
+        "{result:#}"
+    );
+
+    // One ruleset keeps its ids; one package twice is refused.
+    let output = case.check_rulesets(&rulesets[..1]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(json(&output)["report"]["findings"][0]["rule_id"], "r1");
+    let output = case.check_rulesets(&[rulesets[0].clone(), rulesets[0].clone()]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("duplicate ruleset package `org.example.client`"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 /// A clash matrix cell keyed by discipline on both sides.
 fn discipline_cell(subject: &str, counterpart: &str, tolerance: f64, severity: &str) -> Value {
     json!({

@@ -7,18 +7,19 @@ sink writes issues. Each piece is also usable on its own as a library.
 ## `axioval validate`
 
 ```bash
-axioval validate --definitions definitions.json --ruleset ruleset.json
+axioval validate --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...]
 ```
 
 Binds a ruleset to its definition packages and the built-in capabilities
-without a model. Exits 0 when the ruleset compiles, 1 otherwise.
+without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
+`--ruleset`s are bound together as `check` binds them.
 
 ## `axioval check`
 
 ```bash
 axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
-  --definitions definitions.json --ruleset ruleset.json \
+  --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
   [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
 ```
@@ -26,6 +27,20 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
 Runs the ruleset over one or more IFC2X3 or IFC4 STEP models. Each model is
 one source, named by its file name, so a result does not depend on the
 directory it was checked from.
+
+### Several rulesets
+
+A check commonly bundles several rulesets, one per discipline or per client
+requirement set. `--ruleset` may be repeated: each ruleset is compiled on its
+own, against the definition packages it declares, exactly as it would be
+alone, and all their rules run in one check. Each rule id is then qualified
+by its ruleset's package id, `package-id/rule-id`, so two rulesets that both
+define `r1` report `org.example.client/r1` and `org.example.discipline/r1`,
+and findings, not-evaluated outcomes, tables, the summary and `report --rule`
+group by package in rule id order. With one `--ruleset` the ids stay as
+written. Two rulesets with one package id, or definition packages declaring
+one concept twice across the rulesets, are refused (status 1). The library
+entry point is `compile_rulesets`.
 
 ### Several models and disciplines
 

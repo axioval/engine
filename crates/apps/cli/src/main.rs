@@ -27,7 +27,7 @@ use axioval::{
     bcf,
     engine::{
         DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, IntegritySeverity,
-        Runtime, SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile,
+        Runtime, SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile_rulesets,
     },
     ifc::import_ifc_session,
     ir::{
@@ -50,8 +50,9 @@ enum Command {
     Validate {
         #[arg(long, required = true)]
         definitions: Vec<PathBuf>,
-        #[arg(long)]
-        ruleset: PathBuf,
+        /// A ruleset; repeat to bind several together, as `check` does.
+        #[arg(long = "ruleset", required = true)]
+        rulesets: Vec<PathBuf>,
     },
     /// Check a model against a ruleset.
     ///
@@ -95,8 +96,12 @@ struct CheckArgs {
     discipline_map: Vec<DisciplineRule>,
     #[arg(long, required = true)]
     definitions: Vec<PathBuf>,
-    #[arg(long)]
-    ruleset: PathBuf,
+    /// A ruleset to check. Repeat for several: each is compiled against
+    /// its own definition packages and its rule ids are qualified by its
+    /// package id (`package-id/rule-id`), so two rulesets may both define
+    /// a rule `r1`. With one ruleset the ids stay as written.
+    #[arg(long = "ruleset", required = true)]
+    rulesets: Vec<PathBuf>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -303,23 +308,27 @@ fn load<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Box<dyn Error>
 
 fn packages(
     definitions: &[PathBuf],
-    ruleset: &Path,
-) -> Result<(Vec<DefinitionPackage>, RuleSetPackage), Box<dyn Error>> {
+    rulesets: &[PathBuf],
+) -> Result<(Vec<DefinitionPackage>, Vec<RuleSetPackage>), Box<dyn Error>> {
     let definitions = definitions
         .iter()
         .map(|path| load(path))
         .collect::<Result<Vec<DefinitionPackage>, _>>()?;
-    Ok((definitions, load(ruleset)?))
+    let rulesets = rulesets
+        .iter()
+        .map(|path| load(path))
+        .collect::<Result<Vec<RuleSetPackage>, _>>()?;
+    Ok((definitions, rulesets))
 }
 
 fn run() -> Result<Outcome, Box<dyn Error>> {
     match Cli::parse().command {
         Command::Validate {
             definitions,
-            ruleset,
+            rulesets,
         } => {
-            let (definitions, ruleset) = packages(&definitions, &ruleset)?;
-            let plan = compile(&axioval::default_registry()?, &definitions, &ruleset)?;
+            let (definitions, rulesets) = packages(&definitions, &rulesets)?;
+            let plan = compile_rulesets(&axioval::default_registry()?, &definitions, &rulesets)?;
             println!("validated {} executable rule(s)", plan.rules().len());
             Ok(Outcome::Passed)
         }
@@ -333,9 +342,9 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
 }
 
 fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
-    let (definitions, ruleset) = packages(&args.definitions, &args.ruleset)?;
+    let (definitions, rulesets) = packages(&args.definitions, &args.rulesets)?;
     let registry = axioval::default_registry()?;
-    let plan = compile(&registry, &definitions, &ruleset)?;
+    let plan = compile_rulesets(&registry, &definitions, &rulesets)?;
     let (session, bytes) = sources(&args.models)?;
     let session = session.with_discipline_map(
         &args

@@ -52,7 +52,9 @@ write BCF from any source's report without linking the engine or an adapter.
 
 1. A normalized package is deserialized under a deny-unknown-fields contract.
 2. The compiler binds selectors and parameters to trusted capability descriptors.
-3. Compilation produces an immutable ordered execution plan.
+3. Compilation produces an immutable ordered execution plan. Several rulesets
+   compile into one plan with `compile_rulesets`: each on its own terms, its
+   rule IDs qualified by its package ID (`package-id/rule-id`).
 4. An `EvidenceSession` binds the project to one immutable revision,
    fingerprint, and optional schema per declared source. Every trusted evidence
    service must expose its own source snapshots; registration rejects unbound,

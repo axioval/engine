@@ -3,7 +3,7 @@
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidGuardService};
-use axioval_engine::{GuardSearch, GuardService};
+use axioval_engine::{GuardCandidate, GuardSearch, GuardService};
 use axioval_ir::{ObjectId, SourceId};
 
 fn source() -> SourceId {
@@ -284,5 +284,48 @@ fn an_unmeasured_body_refuses_the_measurement() {
     assert_eq!(
         service.measure_guard_edges(search().with_surfaces(vec![id("deck")])),
         Err(axioval_engine::GuardError::Unavailable)
+    );
+}
+
+/// A cupboard standing along the edge is as close and as tall as a railing,
+/// but it is not protection when the ruleset names only the railing as a
+/// barrier. Nor is it a climbing aid unless the climbable set admits it.
+#[test]
+fn a_body_outside_the_barrier_set_is_not_a_barrier() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("deck"), body(0.0, 4.0, 0.0, 4.0, 0.0, 0.2))
+        .with_mesh(id("railing"), body(0.0, 4.0, 3.95, 4.05, 0.2, 1.2))
+        // A full-height cupboard along the south edge.
+        .with_mesh(id("cupboard"), body(0.0, 4.0, -0.05, 0.05, 0.2, 2.2))
+        // A low stool beside the railing.
+        .with_mesh(id("stool"), body(1.0, 1.6, 3.3, 3.9, 0.2, 0.8));
+    let service = AxiolidGuardService::new(geometry, source()).with_walking_surface(id("deck"));
+
+    let open = service.measure_guard_edges(search()).expect("measurable");
+    assert!(
+        open.edges()[0]
+            .barriers()
+            .iter()
+            .any(|b| b.element() == &id("cupboard")),
+        "without a barrier set any nearby body is a candidate"
+    );
+
+    let restricted = service
+        .measure_guard_edges(
+            search()
+                .with_barrier_candidates(vec![id("railing")])
+                .with_climbable_candidates(Vec::new()),
+        )
+        .expect("measurable");
+    let edge = &restricted.edges()[0];
+    let barriers: Vec<&ObjectId> = edge
+        .barriers()
+        .iter()
+        .map(GuardCandidate::element)
+        .collect();
+    assert_eq!(barriers, [&id("railing")], "the cupboard is not a barrier");
+    assert!(
+        edge.climbables().is_empty(),
+        "an empty climbable set admits no climbing aid"
     );
 }

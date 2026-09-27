@@ -648,3 +648,95 @@ fn the_selection_is_the_walking_surface_profile() {
     assert_eq!(not_evaluated.len(), 1);
     assert_eq!(not_evaluated[0].object_id(), Some(&oid("slab-2")));
 }
+
+// ---------------------------------------------------------------------------
+// Candidate roles.
+//
+// A mesh does not say whether a body is a railing or a cupboard. The ruleset
+// names the objects that may play each role, and nothing else counts.
+// ---------------------------------------------------------------------------
+
+fn entity(object_type: &str) -> ParameterValue {
+    ParameterValue::Selector {
+        value: Box::new(Selector::EntityType {
+            object_type: object_type.into(),
+            include_subtypes: false,
+        }),
+    }
+}
+
+/// Reports a cupboard as a full-height barrier along the whole edge, as an
+/// adapter that ignored the candidate sets would, after checking that the
+/// rule sent the sets it resolved.
+struct CupboardStub;
+
+impl GuardService for CupboardStub {
+    fn measure_guard_edges(&self, search: GuardSearch) -> Result<GuardEvidence, GuardError> {
+        assert_eq!(search.barrier_candidates(), Some(&[oid("rail")][..]));
+        assert_eq!(search.landing_candidates(), Some(&[][..]));
+        assert_eq!(search.climbable_candidates(), None);
+        let cupboard =
+            GuardCandidate::try_new(oid("cupboard"), 0.0, 2.0, [0.0, 1.0], 0.0, None).unwrap();
+        GuardEvidence::try_new(
+            vec![GuardEdge::new(
+                oid("slab-1"),
+                vec![cupboard],
+                vec![],
+                vec![],
+            )],
+            1,
+            Evidence::exact(source(), "guard:edges"),
+        )
+    }
+}
+
+fn evaluate_roles(rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
+    let project = Project::new(vec![
+        Object::new(oid("slab-1"), "slab"),
+        Object::new(oid("rail"), "railing"),
+        Object::new(oid("cupboard"), "furniture"),
+    ])
+    .unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(GuardServiceHandle::new(Arc::new(CupboardStub)))
+        .unwrap();
+    HorizontalGuard.evaluate(
+        &RuleContext {
+            project: &project,
+            services: &services,
+        },
+        rule,
+    )
+}
+
+/// A cupboard along the edge is not a barrier when the ruleset names only
+/// railings as barriers, even if the measurement reports it as one.
+#[test]
+fn an_object_outside_the_barrier_selection_is_not_protection() {
+    let outcome = evaluate_roles(&rule_with(&[
+        ("barrier_selector", entity("railing")),
+        ("landing_selector", entity("terrace")),
+    ]));
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+    assert_eq!(message_of(&outcome), "missing_barrier");
+    assert!(outcome.findings()[0].related.is_empty());
+}
+
+#[test]
+fn a_role_selector_of_the_wrong_type_is_refused() {
+    let outcome = evaluate(
+        Ok(edge(vec![], vec![], vec![])),
+        &rule_with(&[(
+            "barrier_selector",
+            ParameterValue::String {
+                value: "railing".into(),
+            },
+        )]),
+    );
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
+}

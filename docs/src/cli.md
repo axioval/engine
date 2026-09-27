@@ -220,3 +220,11 @@ exposed edges are measured:
 - Findings name only selected surfaces.
 - While any body in the model could not be meshed, guard rules are not
   evaluated, since the unmeasured body may be the rail that guards an edge.
+
+A mesh does not say whether a body is a railing or a cupboard either. The
+rule's optional `barrier_selector`, `landing_selector` and
+`climbable_selector` name which objects may act as barriers, landings and
+climbing aids, for example `IfcRailing` and `IfcWall` as barriers. Only their
+members are measured for that role. Without a selector, any body near the
+edge counts for its role, so a cupboard standing along an edge can pass as
+its barrier.

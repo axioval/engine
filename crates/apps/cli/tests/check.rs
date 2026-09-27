@@ -964,6 +964,11 @@ fn with_geometry_an_unguarded_landing_edge_is_found() {
         "measure_barrier_from_curb".into(),
         declare("measure_barrier_from_curb", "boolean"),
     );
+    for role in ["barrier_selector", "landing_selector", "climbable_selector"] {
+        let mut optional = declare(role, "selector");
+        optional["required"] = json!(false);
+        parameters.insert(role.into(), optional);
+    }
     definitions["definitions"]["axioval:example.guard"] = json!({
         "id": "axioval:example.guard",
         "name": {"default": "Fall protection", "translations": {}},

@@ -233,3 +233,72 @@ fn ifc2x3_materials_are_refused_until_upstream_binds_the_release() {
         Err(PropertyResolutionError::Unavailable(message)) if message.contains("IFC2X3")
     ));
 }
+
+#[test]
+fn an_unresolved_length_unit_refuses_the_thicknesses_alone() {
+    let data = DATA
+        .replace("#91=IFCUNITASSIGNMENT((#90));\n", "")
+        .replace(",$,#91);", ",$,$);");
+    for name in ["TotalThickness", "Layer1.Thickness"] {
+        assert!(
+            resolve_in("IFC4", &data, "#1", name).is_err(),
+            "{name} is answered without a length unit"
+        );
+    }
+    let PropertyResolution::Present(resolved) =
+        resolve_in("IFC4", &data, "#1", "Layer1.Material").unwrap()
+    else {
+        panic!("the layer's material is absent");
+    };
+    assert_eq!(
+        resolved.property().value,
+        PropertyValue::String("Gypsum".into())
+    );
+}
+
+fn names(local: &str) -> Option<Vec<String>> {
+    value(local, "Names").map(|value| match value {
+        PropertyValue::List(names) => names
+            .into_iter()
+            .map(|name| match name {
+                PropertyValue::String(name) => name,
+                other => panic!("a name is not text: {other:?}"),
+            })
+            .collect(),
+        other => panic!("Names is not a list: {other:?}"),
+    })
+}
+
+#[test]
+fn names_list_every_name_and_category_the_material_goes_by() {
+    // The set, each layer's name and category, and each layer's material's
+    // name and category, distinct and sorted.
+    assert_eq!(
+        names("#1").unwrap(),
+        [
+            "Air",
+            "Board",
+            "Concrete",
+            "Core",
+            "Finish",
+            "Gypsum",
+            "LoadBearing",
+            "Mineral wool",
+            "Structure",
+            "WT-01",
+        ]
+    );
+    assert_eq!(names("#3").unwrap(), ["Concrete", "Structure"]);
+    assert_eq!(
+        names("#4").unwrap(),
+        ["Frame", "Glass", "Glazing", "Gypsum", "Window"]
+    );
+    assert_eq!(
+        names("#5").unwrap(),
+        ["B-100", "Concrete", "Structure", "Web"]
+    );
+    assert_eq!(names("#7").unwrap(), ["Concrete", "Glass", "Structure"]);
+    assert_eq!(names("#6"), None);
+    let found = locator("#3", "names");
+    assert!(found.ends_with("material:#3:occurrence:#44:#44"), "{found}");
+}

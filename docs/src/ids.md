@@ -16,12 +16,13 @@ The applicability is one selector: the entity's classes (never their subclasses)
 | predefined type | property selectors over `axioval:type-attributes` and `axioval:attributes`, resolved as below | as the entity |
 | attribute | property selectors in `axioval:attributes`, typed by the attribute's declared type | `property-required` or `property-value` in `axioval:attributes`; prohibited without a value: a `property-requirements` row excluding `not-empty`; prohibited with a value, or a restricted name: `selector-conformance` |
 | property | gap | `property-required`, `property-data-type`, `property-value`; prohibited without a value: `property-requirements` rows excluding `not-empty`, one per enumerated set and name |
-| classification | `classification` selectors with `includeDescendants` | `selector-conformance`, negated when prohibited |
+| classification | `classification` selectors with `includeDescendants` | `classification`: systems and codes as literals or patterns, a system alone, `optional` or `prohibited` |
 | material without a value | `exists` on `axioval:material.Kind` | `selector-conformance`, negated when prohibited |
+| material with a value | the value against `axioval:material.Names` with `quantifier: any` | `selector-conformance`, negated when prohibited; optional: no material, or one going by the value |
 | part of | `related` with `Relationship:backward+` to the whole's entity selector | `selector-conformance`, negated when prohibited |
 | `minOccurs`/`maxOccurs` | — | `object-count` per source: required reports a model without applicable objects, prohibited a model with any |
 
-The predefined type follows IDS: the type object's own, or its element or process type when that is user-defined or unset, unless the result is empty or `NOTDEFINED`; otherwise the occurrence's own, or its object type when user-defined or unset. A literal `USERDEFINED` asks whether the type is user-defined at all. A part-of relation is followed from the part to its wholes one or more times, and only that relation; a pattern for the whole drops classes that can never be the relation's relating end.
+The predefined type follows IDS: the type object's own, or its element or process type when that is user-defined or unset, unless the result is empty or `NOTDEFINED`; otherwise the occurrence's own, or its object type when user-defined or unset. A literal `USERDEFINED` asks whether the type is user-defined at all. A classification requirement is met by one assignment in a matching system whose code, or an ancestor's, matches; an optional one holds for an object with no classification at all and must be met by one with any. A material value is matched against every name and category the material goes by (the set's, each member's, each member material's), as `axioval:material.Names` lists them. A part-of relation is followed from the part to its wholes one or more times, and only that relation; a pattern for the whole drops classes that can never be the relation's relating end.
 
 Values keep IDS casting where a capability casts: `property-value` casts literals to the resolved value's kind, including `totalDigits` and `fractionDigits`. A selector compares one declared type, so an attribute value in a selector is translated only when every applicable class declares the attribute as text, an enumeration, a boolean or an integer; XML Schema patterns go through `axioval_rules::translate_xsd_pattern`, which refuses what it cannot map exactly.
 
@@ -33,8 +34,8 @@ These parts stay explicit gaps:
 - property set and property name patterns, which need the property service to enumerate an object's properties (openbimrs/ifc#78), and name enumerations anywhere but a prohibited facet without a value;
 - a prohibited property facet with a value or a data type;
 - an attribute declared as a real, a measure, a date, a select, a reference or an aggregate, in a selector;
-- a classification without a value (the system alone), a classification pattern, and an optional classification with a value;
-- a material with a value, which IDS matches against every member and every member material's name and category;
+- in the applicability, a classification without a value (the system alone) and a classification pattern, which the classification selector cannot state;
+- a material value restricted by several facets at once (an enumeration and patterns, a length), which one name must meet together;
 - part of without a relation (every relation, mixed along the chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`;
 - requirements on a prohibited specification, which IDS declares invalid;
 - entities that are not `IfcObject` occurrences, which a model session does not check, and `IFC4X3_ADD2`.

@@ -31,9 +31,12 @@
 //!   same in the reserved attribute set. A prohibited property or attribute
 //!   without a value becomes an excluded `not-empty` row of
 //!   `property-requirements`.
-//! - Entity, classification, material, part-of and name-restricted
-//!   attribute requirements become `selector-conformance` with the facet's
-//!   selector, negated when prohibited.
+//! - Entity, material, part-of and name-restricted attribute requirements
+//!   become `selector-conformance` with the facet's selector, negated when
+//!   prohibited. A material value is tested against the material set's
+//!   `Names` list, every name and category the material goes by.
+//! - A classification requirement becomes `classification`: systems and
+//!   codes as literals or patterns, a system alone, optional or prohibited.
 //! - The applicability's `minOccurs`/`maxOccurs` become `object-count` in
 //!   each source: a required specification reports a model with no
 //!   applicable object, a prohibited one a model with any.
@@ -58,11 +61,11 @@ use std::fmt;
 use axioval_ir::contract::{
     ColumnKind, ComparisonOperator, DefinitionPackage, ExternalName, LocalizedText,
     ObjectTypeDefinition, PackageMetadata, ParameterDefinition, ParameterKind, ParameterValue,
-    PropertyDefinition, PropertySetDefinition, PropertyValueKind, RelatedQuantifier,
+    PropertyDefinition, PropertySetDefinition, PropertyValueKind, Quantifier, RelatedQuantifier,
     RuleApplicability, RuleDefinition, RuleFolder, RuleInstance, RuleSetPackage, Selector,
     Severity, TableColumnDefinition, TableRow,
 };
-use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
+use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use ifc_schema::{Schema, TypeKind};
 use openbim_ids::{
     Attribute, Classification, Entity, Facet, Ids, IfcVersion, Material, Occurrence, PartOf,
@@ -90,6 +93,7 @@ const PROPERTY_VALUE: &str = "axioval:capability.property-value";
 const SELECTOR_CONFORMANCE: &str = "axioval:capability.selector-conformance";
 const PROPERTY_REQUIREMENTS: &str = "axioval:capability.property-requirements";
 const OBJECT_COUNT: &str = "axioval:capability.object-count";
+const CLASSIFICATION: &str = "axioval:capability.classification";
 
 /// The longest `length`, `minLength` or `maxLength` a selector spells as a
 /// repetition; a longer one would exceed the regular expression size limit.
@@ -303,18 +307,16 @@ pub enum Reason {
     /// A value literal a selector cannot compare exactly (a boolean other
     /// than `true`/`false`, an integer written with a fraction).
     ValueLiteral(String),
-    /// A classification facet without a value, which asks for the system
-    /// alone; the classification selector names a code.
+    /// An applicability classification facet without a value, which asks
+    /// for the system alone; the classification selector names a code. A
+    /// requirement translates through the `classification` capability.
     ClassificationSystem,
-    /// A classification system or value given as a pattern.
+    /// An applicability classification system or value given as a pattern.
+    /// A requirement translates through the `classification` capability.
     ClassificationPattern,
-    /// An optional classification facet with a value, which holds when the
-    /// system is absent: that needs a selector for the system alone.
-    OptionalClassification,
-    /// A material facet with a value, which IDS matches against every
-    /// layer, profile, constituent and list member and their materials'
-    /// names and categories; the material set exposes members by number and
-    /// not their materials' categories.
+    /// A material value restricted by several facets (an enumeration and
+    /// patterns together, or a length), which one of the material's names
+    /// must meet at once; separate tests over the name list cannot say so.
     MaterialValue,
     /// A part-of facet without a relation (every relation, mixed along the
     /// chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`.
@@ -389,16 +391,13 @@ impl fmt::Display for Reason {
                 write!(f, "value {literal:?} cannot be compared exactly by a selector")
             }
             Reason::ClassificationSystem => f.write_str(
-                "a classification facet without a value asks for the system alone, which no selector names",
+                "an applicability classification without a value asks for the system alone, which no selector names",
             ),
-            Reason::ClassificationPattern => {
-                f.write_str("a classification system or value pattern is not translated")
-            }
-            Reason::OptionalClassification => f.write_str(
-                "an optional classification with a value holds without the system, which no selector names",
+            Reason::ClassificationPattern => f.write_str(
+                "an applicability classification system or value pattern has no selector",
             ),
             Reason::MaterialValue => f.write_str(
-                "a material value matches any member's name or category, which the material set does not list",
+                "a material value restricted by several facets must hold for one name at once",
             ),
             Reason::PartOfRelation(None) => f.write_str(
                 "a part-of facet without a relation mixes every relation along the chain",
@@ -720,27 +719,32 @@ impl<'o> Writer<'o> {
                 )))
             }
             Facet::Classification(classification) => {
-                if occurrence == Occurrence::Optional {
-                    return Err(if classification.value.is_some() {
-                        Reason::OptionalClassification
-                    } else {
-                        Reason::ClassificationSystem
-                    });
-                }
-                let selector = classification_selector(classification)?;
-                Ok(Some(conformance(
-                    selector,
-                    occurrence,
-                    &format!("is classified {}", shown_classification(classification)),
-                )))
+                classification_check(classification, occurrence).map(Some)
             }
             Facet::Material(material) => {
                 let selector = self.material_selector(material, scope.releases)?;
+                let holds = match &material.value {
+                    Some(value) => format!("has a material named {}", shown_value(value)),
+                    None => "has a material".to_owned(),
+                };
                 if occurrence == Occurrence::Optional {
-                    // Without a value: any material, or none.
-                    return Ok(None);
+                    let Some(value) = &material.value else {
+                        // Without a value: any material, or none.
+                        return Ok(None);
+                    };
+                    // No material at all, or one going by the name.
+                    let kind = (
+                        MATERIAL_SET.to_owned(),
+                        self.attribute(MATERIAL_KIND, scope.releases),
+                    );
+                    let selector = any_of(vec![unset(&kind), selector]);
+                    return Ok(Some(conformance(
+                        selector,
+                        occurrence,
+                        &format!("has no material or one named {}", shown_value(value)),
+                    )));
                 }
-                Ok(Some(conformance(selector, occurrence, "has a material")))
+                Ok(Some(conformance(selector, occurrence, &holds)))
             }
             Facet::PartOf(part_of) => {
                 let selector = self.part_of_selector(part_of, scope.releases)?;
@@ -1066,15 +1070,56 @@ impl<'o> Writer<'o> {
         material: &Material,
         releases: &[IfcVersion],
     ) -> Result<Selector, Reason> {
-        if material.value.is_some() {
-            return Err(Reason::MaterialValue);
-        }
-        // Every material states its composition.
-        let kind = (
+        let Some(value) = &material.value else {
+            // Every material states its composition.
+            let kind = (
+                MATERIAL_SET.to_owned(),
+                self.attribute(MATERIAL_KIND, releases),
+            );
+            return Ok(exists(&kind));
+        };
+        // IDS matches the value against every name and category the
+        // material goes by, members' and their materials' included; one of
+        // them must meet the whole value.
+        let names = (
             MATERIAL_SET.to_owned(),
-            self.attribute(MATERIAL_KIND, releases),
+            self.attribute(MATERIAL_NAMES, releases),
         );
-        Ok(exists(&kind))
+        let tests = match value {
+            Value::Simple(literal) => vec![is(&names, literal)],
+            Value::Restriction(restriction) => {
+                let only_enumeration = only_enumeration(restriction);
+                let only_patterns = restriction.enumeration.is_empty()
+                    && !restriction.patterns.is_empty()
+                    && only_names(restriction).is_ok();
+                if only_enumeration {
+                    vec![test(
+                        &names,
+                        ComparisonOperator::OneOf,
+                        Some(ParameterValue::StringList {
+                            value: restriction.enumeration.clone(),
+                        }),
+                    )]
+                } else if only_patterns {
+                    restriction
+                        .patterns
+                        .iter()
+                        .map(|pattern| {
+                            Ok(test(
+                                &names,
+                                ComparisonOperator::Matches,
+                                Some(string(&translated(pattern)?)),
+                            ))
+                        })
+                        .collect::<Result<_, Reason>>()?
+                } else {
+                    // Several facets must hold for one name, which
+                    // separate tests over the list cannot require.
+                    return Err(Reason::MaterialValue);
+                }
+            }
+        };
+        Ok(any_of(tests.into_iter().map(any_element).collect()))
     }
 
     fn part_of_selector(
@@ -1388,6 +1433,8 @@ enum Kind {
     Forbidden,
     /// `object-count`.
     Count,
+    /// `classification`.
+    Classification,
 }
 
 /// The columns of the `property-requirements` table, as the capability
@@ -1449,6 +1496,12 @@ impl Kind {
                 "Applicable objects",
                 "An IDS specification's minOccurs/maxOccurs: how many applicable objects each model may hold.",
                 OBJECT_COUNT,
+            ),
+            Kind::Classification => (
+                "classification",
+                "Classification is required",
+                "An IDS classification requirement: an assignment in a matching system with a matching code or ancestor code, none when prohibited, or none at all when optional.",
+                CLASSIFICATION,
             ),
         }
     }
@@ -1520,6 +1573,17 @@ impl Kind {
                 parameter("maximum", ParameterKind::Integer, false),
                 parameter("across_sources", ParameterKind::Boolean, false),
             ],
+            Kind::Classification => {
+                let mut parameters: Vec<_> =
+                    ["codes", "code_patterns", "systems", "system_patterns"]
+                        .into_iter()
+                        .map(|id| parameter(id, ParameterKind::StringList, false))
+                        .collect();
+                for id in ["optional", "prohibited"] {
+                    parameters.push(parameter(id, ParameterKind::Boolean, false));
+                }
+                parameters
+            }
         }
     }
 
@@ -2171,6 +2235,90 @@ fn classification_selector(classification: &Classification) -> Result<Selector, 
         }
     }
     Ok(any_of(operands))
+}
+
+/// A property selector over a list value, holding when any element does.
+fn any_element(selector: Selector) -> Selector {
+    match selector {
+        Selector::Property {
+            property_set,
+            property,
+            operator,
+            value,
+            case_sensitive,
+            trim,
+            precision,
+            quantifier: _,
+        } => Selector::Property {
+            property_set,
+            property,
+            operator,
+            value,
+            case_sensitive,
+            trim,
+            quantifier: Some(Quantifier::Any),
+            precision,
+        },
+        other => other,
+    }
+}
+
+/// A classification requirement as the `classification` capability states
+/// it: literal or pattern systems and codes, optional or prohibited.
+///
+/// A restriction's enumeration and patterns must both hold, as its facets
+/// do in XML Schema; any other facet is a gap.
+fn classification_check(
+    classification: &Classification,
+    occurrence: Occurrence,
+) -> Result<Check, Reason> {
+    let mut parameters = BTreeMap::new();
+    let mut add = |literals: &str, patterns: &str, value: &Value| -> Result<(), Reason> {
+        let list = |value: &[String]| ParameterValue::StringList {
+            value: value.to_vec(),
+        };
+        match value {
+            Value::Simple(literal) => {
+                parameters.insert(literals.to_owned(), list(std::slice::from_ref(literal)));
+            }
+            Value::Restriction(restriction) => {
+                only_names(restriction)?;
+                if !restriction.enumeration.is_empty() {
+                    parameters.insert(literals.to_owned(), list(&restriction.enumeration));
+                }
+                if !restriction.patterns.is_empty() {
+                    for pattern in &restriction.patterns {
+                        translated(pattern)?;
+                    }
+                    parameters.insert(patterns.to_owned(), list(&restriction.patterns));
+                }
+            }
+        }
+        Ok(())
+    };
+    add("systems", "system_patterns", &classification.system)?;
+    if let Some(value) = &classification.value {
+        add("codes", "code_patterns", value)?;
+    }
+    let flag = match occurrence {
+        Occurrence::Required => None,
+        Occurrence::Optional => Some("optional"),
+        Occurrence::Prohibited => Some("prohibited"),
+    };
+    if let Some(flag) = flag {
+        parameters.insert(flag.to_owned(), ParameterValue::Boolean { value: true });
+    }
+    let shown = shown_classification(classification);
+    let title = match occurrence {
+        Occurrence::Required => format!("required: is classified {shown}"),
+        Occurrence::Optional => format!("where classified at all: is classified {shown}"),
+        Occurrence::Prohibited => format!("prohibited: is classified {shown}"),
+    };
+    Ok(Check::Capability {
+        kind: Kind::Classification,
+        title,
+        parameters,
+    })
 }
 
 /// The `property-value` parameters an IDS value stands for.

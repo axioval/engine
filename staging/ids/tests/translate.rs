@@ -202,7 +202,7 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             Reason::PropertyApplicability,
         ),
         (
-            format!("{WALL}<material><value><simpleValue>Steel</simpleValue></value></material>"),
+            format!("{WALL}<material><value><xs:restriction base=\"xs:string\"><xs:enumeration value=\"Steel\"/><xs:pattern value=\"S.*\"/></xs:restriction></value></material>"),
             Reason::MaterialValue,
         ),
         (
@@ -338,9 +338,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
         [
             (requirement(1), Reason::ProhibitedValue),
             (requirement(2), Reason::EmptyRestriction),
-            (requirement(9), Reason::ClassificationSystem),
             (requirement(10), Reason::NamePattern),
-            (requirement(11), Reason::MaterialValue),
             (
                 requirement(12),
                 Reason::PartOfRelation(Some(Relation::VoidsElementFillsElement))
@@ -355,6 +353,8 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
             "spec1.facet5",
             "spec1.facet6",
             "spec1.facet8",
+            "spec1.facet9",
+            "spec1.facet11",
             "spec1.facet13"
         ]
     );
@@ -378,6 +378,14 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     );
     assert_eq!(
         capability("spec1.facet6"),
+        "axioval:capability.selector-conformance"
+    );
+    assert_eq!(
+        capability("spec1.facet9"),
+        "axioval:capability.classification"
+    );
+    assert_eq!(
+        capability("spec1.facet11"),
         "axioval:capability.selector-conformance"
     );
     assert_eq!(
@@ -936,6 +944,113 @@ fn classification_material_and_part_of_requirements_check_a_real_model() {
             &every_applicable()
         ),
         ["#10", "#11"]
+    );
+}
+
+#[test]
+fn classification_systems_patterns_and_optional_requirements_check_a_real_model() {
+    let classified = |attributes: &str, code: &str| {
+        format!(
+            "<classification {attributes}><value><simpleValue>{code}</simpleValue></value><system><simpleValue>Uniclass</simpleValue></system></classification>"
+        )
+    };
+    // A system alone, patterns, and an optional classification go through
+    // the classification capability.
+    let system = |attributes: &str, system: &str| {
+        format!("<classification {attributes}><system>{system}</system></classification>")
+    };
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &system("", "<simpleValue>Uniclass</simpleValue>")
+        ),
+        ["#11", "#12"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &system(
+                "",
+                "<xs:restriction base=\"xs:string\"><xs:pattern value=\"Uni.*\"/></xs:restriction>"
+            )
+        ),
+        ["#11", "#12"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &system(
+                "cardinality=\"prohibited\"",
+                "<simpleValue>Uniclass</simpleValue>"
+            )
+        ),
+        ["#10"]
+    );
+    // Optional: unclassified walls pass, the classified one must match.
+    assert!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &classified("cardinality=\"optional\"", "EF_25")
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &classified("cardinality=\"optional\"", "EF_30")
+        ),
+        ["#10"]
+    );
+}
+
+#[test]
+fn material_values_check_a_real_model() {
+    // A material value is any name the material goes by.
+    let named = |attributes: &str, value: &str| {
+        format!("<material {attributes}><value>{value}</value></material>")
+    };
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &named("", "<simpleValue>Concrete</simpleValue>")
+        ),
+        ["#11", "#12"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &named("", "<simpleValue>Steel</simpleValue>")
+        ),
+        ["#10", "#11", "#12"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &named(
+                "cardinality=\"optional\"",
+                "<xs:restriction base=\"xs:string\"><xs:pattern value=\"St.*\"/></xs:restriction>"
+            )
+        ),
+        ["#10"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            &named(
+                "cardinality=\"prohibited\"",
+                "<simpleValue>Concrete</simpleValue>"
+            )
+        ),
+        ["#10"]
     );
 }
 

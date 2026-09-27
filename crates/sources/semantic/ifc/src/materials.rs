@@ -11,20 +11,26 @@
 //! assignments at one level, or two type objects, are a conflict. A malformed
 //! material, a material reached through a tapering profile usage (two profile
 //! sets), and a lone layer, constituent or profile associated directly are
-//! refused, never answered in part. Layer thicknesses go through
-//! `measure.rs`, so they are lengths in metres or refused.
+//! refused, never answered in part. Layer thicknesses and constituent
+//! fractions go through `measure.rs`, so they are SI values or refused; a
+//! unit the file does not resolve refuses that measure alone, since the
+//! material's names and members are read exactly without it.
+//!
+//! `Names` lists every name and category the material goes by, as IDS
+//! matches a material value: the material's or set's own, each member's, and
+//! each member's material's.
 //!
 //! IFC2X3 is refused: `ifc-material` 0.2 reads IFC4 slot positions whatever
 //! release the file declares (openbimrs/ifc#77).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use axioval_engine::PropertyResolutionError;
 use axioval_ir::{
     MATERIAL_CATEGORY, MATERIAL_COUNT, MATERIAL_KIND, MATERIAL_KIND_CONSTITUENT_SET,
     MATERIAL_KIND_LAYER_SET, MATERIAL_KIND_LIST, MATERIAL_KIND_PROFILE_SET, MATERIAL_KIND_SINGLE,
-    MATERIAL_NAME, MATERIAL_TOTAL_THICKNESS, PropertyValue,
+    MATERIAL_NAME, MATERIAL_NAMES, MATERIAL_TOTAL_THICKNESS, PropertyValue,
 };
 use ifc_material::{
     AssignmentSource, Material, MaterialConstituentSet, MaterialDefinition, MaterialError,
@@ -38,8 +44,9 @@ use crate::attributes::AttributeValue;
 use crate::measure::si_value;
 use crate::release::Release;
 
-/// Every material property of one object, keyed by lower-case name.
-type Composition = BTreeMap<String, (PropertyValue, String)>;
+/// Every material property of one object, keyed by lower-case name. A
+/// measure whose unit cannot be resolved is refused on its own.
+type Composition = BTreeMap<String, Result<(PropertyValue, String), PropertyResolutionError>>;
 
 /// The material that applies to one object, as properties and as the
 /// `IfcMaterial` instances it is made of.
@@ -72,13 +79,14 @@ impl Materials {
         name: &str,
     ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
         let resolved = self.resolved(model, object)?;
-        Ok(resolved
-            .properties
-            .get(&name.to_ascii_lowercase())
-            .map(|(value, detail)| AttributeValue {
+        match resolved.properties.get(&name.to_ascii_lowercase()) {
+            None => Ok(None),
+            Some(Ok((value, detail))) => Ok(Some(AttributeValue {
                 value: value.clone(),
                 detail: detail.clone(),
-            }))
+            })),
+            Some(Err(error)) => Err(error.clone()),
+        }
     }
 
     /// Every `IfcMaterial` the material of `object` is made of; empty when
@@ -117,20 +125,55 @@ struct Writer<'s> {
     prefix: String,
     out: Composition,
     materials: Vec<EntityId>,
+    /// Every name and category the material goes by, for [`MATERIAL_NAMES`].
+    names: BTreeSet<String>,
 }
 
 impl Writer<'_> {
     fn put(&mut self, name: &str, value: PropertyValue, holder: impl std::fmt::Display) {
         self.out.insert(
             name.to_ascii_lowercase(),
-            (value, format!("{}:{holder}", self.prefix)),
+            Ok((value, format!("{}:{holder}", self.prefix))),
         );
+    }
+
+    /// A measure, or its refusal for this property alone: a unit the file
+    /// does not resolve leaves the material's names and members readable.
+    fn put_measure(
+        &mut self,
+        name: &str,
+        value: Result<PropertyValue, PropertyResolutionError>,
+        holder: impl std::fmt::Display,
+    ) {
+        match value {
+            Ok(value) => self.put(name, value, holder),
+            Err(error) => {
+                self.out.insert(name.to_ascii_lowercase(), Err(error));
+            }
+        }
     }
 
     fn text(&mut self, name: &str, value: Option<&str>, holder: impl std::fmt::Display) {
         if let Some(value) = value {
+            self.named(Some(value));
             self.put(name, PropertyValue::String(value.to_owned()), holder);
         }
+    }
+
+    /// Records a name the material goes by; an empty one names nothing.
+    fn named(&mut self, name: Option<&str>) {
+        if let Some(name) = name.filter(|name| !name.is_empty()) {
+            self.names.insert(name.to_owned());
+        }
+    }
+
+    /// Writes [`MATERIAL_NAMES`] once every name is recorded.
+    fn finish_names(&mut self, holder: impl std::fmt::Display) {
+        let names = std::mem::take(&mut self.names)
+            .into_iter()
+            .map(PropertyValue::String)
+            .collect();
+        self.put(MATERIAL_NAMES, PropertyValue::List(names), holder);
     }
 
     /// Records that the material is made of `material`.
@@ -195,6 +238,7 @@ fn compose(
         ),
         out: Composition::new(),
         materials: Vec::new(),
+        names: BTreeSet::new(),
     };
     match resolved.material {
         ResolvedMaterialSelect::Definition(MaterialDefinition::Material(material)) => {
@@ -263,6 +307,7 @@ fn compose(
             )));
         }
     }
+    writer.finish_names(resolved.assignment.id());
     Ok(Resolved {
         properties: writer.out,
         materials: writer.materials,
@@ -286,8 +331,8 @@ fn layer_set(
     writer.count(layers.len(), set.id())?;
     let total = view.total_thickness(set).map_err(refusal)?;
     // The derived total is a sum of layer thicknesses, so it has their type.
-    let total = writer.measure(model, "IfcMaterialLayer", "LayerThickness", total)?;
-    writer.put(MATERIAL_TOTAL_THICKNESS, total, set.id());
+    let total = writer.measure(model, "IfcMaterialLayer", "LayerThickness", total);
+    writer.put_measure(MATERIAL_TOTAL_THICKNESS, total, set.id());
     for (index, id) in layers.into_iter().enumerate() {
         let member = format!("Layer{}", index + 1);
         macro_rules! read_layer {
@@ -295,8 +340,8 @@ fn layer_set(
                 let layer = $layer;
                 let thickness = layer.thickness().map_err(refusal)?;
                 let thickness =
-                    writer.measure(model, "IfcMaterialLayer", "LayerThickness", thickness)?;
-                writer.put(&format!("{member}.Thickness"), thickness, id);
+                    writer.measure(model, "IfcMaterialLayer", "LayerThickness", thickness);
+                writer.put_measure(&format!("{member}.Thickness"), thickness, id);
                 writer.text(
                     &format!("{member}.Name"),
                     layer.name().map_err(refusal)?,
@@ -322,6 +367,7 @@ fn layer_set(
         if let Some(material) = material {
             writer.material(material);
             let name = material_name(view, id, material)?;
+            writer.named(material_category(view, id, material)?);
             writer.text(
                 &format!("{member}.Material"),
                 Some(name),
@@ -365,12 +411,13 @@ fn constituent_set(
         );
         if let Some(fraction) = constituent.fraction().map_err(refusal)? {
             let fraction =
-                writer.measure(view.model(), "IfcMaterialConstituent", "Fraction", fraction)?;
-            writer.put(&format!("{member}.Fraction"), fraction, id);
+                writer.measure(view.model(), "IfcMaterialConstituent", "Fraction", fraction);
+            writer.put_measure(&format!("{member}.Fraction"), fraction, id);
         }
         let material = constituent.material_id().map_err(refusal)?;
         writer.material(material);
         let name = material_name(view, id, material)?;
+        writer.named(material_category(view, id, material)?);
         writer.text(
             &format!("{member}.Material"),
             Some(name),
@@ -424,6 +471,7 @@ fn profile_set(
         if let Some(material) = material {
             writer.material(material);
             let name = material_name(view, id, material)?;
+            writer.named(material_category(view, id, material)?);
             writer.text(
                 &format!("{member}.Material"),
                 Some(name),
@@ -483,6 +531,14 @@ fn material_name(
     id: EntityId,
 ) -> Result<&str, PropertyResolutionError> {
     material(view, holder, id)?.name().map_err(refusal)
+}
+
+fn material_category(
+    view: MaterialView<'_>,
+    holder: EntityId,
+    id: EntityId,
+) -> Result<Option<&str>, PropertyResolutionError> {
+    material(view, holder, id)?.category().map_err(refusal)
 }
 
 fn wrong(holder: EntityId, target: EntityId, expected: &str) -> PropertyResolutionError {

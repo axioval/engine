@@ -52,6 +52,7 @@ Some facts about an object are not in any property set but in fields of the obje
   - `TotalThickness`: the summed layer thickness of a layer set, a length in metres.
   - `Count`: the number of layers, constituents, profiles or listed materials.
   - Members numbered from 1 in the source's order: `Layer<n>.Material`, `.Thickness` (a length), `.Name` and `.Category`; `Constituent<n>.Material`, `.Name`, `.Category` and `.Fraction` (a decimal); `Profile<n>.Material`, `.Name` and `.Category`; `Material<n>.Name` and `.Category` for a list. `.Material` is the name of the member's material.
+  - `Names`: every name the material goes by, as a list of strings, distinct and sorted: the material's or the set's name and category, each member's name and category, and each member's material's name and category. A selector with `quantifier: any` asks whether one of them is a given name without enumerating members.
 
   An object without material has none of them (an exact absence), and neither does a member that does not exist or states no value. Two material assignments on the object, or on its type, are a conflict.
 

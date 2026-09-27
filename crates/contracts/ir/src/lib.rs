@@ -408,6 +408,11 @@ pub const PRESENTATION_TRANSPARENCY: &str = "Transparency";
 ///   `Profile<n>.Material`, `Profile<n>.Name` and `Profile<n>.Category`;
 ///   `Material<n>.Name` and `Material<n>.Category` for a list. `.Material` is
 ///   the name of the member's material.
+/// - [`MATERIAL_NAMES`]: every name the material goes by, as a
+///   [`PropertyValue::List`] of strings, distinct and sorted: the material's
+///   or the set's name and category, and each member's name and category and
+///   its material's name and category. Empty names are left out. A selector
+///   asks whether `any` of them is a given name without enumerating members.
 pub const MATERIAL_SET: &str = "axioval:material";
 
 /// The composition property in [`MATERIAL_SET`].
@@ -420,6 +425,8 @@ pub const MATERIAL_CATEGORY: &str = "Category";
 pub const MATERIAL_TOTAL_THICKNESS: &str = "TotalThickness";
 /// The member count property in [`MATERIAL_SET`].
 pub const MATERIAL_COUNT: &str = "Count";
+/// The list of every name and category in [`MATERIAL_SET`].
+pub const MATERIAL_NAMES: &str = "Names";
 /// [`MATERIAL_KIND`] of one homogeneous material.
 pub const MATERIAL_KIND_SINGLE: &str = "material";
 /// [`MATERIAL_KIND`] of a set of layers with thicknesses.

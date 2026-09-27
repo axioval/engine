@@ -597,18 +597,32 @@ All notable changes are documented here. This project follows Semantic Versionin
   requirements, entity requirements for other classes, class patterns,
   prohibited properties and attributes without a value
   (`property-requirements` rows excluding `not-empty`, one per enumerated
-  name), prohibited classification, material, part-of and attribute facets
-  (`selector-conformance` with the negated selector), `totalDigits` and
+  name), prohibited material, part-of and attribute facets
+  (`selector-conformance` with the negated selector), classification
+  requirements through the new `classification` capability (a system
+  alone, patterns, optional and prohibited), material values against
+  `axioval:material.Names`, `totalDigits` and
   `fractionDigits`, and specification cardinality (`object-count` per
   source, so a required specification reports a model without applicable
   objects and a prohibited one a model with any). What no capability
   decides exactly stays a reported gap: applicability property facets,
   property name patterns (openbimrs/ifc#78) and enumerations outside a
-  prohibited facet, prohibited property values, material values,
-  classification systems without a value or given as patterns, part-of
-  without a relation or through voids and fills, and requirements on a
-  prohibited specification. The buildingSMART corpus runs without a
-  mismatch. See the new "IDS import" page.
+  prohibited facet, prohibited property values, material values
+  restricted by several facets at once, applicability classifications
+  without a value or given as patterns, part-of without a relation, through
+  voids and fills, or to a type object, and requirements on a prohibited
+  specification. The buildingSMART corpus runs without a mismatch (126
+  exact passes, 42 sound passes, 80 caught fails). See the new "IDS
+  import" page.
+- **`classification` requirements.** The `classification` capability
+  requires what a `classification` selector cannot state: `systems` and
+  `codes` as literals, `system_patterns` and `code_patterns` as XML Schema
+  patterns, a system alone, `optional` (holds for an object without any
+  classification, must be met by one with any) and `prohibited`. It reads
+  the classification service and decides as the selector does: one
+  assignment meets the system and the code together, a code matches the
+  assigned item or any ancestor, and an assignment without a stated system
+  is not evaluated when it could decide the verdict.
 - **Chained relationship steps.** A `path` step ending in `+`, such as
   `IfcRelAggregates:backward+`, is taken one or more times, in `related`
   selectors and every capability that takes a `path`.
@@ -1096,13 +1110,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 - **Materials.** The reserved `axioval:material` set (`MATERIAL_SET`) names
   the material an object is made of: its `Kind`, `Name` and `Category`, a
   layer set's `TotalThickness`, the member `Count`, and numbered members
-  such as `Layer1.Material` and `Layer1.Thickness`. Every property
-  capability and selector reads them. The IFC adapter answers them from
+  such as `Layer1.Material` and `Layer1.Thickness`, and `Names`, a list of
+  every name and category the material, its members and their materials go
+  by (`MATERIAL_NAMES`), which a selector with `quantifier: any` matches
+  without enumerating members. Every property capability and selector
+  reads them. The IFC adapter answers them from
   `IfcRelAssociatesMaterial` through `ifc-material` 0.2.0, on the object or
   else its type object: single materials, layer sets (directly or through
   a usage), constituent sets, profile sets and material lists, thicknesses
-  in metres with exact provenance. An object without material is an exact
-  absence; two assignments conflict. IFC2X3 materials are refused until
+  in metres with exact provenance; a unit the file does not resolve refuses
+  that measure alone. An object without material is an exact absence; two
+  assignments conflict. IFC2X3 materials are refused until
   `ifc-material` binds to the file's release (openbimrs/ifc#77).
 - **Property selectors on par with `property-predicate`.** Selectors take
   the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,

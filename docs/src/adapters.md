@@ -177,8 +177,12 @@ reads:
   `IfcMaterialProfileSetUsage`: each profile's material, name and category;
 - an `IfcMaterialList`: each material's name and category.
 
-Thicknesses are converted from the project's length unit to metres as
-described under *Measures*, or refused. The locator names the object, where
+`Names` collects every non-empty name and category among these, and each
+member material's name and category, as IDS matches a material value.
+
+Thicknesses and fractions are converted from the project's units as
+described under *Measures*, or refused. A unit the file does not resolve
+refuses that measure alone: the names and members are exact without it. The locator names the object, where
 the association came from, the association and the entity that holds the
 value: `material:#1:type:#40:#41:#32/#20` is layer `#32`'s material `#20`,
 associated by `#41` with type `#40`; a usage adds `usage:#36`. An object

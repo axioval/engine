@@ -7,6 +7,7 @@ mod accessible_route;
 mod body_extent;
 mod clash;
 mod clash_matrix;
+mod classification_requirement;
 mod comparison;
 mod component_clearance;
 mod component_visibility;
@@ -68,6 +69,7 @@ pub use accessible_route::AccessibleRoute;
 pub use body_extent::BodyExtent;
 pub use clash::Clash;
 pub use clash_matrix::ClashMatrix;
+pub use classification_requirement::ClassificationRequirement;
 pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
     ComparisonTolerance, Difference, Facet, Measure, Measurement, ModelComparison, ObjectChange,
@@ -154,6 +156,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(Containment))
         .and_then(|registry| registry.register(Distance))
         .and_then(|registry| registry.register(SelectorConformance))
+        .and_then(|registry| registry.register(ClassificationRequirement))
         .and_then(|registry| registry.register(UniqueValue))
         .and_then(|registry| registry.register(ConsistentValue))
         .and_then(|registry| registry.register(RelatedCount))

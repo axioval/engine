@@ -9,15 +9,17 @@
 //! search found nowhere it fits. Neither may be returned on a hunch -- an
 //! adapter that cannot search exhaustively must say so instead.
 
-use axiolid_core::Point2;
+use axiolid_core::{Point2, Point3};
+use axiolid_measure::WindingMesh;
+use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
     AreaInterval, ClearanceOutcome, ClearanceRequest, ClearanceShape, CompleteClearanceEvidence,
     ContainmentOutcome, ContainmentRequest, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
     FreeSpaceService, ObstructionEvidence, PlacementOutcome, PlacementRequest,
 };
-use axioval_ir::{Evidence, SourceId};
+use axioval_ir::{Evidence, ObjectId, SourceId};
 
-use crate::geometry::{AxiolidGeometry, Triangle, triangles};
+use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::planar::{plan_frame, polygon_area, projected_polygons};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
 
@@ -71,6 +73,11 @@ fn ring(points: Vec<Point2>) -> Polygon {
 }
 
 pub(crate) fn shape_footprint(request: &ClearanceRequest) -> Result<Footprint, FreeSpaceError> {
+    shape_bounds(request, 0.0)
+}
+
+/// The footprint's bounds with every side moved inward by `inset` metres.
+fn shape_bounds(request: &ClearanceRequest, inset: f64) -> Result<Footprint, FreeSpaceError> {
     let frame = request.frame();
     let [centre_x, centre_y, _] = frame.origin().coordinates_metres();
     let [rx, ry, rz] = frame.right().components();
@@ -84,7 +91,10 @@ pub(crate) fn shape_footprint(request: &ClearanceRequest) -> Result<Footprint, F
     }
     Ok(match request.shape() {
         ClearanceShape::Box(b) => {
-            let (half_width, half_depth) = (b.width_metres() / 2.0, b.depth_metres() / 2.0);
+            let (half_width, half_depth) = (
+                b.width_metres() / 2.0 - inset,
+                b.depth_metres() / 2.0 - inset,
+            );
             let corner = |along: f64, across: f64| {
                 Point2::new(
                     centre_x + along * rx + across * fx,
@@ -117,58 +127,256 @@ pub(crate) fn shape_footprint(request: &ClearanceRequest) -> Result<Footprint, F
                         .collect(),
                 )
             };
+            // A regular polygon's sides lie `cos(π/n)` of its vertex radius
+            // from its centre, so moving them in by `inset` takes
+            // `inset / cos(π/n)` off the vertex radius.
+            let apothem = (std::f64::consts::PI / sides).cos();
             let radius = cylinder.radius_metres();
             Footprint {
-                inner: polygon(radius),
-                outer: polygon(radius / (std::f64::consts::PI / sides).cos()),
+                inner: polygon(radius - inset / apothem),
+                outer: polygon((radius - inset) / apothem),
             }
         }
     })
 }
 
-/// Vertical span of a triangle set as `(min_z, max_z)`.
-fn vertical_span(triangles: &[Triangle]) -> Option<(f64, f64)> {
-    let mut span: Option<(f64, f64)> = None;
-    for point in triangles.iter().flatten() {
-        span = Some(match span {
-            None => (point.z, point.z),
-            Some((lo, hi)) => (lo.min(point.z), hi.max(point.z)),
-        });
-    }
-    span
+/// How far inside the volume an obstacle must reach to obstruct it.
+///
+/// The volume is tested shrunk by this much on every side, so an obstacle
+/// resting on its base, standing against a side or touching its top leaves it
+/// clear, and floating-point rounding (far below a micrometre at building
+/// coordinates) cannot turn contact into an obstruction.
+pub(crate) const CONTACT_TOLERANCE_M: f64 = 1.0e-6;
+
+/// A convex prism: a convex plan polygon swept over `[bottom, top]`.
+struct Prism {
+    /// Unit plan normals of the polygon's edges with the polygon's own
+    /// `(min, max)` projection on each.
+    sides: Vec<([f64; 2], f64, f64)>,
+    plan: Vec<[f64; 2]>,
+    bottom: f64,
+    top: f64,
+    extent: Extent,
 }
 
-/// Plan area shared by a footprint polygon and a triangle set.
-fn overlap_area(
-    footprint: &Polygon,
-    other: &[Triangle],
+impl Prism {
+    fn new(polygon: &Polygon, bottom: f64, top: f64) -> Self {
+        let plan: Vec<[f64; 2]> = polygon.outer.points.iter().map(|p| [p.x, p.y]).collect();
+        let sides = edge_normals(&plan)
+            .map(|normal| {
+                let (min, max) = project(&plan, normal);
+                (normal, min, max)
+            })
+            .collect();
+        let mut extent = (
+            [f64::INFINITY, f64::INFINITY, bottom],
+            [f64::NEG_INFINITY, f64::NEG_INFINITY, top],
+        );
+        for [x, y] in &plan {
+            extent.0[0] = extent.0[0].min(*x);
+            extent.0[1] = extent.0[1].min(*y);
+            extent.1[0] = extent.1[0].max(*x);
+            extent.1[1] = extent.1[1].max(*y);
+        }
+        Self {
+            sides,
+            plan,
+            bottom,
+            top,
+            extent,
+        }
+    }
+
+    /// Whether a triangle has a point in the (closed) prism.
+    ///
+    /// A point lies in the prism when its height lies in the band and its
+    /// plan position in the polygon. So the triangle meets the prism exactly
+    /// when its part inside the band, a convex polygon, meets the plan
+    /// polygon in plan: two convex polygons, which meet unless an edge
+    /// normal of one of them separates them.
+    fn meets(&self, triangle: &Triangle) -> bool {
+        let [lo, hi] = triangle_extent(triangle);
+        if extent_gap(&self.extent, &(lo, hi), false) > 0.0 {
+            return false;
+        }
+        let band = clip(&clip(triangle, |p| p.z - self.bottom), |p| self.top - p.z);
+        if band.is_empty() {
+            return false;
+        }
+        let part: Vec<[f64; 2]> = band.iter().map(|p| [p.x, p.y]).collect();
+        let apart = |(lo_a, hi_a): (f64, f64), (lo_b, hi_b): (f64, f64)| hi_a < lo_b || hi_b < lo_a;
+        if self
+            .sides
+            .iter()
+            .any(|(normal, lo, hi)| apart(project(&part, *normal), (*lo, *hi)))
+        {
+            return false;
+        }
+        !edge_normals(&part)
+            .any(|normal| apart(project(&part, normal), project(&self.plan, normal)))
+    }
+}
+
+/// The unit normals of a closed plan polygon's edges, skipping zero-length
+/// edges (a clipped triangle can repeat a point).
+fn edge_normals(points: &[[f64; 2]]) -> impl Iterator<Item = [f64; 2]> + '_ {
+    (0..points.len()).filter_map(|i| {
+        let [ax, ay] = points[i];
+        let [bx, by] = points[(i + 1) % points.len()];
+        let (dx, dy) = (bx - ax, by - ay);
+        let length = dx.hypot(dy);
+        (length > 0.0).then(|| [-dy / length, dx / length])
+    })
+}
+
+/// `(min, max)` of the points' positions along `axis`.
+fn project(points: &[[f64; 2]], axis: [f64; 2]) -> (f64, f64) {
+    points
+        .iter()
+        .map(|[x, y]| x * axis[0] + y * axis[1])
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+            (lo.min(v), hi.max(v))
+        })
+}
+
+/// The part of a convex polygon where `side` is not negative.
+fn clip(polygon: &[Point3], side: impl Fn(&Point3) -> f64) -> Vec<Point3> {
+    let mut kept = Vec::with_capacity(polygon.len() + 1);
+    for (i, a) in polygon.iter().enumerate() {
+        let b = &polygon[(i + 1) % polygon.len()];
+        let (sa, sb) = (side(a), side(b));
+        if sa >= 0.0 {
+            kept.push(*a);
+        }
+        if (sa < 0.0) != (sb < 0.0) {
+            let t = sa / (sa - sb);
+            kept.push(*a + (*b - *a) * t);
+        }
+    }
+    kept
+}
+
+fn triangle_extent(triangle: &Triangle) -> [[f64; 3]; 2] {
+    let [a, b, c] = triangle;
+    [a.min(*b).min(*c).to_array(), a.max(*b).max(*c).to_array()]
+}
+
+/// The clearance volume as prisms, shrunk by [`CONTACT_TOLERANCE_M`].
+///
+/// `inner` lies inside the volume, so an obstacle sharing a point with it
+/// shares interior with the volume. `outer` contains the shrunk volume, so an
+/// obstacle missing it reaches no deeper than the tolerance. For a box they
+/// are the same prism and `outer` is `None`.
+struct Volume {
+    inner: Prism,
+    outer: Option<Prism>,
+    centre: Point3,
+}
+
+fn clearance_volume(request: &ClearanceRequest) -> Result<Volume, FreeSpaceError> {
+    let [x, y, z] = request.frame().origin().coordinates_metres();
+    let (height, narrowest) = match request.shape() {
+        ClearanceShape::Box(b) => (
+            b.height_metres(),
+            b.width_metres().min(b.depth_metres()) / 2.0,
+        ),
+        ClearanceShape::Cylinder(c) => (
+            c.height_metres(),
+            c.radius_metres() * (std::f64::consts::PI / f64::from(DISC_SIDES)).cos(),
+        ),
+    };
+    if narrowest <= CONTACT_TOLERANCE_M || height <= 2.0 * CONTACT_TOLERANCE_M {
+        return Err(FreeSpaceError::Unavailable(
+            "the clearance volume is thinner than the contact tolerance".into(),
+        ));
+    }
+    let bounds = shape_bounds(request, CONTACT_TOLERANCE_M)?;
+    let (bottom, top) = (z + CONTACT_TOLERANCE_M, z + height - CONTACT_TOLERANCE_M);
+    Ok(Volume {
+        inner: Prism::new(&bounds.inner, bottom, top),
+        outer: matches!(request.shape(), ClearanceShape::Cylinder(_))
+            .then(|| Prism::new(&bounds.outer, bottom, top)),
+        centre: Point3::new(x, y, z + height / 2.0),
+    })
+}
+
+/// How an obstacle stands to the volume.
+enum Reach {
+    /// It shares interior with the volume.
+    Obstructs,
+    /// It reaches no deeper into the volume than the contact tolerance.
+    Misses,
+    /// It meets the cylinder's approximation band only.
+    Undecided,
+}
+
+/// A point is inside a closed body when its winding number reaches one half.
+const INSIDE_WINDING: f64 = 0.5;
+
+/// Decides one obstacle against the volume.
+///
+/// Its surface meeting the inner prism is a witness: the surface bounds the
+/// solid, so solid lies on both sides of the meeting point, inside the
+/// volume. An obstacle wholly inside the volume is caught here too, since
+/// its surface is. When the surface misses the inner prism, the prism is
+/// wholly inside or wholly outside the solid, and the winding number at the
+/// volume's centre, which lies at least the prism's inset half-width from
+/// the surface, tells which. Only a closed, consistently and outward wound
+/// mesh bounds a solid, so any other is refused when it comes near.
+fn reach(
+    volume: &Volume,
+    object: &ObjectId,
+    mesh: &TriMesh,
     tolerance: axiolid_core::Tolerance,
-) -> Result<f64, FreeSpaceError> {
-    let other_polygons = projected_polygons(other);
-    if other_polygons.is_empty() {
-        return Ok(0.0);
+) -> Result<Reach, FreeSpaceError> {
+    let reachable = volume.outer.as_ref().unwrap_or(&volume.inner).extent;
+    match mesh_extent(mesh) {
+        None => return Err(FreeSpaceError::MissingGeometry(Box::new(object.clone()))),
+        // Wherever its solid is, it lies within its mesh's box.
+        Some(extent) if extent_gap(&reachable, &extent, false) > 0.0 => return Ok(Reach::Misses),
+        Some(_) => {}
     }
-    let frame = plan_frame();
-    let result = overlay(
-        &OverlayInput {
-            frame,
-            polygons: vec![footprint.clone()],
-        },
-        &OverlayInput {
-            frame,
-            polygons: other_polygons,
-        },
-        OverlayOperation::Intersection,
-        FillRule::NonZero,
-        tolerance,
-    )
-    .map_err(|error| FreeSpaceError::Unavailable(format!("overlay: {error:?}")))?;
-    Ok(result.polygons.iter().map(polygon_area).sum())
-}
-
-/// Height of the vertical overlap between two spans, zero when disjoint.
-fn overlapping_height(first: (f64, f64), second: (f64, f64)) -> f64 {
-    (first.1.min(second.1) - first.0.max(second.0)).max(0.0)
+    let health = audit_mesh(mesh, tolerance);
+    if !health.is_surface_usable() {
+        return Err(FreeSpaceError::Unavailable(format!(
+            "the mesh of obstacle {object} cannot be read"
+        )));
+    }
+    if !health.is_closed_two_manifold() {
+        return Err(FreeSpaceError::Unavailable(format!(
+            "obstacle {object} is not a closed, consistently wound surface, so it bounds no \
+             solid to test the clearance volume against"
+        )));
+    }
+    let body = triangles(mesh);
+    let origin = body[0][0];
+    let signed_volume: f64 = body
+        .iter()
+        .map(|[a, b, c]| (*a - origin).dot((*b - origin).cross(*c - origin)))
+        .sum();
+    if signed_volume <= 0.0 {
+        return Err(FreeSpaceError::Unavailable(format!(
+            "obstacle {object} faces inward, so which side of it is solid is unknown"
+        )));
+    }
+    if body.iter().any(|triangle| volume.inner.meets(triangle)) {
+        return Ok(Reach::Obstructs);
+    }
+    let winding = WindingMesh::prepare(mesh, tolerance)
+        .and_then(|prepared| prepared.winding_number(volume.centre))
+        .map_err(|error| FreeSpaceError::Unavailable(format!("winding: {error}")))?;
+    if winding.skipped_singular_triangles > 0 || winding.value <= -INSIDE_WINDING {
+        return Err(FreeSpaceError::Unavailable(format!(
+            "obstacle {object} does not decide whether it encloses the clearance volume"
+        )));
+    }
+    if winding.value >= INSIDE_WINDING {
+        return Ok(Reach::Obstructs);
+    }
+    match &volume.outer {
+        Some(outer) if body.iter().any(|triangle| outer.meets(triangle)) => Ok(Reach::Undecided),
+        _ => Ok(Reach::Misses),
+    }
 }
 
 impl FreeSpaceService for AxiolidFreeSpaceService {
@@ -183,14 +391,13 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             ClearanceShape::Box(b) => b.height_metres(),
             ClearanceShape::Cylinder(c) => c.height_metres(),
         };
-        let volume_span = (z, z + height);
 
         // The volume's box. A tessellated obstacle whose true body could reach
         // it makes the verdict an estimate; this evidence is exact.
-        let volume = footprint.outer.outer.points.iter().fold(
+        let volume_box = footprint.outer.outer.points.iter().fold(
             (
-                [f64::INFINITY, f64::INFINITY, volume_span.0],
-                [f64::NEG_INFINITY, f64::NEG_INFINITY, volume_span.1],
+                [f64::INFINITY, f64::INFINITY, z],
+                [f64::NEG_INFINITY, f64::NEG_INFINITY, z + height],
             ),
             |(min, max), p| {
                 (
@@ -201,7 +408,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         );
         if self
             .geometry
-            .tessellated_near(&volume, 0.0, false, |object| {
+            .tessellated_near(&volume_box, 0.0, false, |object| {
                 !request.obstacles().contains(object)
             })
             .is_some()
@@ -209,6 +416,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             return Err(FreeSpaceError::InexactObstructionEvidence);
         }
 
+        let volume = clearance_volume(request)?;
         let mut blockers = Vec::new();
         let mut undecided = false;
         for obstacle in request.obstacles() {
@@ -221,18 +429,10 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
                 .geometry
                 .mesh(obstacle)
                 .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())))?;
-            let body = triangles(mesh);
-            let Some(span) = vertical_span(&body) else {
-                return Err(FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())));
-            };
-            if overlapping_height(volume_span, span) <= 0.0 {
-                continue;
-            }
-            if overlap_area(&footprint.inner, &body, tolerance)? > AREA_EPSILON_M2 {
-                blockers.push(obstacle.clone());
-            } else if overlap_area(&footprint.outer, &body, tolerance)? > AREA_EPSILON_M2 {
-                // Between the two bounds: it may or may not reach the volume.
-                undecided = true;
+            match reach(&volume, obstacle, mesh, tolerance)? {
+                Reach::Obstructs => blockers.push(obstacle.clone()),
+                Reach::Undecided => undecided = true,
+                Reach::Misses => {}
             }
         }
 

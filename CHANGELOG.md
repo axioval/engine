@@ -1033,6 +1033,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A clearance volume could be obstructed by a body that never entered
+  it.** `AxiolidFreeSpaceService::assess_clearance` named an obstacle as a
+  blocker when its height range overlapped the volume's band and its plan
+  outline overlapped the volume's footprint, tested separately, so an
+  L-shaped body with a low foot under the volume and a tall column beside
+  it, or a table whose top overhangs the volume above its band, was
+  reported `Obstructed` with exact evidence. An obstacle now obstructs only
+  when its solid shares interior with the volume: one of its triangles
+  meets the volume shrunk by 1 µm (the triangle's part inside the height
+  band, compared with the footprint in plan), or the volume's centre lies
+  inside it. Contact with a face stays clear. A cylinder keeps its
+  inscribed and circumscribed 64-gons, now as prisms. An obstacle whose
+  mesh box reaches the volume must be a closed, consistently and outward
+  wound surface, or the request is refused: an open or inward-facing mesh
+  bounds no solid to decide either way. `component-clearance` inherits the
+  fix. (#88)
 - **Breaking. A model with no objects could not be checked, and would have
   passed an existence rule.** `EvidenceSession::try_new` refused a snapshot
   whose source contributes no object, so an IFC file holding only

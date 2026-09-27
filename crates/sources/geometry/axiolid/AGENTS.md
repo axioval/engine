@@ -10,7 +10,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   never vertex-to-vertex.
 - `src/free_space.rs` implements `FreeSpaceService` for clearance and free
   area. `find_placement` refuses: its `NoPlacement` arm asserts an exhaustive
-  search this adapter cannot perform.
+  search this adapter cannot perform. Clearance tests each obstacle's solid
+  against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
+  meeting it (band-clipped, then plan separating axes) or the centre inside
+  (winding number) obstructs. Never go back to testing height range and
+  plan outline separately: an L-shaped body satisfies both from different
+  parts. Obstacles whose box reaches the prism must be closed, consistently
+  and outward wound, or the request refuses.
 - `src/containment.rs` answers `assess_containment` for the free-space
   service: the overlay difference of the footprint's bounds (the exact
   rectangle, or a cylinder's inscribed and circumscribed 64-gons) less the

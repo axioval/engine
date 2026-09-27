@@ -20,7 +20,14 @@ The result is asymmetric:
 
 Partial geometry therefore cannot produce a false clear result.
 
-The Axiolid adapter measures a box as the exact rectangle along the frame's right and forward axes, and refuses a tilted frame. It bounds a cylinder's disc from both sides with inscribed and circumscribed 64-gons. An obstacle meeting the inscribed polygon obstructs; the volume is clear only when every obstacle misses the circumscribed one. An obstacle between the two (within about 0.12 % of the radius) refuses the request rather than being guessed either way.
+The Axiolid adapter measures a box as the exact rectangle along the frame's right and forward axes, swept over its height, and refuses a tilted frame. It bounds a cylinder from both sides with prisms over inscribed and circumscribed 64-gons. An obstacle meeting the inscribed prism obstructs; the volume is clear only when every obstacle misses the circumscribed one. An obstacle between the two (within about 0.12 % of the radius) refuses the request rather than being guessed either way.
+
+An obstacle obstructs only when its solid and the volume share interior. Its height range and plan outline are never tested separately: an L-shaped body with a low foot under the volume and a tall column beside it overlaps the volume in both, yet never enters it. The adapter tests the solid against the prism shrunk by 1 µm on every side, so a body resting on the base, standing against a side or touching the top leaves the volume clear:
+
+- a triangle of the obstacle meets the shrunk prism: the part of the triangle inside the height band is a convex polygon, which meets the prism exactly when it meets the prism's plan polygon, a separating-axis test between two convex polygons. This also catches an obstacle wholly inside the volume;
+- otherwise the prism lies wholly inside or wholly outside the obstacle, and the winding number at the volume's centre, far from every triangle, tells which.
+
+Only a closed, consistently and outward wound mesh bounds a solid. An obstacle whose mesh box reaches the shrunk prism must be one, or the request is refused; one whose box misses it is clear whatever its mesh.
 
 ## Containment in scopes
 

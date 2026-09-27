@@ -76,7 +76,7 @@ fn an_empty_volume_is_clear() {
 #[test]
 fn an_intersecting_body_obstructs_and_is_named() {
     let geometry =
-        AxiolidGeometry::new().with_mesh(id("column"), body(0.9, 1.1, 0.9, 1.1, 0.0, 3.0));
+        AxiolidGeometry::new().with_mesh(id("column"), closed_box(0.9, 1.1, 0.9, 1.1, 0.0, 3.0));
     let service = AxiolidFreeSpaceService::new(geometry, source());
     let request = ClearanceRequest::new(
         frame_at(1.0, 1.0, 0.0),
@@ -310,8 +310,8 @@ fn a_turned_box_follows_its_frame_axes() {
         MetricDirection::try_new([0.0, 0.0, 1.0]).unwrap(),
     )
     .unwrap();
-    let geometry =
-        AxiolidGeometry::new().with_mesh(id("column"), body(0.6, 0.75, -0.75, -0.6, 0.0, 3.0));
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("column"), closed_box(0.6, 0.75, -0.75, -0.6, 0.0, 3.0));
     let service = AxiolidFreeSpaceService::new(geometry, source());
     let request = ClearanceRequest::new(frame, box_shape(2.0, 0.4, 2.0), vec![id("column")]);
     assert!(matches!(
@@ -324,8 +324,8 @@ fn a_turned_box_follows_its_frame_axes() {
 /// cylinder, and must not be named as a blocker.
 #[test]
 fn a_column_in_the_corner_of_a_cylinders_square_does_not_obstruct_it() {
-    let geometry =
-        AxiolidGeometry::new().with_mesh(id("column"), body(0.65, 0.75, 0.65, 0.75, 0.0, 3.0));
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("column"), closed_box(0.65, 0.75, 0.65, 0.75, 0.0, 3.0));
     let service = AxiolidFreeSpaceService::new(geometry, source());
     let cylinder = ClearanceShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
     let request = ClearanceRequest::new(frame_at(0.0, 0.0, 0.0), cylinder, vec![id("column")]);
@@ -346,7 +346,7 @@ fn an_obstacle_in_the_disc_band_refuses() {
     let (cx, cy) = (0.7495 * angle.cos(), 0.7495 * angle.sin());
     let geometry = AxiolidGeometry::new().with_mesh(
         id("post"),
-        body(
+        closed_box(
             cx - 0.00005,
             cx + 0.00005,
             cy - 0.00005,
@@ -362,4 +362,270 @@ fn an_obstacle_in_the_disc_band_refuses() {
         service.assess_clearance(&request),
         Err(FreeSpaceError::Unavailable(_))
     ));
+}
+
+/// Several closed bodies as one mesh, like a table exported in one piece.
+fn merged(parts: &[TriMesh]) -> TriMesh {
+    let mut positions = Vec::new();
+    let mut indices = Vec::new();
+    for part in parts {
+        let offset = u32::try_from(positions.len()).expect("small mesh");
+        indices.extend(part.indices.iter().map(|index| index + offset));
+        positions.extend(part.positions.iter().copied());
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A profile extruded from `w0` to `w1` into a closed, outward-oriented
+/// prism, `place` putting a profile point `(u, v)` at depth `w` in space.
+/// `fan` triangulates the profile with the profile's own winding.
+fn extruded(
+    profile: &[(f64, f64)],
+    fan: &[[u32; 3]],
+    [w0, w1]: [f64; 2],
+    place: fn(f64, f64, f64) -> Point3,
+) -> TriMesh {
+    let n = u32::try_from(profile.len()).expect("small profile");
+    let mut positions: Vec<Point3> = profile.iter().map(|&(u, v)| place(u, v, w0)).collect();
+    positions.extend(profile.iter().map(|&(u, v)| place(u, v, w1)));
+    let mut indices = Vec::new();
+    for &[a, b, c] in fan {
+        indices.extend([a, b, c, n + a, n + c, n + b]);
+    }
+    for a in 0..n {
+        let b = (a + 1) % n;
+        indices.extend([b, a, n + a, b, n + a, n + b]);
+    }
+    let mesh = TriMesh::new(positions, indices);
+    // The winding is consistent; which way it faces depends on the profile.
+    if signed_volume(&mesh) > 0.0 {
+        mesh
+    } else {
+        inverted(&mesh)
+    }
+}
+
+fn signed_volume(mesh: &TriMesh) -> f64 {
+    mesh.indices
+        .chunks(3)
+        .map(|t| {
+            let [a, b, c] = [0, 1, 2].map(|i| mesh.positions[t[i] as usize]);
+            a.dot(b.cross(c))
+        })
+        .sum()
+}
+
+/// The same surface wound the other way, so it faces inward.
+fn inverted(mesh: &TriMesh) -> TriMesh {
+    TriMesh::new(
+        mesh.positions.clone(),
+        mesh.indices
+            .chunks(3)
+            .flat_map(|t| [t[0], t[2], t[1]])
+            .collect(),
+    )
+}
+
+/// An L-shaped body 0.8 m deep (y 0.6 to 1.4): a foot from x 0.6 to 2.0 up
+/// to `foot_top`, and a 3 m column from x 1.6 to 2.0.
+fn l_shaped(foot_top: f64) -> TriMesh {
+    let profile = [
+        (0.6, 0.0),
+        (2.0, 0.0),
+        (2.0, 3.0),
+        (1.6, 3.0),
+        (1.6, foot_top),
+        (0.6, foot_top),
+    ];
+    // Fanned from the reflex corner, which sees every other edge.
+    let fan = [[4, 5, 0], [4, 0, 1], [4, 1, 2], [4, 2, 3]];
+    extruded(&profile, &fan, [0.6, 1.4], across)
+}
+
+/// A profile `(x, z)` extruded along y.
+fn across(x: f64, z: f64, y: f64) -> Point3 {
+    Point3::new(x, y, z)
+}
+
+/// A plan outline `(x, y)` extruded upward.
+fn upright(x: f64, y: f64, z: f64) -> Point3 {
+    Point3::new(x, y, z)
+}
+
+/// A 2 m square table 2.7 m high on four corner legs, one mesh.
+fn table() -> TriMesh {
+    let leg = |x: f64, y: f64| closed_box(x, x + 0.2, y, y + 0.2, 0.0, 2.6);
+    merged(&[
+        leg(0.0, 0.0),
+        leg(1.8, 0.0),
+        leg(0.0, 1.8),
+        leg(1.8, 1.8),
+        closed_box(0.0, 2.0, 0.0, 2.0, 2.6, 2.7),
+    ])
+}
+
+/// The box the tests below share: 0.8 m square (x and y 0.6 to 1.4), from
+/// 0.5 m up to 2.5 m.
+fn raised_box(obstacles: &[(&str, TriMesh)]) -> Result<ClearanceOutcome, FreeSpaceError> {
+    raised(box_shape(0.8, 0.8, 2.0), obstacles)
+}
+
+/// `shape` centred on x = y = 1 m, standing at 0.5 m.
+fn raised(
+    shape: ClearanceShape,
+    obstacles: &[(&str, TriMesh)],
+) -> Result<ClearanceOutcome, FreeSpaceError> {
+    let geometry = obstacles
+        .iter()
+        .fold(AxiolidGeometry::new(), |geometry, (name, mesh)| {
+            geometry.with_mesh(id(name), mesh.clone())
+        });
+    let request = ClearanceRequest::new(
+        frame_at(1.0, 1.0, 0.5),
+        shape,
+        obstacles.iter().map(|(name, _)| id(name)).collect(),
+    );
+    AxiolidFreeSpaceService::new(geometry, source()).assess_clearance(&request)
+}
+
+fn blockers(outcome: Result<ClearanceOutcome, FreeSpaceError>) -> Vec<ObjectId> {
+    match outcome.expect("measurable") {
+        ClearanceOutcome::Obstructed(evidence) => evidence.blockers().to_vec(),
+        ClearanceOutcome::Clear(_) => Vec::new(),
+    }
+}
+
+/// The L's foot lies under the volume and its column beside it. Its height
+/// overlaps the volume's band and its plan outline the volume's footprint,
+/// but no part of it is inside the volume. Testing the two separately, as
+/// this adapter once did, named it as a blocker.
+#[test]
+fn an_l_shaped_body_under_and_beside_the_volume_is_clear() {
+    assert!(matches!(
+        raised_box(&[("l", l_shaped(0.3))]).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+    let cylinder = ClearanceShape::Cylinder(CylinderClearance::try_new(0.4, 2.0).unwrap());
+    assert!(matches!(
+        raised(cylinder, &[("l", l_shaped(0.3))]).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// A foot rising into the volume obstructs it.
+#[test]
+fn an_l_shaped_body_reaching_into_the_volume_obstructs_it() {
+    assert_eq!(blockers(raised_box(&[("l", l_shaped(0.8))])), [id("l")]);
+    let cylinder = ClearanceShape::Cylinder(CylinderClearance::try_new(0.4, 2.0).unwrap());
+    assert_eq!(
+        blockers(raised(cylinder, &[("l", l_shaped(0.8))])),
+        [id("l")]
+    );
+}
+
+/// The table's top covers the volume's footprint above its band, and its legs
+/// stand in the band outside the footprint: the volume beneath is clear.
+#[test]
+fn a_table_overhanging_the_volume_above_its_band_is_clear() {
+    assert!(matches!(
+        raised_box(&[("table", table())]).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+    let cylinder = ClearanceShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    assert!(matches!(
+        raised(cylinder, &[("table", table())]).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// A body entering the volume through a side obstructs it and is named.
+#[test]
+fn a_body_entering_the_volume_obstructs_it() {
+    assert_eq!(
+        blockers(raised_box(&[
+            ("crate", closed_box(1.2, 2.0, 0.6, 1.4, 0.0, 1.0)),
+            ("far", closed_box(5.0, 6.0, 5.0, 6.0, 0.0, 1.0)),
+        ])),
+        [id("crate")]
+    );
+}
+
+/// Bodies against a side, under the base and on the top touch the volume
+/// but do not enter it.
+#[test]
+fn bodies_in_contact_with_its_faces_leave_the_volume_clear() {
+    assert!(matches!(
+        raised_box(&[
+            ("wall", closed_box(1.4, 2.0, 0.0, 2.0, 0.0, 3.0)),
+            ("floor", closed_box(0.0, 2.0, 0.0, 2.0, 0.0, 0.5)),
+            ("ceiling", closed_box(0.0, 1.4, 0.0, 2.0, 2.5, 3.0)),
+        ])
+        .expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// No surface meets a volume buried in a solid, yet it is obstructed.
+#[test]
+fn a_volume_inside_a_body_is_obstructed() {
+    assert_eq!(
+        blockers(raised_box(&[(
+            "block",
+            closed_box(-5.0, 5.0, -5.0, 5.0, -5.0, 5.0)
+        )])),
+        [id("block")]
+    );
+}
+
+/// A body wholly inside the volume obstructs it.
+#[test]
+fn a_body_inside_the_volume_obstructs_it() {
+    assert_eq!(
+        blockers(raised_box(&[(
+            "box",
+            closed_box(0.9, 1.1, 0.9, 1.1, 1.0, 1.2)
+        )])),
+        [id("box")]
+    );
+}
+
+/// A slab leaning over the volume: in the band it stays beyond x = 1.4, and
+/// it reaches over the footprint only above the band. Its faces cross the
+/// band's top, so only their part inside the band may be compared in plan.
+#[test]
+fn a_slab_leaning_over_the_volume_is_clear() {
+    let profile = [(2.2, 2.0), (2.5, 2.0), (0.9, 3.0), (0.6, 3.0)];
+    let slab = extruded(&profile, &[[0, 1, 2], [0, 2, 3]], [0.6, 1.4], across);
+    assert!(matches!(
+        raised_box(&[("slab", slab)]).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// A column turned by 45° off the volume's corner. Neither of the volume's
+/// sides separates them in plan, only the column's own diagonal side does.
+#[test]
+fn a_turned_column_off_the_corner_is_clear() {
+    let diamond = [(1.85, 1.6), (1.6, 1.85), (1.35, 1.6), (1.6, 1.35)];
+    let column = extruded(&diamond, &[[0, 1, 2], [0, 2, 3]], [0.0, 3.0], upright);
+    assert!(matches!(
+        raised_box(&[("column", column)]).expect("measurable"),
+        ClearanceOutcome::Clear(_)
+    ));
+}
+
+/// Only a closed, outward surface bounds a solid. An open or inward-facing
+/// mesh near the volume refuses rather than being guessed either way.
+#[test]
+fn an_open_or_inward_obstacle_near_the_volume_refuses() {
+    for mesh in [
+        body(0.9, 1.1, 0.9, 1.1, 0.0, 3.0),
+        body(1.3, 1.8, 0.9, 1.1, 0.0, 3.0),
+        inverted(&closed_box(1.3, 1.8, 0.9, 1.1, 0.0, 3.0)),
+    ] {
+        assert!(matches!(
+            raised_box(&[("column", mesh)]),
+            Err(FreeSpaceError::Unavailable(_))
+        ));
+    }
 }

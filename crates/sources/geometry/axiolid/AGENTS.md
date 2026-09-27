@@ -50,6 +50,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   separation; never drop the margin, or a gap exactly as wide as the path
   snaps shut and reads as blocked), contacts by footprints grown with the
   matching one-sided dilation, and `axiolid_route::skeleton` per piece.
+  Merged scopes and a band start come from the request through
+  `floor_scene`, as for placement.
   The skeleton is called directly (axiolid-triangulate 0.3.1 carries the
   fix for axiolid/kernel#190); a piece whose skeleton the kernel refuses is
   unmapped, never guessed. Half widths are distances to the free area widened by the grid

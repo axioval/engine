@@ -185,7 +185,7 @@ impl AxiolidFreeSpaceService {
         let reach = radius + request.tolerance_metres();
         let (scene, floor) = self.floor_scene(
             request.scope(),
-            &[],
+            request.merged_scopes(),
             request.obstacles(),
             request.swept_doors(),
             request.band(),
@@ -337,10 +337,12 @@ impl AxiolidFreeSpaceService {
             contacts.push(CirculationContact::new(subject, reached, maybe));
         }
 
-        let evidence = Evidence::exact(
-            request.scope().source.clone(),
-            format!("axiolid:circulation:{}", request.scope().local_id),
-        );
+        let mut locator = format!("axiolid:circulation:{}", request.scope().local_id);
+        for merged in request.merged_scopes() {
+            locator.push('+');
+            locator.push_str(&merged.to_string());
+        }
+        let evidence = Evidence::exact(request.scope().source.clone(), locator);
         CirculationMap::try_new(
             request.clone(),
             pieces.len(),

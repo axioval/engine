@@ -28,6 +28,15 @@
 //!   size at most every `passing_spacing_metres` (see
 //!   [`crate::passing_spaces`]).
 //!
+//! With `merge_path`, the spaces it reaches are mapped together with the
+//! selected one as one walkable area: their entrances and components count
+//! too. `band_from_metres` starts the obstacle band above the floor, so a
+//! skirting below it leaves the path free. `end_exempt_selector` exempts a
+//! path end within `end_exempt_reach_metres` of a selected object from
+//! needing a free area. With `component_mode` `link_sets`, every component
+//! must instead be linked with one of the `partner_selector` objects of its
+//! space.
+//!
 //! With `subtract_door_swings`, the sectors the selected doors' leaves sweep
 //! are obstacles too, for the path, its end areas and its passing spaces;
 //! an entrance of the space is walked through, so its own swing never is.
@@ -41,9 +50,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use axioval_engine::{
     BoxClearance, CapabilityEvaluation, CirculationMap, CirculationNodeKind, CirculationRequest,
-    CompiledRule, FrameOffsetPlacement, FreeSpaceError, FreeSpaceServiceHandle, MetricDirection,
-    MetricFrame, MetricPoint, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    CompiledRule, ConvexPlanRegion, ElevationBand, FrameOffsetPlacement, FreeSpaceError,
+    FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, NotEvaluatedReason,
+    ParameterDescriptor, ParameterType, PlacementDomain, PlacementOrientation, PlacementOutcome,
+    PlacementRequest, PlacementShape, ProximityServiceHandle, RegionDistanceRequest,
     RuleCapability, RuleContext, SignedDistanceInterval, SweptDoor,
 };
 use axioval_ir::contract::Selector;
@@ -77,6 +87,8 @@ enum Mode {
     Touch,
     /// Linked with each other.
     Link,
+    /// Each linked with one of the partners.
+    LinkSets,
 }
 
 /// The free area each path end needs.
@@ -92,6 +104,10 @@ struct Declaration<'a> {
     access: AccessDeclaration<'a>,
     obstacles: Option<&'a Selector>,
     swings: Option<&'a Selector>,
+    merge: Option<Traversal<'a>>,
+    band_from: Option<f64>,
+    exempt: Option<(&'a Selector, f64)>,
+    partners: Option<&'a Selector>,
     width: f64,
     height: f64,
     tolerance: f64,
@@ -111,6 +127,7 @@ fn positive(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unav
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let height = positive(&parameters, "clear_height_metres")?
@@ -132,10 +149,41 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let mode = match parameters.string("component_mode")?.unwrap_or("touch") {
         "touch" => Mode::Touch,
         "link" => Mode::Link,
+        "link_sets" => Mode::LinkSets,
         other => {
             return Err(invalid(format!(
-                "component mode `{other}` is unsupported (touch, link)"
+                "component mode `{other}` is unsupported (touch, link, link_sets)"
             )));
+        }
+    };
+    let partners = parameters.selector("partner_selector")?;
+    if (mode == Mode::LinkSets) != partners.is_some() {
+        return Err(invalid(
+            "`component_mode` `link_sets` and `partner_selector` go together",
+        ));
+    }
+    let band_from = match parameters.number("band_from_metres")? {
+        Some(from) if !(from.is_finite() && from >= 0.0 && from < height) => {
+            return Err(invalid(
+                "`band_from_metres` must lie from the floor up to below `clear_height_metres`",
+            ));
+        }
+        other => other,
+    };
+    let merge = match parameters.strings("merge_path")? {
+        Some(path) => Some(Traversal::path(path)?),
+        None => None,
+    };
+    let exempt = match (
+        parameters.selector("end_exempt_selector")?,
+        positive(&parameters, "end_exempt_reach_metres")?,
+    ) {
+        (Some(selector), Some(reach)) => Some((selector, reach)),
+        (None, None) => None,
+        _ => {
+            return Err(invalid(
+                "`end_exempt_selector` and `end_exempt_reach_metres` go together",
+            ));
         }
     };
     let end = match (
@@ -158,10 +206,10 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     };
     let short_end = positive(&parameters, "short_end_metres")?;
     let narrow_end = positive(&parameters, "narrow_end_metres")?;
-    if end.is_none() && (short_end.is_some() || narrow_end.is_some()) {
+    if end.is_none() && (short_end.is_some() || narrow_end.is_some() || exempt.is_some()) {
         return Err(invalid(
-            "`short_end_metres` and `narrow_end_metres` exempt ends from the free area \
-             `end_width_metres` and `end_length_metres` declare",
+            "`short_end_metres`, `narrow_end_metres` and `end_exempt_selector` exempt ends \
+             from the free area `end_width_metres` and `end_length_metres` declare",
         ));
     }
     Ok(Declaration {
@@ -170,6 +218,10 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         access,
         obstacles: parameters.selector("obstacles")?,
         swings: parameters.selector("subtract_door_swings")?,
+        merge,
+        band_from,
+        exempt,
+        partners,
         width: positive(&parameters, "width_metres")?
             .ok_or_else(|| invalid("parameter `width_metres` is required"))?,
         height,
@@ -206,6 +258,11 @@ impl RuleCapability for LocalCirculation {
             ParameterDescriptor::optional("end_reach_metres", ParameterType::Number),
             ParameterDescriptor::optional("short_end_metres", ParameterType::Number),
             ParameterDescriptor::optional("narrow_end_metres", ParameterType::Number),
+            ParameterDescriptor::optional("merge_path", ParameterType::StringList),
+            ParameterDescriptor::optional("band_from_metres", ParameterType::Number),
+            ParameterDescriptor::optional("end_exempt_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("end_exempt_reach_metres", ParameterType::Number),
+            ParameterDescriptor::optional("partner_selector", ParameterType::Selector),
         ];
         parameters.extend(passing_spaces::parameters());
         parameters
@@ -267,25 +324,49 @@ impl RuleCapability for LocalCirculation {
                 return evaluation;
             }
         };
-        let members = match components(context, &declared, &spaces, &mut evaluation) {
+        let everything: Vec<&Object> = context.project.objects().collect();
+        let members = match components(context, &declared, &everything, &mut evaluation) {
             Ok(members) => members,
             Err(unavailable) => {
                 refuse(&mut evaluation, unavailable);
                 return evaluation;
             }
         };
+        let others = |selector: Option<&Selector>, what: &str| {
+            selector.map_or_else(
+                || Ok(Others::default()),
+                |selector| Others::select(context, &declared, selector, &everything, what),
+            )
+        };
+        let (partners, exempt) = match (
+            others(declared.partners, "partner"),
+            others(
+                declared.exempt.map(|(selector, _)| selector),
+                "exempting object",
+            ),
+        ) {
+            (Ok(partners), Ok(exempt)) => (partners, exempt),
+            (Err(unavailable), _) | (_, Err(unavailable)) => {
+                refuse(&mut evaluation, unavailable);
+                return evaluation;
+            }
+        };
         let index = declared.access.index(context);
         let judge = Judge {
+            context,
             rule,
             declared: &declared,
             free_space,
             index: &index,
             obstacles: &obstacles,
             swept: &swept,
+            everything: &everything,
+            members: &members,
+            partners: &partners,
+            exempt: &exempt,
         };
         for space in &spaces {
-            let inside = members.get(&space.id).cloned().unwrap_or_default();
-            judge.space(&space.id, &inside, &mut evaluation);
+            judge.space(&space.id, &mut evaluation);
         }
         evaluation
     }
@@ -313,8 +394,8 @@ fn select_obstacles(
     Ok(objects.iter().map(|object| object.id.clone()).collect())
 }
 
-/// The selected components of each selected space. A component whose
-/// selection or spaces are undecided is not evaluated itself.
+/// The selected components of each space. A component whose selection or
+/// spaces are undecided is not evaluated itself.
 fn components(
     context: &RuleContext<'_>,
     declared: &Declaration<'_>,
@@ -359,6 +440,78 @@ fn components(
         }
     }
     Ok(members)
+}
+
+/// Objects of another selection (partners, exempting objects) by space:
+/// surely selected ones, and those the selection cannot decide. Objects
+/// whose spaces cannot be read may stand anywhere.
+#[derive(Default)]
+struct Others {
+    sure: BTreeMap<ObjectId, Vec<ObjectId>>,
+    maybe: BTreeMap<ObjectId, Vec<ObjectId>>,
+    anywhere: Vec<String>,
+}
+
+impl Others {
+    fn select(
+        context: &RuleContext<'_>,
+        declared: &Declaration<'_>,
+        selector: &Selector,
+        everything: &[&Object],
+        what: &str,
+    ) -> Result<Self, Unavailable> {
+        let (picked, outcomes) = select_objects(context, selector);
+        let mut objects: Vec<(ObjectId, bool)> = picked
+            .iter()
+            .map(|object| (object.id.clone(), true))
+            .collect();
+        for outcome in outcomes.not_evaluated_outcomes() {
+            match outcome.object_id() {
+                Some(object) => objects.push((object.clone(), false)),
+                None => {
+                    return Err((
+                        outcome.reason().clone(),
+                        format!("the {what} selection is undecided: {}", outcome.message()),
+                    ));
+                }
+            }
+        }
+        let mut others = Self::default();
+        for (object, sure) in objects {
+            match declared.spaces.related(context, &object, everything) {
+                Ok((reached, _)) => {
+                    let into = if sure {
+                        &mut others.sure
+                    } else {
+                        &mut others.maybe
+                    };
+                    for space in reached {
+                        into.entry(space).or_default().push(object.clone());
+                    }
+                }
+                Err((_, message)) => others.anywhere.push(format!(
+                    "the spaces of {what} {object} cannot be read: {message}"
+                )),
+            }
+        }
+        Ok(others)
+    }
+
+    /// The sure and possible objects of `spaces`.
+    fn of(&self, spaces: &[ObjectId]) -> (Vec<ObjectId>, Vec<ObjectId>) {
+        let collect = |map: &BTreeMap<ObjectId, Vec<ObjectId>>| {
+            let mut out: Vec<ObjectId> = spaces
+                .iter()
+                .filter_map(|space| map.get(space))
+                .flatten()
+                .cloned()
+                .collect();
+            out.sort();
+            out.dedup();
+            out
+        };
+        (collect(&self.sure), collect(&self.maybe))
+    }
 }
 
 fn error(error: &FreeSpaceError) -> Unavailable {
@@ -409,12 +562,17 @@ impl Verdicts {
 }
 
 struct Judge<'a> {
+    context: &'a RuleContext<'a>,
     rule: &'a CompiledRule,
     declared: &'a Declaration<'a>,
     free_space: &'a FreeSpaceServiceHandle,
     index: &'a AccessIndex,
     obstacles: &'a [ObjectId],
     swept: &'a [SweptDoor],
+    everything: &'a [&'a Object],
+    members: &'a BTreeMap<ObjectId, Vec<ObjectId>>,
+    partners: &'a Others,
+    exempt: &'a Others,
 }
 
 /// The entrances of one space.
@@ -426,43 +584,88 @@ struct Doors {
 }
 
 impl Judge<'_> {
-    fn space(
-        &self,
-        space: &ObjectId,
-        components: &[ObjectId],
-        evaluation: &mut CapabilityEvaluation,
-    ) {
+    #[allow(clippy::too_many_lines)]
+    fn space(&self, space: &ObjectId, evaluation: &mut CapabilityEvaluation) {
+        let (merged, merge_evidence) = match &self.declared.merge {
+            Some(path) => match path.related(self.context, space, self.everything) {
+                Ok(merged) => merged,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(
+                        space.clone(),
+                        reason,
+                        format!("the spaces merged with {space} cannot be read: {message}"),
+                    );
+                    return;
+                }
+            },
+            None => (Vec::new(), Vec::new()),
+        };
+        let mut merged: Vec<ObjectId> = merged.into_iter().filter(|id| id != space).collect();
+        merged.sort();
+        merged.dedup();
+        let area: Vec<ObjectId> = std::iter::once(space.clone())
+            .chain(merged.iter().cloned())
+            .collect();
+        let mut components: Vec<ObjectId> = area
+            .iter()
+            .filter_map(|space| self.members.get(space))
+            .flatten()
+            .cloned()
+            .collect();
+        components.sort();
+        components.dedup();
         // Nothing to reach and no ends to check: the space has no path to
         // judge.
         if components.is_empty() && self.declared.end.is_none() {
             return;
         }
-        let entrances = self.index.entrances(space, AccessType::Any);
-        let doors = Doors {
-            all: entrances
-                .sure
-                .iter()
-                .map(|(id, _)| id.clone())
-                .chain(entrances.maybe.iter().map(|(id, _)| id.clone()))
-                .collect(),
-            sure: entrances.sure,
+        let mut doors = Doors {
+            sure: Vec::new(),
+            all: Vec::new(),
         };
+        for part in &area {
+            let entrances = self.index.entrances(part, AccessType::Any);
+            doors
+                .all
+                .extend(entrances.sure.iter().map(|(id, _)| id.clone()));
+            doors
+                .all
+                .extend(entrances.maybe.iter().map(|(id, _)| id.clone()));
+            for (door, cited) in entrances.sure {
+                if !doors.sure.iter().any(|(known, _)| *known == door) {
+                    doors.sure.push((door, cited));
+                }
+            }
+        }
+        doors.all.sort();
+        doors.all.dedup();
+        doors.sure.sort_by(|a, b| a.0.cmp(&b.0));
+        let (partners, maybe_partners) = self.partners.of(&area);
         let obstacles: Vec<ObjectId> = self
             .obstacles
             .iter()
-            .filter(|object| *object != space)
+            .filter(|object| !area.contains(object))
             .cloned()
             .collect();
+        let mut subjects = components.clone();
+        subjects.extend(partners.iter().cloned());
+        subjects.extend(maybe_partners.iter().cloned());
+        subjects.retain(|subject| !area.contains(subject));
         let map = CirculationRequest::try_new(
             space.clone(),
             doors.all.clone(),
-            components.to_vec(),
+            subjects,
             obstacles.clone(),
             self.declared.width,
             self.declared.height,
             self.declared.tolerance,
         )
         .and_then(|request| request.with_swept_doors(self.swept.to_vec()))
+        .and_then(|request| request.with_merged_scopes(merged.clone()))
+        .and_then(|request| match self.declared.band_from {
+            Some(from) => request.with_band_from(from),
+            None => Ok(request),
+        })
         .and_then(|request| self.free_space.map_circulation(&request));
         let map = match map {
             Ok(map) => map,
@@ -474,7 +677,7 @@ impl Judge<'_> {
                     reason.clone(),
                     message.clone(),
                 );
-                for component in components {
+                for component in &components {
                     evaluation.push_object_not_evaluated(
                         component.clone(),
                         reason.clone(),
@@ -487,14 +690,18 @@ impl Judge<'_> {
         let context = Context {
             judge: self,
             space,
+            merged: &merged,
+            merge_evidence: &merge_evidence,
             map: &map,
             doors: &doors,
             obstacles: &obstacles,
+            area: &area,
         };
-        for component in components {
+        for component in &components {
             let verdicts = match self.declared.mode {
                 Mode::Touch => context.touch(component),
-                Mode::Link => context.link(component, components),
+                Mode::Link => context.link(component, &components),
+                Mode::LinkSets => context.link_sets(component, &partners, &maybe_partners),
             };
             verdicts.push_into(self.rule, component, evaluation);
         }
@@ -506,9 +713,14 @@ impl Judge<'_> {
 struct Context<'a> {
     judge: &'a Judge<'a>,
     space: &'a ObjectId,
+    /// The spaces mapped with it, and why.
+    merged: &'a [ObjectId],
+    merge_evidence: &'a [Evidence],
     map: &'a CirculationMap,
     doors: &'a Doors,
     obstacles: &'a [ObjectId],
+    /// The space and the merged spaces.
+    area: &'a [ObjectId],
 }
 
 impl Context<'_> {
@@ -563,10 +775,16 @@ impl Context<'_> {
             });
             if apart {
                 let mut evidence = vec![self.map.evidence().clone()];
-                let (cited_doors, cited) = self.judge.index.cited(self.space);
-                evidence.extend(cited);
+                evidence.extend(self.merge_evidence.iter().cloned());
                 let mut related = vec![self.space.clone()];
-                related.extend(cited_doors);
+                for part in self.area {
+                    let (cited_doors, cited) = self.judge.index.cited(part);
+                    evidence.extend(cited);
+                    related.extend(cited_doors);
+                }
+                related.extend(self.merged.iter().cloned());
+                related.sort();
+                related.dedup();
                 verdicts.findings.push((
                     format!(
                         "no entrance of {} reaches it on a path {} wide",
@@ -632,7 +850,7 @@ impl Context<'_> {
         match passing_spaces::judge_path(
             passing,
             self.judge.free_space,
-            self.space,
+            (self.space, self.merged),
             (self.obstacles, self.judge.swept),
             &points,
             &format!("the path from {door}"),
@@ -647,6 +865,70 @@ impl Context<'_> {
             }
             Spacing::Unknown(reason, message) => verdicts.unknown.push((reason, message)),
         }
+    }
+
+    /// Whether `component` is linked with one of the partners: a partner
+    /// sharing a piece with it passes; a finding needs its possible pieces
+    /// apart from every partner's, sure or possible, and every partner
+    /// placed.
+    fn link_sets(
+        &self,
+        component: &ObjectId,
+        partners: &[ObjectId],
+        maybe_partners: &[ObjectId],
+    ) -> Verdicts {
+        let mut verdicts = Verdicts::default();
+        let (pieces, possible) = self.near(component);
+        let linked = partners.iter().any(|partner| {
+            partner != component && {
+                let (theirs, _) = self.near(partner);
+                pieces.iter().any(|piece| theirs.contains(piece))
+            }
+        });
+        if linked {
+            return verdicts;
+        }
+        let apart = partners
+            .iter()
+            .chain(maybe_partners)
+            .filter(|partner| *partner != component)
+            .all(|partner| {
+                let (_, theirs) = self.near(partner);
+                possible.iter().all(|piece| !theirs.contains(piece))
+            });
+        let anywhere = &self.judge.partners.anywhere;
+        if apart && anywhere.is_empty() {
+            let mut evidence = vec![self.map.evidence().clone()];
+            evidence.extend(self.merge_evidence.iter().cloned());
+            let mut related = vec![self.space.clone()];
+            related.extend(partners.iter().chain(maybe_partners).cloned());
+            related.extend(self.merged.iter().cloned());
+            verdicts.findings.push((
+                format!(
+                    "no path {} wide in {} links it with a partner{}",
+                    self.describe_width(),
+                    self.space,
+                    if partners.is_empty() && maybe_partners.is_empty() {
+                        " (the space has none)"
+                    } else {
+                        ""
+                    }
+                ),
+                evidence,
+                related,
+            ));
+        } else {
+            let mut why = format!(
+                "whether a path {} wide links it with a partner is not proven either way",
+                self.describe_width()
+            );
+            if !anywhere.is_empty() {
+                why.push_str(": ");
+                why.push_str(&anywhere.join("; "));
+            }
+            verdicts.unknown.push(incomplete(why));
+        }
+        verdicts
     }
 
     /// Whether `component` is linked with every other component.
@@ -769,6 +1051,12 @@ impl Context<'_> {
         let outcome = self
             .search(area, [x, y, z], [dx, dy])
             .map_err(|failure| error(&failure))?;
+        if matches!(outcome, PlacementOutcome::NoPlacement(_)) {
+            exempt = exempt.or(self.near_exempt(node));
+            if exempt == Exemption::Yes {
+                return Ok(End::Exempt);
+            }
+        }
         match (outcome, exempt) {
             (PlacementOutcome::Found(_), _) => Ok(End::Free),
             (PlacementOutcome::NoPlacement(proof), Exemption::No) => {
@@ -781,6 +1069,63 @@ impl Context<'_> {
                 metres(y)
             ))),
         }
+    }
+
+    /// Whether the end `node` lies within `end_exempt_reach_metres` of an
+    /// exempting object's footprint. The end's true position lies within
+    /// two sample spacings of the node, so the distance is measured from a
+    /// square that wide around it: surely near when even its farthest point
+    /// is, surely not when the square is farther.
+    fn near_exempt(&self, node: usize) -> Exemption {
+        let Some((_, reach)) = self.judge.declared.exempt else {
+            return Exemption::No;
+        };
+        let exempt = self.judge.exempt;
+        let (sure, maybe) = exempt.of(self.area);
+        if sure.is_empty() && maybe.is_empty() {
+            return if exempt.anywhere.is_empty() {
+                Exemption::No
+            } else {
+                Exemption::Maybe
+            };
+        }
+        let Some(proximity) = self.judge.context.services.get::<ProximityServiceHandle>() else {
+            return Exemption::Maybe;
+        };
+        let [x, y, _] = self.map.nodes()[node].point();
+        let slack = 2.0 * self.map.spacing_metres();
+        let Ok(square) = ConvexPlanRegion::try_new(vec![
+            [x - slack, y - slack],
+            [x + slack, y - slack],
+            [x + slack, y + slack],
+            [x - slack, y + slack],
+        ]) else {
+            return Exemption::Maybe;
+        };
+        // From the square to the footprint, the end is at most the square's
+        // diagonal farther.
+        let diagonal = 2.0 * std::f64::consts::SQRT_2 * slack;
+        let mut verdict = if exempt.anywhere.is_empty() {
+            Exemption::No
+        } else {
+            Exemption::Maybe
+        };
+        for (object, surely) in sure
+            .iter()
+            .map(|object| (object, true))
+            .chain(maybe.iter().map(|object| (object, false)))
+        {
+            let request = RegionDistanceRequest::new(square.clone(), object.clone());
+            let here = match proximity.measure_region_distance(&request) {
+                Ok(measured) if measured.interval_metres().1 + diagonal <= reach && surely => {
+                    Exemption::Yes
+                }
+                Ok(measured) if measured.interval_metres().0 > reach => Exemption::No,
+                _ => Exemption::Maybe,
+            };
+            verdict = verdict.or(here);
+        }
+        verdict
     }
 
     fn search(
@@ -805,13 +1150,17 @@ impl Context<'_> {
             shape: BoxClearance::try_new(area.width, area.length, self.judge.declared.height)?,
             orientation: PlacementOrientation::Fixed(anchor),
         };
-        let request = PlacementRequest::new_in_domain(
+        let mut request = PlacementRequest::new_in_domain(
             self.space.clone(),
             shape,
             self.obstacles.to_vec(),
             PlacementDomain::FrameOffsets(offsets),
         )?
-        .with_swept_doors(self.judge.swept.to_vec())?;
+        .with_swept_doors(self.judge.swept.to_vec())?
+        .with_merged_scopes(self.merged.to_vec())?;
+        if let Some(from) = self.judge.declared.band_from {
+            request = request.with_band(ElevationBand::try_new(from, self.judge.declared.height)?);
+        }
         self.judge.free_space.find_placement(&request)
     }
 }

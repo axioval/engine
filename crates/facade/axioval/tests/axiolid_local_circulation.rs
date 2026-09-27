@@ -15,14 +15,16 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval::axiolid::{
     AxiolidDerivedRelationshipService, AxiolidFreeSpaceService, AxiolidGeometry,
+    AxiolidProximityService,
 };
 use axioval::engine::{
     CapabilityEvaluation, CompiledRule, CompleteRelationshipSelection,
     DerivedRelationshipServiceHandle, DoorLeaf, DoorLeaves, DoorLeavesError,
     FreeSpaceServiceHandle, HingeSide, LeafMotion, LeafPosition, MetricDirection, ObjectFrame,
-    ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    RuleCapability, RuleContext, ServiceRegistry, SourceSnapshot, SwingSector,
+    ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ProximityServiceHandle,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, RuleCapability, RuleContext,
+    ServiceRegistry, SourceSnapshot, SwingSector,
 };
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
 use axioval::ir::{Evidence, NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
@@ -65,6 +67,9 @@ struct Scene {
     objects: Vec<Object>,
     geometry: AxiolidGeometry,
     leaves: BTreeMap<ObjectId, DoorLeaves>,
+    /// Further spaces, and pairs a stated `merges` relationship joins.
+    spaces: Vec<&'static str>,
+    merges: Vec<(ObjectId, ObjectId)>,
 }
 
 impl Scene {
@@ -74,6 +79,8 @@ impl Scene {
             objects: Vec::new(),
             geometry: AxiolidGeometry::new(),
             leaves: BTreeMap::new(),
+            spaces: Vec::new(),
+            merges: Vec::new(),
         }
         .body("room", "room", cuboid([0.0, 0.0, 0.0], [6.0, 4.0, 3.0]))
         .body("door", "door", cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))
@@ -122,14 +129,23 @@ impl Scene {
             parameters: bound,
         };
         let project = Project::new(self.objects.clone()).unwrap();
-        let derived = AxiolidDerivedRelationshipService::new(self.geometry.clone())
+        let mut derived = AxiolidDerivedRelationshipService::new(self.geometry.clone())
             .with_space(id("room"))
             .with_opening(id("door"));
+        for space in &self.spaces {
+            derived = derived.with_space(id(space));
+        }
         let mut services = ServiceRegistry::new();
         services
             .register(RelationshipSelectionServiceHandle::new(Arc::new(Derived(
                 DerivedRelationshipServiceHandle::new(Arc::new(derived)),
+                self.merges.clone(),
             ))))
+            .unwrap();
+        services
+            .register(ProximityServiceHandle::new(Arc::new(
+                AxiolidProximityService::new(self.geometry.clone()),
+            )))
             .unwrap();
         services
             .register(FreeSpaceServiceHandle::new(Arc::new(
@@ -212,15 +228,41 @@ fn hinged(local: &str, hinge: [f64; 3], closed: [f64; 3], open: [f64; 3]) -> Doo
     .unwrap()
 }
 
-/// Every relationship derived from the geometry.
-struct Derived(DerivedRelationshipServiceHandle);
+/// Every relationship derived from the geometry, and a stated `merges`
+/// relationship between the given pairs, either way.
+struct Derived(DerivedRelationshipServiceHandle, Vec<(ObjectId, ObjectId)>);
 
 impl RelationshipSelectionService for Derived {
     fn select(
         &self,
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
-        self.0.select(request)
+        let RelationshipQuery::Related { relationship, .. } = request.query() else {
+            return self.0.select(request);
+        };
+        if relationship.as_str() != "merges" {
+            return self.0.select(request);
+        }
+        let anchor = request.anchor();
+        let candidates = self
+            .1
+            .iter()
+            .filter_map(|(a, b)| {
+                if a == anchor {
+                    Some(b.clone())
+                } else if b == anchor {
+                    Some(a.clone())
+                } else {
+                    None
+                }
+            })
+            .filter(|candidate| request.candidate_universe().contains(candidate))
+            .collect();
+        CompleteRelationshipSelection::try_new(
+            request.clone(),
+            candidates,
+            vec![Evidence::exact(source(), format!("merges:{anchor}"))],
+        )
     }
 }
 
@@ -447,6 +489,8 @@ fn corridor() -> Scene {
         objects: Vec::new(),
         geometry: AxiolidGeometry::new(),
         leaves: BTreeMap::new(),
+        spaces: Vec::new(),
+        merges: Vec::new(),
     }
     .body("room", "room", cuboid([0.0, 0.0, 0.0], [20.0, 1.8, 3.0]))
     .body("door", "door", cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))
@@ -484,4 +528,133 @@ fn a_path_without_passing_spaces_along_the_cabinets_is_found() {
     let outcome = corridor().check(&passing(25.0));
     assert!(outcome.findings().is_empty(), "{outcome:#?}");
     assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+}
+
+/// The room and an annex east of it (x 6..9), sharing the boundary at x 6
+/// with nothing between; a bed in the room, a WC in the annex.
+fn suite() -> Scene {
+    let mut scene = Scene::room()
+        .body("annex", "room", cuboid([6.0, 0.0, 0.0], [9.0, 4.0, 3.0]))
+        .body("bed", "bed", cuboid([0.5, 2.0, 0.0], [2.5, 3.9, 0.5]))
+        .body("wc", "wc", cuboid([8.3, 0.2, 0.0], [8.9, 0.9, 0.8]));
+    scene.spaces.push("annex");
+    scene.merges.push((id("room"), id("annex")));
+    scene
+}
+
+fn linking() -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "component_selector",
+            selector(Selector::AnyOf {
+                operands: vec![kind("bed"), kind("wc")],
+            }),
+        ),
+        (
+            "component_mode",
+            ParameterValue::String {
+                value: "link".into(),
+            },
+        ),
+        ("merge_path", strings(&["merges"])),
+    ]
+}
+
+#[test]
+fn a_bed_is_linked_to_a_wc_across_merged_spaces() {
+    let outcome = suite().check(&linking());
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // A wall along the shared boundary parts them.
+    let outcome = suite()
+        .body("wall", "wall", cuboid([5.9, 0.0, 0.0], [6.0, 4.0, 3.0]))
+        .check(&linking());
+    let found = findings(&outcome);
+    assert!(
+        found.iter().any(|(object, message)| object == "bed"
+            && message == "no path 0.9 m wide in cad:model/room links it with cad:model/wc"),
+        "{found:#?}"
+    );
+}
+
+#[test]
+fn a_low_skirting_is_ignored_with_the_band_starting_above_it() {
+    // A skirting 0.1 m high runs across the room at x 3.0..3.1.
+    let scene = || {
+        Scene::room()
+            .body(
+                "skirting",
+                "skirting",
+                cuboid([3.0, 0.0, 0.0], [3.1, 4.0, 0.1]),
+            )
+            .body("wc", "wc", cuboid([5.3, 0.2, 0.0], [5.9, 0.9, 0.8]))
+    };
+    let outcome = scene().check(&[]);
+    assert_eq!(findings(&outcome).len(), 1, "{outcome:#?}");
+    let outcome = scene().check(&[("band_from_metres", number(0.2))]);
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // A band starting at the clear height is an invalid declaration.
+    let outcome = scene().check(&[("band_from_metres", number(2.0))]);
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+#[test]
+fn a_path_end_near_a_selected_component_needs_no_free_area() {
+    let with = |reach: f64| {
+        let mut parameters = turning();
+        parameters.push(("end_exempt_selector", selector(kind("cabinet"))));
+        parameters.push(("end_exempt_reach_metres", number(reach)));
+        blocked().check(&parameters)
+    };
+    // The dead end lies about 0.6 m from the block.
+    let outcome = with(1.5);
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    assert_eq!(with(0.2).findings().len(), 1);
+}
+
+#[test]
+fn each_component_of_one_set_must_reach_one_of_the_other() {
+    let scene = |partition: f64| {
+        Scene::partitioned(partition).body("bed", "bed", cuboid([0.5, 2.0, 0.0], [2.5, 3.0, 0.5]))
+    };
+    let pairing = || {
+        vec![
+            ("component_selector", selector(kind("bed"))),
+            (
+                "component_mode",
+                ParameterValue::String {
+                    value: "link_sets".into(),
+                },
+            ),
+            ("partner_selector", selector(kind("wc"))),
+        ]
+    };
+    let outcome = scene(3.3).check(&pairing());
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "bed".to_owned(),
+            "no path 0.9 m wide in cad:model/room links it with a partner".to_owned()
+        )],
+        "{outcome:#?}"
+    );
+    let outcome = scene(2.5).check(&pairing());
+    assert!(outcome.findings().is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // `link_sets` needs its partners.
+    let outcome = scene(2.5).check(&[(
+        "component_mode",
+        ParameterValue::String {
+            value: "link_sets".into(),
+        },
+    )]);
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
 }

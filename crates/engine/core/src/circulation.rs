@@ -46,6 +46,8 @@ pub struct CirculationRequest {
     height_metres: f64,
     tolerance_metres: f64,
     swept: Vec<SweptDoor>,
+    merged: Vec<ObjectId>,
+    band_from_metres: f64,
 }
 
 impl CirculationRequest {
@@ -94,7 +96,52 @@ impl CirculationRequest {
             height_metres,
             tolerance_metres,
             swept: Vec::new(),
+            merged: Vec::new(),
+            band_from_metres: 0.0,
         })
+    }
+
+    /// Maps the union of the scope and `merged` scopes, such as the spaces
+    /// of one room split by a virtual boundary, as one free area. Merged
+    /// scopes stand on the scope's floor and are never obstacles.
+    ///
+    /// # Errors
+    ///
+    /// [`FreeSpaceError::MergedScopeConflict`] when a merged scope is an
+    /// entrance or a component.
+    pub fn with_merged_scopes(mut self, mut merged: Vec<ObjectId>) -> Result<Self, FreeSpaceError> {
+        merged.retain(|object| object != &self.scope);
+        merged.sort();
+        merged.dedup();
+        if merged.iter().any(|object| {
+            self.entrances.binary_search(object).is_ok()
+                || self.components.binary_search(object).is_ok()
+        }) {
+            return Err(FreeSpaceError::MergedScopeConflict);
+        }
+        self.obstacles
+            .retain(|object| merged.binary_search(object).is_err());
+        self.merged = merged;
+        Ok(self)
+    }
+
+    /// The scopes mapped together with the scope, sorted.
+    #[must_use]
+    pub fn merged_scopes(&self) -> &[ObjectId] {
+        &self.merged
+    }
+
+    /// Counts obstacles only from `from_metres` above the floor up to the
+    /// height, so a skirting or a low sill below it leaves the path free.
+    ///
+    /// # Errors
+    ///
+    /// [`FreeSpaceError::InvalidElevationBand`] for a start that is
+    /// negative, not finite or not below the height.
+    pub fn with_band_from(mut self, from_metres: f64) -> Result<Self, FreeSpaceError> {
+        ElevationBand::try_new(from_metres, self.height_metres)?;
+        self.band_from_metres = from_metres;
+        Ok(self)
     }
 
     /// Counts the sectors `swept` doors sweep as obstacles (see
@@ -164,11 +211,12 @@ impl CirculationRequest {
         self.tolerance_metres
     }
 
-    /// The band obstacles count in: the floor up by the height.
+    /// The band obstacles count in: from the band's start (the floor by
+    /// default) up to the height above the floor.
     #[must_use]
     pub fn band(&self) -> ElevationBand {
-        ElevationBand::try_new(0.0, self.height_metres)
-            .unwrap_or_else(|_| unreachable!("the height is positive and finite"))
+        ElevationBand::try_new(self.band_from_metres, self.height_metres)
+            .unwrap_or_else(|_| unreachable!("the start lies below the positive, finite height"))
     }
 
     /// The subjects a map reports contacts for: the entrances and the

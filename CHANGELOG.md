@@ -105,6 +105,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   pair not evaluated. **Breaking:** definitions bound to `clash` or
   `clash-matrix` must declare the new optional parameter;
   `ProximityService` gains a defaulted method.
+- **Local circulation options.** (#125) `local-circulation` takes
+  `merge_path` (the spaces it reaches are mapped with the selected one as
+  one walkable area, their entrances and components counting too;
+  `CirculationRequest::with_merged_scopes`), `band_from_metres` (the
+  obstacle band starts above the floor, so a skirting below it is
+  ignored; `CirculationRequest::with_band_from`), `end_exempt_selector`
+  with `end_exempt_reach_metres` (a path end within reach of a selected
+  object's footprint, measured with the proximity service from a square
+  two sample spacings around the end node, needs no free area), and
+  `component_mode` `link_sets` with `partner_selector` (every component
+  must be linked with one of the partners of its space). The Axiolid map
+  searches the merged floors together and names them in its locator.
+  **Breaking:** definitions bound to `local-circulation` must declare the
+  five new optional parameters; `CirculationRequest` equality now covers
+  merged scopes and the band start.
 - **Free floor reached from the entrances.** (#124) `free-floor-circle`
   and `free-floor-rectangle` take `entrance_path_width` (with
   `entrance_tolerance_metres`, default 0.05 m) and the entrance

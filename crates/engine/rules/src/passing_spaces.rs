@@ -252,12 +252,13 @@ fn walk(
 
 /// Whether the polyline `points` in `scope` (on its floor) has its passing
 /// spaces, its ends counting as passing spaces; `what` names it in a
-/// finding. `obstacles` must not hold the scope; the sectors `swept`
+/// finding. `merged` scopes are searched with it. `obstacles` must not
+/// hold the scopes; the sectors `swept`
 /// doors sweep obstruct a passing space as well.
 pub(crate) fn judge_path(
     passing: &PassingSpaces,
     free_space: &FreeSpaceServiceHandle,
-    scope: &ObjectId,
+    (scope, merged): (&ObjectId, &[ObjectId]),
     (obstacles, swept): (&[ObjectId], &[SweptDoor]),
     points: &[[f64; 3]],
     what: &str,
@@ -266,7 +267,7 @@ pub(crate) fn judge_path(
         passing,
         free_space,
         scope,
-        merged: &[],
+        merged,
         obstacles,
         swept,
     };

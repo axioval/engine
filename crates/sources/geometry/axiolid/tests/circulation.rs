@@ -252,3 +252,101 @@ fn a_swing_across_the_gap_cuts_the_wc_off() {
     let own = request(vec![swinging_south("door", 0.5, 0.0)]);
     assert!(own.swept_doors().is_empty());
 }
+
+#[test]
+fn merged_spaces_are_mapped_as_one_area() {
+    // An annex east of the room (x 6..9) holds the WC; they share x 6.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [6.0, 4.0, 3.0]))
+        .with_mesh(id("annex"), cuboid([6.0, 0.0, 0.0], [9.0, 4.0, 3.0]))
+        .with_mesh(id("door"), cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))
+        .with_mesh(id("wc"), cuboid([8.3, 0.2, 0.0], [8.9, 0.9, 0.8]));
+    let request = CirculationRequest::try_new(
+        id("room"),
+        vec![id("door")],
+        vec![id("wc")],
+        vec![id("wc"), id("door"), id("annex")],
+        0.9,
+        2.0,
+        0.05,
+    )
+    .unwrap()
+    .with_merged_scopes(vec![id("annex"), id("room")])
+    .unwrap();
+    // The annex is floor, never an obstacle.
+    assert_eq!(request.obstacles(), &[id("wc")]);
+    assert_eq!(request.merged_scopes(), &[id("annex")]);
+    let map = AxiolidFreeSpaceService::new(geometry, source())
+        .map_circulation(&request)
+        .expect("mapped");
+    let door = map.contact(&id("door")).unwrap();
+    let wc = map.contact(&id("wc")).unwrap();
+    assert!(wc.reaches(door.reached()[0].0), "{map:#?}");
+    assert_eq!(
+        map.evidence().locator,
+        "axiolid:circulation:room+cad:model/annex"
+    );
+    // A merged scope may be neither an entrance nor a component.
+    assert_eq!(
+        CirculationRequest::try_new(
+            id("room"),
+            vec![id("door")],
+            vec![id("wc")],
+            Vec::new(),
+            0.9,
+            2.0,
+            0.05,
+        )
+        .unwrap()
+        .with_merged_scopes(vec![id("wc")])
+        .unwrap_err(),
+        FreeSpaceError::MergedScopeConflict
+    );
+}
+
+#[test]
+fn a_band_starting_above_a_skirting_leaves_the_path_free() {
+    // A skirting 0.1 m high crosses the room at x 3.0..3.1.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [6.0, 4.0, 3.0]))
+        .with_mesh(id("door"), cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))
+        .with_mesh(id("wc"), cuboid([5.3, 0.2, 0.0], [5.9, 0.9, 0.8]))
+        .with_mesh(id("skirting"), cuboid([3.0, 0.0, 0.0], [3.1, 4.0, 0.1]));
+    let request = |from: Option<f64>| {
+        let request = CirculationRequest::try_new(
+            id("room"),
+            vec![id("door")],
+            vec![id("wc")],
+            vec![id("skirting"), id("wc"), id("door")],
+            0.9,
+            2.0,
+            0.05,
+        )
+        .unwrap();
+        match from {
+            Some(from) => request.with_band_from(from).unwrap(),
+            None => request,
+        }
+    };
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let low = service.map_circulation(&request(None)).unwrap();
+    let (door, wc) = (
+        low.contact(&id("door")).unwrap(),
+        low.contact(&id("wc")).unwrap(),
+    );
+    assert!(
+        door.possible()
+            .iter()
+            .all(|piece| !wc.possible().contains(piece))
+    );
+    let high = service.map_circulation(&request(Some(0.2))).unwrap();
+    let (door, wc) = (
+        high.contact(&id("door")).unwrap(),
+        high.contact(&id("wc")).unwrap(),
+    );
+    assert!(wc.reaches(door.reached()[0].0), "{high:#?}");
+    assert_eq!(
+        request(None).with_band_from(2.0).unwrap_err(),
+        FreeSpaceError::InvalidElevationBand
+    );
+}

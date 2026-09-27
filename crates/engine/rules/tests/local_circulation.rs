@@ -278,3 +278,65 @@ fn refusals_and_missing_services_are_not_evaluated() {
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
     );
 }
+
+/// `merge_path` and `band_from_metres` go into the request, and `link_sets`
+/// sends the partners as subjects.
+#[test]
+fn merged_spaces_band_start_and_partners_are_requested() {
+    let stub = Arc::new(Stub::new(
+        1,
+        vec![
+            ("d", vec![0], vec![0]),
+            ("a", vec![0], vec![0]),
+            ("c", vec![0], vec![0]),
+        ],
+    ));
+    let handle = stub.clone();
+    let model = Model::default()
+        .object("s", "space")
+        .object("t", "space")
+        .object("d", "door")
+        .object("a", "wc")
+        .object("c", "bed")
+        .edge("bounds", "d", "s")
+        .edge("in", "a", "s")
+        .edge("in", "c", "t")
+        .edge("merges", "s", "t");
+    let evaluation = model.evaluate_with(
+        &LocalCirculation,
+        &rule(
+            ID,
+            kind("space"),
+            vec![
+                ("component_selector", selector(kind("wc"))),
+                ("space_path", strings(&["in"])),
+                ("access_path", strings(&["bounds"])),
+                ("door_selector", selector(kind("door"))),
+                ("width_metres", number(0.9)),
+                ("clear_height_metres", number(2.0)),
+                ("merge_path", strings(&["merges"])),
+                ("band_from_metres", number(0.2)),
+                ("component_mode", string("link_sets")),
+                ("partner_selector", selector(kind("bed"))),
+            ],
+        ),
+        |services| {
+            services
+                .register(FreeSpaceServiceHandle::new(handle))
+                .unwrap();
+        },
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:#?}");
+    let seen = stub.seen.lock().unwrap();
+    let request = seen
+        .iter()
+        .find(|request| request.scope() == &id("s"))
+        .unwrap();
+    assert_eq!(request.merged_scopes(), [id("t")]);
+    assert!((request.band().from_metres() - 0.2).abs() < f64::EPSILON);
+    assert_eq!(request.entrances(), [id("d")]);
+    // The WC of `s` and the bed of the merged `t`.
+    assert_eq!(request.components(), [id("a"), id("c")]);
+    assert!(!request.obstacles().contains(&id("t")));
+}

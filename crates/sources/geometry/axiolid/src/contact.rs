@@ -10,7 +10,7 @@
 
 use axiolid_measure::{closest_points_on_triangles, surface_properties};
 use axioval_engine::{ContactError, ContactEvidence, ContactRequest, ContactService, ContactSide};
-use axioval_ir::{Evidence, SourceId};
+use axioval_ir::Evidence;
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::plan_overlap_area;
@@ -27,14 +27,13 @@ const AUDIT_ANGULAR_TOLERANCE: f64 = 1e-9;
 #[derive(Debug)]
 pub struct AxiolidContactService {
     geometry: AxiolidGeometry,
-    source: SourceId,
 }
 
 impl AxiolidContactService {
     /// Creates a service over the supplied geometry.
     #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self { geometry, source }
+    pub fn new(geometry: AxiolidGeometry) -> Self {
+        Self { geometry }
     }
 }
 
@@ -119,11 +118,21 @@ impl ContactService for AxiolidContactService {
         if self.geometry.is_tessellated(request.subject()) {
             return Err(ContactError::InexactEvidence);
         }
-        // Counterparts are the measured objects. One whose body could not be
-        // measured may be exactly what the subject rests on, and its extent is
-        // unknown, so no answer about counterparts is complete.
-        if self.geometry.unmeasured().next().is_some() {
-            return Err(ContactError::Unavailable);
+        // Counterparts are exactly the requested candidates. A candidate whose
+        // body could not be measured, or that the host never described, may be
+        // exactly what the subject rests on and its extent is unknown, so no
+        // answer is complete. An unmeasured object the rule did not ask about
+        // cannot change the answer and blocks nothing.
+        let mut counterparts = Vec::with_capacity(request.candidates().len());
+        for candidate in request.candidates() {
+            if self.geometry.is_unmeasured(candidate) {
+                return Err(ContactError::Unavailable);
+            }
+            if let Some(mesh) = self.geometry.mesh(candidate) {
+                counterparts.push((candidate, mesh));
+            } else if !self.geometry.has_no_body(candidate) {
+                return Err(ContactError::Unavailable);
+            }
         }
         let tolerance =
             axiolid_core::Tolerance::new(AUDIT_LINEAR_TOLERANCE, AUDIT_ANGULAR_TOLERANCE)
@@ -141,7 +150,7 @@ impl ContactService for AxiolidContactService {
         let mut nearest: Option<f64> = None;
         let mut contact_area = 0.0;
         let mut touching = Vec::new();
-        for (candidate_id, candidate_mesh) in self.geometry.counterparts(request.subject()) {
+        for (candidate_id, candidate_mesh) in counterparts {
             let candidate_triangles = triangles(candidate_mesh);
             if candidate_triangles.is_empty()
                 || !on_requested_side(&subject_triangles, &candidate_triangles, request.side())
@@ -170,6 +179,8 @@ impl ContactService for AxiolidContactService {
         // A tessellated counterpart close enough to touch, or to be the nearest
         // candidate, makes the area or the distance an estimate. Its enclosing
         // box is grown by its chord deviation and never farther than its body.
+        // Only candidates can touch; a curved object outside them is not
+        // measured and so cannot make the answer an estimate.
         let reach = nearest.map_or(request.tolerance().maximum_gap_metres(), |distance| {
             distance.max(request.tolerance().maximum_gap_metres())
         });
@@ -180,7 +191,7 @@ impl ContactService for AxiolidContactService {
         if self
             .geometry
             .tessellated_near(&subject_extent, reach, false, |object| {
-                object == request.subject()
+                !request.is_candidate(object)
             })
             .is_some()
         {
@@ -199,7 +210,7 @@ impl ContactService for AxiolidContactService {
             nearest,
             touching,
             Evidence::exact(
-                self.source.clone(),
+                request.subject().source.clone(),
                 format!("axiolid:contact:{}", request.subject().local_id),
             ),
         )

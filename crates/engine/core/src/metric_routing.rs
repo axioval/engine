@@ -40,6 +40,16 @@ pub enum MetricRoutingError {
     /// The backend deliberately refused an unsupported or partial query.
     #[error("metric routing query unavailable: {0}")]
     Unavailable(String),
+    /// A many-target query named no target.
+    #[error("a metric routing query needs at least one target")]
+    NoTargets,
+    /// A farthest-point tolerance was negative or non-finite.
+    #[error("metric routing tolerance must be finite and non-negative")]
+    InvalidTolerance,
+    /// A backend answered with a target the request does not have, or
+    /// claimed convergence for an interval wider than the tolerance.
+    #[error("metric routing backend answered inconsistently with the request")]
+    InconsistentResponse,
 }
 
 /// Three-valued result for comparing bounded evidence with a policy threshold.
@@ -347,11 +357,331 @@ pub enum MetricRouteOutcome {
     Blocked(BlockedMetricRouteEvidence),
 }
 
+/// The distance from one point to the nearest of several targets.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NearestTargetRequest {
+    origin: MetricPoint,
+    targets: Vec<MetricPoint>,
+    profile: MobilityProfile,
+}
+
+impl NearestTargetRequest {
+    /// Creates a request; targets keep their order, which answers index.
+    pub fn try_new(
+        origin: MetricPoint,
+        targets: Vec<MetricPoint>,
+        profile: MobilityProfile,
+    ) -> Result<Self, MetricRoutingError> {
+        if targets.is_empty() {
+            return Err(MetricRoutingError::NoTargets);
+        }
+        Ok(Self {
+            origin,
+            targets,
+            profile,
+        })
+    }
+
+    /// Where every route starts.
+    pub fn origin(&self) -> &MetricPoint {
+        &self.origin
+    }
+
+    /// The targets, in request order.
+    pub fn targets(&self) -> &[MetricPoint] {
+        &self.targets
+    }
+
+    /// Mobility envelope.
+    pub fn profile(&self) -> MobilityProfile {
+        self.profile
+    }
+}
+
+/// Bounds on the distance to the nearest target, and a route that realises
+/// the upper bound.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NearestTargetEvidence {
+    target: usize,
+    shortest_distance: LengthInterval,
+    waypoints: Vec<MetricPoint>,
+    evidence: Evidence,
+}
+
+impl NearestTargetEvidence {
+    /// Validates the answer: `target` indexes the request's targets and is
+    /// the one the waypoints reach; `shortest_distance` bounds the distance
+    /// to the nearest of all targets, which may be another one.
+    pub fn try_new(
+        target: usize,
+        shortest_distance: LengthInterval,
+        waypoints: Vec<MetricPoint>,
+        evidence: Evidence,
+    ) -> Result<Self, MetricRoutingError> {
+        if waypoints.is_empty() {
+            return Err(MetricRoutingError::EmptyRouteEvidence);
+        }
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(MetricRoutingError::InexactRouteEvidence);
+        }
+        Ok(Self {
+            target,
+            shortest_distance,
+            waypoints,
+            evidence,
+        })
+    }
+
+    /// Index of the target the route reaches.
+    pub fn target(&self) -> usize {
+        self.target
+    }
+
+    /// Conservative bounds on the distance to the nearest target.
+    pub fn shortest_distance(&self) -> &LengthInterval {
+        &self.shortest_distance
+    }
+
+    /// The route, from the origin to [`Self::target`].
+    pub fn waypoints(&self) -> &[MetricPoint] {
+        &self.waypoints
+    }
+
+    /// Measurement provenance.
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// No target is reachable from the origin, under complete exact evidence.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnreachableTargetsEvidence {
+    request: NearestTargetRequest,
+    completeness: CompleteMetricEvidence,
+}
+
+impl UnreachableTargetsEvidence {
+    /// Binds complete evidence to one request.
+    pub fn new(request: NearestTargetRequest, completeness: CompleteMetricEvidence) -> Self {
+        Self {
+            request,
+            completeness,
+        }
+    }
+
+    /// Request proven unreachable.
+    pub fn request(&self) -> &NearestTargetRequest {
+        &self.request
+    }
+
+    /// Exact completeness provenance.
+    pub fn completeness(&self) -> &CompleteMetricEvidence {
+        &self.completeness
+    }
+}
+
+/// Answer to a [`NearestTargetRequest`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum NearestTargetOutcome {
+    /// Some target is reachable; the nearest distance is bounded.
+    Reached(NearestTargetEvidence),
+    /// No target is reachable, with complete evidence.
+    Unreachable(UnreachableTargetsEvidence),
+}
+
+/// The largest distance from any point of a region to the nearest of
+/// several targets.
+///
+/// The region is an object's walkable area: the points of its plan, on its
+/// floor, that the mobility profile leaves free. Only those points count;
+/// a point inside an obstacle is none of the region's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FarthestPointRequest {
+    region: ObjectId,
+    targets: Vec<MetricPoint>,
+    profile: MobilityProfile,
+    tolerance_metres: f64,
+}
+
+impl FarthestPointRequest {
+    /// Creates a request. `tolerance_metres` is how narrow the interval
+    /// should become; a backend may answer wider without claiming
+    /// convergence, never narrower than the truth.
+    pub fn try_new(
+        region: ObjectId,
+        targets: Vec<MetricPoint>,
+        profile: MobilityProfile,
+        tolerance_metres: f64,
+    ) -> Result<Self, MetricRoutingError> {
+        if targets.is_empty() {
+            return Err(MetricRoutingError::NoTargets);
+        }
+        if !valid_non_negative(tolerance_metres) {
+            return Err(MetricRoutingError::InvalidTolerance);
+        }
+        Ok(Self {
+            region,
+            targets,
+            profile,
+            tolerance_metres,
+        })
+    }
+
+    /// The object whose walkable area is measured.
+    pub fn region(&self) -> &ObjectId {
+        &self.region
+    }
+
+    /// The targets, in request order.
+    pub fn targets(&self) -> &[MetricPoint] {
+        &self.targets
+    }
+
+    /// Mobility envelope.
+    pub fn profile(&self) -> MobilityProfile {
+        self.profile
+    }
+
+    /// Requested interval width in metres.
+    pub fn tolerance_metres(&self) -> f64 {
+        self.tolerance_metres
+    }
+}
+
+/// A certified bracket on the largest distance to the nearest target.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FarthestPointEvidence {
+    distance: LengthInterval,
+    witness: MetricPoint,
+    converged: bool,
+    evidence: Evidence,
+}
+
+impl FarthestPointEvidence {
+    /// Validates the bracket.
+    ///
+    /// `distance` contains the largest distance over the region; `witness`
+    /// is a point of the region whose distance to every target is at least
+    /// `distance`'s lower bound. `converged` claims the interval is no wider
+    /// than the requested tolerance; the handle checks the claim.
+    pub fn try_new(
+        distance: LengthInterval,
+        witness: MetricPoint,
+        converged: bool,
+        evidence: Evidence,
+    ) -> Result<Self, MetricRoutingError> {
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(MetricRoutingError::InexactRouteEvidence);
+        }
+        Ok(Self {
+            distance,
+            witness,
+            converged,
+            evidence,
+        })
+    }
+
+    /// Bounds on the largest distance to the nearest target.
+    pub fn distance(&self) -> &LengthInterval {
+        &self.distance
+    }
+
+    /// A point of the region at least the lower bound from every target.
+    pub fn witness(&self) -> &MetricPoint {
+        &self.witness
+    }
+
+    /// Whether the interval is no wider than the requested tolerance.
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    /// Measurement provenance.
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// Part of the region reaches no target, under complete exact evidence, so
+/// the largest distance is unbounded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnreachableRegionEvidence {
+    request: FarthestPointRequest,
+    witness: MetricPoint,
+    completeness: CompleteMetricEvidence,
+}
+
+impl UnreachableRegionEvidence {
+    /// Binds a point of the region no target reaches, and complete
+    /// evidence, to one request.
+    pub fn new(
+        request: FarthestPointRequest,
+        witness: MetricPoint,
+        completeness: CompleteMetricEvidence,
+    ) -> Self {
+        Self {
+            request,
+            witness,
+            completeness,
+        }
+    }
+
+    /// Request proven to have an unreachable part.
+    pub fn request(&self) -> &FarthestPointRequest {
+        &self.request
+    }
+
+    /// A point of the region from which no target is reachable.
+    pub fn witness(&self) -> &MetricPoint {
+        &self.witness
+    }
+
+    /// Exact completeness provenance.
+    pub fn completeness(&self) -> &CompleteMetricEvidence {
+        &self.completeness
+    }
+}
+
+/// Answer to a [`FarthestPointRequest`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum FarthestPointOutcome {
+    /// Every point of the region reaches a target; the largest distance is
+    /// bracketed.
+    Bounded(FarthestPointEvidence),
+    /// Some point of the region reaches no target.
+    Unreachable(UnreachableRegionEvidence),
+}
+
 /// Backend-neutral metric routing interface implemented by trusted host code.
 pub trait MetricRoutingService: Send + Sync + 'static {
     /// Evaluates one route request or explicitly refuses unavailable evidence.
     fn route(&self, request: &MetricRouteRequest)
     -> Result<MetricRouteOutcome, MetricRoutingError>;
+
+    /// Bounds the distance from the origin to the nearest target. The
+    /// default refuses: a backend that cannot search many targets at once
+    /// must not answer with a single pair.
+    fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        let _ = request;
+        Err(MetricRoutingError::Unavailable(
+            "this backend does not measure nearest targets".into(),
+        ))
+    }
+
+    /// Brackets the largest distance from any point of the region to the
+    /// nearest target. The default refuses rather than sampling points.
+    fn farthest_point(
+        &self,
+        request: &FarthestPointRequest,
+    ) -> Result<FarthestPointOutcome, MetricRoutingError> {
+        let _ = request;
+        Err(MetricRoutingError::Unavailable(
+            "this backend does not measure farthest points".into(),
+        ))
+    }
 }
 
 /// Concrete type-indexable wrapper around a metric routing service.
@@ -382,6 +712,68 @@ impl MetricRoutingServiceHandle {
             && blocked.request() != request
         {
             return Err(MetricRoutingError::ResponseEndpointMismatch);
+        }
+        Ok(outcome)
+    }
+
+    /// Executes a nearest-target query and checks the answer is bound to it:
+    /// the target exists, the route starts at the origin and ends at it, and
+    /// an unreachable verdict names this request.
+    pub fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        let outcome = self.0.nearest_target(request)?;
+        match &outcome {
+            NearestTargetOutcome::Reached(reached) => {
+                let target = request
+                    .targets()
+                    .get(reached.target())
+                    .ok_or(MetricRoutingError::InconsistentResponse)?;
+                let (Some(first), Some(last)) =
+                    (reached.waypoints().first(), reached.waypoints().last())
+                else {
+                    return Err(MetricRoutingError::EmptyRouteEvidence);
+                };
+                if first != request.origin() || last != target {
+                    return Err(MetricRoutingError::ResponseEndpointMismatch);
+                }
+            }
+            NearestTargetOutcome::Unreachable(unreachable) => {
+                if unreachable.request() != request {
+                    return Err(MetricRoutingError::ResponseEndpointMismatch);
+                }
+            }
+        }
+        Ok(outcome)
+    }
+
+    /// Executes a farthest-point query and checks the answer is bound to it:
+    /// the witness lies on the requested region, a claimed convergence holds
+    /// for the requested tolerance, and an unreachable verdict names this
+    /// request.
+    pub fn farthest_point(
+        &self,
+        request: &FarthestPointRequest,
+    ) -> Result<FarthestPointOutcome, MetricRoutingError> {
+        let outcome = self.0.farthest_point(request)?;
+        match &outcome {
+            FarthestPointOutcome::Bounded(bounded) => {
+                if bounded.witness().subject() != request.region() {
+                    return Err(MetricRoutingError::ResponseEndpointMismatch);
+                }
+                let width = bounded.distance().upper_metres() - bounded.distance().lower_metres();
+                if bounded.converged() && width > request.tolerance_metres() {
+                    return Err(MetricRoutingError::InconsistentResponse);
+                }
+            }
+            FarthestPointOutcome::Unreachable(unreachable) => {
+                if unreachable.request() != request
+                    || unreachable.witness().subject() != request.region()
+                {
+                    return Err(MetricRoutingError::ResponseEndpointMismatch);
+                }
+            }
         }
         Ok(outcome)
     }

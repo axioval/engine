@@ -8,8 +8,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CandidatePair, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectBounds,
-    ProximityError, ProximityEvidence, ProximityServiceHandle, RuleContext, candidate_pairs,
+    CandidatePair, CapabilityEvaluation, CompiledRule, GeometryFidelity, NotEvaluatedReason,
+    ObjectBounds, ProximityError, ProximityProjection, ProximityServiceHandle, RuleContext,
+    projected_candidate_pairs,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Object, ObjectId, Severity};
@@ -36,26 +37,14 @@ impl Unevaluated {
 pub(crate) struct Prepared<'a> {
     pub(crate) service: &'a ProximityServiceHandle,
     pub(crate) subjects: Vec<ObjectId>,
+    /// Selected subjects whose extent could not be read.
+    pub(crate) unmeasurable_subjects: BTreeSet<ObjectId>,
     /// Counterparts with a readable extent, in identity order.
     pub(crate) counterparts: BTreeSet<ObjectId>,
     /// Selected counterparts whose extent could not be read.
     pub(crate) unmeasurable_counterparts: BTreeSet<ObjectId>,
     pub(crate) pairs: Vec<CandidatePair>,
     pub(crate) unevaluated: Unevaluated,
-}
-
-/// A declared length that is not a finite, non-negative number.
-pub(crate) struct InvalidLength;
-
-/// An optional declared length in metres; absent is `Ok(None)`.
-pub(crate) fn length(rule: &CompiledRule, key: &str) -> Result<Option<f64>, InvalidLength> {
-    match rule.parameters.get(key) {
-        None => Ok(None),
-        Some(ParameterValue::Number { value }) if value.is_finite() && *value >= 0.0 => {
-            Ok(Some(*value))
-        }
-        Some(_) => Err(InvalidLength),
-    }
 }
 
 pub(crate) fn severity(rule: &CompiledRule) -> Severity {
@@ -75,11 +64,29 @@ pub(crate) fn counterpart_selector(rule: &CompiledRule) -> Option<&Selector> {
 
 pub(crate) fn reason(error: ProximityError) -> NotEvaluatedReason {
     match error {
-        ProximityError::Unavailable => NotEvaluatedReason::IncompleteEvidence,
+        ProximityError::Unavailable | ProximityError::NoBody => {
+            NotEvaluatedReason::IncompleteEvidence
+        }
+        ProximityError::UnsupportedProjection => NotEvaluatedReason::BackendUnavailable,
         ProximityError::InvalidMeasurement
         | ProximityError::EvidenceFidelityMismatch
         | ProximityError::SameObject => NotEvaluatedReason::InvalidEvidence,
     }
+}
+
+/// Refuses every selected subject because the declaration is unusable.
+pub(crate) fn refuse_declaration(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    message: &str,
+) -> CapabilityEvaluation {
+    let (subjects, evaluation) = select_objects(context, &rule.selector);
+    refuse_all(
+        &subjects,
+        evaluation,
+        &NotEvaluatedReason::InvalidDeclaration,
+        message,
+    )
 }
 
 /// Marks every subject not evaluated for one rule-wide reason.
@@ -95,14 +102,17 @@ pub(crate) fn refuse_all(
     evaluation
 }
 
-/// Selects both groups and runs the broad phase within `margin_metres`.
+/// Selects both groups and runs the broad phase within `margin_metres` in
+/// `projection`.
 ///
 /// Returns the evaluation early, with every subject refused, when the
 /// declaration or the service is unusable.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn prepare<'a>(
     context: &RuleContext<'a>,
     rule: &CompiledRule,
     margin_metres: Option<f64>,
+    projection: ProximityProjection,
 ) -> Result<Prepared<'a>, CapabilityEvaluation> {
     let (subjects, evaluation) = select_objects(context, &rule.selector);
     let (Some(selector), Some(margin)) = (counterpart_selector(rule), margin_metres) else {
@@ -173,7 +183,12 @@ pub(crate) fn prepare<'a>(
             .filter_map(|object| bounds.get(&object.id).cloned())
             .collect()
     };
-    let pairs = match candidate_pairs(&group(&subjects), &group(&counterparts), margin) {
+    let pairs = match projected_candidate_pairs(
+        &group(&subjects),
+        &group(&counterparts),
+        projection,
+        margin,
+    ) {
         Ok(pairs) => pairs,
         Err(error) => {
             return Err(refuse_all(
@@ -184,12 +199,16 @@ pub(crate) fn prepare<'a>(
             ));
         }
     };
-
     Ok(Prepared {
         service,
         subjects: subjects
             .iter()
             .filter(|object| bounds.contains_key(&object.id))
+            .map(|object| object.id.clone())
+            .collect(),
+        unmeasurable_subjects: subjects
+            .iter()
+            .filter(|object| unmeasurable.contains(&object.id))
             .map(|object| object.id.clone())
             .collect(),
         counterparts: counterparts
@@ -208,13 +227,13 @@ pub(crate) fn prepare<'a>(
 }
 
 /// Human-readable suffix for measurements on tessellated geometry.
-pub(crate) fn fidelity_note(measured: &ProximityEvidence) -> String {
-    if measured.fidelity().is_exact() {
+pub(crate) fn fidelity_note(fidelity: GeometryFidelity) -> String {
+    if fidelity.is_exact() {
         String::new()
     } else {
         format!(
             " (approximate: tessellated geometry, true surfaces within {:.4} m)",
-            measured.fidelity().deviation_metres()
+            fidelity.deviation_metres()
         )
     }
 }

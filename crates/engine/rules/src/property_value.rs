@@ -8,7 +8,11 @@
 //! - a boolean accepts `true`/`1` and `false`/`0`;
 //! - an integer takes integer literals, and bounds in any numeric form;
 //! - a decimal takes `xs:double` literals and equals within the tolerance
-//!   `|x - v| <= |v|·1e-6 + 1e-6`; bounds compare without tolerance.
+//!   `|x - v| <= |v|·1e-6 + 1e-6`; bounds compare without tolerance;
+//! - a date takes `xs:date` literals (`2026-09-27`) and a date-time
+//!   `xs:dateTime` literals with a UTC offset, compared chronologically.
+//!   With `precision` `day` both read as the calendar day they state, so a
+//!   date-time value takes date literals and the reverse.
 //!
 //! A literal that cannot be cast to the value's kind, or a constraint the kind
 //! does not take, makes the object not evaluated (`InvalidDeclaration`): the
@@ -20,7 +24,11 @@ use axioval_engine::{
     PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
-use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
+use axioval_ir::{
+    Date, DateTime, Evidence, Finding, Object, Property, PropertyValue, Severity, TemporalPrecision,
+};
+
+use crate::support::temporal_order;
 
 use crate::selection::{bound_property_request, property_error, select_objects};
 use crate::xsd_pattern;
@@ -30,8 +38,8 @@ const EPSILON: f64 = 1.0e-6;
 
 /// The declared constraints of one rule.
 #[derive(Default)]
-pub(crate) struct Constraints<'r> {
-    pub(crate) data_type: Option<&'r str>,
+struct Constraints<'r> {
+    data_type: Option<&'r str>,
     values: &'r [String],
     patterns: &'r [String],
     min_inclusive: Option<&'r str>,
@@ -41,15 +49,14 @@ pub(crate) struct Constraints<'r> {
     length: Option<i64>,
     min_length: Option<i64>,
     max_length: Option<i64>,
-    pub(crate) optional: bool,
-    /// Meeting the requirement is the violation.
-    pub(crate) prohibited: bool,
+    total_digits: Option<i64>,
+    fraction_digits: Option<i64>,
+    optional: bool,
+    precision: Option<TemporalPrecision>,
 }
 
 impl<'r> Constraints<'r> {
-    /// Reads the constraints; `presence_suffices` admits a rule with none,
-    /// which then only requires a value to be there.
-    pub(crate) fn read(rule: &'r CompiledRule, presence_suffices: bool) -> Result<Self, String> {
+    fn read(rule: &'r CompiledRule) -> Result<Self, String> {
         let text = |name: &str| match rule.parameters.get(name) {
             Some(ParameterValue::String { value }) => Some(value.as_str()),
             _ => None,
@@ -73,18 +80,22 @@ impl<'r> Constraints<'r> {
             length: count("length"),
             min_length: count("min_length"),
             max_length: count("max_length"),
+            total_digits: count("total_digits"),
+            fraction_digits: count("fraction_digits"),
             optional: matches!(
                 rule.parameters.get("optional"),
                 Some(ParameterValue::Boolean { value: true })
             ),
-            prohibited: matches!(
-                rule.parameters.get("prohibited"),
-                Some(ParameterValue::Boolean { value: true })
-            ),
+            precision: match text("precision") {
+                None => None,
+                Some("day") => Some(TemporalPrecision::Day),
+                Some(other) => {
+                    return Err(format!(
+                        "precision `{other}` is unsupported; the only precision is `day`"
+                    ));
+                }
+            },
         };
-        if constraints.optional && constraints.prohibited {
-            return Err("optional and prohibited exclude each other".into());
-        }
         if constraints
             .data_type
             .is_some_and(|value| value.trim().is_empty())
@@ -102,21 +113,30 @@ impl<'r> Constraints<'r> {
         {
             return Err("a length is negative".into());
         }
-        if !presence_suffices
-            && !constraints.prohibited
-            && constraints.data_type.is_none()
-            && !constraints.constrains_value()
-        {
+        // XML Schema: `totalDigits` is a positive integer, `fractionDigits`
+        // a non-negative one.
+        if constraints.total_digits.is_some_and(|digits| digits < 1) {
+            return Err("total_digits is not positive".into());
+        }
+        if constraints.fraction_digits.is_some_and(|digits| digits < 0) {
+            return Err("fraction_digits is negative".into());
+        }
+        if constraints.data_type.is_none() && !constraints.constrains_value() {
             return Err("no data type and no value constraint".into());
         }
         Ok(constraints)
     }
 
-    pub(crate) fn constrains_value(&self) -> bool {
+    fn constrains_value(&self) -> bool {
         !self.values.is_empty()
             || !self.patterns.is_empty()
             || self.has_bounds()
             || self.has_lengths()
+            || self.has_digits()
+    }
+
+    fn has_digits(&self) -> bool {
+        self.total_digits.is_some() || self.fraction_digits.is_some()
     }
 
     fn has_bounds(&self) -> bool {
@@ -132,7 +152,7 @@ impl<'r> Constraints<'r> {
 }
 
 /// Whether a present value meets the constraints.
-pub(crate) enum Verdict {
+enum Verdict {
     Meets,
     Fails(String),
     /// The constraints cannot be applied to this value.
@@ -145,16 +165,15 @@ pub(crate) enum Verdict {
 /// as in `property-data-type`), `values` (any of), `patterns` (XML Schema
 /// regular expressions, any of, whole value), `min_inclusive`,
 /// `max_inclusive`, `min_exclusive`, `max_exclusive`, `length`,
-/// `min_length`, `max_length`, and `optional`. All given constraints must
-/// hold. Without `optional`, absence, `null` and blank text are violations;
+/// `min_length`, `max_length`, `total_digits`, `fraction_digits` (for a
+/// number only), `optional`, and `precision` (`day`, for a date or date-time
+/// value only). All given constraints must hold. A decimal's digits are
+/// counted on the shortest decimal that reads back as the same double, the
+/// form a model's literal has. Without `optional`, absence, `null` and blank text are violations;
 /// with it, an absent or `null` property passes and any present value,
 /// empty text included, is checked.
 pub struct PropertyValueConstraint;
 impl RuleCapability for PropertyValueConstraint {
-    fn selectable(&self) -> bool {
-        true
-    }
-
     fn id(&self) -> &'static str {
         "axioval:capability.property-value"
     }
@@ -170,6 +189,7 @@ impl RuleCapability for PropertyValueConstraint {
             "max_inclusive",
             "min_exclusive",
             "max_exclusive",
+            "precision",
         ] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::String));
         }
@@ -179,12 +199,19 @@ impl RuleCapability for PropertyValueConstraint {
                 ParameterType::StringList,
             ));
         }
-        for name in ["length", "min_length", "max_length"] {
+        for name in [
+            "length",
+            "min_length",
+            "max_length",
+            "total_digits",
+            "fraction_digits",
+        ] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::Integer));
         }
-        for name in ["optional", "prohibited"] {
-            parameters.push(ParameterDescriptor::optional(name, ParameterType::Boolean));
-        }
+        parameters.push(ParameterDescriptor::optional(
+            "optional",
+            ParameterType::Boolean,
+        ));
         parameters
     }
 
@@ -199,7 +226,7 @@ impl RuleCapability for PropertyValueConstraint {
                 "property-value has no valid property reference",
             );
         };
-        let constraints = match Constraints::read(rule, false) {
+        let constraints = match Constraints::read(rule) {
             Ok(constraints) => constraints,
             Err(message) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -230,14 +257,7 @@ impl RuleCapability for PropertyValueConstraint {
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();
-                    let verdict = judge(
-                        &property.value,
-                        property.data_type(),
-                        "property",
-                        name,
-                        &constraints,
-                    );
-                    match forbid_if(&constraints, verdict, "property", name) {
+                    match judge(property, name, &constraints) {
                         Verdict::Meets => {}
                         Verdict::Fails(message) => evaluation.push_finding(finding(
                             rule,
@@ -255,7 +275,7 @@ impl RuleCapability for PropertyValueConstraint {
                     }
                 }
                 Ok(PropertyResolution::Absent(proof)) => {
-                    if !constraints.optional && !constraints.prohibited {
+                    if !constraints.optional {
                         evaluation.push_finding(finding(
                             rule,
                             object,
@@ -274,59 +294,35 @@ impl RuleCapability for PropertyValueConstraint {
     }
 }
 
-/// The verdict on a value that is there: emptiness, declared type, then
-/// the constraints. `kind` names what holds it (`property`, `attribute`).
-pub(crate) fn judge(
-    value: &PropertyValue,
-    declared: Option<&str>,
-    kind: &str,
-    name: &str,
-    constraints: &Constraints<'_>,
-) -> Verdict {
+/// The verdict on a present property: emptiness, declared type, then value.
+fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verdict {
+    let value = &property.value;
     if constraints.optional && matches!(value, PropertyValue::Null) {
         return Verdict::Meets;
     }
     if !constraints.optional && is_empty(value) {
-        return Verdict::Fails(format!("missing required {kind} {name}"));
+        return Verdict::Fails(format!("missing required property {name}"));
     }
     if let Some(expected) = constraints.data_type {
-        match declared {
+        match property.data_type() {
             Some(actual) if actual.eq_ignore_ascii_case(expected) => {}
             Some(actual) => {
-                return Verdict::Fails(format!("{kind} {name} is {actual}, not {expected}"));
+                return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
             }
             None => {
                 return Verdict::Inapplicable(
                     NotEvaluatedReason::IncompleteEvidence,
-                    format!("the source does not report the type of {kind} {name}"),
+                    format!("the source does not report the type of property {name}"),
                 );
             }
         }
     }
     match verdict(value, constraints) {
-        Verdict::Fails(why) => Verdict::Fails(format!("{kind} {name} {why}")),
+        Verdict::Fails(why) => Verdict::Fails(format!("property {name} {why}")),
         Verdict::Inapplicable(reason, message) => {
-            Verdict::Inapplicable(reason, format!("{kind} {name}: {message}"))
+            Verdict::Inapplicable(reason, format!("property {name}: {message}"))
         }
         Verdict::Meets => Verdict::Meets,
-    }
-}
-
-/// For a prohibited requirement, meeting it is the violation and failing it
-/// passes; a verdict that could not be reached stays undecided.
-pub(crate) fn forbid_if(
-    constraints: &Constraints<'_>,
-    verdict: Verdict,
-    kind: &str,
-    name: &str,
-) -> Verdict {
-    if !constraints.prohibited {
-        return verdict;
-    }
-    match verdict {
-        Verdict::Meets => Verdict::Fails(format!("{kind} {name} meets a prohibited requirement")),
-        Verdict::Fails(_) => Verdict::Meets,
-        undecided @ Verdict::Inapplicable(..) => undecided,
     }
 }
 
@@ -335,7 +331,7 @@ fn is_empty(value: &PropertyValue) -> bool {
         || matches!(value, PropertyValue::String(text) if text.trim().is_empty())
 }
 
-pub(crate) fn finding(
+fn finding(
     rule: &CompiledRule,
     object: &Object,
     message: String,
@@ -343,20 +339,15 @@ pub(crate) fn finding(
 ) -> Finding {
     Finding {
         rule_id: rule.id.clone(),
-        object_id: object.id.clone(),
+        scope: axioval_ir::Scope::Object(object.id.clone()),
         related: Vec::new(),
-        severity: severity_of(rule),
+        severity: match rule.severity {
+            axioval_ir::contract::Severity::Error => Severity::Error,
+            axioval_ir::contract::Severity::Warning => Severity::Warning,
+            axioval_ir::contract::Severity::Info => Severity::Info,
+        },
         message,
         evidence,
-    }
-}
-
-/// The report severity a rule's declared severity stands for.
-pub(crate) fn severity_of(rule: &CompiledRule) -> Severity {
-    match rule.severity {
-        axioval_ir::contract::Severity::Error => Severity::Error,
-        axioval_ir::contract::Severity::Warning => Severity::Warning,
-        axioval_ir::contract::Severity::Info => Severity::Info,
     }
 }
 
@@ -365,7 +356,24 @@ fn invalid(message: impl Into<String>) -> Verdict {
 }
 
 fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
+    if constraints.precision.is_some()
+        && !matches!(value, PropertyValue::Date(_) | PropertyValue::DateTime(_))
+    {
+        return invalid("precision applies to a date or date-time value only");
+    }
+    if constraints.has_digits()
+        && matches!(
+            value,
+            PropertyValue::String(_)
+                | PropertyValue::Boolean(_)
+                | PropertyValue::Date(_)
+                | PropertyValue::DateTime(_)
+        )
+    {
+        return invalid("total_digits and fraction_digits apply to a number only");
+    }
     match value {
+        PropertyValue::Date(_) | PropertyValue::DateTime(_) => temporal_verdict(value, constraints),
         PropertyValue::String(text) => text_verdict(text, constraints),
         PropertyValue::Boolean(actual) => {
             if !constraints.patterns.is_empty()
@@ -401,7 +409,11 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
                 return equal;
             }
             #[allow(clippy::cast_precision_loss)]
-            bounds(Number::Integer(*actual), *actual as f64, constraints)
+            let bounded = bounds(Number::Integer(*actual), *actual as f64, constraints);
+            if !matches!(bounded, Verdict::Meets) {
+                return bounded;
+            }
+            digits(&actual.unsigned_abs().to_string(), constraints)
         }
         PropertyValue::Decimal(actual) => {
             if !constraints.patterns.is_empty() || constraints.has_lengths() {
@@ -419,14 +431,96 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
             if !matches!(equal, Verdict::Meets) {
                 return equal;
             }
-            bounds(Number::Decimal, *actual, constraints)
+            let bounded = bounds(Number::Decimal, *actual, constraints);
+            if !matches!(bounded, Verdict::Meets) || !constraints.has_digits() {
+                return bounded;
+            }
+            if !actual.is_finite() {
+                return invalid("a value that is not finite has no digits");
+            }
+            // Rust prints the shortest decimal that reads back as the same
+            // double, never in exponent notation.
+            digits(&actual.abs().to_string(), constraints)
         }
         PropertyValue::Quantity { .. } => Verdict::Inapplicable(
             NotEvaluatedReason::IncompleteEvidence,
             "comparing a quantity needs its unit".into(),
         ),
         PropertyValue::Null => invalid("null has no value to compare"),
+        PropertyValue::List(_) => Verdict::Inapplicable(
+            NotEvaluatedReason::InvalidEvidence,
+            "the value is a list; compare its elements with a quantified property selector".into(),
+        ),
     }
+}
+
+/// `totalDigits` and `fractionDigits` of an unsigned decimal numeral.
+///
+/// As XML Schema counts them: the value is `i / 10^n` with `n` the
+/// fraction digits and `|i|` below `10^totalDigits`, so leading zeros of the
+/// whole part and trailing zeros of the fraction do not count.
+fn digits(numeral: &str, constraints: &Constraints<'_>) -> Verdict {
+    let (whole, fraction) = numeral.split_once('.').unwrap_or((numeral, ""));
+    let whole = whole.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let count = |text: &str| i64::try_from(text.len()).unwrap_or(i64::MAX);
+    let (fraction_digits, total_digits) = (count(fraction), count(whole) + count(fraction));
+    if let Some(limit) = constraints.total_digits
+        && total_digits > limit
+    {
+        return Verdict::Fails(format!(
+            "is {numeral}, with {total_digits} digits, more than {limit}"
+        ));
+    }
+    if let Some(limit) = constraints.fraction_digits
+        && fraction_digits > limit
+    {
+        return Verdict::Fails(format!(
+            "is {numeral}, with {fraction_digits} fraction digits, more than {limit}"
+        ));
+    }
+    Verdict::Meets
+}
+
+/// A date or date-time against lexical date and date-time literals.
+fn temporal_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
+    if !constraints.patterns.is_empty() || constraints.has_lengths() {
+        return invalid("a date takes no patterns or lengths");
+    }
+    let order = |literal: &str| {
+        let literal_value = literal
+            .parse::<Date>()
+            .map(PropertyValue::Date)
+            .or_else(|_| literal.parse::<DateTime>().map(PropertyValue::DateTime))
+            .map_err(|_| format!("{literal:?} is not a date or date-time literal"))?;
+        temporal_order(value, &literal_value, constraints.precision)
+            .unwrap_or_else(|| Err("not a date".into()))
+            .map_err(|message| format!("{literal:?}: {message}"))
+    };
+    let shown = crate::support::display(Some(value));
+    let equal = one_of(
+        constraints.values,
+        |literal| order(literal).map(std::cmp::Ordering::is_eq),
+        &shown,
+    );
+    if !matches!(equal, Verdict::Meets) {
+        return equal;
+    }
+    let checks: [Bound<'_>; 4] = [
+        (constraints.min_inclusive, std::cmp::Ordering::is_ge, ">="),
+        (constraints.max_inclusive, std::cmp::Ordering::is_le, "<="),
+        (constraints.min_exclusive, std::cmp::Ordering::is_gt, ">"),
+        (constraints.max_exclusive, std::cmp::Ordering::is_lt, "<"),
+    ];
+    for (bound, holds, symbol) in checks {
+        let Some(bound) = bound else { continue };
+        match order(bound) {
+            Ok(ordering) if holds(ordering) => {}
+            Ok(_) => return Verdict::Fails(format!("is {shown}, not {symbol} {bound}")),
+            Err(message) => return invalid(message),
+        }
+    }
+    Verdict::Meets
 }
 
 fn text_verdict(text: &str, constraints: &Constraints<'_>) -> Verdict {
@@ -576,7 +670,27 @@ fn parse_double(literal: &str) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_double, parse_integer, within_tolerance};
+    use super::{Constraints, Verdict, digits, parse_double, parse_integer, within_tolerance};
+
+    #[test]
+    fn digits_are_counted_as_xml_schema_counts_them() {
+        let limits = |total, fraction| Constraints {
+            total_digits: total,
+            fraction_digits: fraction,
+            ..Constraints::default()
+        };
+        let meets = |numeral: &str, constraints: &Constraints<'_>| {
+            matches!(digits(numeral, constraints), Verdict::Meets)
+        };
+        assert!(meets("123", &limits(Some(3), None)));
+        assert!(!meets("1234", &limits(Some(3), None)));
+        assert!(meets("120", &limits(Some(3), Some(0))));
+        assert!(meets("0.0012", &limits(Some(4), Some(4))));
+        assert!(!meets("0.0012", &limits(Some(3), None)));
+        assert!(!meets("1.25", &limits(None, Some(1))));
+        assert!(meets("1.25", &limits(Some(3), Some(2))));
+        assert!(meets("0", &limits(Some(1), Some(0))));
+    }
 
     #[test]
     fn number_literals_follow_xml_schema() {

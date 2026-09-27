@@ -148,7 +148,7 @@ fn session_rejects_unbound_stale_duplicate_and_unknown_service_bindings() {
 }
 
 #[test]
-fn session_rejects_missing_duplicate_and_unexpected_snapshots() {
+fn session_rejects_missing_and_duplicate_snapshots() {
     assert!(matches!(
         EvidenceSession::try_new(project(), []),
         Err(EvidenceSessionError::MissingSource(_))
@@ -157,16 +157,33 @@ fn session_rejects_missing_duplicate_and_unexpected_snapshots() {
         EvidenceSession::try_new(project(), [snapshot(), snapshot()]),
         Err(EvidenceSessionError::DuplicateSource(_))
     ));
-    let extra = SourceSnapshot::try_new(
+}
+
+#[test]
+fn a_snapshot_without_objects_is_an_empty_source_of_the_session() {
+    // A model holding no objects (only presentation data, say) is still a
+    // source to check, not a malformed session.
+    let empty = SourceSnapshot::try_new(
         SourceId::new("test", "other").unwrap(),
         "r1",
-        "sha256:extra",
+        "sha256:empty",
     )
     .unwrap();
-    assert!(matches!(
-        EvidenceSession::try_new(project(), [snapshot(), extra]),
-        Err(EvidenceSessionError::UnexpectedSource(_))
-    ));
+    let session = EvidenceSession::try_new(project(), [snapshot(), empty.clone()]).unwrap();
+    assert_eq!(session.snapshots().len(), 2);
+    assert_eq!(session.snapshot(empty.source()), Some(&empty));
+    assert_eq!(session.project().objects().count(), 1);
+
+    let alone = EvidenceSession::try_new(Project::new(vec![]).unwrap(), [empty.clone()])
+        .unwrap()
+        .with_service(marker("empty-source", vec![empty.clone()]))
+        .unwrap();
+    assert_eq!(alone.project().objects().count(), 0);
+    assert_eq!(alone.snapshots().len(), 1);
+    assert_eq!(
+        alone.service::<Marker>(),
+        Some(&marker("empty-source", vec![empty]))
+    );
 }
 
 /// A service a host built itself, with no snapshot of its own.

@@ -8,7 +8,15 @@ The request supplies deterministic source-qualified sets of:
 - entrance or portal objects;
 - obstacle objects;
 - the required clear width and optional elevation band;
-- verified-portal and moving-envelope policy.
+- verified-portal and moving-envelope policy;
+- typed vertical connectors (`VerticalConnector`: an object and its
+  `VerticalConnectorKind`, `Lift`, `Ramp` or `Stair`), given with
+  `WalkabilityRequest::with_connectors`;
+- optionally, stated clear widths of entrances
+  (`WalkabilityRequest::with_stated_clear_widths`): what the rule reads from
+  its source as the width a door's leaf and lining leave. Each must be
+  finite, positive and name a requested entrance once, or the request is
+  refused (`InvalidStatedClearWidth`).
 
 Semantic selectors run before this service. IFC placements, meshes, B-reps, and native kernel types never enter the request.
 
@@ -25,6 +33,102 @@ For the request minimum width, the engine evaluates two deterministic graphs:
 1. **definite graph:** passage lower bound meets the width;
 2. **possible graph:** passage upper bound meets the width.
 
+A passage that climbs through a connector names it
+(`VerifiedWalkablePassage::with_connector`); a passage names a portal or a
+connector, never both, and the snapshot accepts a connector passage only for a
+requested connector of the same kind. `route_between_avoiding` evaluates both
+graphs without the passages of the forbidden kinds, so a rule that forbids
+`Stair` sees a stairs-only connection as `Unreachable`.
+
 A route in the definite graph is `Reachable`. No route in the possible graph is `Unreachable`. A route only in the possible graph is `Indeterminate`. Approximate width evidence therefore cannot become a pass or a false negative.
+
+A rule can judge passages itself on top of their widths with
+`route_between_admitting`: a `PassageAdmission` per passage, `Admitted`,
+`Undecided` or `Refused`. The definite graph keeps only admitted passages and
+the possible graph drops only refused ones, so a passage the rule cannot
+decide (a door whose required width it cannot read) can only make a route
+`Indeterminate`. `route_between_avoiding` is the admission that refuses the
+forbidden connector kinds.
+
+When a route is `Unreachable`, `blocking_passages` names what blocks it: the
+passages leaving the regions the possible graph reaches from the origin
+that lead, widths and admission ignored, towards the destination without
+re-entering those regions. Every route crosses one of them after it last
+leaves the reached regions, so they form a cut; a block that only guards
+some other region is left out. The list is empty when nothing joins the
+two at all.
+
+## The Axiolid backend
+
+`AxiolidWalkabilityService` (in `axioval-axiolid`) implements this contract
+over host-supplied meshes. Surfaces, entrances, obstacles and connectors are
+the request's; the host declares only what a mesh cannot show: the void of a
+bodiless opening and, optionally, a door's clear width. A clear width the
+request states counts as one the host states; where both do, the narrower
+counts, and a stated width bounds even an opening's void from above.
+
+- **Surfaces.** Each selected surface must be an exact closed body whose
+  underside is one horizontal floor. Its free region is its plan footprint
+  minus, for every obstacle, the plan projection of the part of the obstacle
+  inside the headroom band: the request's band measured from the floor, or
+  the surface's own height without one. An obstacle touching the band only at
+  its ends does not obstruct, so a lintel at the band's top leaves the door
+  open.
+- **Portals.** A portal's corridor is its plan extent along the wall,
+  extruded through its thickness until the first selected surface on each
+  side (within 1 m), minus the obstacles in the band above its own sill. The
+  portal's own body is open: its leaf and lining are not obstacles. A selected surface or entrance never obstructs, even when the
+  obstacle selection also picks it.
+- **Regions.** `surface:{id}` per surface and `portal:{id}:-`,
+  `portal:{id}:+` per entrance, mapped to their objects. Each surface stands
+  for a hub where the body provably fits; each portal face for the landing
+  in front of it.
+- **Passages.** A *spoke* joins a surface to the portal face opening onto
+  it. A *crossing* joins a portal's two faces and names it; its width is at
+  most the longest free interval of the portal's mid-line, since a crossing
+  body covers a chord of its own diameter there, and at most a stated clear
+  width. Surfaces and portal faces that touch in plan at overlapping heights
+  are joined without a width bound, and a connector joins every pair of
+  surfaces whose floor lies within 1 m of its height range and plan. Climbs
+  are not measured, so connector passages are never definite.
+- **Definite passages.** A passage's lower bound is the request width only
+  when the sweep of the body along a witness path (hub to landing, or
+  landing to mid-line to landing) is proven inside the free region, and, for
+  a crossing, the leaf and lining admit the body: a bodiless opening does, a
+  door only through a stated clear width. Otherwise the lower bound is zero.
+  Every definite passage ends where the next begins, so a definite route
+  concatenates proven sweeps.
+- **Proof without one-sided erosion.** `axiolid-overlay` 0.3.0 erodes by a
+  round-joined approximation of a disc without stating on which side of the
+  exact erosion it lies, so the backend does not use it. Paths are proposed
+  by `axiolid-route` through the free region less an enclosure of its
+  boundary's disc sweep, which lies inside the exact erosion, and only
+  proposed. A path is a witness once an outer
+  polygon enclosing its exact sweep (segment rectangles, polygons
+  circumscribing the discs at its vertices, all grown by 0.1 mm) leaves
+  nothing outside the free region under exact booleans.
+- **Evidence.** Every passage cites the source of the object it measures (the
+  surface of a spoke or surface pair, the portal of a crossing or portal
+  face, the connector of a climb), so in a set federating several files it
+  names that object's own file. The snapshot's completeness is set-level and
+  cites the source the host gave the service.
+- **Refusals.** `WalkabilityError::Unavailable` for moving envelopes (door
+  swings are not measured), unmeasured or undescribed obstacles, tessellated
+  surfaces, portals or obstacles inside a band, surfaces that are not closed
+  or not flat underneath, portals without a single through-direction and
+  portals opening onto two surfaces at the same distance.
+
+Verdicts available today: `Reachable` wherever a sweep is proven;
+`Unreachable` where every connection needs a portal narrower than the width
+(geometrically or by a stated clear width), a forbidden connector kind, or
+nothing joins the surfaces at all; `Indeterminate` otherwise, notably for a
+door whose clear width is not stated, a crossing whose landing is obstructed,
+and any route through a connector. A gap narrower than the width inside a
+surface is not detected; it can only make a route `Indeterminate`, never
+`Unreachable`. Once one-sided erosion (`Region::erode_inner`,
+axiolid-overlay 0.3.1) is published, the free region eroded by half the width
+on its inner side can bound surfaces and gaps as well.
+
+The `accessible-route` capability (see [capabilities](./capabilities.md#accessible-route)) is built on this contract: one snapshot for its mobility profile, its own admission per passage, and the blocking passages as the related elements of a finding.
 
 Corridor metric lengths remain owned by the separate metric-routing service. End-clearance placement remains owned by the free-space placement service.

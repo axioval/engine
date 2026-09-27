@@ -8,14 +8,16 @@
 //!   failure, complete or not;
 //! - a `fail-` case either produces a finding, or its translation reported a
 //!   gap that explains why not. A complete translation with no finding is a
-//!   miss. So is one whose only gap is existence while the model does contain
-//!   an applicable object.
+//!   miss.
+//!
+//! Findings about a whole source count like findings about objects: a
+//! required specification with no applicable object fails that way.
 //!
 //! `invalid-` cases judge the IDS against the IFC schema and are skipped.
 //! The corpus is CC BY-ND 4.0 and is not vendored: point `IDS_TEST_CASES` at
 //! `Documentation/ImplementersDocumentation/TestCases` of
 //! <https://github.com/buildingSMART/IDS> and run
-//! `cargo test -- --ignored corpus`.
+//! `cargo test -- --ignored corpus`. `IDS_CORPUS_VERBOSE` lists every case.
 #![allow(missing_docs, clippy::doc_markdown)]
 
 use std::collections::BTreeMap;
@@ -98,9 +100,8 @@ fn classify(case: &Path) -> Option<(Class, String)> {
     let report = Runtime::new(registry)
         .run_session(&session, plan)
         .expect("plan runs");
-    // Findings about objects and about whole populations alike.
-    let findings = report.findings().len() + report.rule_findings().len();
-    let detail = format!(
+    let findings = report.findings().len();
+    let mut detail = format!(
         "{} finding(s), {} not evaluated, gaps: [{}]",
         findings,
         report.not_evaluated().len(),
@@ -108,8 +109,18 @@ fn classify(case: &Path) -> Option<(Class, String)> {
             .gaps()
             .map(|(_, gap)| gap.to_string())
             .collect::<Vec<_>>()
-            .join("; ")
+            .join("; "),
     );
+    if std::env::var_os("IDS_CORPUS_VERBOSE").is_some() {
+        for finding in report.findings() {
+            detail.push_str("\n        finding: ");
+            detail.push_str(&finding.message);
+        }
+        for outcome in report.not_evaluated() {
+            detail.push_str("\n        not evaluated: ");
+            detail.push_str(&outcome.message);
+        }
+    }
     let class = match (expected_pass, findings > 0) {
         (true, true) => Class::Mismatch,
         (false, true) => Class::CaughtFail,
@@ -124,23 +135,33 @@ fn classify(case: &Path) -> Option<(Class, String)> {
 
 fn run() {
     let mut classes: BTreeMap<Class, Vec<String>> = BTreeMap::new();
+    // Classes per facet directory of the corpus.
+    let mut facets: BTreeMap<String, BTreeMap<Class, usize>> = BTreeMap::new();
     for case in cases() {
         if let Some((class, detail)) = classify(&case) {
             let name = case.file_stem().unwrap().to_string_lossy().into_owned();
+            let facet = case
+                .parent()
+                .and_then(Path::file_name)
+                .map_or_else(String::new, |facet| facet.to_string_lossy().into_owned());
+            *facets.entry(facet).or_default().entry(class).or_default() += 1;
             classes
                 .entry(class)
                 .or_default()
                 .push(format!("{name}: {detail}"));
         }
     }
+    for (facet, counts) in &facets {
+        let shown: Vec<String> = counts
+            .iter()
+            .map(|(class, count)| format!("{class:?} {count}"))
+            .collect();
+        println!("{facet}: {}", shown.join(", "));
+    }
     for (class, cases) in &classes {
         println!("{class:?}: {}", cases.len());
-        // IDS_CORPUS_VERBOSE lists every case, not only the notable classes.
         if std::env::var_os("IDS_CORPUS_VERBOSE").is_some()
-            || matches!(
-                class,
-                Class::CaughtFail | Class::ExactPass | Class::NotEvaluated | Class::ModelRefused
-            )
+            || matches!(class, Class::NotEvaluated | Class::ModelRefused)
         {
             for case in cases {
                 println!("    {case}");

@@ -5,7 +5,10 @@
 //! objects beside a barrier -- and never decides whether the edge is safe.
 //!
 //! Which objects are walking surfaces is a semantic fact a mesh does not
-//! carry, so the host declares them.
+//! carry, so the host declares them. Likewise which bodies may act as
+//! barriers, landings or climbing aids: when the search names a set for a
+//! role, only its members are considered for that role; without one, any
+//! nearby body is.
 
 use std::collections::BTreeSet;
 
@@ -55,8 +58,10 @@ impl AxiolidGuardService {
         &self,
         barriers: &[GuardCandidate],
         walking_level: f64,
-        radius: f64,
+        search: &GuardSearch,
+        surfaces: &BTreeSet<ObjectId>,
     ) -> Result<Vec<ClimbableCandidate>, GuardError> {
+        let radius = search.candidate_radius_metres();
         let mut aids = Vec::new();
         // A climbable is measured against a barrier, not against the edge:
         // an object is only a climbing aid if it stands next to something
@@ -67,7 +72,10 @@ impl AxiolidGuardService {
             };
             let barrier_points = plan_points(&triangles(barrier_mesh));
             for (candidate_id, candidate_mesh) in self.geometry.objects() {
-                if candidate_id == barrier.element() || self.surfaces.contains(candidate_id) {
+                if candidate_id == barrier.element()
+                    || surfaces.contains(candidate_id)
+                    || !search.admits_climbable(candidate_id)
+                {
                     continue;
                 }
                 let candidate_triangles = triangles(candidate_mesh);
@@ -164,6 +172,19 @@ fn footprint_gap(candidate: &[Point2], barrier: &[Point2]) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
+/// Distance along the ring to the start of each segment.
+fn cumulative_lengths(segments: &[(Point2, Point2)]) -> Vec<f64> {
+    let mut running = 0.0;
+    segments
+        .iter()
+        .map(|(a, b)| {
+            let start = running;
+            running += ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+            start
+        })
+        .collect()
+}
+
 /// How a candidate relates to one boundary ring of a surface.
 ///
 /// Returns the nearest horizontal gap and the covered edge interval, or
@@ -210,11 +231,22 @@ impl GuardService for AxiolidGuardService {
         let tolerance =
             axiolid_core::Tolerance::new(1.0e-9, 1.0e-9).map_err(|_| GuardError::Unavailable)?;
         let radius = search.candidate_radius_metres();
+        // A body that could not be meshed may be exactly the rail that guards
+        // an edge, and its extent is unknown, so no edge answer is complete.
+        if self.geometry.unmeasured().next().is_some() {
+            return Err(GuardError::Unavailable);
+        }
+        let surfaces: BTreeSet<ObjectId> = self
+            .surfaces
+            .iter()
+            .chain(search.surfaces())
+            .cloned()
+            .collect();
 
         let mut edges = Vec::new();
         let mut evaluated = 0usize;
 
-        for surface in &self.surfaces {
+        for surface in &surfaces {
             let Some(mesh) = self.geometry.mesh(surface) else {
                 continue;
             };
@@ -237,7 +269,7 @@ impl GuardService for AxiolidGuardService {
                 || self
                     .geometry
                     .tessellated_near(&extent, 2.0 * radius, true, |object| {
-                        self.surfaces.contains(object)
+                        surfaces.contains(object)
                     })
                     .is_some()
             {
@@ -253,15 +285,10 @@ impl GuardService for AxiolidGuardService {
             for ring in &rings {
                 let segments = ring_segments(ring);
                 let perimeter = ring_perimeter(ring);
-                let mut cumulative = Vec::with_capacity(segments.len());
-                let mut running = 0.0;
-                for (a, b) in &segments {
-                    cumulative.push(running);
-                    running += ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
-                }
+                let cumulative = cumulative_lengths(&segments);
 
                 for (candidate_id, candidate_mesh) in self.geometry.objects() {
-                    if candidate_id == surface || self.surfaces.contains(candidate_id) {
+                    if candidate_id == surface || surfaces.contains(candidate_id) {
                         continue;
                     }
                     let candidate_triangles = triangles(candidate_mesh);
@@ -278,6 +305,17 @@ impl GuardService for AxiolidGuardService {
                     // Sign is the whole distinction: a top above the walking
                     // level is a barrier, at or below it is a landing.
                     let top_offset = candidate_top - walking_level;
+                    // A body the ruleset did not name for this role is not a
+                    // barrier or landing, however close: a cupboard is not a
+                    // railing.
+                    let admitted = if top_offset > 0.0 {
+                        search.admits_barrier(candidate_id)
+                    } else {
+                        search.admits_landing(candidate_id)
+                    };
+                    if !admitted {
+                        continue;
+                    }
                     let entry = GuardCandidate::try_new(
                         candidate_id.clone(),
                         gap,
@@ -296,7 +334,7 @@ impl GuardService for AxiolidGuardService {
                 }
             }
 
-            let climbables = self.climbing_aids(&barriers, walking_level, radius)?;
+            let climbables = self.climbing_aids(&barriers, walking_level, &search, &surfaces)?;
 
             edges.push(GuardEdge::new(
                 surface.clone(),

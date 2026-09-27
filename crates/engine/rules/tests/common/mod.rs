@@ -32,11 +32,22 @@ pub struct Model {
     edges: BTreeMap<String, Vec<(ObjectId, ObjectId)>>,
     /// Objects whose properties the source cannot answer.
     unreadable: BTreeSet<ObjectId>,
+    /// relationship -> (anchor, locator): further evidence an answer from
+    /// that anchor cites.
+    citations: BTreeMap<String, Vec<(ObjectId, String)>>,
 }
 
 impl Model {
     pub fn object(mut self, local: &str, kind: &str) -> Self {
         self.objects.push(Object::new(id(local), kind));
+        self
+    }
+
+    /// An object of another source document than [`source`].
+    pub fn object_in(mut self, document: &str, local: &str, kind: &str) -> Self {
+        let source = SourceId::new("test", document).unwrap();
+        self.objects
+            .push(Object::new(ObjectId::new(source, local).unwrap(), kind));
         self
     }
 
@@ -55,6 +66,15 @@ impl Model {
             .entry(relationship.into())
             .or_default()
             .push((id(relating), id(related)));
+        self
+    }
+
+    /// Cites `locator` in every answer about `relationship` from `anchor`.
+    pub fn cite(mut self, relationship: &str, anchor: &str, locator: &str) -> Self {
+        self.citations
+            .entry(relationship.into())
+            .or_default()
+            .push((id(anchor), locator.into()));
         self
     }
 
@@ -177,14 +197,19 @@ impl RelationshipSelectionService for Model {
                 candidate != request.anchor() && request.candidate_universe().contains(candidate)
             })
             .collect();
-        CompleteRelationshipSelection::try_new(
-            request.clone(),
-            candidates,
-            vec![Evidence::exact(
-                source(),
-                format!("scan:{}", relationship.as_str()),
-            )],
-        )
+        let mut evidence = vec![Evidence::exact(
+            source(),
+            format!("scan:{}", relationship.as_str()),
+        )];
+        evidence.extend(
+            self.citations
+                .get(relationship.as_str())
+                .into_iter()
+                .flatten()
+                .filter(|(anchor, _)| anchor == request.anchor())
+                .map(|(_, locator)| Evidence::exact(source(), locator.clone())),
+        );
+        CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
     }
 }
 
@@ -254,17 +279,23 @@ pub fn findings(evaluation: &CapabilityEvaluation) -> Vec<(String, String)> {
     evaluation
         .findings()
         .iter()
-        .map(|finding| (finding.object_id.local_id.clone(), finding.message.clone()))
+        .map(|finding| (subject(finding), finding.message.clone()))
         .collect()
+}
+
+/// A finding's object by local id, or `source` / `project` for a finding
+/// about no single object.
+pub fn subject(finding: &axioval_ir::Finding) -> String {
+    match &finding.scope {
+        axioval_ir::Scope::Object(object) => object.local_id.clone(),
+        axioval_ir::Scope::Source(_) => "source".to_owned(),
+        axioval_ir::Scope::Project => "project".to_owned(),
+    }
 }
 
 /// Objects of every finding, sorted.
 pub fn flagged(evaluation: &CapabilityEvaluation) -> Vec<String> {
-    let mut objects: Vec<String> = evaluation
-        .findings()
-        .iter()
-        .map(|finding| finding.object_id.local_id.clone())
-        .collect();
+    let mut objects: Vec<String> = evaluation.findings().iter().map(subject).collect();
     objects.sort();
     objects
 }

@@ -7,25 +7,48 @@
 //! substituted: missing backends return [`AxiolidError::IntegrationUnavailable`].
 
 pub mod contact;
+pub(crate) mod containment;
+pub(crate) mod coverage;
+pub mod derived_relationships;
 pub mod envelope_membership;
+pub mod facade_area;
+mod face_distance;
 pub mod free_space;
 pub mod geometry;
 pub mod guard;
 pub mod linear_quantity;
+pub mod metric_routing;
+mod placement;
 pub mod plan_area;
+pub mod plan_span;
 pub(crate) mod planar;
 pub mod proximity;
+pub mod sight;
 pub mod space;
+pub mod triangle_count;
+pub mod vertical_extent;
+pub mod walkability;
+pub(crate) mod walkable;
+pub mod walking_surface;
 
 pub use contact::AxiolidContactService;
+pub use derived_relationships::AxiolidDerivedRelationshipService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
+pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::AxiolidGeometry;
 pub use guard::AxiolidGuardService;
 pub use linear_quantity::AxiolidLinearQuantityService;
+pub use metric_routing::AxiolidMetricRoutingService;
 pub use plan_area::AxiolidPlanAreaService;
+pub use plan_span::AxiolidPlanSpanService;
 pub use proximity::AxiolidProximityService;
+pub use sight::AxiolidSightService;
 pub use space::AxiolidSpaceService;
+pub use triangle_count::AxiolidTriangleCountService;
+pub use vertical_extent::AxiolidVerticalExtentService;
+pub use walkability::AxiolidWalkabilityService;
+pub use walking_surface::AxiolidWalkingSurfaceService;
 
 use std::collections::BTreeMap;
 

@@ -6,7 +6,8 @@ use std::io::{Cursor, Read};
 use axioval_bcf::{ExportError, IFC_GLOBAL_ID_SCHEME, NOT_EVALUATED_TOPIC_TYPE, Options, export};
 use axioval_ir::{
     Evidence, ExternalId, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, Project,
-    Report, RuleFinding, RuleId, Severity, SourceId,
+    QuantityDimension, Report, ReportColumn, ReportTable, ReportValue, RuleId, Scope, Severity,
+    SourceId,
 };
 
 const WALL: &str = "2O2Fr$t4X7Zf8NOew3FLOH";
@@ -42,11 +43,10 @@ fn id(document: &str, local: u64) -> ObjectId {
 fn report(document: &str, first: u64) -> Report {
     let source = SourceId::new("ifc-step", document).unwrap();
     Report {
-        rule_findings: vec![],
         findings: vec![
             Finding {
                 rule_id: RuleId::new("slab-contact").unwrap(),
-                object_id: id(document, first),
+                scope: Scope::Object(id(document, first)),
                 severity: Severity::Error,
                 message: "Wall has insufficient contact with the slab below".into(),
                 related: vec![],
@@ -55,7 +55,7 @@ fn report(document: &str, first: u64) -> Report {
             .with_related([id(document, first + 1)]),
             Finding {
                 rule_id: RuleId::new("door-fire-rating").unwrap(),
-                object_id: id(document, first + 2),
+                scope: Scope::Object(id(document, first + 2)),
                 severity: Severity::Warning,
                 message: "FireRating is missing".into(),
                 related: vec![],
@@ -64,10 +64,11 @@ fn report(document: &str, first: u64) -> Report {
         ],
         not_evaluated: vec![NotEvaluated {
             rule_id: RuleId::new("stair-headroom").unwrap(),
-            object_id: None,
+            scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,
             message: "no geometry service is registered".into(),
         }],
+        tables: vec![],
     }
 }
 
@@ -184,6 +185,29 @@ fn identical_input_writes_identical_bytes() {
 }
 
 #[test]
+fn report_tables_write_no_topics() {
+    let bytes = |report: &Report| {
+        export(report, &model("a.ifc", 1), &options())
+            .unwrap()
+            .to_bytes()
+            .unwrap()
+    };
+    let plain = report("a.ifc", 1);
+    let mut tabled = plain.clone();
+    let mut table = ReportTable::new(
+        RuleId::new("storey-height").unwrap(),
+        "levels",
+        vec![ReportColumn::quantity("height", QuantityDimension::Length)],
+    )
+    .unwrap();
+    table
+        .push_row(id("a.ifc", 1), vec![ReportValue::exact(3.0)])
+        .unwrap();
+    tabled.tables.push(table);
+    assert_eq!(bytes(&tabled), bytes(&plain));
+}
+
+#[test]
 fn a_federation_of_two_revisions_keeps_every_guid_unique() {
     let mut objects: Vec<_> = model("a.ifc", 1).objects().cloned().collect();
     objects.extend(model("b.ifc", 1).objects().cloned());
@@ -227,7 +251,7 @@ fn related_objects_alone_are_never_selected() {
     report.findings = vec![
         Finding {
             rule_id: RuleId::new("door-in-wall").unwrap(),
-            object_id: id("a.ifc", 3),
+            scope: Scope::Object(id("a.ifc", 3)),
             severity: Severity::Error,
             message: "Door is not hosted by an opening".into(),
             related: vec![],
@@ -240,45 +264,170 @@ fn related_objects_alone_are_never_selected() {
     assert_eq!(export.unanchored, [id("a.ifc", 3)]);
 }
 
-#[test]
-fn rule_findings_become_topics_selecting_every_anchored_participant() {
-    let report = Report {
-        rule_findings: vec![
-            RuleFinding {
-                rule_id: RuleId::new("walls-exist").unwrap(),
-                severity: Severity::Error,
-                message: "0 applicable object(s); at least 1 required".into(),
-                related: vec![],
-                evidence: vec![],
-            },
-            RuleFinding {
-                rule_id: RuleId::new("at-most-one").unwrap(),
-                severity: Severity::Warning,
-                message: "3 applicable objects; at most 1 allowed".into(),
-                related: vec![id("a.ifc", 1), id("a.ifc", 2), id("a.ifc", 3)],
-                evidence: vec![],
-            },
+/// "The model has no building" and "at most one slab, found two" have no
+/// subject object; the whole project has an outcome of its own.
+fn scoped_report(document: &str, first: u64) -> Report {
+    let source = SourceId::new("ifc-step", document).unwrap();
+    Report {
+        findings: vec![
+            Finding::new(
+                RuleId::new("building-exists").unwrap(),
+                source.clone(),
+                Severity::Error,
+                "no object matches the selection; required at least 1",
+            ),
+            Finding::new(
+                RuleId::new("one-wall-or-slab").unwrap(),
+                source.clone(),
+                Severity::Warning,
+                "2 object(s) match the selection; required at most 1",
+            )
+            .with_related([id(document, first + 1), id(document, first)])
+            .with_evidence([Evidence::exact(source.clone(), "selection:count")]),
         ],
-        ..Report::default()
-    };
-    let export = export(&report, &model("a.ifc", 1), &options()).unwrap();
-    // The door has no GlobalId; it is named but cannot be selected.
-    assert_eq!(export.unanchored, [id("a.ifc", 3)]);
+        not_evaluated: vec![NotEvaluated {
+            rule_id: RuleId::new("storey-exists").unwrap(),
+            scope: Scope::Source(source),
+            reason: NotEvaluatedReason::IncompleteEvidence,
+            message: "0 object(s) match and 3 more may".into(),
+        }],
+        tables: vec![],
+    }
+}
+
+#[test]
+fn a_source_or_project_outcome_is_a_model_level_topic_without_a_component() {
+    let export = export(&scoped_report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+    assert!(export.unanchored.is_empty());
     let bytes = export.to_bytes().unwrap();
+    assert!(viewpoints(&bytes).is_empty());
     let archive = openbim_bcf::read_slice(&bytes).unwrap();
     assert!(
         archive.diagnostics().is_empty(),
         "{:?}",
         archive.diagnostics()
     );
-    assert_eq!(archive.topic_count(), 2);
-    // Only the population with participants has a viewpoint, selecting both
-    // anchored objects although neither is a subject.
-    let views = viewpoints(&bytes);
-    assert_eq!(views.len(), 1);
+    let topics: Vec<_> = archive.topics().map(|markup| &markup.topic).collect();
+    assert_eq!(topics.len(), 3);
+    let described = |label: &str| {
+        topics
+            .iter()
+            .find(|topic| topic.labels == [label])
+            .and_then(|topic| topic.description.clone())
+            .unwrap_or_else(|| panic!("no topic labelled {label}"))
+    };
+    let building = described("building-exists");
     assert!(
-        views[0].contains(WALL) && views[0].contains(SLAB),
-        "{}",
-        views[0]
+        building.contains("Source: ifc-step:a.ifc; no single object"),
+        "{building}"
+    );
+    assert!(!building.contains("Object:"), "{building}");
+    let count = described("one-wall-or-slab");
+    // The objects found are named, not selected.
+    assert!(
+        count.contains("Related: ifc-step:a.ifc/#1, ifc-step:a.ifc/#2"),
+        "{count}"
+    );
+    assert!(
+        count.contains("Evidence (exact): selection:count"),
+        "{count}"
+    );
+    let storey = described("storey-exists");
+    assert!(
+        storey.contains("Source: ifc-step:a.ifc; the rule was not evaluated for this source"),
+        "{storey}"
+    );
+}
+
+#[test]
+fn a_project_finding_is_written_and_its_guid_is_stable() {
+    let report = Report {
+        findings: vec![Finding::new(
+            RuleId::new("fire-compartment-exists").unwrap(),
+            Scope::Project,
+            Severity::Error,
+            "no object matches the selection in the project; required at least 1",
+        )],
+        not_evaluated: vec![],
+        tables: vec![],
+    };
+    let guid = |project: &Project| {
+        export(&report, project, &options())
+            .unwrap()
+            .document
+            .topics[0]
+            .guid
+            .clone()
+    };
+    let topic = &export(&report, &model("a.ifc", 1), &options())
+        .unwrap()
+        .document
+        .topics[0];
+    assert!(topic.viewpoints.is_empty());
+    assert!(
+        topic
+            .description
+            .as_deref()
+            .unwrap()
+            .contains("Project: no single object or source")
+    );
+    assert_eq!(guid(&model("a.ifc", 1)), guid(&model("b.ifc", 7)));
+}
+
+#[test]
+fn source_findings_keep_their_guids_across_renamed_revisions() {
+    // A revised model saved under another name still reports the same
+    // source-level issue; its GUID must not depend on the file name.
+    let guids = |document: &str, first: u64| -> Vec<String> {
+        export(
+            &scoped_report(document, first),
+            &model(document, first),
+            &options(),
+        )
+        .unwrap()
+        .document
+        .topics
+        .into_iter()
+        .map(|topic| topic.guid)
+        .collect()
+    };
+    assert_eq!(guids("a.ifc", 1), guids("a-rev2.ifc", 100));
+
+    // Two sources in one project report the same issue: qualified, unique.
+    let mut objects: Vec<_> = model("a.ifc", 1).objects().cloned().collect();
+    objects.extend(model("b.ifc", 1).objects().cloned());
+    let project = Project::new(objects).unwrap();
+    let mut both = scoped_report("a.ifc", 1);
+    let other = scoped_report("b.ifc", 1);
+    both.findings.extend(other.findings);
+    both.not_evaluated.extend(other.not_evaluated);
+    let archive = openbim_bcf::read_slice(
+        &export(&both, &project, &options())
+            .unwrap()
+            .to_bytes()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(archive.topic_count(), 6);
+}
+
+#[test]
+fn object_and_rule_level_topic_guids_are_unchanged_by_scopes() {
+    // Pinned from before findings had a scope: a user's tracked issues keep
+    // their GUIDs.
+    let guids: Vec<String> = export(&report("a.ifc", 1), &model("a.ifc", 1), &options())
+        .unwrap()
+        .document
+        .topics
+        .into_iter()
+        .map(|topic| topic.guid)
+        .collect();
+    assert_eq!(
+        guids,
+        [
+            "ea43db6d-429c-568c-bbe4-f39f8c5b7d87",
+            "2c812871-0333-5fb5-bf0c-4356042daf3a",
+            "644f00fc-b113-537e-9d52-c298dbad2d72",
+        ]
     );
 }

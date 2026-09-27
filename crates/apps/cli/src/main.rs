@@ -1,12 +1,16 @@
 //! Command-line validation of normalized Axioval packages.
 //!
-//! `validate` binds a ruleset without a model. `check` runs it over a model and
-//! writes the report as JSON, and optionally as a BCF archive. `report` reads
-//! a saved result back as a bounded summary or a filtered, paged listing.
+//! `validate` binds a ruleset without a model. `check` runs it over one or
+//! more models, each a source of one session with an optional discipline, and
+//! writes the report as JSON, and optionally as a BCF archive. `compare`
+//! compares two revisions of a model object by object and writes the same
+//! kind of result. `report` reads a saved result back as a bounded summary
+//! or a filtered, paged listing.
 //!
 //! Exit status is part of the automation contract; see [`Outcome`].
 
 use std::{
+    collections::BTreeMap,
     error::Error,
     fmt::Write as _,
     fs,
@@ -15,6 +19,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod compare;
 mod digest;
 mod geometry;
 
@@ -22,7 +27,7 @@ use axioval::{
     bcf,
     engine::{EvidenceSession, IntegritySeverity, Runtime, SourceIntegrityServiceHandle, compile},
     ifc::import_ifc_session,
-    ir::{DefinitionPackage, Report, RuleSetPackage},
+    ir::{DefinitionPackage, Discipline, Project, Report, RuleSetPackage, SourceId},
 };
 use clap::{Args, Parser, Subcommand};
 use digest::{CheckOutput, Filter, IntegrityRecord, Section};
@@ -48,7 +53,16 @@ enum Command {
     /// least one finding; 4 no finding, but something was not evaluated, so
     /// the model has not passed; 1 the check could not run; 2 invalid usage.
     Check(CheckArgs),
-    /// Read a result saved by `check --report`.
+    /// Compare two revisions of a model, object by object.
+    ///
+    /// Objects are matched by `GlobalId`. Kind, classifications, named
+    /// properties, placement and the coordinate system are compared, and
+    /// with `--geometry` each object's measured bounds. Exit status as for
+    /// `check`: 0 identical, 3 at least one difference, 4 no difference but
+    /// something could not be compared, 1 the comparison could not run, 2
+    /// invalid usage.
+    Compare(compare::CompareArgs),
+    /// Read a result saved by `check --report` or `compare --report`.
     ///
     /// Without filters, prints the same bounded summary as `check --summary`.
     /// With any filter, lists the matching entries, paged.
@@ -57,13 +71,28 @@ enum Command {
 
 #[derive(Args)]
 struct CheckArgs {
-    /// The model to check: an IFC2X3 or IFC4 STEP file.
-    #[arg(long)]
-    model: PathBuf,
+    /// A model to check: an IFC2X3 or IFC4 STEP file, optionally followed by
+    /// `:DISCIPLINE`, the role it plays (`arch.ifc:architecture`). Repeat for
+    /// several models; each is one source of the check, named by its file
+    /// name. A discipline is a lowercase token (`a-z`, `0-9`, `-`, `_`). A
+    /// file whose name itself ends in `:name` takes a trailing `:`.
+    #[arg(long = "model", required = true, value_name = "PATH[:DISCIPLINE]", value_parser = model_arg)]
+    models: Vec<ModelArg>,
     #[arg(long, required = true)]
     definitions: Vec<PathBuf>,
     #[arg(long)]
     ruleset: PathBuf,
+    /// Mesh the model's bodies so geometric rules can run. Off by default:
+    /// meshing costs time and purely semantic rulesets do not need it.
+    #[arg(long)]
+    geometry: bool,
+    #[command(flatten)]
+    output: OutputArgs,
+}
+
+/// Where and how a result is written; shared by `check` and `compare`.
+#[derive(Args)]
+struct OutputArgs {
     /// Write the JSON result here instead of stdout.
     #[arg(long)]
     report: Option<PathBuf>,
@@ -77,10 +106,6 @@ struct CheckArgs {
     /// when set, else the current time, in UTC.
     #[arg(long, requires = "bcf")]
     bcf_date: Option<String>,
-    /// Mesh the model's bodies so geometric rules can run. Off by default:
-    /// meshing costs time and purely semantic rulesets do not need it.
-    #[arg(long)]
-    geometry: bool,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -97,7 +122,7 @@ struct ReportArgs {
     /// Only entries from this section.
     #[arg(long, value_enum)]
     section: Option<Section>,
-    /// Only findings and not-evaluated outcomes of this rule.
+    /// Only findings, not-evaluated outcomes and table rows of this rule.
     #[arg(long)]
     rule: Option<String>,
     /// Only integrity issues with this code.
@@ -122,9 +147,54 @@ struct ReportArgs {
     json: bool,
 }
 
+/// One `--model` argument: a file and the discipline declared for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ModelArg {
+    path: PathBuf,
+    discipline: Option<Discipline>,
+}
+
+/// Parses `PATH[:DISCIPLINE]`.
+///
+/// The discipline is the text after the last `:` when that text is a
+/// discipline name, so a Windows drive (`C:\m.ifc`) or a directory with a
+/// colon stays part of the path. A trailing `:` declares no discipline and
+/// keeps everything before it as the path. Text after the last `:` that
+/// looks like a name but is not a valid one (`m.ifc:Structure`) is refused
+/// rather than read as part of a file name.
+fn model_arg(value: &str) -> Result<ModelArg, String> {
+    let whole = || ModelArg {
+        path: PathBuf::from(value),
+        discipline: None,
+    };
+    let Some((path, suffix)) = value.rsplit_once(':') else {
+        return Ok(whole());
+    };
+    if path.is_empty() {
+        return Ok(whole());
+    }
+    if suffix.is_empty() {
+        return Ok(ModelArg {
+            path: PathBuf::from(path),
+            discipline: None,
+        });
+    }
+    let name_like = suffix
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+    if !name_like {
+        return Ok(whole());
+    }
+    let discipline = Discipline::new(suffix).map_err(|error| error.to_string())?;
+    Ok(ModelArg {
+        path: PathBuf::from(path),
+        discipline: Some(discipline),
+    })
+}
+
 /// How a completed run ends. Errors exit 1 and usage errors 2 (clap).
 #[derive(Debug, PartialEq, Eq)]
-enum Outcome {
+pub(crate) enum Outcome {
     /// Every rule was evaluated and none found anything.
     Passed,
     /// At least one finding. Takes precedence over [`Outcome::Incomplete`]:
@@ -135,7 +205,7 @@ enum Outcome {
 }
 impl Outcome {
     fn of(report: &Report) -> Self {
-        if report.has_findings() {
+        if !report.findings().is_empty() {
             Self::Findings
         } else if !report.not_evaluated().is_empty() {
             Self::Incomplete
@@ -180,6 +250,7 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
             Ok(Outcome::Passed)
         }
         Command::Check(args) => check(args),
+        Command::Compare(args) => compare::compare(args),
         Command::Report(args) => {
             report(args)?;
             Ok(Outcome::Passed)
@@ -191,12 +262,10 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let (definitions, ruleset) = packages(&args.definitions, &args.ruleset)?;
     let registry = axioval::default_registry()?;
     let plan = compile(&registry, &definitions, &ruleset)?;
-    let bytes =
-        fs::read(&args.model).map_err(|error| format!("{}: {error}", args.model.display()))?;
-    let session = import(&args.model, &bytes)?;
+    let (session, bytes) = sources(&args.models)?;
     let (session, meshed) = if args.geometry {
-        let (session, report) = geometry::attach(session, &bytes)
-            .map_err(|error| format!("{}: geometry: {error}", args.model.display()))?;
+        let (session, report) =
+            geometry::attach(session, &bytes).map_err(|error| format!("geometry: {error}"))?;
         (session, Some(report))
     } else {
         (session, None)
@@ -215,10 +284,21 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .collect(),
     });
     let output = CheckOutput::new(result, integrity, geometry, session.project());
-    let result = &output.report;
-    let json = serde_json::to_string_pretty(&output)? + "\n";
-    // Everything is built before anything is written, so a run that fails
-    // leaves no partial output behind.
+    emit(&output, session.project(), args.output)?;
+    Ok(Outcome::of(&output.report))
+}
+
+/// Writes a result as `args` asks: JSON to stdout or `--report`, a summary,
+/// a BCF archive, and diagnostics to stderr.
+///
+/// Everything is built before anything is written, so a run that fails
+/// leaves no partial output behind.
+pub(crate) fn emit(
+    output: &CheckOutput,
+    project: &Project,
+    args: OutputArgs,
+) -> Result<(), Box<dyn Error>> {
+    let json = serde_json::to_string_pretty(output)? + "\n";
     let archive = match &args.bcf {
         Some(path) => {
             let date = match args.bcf_date {
@@ -226,8 +306,8 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
                 None => timestamp()?,
             };
             let export = bcf::export(
-                result,
-                session.project(),
+                &output.report,
+                project,
                 &bcf::Options::new(args.bcf_author, date),
             )?;
             Some((path, export.to_bytes()?, export.unanchored))
@@ -239,7 +319,7 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .report
             .as_deref()
             .map(|path| path.to_string_lossy().into_owned());
-        digest::render_summary(&digest::summarize(&output, args.top, saved.as_deref()))
+        digest::render_summary(&digest::summarize(output, args.top, saved.as_deref()))
     });
 
     if let Some(path) = &args.report {
@@ -257,8 +337,8 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         .iter()
         .flat_map(|(_, _, unanchored)| unanchored)
         .collect();
-    warn(&output, summary.is_some(), &unanchored);
-    Ok(Outcome::of(result))
+    warn(output, summary.is_some(), &unanchored);
+    Ok(())
 }
 
 fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
@@ -339,7 +419,7 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&axioval::ir::Obje
         }
         eprintln!(
             "{} finding(s), {} not evaluated, {} integrity issue(s)",
-            output.report.findings().len() + output.report.rule_findings().len(),
+            output.report.findings().len(),
             output.report.not_evaluated().len(),
             output.integrity.len()
         );
@@ -374,6 +454,43 @@ fn listing_command(path: &str, args: &ReportArgs) -> String {
     command
 }
 
+/// Imports every model as one source of one session, with its discipline.
+///
+/// Returns the session and each source's bytes, for meshing. Two models with
+/// the same file name would be the same source, so they are refused.
+fn sources(models: &[ModelArg]) -> Result<(EvidenceSession, geometry::ModelBytes), Box<dyn Error>> {
+    let mut members = Vec::with_capacity(models.len());
+    let mut bytes = geometry::ModelBytes::new();
+    let mut paths: BTreeMap<SourceId, &Path> = BTreeMap::new();
+    for model in models {
+        let path = model.path.as_path();
+        let content = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+        let mut session = import(path, &content)?;
+        let source = session
+            .snapshots()
+            .next()
+            .map(|snapshot| snapshot.source().clone())
+            .ok_or_else(|| format!("{}: the import produced no source", path.display()))?;
+        if let Some(first) = paths.insert(source.clone(), path) {
+            return Err(format!(
+                "{} and {} share the file name `{}`, which names the source; rename one",
+                first.display(),
+                path.display(),
+                source.document
+            )
+            .into());
+        }
+        if let Some(discipline) = &model.discipline {
+            session = session
+                .with_discipline(&source, discipline.clone())
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+        }
+        bytes.insert(source, content);
+        members.push(session);
+    }
+    Ok((EvidenceSession::federate(members)?, bytes))
+}
+
 /// Imports the model, named by its file name so a report does not depend on
 /// where the file was checked from.
 fn import(model: &Path, bytes: &[u8]) -> Result<EvidenceSession, Box<dyn Error>> {
@@ -385,7 +502,7 @@ fn import(model: &Path, bytes: &[u8]) -> Result<EvidenceSession, Box<dyn Error>>
         .map_err(|error| format!("{}: {error}", model.display()))?)
 }
 
-fn integrity(session: &EvidenceSession) -> Result<Vec<IntegrityRecord>, Box<dyn Error>> {
+pub(crate) fn integrity(session: &EvidenceSession) -> Result<Vec<IntegrityRecord>, Box<dyn Error>> {
     let Some(service) = session.service::<SourceIntegrityServiceHandle>() else {
         return Ok(vec![]);
     };
@@ -464,7 +581,48 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::utc;
+    use super::{ModelArg, model_arg, utc};
+    use axioval::ir::Discipline;
+    use std::path::PathBuf;
+
+    fn parsed(path: &str, discipline: Option<&str>) -> ModelArg {
+        ModelArg {
+            path: PathBuf::from(path),
+            discipline: discipline.map(|name| Discipline::new(name).unwrap()),
+        }
+    }
+
+    #[test]
+    fn a_model_argument_splits_off_its_discipline() {
+        assert_eq!(model_arg("m.ifc"), Ok(parsed("m.ifc", None)));
+        assert_eq!(
+            model_arg("dir/m.ifc:structure"),
+            Ok(parsed("dir/m.ifc", Some("structure")))
+        );
+        assert_eq!(
+            model_arg("m.ifc:building_services"),
+            Ok(parsed("m.ifc", Some("building_services")))
+        );
+        // A drive letter or a colon inside the path is not a discipline.
+        assert_eq!(
+            model_arg("C:\\models\\m.ifc"),
+            Ok(parsed("C:\\models\\m.ifc", None))
+        );
+        assert_eq!(
+            model_arg("C:\\m.ifc:mep"),
+            Ok(parsed("C:\\m.ifc", Some("mep")))
+        );
+        assert_eq!(model_arg("a:b/m.ifc"), Ok(parsed("a:b/m.ifc", None)));
+        // A trailing colon keeps a file name that ends in `:name`.
+        assert_eq!(model_arg("odd:arch:"), Ok(parsed("odd:arch", None)));
+        assert_eq!(model_arg(":arch"), Ok(parsed(":arch", None)));
+    }
+
+    #[test]
+    fn a_discipline_that_is_not_a_lowercase_token_is_refused() {
+        assert!(model_arg("m.ifc:Structure").is_err());
+        assert!(model_arg("m.ifc:-structure").is_err());
+    }
 
     #[test]
     fn utc_formats_known_instants() {

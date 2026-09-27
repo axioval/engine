@@ -14,40 +14,28 @@
 //! reference or an aggregate. An unset
 //! attribute (`$`), an attribute the entity does not declare, and an object
 //! with no type are exact absences; an object typed twice is a conflict.
-//!
-//! [`PREDEFINED_TYPE_SET`] answers the designation that narrows an object's
-//! class, resolved as IDS reads it: the type object's (its `PredefinedType`,
-//! or its `ElementType`/`ProcessType` when that is user-defined or unset)
-//! unless that is `NOTDEFINED` or empty, then the occurrence's (its
-//! `PredefinedType`, or its `ObjectType` when that is user-defined or unset).
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use axioval_engine::PropertyResolutionError;
 use axioval_ir::{
-    ATTRIBUTE_SET, PREDEFINED_TYPE, PREDEFINED_TYPE_SET, PREDEFINED_TYPE_USER_DEFINED,
-    PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, TYPE_ATTRIBUTE_SET,
+    ATTRIBUTE_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET, PRESENTATION_TRANSPARENCY,
+    PropertyValue, TYPE_ATTRIBUTE_SET,
 };
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
 
 use crate::layers::{self, LayerIndex};
+use crate::materials::Materials;
 use crate::measure::si_value;
 use crate::release::Release;
+use crate::styles::{self, StyleIndex};
 
 /// A present attribute value and the locator detail that proves it.
 pub(crate) struct AttributeValue {
     pub(crate) value: PropertyValue,
     pub(crate) detail: String,
-}
-
-/// An object's predefined type and whether it is user-defined.
-pub(crate) struct PredefinedType {
-    pub(crate) value: Option<String>,
-    pub(crate) user_defined: bool,
-    /// The type object whose designation was used, if any.
-    type_object: Option<EntityId>,
 }
 
 /// Type objects assigned to each object, with the assigning relationship.
@@ -58,6 +46,8 @@ pub(crate) struct Attributes {
     release: Release,
     types: OnceLock<Result<TypeIndex, String>>,
     layers: OnceLock<Result<LayerIndex, String>>,
+    styles: OnceLock<Result<StyleIndex, String>>,
+    materials: Materials,
 }
 
 impl Attributes {
@@ -66,6 +56,8 @@ impl Attributes {
             release,
             types: OnceLock::new(),
             layers: OnceLock::new(),
+            styles: OnceLock::new(),
+            materials: Materials::new(release),
         }
     }
 
@@ -87,21 +79,31 @@ impl Attributes {
             });
         }
         if set == PRESENTATION_SET {
+            if name.eq_ignore_ascii_case(PRESENTATION_TRANSPARENCY) {
+                return self.transparency(model, object);
+            }
             return self.layer(model, object, name);
         }
-        if set == PREDEFINED_TYPE_SET {
-            return self.designation_property(model, object, name);
+        if set == MATERIAL_SET {
+            return self.materials.resolve(model, object, name);
         }
         debug_assert_eq!(set, TYPE_ATTRIBUTE_SET);
-        match self.type_objects(model, object)? {
-            [] => Ok(None),
-            [(type_object, relationship)] => read(schema, model, *type_object, name).map(|value| {
-                value.map(|value| AttributeValue {
-                    value,
-                    detail: format!("type-attribute:{relationship}:{type_object}:{name}"),
+        let types = self
+            .types
+            .get_or_init(|| index_types(schema, model))
+            .as_ref()
+            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        match types.get(&object).map(Vec::as_slice) {
+            None | Some([]) => Ok(None),
+            Some([(type_object, relationship)]) => {
+                read(schema, model, *type_object, name).map(|value| {
+                    value.map(|value| AttributeValue {
+                        value,
+                        detail: format!("type-attribute:{relationship}:{type_object}:{name}"),
+                    })
                 })
-            }),
-            several => Err(PropertyResolutionError::Conflicting(format!(
+            }
+            Some(several) => Err(PropertyResolutionError::Conflicting(format!(
                 "{object} is typed by {} type objects ({})",
                 several.len(),
                 several
@@ -115,119 +117,11 @@ impl Attributes {
 }
 
 impl Attributes {
-    /// The type objects assigned to `object`, with the assigning relationships.
-    fn type_objects(
-        &self,
-        model: &Model,
-        object: EntityId,
-    ) -> Result<&[(EntityId, EntityId)], PropertyResolutionError> {
-        let types = self
-            .types
-            .get_or_init(|| index_types(self.release.schema, model))
-            .as_ref()
-            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
-        Ok(types.get(&object).map_or(&[], Vec::as_slice))
-    }
-
-    /// `name` in [`PREDEFINED_TYPE_SET`] for `object`.
-    fn designation_property(
-        &self,
-        model: &Model,
-        object: EntityId,
-        name: &str,
-    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
-        let is = |wanted: &str| name.eq_ignore_ascii_case(wanted);
-        if !is(PREDEFINED_TYPE) && !is(PREDEFINED_TYPE_USER_DEFINED) {
-            return Ok(None);
-        }
-        let resolved = self.predefined_type(model, object)?;
-        let detail = match resolved.type_object {
-            Some(type_object) => format!("predefined-type:{object}:{type_object}"),
-            None => format!("predefined-type:{object}"),
-        };
-        let value = if is(PREDEFINED_TYPE_USER_DEFINED) {
-            Some(PropertyValue::Boolean(resolved.user_defined))
-        } else {
-            resolved.value.map(PropertyValue::String)
-        };
-        Ok(value.map(|value| AttributeValue { value, detail }))
-    }
-
-    /// The predefined type of any instance, as [`PREDEFINED_TYPE_SET`]
-    /// resolves it.
-    pub(crate) fn predefined_type(
-        &self,
-        model: &Model,
-        object: EntityId,
-    ) -> Result<PredefinedType, PropertyResolutionError> {
-        if model.get(object).is_none() {
-            return Err(PropertyResolutionError::InvalidRequest);
-        }
-        let schema = self.release.schema;
-        let own = |name| designation(schema, model, object, name).ok().flatten();
-        let type_object = match self.type_objects(model, object)? {
-            [] => None,
-            [(single, _)] => Some(*single),
-            several => {
-                return Err(PropertyResolutionError::Conflicting(format!(
-                    "{object} is typed by {} type objects",
-                    several.len()
-                )));
-            }
-        };
-        let mut value = None;
-        let mut user_defined = None;
-        let mut used = None;
-        if let Some(type_id) = type_object {
-            let declared = designation(schema, model, type_id, "PredefinedType")
-                .ok()
-                .flatten();
-            let custom = || match designation(schema, model, type_id, "ElementType") {
-                Ok(text) => text,
-                Err(()) => designation(schema, model, type_id, "ProcessType")
-                    .ok()
-                    .flatten(),
-            };
-            let (stated, custom_used) = match declared.as_deref() {
-                Some("USERDEFINED") => (custom(), true),
-                None => {
-                    let text = custom();
-                    let used = text.as_deref().is_some_and(|text| !text.is_empty());
-                    (text, used)
-                }
-                Some(_) => (declared.clone(), false),
-            };
-            if declared.as_deref() == Some("USERDEFINED") || custom_used {
-                user_defined = Some(true);
-            }
-            if let Some(stated) = stated.filter(|d| !d.is_empty() && d != "NOTDEFINED") {
-                value = Some(stated);
-                used = Some(type_id);
-                user_defined.get_or_insert(false);
-            }
-        }
-        if value.is_none() {
-            let declared = own("PredefinedType");
-            value = match declared.as_deref() {
-                Some("USERDEFINED") | None => own("ObjectType"),
-                Some(_) => declared.clone(),
-            };
-            if user_defined.is_none() {
-                user_defined = Some(match declared.as_deref() {
-                    Some("USERDEFINED") => true,
-                    None => own("ObjectType").is_some_and(|text| !text.is_empty()),
-                    Some(_) => false,
-                });
-            }
-        }
-        Ok(PredefinedType {
-            value,
-            user_defined: user_defined.unwrap_or(false),
-            type_object: used,
-        })
-    }
-
-    /// The one presentation layer of `object`; several distinct ones conflict.
+    /// Every distinct presentation layer of `object`, sorted by name.
+    ///
+    /// An object on no layer is exactly absent, but only in a model that
+    /// assigns layers at all; in one without a single layer assignment the
+    /// source answers that it records none.
     fn layer(
         &self,
         model: &Model,
@@ -243,44 +137,86 @@ impl Attributes {
             .get_or_init(|| layers::index(schema, model))
             .as_ref()
             .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        if index.is_empty() {
+            // Nothing in the model is on a layer: an object's missing layer
+            // says nothing about it. The message names the source only, so
+            // every object answers identically and is reported once.
+            return Err(PropertyResolutionError::NotRecorded(
+                "the source assigns no presentation layers (no IfcPresentationLayerAssignment)"
+                    .into(),
+            ));
+        }
         let found = layers::layers_of(schema, model, index, object)
             .map_err(PropertyResolutionError::Incomplete)?;
-        let mut found = found.into_iter();
-        match (found.next(), found.next()) {
-            (None, _) => Ok(None),
-            (Some((layer, assignment)), None) => Ok(Some(AttributeValue {
-                value: PropertyValue::String(layer),
-                detail: format!("layer:{object}:{assignment}"),
-            })),
-            (Some((first, _)), Some((second, _))) => {
-                Err(PropertyResolutionError::Conflicting(format!(
-                    "{object} is on {} layers ({first}, {second}{})",
-                    2 + found.len(),
-                    if found.len() > 0 { ", ..." } else { "" }
-                )))
-            }
+        if found.is_empty() {
+            return Ok(None);
         }
+        let assignments: Vec<String> = found.values().map(ToString::to_string).collect();
+        Ok(Some(AttributeValue {
+            value: PropertyValue::List(found.into_keys().map(PropertyValue::String).collect()),
+            detail: format!("layer:{object}:{}", assignments.join(",")),
+        }))
     }
 }
 
-/// The text of an enumeration or string attribute: `Err` when the entity
-/// declares no such attribute, `Ok(None)` when it is unset.
-fn designation(
-    schema: &Schema,
-    model: &Model,
-    id: EntityId,
-    name: &str,
-) -> Result<Option<String>, ()> {
-    let entity = model.get(id).ok_or(())?;
-    let slot = schema
-        .attribute_names(&entity.type_name)
-        .iter()
-        .position(|attribute| *attribute == name)
-        .ok_or(())?;
-    Ok(match entity.attribute(slot) {
-        Some(Value::Text(text) | Value::Enum(text)) => Some(text.to_string()),
-        _ => None,
-    })
+impl Attributes {
+    /// Every distinct surface transparency of `object`'s body, ascending.
+    ///
+    /// Items styled themselves state their own; items without a surface
+    /// style are drawn with the styles of the object's material. An object
+    /// with no styled surface is exactly absent.
+    fn transparency(
+        &self,
+        model: &Model,
+        object: EntityId,
+    ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
+        let schema = self.release.schema;
+        let index = self
+            .styles
+            .get_or_init(|| styles::index(schema, model))
+            .as_ref()
+            .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        let surfaces = styles::surfaces_of(schema, model, index, object)?;
+        // The material is consulted only when an item needs it and some
+        // material in the model is styled at all.
+        let material = if surfaces.unstyled && index.styles_materials() {
+            let materials = self.materials.material_ids(model, object)?;
+            index.material_surfaces(schema, model, &materials)?
+        } else {
+            Vec::new()
+        };
+        if surfaces.items.is_empty() && material.is_empty() {
+            return Ok(None);
+        }
+        let mut values: Vec<f64> = surfaces
+            .items
+            .iter()
+            .chain(&material)
+            .map(|surface| surface.transparency)
+            .collect();
+        values.sort_by(f64::total_cmp);
+        values.dedup();
+        let ids = |surfaces: &[styles::Surface]| {
+            let mut ids: Vec<EntityId> = surfaces.iter().map(|surface| surface.style).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            ids.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let mut detail = format!("transparency:{object}");
+        if !surfaces.items.is_empty() {
+            detail = format!("{detail}:{}", ids(&surfaces.items));
+        }
+        if !material.is_empty() {
+            detail = format!("{detail}:material:{}", ids(&material));
+        }
+        Ok(Some(AttributeValue {
+            value: PropertyValue::List(values.into_iter().map(PropertyValue::Decimal).collect()),
+            detail,
+        }))
+    }
 }
 
 /// One attribute of one entity, by schema name (ASCII case-insensitive).
@@ -340,6 +276,14 @@ fn typed(
     type_name: &str,
     value: &Value,
 ) -> Result<Option<PropertyValue>, PropertyResolutionError> {
+    let raw = match value {
+        Value::Text(text) => crate::temporal::Raw::Text(text),
+        Value::Integer(seconds) => crate::temporal::Raw::Integer(*seconds),
+        _ => crate::temporal::Raw::Other,
+    };
+    if let Some(value) = crate::temporal::read(type_name, &raw) {
+        return value.map(Some);
+    }
     if type_name.to_ascii_uppercase().ends_with("MEASURE") {
         #[allow(clippy::cast_precision_loss)]
         let number = match value {

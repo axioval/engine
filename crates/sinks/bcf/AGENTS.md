@@ -10,12 +10,15 @@ BCF 2.1 issue archives from a `Report` and the `Project` it was computed over.
 - Every finding and, unless the host opts out, every not-evaluated outcome is a
   topic. Dropping not-evaluated outcomes by default would make an incomplete
   check read as a pass.
-- A rule finding (about a whole population) is a topic too; it has no subject, so its viewpoint selects every anchored participant, and none when it names no object.
 - A viewpoint selects the subject first. Never write a viewpoint of related
   objects alone: it would highlight the wrong element. An object without a
   GlobalId alias keeps its topic and is listed in `Export::unanchored`.
+- A source- or project-scoped entry has no subject, so its topic has no
+  viewpoint and no component, and nothing in it is `unanchored`.
 - GUIDs are UUIDv5 over rule, GlobalIds and message, so they survive
-  re-export. Changing `NAMESPACE` or the key layout changes every GUID a user
+  re-export. A scoped finding's key marks its scope kind but never names the
+  source, which would change with the file name; `tests/export.rs` pins the
+  object and rule-level GUIDs. Changing `NAMESPACE` or the key layout changes every GUID a user
   has ever received; treat both as a compatibility contract.
 - Never read the clock or invent GUIDs; the caller supplies author and date.
 - 2.1 only until a host can supply a camera, which 3.0 requires.

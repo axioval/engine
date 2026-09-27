@@ -26,9 +26,11 @@ use crate::support::{
 ///
 /// A name counts as a number only when it is one exactly: an optional sign
 /// and digits, nothing else, so ` 1` and `1a` are not numbers. A member
-/// without a numeric name gets its own finding and does not interrupt the
-/// sequence. Ordering needs every member's order value, so a member without
-/// one makes the whole anchor not evaluated.
+/// without a numeric name, or with a number below `first`, gets its own
+/// finding and does not interrupt the sequence; a number out of order is
+/// reported against the member below it. Ordering needs every member's order
+/// value, so a member without one makes the whole anchor not evaluated: the
+/// engine has no exact source-neutral placement height to fall back on.
 pub struct NameSequence;
 
 struct Member<'a> {
@@ -232,6 +234,15 @@ fn check(
             ));
             continue;
         };
+        if value < config.first {
+            // Its own result: a number below the start is not an order break,
+            // and like a non-number it does not interrupt the sequence.
+            evaluation.push_finding(report(
+                format!("{name} {value} is below the start {}", config.first),
+                None,
+            ));
+            continue;
+        }
         let message = match previous {
             None if value > config.first => Some((
                 format!(
@@ -239,10 +250,6 @@ fn check(
                     config.first
                 ),
                 None,
-            )),
-            _ if value < config.first => Some((
-                format!("{name} {value} is less than {}", config.first),
-                previous.map(|(_, member)| member),
             )),
             Some((before, below)) => match value.cmp(&before) {
                 Ordering::Less | Ordering::Equal => Some((

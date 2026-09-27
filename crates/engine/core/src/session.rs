@@ -4,10 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use axioval_ir::{Project, SourceId};
+use axioval_ir::{Discipline, Project, SourceId};
 use thiserror::Error;
 
-use crate::{ServiceRegistry, ServiceRegistryError};
+use crate::derived_relationships::{DerivedRelationshipServiceHandle, RoutedRelationships};
+use crate::{RelationshipSelectionServiceHandle, ServiceRegistry, ServiceRegistryError};
 
 /// Trusted service that declares the immutable source snapshots it can resolve.
 ///
@@ -104,6 +105,59 @@ impl SourceSnapshot {
     }
 }
 
+/// The disciplines a run's sources play, as the session declared them.
+///
+/// Only the engine constructs this, from the evidence session, and registers
+/// it for the duration of one run, replacing any host-registered copy.
+/// Capabilities find it in the service registry. A source without an entry
+/// declares no discipline; that is unknown, never "no discipline matches".
+#[derive(Clone, Debug, Default)]
+pub struct SourceDisciplines(BTreeMap<SourceId, Discipline>);
+
+impl SourceDisciplines {
+    pub(crate) fn new(disciplines: BTreeMap<SourceId, Discipline>) -> Self {
+        Self(disciplines)
+    }
+
+    /// The discipline declared for `source`, if any.
+    #[must_use]
+    pub fn of(&self, source: &SourceId) -> Option<&Discipline> {
+        self.0.get(source)
+    }
+}
+
+/// Every source a run checks.
+///
+/// The runtime registers it for the duration of one run, replacing any
+/// host-registered copy: from the session's snapshots in
+/// [`crate::Runtime::run_session`], from the sources the project's objects
+/// name in [`crate::Runtime::run`]. It lists a source even when that source
+/// contributes no object, so a capability judging each source as a whole
+/// ("the model contains a building") reports an empty source instead of
+/// never seeing it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SessionSources(BTreeSet<SourceId>);
+
+impl SessionSources {
+    /// Lists `sources`; order and repetition do not matter.
+    ///
+    /// Capability tests construct it; a run always uses the runtime's own.
+    pub fn new(sources: impl IntoIterator<Item = SourceId>) -> Self {
+        Self(sources.into_iter().collect())
+    }
+
+    /// Every source, sorted.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &SourceId> {
+        self.0.iter()
+    }
+
+    /// Whether the run checks `source`.
+    #[must_use]
+    pub fn contains(&self, source: &SourceId) -> bool {
+        self.0.contains(source)
+    }
+}
+
 /// Invalid project/source snapshot binding.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum EvidenceSessionError {
@@ -116,9 +170,6 @@ pub enum EvidenceSessionError {
     /// A project source has no immutable snapshot declaration.
     #[error("project source has no snapshot declaration: {0}")]
     MissingSource(SourceId),
-    /// A snapshot does not correspond to any project object.
-    #[error("snapshot source is not present in the project: {0}")]
-    UnexpectedSource(SourceId),
     /// A service declared no immutable source binding.
     #[error("evidence service has no source snapshot binding")]
     UnboundService,
@@ -128,6 +179,19 @@ pub enum EvidenceSessionError {
     /// A service source is absent from the session or has a different identity.
     #[error("evidence service snapshot does not match the session: {0}")]
     ServiceSnapshotMismatch(SourceId),
+    /// A discipline was declared for a source the session does not hold.
+    #[error("discipline declared for a source outside the session: {0}")]
+    UnknownSource(SourceId),
+    /// A source's discipline was declared twice.
+    #[error("source already declares a discipline: {0}")]
+    DuplicateDiscipline(SourceId),
+    /// A federated member holds a service the engine cannot route by source.
+    ///
+    /// Federation composes the semantic services adapters register; a host
+    /// service (geometry, derived relationships) is registered on the
+    /// federated session instead, bound to every snapshot it was built from.
+    #[error("evidence session holds a service that cannot be federated")]
+    UnfederableService,
     /// Typed service registration failed.
     #[error(transparent)]
     ServiceRegistry(#[from] ServiceRegistryError),
@@ -142,11 +206,23 @@ pub enum EvidenceSessionError {
 pub struct EvidenceSession {
     project: Arc<Project>,
     snapshots: BTreeMap<SourceId, SourceSnapshot>,
+    disciplines: BTreeMap<SourceId, Discipline>,
     services: ServiceRegistry,
 }
 
 impl EvidenceSession {
     /// Starts a session after proving every project source has exactly one snapshot.
+    ///
+    /// A snapshot need not contribute an object: a model holding no objects
+    /// (only presentation data, or nothing at all) is an empty source and
+    /// still part of the session. Capabilities that judge each source as a
+    /// whole find it through [`SessionSources`], so an empty source is
+    /// reported rather than skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when two snapshots name the same source, or an
+    /// object's source has no snapshot.
     pub fn try_new(
         project: Project,
         snapshots: impl IntoIterator<Item = SourceSnapshot>,
@@ -168,17 +244,116 @@ impl EvidenceSession {
         {
             return Err(EvidenceSessionError::MissingSource(source.clone()));
         }
-        if let Some(source) = indexed
-            .keys()
-            .find(|source| !project_sources.contains(*source))
-        {
-            return Err(EvidenceSessionError::UnexpectedSource((*source).clone()));
-        }
         Ok(Self {
             project: Arc::new(project),
             snapshots: indexed,
+            disciplines: BTreeMap::new(),
             services: ServiceRegistry::new(),
         })
+    }
+
+    /// Combines sessions over disjoint sources into one session.
+    ///
+    /// The project holds every member's objects under their own
+    /// source-qualified identities, and every snapshot and declared
+    /// discipline is kept, including a member whose source holds no objects,
+    /// which stays in the session as an empty source. Each semantic service the members registered
+    /// (property resolution, relationship selection, type hierarchy, object
+    /// frames, classifications, integrity) becomes one service bound to the
+    /// snapshots of the members that had it, answering each request from
+    /// the member that owns the request's source; a source no member
+    /// covers is refused, never answered empty. A relationship request is
+    /// answered from its anchor's member over the part of the candidate
+    /// universe in that member's sources, since a member cannot relate
+    /// objects it does not hold.
+    ///
+    /// One member is returned unchanged. Federate before registering host
+    /// services such as geometry: they are built over the federated
+    /// project and bound to all its snapshots.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when two members hold the same source, or a member
+    /// holds a service other than the semantic ones above.
+    pub fn federate(
+        members: impl IntoIterator<Item = EvidenceSession>,
+    ) -> Result<Self, EvidenceSessionError> {
+        let mut members: Vec<Self> = members.into_iter().collect();
+        if members.len() == 1 {
+            return Ok(members.remove(0));
+        }
+        for member in &members {
+            if member.services.len() > crate::federation::routed(&member.services) {
+                return Err(EvidenceSessionError::UnfederableService);
+            }
+        }
+        let objects = members
+            .iter()
+            .flat_map(|member| member.project.objects().cloned())
+            .collect();
+        let snapshots: Vec<SourceSnapshot> = members
+            .iter()
+            .flat_map(|member| member.snapshots.values().cloned())
+            .collect();
+        let project = Project::new(objects).map_err(|error| match error {
+            // Objects of one source only ever come from its own member, so a
+            // duplicate object means two members hold the same source.
+            axioval_ir::IrError::DuplicateObject(object) => {
+                EvidenceSessionError::DuplicateSource(object.source)
+            }
+            _ => EvidenceSessionError::InvalidSnapshotIdentity,
+        })?;
+        let mut federated = Self::try_new(project, snapshots)?;
+        for member in &members {
+            federated.disciplines.extend(
+                member
+                    .disciplines
+                    .iter()
+                    .map(|(source, discipline)| (source.clone(), discipline.clone())),
+            );
+        }
+        let registries: Vec<&ServiceRegistry> =
+            members.iter().map(|member| &member.services).collect();
+        crate::federation::register(&mut federated.services, &registries)?;
+        Ok(federated)
+    }
+
+    /// Declares the discipline `source` plays in this check.
+    ///
+    /// A discipline is a host declaration, not part of the snapshot
+    /// identity: services bound to a snapshot stay valid whatever role the
+    /// source plays. Capabilities read it through
+    /// [`crate::SourceDisciplines`]; the `discipline` selector matches on it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the session holds no such source or it already
+    /// declares a discipline.
+    pub fn with_discipline(
+        mut self,
+        source: &SourceId,
+        discipline: Discipline,
+    ) -> Result<Self, EvidenceSessionError> {
+        if !self.snapshots.contains_key(source) {
+            return Err(EvidenceSessionError::UnknownSource(source.clone()));
+        }
+        if self.disciplines.contains_key(source) {
+            return Err(EvidenceSessionError::DuplicateDiscipline(source.clone()));
+        }
+        self.disciplines.insert(source.clone(), discipline);
+        Ok(self)
+    }
+
+    /// The discipline declared for `source`, if any.
+    #[must_use]
+    pub fn discipline(&self, source: &SourceId) -> Option<&Discipline> {
+        self.disciplines.get(source)
+    }
+
+    /// Every declared discipline, by source.
+    #[must_use]
+    pub fn disciplines(&self) -> &BTreeMap<SourceId, Discipline> {
+        &self.disciplines
     }
 
     /// Registers one non-replaceable typed evidence service.
@@ -212,6 +387,47 @@ impl EvidenceSession {
     ) -> Result<Self, EvidenceSessionError> {
         self.check_bindings(built_from)?;
         self.services.register(service)?;
+        Ok(self)
+    }
+
+    /// Registers a derived-relationship service and routes the session's
+    /// relationship selection through it.
+    ///
+    /// Afterwards the session's [`RelationshipSelectionServiceHandle`]
+    /// answers identities starting with
+    /// [`crate::DERIVED_RELATIONSHIP_PREFIX`] from `service` and every other
+    /// identity from the semantic service registered before, so capabilities
+    /// taking a `relationship` or `path` use derived relationships unchanged.
+    /// Register the semantic service first; one registered afterwards is a
+    /// duplicate. `built_from` is checked as in [`Self::with_host_service`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a binding is missing, repeated or stale, or a
+    /// derived-relationship service is already registered.
+    pub fn with_derived_relationships(
+        mut self,
+        service: DerivedRelationshipServiceHandle,
+        built_from: &[SourceSnapshot],
+    ) -> Result<Self, EvidenceSessionError> {
+        self.check_bindings(built_from)?;
+        let semantic = self
+            .services
+            .get::<RelationshipSelectionServiceHandle>()
+            .cloned();
+        self.services.register(service.clone())?;
+        let snapshots = semantic.as_ref().map_or_else(
+            || built_from.to_vec(),
+            |semantic| semantic.source_snapshots().to_vec(),
+        );
+        self.services
+            .replace(RelationshipSelectionServiceHandle::new(Arc::new(
+                RoutedRelationships {
+                    semantic,
+                    derived: service,
+                    snapshots,
+                },
+            )));
         Ok(self)
     }
 

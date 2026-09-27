@@ -18,10 +18,26 @@
 //!   the true depth. Only a closed solid has an inside; a surface entering a
 //!   solid is measured against the solid, and two open surfaces, which share
 //!   no volume, report `None`.
+//! - **Shape comparisons are intervals.** The extent of the intersection
+//!   along each axis ([`OverlapExtents`]) and the Hausdorff distance between
+//!   the two surfaces are reported as [`LengthInterval`]s the true values lie
+//!   in, so a policy judging them against a tolerance can tell a certain
+//!   answer from an open one.
+//! - **Volumes are certified intervals.** The volume two closed bodies share
+//!   and each body's own volume ([`IntersectionVolume`]) are
+//!   [`VolumeInterval`]s sure to contain the true values, never a point
+//!   estimate.
+//!
+//! A second question rides on the same service: how far a body lies from
+//! one class of another body's faces ([`FaceDistanceRequest`]), signed by
+//! whether the body lies inside the other. It is what cover and protrusion
+//! checks measure.
 
 use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
+
+use crate::{LengthInterval, SignedDistanceInterval};
 
 /// Why a proximity measurement could not be produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -29,6 +45,11 @@ pub enum ProximityError {
     /// The adapter holds no measurable geometry for an object.
     #[error("proximity measurement is unavailable for the requested object")]
     Unavailable,
+    /// The object is declared to occupy no material, such as a storey or an
+    /// opening. A fact about the object, not a failure to measure it: an
+    /// object whose body could not be measured is [`Self::Unavailable`].
+    #[error("the requested object occupies no material")]
+    NoBody,
     /// Coordinates or measured quantities are non-finite, negative or incoherent.
     #[error("proximity measurement is not finite, non-negative and coherent")]
     InvalidMeasurement,
@@ -38,6 +59,9 @@ pub enum ProximityError {
     /// A body cannot be measured against itself.
     #[error("proximity of an object to itself is undefined")]
     SameObject,
+    /// The request's projection is not measured by this method or service.
+    #[error("the requested proximity projection is not supported")]
+    UnsupportedProjection,
 }
 
 /// An axis-aligned box in canonical metres.
@@ -180,21 +204,154 @@ impl ObjectBounds {
     }
 }
 
+/// The direction in which a distance between two bodies is measured.
+///
+/// No projection's distance bounds another's from below, so the broad phase
+/// prunes each by its own box gap ([`crate::projected_candidate_pairs`]).
+#[derive(Clone, Copy, Debug)]
+pub enum ProximityProjection {
+    /// Shortest distance between the two surfaces in space.
+    Minimum3d,
+    /// Plan distance between the two footprints: zero when they meet in plan.
+    Horizontal,
+    /// Gap between the two bodies' vertical extents (bottom to top), for
+    /// bodies above or below one another. The bodies are related when their
+    /// footprints overlap with positive area or, with a positive
+    /// `footprint_offset_metres`, when the counterpart's footprint comes
+    /// closer than the offset to the subject's (the subject's footprint grown
+    /// by the offset), and when the counterpart lies in `direction` from the
+    /// subject. Unrelated bodies have no distance in this projection.
+    Vertical {
+        footprint_offset_metres: f64,
+        direction: VerticalDirection,
+    },
+    /// Whether the footprints overlap with positive area: distance zero when
+    /// they do, none when they do not.
+    PlanOverlap,
+}
+
+/// Where the counterpart of a [`ProximityProjection::Vertical`] distance must
+/// lie relative to the subject.
+///
+/// Compare the two vertical extents (bottom to top) end by end. A counterpart
+/// lies **above** the subject unless it lies lower at both ends (its top
+/// below the subject's top and its bottom below the subject's bottom), and
+/// **below** unless it lies higher at both ends. A counterpart overlapping
+/// the subject in height is therefore above, below or both at distance zero:
+/// a pendant reaching down past a sprinkler's top is above it, a riser
+/// passing the sprinkler is both. Every counterpart is above or below, so the
+/// `Either` distance is the lesser of the two.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum VerticalDirection {
+    /// Above or below: the gap between the two extents.
+    Either,
+    /// The counterpart lies above: the gap from the subject's top up to the
+    /// counterpart's bottom, zero when the extents overlap.
+    Above,
+    /// The counterpart lies below: the gap from the subject's bottom down to
+    /// the counterpart's top, zero when the extents overlap.
+    Below,
+}
+
+impl VerticalDirection {
+    /// The direction's spelling in rule parameters, evidence and messages.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Either => "either",
+            Self::Above => "above",
+            Self::Below => "below",
+        }
+    }
+}
+
+impl ProximityProjection {
+    /// Whether the projection's offset is finite and non-negative.
+    fn is_valid(&self) -> bool {
+        match self {
+            Self::Vertical {
+                footprint_offset_metres,
+                ..
+            } => footprint_offset_metres.is_finite() && *footprint_offset_metres >= 0.0,
+            _ => true,
+        }
+    }
+    /// Whether a pair may have no distance at all in this projection.
+    pub fn may_be_unrelated(&self) -> bool {
+        matches!(self, Self::Vertical { .. } | Self::PlanOverlap)
+    }
+    /// The projection's spelling in evidence locators and messages.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Minimum3d => "minimum_3d",
+            Self::Horizontal => "horizontal",
+            Self::Vertical { .. } => "vertical",
+            Self::PlanOverlap => "plan_overlap",
+        }
+    }
+    fn key(&self) -> (u8, f64, VerticalDirection) {
+        match self {
+            Self::Minimum3d => (0, 0.0, VerticalDirection::Either),
+            Self::Horizontal => (1, 0.0, VerticalDirection::Either),
+            Self::Vertical {
+                footprint_offset_metres,
+                direction,
+            } => (2, *footprint_offset_metres, *direction),
+            Self::PlanOverlap => (3, 0.0, VerticalDirection::Either),
+        }
+    }
+}
+
+impl PartialEq for ProximityProjection {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+impl Eq for ProximityProjection {}
+impl PartialOrd for ProximityProjection {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for ProximityProjection {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let (a, a_offset, a_direction) = self.key();
+        let (b, b_offset, b_direction) = other.key();
+        a.cmp(&b)
+            .then_with(|| a_offset.total_cmp(&b_offset))
+            .then_with(|| a_direction.cmp(&b_direction))
+    }
+}
+
 /// A request to measure the proximity of two distinct objects.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProximityRequest {
     subject: ObjectId,
     counterpart: ObjectId,
+    projection: ProximityProjection,
 }
 
 impl ProximityRequest {
+    /// A request in space ([`ProximityProjection::Minimum3d`]).
     pub fn try_new(subject: ObjectId, counterpart: ObjectId) -> Result<Self, ProximityError> {
+        Self::projected(subject, counterpart, ProximityProjection::Minimum3d)
+    }
+    /// A request measured in `projection`; a vertical offset must be finite
+    /// and non-negative.
+    pub fn projected(
+        subject: ObjectId,
+        counterpart: ObjectId,
+        projection: ProximityProjection,
+    ) -> Result<Self, ProximityError> {
         if subject == counterpart {
             return Err(ProximityError::SameObject);
+        }
+        if !projection.is_valid() {
+            return Err(ProximityError::InvalidMeasurement);
         }
         Ok(Self {
             subject,
             counterpart,
+            projection,
         })
     }
     pub fn subject(&self) -> &ObjectId {
@@ -202,6 +359,55 @@ impl ProximityRequest {
     }
     pub fn counterpart(&self) -> &ObjectId {
         &self.counterpart
+    }
+    pub fn projection(&self) -> ProximityProjection {
+        self.projection
+    }
+}
+
+/// How far the intersection of two bodies reaches along each world axis.
+///
+/// Each axis carries a [`LengthInterval`]: the extent of the intersection's
+/// axis-aligned box along it. The lower bound is witnessed (points found in
+/// both bodies), the upper bound proven (the bodies' boxes overlap no
+/// further), so exact geometry need not report a point. An empty
+/// intersection has zero extent on every axis.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OverlapExtents {
+    axes: [LengthInterval; 3],
+}
+
+impl OverlapExtents {
+    /// The extents along x, y and z.
+    #[must_use]
+    pub fn new(x: LengthInterval, y: LengthInterval, z: LengthInterval) -> Self {
+        Self { axes: [x, y, z] }
+    }
+    pub fn x(&self) -> LengthInterval {
+        self.axes[0]
+    }
+    pub fn y(&self) -> LengthInterval {
+        self.axes[1]
+    }
+    pub fn z(&self) -> LengthInterval {
+        self.axes[2]
+    }
+    /// The lesser of the x and y extents: how far the intersection reaches in
+    /// plan along its narrower axis.
+    pub fn horizontal(&self) -> LengthInterval {
+        let (x, y) = (self.axes[0], self.axes[1]);
+        LengthInterval::try_new(
+            x.lower_metres().min(y.lower_metres()),
+            x.upper_metres().min(y.upper_metres()),
+        )
+        .unwrap_or_else(|_| unreachable!("the lesser of two intervals is an interval"))
+    }
+    /// The z extent.
+    pub fn vertical(&self) -> LengthInterval {
+        self.axes[2]
+    }
+    fn is_empty(&self) -> bool {
+        self.axes.iter().all(|axis| axis.lower_metres() == 0.0)
     }
 }
 
@@ -212,6 +418,130 @@ pub enum BodyContainment {
     CounterpartInsideSubject,
 }
 
+/// Bounds on a volume in cubic metres: finite, non-negative, and sure to
+/// contain the true value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VolumeInterval {
+    lower_cubic_metres: f64,
+    upper_cubic_metres: f64,
+}
+
+impl VolumeInterval {
+    /// Validates inclusive lower and upper bounds.
+    pub fn try_new(
+        lower_cubic_metres: f64,
+        upper_cubic_metres: f64,
+    ) -> Result<Self, ProximityError> {
+        let valid = |value: f64| value.is_finite() && value >= 0.0;
+        if !valid(lower_cubic_metres)
+            || !valid(upper_cubic_metres)
+            || lower_cubic_metres > upper_cubic_metres
+        {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self {
+            lower_cubic_metres,
+            upper_cubic_metres,
+        })
+    }
+    /// A volume known exactly.
+    pub fn exact(cubic_metres: f64) -> Result<Self, ProximityError> {
+        Self::try_new(cubic_metres, cubic_metres)
+    }
+    pub fn lower_cubic_metres(&self) -> f64 {
+        self.lower_cubic_metres
+    }
+    pub fn upper_cubic_metres(&self) -> f64 {
+        self.upper_cubic_metres
+    }
+    /// Whether the interval proves one value.
+    #[allow(clippy::float_cmp)]
+    pub fn is_exact(&self) -> bool {
+        self.lower_cubic_metres == self.upper_cubic_metres
+    }
+    /// `(lower, upper)` bounds on this volume's share of `whole`, for a
+    /// part that lies within the whole: outward rounded and clamped to
+    /// `[0, 1]`, so the true share always lies inside.
+    pub fn share_of(self, whole: Self) -> (f64, f64) {
+        let lower = if whole.upper_cubic_metres > 0.0 {
+            (self.lower_cubic_metres / whole.upper_cubic_metres).next_down()
+        } else {
+            0.0
+        };
+        let upper = if whole.lower_cubic_metres > 0.0 {
+            (self.upper_cubic_metres / whole.lower_cubic_metres).next_up()
+        } else {
+            1.0
+        };
+        let upper = upper.clamp(0.0, 1.0);
+        (lower.clamp(0.0, upper), upper)
+    }
+}
+
+/// The volume two closed bodies share, with each body's own volume.
+///
+/// Every value is a certified [`VolumeInterval`]. The shared volume cannot
+/// exceed either body's, so bounds claiming it must are refused.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IntersectionVolume {
+    shared: VolumeInterval,
+    subject: VolumeInterval,
+    counterpart: VolumeInterval,
+}
+
+impl IntersectionVolume {
+    /// The shared volume and the volumes of the request's subject and
+    /// counterpart.
+    pub fn try_new(
+        shared: VolumeInterval,
+        subject: VolumeInterval,
+        counterpart: VolumeInterval,
+    ) -> Result<Self, ProximityError> {
+        let most = subject
+            .upper_cubic_metres
+            .min(counterpart.upper_cubic_metres);
+        if shared.lower_cubic_metres > most {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self {
+            shared,
+            subject,
+            counterpart,
+        })
+    }
+    /// The volume both bodies occupy.
+    pub fn shared(&self) -> VolumeInterval {
+        self.shared
+    }
+    /// The subject's own volume.
+    pub fn subject(&self) -> VolumeInterval {
+        self.subject
+    }
+    /// The counterpart's own volume.
+    pub fn counterpart(&self) -> VolumeInterval {
+        self.counterpart
+    }
+    /// The volume of the smaller body: the lesser of the two volumes.
+    pub fn smaller(&self) -> VolumeInterval {
+        VolumeInterval {
+            lower_cubic_metres: self
+                .subject
+                .lower_cubic_metres
+                .min(self.counterpart.lower_cubic_metres),
+            upper_cubic_metres: self
+                .subject
+                .upper_cubic_metres
+                .min(self.counterpart.upper_cubic_metres),
+        }
+    }
+    /// `(lower, upper)` bounds on the shared volume's share of the smaller
+    /// body, between zero and one: one when one body lies wholly in the
+    /// other. Rounded outward, so the true ratio always lies inside.
+    pub fn ratio_of_smaller(&self) -> (f64, f64) {
+        self.shared.share_of(self.smaller())
+    }
+}
+
 /// How close two bodies come and how far they overlap.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProximityEvidence {
@@ -220,6 +550,9 @@ pub struct ProximityEvidence {
     penetration_metres: Option<f64>,
     plan_overlap_square_metres: f64,
     containment: Option<BodyContainment>,
+    overlap_extents: Option<OverlapExtents>,
+    hausdorff: Option<LengthInterval>,
+    volume: Option<IntersectionVolume>,
     fidelity: GeometryFidelity,
     evidence: Evidence,
 }
@@ -261,15 +594,81 @@ impl ProximityEvidence {
         if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
             return Err(ProximityError::EvidenceFidelityMismatch);
         }
+        // Penetration and containment are questions in space.
+        if request.projection() != ProximityProjection::Minimum3d {
+            return Err(ProximityError::UnsupportedProjection);
+        }
         Ok(Self {
             request,
             separation_metres,
             penetration_metres,
             plan_overlap_square_metres,
             containment,
+            overlap_extents: None,
+            hausdorff: None,
+            volume: None,
             fidelity,
             evidence,
         })
+    }
+
+    /// Adds the extents of the bodies' intersection along each axis.
+    ///
+    /// Refused when no penetration was measured (two open surfaces share no
+    /// volume), and when bodies apart at the surface and not contained in
+    /// one another claim a non-empty intersection.
+    pub fn with_overlap_extents(mut self, extents: OverlapExtents) -> Result<Self, ProximityError> {
+        let disjoint = self.separation_metres > 0.0 && self.containment.is_none();
+        if self.penetration_metres.is_none() || (disjoint && !extents.is_empty()) {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.overlap_extents = Some(extents);
+        Ok(self)
+    }
+
+    /// Adds the Hausdorff distance between the two surfaces: the farthest
+    /// any point of either surface lies from the other surface.
+    ///
+    /// It is never smaller than the separation, so an interval lying wholly
+    /// below the separation's own interval is refused.
+    pub fn with_hausdorff(mut self, interval: LengthInterval) -> Result<Self, ProximityError> {
+        if interval.upper_metres() < self.separation_interval_metres().0 {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.hausdorff = Some(interval);
+        Ok(self)
+    }
+
+    /// Adds the certified volume the two bodies share, with their own
+    /// volumes.
+    ///
+    /// Refused when no penetration was measured (open surfaces enclose no
+    /// volume), when bodies apart at the surface and not contained in one
+    /// another claim a shared volume, and when a body said to lie inside
+    /// the other cannot share its whole volume with it.
+    pub fn with_intersection_volume(
+        mut self,
+        volume: IntersectionVolume,
+    ) -> Result<Self, ProximityError> {
+        let disjoint = self.separation_metres > 0.0 && self.containment.is_none();
+        let shared = volume.shared();
+        let whole = |inner: VolumeInterval| {
+            shared.upper_cubic_metres >= inner.lower_cubic_metres
+                && shared.lower_cubic_metres <= inner.upper_cubic_metres
+        };
+        let contained = match self.containment {
+            Some(BodyContainment::SubjectInsideCounterpart) => whole(volume.subject()),
+            Some(BodyContainment::CounterpartInsideSubject) => whole(volume.counterpart()),
+            None => true,
+        };
+        if self.penetration_metres.is_none()
+            || (disjoint && shared.lower_cubic_metres > 0.0)
+            || !contained
+        {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.volume = Some(volume);
+        Ok(self)
     }
 
     pub fn request(&self) -> &ProximityRequest {
@@ -299,6 +698,269 @@ impl ProximityEvidence {
     pub fn containment(&self) -> Option<BodyContainment> {
         self.containment
     }
+    /// Extents of the intersection along each axis; `None` when the service
+    /// did not measure them or neither body is a closed solid.
+    pub fn overlap_extents(&self) -> Option<OverlapExtents> {
+        self.overlap_extents
+    }
+    /// Hausdorff distance between the two surfaces; `None` when the service
+    /// did not measure it. Zero exactly when the surfaces coincide, so it is
+    /// what tells a duplicate from a mere overlap.
+    pub fn hausdorff_interval_metres(&self) -> Option<LengthInterval> {
+        self.hausdorff
+    }
+    /// The certified volume the bodies share and their own volumes; `None`
+    /// when the service did not measure it or a body is not a closed solid.
+    pub fn intersection_volume(&self) -> Option<IntersectionVolume> {
+        self.volume
+    }
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// The distance between two bodies in a request's projection, as an interval.
+///
+/// `(lower, upper)` in metres, both equal for exact geometry. An upper bound
+/// of infinity says the bodies may be unrelated in the projection (not above
+/// one another, not overlapping in plan); a lower bound of infinity says they
+/// are. Only [`ProximityProjection::may_be_unrelated`] projections may report
+/// an infinite bound, and exact evidence is a point: whether exact bodies are
+/// related is decided, never left open.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProjectedDistanceEvidence {
+    request: ProximityRequest,
+    lower_metres: f64,
+    upper_metres: f64,
+    fidelity: GeometryFidelity,
+    evidence: Evidence,
+}
+
+impl ProjectedDistanceEvidence {
+    /// Rejects incoherent intervals and evidence whose exactness does not
+    /// match the geometry it was measured on.
+    pub fn try_new(
+        request: ProximityRequest,
+        lower_metres: f64,
+        upper_metres: f64,
+        fidelity: GeometryFidelity,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let deviation = fidelity.deviation_metres();
+        let unbounded_allowed = request.projection().may_be_unrelated();
+        let bound_ok = |value: f64| {
+            value >= 0.0 && (value.is_finite() || (unbounded_allowed && value == f64::INFINITY))
+        };
+        if !bound_ok(lower_metres)
+            || !bound_ok(upper_metres)
+            || lower_metres > upper_metres
+            || !deviation.is_finite()
+            || deviation < 0.0
+            || (fidelity.is_exact() && lower_metres < upper_metres)
+        {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            lower_metres,
+            upper_metres,
+            fidelity,
+            evidence,
+        })
+    }
+
+    /// The distance interval of a measurement in space.
+    pub fn from_proximity(measured: &ProximityEvidence) -> Result<Self, ProximityError> {
+        let (lower, upper) = measured.separation_interval_metres();
+        Self::try_new(
+            measured.request().clone(),
+            lower,
+            upper,
+            measured.fidelity(),
+            measured.evidence().clone(),
+        )
+    }
+
+    pub fn request(&self) -> &ProximityRequest {
+        &self.request
+    }
+    /// `(lower, upper)` bounds on the true distance; infinite when unrelated.
+    pub fn interval_metres(&self) -> (f64, f64) {
+        (self.lower_metres, self.upper_metres)
+    }
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// Which faces of a body a [`FaceDistanceRequest`] measures to, by the
+/// direction of their outward normal.
+///
+/// A face is **top** when its outward normal points upwards within 45° of
+/// vertical (its z component is at least √½), **bottom** when it points
+/// downwards within 45°, and a **side** face otherwise. `Any` takes every
+/// face.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FaceClass {
+    Top,
+    Side,
+    Bottom,
+    Any,
+}
+
+impl FaceClass {
+    /// The class's spelling in rule parameters, evidence and messages.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Side => "side",
+            Self::Bottom => "bottom",
+            Self::Any => "any",
+        }
+    }
+    /// Parses [`Self::name`].
+    pub fn parse(name: &str) -> Option<Self> {
+        [Self::Top, Self::Side, Self::Bottom, Self::Any]
+            .into_iter()
+            .find(|class| class.name() == name)
+    }
+}
+
+/// Why a face distance could not be measured.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum FaceDistanceError {
+    /// The service does not measure face distances.
+    #[error("face distances are not measured by this service")]
+    Unsupported,
+    /// The adapter holds no measurable geometry for an object.
+    #[error("face distance is unavailable for the requested object")]
+    Unavailable,
+    /// An object is declared to occupy no material.
+    #[error("the requested object occupies no material")]
+    NoBody,
+    /// The host is not a closed solid, so it has no inside and no outward
+    /// normals.
+    #[error("the host body is not a closed solid")]
+    NotClosed,
+    /// The host has no face of the requested class.
+    #[error("the host body has no face of the requested class")]
+    NoFaces,
+    /// The host is a tessellation: its chords do not state the true faces'
+    /// normals, so no face class can be read from them.
+    #[error("the host body is tessellated, so its face classes are unknown")]
+    InexactHost,
+    /// A face of the host lies at the 45° boundary between two classes
+    /// within rounding, so which class it belongs to is undecided.
+    #[error("a face of the host lies on the boundary between two face classes")]
+    AmbiguousFace,
+    /// Coordinates or measured quantities are non-finite or incoherent.
+    #[error("face distance is not finite and coherent")]
+    InvalidMeasurement,
+    /// The evidence's exactness disagrees with the measured geometry's fidelity.
+    #[error("face distance evidence exactness must match geometry fidelity and be reviewable")]
+    EvidenceFidelityMismatch,
+    /// A body cannot be measured against its own faces.
+    #[error("the face distance of an object to itself is undefined")]
+    SameObject,
+}
+
+/// A request for the signed distance from one body to one class of another
+/// body's faces.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FaceDistanceRequest {
+    body: ObjectId,
+    host: ObjectId,
+    faces: FaceClass,
+}
+
+impl FaceDistanceRequest {
+    /// The distance from `body` to the `faces` of `host`.
+    pub fn try_new(
+        body: ObjectId,
+        host: ObjectId,
+        faces: FaceClass,
+    ) -> Result<Self, FaceDistanceError> {
+        if body == host {
+            return Err(FaceDistanceError::SameObject);
+        }
+        Ok(Self { body, host, faces })
+    }
+    /// The body measured from.
+    pub fn body(&self) -> &ObjectId {
+        &self.body
+    }
+    /// The body whose faces are measured to.
+    pub fn host(&self) -> &ObjectId {
+        &self.host
+    }
+    pub fn faces(&self) -> FaceClass {
+        self.faces
+    }
+}
+
+/// The signed distance from a body to a class of a host body's faces.
+///
+/// With `F` the host's faces of the class, each point `p` of the body has
+/// the signed distance `+d(p, F)` when it lies in the host (boundary
+/// included) and `-d(p, F)` when it lies outside. The body's distance is the
+/// least over its points:
+///
+/// - **positive**: the whole body lies in the host, that far from the faces
+///   (a cover);
+/// - **negative**: part of the body lies outside the host, the farthest of
+///   it that far from the faces (a protrusion);
+/// - **zero**: the body reaches the faces.
+///
+/// It is a [`SignedDistanceInterval`] sure to contain the true value, a
+/// point only when the measurement proves one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceDistanceEvidence {
+    request: FaceDistanceRequest,
+    signed: SignedDistanceInterval,
+    fidelity: GeometryFidelity,
+    evidence: Evidence,
+}
+
+impl FaceDistanceEvidence {
+    /// Rejects evidence whose exactness does not match the geometry it was
+    /// measured on.
+    pub fn try_new(
+        request: FaceDistanceRequest,
+        signed: SignedDistanceInterval,
+        fidelity: GeometryFidelity,
+        evidence: Evidence,
+    ) -> Result<Self, FaceDistanceError> {
+        let deviation = fidelity.deviation_metres();
+        if !deviation.is_finite() || deviation < 0.0 {
+            return Err(FaceDistanceError::InvalidMeasurement);
+        }
+        if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
+            return Err(FaceDistanceError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            signed,
+            fidelity,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &FaceDistanceRequest {
+        &self.request
+    }
+    /// Bounds on the signed distance: positive inside the host, negative
+    /// outside.
+    pub fn signed(&self) -> SignedDistanceInterval {
+        self.signed
+    }
     pub fn fidelity(&self) -> GeometryFidelity {
         self.fidelity
     }
@@ -313,11 +975,41 @@ impl ProximityEvidence {
 pub trait ProximityService: Send + Sync + 'static {
     /// The extent of one object's measured geometry.
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError>;
-    /// How close two objects come and how far they overlap.
+    /// How close two objects come and how far they overlap, in space.
+    ///
+    /// A request in any other projection is refused with
+    /// [`ProximityError::UnsupportedProjection`].
     fn measure_proximity(
         &self,
         request: &ProximityRequest,
     ) -> Result<ProximityEvidence, ProximityError>;
+    /// The distance between two objects in the request's projection.
+    ///
+    /// The default answers [`ProximityProjection::Minimum3d`] from
+    /// [`Self::measure_proximity`] and refuses every other projection, so a
+    /// service that does not measure projections fails closed.
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        match request.projection() {
+            ProximityProjection::Minimum3d => {
+                ProjectedDistanceEvidence::from_proximity(&self.measure_proximity(request)?)
+            }
+            _ => Err(ProximityError::UnsupportedProjection),
+        }
+    }
+    /// The signed distance from one body to a class of another's faces.
+    ///
+    /// The default refuses with [`FaceDistanceError::Unsupported`], so a
+    /// service that does not measure face distances fails closed.
+    fn measure_face_distance(
+        &self,
+        request: &FaceDistanceRequest,
+    ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
+        let _ = request;
+        Err(FaceDistanceError::Unsupported)
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -336,6 +1028,30 @@ impl ProximityServiceHandle {
         request: &ProximityRequest,
     ) -> Result<ProximityEvidence, ProximityError> {
         self.0.measure_proximity(request)
+    }
+    /// The distance in the request's projection. Evidence answering another
+    /// request, projection included, is refused.
+    pub fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let measured = self.0.measure_distance(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
+    /// The signed face distance. Evidence answering another request is
+    /// refused.
+    pub fn measure_face_distance(
+        &self,
+        request: &FaceDistanceRequest,
+    ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
+        let measured = self.0.measure_face_distance(request)?;
+        if measured.request() != request {
+            return Err(FaceDistanceError::InvalidMeasurement);
+        }
+        Ok(measured)
     }
 }
 
@@ -462,6 +1178,347 @@ mod tests {
         .unwrap();
         let (lower, upper) = measured.separation_interval_metres();
         assert!((lower - 0.007).abs() < 1e-12 && (upper - 0.013).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_vertical_offset_must_be_finite_and_non_negative() {
+        for offset in [-0.1, f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                ProximityRequest::projected(
+                    id("pipe"),
+                    id("wall"),
+                    ProximityProjection::Vertical {
+                        footprint_offset_metres: offset,
+                        direction: VerticalDirection::Either,
+                    }
+                ),
+                Err(ProximityError::InvalidMeasurement)
+            );
+        }
+    }
+
+    /// Above and below are different questions.
+    #[test]
+    fn a_vertical_direction_distinguishes_requests() {
+        let vertical = |direction| ProximityProjection::Vertical {
+            footprint_offset_metres: 0.0,
+            direction,
+        };
+        let above = vertical(VerticalDirection::Above);
+        assert_ne!(above, vertical(VerticalDirection::Below));
+        assert_ne!(above, vertical(VerticalDirection::Either));
+        assert!(vertical(VerticalDirection::Either) < above);
+    }
+
+    /// Penetration is a question in space; a projected request cannot carry it.
+    #[test]
+    fn full_proximity_evidence_is_only_measured_in_space() {
+        let horizontal =
+            ProximityRequest::projected(id("pipe"), id("wall"), ProximityProjection::Horizontal)
+                .unwrap();
+        assert_eq!(
+            ProximityEvidence::try_new(
+                horizontal,
+                0.1,
+                Some(0.0),
+                0.0,
+                None,
+                GeometryFidelity::Exact,
+                exact()
+            ),
+            Err(ProximityError::UnsupportedProjection)
+        );
+    }
+
+    #[test]
+    fn projected_distance_intervals_are_coherent() {
+        let plan =
+            ProximityRequest::projected(id("pipe"), id("wall"), ProximityProjection::PlanOverlap)
+                .unwrap();
+        let tessellated = GeometryFidelity::tessellated(0.002).unwrap();
+        // Exact evidence is a point, related or not.
+        assert!(
+            ProjectedDistanceEvidence::try_new(
+                plan.clone(),
+                f64::INFINITY,
+                f64::INFINITY,
+                GeometryFidelity::Exact,
+                exact()
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(
+                plan.clone(),
+                0.0,
+                f64::INFINITY,
+                GeometryFidelity::Exact,
+                exact()
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        // A tessellation may leave the relation open, but never claim exactness.
+        assert!(
+            ProjectedDistanceEvidence::try_new(
+                plan.clone(),
+                0.0,
+                f64::INFINITY,
+                tessellated,
+                approximate()
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(plan, 0.0, 0.0, tessellated, exact()),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        // Bodies always have a distance in space and in plan.
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(
+                request(),
+                0.0,
+                f64::INFINITY,
+                tessellated,
+                approximate()
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(request(), 0.3, 0.2, tessellated, approximate()),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// The narrower plan axis bounds how far an intersection reaches in plan.
+    #[test]
+    fn horizontal_extent_is_the_narrower_plan_axis() {
+        let extents = OverlapExtents::new(
+            LengthInterval::try_new(0.1, 0.3).unwrap(),
+            LengthInterval::try_new(0.2, 0.25).unwrap(),
+            LengthInterval::exact(1.0).unwrap(),
+        );
+        assert_eq!(
+            extents.horizontal(),
+            LengthInterval::try_new(0.1, 0.25).unwrap()
+        );
+        assert_eq!(extents.vertical(), LengthInterval::exact(1.0).unwrap());
+    }
+
+    #[test]
+    fn overlap_extents_need_a_shared_volume() {
+        let extents = OverlapExtents::new(
+            LengthInterval::exact(0.1).unwrap(),
+            LengthInterval::exact(0.1).unwrap(),
+            LengthInterval::exact(0.1).unwrap(),
+        );
+        let measured = |separation: f64, penetration: Option<f64>| {
+            ProximityEvidence::try_new(
+                request(),
+                separation,
+                penetration,
+                0.0,
+                None,
+                GeometryFidelity::Exact,
+                exact(),
+            )
+            .unwrap()
+        };
+        assert!(
+            measured(0.0, Some(0.1))
+                .with_overlap_extents(extents)
+                .is_ok()
+        );
+        // Two open surfaces have no inside to share.
+        assert_eq!(
+            measured(0.0, None).with_overlap_extents(extents),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        // Bodies apart at the surface, neither inside the other, share nothing.
+        assert_eq!(
+            measured(0.2, Some(0.0)).with_overlap_extents(extents),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// No point of a surface lies closer to the other than the separation.
+    #[test]
+    fn hausdorff_distance_is_never_below_the_separation() {
+        let measured = ProximityEvidence::try_new(
+            request(),
+            0.2,
+            Some(0.0),
+            0.0,
+            None,
+            GeometryFidelity::Exact,
+            exact(),
+        )
+        .unwrap();
+        assert_eq!(
+            measured
+                .clone()
+                .with_hausdorff(LengthInterval::try_new(0.0, 0.1).unwrap()),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert!(
+            measured
+                .with_hausdorff(LengthInterval::try_new(0.2, 0.5).unwrap())
+                .is_ok()
+        );
+    }
+
+    fn volume(lower: f64, upper: f64) -> VolumeInterval {
+        VolumeInterval::try_new(lower, upper).unwrap()
+    }
+
+    #[test]
+    fn volume_intervals_are_finite_non_negative_and_ordered() {
+        for (lower, upper) in [
+            (-0.1, 0.1),
+            (0.2, 0.1),
+            (0.0, f64::INFINITY),
+            (f64::NAN, 1.0),
+        ] {
+            assert_eq!(
+                VolumeInterval::try_new(lower, upper),
+                Err(ProximityError::InvalidMeasurement)
+            );
+        }
+        assert!(VolumeInterval::exact(0.0).unwrap().is_exact());
+    }
+
+    /// Two bodies cannot share more than the smaller of them holds.
+    #[test]
+    fn a_shared_volume_never_exceeds_either_body() {
+        assert_eq!(
+            IntersectionVolume::try_new(volume(0.5, 0.6), volume(1.0, 1.0), volume(0.4, 0.4)),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        let measured =
+            IntersectionVolume::try_new(volume(0.3, 0.4), volume(1.0, 1.0), volume(0.4, 0.5))
+                .unwrap();
+        assert_eq!(measured.smaller(), volume(0.4, 0.5));
+        let (lower, upper) = measured.ratio_of_smaller();
+        assert!(lower <= 0.6 && lower > 0.599, "{lower}");
+        assert!((upper - 1.0).abs() < f64::EPSILON, "{upper}");
+    }
+
+    /// A share's bounds are rounded outward, so the true share lies inside.
+    #[test]
+    fn a_volume_share_is_rounded_outward_and_clamped() {
+        let third = volume(1.0 / 3.0, 1.0 / 3.0);
+        let (lower, upper) = third.share_of(volume(1.0, 1.0));
+        assert!(lower < 1.0 / 3.0 && upper > 1.0 / 3.0);
+        assert_eq!(volume(0.0, 0.0).share_of(volume(0.0, 0.0)), (0.0, 1.0));
+        assert!((volume(1.0, 1.0).share_of(volume(1.0, 1.0)).1 - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn an_intersection_volume_needs_a_shared_inside() {
+        let measured = |separation: f64, penetration: Option<f64>, containment| {
+            ProximityEvidence::try_new(
+                request(),
+                separation,
+                penetration,
+                0.0,
+                containment,
+                GeometryFidelity::Exact,
+                exact(),
+            )
+            .unwrap()
+        };
+        let shared = |lower: f64, upper: f64| {
+            IntersectionVolume::try_new(volume(lower, upper), volume(1.0, 1.0), volume(8.0, 8.0))
+                .unwrap()
+        };
+        assert!(
+            measured(0.0, Some(0.1), None)
+                .with_intersection_volume(shared(0.2, 0.2))
+                .is_ok()
+        );
+        // Open surfaces enclose nothing.
+        assert_eq!(
+            measured(0.0, None, None).with_intersection_volume(shared(0.0, 0.0)),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        // Bodies apart at the surface share nothing unless one holds the
+        // other,
+        assert_eq!(
+            measured(0.2, Some(0.0), None).with_intersection_volume(shared(0.1, 0.2)),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert!(
+            measured(0.2, Some(0.0), None)
+                .with_intersection_volume(shared(0.0, 0.0))
+                .is_ok()
+        );
+        // and then they share the whole of the inner body.
+        let inside = || {
+            measured(
+                0.2,
+                Some(0.1),
+                Some(BodyContainment::SubjectInsideCounterpart),
+            )
+        };
+        assert!(inside().with_intersection_volume(shared(1.0, 1.0)).is_ok());
+        assert_eq!(
+            inside().with_intersection_volume(shared(0.5, 0.6)),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn a_face_distance_is_between_two_objects() {
+        assert_eq!(
+            FaceDistanceRequest::try_new(id("pipe"), id("pipe"), FaceClass::Top),
+            Err(FaceDistanceError::SameObject)
+        );
+        for class in [
+            FaceClass::Top,
+            FaceClass::Side,
+            FaceClass::Bottom,
+            FaceClass::Any,
+        ] {
+            assert_eq!(FaceClass::parse(class.name()), Some(class));
+        }
+        assert_eq!(FaceClass::parse("front"), None);
+        let request =
+            FaceDistanceRequest::try_new(id("pipe"), id("wall"), FaceClass::Side).unwrap();
+        let signed = SignedDistanceInterval::try_new(-0.1, 0.2).unwrap();
+        assert_eq!(
+            FaceDistanceEvidence::try_new(
+                request.clone(),
+                signed,
+                GeometryFidelity::tessellated(0.001).unwrap(),
+                exact()
+            ),
+            Err(FaceDistanceError::EvidenceFidelityMismatch)
+        );
+        assert!(
+            FaceDistanceEvidence::try_new(request, signed, GeometryFidelity::Exact, exact())
+                .is_ok()
+        );
+    }
+
+    /// A service that does not measure face distances says so.
+    #[test]
+    fn face_distances_are_refused_by_default() {
+        struct Silent;
+        impl ProximityService for Silent {
+            fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+            fn measure_proximity(
+                &self,
+                _: &ProximityRequest,
+            ) -> Result<ProximityEvidence, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+        }
+        let request = FaceDistanceRequest::try_new(id("pipe"), id("wall"), FaceClass::Any).unwrap();
+        assert_eq!(
+            ProximityServiceHandle::new(Arc::new(Silent)).measure_face_distance(&request),
+            Err(FaceDistanceError::Unsupported)
+        );
     }
 
     #[test]

@@ -45,6 +45,14 @@ pub enum FreeSpaceError {
     PlacementScopeMismatch,
     #[error("placement witness falls outside its requested search domain")]
     PlacementDomainMismatch,
+    #[error("placement witness does not follow the requested orientation")]
+    PlacementOrientationMismatch,
+    #[error("frame-offset placement of a box needs a fixed orientation along the anchor axes")]
+    OrientationDomainConflict,
+    #[error("placement elevation band must be finite, start at or above the floor and be ordered")]
+    InvalidElevationBand,
+    #[error("a merged scope is the search scope itself or one of its obstacles")]
+    MergedScopeConflict,
     #[error("free-space backend returned evidence for another request")]
     ResponseRequestMismatch,
     #[error("free-space geometry is unavailable for `{0}`")]
@@ -356,7 +364,10 @@ impl FrameOffsetPlacement {
     pub fn up(&self) -> SignedDistanceInterval {
         self.up
     }
-    fn contains_frame(&self, frame: &MetricFrame) -> bool {
+    /// Whether a found frame keeps the anchor's axes and lies within the
+    /// offsets. Placement evidence is validated with exactly this test, so a
+    /// backend may filter its witnesses with it.
+    pub fn contains_frame(&self, frame: &MetricFrame) -> bool {
         let aligned = self.anchor.right() == frame.right()
             && self.anchor.forward() == frame.forward()
             && self.anchor.up() == frame.up();
@@ -403,16 +414,97 @@ fn requested_support(domain: &PlacementDomain) -> Option<&SupportedPlacement> {
     }
 }
 
+/// Which rotations of a box placement count as a fit.
+///
+/// Answers differ by orientation: a box that fits only diagonally has no
+/// placement along a fixed frame but has one at some angle. Evidence for a
+/// fixed orientation says nothing about other angles.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlacementOrientation {
+    /// The box width follows the frame's right axis and its depth the forward
+    /// axis. Only the axes are binding; the frame origin is not a location.
+    Fixed(MetricFrame),
+    /// Every rotation about the vertical axis counts.
+    Any,
+}
+
+/// The elevations, relative to the scope's floor, in which obstacles count.
+///
+/// Only the part of an obstacle's solid inside the open band blocks a
+/// placement. Without a band, the band runs from the floor up by the shape's
+/// height.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ElevationBand {
+    from_metres: f64,
+    to_metres: f64,
+}
+impl ElevationBand {
+    pub fn try_new(from_metres: f64, to_metres: f64) -> Result<Self, FreeSpaceError> {
+        if !from_metres.is_finite()
+            || !to_metres.is_finite()
+            || from_metres < 0.0
+            || from_metres >= to_metres
+        {
+            return Err(FreeSpaceError::InvalidElevationBand);
+        }
+        Ok(Self {
+            from_metres,
+            to_metres,
+        })
+    }
+    /// Bottom of the band above the floor.
+    pub fn from_metres(&self) -> f64 {
+        self.from_metres
+    }
+    /// Top of the band above the floor.
+    pub fn to_metres(&self) -> f64 {
+        self.to_metres
+    }
+}
+
+/// A clearance shape together with the rotations a placement may use.
+///
+/// A box carries an explicit orientation so that a request cannot leave open
+/// which question it asks. A cylinder is rotation-invariant and carries none.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlacementShape {
+    Box {
+        shape: BoxClearance,
+        orientation: PlacementOrientation,
+    },
+    Cylinder(CylinderClearance),
+}
+impl PlacementShape {
+    pub fn clearance(&self) -> ClearanceShape {
+        match self {
+            Self::Box { shape, .. } => ClearanceShape::Box(*shape),
+            Self::Cylinder(shape) => ClearanceShape::Cylinder(*shape),
+        }
+    }
+    pub fn orientation(&self) -> Option<&PlacementOrientation> {
+        match self {
+            Self::Box { orientation, .. } => Some(orientation),
+            Self::Cylinder(_) => None,
+        }
+    }
+}
+
+fn same_axes(a: &MetricFrame, b: &MetricFrame) -> bool {
+    a.right() == b.right() && a.forward() == b.forward() && a.up() == b.up()
+}
+
 /// Searches an object-grounded scope for any placement of a clearance shape.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacementRequest {
     scope: ObjectId,
-    shape: ClearanceShape,
+    shape: PlacementShape,
     obstacles: Vec<ObjectId>,
     domain: PlacementDomain,
+    band: Option<ElevationBand>,
+    merged: Vec<ObjectId>,
 }
 impl PlacementRequest {
-    pub fn new(scope: ObjectId, shape: ClearanceShape, mut obstacles: Vec<ObjectId>) -> Self {
+    pub fn new(scope: ObjectId, shape: PlacementShape, mut obstacles: Vec<ObjectId>) -> Self {
         obstacles.sort();
         obstacles.dedup();
         Self {
@@ -420,11 +512,13 @@ impl PlacementRequest {
             shape,
             obstacles,
             domain: PlacementDomain::Unconstrained,
+            band: None,
+            merged: Vec::new(),
         }
     }
     pub fn new_in_domain(
         scope: ObjectId,
-        shape: ClearanceShape,
+        shape: PlacementShape,
         mut obstacles: Vec<ObjectId>,
         domain: PlacementDomain,
     ) -> Result<Self, FreeSpaceError> {
@@ -433,8 +527,16 @@ impl PlacementRequest {
             | PlacementDomain::SupportedFrameOffsets { offsets, .. } => Some(offsets),
             _ => None,
         };
-        if offsets.is_some_and(|offsets| offsets.anchor().origin().subject() != &scope) {
-            return Err(FreeSpaceError::PlacementScopeMismatch);
+        // The anchor may be grounded on another object, such as a door or a
+        // fixture in front of which the shape must fit; the witness is still
+        // grounded on the scope.
+        // Offset witnesses must align with the anchor, so a box searched there
+        // can only be asked about the anchor's own orientation.
+        if let (Some(offsets), Some(orientation)) = (offsets, shape.orientation()) {
+            match orientation {
+                PlacementOrientation::Fixed(frame) if same_axes(frame, offsets.anchor()) => {}
+                _ => return Err(FreeSpaceError::OrientationDomainConflict),
+            }
         }
         obstacles.sort();
         obstacles.dedup();
@@ -443,19 +545,61 @@ impl PlacementRequest {
             shape,
             obstacles,
             domain,
+            band: None,
+            merged: Vec::new(),
         })
+    }
+    /// Counts obstacles only inside `band` above the scope's floor.
+    #[must_use]
+    pub fn with_band(mut self, band: ElevationBand) -> Self {
+        self.band = Some(band);
+        self
+    }
+    /// Searches the union of the scope and `merged` scopes, such as the
+    /// spaces of one group. The witness stays grounded on the scope. A merged
+    /// scope must be neither the scope nor an obstacle.
+    pub fn with_merged_scopes(mut self, mut merged: Vec<ObjectId>) -> Result<Self, FreeSpaceError> {
+        merged.sort();
+        merged.dedup();
+        if merged
+            .iter()
+            .any(|id| id == &self.scope || self.obstacles.binary_search(id).is_ok())
+        {
+            return Err(FreeSpaceError::MergedScopeConflict);
+        }
+        self.merged = merged;
+        Ok(self)
     }
     pub fn scope(&self) -> &ObjectId {
         &self.scope
     }
-    pub fn shape(&self) -> ClearanceShape {
-        self.shape
+    pub fn shape(&self) -> &PlacementShape {
+        &self.shape
     }
     pub fn obstacles(&self) -> &[ObjectId] {
         &self.obstacles
     }
     pub fn domain(&self) -> &PlacementDomain {
         &self.domain
+    }
+    /// The band the request states, if any.
+    pub fn band(&self) -> Option<ElevationBand> {
+        self.band
+    }
+    /// The band obstacles count in: the stated one, or from the floor up by
+    /// the shape's height.
+    pub fn effective_band(&self) -> ElevationBand {
+        self.band.unwrap_or(ElevationBand {
+            from_metres: 0.0,
+            to_metres: match &self.shape {
+                PlacementShape::Box { shape, .. } => shape.height_metres(),
+                PlacementShape::Cylinder(shape) => shape.height_metres(),
+            },
+        })
+    }
+    /// Scopes searched together with the scope, sorted.
+    pub fn merged_scopes(&self) -> &[ObjectId] {
+        &self.merged
     }
 }
 
@@ -571,6 +715,76 @@ pub enum ClearanceOutcome {
     Obstructed(ObstructionEvidence),
 }
 
+/// Asks whether a clearance volume's plan footprint lies inside the union of
+/// the plan footprints of `scopes`, such as the spaces a component stands in.
+///
+/// Only the plan is compared: the volume's height is carried so the request
+/// names the same volume a clearance request does, not to compare it with
+/// the scopes' heights. The scopes are the rule's selection, sorted and
+/// deduplicated; with none, nothing covers the footprint.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContainmentRequest {
+    frame: MetricFrame,
+    shape: ClearanceShape,
+    scopes: Vec<ObjectId>,
+}
+impl ContainmentRequest {
+    pub fn new(frame: MetricFrame, shape: ClearanceShape, mut scopes: Vec<ObjectId>) -> Self {
+        scopes.sort();
+        scopes.dedup();
+        Self {
+            frame,
+            shape,
+            scopes,
+        }
+    }
+    pub fn frame(&self) -> &MetricFrame {
+        &self.frame
+    }
+    pub fn shape(&self) -> ClearanceShape {
+        self.shape
+    }
+    pub fn scopes(&self) -> &[ObjectId] {
+        &self.scopes
+    }
+}
+
+/// Exact evidence for a containment answer, bound to its request.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContainmentEvidence {
+    request: ContainmentRequest,
+    evidence: Evidence,
+}
+impl ContainmentEvidence {
+    pub fn try_new(
+        request: ContainmentRequest,
+        evidence: Evidence,
+    ) -> Result<Self, FreeSpaceError> {
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(FreeSpaceError::IncompleteClearanceEvidence);
+        }
+        Ok(Self { request, evidence })
+    }
+    pub fn request(&self) -> &ContainmentRequest {
+        &self.request
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// Whether a clearance footprint lies inside its scopes.
+///
+/// Both answers are claims about the whole footprint: `Inside` that no part
+/// of positive area lies outside every scope, `Outside` that some part does.
+/// A backend that can only bound the footprint (a cylinder's disc) answers
+/// neither while the bounds disagree.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ContainmentOutcome {
+    Inside(ContainmentEvidence),
+    Outside(ContainmentEvidence),
+}
+
 /// One exact placement witness. It does not claim exhaustive search coverage.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClearancePlacementEvidence {
@@ -594,6 +808,11 @@ fn validate_placement_witness(
     };
     if offsets.is_some_and(|offsets| !offsets.contains_frame(frame)) {
         return Err(FreeSpaceError::PlacementDomainMismatch);
+    }
+    if let Some(PlacementOrientation::Fixed(fixed)) = request.shape().orientation() {
+        if !same_axes(fixed, frame) {
+            return Err(FreeSpaceError::PlacementOrientationMismatch);
+        }
     }
     if !reviewable_exact_evidence(evidence) {
         return Err(FreeSpaceError::InexactPlacementEvidence);
@@ -726,6 +945,17 @@ pub trait FreeSpaceService: Send + Sync + 'static {
         &self,
         request: &FreeAreaRequest,
     ) -> Result<FreeAreaEvidence, FreeSpaceError>;
+    /// Whether a clearance footprint lies inside its scopes. A service that
+    /// does not compare footprints refuses, never answering either way.
+    fn assess_containment(
+        &self,
+        request: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        let _ = request;
+        Err(FreeSpaceError::Unavailable(
+            "this free-space service does not compare clearance footprints with scopes".into(),
+        ))
+    }
 }
 
 #[derive(Clone)]
@@ -771,6 +1001,21 @@ impl FreeSpaceServiceHandle {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }
         Ok(evidence)
+    }
+    pub fn assess_containment(
+        &self,
+        request: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        let outcome = self.0.assess_containment(request)?;
+        let actual = match &outcome {
+            ContainmentOutcome::Inside(value) | ContainmentOutcome::Outside(value) => {
+                value.request()
+            }
+        };
+        if actual != request {
+            return Err(FreeSpaceError::ResponseRequestMismatch);
+        }
+        Ok(outcome)
     }
 }
 

@@ -8,11 +8,21 @@
 //! exactly; one that approximates curved faces measures within a bound the
 //! adapter derives from its declared chord deviation, and a rule must decide
 //! from the whole interval, never from its midpoint.
+//!
+//! The uncovered area of a footprint is what remains of it once the union of
+//! other footprints, each grown in plan by a stated length, is taken away:
+//! how much of an architectural wall no structural wall stands under.
+//!
+//! The covered area of a footprint is the union of several sources' effect
+//! areas clipped to it ([`crate::CoverageRequest`]): how much of a room the
+//! devices placed in it reach.
 
 use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
+
+use crate::coverage::{CoverageEvidence, CoverageRequest, check_answer};
 
 /// Failure to measure a plan area.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -86,6 +96,64 @@ impl PlanArea {
     }
 }
 
+/// The band between two footprints facing each other along a direction.
+///
+/// It is the convex hull of the two footprints, cut to the positions along
+/// `direction` that both footprints reach: between two parallel walls, the
+/// strip between them over the length they share, walls included. Where
+/// their reaches along the direction do not overlap, the band is empty.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanBand {
+    first: ObjectId,
+    second: ObjectId,
+    direction: [f64; 2],
+}
+
+impl PlanBand {
+    /// The band between `first` and `second` along `direction`, a plan
+    /// vector normalised here. The two are ordered, so one band has one
+    /// spelling.
+    pub fn try_new(
+        first: ObjectId,
+        second: ObjectId,
+        direction: [f64; 2],
+    ) -> Result<Self, PlanAreaError> {
+        let length = direction[0].hypot(direction[1]);
+        if first == second {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a band needs two objects, not {first} twice"
+            )));
+        }
+        if !length.is_finite() || length <= f64::EPSILON {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a band needs a plan direction, not {direction:?}"
+            )));
+        }
+        let (first, second) = if first < second {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        Ok(Self {
+            first,
+            second,
+            direction: [direction[0] / length, direction[1] / length],
+        })
+    }
+
+    /// The two objects, in order.
+    #[must_use]
+    pub fn objects(&self) -> [&ObjectId; 2] {
+        [&self.first, &self.second]
+    }
+
+    /// The unit plan direction along which the band is cut.
+    #[must_use]
+    pub fn direction(&self) -> [f64; 2] {
+        self.direction
+    }
+}
+
 /// Measures plan-projected areas of model objects.
 pub trait PlanAreaService: Send + Sync + 'static {
     /// The area of `object`'s footprint: its geometry projected onto the
@@ -97,6 +165,56 @@ pub trait PlanAreaService: Send + Sync + 'static {
         first: &ObjectId,
         second: &ObjectId,
     ) -> Result<PlanArea, PlanAreaError>;
+
+    /// The area of `object`'s footprint outside the union of the footprints
+    /// of `cover`, each grown by `growth_metres` in every plan direction (the
+    /// set of points within that distance of it).
+    ///
+    /// An empty `cover` leaves the whole footprint uncovered. A service that
+    /// does not measure uncovered areas refuses; it never answers with the
+    /// footprint or with zero.
+    fn measure_uncovered_area(
+        &self,
+        object: &ObjectId,
+        cover: &[ObjectId],
+        growth_metres: f64,
+    ) -> Result<PlanArea, PlanAreaError> {
+        let _ = (object, cover, growth_metres);
+        Err(PlanAreaError::Unavailable(
+            "this plan-area service does not measure uncovered areas".into(),
+        ))
+    }
+
+    /// The area of `object`'s footprint outside the union of `bands`.
+    ///
+    /// An empty set of bands leaves the whole footprint outside. A service
+    /// that does not measure bands refuses; it never answers with the
+    /// footprint or with zero.
+    fn measure_outside_bands(
+        &self,
+        object: &ObjectId,
+        bands: &[PlanBand],
+    ) -> Result<PlanArea, PlanAreaError> {
+        let _ = (object, bands);
+        Err(PlanAreaError::Unavailable(
+            "this plan-area service does not measure bands".into(),
+        ))
+    }
+
+    /// How much of the request's subject footprint the union of its
+    /// sources' effect areas covers.
+    ///
+    /// A service that does not measure coverage refuses; it never answers
+    /// with an empty or a whole cover.
+    fn measure_coverage(
+        &self,
+        request: &CoverageRequest,
+    ) -> Result<CoverageEvidence, PlanAreaError> {
+        Err(PlanAreaError::Unavailable(format!(
+            "this plan-area service does not measure the coverage of {}",
+            request.subject()
+        )))
+    }
 }
 
 /// Registry handle for a [`PlanAreaService`].
@@ -124,12 +242,185 @@ impl PlanAreaServiceHandle {
     ) -> Result<PlanArea, PlanAreaError> {
         self.0.measure_plan_overlap(first, second)
     }
+
+    /// The area of `object`'s footprint that the footprints of `cover`, grown
+    /// by `growth_metres`, leave uncovered.
+    ///
+    /// A growth that is negative or not finite, or an object covering itself,
+    /// is refused rather than measured; `cover` reaches the service sorted
+    /// and without repeats.
+    pub fn measure_uncovered_area(
+        &self,
+        object: &ObjectId,
+        cover: &[ObjectId],
+        growth_metres: f64,
+    ) -> Result<PlanArea, PlanAreaError> {
+        if !growth_metres.is_finite() || growth_metres < 0.0 {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a growth of {growth_metres} m is not a non-negative length"
+            )));
+        }
+        if cover.contains(object) {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{object} cannot cover its own footprint"
+            )));
+        }
+        let mut cover = cover.to_vec();
+        cover.sort();
+        cover.dedup();
+        self.0.measure_uncovered_area(object, &cover, growth_metres)
+    }
+
+    /// The area of `object`'s footprint outside the union of `bands`.
+    ///
+    /// A band bounded by `object` itself is refused rather than measured;
+    /// `bands` reach the service sorted and without repeats.
+    pub fn measure_outside_bands(
+        &self,
+        object: &ObjectId,
+        bands: &[PlanBand],
+    ) -> Result<PlanArea, PlanAreaError> {
+        if bands.iter().any(|band| band.objects().contains(&object)) {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{object} cannot bound a band over its own footprint"
+            )));
+        }
+        let mut bands = bands.to_vec();
+        bands.sort_by(|a, b| {
+            (
+                a.objects(),
+                a.direction[0].to_bits(),
+                a.direction[1].to_bits(),
+            )
+                .cmp(&(
+                    b.objects(),
+                    b.direction[0].to_bits(),
+                    b.direction[1].to_bits(),
+                ))
+        });
+        bands.dedup();
+        self.0.measure_outside_bands(object, &bands)
+    }
+
+    /// How much of the request's subject footprint its sources cover.
+    ///
+    /// An answer about another subject, or not listing exactly the
+    /// requested sources in order, is refused.
+    pub fn measure_coverage(
+        &self,
+        request: &CoverageRequest,
+    ) -> Result<CoverageEvidence, PlanAreaError> {
+        let answer = self.0.measure_coverage(request)?;
+        check_answer(request, &answer)?;
+        Ok(answer)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PlanArea, PlanAreaError};
-    use axioval_ir::{Evidence, SourceId};
+    use std::sync::{Arc, Mutex};
+
+    use super::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
+    use axioval_ir::{Evidence, ObjectId, SourceId};
+
+    /// Measures only footprints, and records the cover it was asked about.
+    #[derive(Default)]
+    struct FootprintsOnly(Mutex<Vec<Vec<ObjectId>>>);
+
+    impl PlanAreaService for FootprintsOnly {
+        fn measure_footprint(&self, _: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+            PlanArea::try_new(1.0, 1.0, exact())
+        }
+        fn measure_plan_overlap(
+            &self,
+            _: &ObjectId,
+            _: &ObjectId,
+        ) -> Result<PlanArea, PlanAreaError> {
+            PlanArea::try_new(0.0, 0.0, exact())
+        }
+    }
+
+    struct Recording(Arc<FootprintsOnly>);
+
+    impl PlanAreaService for Recording {
+        fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+            self.0.measure_footprint(object)
+        }
+        fn measure_plan_overlap(
+            &self,
+            first: &ObjectId,
+            second: &ObjectId,
+        ) -> Result<PlanArea, PlanAreaError> {
+            self.0.measure_plan_overlap(first, second)
+        }
+        fn measure_uncovered_area(
+            &self,
+            _: &ObjectId,
+            cover: &[ObjectId],
+            _: f64,
+        ) -> Result<PlanArea, PlanAreaError> {
+            self.0.0.lock().unwrap().push(cover.to_vec());
+            PlanArea::try_new(0.5, 0.5, exact())
+        }
+    }
+
+    fn id(local: &str) -> ObjectId {
+        ObjectId::new(SourceId::new("cad", "m").unwrap(), local).unwrap()
+    }
+
+    #[test]
+    fn a_service_without_uncovered_areas_refuses_rather_than_answering() {
+        let handle = PlanAreaServiceHandle::new(Arc::new(FootprintsOnly::default()));
+        assert!(matches!(
+            handle.measure_uncovered_area(&id("a"), &[id("b")], 0.0),
+            Err(PlanAreaError::Unavailable(_))
+        ));
+        let band = super::PlanBand::try_new(id("b"), id("c"), [1.0, 0.0]).unwrap();
+        assert!(matches!(
+            handle.measure_outside_bands(&id("a"), &[band]),
+            Err(PlanAreaError::Unavailable(_))
+        ));
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn a_band_is_ordered_normalised_and_never_bounded_by_its_subject() {
+        let band = super::PlanBand::try_new(id("c"), id("b"), [0.0, 2.0]).unwrap();
+        assert_eq!(band.objects(), [&id("b"), &id("c")]);
+        assert_eq!(band.direction(), [0.0, 1.0]);
+        assert!(super::PlanBand::try_new(id("b"), id("b"), [1.0, 0.0]).is_err());
+        assert!(super::PlanBand::try_new(id("b"), id("c"), [0.0, 0.0]).is_err());
+        assert!(super::PlanBand::try_new(id("b"), id("c"), [f64::NAN, 1.0]).is_err());
+        let handle = PlanAreaServiceHandle::new(Arc::new(FootprintsOnly::default()));
+        assert!(matches!(
+            handle.measure_outside_bands(&id("b"), &[band]),
+            Err(PlanAreaError::Unavailable(message)) if message.contains("its own footprint")
+        ));
+    }
+
+    #[test]
+    fn the_handle_refuses_a_bad_growth_or_self_cover_and_orders_the_cover() {
+        let log = Arc::new(FootprintsOnly::default());
+        let handle = PlanAreaServiceHandle::new(Arc::new(Recording(log.clone())));
+        for growth in [-0.01, f64::NAN, f64::INFINITY] {
+            assert!(
+                handle
+                    .measure_uncovered_area(&id("a"), &[id("b")], growth)
+                    .is_err(),
+                "{growth}"
+            );
+        }
+        assert!(
+            handle
+                .measure_uncovered_area(&id("a"), &[id("b"), id("a")], 0.0)
+                .is_err()
+        );
+        assert!(log.0.lock().unwrap().is_empty(), "refused before measuring");
+        handle
+            .measure_uncovered_area(&id("a"), &[id("c"), id("b"), id("c")], 0.1)
+            .unwrap();
+        assert_eq!(*log.0.lock().unwrap(), vec![vec![id("b"), id("c")]]);
+    }
 
     fn exact() -> Evidence {
         Evidence::exact(SourceId::new("cad", "m").unwrap(), "footprint:a")

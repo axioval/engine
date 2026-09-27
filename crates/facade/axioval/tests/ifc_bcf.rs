@@ -8,7 +8,7 @@
 
 use axioval::bcf::{IFC_GLOBAL_ID_SCHEME, Options, export};
 use axioval::ifc::{IFC_GLOBAL_ID, import_ifc_session};
-use axioval::ir::{Finding, ObjectId, Report, RuleId, Severity, SourceId};
+use axioval::ir::{Finding, ObjectId, Report, RuleId, Scope, Severity, SourceId};
 use openbim_bcf::Component;
 
 const WALL: &str = "2O2Fr$t4X7Zf8NOew3FLOH";
@@ -35,7 +35,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
     let finding = |object: &str, related: &str| {
         Finding {
             rule_id: RuleId::new("contact").unwrap(),
-            object_id: id(object),
+            scope: Scope::Object(id(object)),
             severity: Severity::Error,
             message: format!("{object} has insufficient contact"),
             related: vec![],
@@ -44,9 +44,9 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
         .with_related([id(related)])
     };
     let report = Report {
-        rule_findings: vec![],
         findings: vec![finding("#1", "#2"), finding("#3", "#1")],
         not_evaluated: vec![],
+        tables: vec![],
     };
 
     let export = export(

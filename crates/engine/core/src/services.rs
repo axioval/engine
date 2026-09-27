@@ -43,6 +43,10 @@ impl ServiceRegistry {
     pub(crate) fn replace<T: Any + Send + Sync>(&mut self, service: T) {
         self.entries.insert(TypeId::of::<T>(), Arc::new(service));
     }
+    /// Number of registered services.
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
     /// Looks up a service by its concrete interface type.
     #[must_use]
     pub fn get<T: Any + Send + Sync>(&self) -> Option<&T> {

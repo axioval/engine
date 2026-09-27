@@ -9,8 +9,9 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
     BodyContainment, Bounds3, CapabilityEvaluation, CompiledRule, GeometryFidelity,
-    NotEvaluatedReason, ObjectBounds, ProximityError, ProximityEvidence, ProximityRequest,
-    ProximityService, ProximityServiceHandle, RuleCapability, RuleContext, ServiceRegistry,
+    IntersectionVolume, LengthInterval, NotEvaluatedReason, ObjectBounds, OverlapExtents,
+    ProximityError, ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
+    RuleCapability, RuleContext, ServiceRegistry, VolumeInterval,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -28,12 +29,21 @@ struct Pair {
     separation: f64,
     penetration: Option<f64>,
     containment: Option<BodyContainment>,
+    /// Hausdorff distance bounds; distinct bodies by default.
+    hausdorff: Option<(f64, f64)>,
+    /// `(lower, upper)` of the x, y and z extents of the intersection.
+    extents: Option<[(f64, f64); 3]>,
+    /// `(lower, upper)` of the shared volume, the bodies 1 m³ each.
+    volume: Option<(f64, f64)>,
 }
 fn apart(separation: f64) -> Pair {
     Pair {
         separation,
         penetration: Some(0.0),
         containment: None,
+        hausdorff: Some((separation.max(1.0), separation.max(1.0))),
+        extents: None,
+        volume: None,
     }
 }
 fn overlapping(depth: f64) -> Pair {
@@ -41,6 +51,35 @@ fn overlapping(depth: f64) -> Pair {
         separation: 0.0,
         penetration: Some(depth),
         containment: None,
+        hausdorff: Some((1.0, 1.0)),
+        extents: None,
+        volume: None,
+    }
+}
+impl Pair {
+    fn hausdorff(self, lower: f64, upper: f64) -> Self {
+        Self {
+            hausdorff: Some((lower, upper)),
+            ..self
+        }
+    }
+    fn unmeasured_hausdorff(self) -> Self {
+        Self {
+            hausdorff: None,
+            ..self
+        }
+    }
+    fn volume(self, lower: f64, upper: f64) -> Self {
+        Self {
+            volume: Some((lower, upper)),
+            ..self
+        }
+    }
+    fn extents(self, extents: [(f64, f64); 3]) -> Self {
+        Self {
+            extents: Some(extents),
+            ..self
+        }
     }
 }
 
@@ -112,7 +151,7 @@ impl ProximityService for Stub {
             .unwrap_or_else(|| panic!("broad phase should have pruned {a}/{b}"));
         let pair = pair?;
         let fidelity = self.fidelity(&a).combined(self.fidelity(&b));
-        ProximityEvidence::try_new(
+        let measured = ProximityEvidence::try_new(
             request.clone(),
             pair.separation,
             pair.penetration,
@@ -124,7 +163,32 @@ impl ProximityService for Stub {
                 locator: format!("proximity:{a}:{b}"),
                 exact: fidelity.is_exact(),
             },
-        )
+        )?;
+        let measured = match pair.hausdorff {
+            Some((lower, upper)) => {
+                measured.with_hausdorff(LengthInterval::try_new(lower, upper).unwrap())?
+            }
+            None => measured,
+        };
+        let measured = match pair.extents {
+            Some(axes) => {
+                let [along_x, along_y, along_z] =
+                    axes.map(|(lower, upper)| LengthInterval::try_new(lower, upper).unwrap());
+                measured.with_overlap_extents(OverlapExtents::new(along_x, along_y, along_z))?
+            }
+            None => measured,
+        };
+        match pair.volume {
+            Some((lower, upper)) => {
+                let body = VolumeInterval::exact(1.0).unwrap();
+                measured.with_intersection_volume(IntersectionVolume::try_new(
+                    VolumeInterval::try_new(lower, upper).unwrap(),
+                    body,
+                    body,
+                )?)
+            }
+            None => Ok(measured),
+        }
     }
 }
 
@@ -215,7 +279,7 @@ fn penetration_beyond_tolerance_is_a_hard_clash_naming_the_counterpart() {
     let [finding] = outcome.findings() else {
         panic!("one clash expected: {:?}", outcome.findings());
     };
-    assert_eq!(finding.object_id, oid("pipe"));
+    assert_eq!(finding.object_id(), Some(&oid("pipe")));
     assert_eq!(finding.related, vec![oid("wall")]);
     assert!(
         finding.message.starts_with("hard clash"),
@@ -256,6 +320,9 @@ fn a_body_inside_another_clashes_although_the_surfaces_are_apart() {
                 separation: 0.2,
                 penetration: Some(0.3),
                 containment: Some(BodyContainment::SubjectInsideCounterpart),
+                hausdorff: Some((0.2, 1.0)),
+                extents: None,
+                volume: None,
             },
         );
     let outcome = run(
@@ -303,6 +370,9 @@ fn meeting_surfaces_without_a_penetration_measurement_are_not_evaluated() {
                 separation: 0.0,
                 penetration: None,
                 containment: None,
+                hausdorff: Some((0.5, 0.5)),
+                extents: None,
+                volume: None,
             },
         );
     let outcome = run(
@@ -381,7 +451,7 @@ fn a_group_checked_against_itself_reports_each_pair_once() {
     );
     let outcome = run(&Clash, &project, stub, &rule);
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, oid("a"));
+    assert_eq!(outcome.findings()[0].object_id(), Some(&oid("a")));
 }
 
 #[test]
@@ -535,5 +605,309 @@ fn a_failed_measurement_is_not_a_pass() {
     assert_eq!(
         outcome.not_evaluated_outcomes()[0].object_id(),
         Some(&oid("pipe"))
+    );
+}
+
+fn one_message(outcome: &CapabilityEvaluation) -> &str {
+    assert!(
+        outcome.not_evaluated_outcomes().is_empty(),
+        "{:?}",
+        outcome.not_evaluated_outcomes()
+    );
+    let [finding] = outcome.findings() else {
+        panic!("one finding expected: {:?}", outcome.findings());
+    };
+    &finding.message
+}
+
+fn walls_touching(pair: Pair) -> Stub {
+    Stub::default()
+        .object("pipe", 0.0)
+        .object("wall", 0.5)
+        .object("far-wall", 50.0)
+        .pair("pipe", "wall", pair)
+}
+
+fn switched_off(mut rule: CompiledRule, switch: &str) -> CompiledRule {
+    rule.parameters
+        .insert(switch.into(), ParameterValue::Boolean { value: false });
+    rule
+}
+
+/// Without a Hausdorff distance a touching pair could be a duplicate, so it
+/// is not passed while duplicates are reported.
+#[test]
+fn an_unmeasured_hausdorff_distance_leaves_a_touching_pair_open() {
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.0).unmeasured_hausdorff()),
+        &clash(&[("penetration_tolerance_metres", 0.01)]),
+    );
+    assert!(outcome.findings().is_empty());
+    assert_eq!(outcome.not_evaluated_outcomes().len(), 1);
+
+    // With duplicates switched off the question does not arise.
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.0).unmeasured_hausdorff()),
+        &switched_off(
+            clash(&[("penetration_tolerance_metres", 0.01)]),
+            "report_duplicates",
+        ),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn a_duplicate_within_tolerance_is_reported_as_a_duplicate() {
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.1).hausdorff(0.0, 0.002)),
+        &clash(&[
+            ("penetration_tolerance_metres", 0.01),
+            ("duplicate_tolerance_metres", 0.005),
+        ]),
+    );
+    assert!(one_message(&outcome).starts_with("duplicate of"));
+}
+
+/// A switched-off duplicate is not reported as the intersection it also is.
+#[test]
+fn a_switched_off_class_hides_its_pairs() {
+    let rule = switched_off(
+        clash(&[
+            ("penetration_tolerance_metres", 0.01),
+            ("duplicate_tolerance_metres", 0.005),
+        ]),
+        "report_duplicates",
+    );
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.1).hausdorff(0.0, 0.002)),
+        &rule,
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.1)),
+        &switched_off(
+            clash(&[("penetration_tolerance_metres", 0.01)]),
+            "report_intersections",
+        ),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// Straddling the duplicate tolerance: an intersection either way is still a
+/// finding, but a pair that would pass unless it were a duplicate is open.
+#[test]
+fn a_straddling_duplicate_tolerance_decides_only_when_both_readings_agree() {
+    let rule = clash(&[
+        ("penetration_tolerance_metres", 0.01),
+        ("duplicate_tolerance_metres", 0.005),
+    ]);
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.1).hausdorff(0.001, 0.01)),
+        &rule,
+    );
+    assert!(one_message(&outcome).starts_with("hard clash"));
+
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.0).hausdorff(0.001, 0.01)),
+        &rule,
+    );
+    assert!(outcome.findings().is_empty());
+    let [open] = outcome.not_evaluated_outcomes() else {
+        panic!("one open pair expected");
+    };
+    assert!(open.message().contains("duplicate"), "{}", open.message());
+}
+
+fn axis_rule(horizontal: f64, vertical: f64) -> CompiledRule {
+    clash(&[
+        ("penetration_tolerance_metres", 0.0),
+        ("horizontal_tolerance_metres", horizontal),
+        ("vertical_tolerance_metres", vertical),
+    ])
+}
+
+/// A 5 mm vertical overlap under a 10 mm vertical tolerance is no clash,
+/// however wide it is in plan.
+#[test]
+fn an_intersection_counts_only_past_both_axis_tolerances() {
+    let shallow = overlapping(0.005).extents([(2.0, 2.0), (0.5, 0.5), (0.005, 0.005)]);
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(shallow),
+        &axis_rule(0.01, 0.01),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(shallow),
+        &axis_rule(0.01, 0.001),
+    );
+    let message = one_message(&outcome);
+    assert!(message.starts_with("hard clash"), "{message}");
+    assert!(
+        message.contains("reaching 0.5000 m in plan and 0.0050 m vertically"),
+        "{message}"
+    );
+
+    // The narrower plan axis decides the horizontal tolerance.
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(shallow),
+        &axis_rule(0.6, 0.0),
+    );
+    assert!(outcome.findings().is_empty());
+}
+
+/// A pipe sunk into a wall sharing 0.2 m³ is a clash only past a volume
+/// tolerance below that; an unmeasured or straddling volume is undecided.
+#[test]
+fn an_intersection_counts_only_past_the_volume_tolerance() {
+    let volume_rule = |tolerance: f64| {
+        clash(&[
+            ("penetration_tolerance_metres", 0.0),
+            ("volume_tolerance_cubic_metres", tolerance),
+        ])
+    };
+    let sunk = overlapping(0.1).volume(0.2, 0.2);
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(sunk),
+        &volume_rule(0.1),
+    );
+    let message = one_message(&outcome);
+    assert!(message.starts_with("hard clash"), "{message}");
+    assert!(message.contains("sharing 0.200000 m³"), "{message}");
+
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(sunk),
+        &volume_rule(0.3),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+
+    for pair in [overlapping(0.1).volume(0.05, 0.15), overlapping(0.1)] {
+        let outcome = run(
+            &Clash,
+            &pipes_and_walls(),
+            walls_touching(pair),
+            &volume_rule(0.1),
+        );
+        assert!(outcome.findings().is_empty());
+        let [open] = outcome.not_evaluated_outcomes() else {
+            panic!("one open pair expected");
+        };
+        assert!(
+            open.message().contains("volume tolerance"),
+            "{}",
+            open.message()
+        );
+    }
+
+    // No volume tolerance asks nothing of the volume.
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.1)),
+        &volume_rule(0.0),
+    );
+    assert!(one_message(&outcome).starts_with("hard clash"));
+}
+
+#[test]
+fn a_straddling_or_unmeasured_extent_is_not_evaluated() {
+    for pair in [
+        overlapping(0.05).extents([(0.1, 0.3), (0.5, 0.5), (1.0, 1.0)]),
+        overlapping(0.05),
+    ] {
+        let outcome = run(
+            &Clash,
+            &pipes_and_walls(),
+            walls_touching(pair),
+            &axis_rule(0.2, 0.0),
+        );
+        assert!(outcome.findings().is_empty());
+        assert_eq!(
+            outcome.not_evaluated_outcomes()[0].reason(),
+            &NotEvaluatedReason::IncompleteEvidence
+        );
+    }
+    // A clearance shortfall holds whichever way the extent falls.
+    let mut rule = axis_rule(0.2, 0.0);
+    rule.parameters.insert(
+        "clearance_metres".into(),
+        ParameterValue::Number { value: 0.05 },
+    );
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.05).extents([(0.1, 0.3), (0.5, 0.5), (1.0, 1.0)])),
+        &rule,
+    );
+    assert!(one_message(&outcome).starts_with("clearance clash"));
+}
+
+#[test]
+fn containment_has_its_own_switch() {
+    let inside = Pair {
+        separation: 0.2,
+        penetration: Some(0.3),
+        containment: Some(BodyContainment::SubjectInsideCounterpart),
+        hausdorff: Some((0.2, 1.0)),
+        extents: None,
+        volume: None,
+    };
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(inside),
+        &switched_off(
+            clash(&[("penetration_tolerance_metres", 0.01)]),
+            "report_containment",
+        ),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn switching_every_class_off_without_a_clearance_is_invalid() {
+    let mut rule = clash(&[("penetration_tolerance_metres", 0.01)]);
+    for switch in [
+        "report_duplicates",
+        "report_containment",
+        "report_intersections",
+    ] {
+        rule = switched_off(rule, switch);
+    }
+    let outcome = run(&Clash, &pipes_and_walls(), Stub::default(), &rule);
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
     );
 }

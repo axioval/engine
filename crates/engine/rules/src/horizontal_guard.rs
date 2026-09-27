@@ -8,19 +8,27 @@
 //! when the fall beyond it is short enough and lands somewhere wide enough to
 //! stand. A barrier that is otherwise adequate can still be defeated by
 //! something climbable beside it.
+//!
+//! Which objects may act as barriers, landings or climbing aids is a semantic
+//! choice the ruleset states through the optional `barrier_selector`,
+//! `landing_selector` and `climbable_selector`. Each resolved set travels in
+//! the [`GuardSearch`], so a cupboard is not taken for a railing. An absent
+//! selector leaves its role open to any nearby body.
 
 use axioval_engine::{
     CapabilityEvaluation, ClimbableCandidate, CompiledRule, GuardCandidate, GuardEdge, GuardError,
     GuardSearch, GuardServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext,
 };
-use axioval_ir::contract::ParameterValue;
+use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Finding, Severity};
 
+use crate::counts::Population;
 use crate::guard_diagnosis::{GuardDefect, GuardDiagnosis};
 use crate::selection::select_objects;
+use crate::support::{Parameters, Unavailable};
 use axioval_ir::ObjectId;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Tolerance for comparing measured lengths, in metres.
 const EPSILON_M: f64 = 1.0e-6;
@@ -28,6 +36,13 @@ const EPSILON_M: f64 = 1.0e-6;
 const REQUIRED_COVERAGE: f64 = 1.0 - 1.0e-6;
 /// A barrier is *present* on an edge only when it runs along more than half.
 const BARRIER_PRESENT_COVERAGE: f64 = 0.5;
+
+/// Restricts which objects may count as barriers.
+const BARRIER_SELECTOR: &str = "barrier_selector";
+/// Restricts which objects may count as landings.
+const LANDING_SELECTOR: &str = "landing_selector";
+/// Restricts which objects may count as climbing aids.
+const CLIMBABLE_SELECTOR: &str = "climbable_selector";
 
 /// Requires exposed edges of walking surfaces to be guarded against falls.
 pub struct HorizontalGuard;
@@ -55,6 +70,9 @@ impl RuleCapability for HorizontalGuard {
                 ParameterType::Number,
             ),
             ParameterDescriptor::required("measure_barrier_from_curb", ParameterType::Boolean),
+            ParameterDescriptor::optional(BARRIER_SELECTOR, ParameterType::Selector),
+            ParameterDescriptor::optional(LANDING_SELECTOR, ParameterType::Selector),
+            ParameterDescriptor::optional(CLIMBABLE_SELECTOR, ParameterType::Selector),
         ]
     }
 
@@ -70,6 +88,13 @@ impl RuleCapability for HorizontalGuard {
                 "horizontal-guard declaration is missing or not realisable",
             );
             return evaluation;
+        };
+        let roles = match RoleSelectors::from_rule(rule) {
+            Ok(roles) => roles,
+            Err((reason, message)) => {
+                evaluation.push_not_evaluated(reason, format!("horizontal-guard: {message}"));
+                return evaluation;
+            }
         };
 
         let Some(service) = context.services.get::<GuardServiceHandle>() else {
@@ -88,6 +113,10 @@ impl RuleCapability for HorizontalGuard {
             .max(policy.maximum_platform_gap_metres)
             .max(policy.maximum_landing_gap_metres)
             .max(policy.climbable_barrier_distance_metres);
+        // The selection is the walking-surface profile: the ruleset, not the
+        // host, says which edges are checked for fall protection.
+        let surfaces: BTreeSet<ObjectId> =
+            selected.iter().map(|object| object.id.clone()).collect();
         let Ok(search) = GuardSearch::try_new(radius, sample_spacing(&policy)) else {
             evaluation.push_not_evaluated(
                 NotEvaluatedReason::InvalidDeclaration,
@@ -96,19 +125,20 @@ impl RuleCapability for HorizontalGuard {
             return evaluation;
         };
 
-        let measured = match service.measure_guard_edges(search) {
+        let search = match roles.restrict(
+            context,
+            search.with_surfaces(surfaces.iter().cloned().collect()),
+        ) {
+            Ok(search) => search,
+            Err((reason, message)) => {
+                evaluation.push_not_evaluated(reason, message);
+                return evaluation;
+            }
+        };
+        let measured = match service.measure_guard_edges(search.clone()) {
             Ok(measured) => measured,
             Err(error) => {
-                evaluation.push_not_evaluated(
-                    match error {
-                        GuardError::Unavailable => NotEvaluatedReason::IncompleteEvidence,
-                        GuardError::InvalidSearch => NotEvaluatedReason::InvalidDeclaration,
-                        GuardError::InexactEvidence | GuardError::InvalidQuantity => {
-                            NotEvaluatedReason::InvalidEvidence
-                        }
-                    },
-                    error.to_string(),
-                );
+                evaluation.push_not_evaluated(unmeasured_reason(error), error.to_string());
                 return evaluation;
             }
         };
@@ -117,9 +147,27 @@ impl RuleCapability for HorizontalGuard {
         // not only the worst. Edges are sample points along the boundary, so a
         // slab with a short rail on one side and no rail on another has two
         // separate problems and a reviewer must see both.
+        let measured_surfaces: BTreeSet<&ObjectId> = measured
+            .edges()
+            .iter()
+            .map(axioval_engine::GuardEdge::surface)
+            .collect();
+        for surface in &surfaces {
+            if !measured_surfaces.contains(surface) {
+                evaluation.push_object_not_evaluated(
+                    surface.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "no edge was measured for this walking surface; it has no measurable body",
+                );
+            }
+        }
         let mut grouped: BTreeMap<(ObjectId, GuardDefect), Vec<ObjectId>> = BTreeMap::new();
         for edge in measured.edges() {
-            let Some(diagnosis) = edge_diagnosis(edge, &policy) else {
+            if !surfaces.contains(edge.surface()) {
+                continue;
+            }
+            let edge = admitted(edge, &search);
+            let Some(diagnosis) = edge_diagnosis(&edge, &policy) else {
                 continue;
             };
             grouped
@@ -134,7 +182,7 @@ impl RuleCapability for HorizontalGuard {
             related.dedup();
             evaluation.push_finding(Finding {
                 rule_id: rule.id.clone(),
-                object_id: surface,
+                scope: axioval_ir::Scope::Object(surface),
                 severity: Severity::Error,
                 related,
                 message: defect.code().to_string(),
@@ -142,6 +190,71 @@ impl RuleCapability for HorizontalGuard {
             });
         }
         evaluation
+    }
+}
+
+/// Why a failed guard measurement leaves the rule not evaluated.
+fn unmeasured_reason(error: GuardError) -> NotEvaluatedReason {
+    match error {
+        GuardError::Unavailable => NotEvaluatedReason::IncompleteEvidence,
+        GuardError::InvalidSearch => NotEvaluatedReason::InvalidDeclaration,
+        GuardError::InexactEvidence | GuardError::InvalidQuantity => {
+            NotEvaluatedReason::InvalidEvidence
+        }
+    }
+}
+
+/// The optional selectors naming which objects may play each guard role.
+struct RoleSelectors<'rule> {
+    barriers: Option<&'rule Selector>,
+    landings: Option<&'rule Selector>,
+    climbables: Option<&'rule Selector>,
+}
+
+impl<'rule> RoleSelectors<'rule> {
+    fn from_rule(rule: &'rule CompiledRule) -> Result<Self, Unavailable> {
+        let parameters = Parameters(rule);
+        Ok(Self {
+            barriers: parameters.selector(BARRIER_SELECTOR)?,
+            landings: parameters.selector(LANDING_SELECTOR)?,
+            climbables: parameters.selector(CLIMBABLE_SELECTOR)?,
+        })
+    }
+
+    /// Adds each declared role's resolved set to `search`.
+    ///
+    /// An object the selector cannot decide might be the rail that guards an
+    /// edge, or the cupboard that must not; excluding it could invent a
+    /// finding and including it could hide one, so the rule is not evaluated.
+    fn restrict(
+        &self,
+        context: &RuleContext<'_>,
+        mut search: GuardSearch,
+    ) -> Result<GuardSearch, Unavailable> {
+        let resolve = |name: &str, selector: &Selector| {
+            let population = Population::of(context, selector);
+            if population.undecided.is_empty() {
+                Ok(population.matched.into_iter().collect::<Vec<_>>())
+            } else {
+                Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "horizontal-guard: `{name}` cannot be decided for {} object(s)",
+                        population.undecided.len()
+                    ),
+                ))
+            }
+        };
+        if let Some(selector) = self.barriers {
+            search = search.with_barrier_candidates(resolve(BARRIER_SELECTOR, selector)?);
+        }
+        if let Some(selector) = self.landings {
+            search = search.with_landing_candidates(resolve(LANDING_SELECTOR, selector)?);
+        }
+        if let Some(selector) = self.climbables {
+            search = search.with_climbable_candidates(resolve(CLIMBABLE_SELECTOR, selector)?);
+        }
+        Ok(search)
     }
 }
 
@@ -181,6 +294,35 @@ impl Policy {
             measure_barrier_from_curb: boolean("measure_barrier_from_curb")?,
         })
     }
+}
+
+/// The edge with every candidate the search did not admit for its role
+/// removed.
+///
+/// The adapter is asked to filter already; repeating it here keeps a service
+/// that ignores the sets from letting a cupboard count as a railing.
+fn admitted(edge: &GuardEdge, search: &GuardSearch) -> GuardEdge {
+    GuardEdge::new(
+        edge.surface().clone(),
+        edge.barriers()
+            .iter()
+            .filter(|barrier| search.admits_barrier(barrier.element()))
+            .cloned()
+            .collect(),
+        edge.landings()
+            .iter()
+            .filter(|landing| search.admits_landing(landing.element()))
+            .cloned()
+            .collect(),
+        edge.climbables()
+            .iter()
+            .filter(|climbable| {
+                search.admits_climbable(climbable.element())
+                    && search.admits_barrier(climbable.barrier())
+            })
+            .cloned()
+            .collect(),
+    )
 }
 
 /// Samples an edge at half the tightest gap the policy cares about, so a

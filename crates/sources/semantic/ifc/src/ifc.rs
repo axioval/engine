@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, DecompositionServiceHandle,
-    EvidenceSession, EvidenceSessionError, MaterialServiceHandle, PropertyRequest,
+    ClassificationServiceHandle, CompletePropertyAbsenceEvidence, CoordinateSystemServiceHandle,
+    EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, PropertyRequest,
     PropertyResolution, PropertyResolutionError, PropertyResolutionService,
     PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
     SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
@@ -22,13 +22,14 @@ use thiserror::Error;
 
 use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
-use crate::decomposition::IfcDecompositionService;
+use crate::coordinates::IfcCoordinateSystem;
+use crate::frames::IfcObjectFrames;
 use crate::identity::{GlobalIds, IFC_GLOBAL_ID};
 use crate::integrity::IfcIntegrity;
-use crate::materials::IfcMaterialService;
 use crate::measure::si_value;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
+use crate::temporal;
 
 /// Production IFC import/session construction failure.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -87,7 +88,7 @@ struct IfcPropertyService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
-    attributes: Arc<Attributes>,
+    attributes: Attributes,
 }
 
 impl IfcPropertyService {
@@ -138,9 +139,24 @@ impl IfcPropertyService {
     /// measures converted to SI.
     ///
     /// A value its declared type carries exactly (see `carries_exactly`) is
-    /// read as stated and must carry no unit. Any other number must be a
+    /// read as stated and must carry no unit; a date or time type is read as
+    /// a date or date-time (see `temporal`). Any other number must be a
     /// measure whose effective unit resolves exactly.
     fn pset_value(&self, exact: &ExactProperty) -> Result<PropertyValue, PropertyResolutionError> {
+        if let Some(value_type) = exact.value_type.as_deref() {
+            let raw = match &exact.value {
+                ExactValue::Text(text) => temporal::Raw::Text(text),
+                ExactValue::Integer(seconds) => temporal::Raw::Integer(*seconds),
+                _ => temporal::Raw::Other,
+            };
+            if let Some(value) = temporal::read(value_type, &raw) {
+                return if exact.unit_id.is_some() {
+                    Err(PropertyResolutionError::InexactEvidence)
+                } else {
+                    value
+                };
+            }
+        }
         let plain = match (&exact.value, exact.value_type.as_deref()) {
             (ExactValue::Null, None) => Some(PropertyValue::Null),
             (value, Some(value_type)) if self.carries_exactly(value, value_type) => match value {
@@ -361,14 +377,11 @@ pub fn import_ifc_session(
             .map_err(|error| session_error(&error))?;
     let snapshots: Arc<[SourceSnapshot]> = Arc::from([snapshot.clone()]);
     let model = Arc::new(model);
-    // One attribute reader, so the type index is built once for properties
-    // and for the predefined types of wholes.
-    let attributes = Arc::new(Attributes::new(release));
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
         release,
         model: model.clone(),
         snapshots: snapshots.clone(),
-        attributes: attributes.clone(),
+        attributes: Attributes::new(release),
     }));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,
@@ -376,27 +389,22 @@ pub fn import_ifc_session(
         global_ids,
         snapshots.clone(),
     )));
-    let materials = MaterialServiceHandle::new(Arc::new(IfcMaterialService::new(
-        release,
-        model.clone(),
-        snapshots.clone(),
-    )));
     let classifications = ClassificationServiceHandle::new(Arc::new(
         IfcClassificationService::new(model.clone(), snapshots.clone()),
     ));
-    let relationship_service = Arc::new(IfcRelationshipService::new(
+    let frames = ObjectFrameServiceHandle::new(Arc::new(IfcObjectFrames::new(
         release,
         model.clone(),
         snapshots.clone(),
-    ));
-    let decomposition = DecompositionServiceHandle::new(Arc::new(IfcDecompositionService::new(
-        release,
-        model,
-        snapshots.clone(),
-        relationship_service.clone(),
-        attributes,
     )));
-    let relationships = RelationshipSelectionServiceHandle::new(relationship_service);
+    let coordinates = CoordinateSystemServiceHandle::new(Arc::new(IfcCoordinateSystem::new(
+        release,
+        model.clone(),
+        snapshots.clone(),
+    )));
+    let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
+        IfcRelationshipService::new(release, model, snapshots.clone()),
+    ));
     let hierarchy =
         TypeHierarchyServiceHandle::new(Arc::new(IfcTypeHierarchy { release, snapshots }));
     EvidenceSession::try_new(project, [snapshot])
@@ -406,8 +414,8 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(hierarchy))
         .and_then(|session| session.with_service(integrity))
         .and_then(|session| session.with_service(classifications))
-        .and_then(|session| session.with_service(materials))
-        .and_then(|session| session.with_service(decomposition))
+        .and_then(|session| session.with_service(frames))
+        .and_then(|session| session.with_service(coordinates))
         .map_err(|error| session_error(&error))
 }
 

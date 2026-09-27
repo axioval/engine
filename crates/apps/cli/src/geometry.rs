@@ -6,6 +6,11 @@
 //! hands the meshes to the geometry services under the object identities the
 //! IFC session already uses.
 //!
+//! With several models, every source is meshed into one geometry set under
+//! its own source-qualified identities, in one shared coordinate system, and
+//! every service is bound to all the session's snapshots. A clash between
+//! objects of two files is then an ordinary pair of the set.
+//!
 //! Every object ends up in exactly one of three states, because the geometry
 //! services treat them differently:
 //!
@@ -14,6 +19,14 @@
 //! - **no body**: it occupies no material (a storey, a zone, an opening);
 //! - **unmeasured**: it is physical but could not be meshed. Measurements it
 //!   could affect refuse rather than act as if it were not there.
+//!
+//! A group (a zone) has no body, but its plan footprint is the union of its
+//! members', so the bridge also declares every group's membership.
+//!
+//! Relationships derived from geometry (`axioval:derived.*`) need to know
+//! which objects are spaces and which are doors, windows or openings. An
+//! opening occupies no material, so its void is meshed separately and handed
+//! to the derivation alone.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -27,14 +40,24 @@ use axiolid_primitive::Primitive;
 use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
-    AxiolidContactService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidProximityService,
-    AxiolidSpaceService,
+    AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
+    AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
+    AxiolidLinearQuantityService, AxiolidMetricRoutingService, AxiolidPlanAreaService,
+    AxiolidPlanSpanService, AxiolidProximityService, AxiolidSightService, AxiolidSpaceService,
+    AxiolidTriangleCountService, AxiolidVerticalExtentService, AxiolidWalkabilityService,
+    AxiolidWalkingSurfaceService,
 };
 use axioval::engine::{
-    ContactServiceHandle, EvidenceSession, FreeSpaceServiceHandle, ProximityServiceHandle,
-    SpaceServiceHandle, TypeHierarchyServiceHandle,
+    ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
+    EvidenceSession, FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
+    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
+    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
+    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
+    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
-use axioval::ir::{ObjectId, SourceId};
+use axioval::ir::{ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
 use ifc_model::{Codec, EntityId, Model};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
@@ -74,43 +97,97 @@ pub struct GeometryReport {
     pub unmeasured: Vec<(ObjectId, String)>,
 }
 
-/// Meshes the model in `bytes` and registers geometry services for `session`.
+/// Each source's model bytes, keyed by the source the session imported them as.
+pub type ModelBytes = BTreeMap<SourceId, Vec<u8>>;
+
+/// One parsed model and its unit scale, per source.
+struct Parsed {
+    model: Model,
+    units: ifc_geometry::units::UnitScale,
+}
+
+/// Parses the model of every snapshot's source.
+fn parse(
+    snapshots: &[SourceSnapshot],
+    models: &ModelBytes,
+) -> Result<BTreeMap<SourceId, Parsed>, Box<dyn Error>> {
+    let mut parsed = BTreeMap::new();
+    for snapshot in snapshots {
+        let source = snapshot.source();
+        let bytes = models
+            .get(source)
+            .ok_or_else(|| format!("no model bytes for source `{source}`"))?;
+        let model = StepCodec
+            .read_bytes(bytes)
+            .map_err(|error| format!("{}: {error}", source.document))?;
+        let units = ifc_geometry::units::resolve(&model);
+        parsed.insert(source.clone(), Parsed { model, units });
+    }
+    Ok(parsed)
+}
+
+/// Meshes every source's model and registers geometry services for
+/// `session`, bound to all its snapshots.
+///
+/// `models` holds each source's bytes, keyed by the source the session
+/// imported them as. Policy choices IFC does not state, such as which
+/// surfaces are walkable or which spaces bound the envelope, are the rules'
+/// own selections, carried in each request; the bridge declares none of them.
 ///
 /// # Errors
 ///
-/// Returns an error when the bytes do not parse (the session already parsed
-/// them, so this means they changed) or a service cannot be registered.
+/// Returns an error when a source has no bytes, the bytes do not parse (the
+/// session already parsed them, so this means they changed) or a service
+/// cannot be registered.
 pub fn attach(
     session: EvidenceSession,
-    bytes: &[u8],
+    models: &ModelBytes,
 ) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error>> {
-    let model = StepCodec.read_bytes(bytes)?;
-    let snapshots: Vec<_> = session.snapshots().cloned().collect();
-    let [snapshot] = snapshots.as_slice() else {
-        return Err("geometry needs a session over exactly one source".into());
+    let snapshots: Vec<SourceSnapshot> = session.snapshots().cloned().collect();
+    let Some(first) = snapshots.first() else {
+        return Err("geometry needs a session over at least one source".into());
     };
-    let source = snapshot.source().clone();
+    // Set-level evidence (free space, guard, envelope, storey residuals) is
+    // cited under one source; evidence about one object cites its own.
+    let source = first.source().clone();
+    let parsed = parse(&snapshots, models)?;
     let hierarchy = session
         .service::<TypeHierarchyServiceHandle>()
         .ok_or("the session has no type hierarchy to classify objects with")?
         .clone();
-    let is_a =
-        |kind: &str, ancestor: &str| hierarchy.is_a(&source, kind, ancestor).unwrap_or(false);
+    let is_a = |id: &ObjectId, ancestor: &str, kinds: &BTreeMap<ObjectId, String>| {
+        kinds
+            .get(id)
+            .is_some_and(|kind| hierarchy.is_a(&id.source, kind, ancestor).unwrap_or(false))
+    };
+    let kinds: BTreeMap<ObjectId, String> = session
+        .project()
+        .objects()
+        .map(|object| (object.id.clone(), object.kind().to_owned()))
+        .collect();
+    let is_a = |id: &ObjectId, ancestor: &str| is_a(id, ancestor, &kinds);
 
     let backend = ifc_geometry::compile::default_backend();
-    let units = ifc_geometry::units::resolve(&model);
     let mut geometry = AxiolidGeometry::new();
     let mut report = GeometryReport::default();
-    let mut kinds: BTreeMap<ObjectId, String> = BTreeMap::new();
+    let mut voids: Vec<(ObjectId, Void)> = Vec::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
-        let kind = object.kind().to_owned();
-        kinds.insert(id.clone(), kind.clone());
-        let is_space = is_a(&kind, "IfcSpace");
-        let bodiless = !is_a(&kind, "IfcProduct")
-            || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&kind, ancestor)));
+        let Some(Parsed { model, units }) = parsed.get(&id.source) else {
+            return Err(format!("no model for source `{}`", id.source).into());
+        };
+        let is_space = is_a(&id, "IfcSpace");
+        let bodiless = !is_a(&id, "IfcProduct")
+            || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&id, ancestor)));
         if bodiless {
+            if is_a(&id, "IfcOpeningElement") {
+                let void = entity_id(&id)
+                    .ok_or_else(|| "not a STEP instance id".to_owned())
+                    .and_then(|entity| mesh(&backend, model, units, entity))
+                    .and_then(|meshed| meshed.ok_or_else(|| "no body representation".into()));
+                voids.push((id.clone(), void));
+            }
             geometry = geometry.with_no_body(id);
             report.no_body += 1;
             continue;
@@ -122,7 +199,7 @@ pub fn attach(
             geometry = geometry.with_unmeasured(id, "not a STEP instance id");
             continue;
         };
-        match mesh(&backend, &model, &units, entity) {
+        match mesh(&backend, model, units, entity) {
             Ok(Some((mesh, true))) => {
                 geometry = geometry.with_mesh(id, mesh);
                 report.exact += 1;
@@ -149,14 +226,48 @@ pub fn attach(
         }
     }
 
-    let space = space_service(&model, &geometry, &source, &kinds, &is_a);
-    let bound = std::slice::from_ref(snapshot);
+    let relationships = session.service::<RelationshipSelectionServiceHandle>();
+    for (group, members) in groups(relationships, &kinds, &is_a) {
+        geometry = match members {
+            Ok(members) => geometry.with_group(group, members),
+            Err(reason) => geometry.with_undecided_group(group, reason),
+        };
+    }
+    let envelope = envelope_service(&session, &geometry, &source, &kinds)?;
+    let space = (
+        space_service(&parsed, &geometry, &source, &kinds, &is_a),
+        linear_service(&geometry, &voids),
+    );
+    let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
+    let derived = derived_service(&geometry, &kinds, &is_a, voids);
+    let facade = facade_service(&geometry, &kinds, &is_a);
+    let session = register(session, &snapshots, geometry, space, envelope, routes)?
+        .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
+        .with_derived_relationships(
+            DerivedRelationshipServiceHandle::new(Arc::new(derived)),
+            &snapshots,
+        )?;
+    Ok((session, report))
+}
+
+/// Registers every geometry service over `geometry`, bound to `snapshots`.
+fn register(
+    session: EvidenceSession,
+    snapshots: &[SourceSnapshot],
+    geometry: AxiolidGeometry,
+    (space, shelves): (AxiolidSpaceService, AxiolidLinearQuantityService),
+    envelope: AxiolidEnvelopeMembershipService,
+    (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
+) -> Result<EvidenceSession, Box<dyn Error>> {
+    let source = snapshots
+        .first()
+        .ok_or("geometry needs a session over at least one source")?
+        .source()
+        .clone();
+    let bound = snapshots;
     let session = session
         .with_host_service(
-            ContactServiceHandle::new(Arc::new(AxiolidContactService::new(
-                geometry.clone(),
-                source.clone(),
-            ))),
+            ContactServiceHandle::new(Arc::new(AxiolidContactService::new(geometry.clone()))),
             bound,
         )?
         .with_host_service(
@@ -167,11 +278,301 @@ pub fn attach(
             bound,
         )?
         .with_host_service(SpaceServiceHandle::new(Arc::new(space)), bound)?
+        // Walking surfaces are the guard rule's selection, carried in each
+        // request; the host declares none of its own.
+        .with_host_service(
+            GuardServiceHandle::new(Arc::new(AxiolidGuardService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        // Doors and openings are the shelf rule's selection, carried in each
+        // request; the bridge hands over the voids of bodiless openings.
+        .with_host_service(LinearQuantityServiceHandle::new(Arc::new(shelves)), bound)?
+        .with_host_service(
+            PlanAreaServiceHandle::new(Arc::new(AxiolidPlanAreaService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        .with_host_service(
+            PlanSpanServiceHandle::new(Arc::new(AxiolidPlanSpanService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        // Counts the triangles of the meshes this bridge produced, so a
+        // count follows its chord budget for curved bodies.
+        .with_host_service(
+            TriangleCountServiceHandle::new(Arc::new(AxiolidTriangleCountService::new(
+                geometry.clone(),
+            ))),
+            bound,
+        )?
+        .with_host_service(
+            VerticalExtentServiceHandle::new(Arc::new(AxiolidVerticalExtentService::new(
+                geometry.clone(),
+            ))),
+            bound,
+        )?
+        // Treads, ramp runs and headroom from the same meshes; obstacles are
+        // the rule's selection, carried in each request.
+        .with_host_service(
+            WalkingSurfaceServiceHandle::new(Arc::new(AxiolidWalkingSurfaceService::new(
+                geometry.clone(),
+            ))),
+            bound,
+        )?
+        // Eyes, targets and blockers are the visibility rule's selection,
+        // carried in each request.
+        .with_host_service(
+            SightServiceHandle::new(Arc::new(AxiolidSightService::new(geometry.clone()))),
+            bound,
+        )?
         .with_host_service(
             ProximityServiceHandle::new(Arc::new(AxiolidProximityService::new(geometry))),
             bound,
-        )?;
-    Ok((session, report))
+        )?
+        // Bounding spaces are the envelope rule's selection, carried in each
+        // request; the host declares only what the model states external.
+        .with_host_service(
+            EnvelopeMembershipServiceHandle::new(Arc::new(envelope)),
+            bound,
+        )?
+        // Walkable surfaces, entrances and obstacles are the walkability
+        // rule's selection; metric routing's are IFC classes.
+        .with_host_service(WalkabilityServiceHandle::new(Arc::new(walkability)), bound)?
+        .with_host_service(MetricRoutingServiceHandle::new(Arc::new(routing)), bound)?;
+    Ok(session)
+}
+
+/// Members of every group (`IfcGroup`: zones, systems), so a bodiless zone
+/// has the union of its members' footprints.
+///
+/// Membership is `IfcRelAssignsToGroup`, read through the session's
+/// relationship service over every object. A refused answer, or no service
+/// at all, leaves the membership undecided: the group's footprint is then
+/// unavailable, never the empty footprint of a group that groups nothing.
+fn groups(
+    relationships: Option<&RelationshipSelectionServiceHandle>,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+) -> Vec<(ObjectId, Result<Vec<ObjectId>, String>)> {
+    let everything: Vec<ObjectId> = kinds.keys().cloned().collect();
+    let members = |group: &ObjectId| -> Result<Vec<ObjectId>, String> {
+        let relationships =
+            relationships.ok_or("the session has no relationship service to read groups with")?;
+        let query = RelationshipQuery::Related {
+            relationship: SemanticRelationship::try_new("IfcRelAssignsToGroup")
+                .map_err(|error| error.to_string())?,
+            direction: TraversalDirection::Forward,
+            follow_chain: false,
+        };
+        let request =
+            RelationshipSelectionRequest::try_new(group.clone(), everything.clone(), query)
+                .map_err(|error| error.to_string())?;
+        let selection = relationships
+            .select(&request)
+            .map_err(|error| error.to_string())?;
+        Ok(selection.candidates().to_vec())
+    };
+    kinds
+        .keys()
+        .filter(|id| is_a(id, "IfcGroup"))
+        .map(|group| (group.clone(), members(group)))
+        .collect()
+}
+
+/// Envelope membership declarations: what the model states external.
+///
+/// Which spaces bound the envelope is the envelope rule's selection, carried
+/// in each request, so the bridge declares none. Each meshed object's
+/// `IsExternal`, from whichever property set states it, is its declaration:
+/// `true` external, `false` internal. An object without exactly one such
+/// boolean stays undeclared and its rule reports not evaluated; absent is not
+/// internal. A bounding space's own declaration is ignored by the adapter.
+fn envelope_service(
+    session: &EvidenceSession,
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+) -> Result<AxiolidEnvelopeMembershipService, Box<dyn Error>> {
+    let properties = session
+        .service::<PropertyResolutionServiceHandle>()
+        .ok_or("the session has no property service to read declarations with")?;
+    let value = |object: &ObjectId, name: &str| -> Option<PropertyValue> {
+        let request = PropertyRequest::try_new(object.clone(), None, name).ok()?;
+        match properties.resolve(&request).ok()? {
+            PropertyResolution::Present(resolved) => Some(resolved.property().value.clone()),
+            PropertyResolution::Absent(_) => None,
+        }
+    };
+
+    let mut service = AxiolidEnvelopeMembershipService::new(geometry.clone(), source.clone());
+    for object in kinds.keys() {
+        if geometry.mesh(object).is_none() {
+            continue;
+        }
+        match value(object, "IsExternal") {
+            Some(PropertyValue::Boolean(true)) => {
+                service = service.with_declared_external(object.clone());
+            }
+            Some(PropertyValue::Boolean(false)) => {
+                service = service.with_declared_internal(object.clone());
+            }
+            _ => {}
+        }
+    }
+    Ok(service)
+}
+
+/// An opening's meshed void and whether it is exact, or why it has none.
+type Void = Result<(axiolid_mesh::TriMesh, bool), String>;
+
+/// Relationships derived from geometry, over the model's spaces and its
+/// doors, windows and openings.
+///
+/// Every `IfcSpace` is a space and every `IfcDoor`, `IfcWindow` and
+/// `IfcOpeningElement` an opening; both are IFC facts. A void that could not
+/// be meshed is declared unmeasured, so the derivation refuses it rather than
+/// finding no space beside it.
+fn derived_service(
+    geometry: &AxiolidGeometry,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+    voids: Vec<(ObjectId, Void)>,
+) -> AxiolidDerivedRelationshipService {
+    let mut service = AxiolidDerivedRelationshipService::new(geometry.clone());
+    for id in kinds.keys() {
+        if is_a(id, "IfcSpace") {
+            service = service.with_space(id.clone());
+        } else if is_a(id, "IfcDoor") || is_a(id, "IfcWindow") {
+            service = service.with_opening(id.clone());
+        }
+    }
+    for (id, void) in voids {
+        service = match void {
+            Ok((mesh, true)) => service.with_opening_void(id, mesh),
+            Ok((mesh, false)) => {
+                service.with_tessellated_opening_void(id, mesh, CHORD_DEVIATION_METRES)
+            }
+            Err(reason) => service.with_unmeasured_opening_void(id, reason),
+        };
+    }
+    service
+}
+
+/// Shelf lengths over `geometry`, with the voids of bodiless openings so a
+/// shelf rule can place their clearances.
+fn linear_service(
+    geometry: &AxiolidGeometry,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidLinearQuantityService {
+    voids.iter().fold(
+        AxiolidLinearQuantityService::new(geometry.clone()),
+        |service, (id, void)| match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, false)) => service.with_tessellated_opening_void(
+                id.clone(),
+                mesh.clone(),
+                CHORD_DEVIATION_METRES,
+            ),
+            Err(_) => service.with_unmeasured_opening_void(id.clone()),
+        },
+    )
+}
+
+/// The walkability and metric-routing services over `geometry`.
+fn route_services(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+    voids: &[(ObjectId, Void)],
+) -> (AxiolidWalkabilityService, AxiolidMetricRoutingService) {
+    (
+        walkability_service(geometry, source, voids),
+        routing_service(geometry, source, kinds, is_a, voids),
+    )
+}
+
+/// Walkable regions over the surfaces, entrances and obstacles each request
+/// selects. The bridge only hands over the voids of opening elements, which
+/// have no body of their own. IFC states no door clear width the bridge can
+/// trust (a door's overall width includes its lining), so none is declared:
+/// a door bounds route widths from above only.
+fn walkability_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidWalkabilityService {
+    voids.iter().fold(
+        AxiolidWalkabilityService::new(geometry.clone(), source.clone()),
+        |service, (id, void)| match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, false)) => service.with_tessellated_opening_void(id.clone(), mesh.clone()),
+            Err(reason) => service.with_unmeasured_opening_void(id.clone(), reason.clone()),
+        },
+    )
+}
+
+/// Metric routes over every `IfcSpace` as a walkable surface, every `IfcDoor`
+/// and opening element as a portal, and every stair, ramp (and their flights)
+/// and transport element as a vertical connector; all are IFC facts. Every
+/// other body obstructs. Windows are not portals: a window filling an opening
+/// obstructs it.
+fn routing_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidMetricRoutingService {
+    let mut service = AxiolidMetricRoutingService::new(geometry.clone(), source.clone());
+    for id in kinds.keys() {
+        if is_a(id, "IfcSpace") {
+            service = service.with_surface(id.clone());
+        } else if is_a(id, "IfcDoor") {
+            service = service.with_portal(id.clone());
+        } else if CONNECTORS.iter().any(|connector| is_a(id, connector)) {
+            service = service.with_connector(id.clone());
+        }
+    }
+    for (id, void) in voids {
+        service = match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, false)) => service.with_tessellated_opening_void(id.clone(), mesh.clone()),
+            Err(reason) => service.with_unmeasured_opening_void(id.clone(), reason.clone()),
+        };
+    }
+    service
+}
+
+/// Entity types that join levels. Names from both IFC2X3 and IFC4.
+const CONNECTORS: &[&str] = &[
+    "IfcStair",
+    "IfcStairFlight",
+    "IfcRamp",
+    "IfcRampFlight",
+    "IfcTransportElement",
+];
+
+/// Facade areas, with every `IfcSpace` as the interior a face may look into.
+///
+/// Which objects are spaces is an IFC fact. Whether a wall is external is
+/// not this bridge's to decide: the rule selects the walls it measures.
+fn facade_service(
+    geometry: &AxiolidGeometry,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+) -> AxiolidFacadeAreaService {
+    kinds.keys().filter(|id| is_a(id, "IfcSpace")).fold(
+        AxiolidFacadeAreaService::new(geometry.clone()),
+        |service, id| service.with_space(id.clone()),
+    )
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {
@@ -278,28 +679,38 @@ fn polygonal(profile: &Profile) -> bool {
 
 /// Space validation needs roles and storeys, which are IFC facts.
 ///
-/// Storeys come from the spatial tree. An element the file places twice, or
-/// anything under a structure aggregated twice, gets no storey: the tree keeps
-/// one of the two parents, and a guessed storey would move floor area between
-/// storeys without saying so.
+/// Storeys come from each source's own spatial tree, so an object's storey
+/// is always one of its own model's. An element the file places twice, or
+/// anything under a structure aggregated twice, gets no storey: the tree
+/// keeps one of the two parents, and a guessed storey would move floor area
+/// between storeys without saying so.
 fn space_service(
-    model: &Model,
+    parsed: &BTreeMap<SourceId, Parsed>,
     geometry: &AxiolidGeometry,
     source: &SourceId,
     kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&str, &str) -> bool,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
 ) -> AxiolidSpaceService {
-    let tree = SpatialTree::build(model);
-    let ambiguous: BTreeSet<EntityId> = tree
-        .anomalies()
+    let trees: BTreeMap<&SourceId, (SpatialTree, BTreeSet<EntityId>)> = parsed
         .iter()
-        .filter_map(|anomaly| match anomaly {
-            SpatialAnomaly::ContainedTwice { element, .. } => Some(*element),
-            SpatialAnomaly::AggregatedTwice { child, .. } => Some(*child),
-            _ => None,
+        .map(|(source, Parsed { model, .. })| {
+            let tree = SpatialTree::build(model);
+            let ambiguous: BTreeSet<EntityId> = tree
+                .anomalies()
+                .iter()
+                .filter_map(|anomaly| match anomaly {
+                    SpatialAnomaly::ContainedTwice { element, .. } => Some(*element),
+                    SpatialAnomaly::AggregatedTwice { child, .. } => Some(*child),
+                    _ => None,
+                })
+                .collect();
+            (source, (tree, ambiguous))
         })
         .collect();
-    let storey_of = |entity: EntityId| -> Option<EntityId> {
+    let storey_of = |tree: &SpatialTree,
+                     ambiguous: &BTreeSet<EntityId>,
+                     entity: EntityId|
+     -> Option<EntityId> {
         let mut chain = vec![entity];
         chain.extend(tree.container_of(entity));
         let start = *chain.last()?;
@@ -314,30 +725,126 @@ fn space_service(
     };
 
     let mut service = AxiolidSpaceService::new(geometry.clone(), source.clone());
-    for (id, kind) in kinds {
-        let Some(entity) = entity_id(id) else {
+    for id in kinds.keys() {
+        let (Some(entity), Some((tree, ambiguous))) = (entity_id(id), trees.get(&id.source)) else {
             continue;
         };
-        if is_a(kind, "IfcSpace") {
+        if is_a(id, "IfcSpace") {
             service = service.with_space(id.clone());
-        } else if is_a(kind, "IfcSlab") {
+        } else if is_a(id, "IfcSlab") {
             service = service.with_slab(id.clone());
-        } else if is_a(kind, "IfcRoof") {
+        } else if is_a(id, "IfcRoof") {
             service = service.with_roof(id.clone());
-        } else if is_a(kind, "IfcBuilding") {
+        } else if is_a(id, "IfcBuilding") {
             service = service.with_building(id.clone());
         }
         let is_structure = tree.node(entity).is_some();
-        if (!is_structure || is_a(kind, "IfcSpace"))
+        if (!is_structure || is_a(id, "IfcSpace"))
             && !geometry.has_no_body(id)
-            && let Some(storey) = storey_of(entity)
+            && let Some(storey) = storey_of(tree, ambiguous, entity)
         {
             let storey = ObjectId {
-                source: source.clone(),
+                source: id.source.clone(),
                 local_id: storey.to_string(),
             };
             service = service.with_storey(id.clone(), storey);
         }
     }
     service
+}
+
+#[cfg(test)]
+mod tests {
+    use super::attach;
+    use axioval::engine::{
+        MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingServiceHandle,
+        MobilityProfile, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle,
+    };
+    use axioval::ifc::import_ifc_session;
+    use axioval::ir::ObjectId;
+
+    /// Rooms `#16` (x 0..4) and `#26` (x 4.2..8.2) with a 0.9 m door body
+    /// `#40` in the gap between them, and nothing else.
+    fn rooms_and_door() -> String {
+        let body = |first: u32, x: f64, y: f64, dx: f64, dy: f64, depth: f64| {
+            let [point, position, profile, solid, shape] = [0, 1, 2, 3, 4].map(|o| first + o);
+            format!(
+                "#{point}=IFCCARTESIANPOINT(({x},{y}));\n\
+                 #{position}=IFCAXIS2PLACEMENT2D(#{point},$);\n\
+                 #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{position},{dx},{dy});\n\
+                 #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth});\n\
+                 #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+                 #{}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n",
+                first + 5
+            )
+        };
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#2);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             {}#16=IFCSPACE('0000000000000000000016',$,$,$,$,#3,#15,$,.ELEMENT.,$,$);\n\
+             {}#26=IFCSPACE('0000000000000000000026',$,$,$,$,#3,#25,$,.ELEMENT.,$,$);\n\
+             {}#40=IFCDOOR('0000000000000000000040',$,$,$,$,#3,#35,$,2.1,0.9,$,$,$);\n\
+             ENDSEC;\nEND-ISO-10303-21;\n",
+            body(10, 2.0, 2.0, 4.0, 4.0, 3.0),
+            body(20, 6.2, 2.0, 4.0, 4.0, 3.0),
+            body(30, 4.1, 2.0, 0.1, 0.9, 2.1),
+        )
+    }
+
+    #[test]
+    fn geometry_registers_walkability_and_metric_routing() {
+        let bytes = rooms_and_door();
+        let session = import_ifc_session("rooms.ifc", bytes.as_bytes()).unwrap();
+        let models: super::ModelBytes = session
+            .snapshots()
+            .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+            .collect();
+        let (session, report) = attach(session, &models).unwrap();
+        assert_eq!(report.exact, 3, "{report:?}");
+        let id = |local: &str| ObjectId {
+            source: session.snapshots().next().unwrap().source().clone(),
+            local_id: local.to_owned(),
+        };
+
+        let walkability = session.service::<WalkabilityServiceHandle>().unwrap();
+        let request = |width: f64| {
+            WalkabilityRequest::try_new(
+                vec![id("#16"), id("#26")],
+                vec![id("#40")],
+                Vec::new(),
+                width,
+                None,
+                true,
+                false,
+            )
+            .unwrap()
+        };
+        // IFC states no clear width the bridge trusts, so a door that could
+        // pass stays undecided, and one too narrow blocks.
+        let wide_enough = walkability.snapshot(&request(0.8)).unwrap();
+        assert_eq!(
+            wide_enough.route_between(&id("#16"), &id("#26")).unwrap(),
+            WalkabilityRouteOutcome::Indeterminate
+        );
+        let too_narrow = walkability.snapshot(&request(1.0)).unwrap();
+        assert_eq!(
+            too_narrow.route_between(&id("#16"), &id("#26")).unwrap(),
+            WalkabilityRouteOutcome::Unreachable
+        );
+
+        let routing = session.service::<MetricRoutingServiceHandle>().unwrap();
+        let route = MetricRouteRequest::new(
+            MetricPoint::try_new(id("#16"), [1.0, 2.0, 0.0]).unwrap(),
+            MetricPoint::try_new(id("#26"), [7.0, 2.0, 0.0]).unwrap(),
+            MobilityProfile::try_new(0.5, 2.0, 0.02, 0.06).unwrap(),
+        );
+        assert!(matches!(
+            routing.route(&route).unwrap(),
+            MetricRouteOutcome::Blocked(_)
+        ));
+    }
 }

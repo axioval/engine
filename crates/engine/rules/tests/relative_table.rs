@@ -1,4 +1,5 @@
-//! The table mode of relative-count: stepwise minimums with extrapolation.
+//! The table mode of relative-count: stepwise minimums, extrapolation beyond
+//! the last row, and no requirement below the first.
 #![allow(missing_docs)]
 
 mod common;
@@ -6,7 +7,9 @@ mod common;
 use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract::ParameterValue;
 use axioval_rules::RelativeCount;
-use common::{Model, findings, integer, kind, rule, selector, string, strings, unevaluated};
+use common::{
+    Model, findings, flagged, integer, kind, rule, selector, string, strings, unevaluated,
+};
 
 const ID: &str = "axioval:capability.relative-count";
 
@@ -99,6 +102,11 @@ fn a_malformed_table_is_a_declaration_error() {
             ("additional_required", integer(5)),
         ],
         vec![("table", strings(&[]))],
+        vec![
+            ("table", strings(&["1:1"])),
+            ("small_required_below", integer(4)),
+            ("small_provided", integer(1)),
+        ],
     ] {
         let evaluation = check(storeys(&[("a", 1, 1)]), extra);
         assert_eq!(
@@ -106,4 +114,39 @@ fn a_malformed_table_is_a_declaration_error() {
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
+}
+
+#[test]
+fn below_the_first_row_the_anchor_is_skipped_not_extrapolated() {
+    // From zero, 30 workplaces would need two washbasins; below the first
+    // row the table sets no requirement at all.
+    let evaluation = check(
+        storeys(&[("a", 14, 0), ("b", 30, 0), ("c", 40, 0)]),
+        vec![
+            ("table", strings(&["40:3"])),
+            ("additional_required", integer(15)),
+            ("additional_provided", integer(1)),
+        ],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "c".into(),
+            "0 provided and 40 required object(s) via contains; required at least 3 provided for 40 required".into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn increments_alone_apply_from_zero() {
+    let evaluation = check(
+        storeys(&[("a", 14, 0), ("b", 15, 0)]),
+        vec![
+            ("table", strings(&[])),
+            ("additional_required", integer(15)),
+            ("additional_provided", integer(1)),
+        ],
+    );
+    assert_eq!(flagged(&evaluation), ["b"]);
 }

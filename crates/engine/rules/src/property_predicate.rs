@@ -4,28 +4,42 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
     RuleContext,
 };
-use axioval_ir::{PropertyValue, QuantityDimension};
+use axioval_ir::{PropertyValue, QuantityDimension, TemporalPrecision};
 use regex::{Regex, RegexBuilder};
 
 use crate::selection::select_objects;
 use crate::support::{
-    Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve, undefined,
+    Parameters, PropertyRef, Tolerance, Unavailable, display, exact_f64, finding, invalid, resolve,
+    temporal_order, undefined,
 };
 
 /// Checks one property of each selected object against a declared predicate.
 ///
 /// The target is exactly one of `value` (integer), `number`, `quantity`
 /// (a value with a unit such as `mm` or `m2`, compared in SI), `text`, `texts`
-/// (a list for `one_of`/`none_of`) or `boolean`; `is_defined` and
-/// `is_undefined` take none. Text comparisons are case-sensitive unless
-/// `case_sensitive` is `false`; `matches` is a regular expression that must
-/// match the whole value.
+/// (a list for `one_of`/`none_of`), `boolean`, `date` or `date_time`;
+/// `is_defined` and `is_undefined` take none. Text comparisons are
+/// case-sensitive unless `case_sensitive` is `false`; `matches` is a regular
+/// expression that must match the whole value.
+///
+/// A `date` or `date_time` target takes the ordered operators and compares
+/// chronologically: dates by day, date-times as instants whatever their UTC
+/// offsets. `precision` `day` reads every date-time as the calendar day it
+/// states, so a date-time value compares with a `date` target and the
+/// reverse; without it that pair is not evaluated. `precision` on any other
+/// target is an invalid declaration.
 ///
 /// A comparison presupposes a value: an exactly absent property fails every
 /// operator except `is_undefined`, and a value of another type than the
 /// target fails too. A quantity is compared only with a `quantity` target of
 /// the same dimension, never with a bare number; otherwise the object is not
 /// evaluated.
+///
+/// A numeric target may declare `tolerance`, `relative_tolerance` or
+/// `decimals`: a value within the tolerance of the target, or rounding to the
+/// same number, is equal to it, and only a value beyond the tolerance is
+/// greater or less. A tolerance on a text, text list or boolean target is an
+/// invalid declaration.
 pub struct PropertyPredicate;
 
 #[derive(Clone, Copy, Debug)]
@@ -74,10 +88,19 @@ enum Predicate {
         equal: bool,
         value: bool,
     },
+    /// A date or date-time target, with the declared precision.
+    Temporal(Order, PropertyValue, Option<TemporalPrecision>),
     Defined(bool),
 }
 
 impl Predicate {
+    fn numeric(&self) -> bool {
+        matches!(
+            self,
+            Self::Integer(..) | Self::Number(..) | Self::Quantity(..)
+        )
+    }
+
     #[allow(clippy::too_many_lines)]
     fn parse(parameters: &Parameters<'_>) -> Result<Self, Unavailable> {
         let operator = parameters.required_string("operator")?;
@@ -89,6 +112,8 @@ impl Predicate {
             parameters.string("text")?.is_some(),
             parameters.strings("texts")?.is_some(),
             parameters.boolean("boolean")?.is_some(),
+            parameters.date("date")?.is_some(),
+            parameters.date_time("date_time")?.is_some(),
         ]
         .into_iter()
         .filter(|given| *given)
@@ -143,6 +168,23 @@ impl Predicate {
                     ))
                 });
         }
+        let precision = parameters.precision()?;
+        let temporal = parameters
+            .date("date")?
+            .map(PropertyValue::Date)
+            .or(parameters
+                .date_time("date_time")?
+                .map(PropertyValue::DateTime));
+        if let Some(value) = temporal {
+            return order
+                .map(|order| Self::Temporal(order, value, precision))
+                .ok_or_else(|| invalid(format!("operator `{operator}` does not apply to a date")));
+        }
+        if precision.is_some() {
+            return Err(invalid(
+                "`precision` applies to a date or date_time target only",
+            ));
+        }
         if let Some(value) = parameters.boolean("boolean")? {
             return match operator {
                 "equal" | "not_equal" => Ok(Self::Boolean {
@@ -195,13 +237,20 @@ impl Predicate {
     }
 
     /// Whether `actual` satisfies the predicate; `Err` when it cannot be judged.
-    fn holds(&self, actual: Option<&PropertyValue>) -> Result<bool, String> {
+    fn holds(&self, actual: Option<&PropertyValue>, tolerance: &Tolerance) -> Result<bool, String> {
         if let Self::Defined(defined) = self {
             return Ok(undefined(actual) != *defined);
         }
         let Some(actual) = actual else {
             return Ok(false);
         };
+        if let Self::Temporal(order, expected, precision) = self {
+            return match temporal_order(actual, expected, *precision) {
+                Some(ordering) => ordering.map(|ordering| order.holds(ordering)),
+                // A value of another type fails, as for every other target.
+                None => Ok(false),
+            };
+        }
         match (self, actual) {
             (
                 Self::Quantity(order, expected, dimension),
@@ -211,7 +260,7 @@ impl Predicate {
                 },
             ) => {
                 return if held == dimension {
-                    Ok(compare(*order, *value, *expected))
+                    Ok(compare(*order, *value, *expected, tolerance))
                 } else {
                     Err(format!(
                         "a quantity in {} cannot be compared with one in {}",
@@ -236,17 +285,28 @@ impl Predicate {
             }
         };
         Ok(match (self, actual) {
-            (Self::Integer(order, expected), PropertyValue::Integer(value)) => {
+            (Self::Integer(order, expected), PropertyValue::Integer(value))
+                if tolerance.is_exact() =>
+            {
                 order.holds(value.cmp(expected))
             }
-            (Self::Integer(order, expected), PropertyValue::Decimal(value)) => {
-                exact_f64(*expected).is_some_and(|expected| compare(*order, *value, expected))
+            (Self::Integer(order, expected), PropertyValue::Integer(value)) => {
+                match (exact_f64(*value), exact_f64(*expected)) {
+                    (Some(value), Some(expected)) => compare(*order, value, expected, tolerance),
+                    _ => {
+                        return Err(
+                            "an integer beyond 2^53 cannot be compared under a tolerance".into(),
+                        );
+                    }
+                }
             }
+            (Self::Integer(order, expected), PropertyValue::Decimal(value)) => exact_f64(*expected)
+                .is_some_and(|expected| compare(*order, *value, expected, tolerance)),
             (Self::Number(order, expected), PropertyValue::Decimal(value)) => {
-                compare(*order, *value, *expected)
+                compare(*order, *value, *expected, tolerance)
             }
             (Self::Number(order, expected), PropertyValue::Integer(value)) => {
-                exact_f64(*value).is_some_and(|value| compare(*order, value, *expected))
+                exact_f64(*value).is_some_and(|value| compare(*order, value, *expected, tolerance))
             }
             (
                 Self::Text {
@@ -276,34 +336,44 @@ impl Predicate {
     }
 }
 
-fn compare(order: Order, left: f64, right: f64) -> bool {
-    left.partial_cmp(&right)
-        .is_some_and(|ordering| order.holds(ordering))
-}
-
-fn exact_f64(value: i64) -> Option<f64> {
-    #[allow(clippy::cast_precision_loss)]
-    (value.unsigned_abs() <= 1 << 53).then_some(value as f64)
+fn compare(order: Order, left: f64, right: f64, tolerance: &Tolerance) -> bool {
+    let ordering = if tolerance.is_exact() {
+        left.partial_cmp(&right)
+    } else {
+        tolerance.order(left, right)
+    };
+    ordering.is_some_and(|ordering| order.holds(ordering))
 }
 
 fn target(parameters: &Parameters<'_>) -> String {
     let rule = parameters.0;
-    ["value", "number", "quantity", "text", "texts", "boolean"]
-        .iter()
-        .find_map(|name| rule.parameters.get(*name))
-        .map_or_else(String::new, |value| match value {
-            axioval_ir::contract::ParameterValue::Integer { value } => format!(" {value}"),
-            axioval_ir::contract::ParameterValue::Number { value } => format!(" {value}"),
-            axioval_ir::contract::ParameterValue::Quantity { value, unit } => {
-                format!(" {value} {unit}")
-            }
-            axioval_ir::contract::ParameterValue::String { value } => format!(" `{value}`"),
-            axioval_ir::contract::ParameterValue::StringList { value } => {
-                format!(" [{}]", value.join(", "))
-            }
-            axioval_ir::contract::ParameterValue::Boolean { value } => format!(" {value}"),
-            _ => String::new(),
-        })
+    [
+        "value",
+        "number",
+        "quantity",
+        "text",
+        "texts",
+        "boolean",
+        "date",
+        "date_time",
+    ]
+    .iter()
+    .find_map(|name| rule.parameters.get(*name))
+    .map_or_else(String::new, |value| match value {
+        axioval_ir::contract::ParameterValue::Integer { value } => format!(" {value}"),
+        axioval_ir::contract::ParameterValue::Number { value } => format!(" {value}"),
+        axioval_ir::contract::ParameterValue::Quantity { value, unit } => {
+            format!(" {value} {unit}")
+        }
+        axioval_ir::contract::ParameterValue::String { value } => format!(" `{value}`"),
+        axioval_ir::contract::ParameterValue::StringList { value } => {
+            format!(" [{}]", value.join(", "))
+        }
+        axioval_ir::contract::ParameterValue::Boolean { value } => format!(" {value}"),
+        axioval_ir::contract::ParameterValue::Date { value } => format!(" {value}"),
+        axioval_ir::contract::ParameterValue::DateTime { value } => format!(" {value}"),
+        _ => String::new(),
+    })
 }
 
 impl RuleCapability for PropertyPredicate {
@@ -322,8 +392,14 @@ impl RuleCapability for PropertyPredicate {
             ParameterDescriptor::optional("text", ParameterType::String),
             ParameterDescriptor::optional("texts", ParameterType::StringList),
             ParameterDescriptor::optional("boolean", ParameterType::Boolean),
+            ParameterDescriptor::optional("date", ParameterType::Date),
+            ParameterDescriptor::optional("date_time", ParameterType::DateTime),
+            ParameterDescriptor::optional("precision", ParameterType::String),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ]
+        .into_iter()
+        .chain(crate::support::tolerance_parameters())
+        .collect()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -333,9 +409,14 @@ impl RuleCapability for PropertyPredicate {
                 set: Some(parameters.required_string("property_set")?),
                 name: parameters.required_string("property")?,
             };
-            Ok::<_, Unavailable>((property, Predicate::parse(&parameters)?))
+            let predicate = Predicate::parse(&parameters)?;
+            let tolerance = parameters.tolerance()?;
+            if !tolerance.is_exact() && !predicate.numeric() {
+                return Err(invalid("a tolerance applies to a numeric target only"));
+            }
+            Ok::<_, Unavailable>((property, predicate, tolerance))
         })();
-        let (property, predicate) = match parsed {
+        let (property, predicate, tolerance) = match parsed {
             Ok(parsed) => parsed,
             Err((reason, message)) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -345,7 +426,7 @@ impl RuleCapability for PropertyPredicate {
             }
         };
         let operator = parameters.required_string("operator").unwrap_or("invalid");
-        let target = target(&parameters);
+        let target = format!("{}{}", target(&parameters), tolerance.suffix());
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         for object in selected {
             let resolved = match resolve(context, object, property) {
@@ -355,7 +436,7 @@ impl RuleCapability for PropertyPredicate {
                     continue;
                 }
             };
-            match predicate.holds(resolved.value()) {
+            match predicate.holds(resolved.value(), &tolerance) {
                 Ok(true) => {}
                 Ok(false) => evaluation.push_finding(finding(
                     rule,

@@ -6,7 +6,9 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
-use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleFinding, RuleId};
+use axioval_ir::{
+    Finding, NotEvaluated, ObjectId, Project, Report, ReportTable, RuleId, Scope, SourceId,
+};
 use thiserror::Error;
 
 mod session;
@@ -51,6 +53,15 @@ pub enum EngineError {
         capability: String,
         parameter: String,
     },
+    /// A row of a table-valued binding does not fit the declared columns.
+    #[error("capability `{capability}` parameter `{parameter}` row {row}: {detail}")]
+    InvalidTableRow {
+        capability: String,
+        parameter: String,
+        /// Zero-based row index.
+        row: usize,
+        detail: String,
+    },
     /// A rule binds a parameter more than once.
     #[error("rule has duplicate parameter binding `{0}`")]
     DuplicateBinding(String),
@@ -83,6 +94,42 @@ pub enum EngineError {
         kind: String,
         concept: String,
     },
+    /// One rule reported two tables of one name.
+    #[error("rule `{rule}` reported table `{table}` twice")]
+    DuplicateReportTable { rule: String, table: String },
+}
+
+pub use schema::ColumnKind;
+
+/// One trusted column of a table parameter.
+///
+/// A definition's columns must match the descriptor's by ID, kind and
+/// requirement, in any order; their names and descriptions are presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TableColumn {
+    pub id: &'static str,
+    pub kind: ColumnKind,
+    pub required: bool,
+}
+impl TableColumn {
+    /// A column every row must fill.
+    #[must_use]
+    pub const fn required(id: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            id,
+            kind,
+            required: true,
+        }
+    }
+    /// A column a row may leave empty.
+    #[must_use]
+    pub const fn optional(id: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            id,
+            kind,
+            required: false,
+        }
+    }
 }
 
 /// Supported declarative parameter types.
@@ -94,14 +141,42 @@ pub enum ParameterType {
     String,
     Quantity,
     Enum,
+    /// An ISO 8601 calendar date, validated when the package is read.
+    Date,
+    /// An ISO 8601 date-time with a UTC offset, validated when the package
+    /// is read.
+    DateTime,
     Reference,
     ObjectTypeReference,
     PropertyReference,
     Selector,
     StringList,
     ReferenceList,
+    /// Rows of typed cells in the given columns.
+    Table(&'static [TableColumn]),
 }
 impl ParameterType {
+    /// The kind's spelling in a definition package.
+    #[must_use]
+    pub fn package_kind(self) -> &'static str {
+        match self {
+            Self::Boolean => "boolean",
+            Self::Integer => "integer",
+            Self::Number => "number",
+            Self::String => "string",
+            Self::Quantity => "quantity",
+            Self::Enum => "enum",
+            Self::Date => "date",
+            Self::DateTime => "dateTime",
+            Self::Reference => "reference",
+            Self::ObjectTypeReference => "objectTypeReference",
+            Self::PropertyReference => "propertyReference",
+            Self::Selector => "selector",
+            Self::StringList => "stringList",
+            Self::ReferenceList => "referenceList",
+            Self::Table(_) => "table",
+        }
+    }
     fn accepts(self, value: &schema::ParameterValue) -> bool {
         matches!(
             (self, value),
@@ -111,6 +186,8 @@ impl ParameterType {
                 | (Self::String, schema::ParameterValue::String { .. })
                 | (Self::Quantity, schema::ParameterValue::Quantity { .. })
                 | (Self::Enum, schema::ParameterValue::Enum { .. })
+                | (Self::Date, schema::ParameterValue::Date { .. })
+                | (Self::DateTime, schema::ParameterValue::DateTime { .. })
                 | (Self::Reference, schema::ParameterValue::Reference { .. })
                 | (
                     Self::ObjectTypeReference,
@@ -126,6 +203,7 @@ impl ParameterType {
                     Self::ReferenceList,
                     schema::ParameterValue::ReferenceList { .. }
                 )
+                | (Self::Table(_), schema::ParameterValue::Table { .. })
         )
     }
 }
@@ -182,20 +260,26 @@ pub struct RuleContext<'a> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CapabilityEvaluation {
     findings: Vec<Finding>,
-    rule_findings: Vec<RuleFinding>,
     not_evaluated: Vec<CapabilityNotEvaluated>,
+    tables: Vec<ReportTable>,
 }
 /// A not-evaluated outcome before the runtime binds its compiled rule ID.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CapabilityNotEvaluated {
-    object_id: Option<ObjectId>,
+    scope: Scope,
     reason: NotEvaluatedReason,
     message: String,
 }
 impl CapabilityNotEvaluated {
+    /// The object that could not be evaluated, if the outcome is about one.
     #[must_use]
     pub fn object_id(&self) -> Option<&ObjectId> {
-        self.object_id.as_ref()
+        self.scope.object()
+    }
+    /// What could not be evaluated: an object, a source, or the whole rule.
+    #[must_use]
+    pub fn scope(&self) -> &Scope {
+        &self.scope
     }
     #[must_use]
     pub fn reason(&self) -> &NotEvaluatedReason {
@@ -213,23 +297,32 @@ impl CapabilityEvaluation {
     pub fn findings(&self) -> &[Finding] {
         &self.findings
     }
-    /// Conclusive findings about the rule's population as a whole.
-    #[must_use]
-    pub fn rule_findings(&self) -> &[RuleFinding] {
-        &self.rule_findings
-    }
     /// Explicit fail-closed outcomes emitted by this capability.
     #[must_use]
     pub fn not_evaluated_outcomes(&self) -> &[CapabilityNotEvaluated] {
         &self.not_evaluated
+    }
+    /// Tables of measured values emitted by this capability.
+    #[must_use]
+    pub fn tables(&self) -> &[ReportTable] {
+        &self.tables
     }
     /// Creates a conclusive evaluation from zero or more findings.
     #[must_use]
     pub fn evaluated(findings: Vec<Finding>) -> Self {
         Self {
             findings,
-            rule_findings: Vec::new(),
-            not_evaluated: Vec::new(),
+            ..Self::default()
+        }
+    }
+    /// Adds a table of measured values, reported beside the findings.
+    ///
+    /// A table without rows is dropped: it measured nothing, and the
+    /// not-evaluated outcomes already say why. Tables are informative only;
+    /// they never stand in for a finding or a not-evaluated outcome.
+    pub fn push_table(&mut self, table: ReportTable) {
+        if !table.is_empty() {
+            self.tables.push(table);
         }
     }
     /// Creates a rule-level not-evaluated outcome.
@@ -239,17 +332,24 @@ impl CapabilityEvaluation {
         outcome.push_not_evaluated(reason, message);
         outcome
     }
-    /// Adds a conclusive finding.
+    /// Adds a conclusive finding, about an object, a source or the project
+    /// as its [`Scope`] says.
     pub fn push_finding(&mut self, finding: Finding) {
         self.findings.push(finding);
     }
-    /// Adds a conclusive finding about the rule's population as a whole.
-    pub fn push_rule_finding(&mut self, finding: RuleFinding) {
-        self.rule_findings.push(finding);
-    }
     /// Adds a rule-level not-evaluated outcome.
     pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
-        self.push_unavailable(None, reason, message);
+        self.push_unavailable(Scope::Project, reason, message);
+    }
+    /// Adds a not-evaluated outcome about one source as a whole, such as a
+    /// count over that source that undecided objects could still change.
+    pub fn push_source_not_evaluated(
+        &mut self,
+        source: SourceId,
+        reason: NotEvaluatedReason,
+        message: impl Into<String>,
+    ) {
+        self.push_unavailable(Scope::Source(source), reason, message);
     }
     /// Adds an object-specific not-evaluated outcome.
     pub fn push_object_not_evaluated(
@@ -258,16 +358,16 @@ impl CapabilityEvaluation {
         reason: NotEvaluatedReason,
         message: impl Into<String>,
     ) {
-        self.push_unavailable(Some(object_id), reason, message);
+        self.push_unavailable(Scope::Object(object_id), reason, message);
     }
     fn push_unavailable(
         &mut self,
-        object_id: Option<ObjectId>,
+        scope: Scope,
         reason: NotEvaluatedReason,
         message: impl Into<String>,
     ) {
         self.not_evaluated.push(CapabilityNotEvaluated {
-            object_id,
+            scope,
             reason,
             message: message.into(),
         });
@@ -282,12 +382,6 @@ pub trait RuleCapability: Send + Sync {
     fn parameters(&self) -> Vec<ParameterDescriptor>;
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
-    /// Whether the capability judges each selected object on its own, so a
-    /// `meets` selector may use it to select objects. A capability that
-    /// counts or compares objects never is.
-    fn selectable(&self) -> bool {
-        false
-    }
 }
 
 /// Host-controlled registry of trusted capabilities.
@@ -361,23 +455,32 @@ mod classifications;
 mod compiler;
 mod concepts;
 mod contact;
-mod decomposition;
+mod coordinate_system;
+mod coverage;
+mod derived_relationships;
 mod envelope_membership;
+mod facade_area;
+mod federation;
 mod free_space;
 mod guard;
 mod integrity;
 mod linear_quantity;
-mod materials;
 mod metric_routing;
+mod object_frame;
 mod pairwise;
 mod plan_area;
+mod plan_span;
 mod properties;
 mod proximity;
 mod relationships;
 mod services;
+mod sight;
 mod space;
 mod topology;
+mod triangle_count;
+mod vertical_extent;
 mod walkability;
+mod walking_surface;
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle,
@@ -391,21 +494,28 @@ pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
 };
-pub use decomposition::{
-    Decomposition, DecompositionError, DecompositionService, DecompositionServiceHandle,
-    ResolvedWholes, Whole,
+pub use coordinate_system::{
+    CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
+    MapConversion, SourceCoordinateSystem,
+};
+pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
+pub use derived_relationships::{
+    AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
+    DerivedRelationshipServiceHandle, adjacent_side,
 };
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,
     EnvelopeMembershipRequest, EnvelopeMembershipService, EnvelopeMembershipServiceHandle,
 };
+pub use facade_area::{FacadeArea, FacadeAreaError, FacadeAreaService, FacadeAreaServiceHandle};
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
-    CylinderClearance, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
-    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
-    PlacementDomain, PlacementOutcome, PlacementRequest, SignedDistanceInterval,
-    SupportedPlacement,
+    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
+    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
+    FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence, PlacementDomain,
+    PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    SignedDistanceInterval, SupportedPlacement,
 };
 pub use guard::{
     ClimbableCandidate, GuardCandidate, GuardEdge, GuardError, GuardEvidence, GuardSearch,
@@ -419,21 +529,33 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
-pub use materials::{MaterialError, MaterialService, MaterialServiceHandle, ResolvedMaterial};
 pub use metric_routing::{
-    BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
-    MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
-    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ThresholdVerdict,
+    BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
+    FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
+    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
+    MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
+    NearestTargetRequest, ThresholdVerdict, UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
-pub use pairwise::{CandidatePair, CandidateSearchError, candidate_pairs};
-pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
+pub use object_frame::{
+    ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,
+};
+pub use pairwise::{
+    CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
+};
+pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand};
+pub use plan_span::{
+    CentrePlacement, PlanCentre, PlanLength, PlanRecess, PlanRecesses, PlanRectangle, PlanSection,
+    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
+};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use proximity::{
-    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, ProximityError, ProximityEvidence,
-    ProximityRequest, ProximityService, ProximityServiceHandle,
+    BodyContainment, Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence,
+    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds, OverlapExtents,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, ProximityServiceHandle, VerticalDirection, VolumeInterval,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
@@ -441,47 +563,73 @@ pub use relationships::{
     SemanticRelationship, TraversalDirection,
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
-pub use session::{EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceSnapshot};
+pub use session::{
+    EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
+    SourceSnapshot,
+};
+pub use sight::{
+    SightError, SightEvidence, SightOutcome, SightRequest, SightService, SightServiceHandle,
+};
 pub use space::{
-    BoundaryGap, Cap, CapCoverage, ClearHeightEvidence, Containment, SpaceError, SpaceOverlap,
-    SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
+    BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,
+    SpaceOverlap, SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
 };
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
 };
+pub use triangle_count::{
+    TriangleCount, TriangleCountError, TriangleCountService, TriangleCountServiceHandle,
+};
+pub use vertical_extent::{
+    DirectionalExtent, ElevationInterval, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
+};
 pub use walkability::{
-    VerifiedWalkablePassage, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
-    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
-    WalkabilitySnapshot,
+    PassageAdmission, VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind,
+    WalkabilityError, WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest,
+    WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
+};
+pub use walking_surface::{
+    ClearanceBelow, ClearanceBelowRequest, Headroom, HeadroomRequest, Landing, LandingEvidence,
+    LandingExtent, LandingRequest, MeasuredInterval, SlopedRun, SlopedSurface, Tread, TreadFlight,
+    WalkingEnd, WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle, across,
 };
 
-/// Binds a rule's outcomes to it, reporting each unbound concept once.
+/// Binds a rule's outcomes to it, reporting each source-wide cause once.
 ///
-/// An unbound concept depends on the package and the source, never on the
-/// object, so every object of that source fails identically. Listing each one
-/// buries the single cause under thousands of copies. Object-level outcomes
-/// with that reason are merged per source and message into one rule-level
-/// outcome that names the source, the count and a few examples. Every other
-/// outcome keeps its object.
-fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> Vec<NotEvaluated> {
+/// An unbound concept depends on the package and the source, and an
+/// unrecorded fact on the source alone, never on the object, so every object
+/// of that source fails identically. Listing each one buries the single
+/// cause under thousands of copies. Object-level outcomes with either reason
+/// are merged per source, reason and message into one rule-level outcome
+/// scoped to that source, naming the count and a few examples. Every other
+/// outcome keeps its scope.
+fn collapse_source_wide(
+    rule_id: &RuleId,
+    outcomes: Vec<CapabilityNotEvaluated>,
+) -> Vec<NotEvaluated> {
     const EXAMPLES: usize = 3;
-    let mut merged: BTreeMap<(axioval_ir::SourceId, String), Vec<ObjectId>> = BTreeMap::new();
+    let mut merged: BTreeMap<(axioval_ir::SourceId, NotEvaluatedReason, String), Vec<ObjectId>> =
+        BTreeMap::new();
     let mut kept = Vec::new();
     for outcome in outcomes {
-        match (outcome.reason, outcome.object_id) {
-            (NotEvaluatedReason::UnboundConcept, Some(object)) => merged
-                .entry((object.source.clone(), outcome.message))
+        match (outcome.reason, outcome.scope) {
+            (
+                reason @ (NotEvaluatedReason::UnboundConcept | NotEvaluatedReason::NotRecorded),
+                Scope::Object(object),
+            ) => merged
+                .entry((object.source.clone(), reason, outcome.message))
                 .or_default()
                 .push(object),
-            (reason, object_id) => kept.push(NotEvaluated {
+            (reason, scope) => kept.push(NotEvaluated {
                 rule_id: rule_id.clone(),
-                object_id,
+                scope,
                 reason,
                 message: outcome.message,
             }),
         }
     }
-    kept.extend(merged.into_iter().map(|((source, message), mut objects)| {
+    kept.extend(merged.into_iter().map(|((source, reason, message), mut objects)| {
         objects.sort();
         let examples: Vec<&str> = objects
             .iter()
@@ -496,8 +644,8 @@ fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> 
         };
         NotEvaluated {
             rule_id: rule_id.clone(),
-            object_id: None,
-            reason: NotEvaluatedReason::UnboundConcept,
+            scope: Scope::Source(source.clone()),
+            reason,
             message: format!(
                 "{message}; {} object(s) of source `{source}` not evaluated (e.g. {}{tail})",
                 objects.len(),
@@ -536,7 +684,14 @@ impl Runtime {
     /// concepts bind to nothing and concept-based selection is reported as not
     /// evaluated. Hosts that want concept binding run an [`EvidenceSession`].
     pub fn run(&self, project: &Project, plan: ExecutionPlan) -> Result<Report, EngineError> {
-        self.run_with_services(project, &self.services, BTreeMap::new(), plan)
+        self.run_with_services(
+            project,
+            &self.services,
+            BTreeMap::new(),
+            SessionSources::new(project.objects().map(|object| object.id.source.clone())),
+            SourceDisciplines::default(),
+            plan,
+        )
     }
 
     /// Executes a plan against one immutable source/evidence snapshot.
@@ -549,7 +704,18 @@ impl Runtime {
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), snapshot.type_systems().to_vec()))
             .collect();
-        self.run_with_services(session.project(), session.services(), type_systems, plan)
+        self.run_with_services(
+            session.project(),
+            session.services(),
+            type_systems,
+            SessionSources::new(
+                session
+                    .snapshots()
+                    .map(|snapshot| snapshot.source().clone()),
+            ),
+            SourceDisciplines::new(session.disciplines().clone()),
+            plan,
+        )
     }
 
     fn run_with_services(
@@ -557,6 +723,8 @@ impl Runtime {
         project: &Project,
         services: &ServiceRegistry,
         type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
+        sources: SessionSources,
+        disciplines: SourceDisciplines,
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
@@ -565,19 +733,21 @@ impl Runtime {
         // trusted, because it could bind concepts the packages never declared.
         let mut services = services.clone();
         services.replace(ConceptBindings::new(plan.concepts.clone(), type_systems));
-        // `meets` selectors evaluate registered capabilities; the plan was
-        // checked against this registry, so it is the one they may use.
-        services.replace(self.registry.clone());
+        // Disciplines are the session's declarations; a host-registered copy
+        // could claim roles the session never declared.
+        services.replace(disciplines);
+        // So are the sources: a host copy could hide an empty source.
+        services.replace(sources);
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
-        let mut rule_findings = Vec::new();
+        let mut tables: Vec<ReportTable> = Vec::new();
         let mut not_evaluated: Vec<NotEvaluated> = plan
             .deferred
             .into_iter()
             .map(|rule| NotEvaluated {
                 rule_id: rule.id,
-                object_id: None,
+                scope: Scope::Project,
                 reason: NotEvaluatedReason::InvalidDeclaration,
                 message: rule.reason,
             })
@@ -590,32 +760,37 @@ impl Runtime {
             let rule_id = rule.id.clone();
             let evaluation = capability.evaluate(&context, &rule);
             findings.extend(evaluation.findings);
-            // A capability states its own rule id; the compiled one is bound
-            // here so a rule finding can never name another rule.
-            rule_findings.extend(evaluation.rule_findings.into_iter().map(|mut finding| {
-                finding.rule_id = rule_id.clone();
-                finding.related.sort();
-                finding.related.dedup();
-                finding
-            }));
-            not_evaluated.extend(collapse_unbound(&rule_id, evaluation.not_evaluated));
+            // The compiled rule is the table's identity, whatever the capability named.
+            tables.extend(
+                evaluation
+                    .tables
+                    .into_iter()
+                    .map(|table| table.with_rule_id(rule_id.clone())),
+            );
+            not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
         findings.sort_by(|a, b| {
             a.rule_id
                 .cmp(&b.rule_id)
-                .then_with(|| a.object_id.cmp(&b.object_id))
-                .then_with(|| a.message.cmp(&b.message))
-        });
-        rule_findings.sort_by(|a: &RuleFinding, b: &RuleFinding| {
-            a.rule_id
-                .cmp(&b.rule_id)
+                // Project, then sources, then objects, each by identity.
+                .then_with(|| a.scope.cmp(&b.scope))
                 .then_with(|| a.message.cmp(&b.message))
         });
         not_evaluated.sort();
+        tables.sort_by(|a, b| (a.rule_id(), a.name()).cmp(&(b.rule_id(), b.name())));
+        if let Some(pair) = tables
+            .windows(2)
+            .find(|pair| (pair[0].rule_id(), pair[0].name()) == (pair[1].rule_id(), pair[1].name()))
+        {
+            return Err(EngineError::DuplicateReportTable {
+                rule: pair[0].rule_id().to_string(),
+                table: pair[0].name().to_owned(),
+            });
+        }
         Ok(Report {
             findings,
-            rule_findings,
             not_evaluated,
+            tables,
         })
     }
 }

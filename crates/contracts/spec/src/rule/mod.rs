@@ -9,15 +9,11 @@
 //! declares how completely it maps to each output format, so a backend can
 //! refuse to emit rather than silently degrade.
 
-pub mod aggregate;
 pub mod applicability;
 pub mod assertion;
 pub mod basic_checks;
-pub mod building_storey;
 pub mod clash_matrix;
-pub mod comparison;
 pub mod component_clearance;
-pub mod containment;
 pub mod coverage;
 pub mod daylight;
 pub mod definition;
@@ -34,11 +30,8 @@ pub mod free_floor_space;
 pub mod front_clearance;
 pub mod horizontal_guard;
 pub mod instance;
-pub mod layer_agreement;
 pub mod local_circulation;
-pub mod manual_issue;
 pub mod model;
-pub mod model_architecture;
 pub mod model_comparison;
 pub mod opening;
 pub mod opening_sill;

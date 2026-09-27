@@ -81,6 +81,16 @@ pub enum RelationshipQuery {
     },
 }
 
+impl RelationshipQuery {
+    /// The relationship or grouping identity the query names.
+    #[must_use]
+    pub fn relationship(&self) -> &SemanticRelationship {
+        match self {
+            Self::SharedGroup { relationship } | Self::Related { relationship, .. } => relationship,
+        }
+    }
+}
+
 /// What a relationship service does with an instance whose required end is absent.
 ///
 /// A source can carry relationship instances that omit an end the schema
@@ -254,29 +264,36 @@ impl RelationshipSelectionServiceHandle {
         &self,
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
-        let selection = self.0.select(request)?;
-        if selection.request() != request
-            || selection
-                .candidates()
-                .iter()
-                .any(|candidate| !request.contains_candidate(candidate))
-        {
-            return Err(RelationshipSelectionError::ResponseRequestMismatch);
-        }
-        if selection
-            .candidates()
-            .windows(2)
-            .any(|pair| pair[0] >= pair[1])
-        {
-            return Err(RelationshipSelectionError::DuplicateCandidate);
-        }
-        if selection.evidence().is_empty()
-            || selection.evidence().iter().any(|item| !reviewable(item))
-        {
-            return Err(RelationshipSelectionError::InexactEvidence);
-        }
-        Ok(selection)
+        validate_selection(request, self.0.select(request)?)
     }
+}
+
+/// Checks that `selection` answers exactly `request`, stays inside its
+/// universe in canonical order, and carries exact reviewable evidence.
+pub(crate) fn validate_selection(
+    request: &RelationshipSelectionRequest,
+    selection: CompleteRelationshipSelection,
+) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
+    if selection.request() != request
+        || selection
+            .candidates()
+            .iter()
+            .any(|candidate| !request.contains_candidate(candidate))
+    {
+        return Err(RelationshipSelectionError::ResponseRequestMismatch);
+    }
+    if selection
+        .candidates()
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(RelationshipSelectionError::DuplicateCandidate);
+    }
+    if selection.evidence().is_empty() || selection.evidence().iter().any(|item| !reviewable(item))
+    {
+        return Err(RelationshipSelectionError::InexactEvidence);
+    }
+    Ok(selection)
 }
 
 impl SnapshotBoundService for RelationshipSelectionServiceHandle {

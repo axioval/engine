@@ -1,6 +1,11 @@
 #![allow(missing_docs)]
 use super::Selector;
+use crate::{Date, DateTime};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// One row of a `table` value: cells keyed by column ID.
+pub type TableRow = BTreeMap<String, ParameterValue>;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ParameterValue {
@@ -22,6 +27,17 @@ pub enum ParameterValue {
     },
     Enum {
         value: String,
+    },
+    /// An ISO 8601 calendar date, `YYYY-MM-DD`; any other text is refused
+    /// when the package is read.
+    Date {
+        value: Date,
+    },
+    /// An ISO 8601 date-time with an explicit UTC offset,
+    /// `YYYY-MM-DDThh:mm:ss[.f](Z|±hh:mm)`; a date-time without an offset is
+    /// refused when the package is read.
+    DateTime {
+        value: DateTime,
     },
     Reference {
         value: String,
@@ -45,6 +61,10 @@ pub enum ParameterValue {
     },
     ReferenceList {
         value: Vec<String>,
+    },
+    /// Rows of a `table` parameter, in declared order.
+    Table {
+        value: Vec<TableRow>,
     },
 }
 const fn yes() -> bool {

@@ -28,6 +28,10 @@ for object in &export.unanchored {
 Every topic's description repeats the message, the rule, the source-qualified
 object ids and each evidence locator with its exactness.
 
+**Report tables are not exported.** A table of measured values (see
+[Tables](./ir.md#tables)) is not an issue, so it writes no topic; a report
+with tables writes the same archive as one without.
+
 **Not-evaluated outcomes are exported by default.** An archive that lists only
 findings reads as "everything else passed". `Options::include_not_evaluated`
 turns them off explicitly.
@@ -38,12 +42,22 @@ object without the alias cannot be selected: its topic is still written, and
 it is listed in `Export::unanchored`. A viewpoint never selects related
 objects alone, because it would point the reviewer at the wrong element.
 
+**Model-level topics.** A finding or outcome about a whole source or the
+project (see [Scope](./ir.md#scope)) has no subject, so its topic has no
+viewpoint and no component. Its description says `Source: <source>; no single
+object` or `Project: no single object or source`, and lists the related
+objects (for example the objects a count found) without selecting them.
+
 **GUIDs are stable across re-exports.** Topic and viewpoint GUIDs are UUIDv5
 over the rule, the objects' GlobalIds and the message, so rechecking a revised
 model reproduces the GUID of every issue still present, and BCF tools can
 track it. Objects without a GlobalId fall back to their STEP-numbered identity
 and cannot be tracked this way. When a federation holds two revisions that
 produce the same issue, those topics are qualified by source to stay unique.
+A source-level topic's GUID is keyed by its scope kind and related GlobalIds,
+never by the source's name, so a revision saved under another file name keeps
+it; it is qualified by source only when it would repeat. Object and rule-level
+topics keep the GUIDs they had before scopes existed.
 
 **Output is deterministic.** The caller supplies author and date, nothing reads
 the clock, and identical input writes identical bytes. Written archives are

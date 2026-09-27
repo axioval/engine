@@ -15,6 +15,16 @@ use thiserror::Error;
 pub mod contract;
 pub use contract::{DefinitionPackage, RuleSetPackage};
 
+/// Calendar dates and date-times with a UTC offset.
+pub mod temporal;
+pub use temporal::{Date, DateTime, TemporalError, TemporalPrecision};
+
+/// Named tables of measured values reported beside findings.
+pub mod table;
+pub use table::{
+    ReportColumn, ReportColumnKind, ReportRow, ReportTable, ReportTableError, ReportValue,
+};
+
 /// Validation error for source-neutral contracts.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum IrError {
@@ -30,6 +40,11 @@ pub enum IrError {
     /// Two objects of one source claim the same external identity.
     #[error("external id {} is claimed by both {} and {}", .0.id, .0.first, .0.second)]
     DuplicateExternalId(Box<ExternalIdClash>),
+    /// A discipline name is not a lowercase token.
+    #[error(
+        "invalid discipline `{0}`: use 1 to 64 lowercase ASCII letters, digits, `-` or `_`, starting with a letter or digit"
+    )]
+    InvalidDiscipline(String),
 }
 
 /// Two objects of one source claiming one external id, in identity order.
@@ -117,6 +132,60 @@ impl ExternalId {
 impl fmt::Display for ExternalId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.scheme, self.value)
+    }
+}
+
+/// The discipline a source plays in a check, such as `architecture` or
+/// `structure`.
+///
+/// A host declaration about a source, never read from it: IFC carries no
+/// discipline. The name is a lowercase token (`[a-z0-9][a-z0-9_-]{0,63}`), so
+/// two spellings of one discipline cannot silently differ by case or
+/// whitespace, and it compares exactly. The engine attaches no vocabulary;
+/// hosts and packages agree on the names.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Discipline(String);
+impl Discipline {
+    /// Longest accepted discipline name, in bytes.
+    pub const MAX_LEN: usize = 64;
+    /// Validates a discipline name.
+    pub fn new(name: impl Into<String>) -> Result<Self, IrError> {
+        let name = name.into();
+        let mut bytes = name.bytes();
+        let valid = name.len() <= Self::MAX_LEN
+            && bytes
+                .next()
+                .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit())
+            && bytes.all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b'_'
+            });
+        if valid {
+            Ok(Self(name))
+        } else {
+            Err(IrError::InvalidDiscipline(name))
+        }
+    }
+    /// The discipline name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl TryFrom<String> for Discipline {
+    type Error = IrError;
+    fn try_from(name: String) -> Result<Self, IrError> {
+        Self::new(name)
+    }
+}
+impl From<Discipline> for String {
+    fn from(discipline: Discipline) -> Self {
+        discipline.0
+    }
+}
+impl fmt::Display for Discipline {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -219,6 +288,20 @@ pub enum PropertyValue {
         dimension: QuantityDimension,
     },
     String(String),
+    /// A calendar day without a time zone, `YYYY-MM-DD` on the wire.
+    Date(Date),
+    /// An instant with the UTC offset it was stated in,
+    /// `YYYY-MM-DDThh:mm:ss[.f]±hh:mm` (or `Z`) on the wire, tagged
+    /// `dateTime` like the camelCase package kinds. A date-time without an
+    /// offset is not representable.
+    #[serde(rename = "dateTime")]
+    DateTime(DateTime),
+    /// Several values of one property, in the order the source states them
+    /// (the presentation layers of an object). Elements are scalar values:
+    /// never `Null` and never a nested list. A comparison against a list
+    /// states whether any or every element must satisfy it; a list is never
+    /// compared as if it were one of its elements.
+    List(Vec<PropertyValue>),
 }
 
 /// Provenance and exactness of evidence.
@@ -278,32 +361,82 @@ pub const TYPE_ATTRIBUTE_SET: &str = "axioval:type-attributes";
 
 /// Property set that names how an object is presented in its source.
 ///
-/// Its one property, [`PRESENTATION_LAYER`], is the name of the presentation
-/// (CAD) layer the object's shape is assigned to. An object on no layer has
-/// none (an exact absence); an object on several distinct layers is a
-/// conflict. Reserved like [`ATTRIBUTE_SET`].
+/// Reserved like [`ATTRIBUTE_SET`]. Property names are matched ignoring
+/// ASCII case:
+///
+/// - [`PRESENTATION_LAYER`] lists the names of the presentation (CAD) layers
+///   the object's shape is assigned to, as a [`PropertyValue::List`] of
+///   strings: every distinct layer, sorted. An object on no layer has none
+///   (an exact absence), unless its source assigns no layer to any object at
+///   all: then absence says nothing about the object, and the source answers
+///   that it records no layers ([`NotEvaluatedReason::NotRecorded`]).
+/// - [`PRESENTATION_TRANSPARENCY`] lists how transparent the object's styled
+///   surfaces are, as a [`PropertyValue::List`] of decimals from `0.0`
+///   (opaque) to `1.0` (fully transparent): every distinct value, ascending.
+///   A comparison states whether `any` or `all` surfaces must satisfy it. An
+///   object with no styled surface has none (an exact absence).
 pub const PRESENTATION_SET: &str = "axioval:presentation";
 
-/// The layer property in [`PRESENTATION_SET`].
+/// The layer list property in [`PRESENTATION_SET`].
 pub const PRESENTATION_LAYER: &str = "Layer";
 
-/// Property set that names an object's predefined type: the designation
-/// that narrows its class, resolved the way its source defines it.
+/// The surface transparency list property in [`PRESENTATION_SET`].
+pub const PRESENTATION_TRANSPARENCY: &str = "Transparency";
+
+/// Property set that names the material an object is made of.
 ///
-/// For IFC that is the type object's designation first, unless it is
-/// `NOTDEFINED` or empty, then the occurrence's; a `USERDEFINED` one is
-/// carried by its text (`ElementType`/`ProcessType` of the type object,
-/// `ObjectType` of the occurrence). [`PREDEFINED_TYPE`] is that designation,
-/// exactly absent when the object states none; [`PREDEFINED_TYPE_USER_DEFINED`]
-/// is always present and says whether it is user-defined. An object typed by
-/// several type objects is a conflict. Reserved like [`ATTRIBUTE_SET`].
-pub const PREDEFINED_TYPE_SET: &str = "axioval:predefined-type";
+/// The material is the object's own, or else the one its type object
+/// carries. An object with no material has none of these properties (an exact
+/// absence); an object with several material assignments is a conflict.
+/// Reserved like [`ATTRIBUTE_SET`]. Property names are matched ignoring ASCII
+/// case:
+///
+/// - [`MATERIAL_KIND`]: how the material is composed, one of
+///   [`MATERIAL_KIND_SINGLE`], [`MATERIAL_KIND_LAYER_SET`],
+///   [`MATERIAL_KIND_CONSTITUENT_SET`], [`MATERIAL_KIND_PROFILE_SET`] or
+///   [`MATERIAL_KIND_LIST`].
+/// - [`MATERIAL_NAME`]: the name of a single material, or of the set.
+/// - [`MATERIAL_CATEGORY`]: the category of a single material.
+/// - [`MATERIAL_TOTAL_THICKNESS`]: the summed layer thickness of a layer set,
+///   a length.
+/// - [`MATERIAL_COUNT`]: the number of layers, constituents, profiles or
+///   listed materials.
+/// - Members, numbered from 1 in the source's order: `Layer<n>.Material`,
+///   `Layer<n>.Thickness` (a length), `Layer<n>.Name` and `Layer<n>.Category`;
+///   `Constituent<n>.Material`, `Constituent<n>.Name`,
+///   `Constituent<n>.Category` and `Constituent<n>.Fraction` (a decimal);
+///   `Profile<n>.Material`, `Profile<n>.Name` and `Profile<n>.Category`;
+///   `Material<n>.Name` and `Material<n>.Category` for a list. `.Material` is
+///   the name of the member's material.
+/// - [`MATERIAL_NAMES`]: every name the material goes by, as a
+///   [`PropertyValue::List`] of strings, distinct and sorted: the material's
+///   or the set's name and category, and each member's name and category and
+///   its material's name and category. Empty names are left out. A selector
+///   asks whether `any` of them is a given name without enumerating members.
+pub const MATERIAL_SET: &str = "axioval:material";
 
-/// The designation property in [`PREDEFINED_TYPE_SET`].
-pub const PREDEFINED_TYPE: &str = "PredefinedType";
-
-/// Whether the designation in [`PREDEFINED_TYPE_SET`] is user-defined.
-pub const PREDEFINED_TYPE_USER_DEFINED: &str = "UserDefined";
+/// The composition property in [`MATERIAL_SET`].
+pub const MATERIAL_KIND: &str = "Kind";
+/// The name property in [`MATERIAL_SET`].
+pub const MATERIAL_NAME: &str = "Name";
+/// The category property in [`MATERIAL_SET`].
+pub const MATERIAL_CATEGORY: &str = "Category";
+/// The total layer thickness property in [`MATERIAL_SET`].
+pub const MATERIAL_TOTAL_THICKNESS: &str = "TotalThickness";
+/// The member count property in [`MATERIAL_SET`].
+pub const MATERIAL_COUNT: &str = "Count";
+/// The list of every name and category in [`MATERIAL_SET`].
+pub const MATERIAL_NAMES: &str = "Names";
+/// [`MATERIAL_KIND`] of one homogeneous material.
+pub const MATERIAL_KIND_SINGLE: &str = "material";
+/// [`MATERIAL_KIND`] of a set of layers with thicknesses.
+pub const MATERIAL_KIND_LAYER_SET: &str = "layer-set";
+/// [`MATERIAL_KIND`] of a set of named constituents.
+pub const MATERIAL_KIND_CONSTITUENT_SET: &str = "constituent-set";
+/// [`MATERIAL_KIND`] of a set of materials with cross-section profiles.
+pub const MATERIAL_KIND_PROFILE_SET: &str = "profile-set";
+/// [`MATERIAL_KIND`] of an unstructured list of materials.
+pub const MATERIAL_KIND_LIST: &str = "list";
 
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
@@ -311,7 +444,7 @@ pub fn is_reserved_set(set: &str) -> bool {
     set == ATTRIBUTE_SET
         || set == TYPE_ATTRIBUTE_SET
         || set == PRESENTATION_SET
-        || set == PREDEFINED_TYPE_SET
+        || set == MATERIAL_SET
 }
 
 /// A named semantic property.
@@ -553,27 +686,145 @@ pub enum Severity {
     Warning,
     Info,
 }
+/// What a finding or not-evaluated outcome is about.
+///
+/// Most outcomes are about one object. Some are about a whole source ("this
+/// model has no building") or the whole project ("no storey anywhere has a
+/// fire compartment"): there is no object to report them against, and
+/// reporting nothing would read as a pass.
+///
+/// Ordered project first, then sources, then objects, each by identity, so
+/// report ordering stays deterministic.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Scope {
+    /// The whole project, every source together.
+    Project,
+    /// One source as a whole.
+    Source(SourceId),
+    /// One object.
+    Object(ObjectId),
+}
+
+impl Scope {
+    /// The object this scope names, if it names one.
+    #[must_use]
+    pub fn object(&self) -> Option<&ObjectId> {
+        match self {
+            Self::Object(object) => Some(object),
+            Self::Project | Self::Source(_) => None,
+        }
+    }
+    /// The source this scope lies in: the named source, or the object's own
+    /// source. `None` for the project.
+    #[must_use]
+    pub fn source(&self) -> Option<&SourceId> {
+        match self {
+            Self::Project => None,
+            Self::Source(source) => Some(source),
+            Self::Object(object) => Some(&object.source),
+        }
+    }
+    /// Splits the scope into its wire fields, `object_id` and `source`; at
+    /// most one is set.
+    fn into_wire(self) -> (Option<ObjectId>, Option<SourceId>) {
+        match self {
+            Self::Project => (None, None),
+            Self::Source(source) => (None, Some(source)),
+            Self::Object(object) => (Some(object), None),
+        }
+    }
+    fn from_wire(object_id: Option<ObjectId>, source: Option<SourceId>) -> Result<Self, String> {
+        match (object_id, source) {
+            (None, None) => Ok(Self::Project),
+            (None, Some(source)) => Ok(Self::Source(source)),
+            (Some(object), None) => Ok(Self::Object(object)),
+            (Some(object), Some(source)) => Err(format!(
+                "outcome names both object {object} and source {source}; an object already names its source"
+            )),
+        }
+    }
+}
+
+impl From<ObjectId> for Scope {
+    fn from(object: ObjectId) -> Self {
+        Self::Object(object)
+    }
+}
+
+impl From<SourceId> for Scope {
+    fn from(source: SourceId) -> Self {
+        Self::Source(source)
+    }
+}
+
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Project => f.write_str("project"),
+            Self::Source(source) => write!(f, "source {source}"),
+            Self::Object(object) => object.fmt(f),
+        }
+    }
+}
+
 /// A deterministic, source-qualified validation outcome.
+///
+/// On the wire an object finding carries `object_id`, a source finding
+/// `source`, and a project finding neither; a record with both is rejected.
+/// An object finding therefore serializes exactly as before scopes existed.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "FindingWire", into = "FindingWire")]
 pub struct Finding {
     pub rule_id: RuleId,
-    /// The object the finding is reported against.
-    pub object_id: ObjectId,
+    /// What the finding is reported against: an object, a source, or the
+    /// project. Evidence rules do not depend on it: every finding carries
+    /// the exact source evidence that decided it.
+    pub scope: Scope,
     pub severity: Severity,
     pub message: String,
     /// Other objects that participate in the finding -- the slab a wall rests
-    /// on, the body a space intersects.
+    /// on, the body a space intersects, the objects a count found.
     ///
     /// A finding a reviewer cannot act on is a finding that gets ignored:
     /// "this wall has insufficient contact" is only useful alongside *what*
-    /// it fails to rest on. Empty when the object alone explains the finding.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// it fails to rest on. Empty when the subject alone explains the finding.
     pub related: Vec<ObjectId>,
     pub evidence: Vec<Evidence>,
 }
 
 impl Finding {
+    /// A finding with no related objects and no evidence yet.
+    #[must_use]
+    pub fn new(
+        rule_id: RuleId,
+        scope: impl Into<Scope>,
+        severity: Severity,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            rule_id,
+            scope: scope.into(),
+            severity,
+            message: message.into(),
+            related: Vec::new(),
+            evidence: Vec::new(),
+        }
+    }
+    /// The object the finding is reported against, if it is about one.
+    #[must_use]
+    pub fn object_id(&self) -> Option<&ObjectId> {
+        self.scope.object()
+    }
+    /// Attaches evidence, sorted by source and locator and deduplicated so
+    /// ordering never depends on evaluation order.
+    #[must_use]
+    pub fn with_evidence(mut self, evidence: impl IntoIterator<Item = Evidence>) -> Self {
+        self.evidence = evidence.into_iter().collect();
+        self.evidence
+            .sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
+        self.evidence.dedup();
+        self
+    }
     /// Attaches the other objects that participate in this finding, sorted and
     /// deduplicated so ordering never depends on adapter traversal order.
     #[must_use]
@@ -581,29 +832,60 @@ impl Finding {
         self.related = related.into_iter().collect();
         self.related.sort();
         self.related.dedup();
-        // The subject is already named by `object_id`; repeating it adds noise.
-        self.related
-            .retain(|candidate| candidate != &self.object_id);
+        // The subject is already named by the scope; repeating it adds noise.
+        if let Scope::Object(subject) = &self.scope {
+            let subject = subject.clone();
+            self.related.retain(|candidate| candidate != &subject);
+        }
         self
     }
 }
-/// A conclusive outcome about a rule's population as a whole rather than
-/// about one object: "no applicable object exists", "five exist where at
-/// most two may". It has no subject object, so it cannot be a [`Finding`].
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+
+/// The serialized form of a [`Finding`], compatible with reports written
+/// before scopes existed.
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RuleFinding {
-    pub rule_id: RuleId,
-    pub severity: Severity,
-    pub message: String,
-    /// Objects that participate, sorted and unique; empty when the finding
-    /// is about their absence.
+struct FindingWire {
+    rule_id: RuleId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    object_id: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<SourceId>,
+    severity: Severity,
+    message: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub related: Vec<ObjectId>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub evidence: Vec<Evidence>,
+    related: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
 }
 
+impl From<Finding> for FindingWire {
+    fn from(finding: Finding) -> Self {
+        let (object_id, source) = finding.scope.into_wire();
+        Self {
+            rule_id: finding.rule_id,
+            object_id,
+            source,
+            severity: finding.severity,
+            message: finding.message,
+            related: finding.related,
+            evidence: finding.evidence,
+        }
+    }
+}
+
+impl TryFrom<FindingWire> for Finding {
+    type Error = String;
+    fn try_from(wire: FindingWire) -> Result<Self, String> {
+        Ok(Self {
+            rule_id: wire.rule_id,
+            scope: Scope::from_wire(wire.object_id, wire.source)?,
+            severity: wire.severity,
+            message: wire.message,
+            related: wire.related,
+            evidence: wire.evidence,
+        })
+    }
+}
 /// Why an object or rule instance could not be evaluated conclusively.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -618,45 +900,105 @@ pub enum NotEvaluatedReason {
     /// express. A fact about the package and the source, never about one
     /// object, so the runtime reports it once per rule and source.
     UnboundConcept,
+    /// The source records the consulted kind of fact for no object at all
+    /// (a model with no presentation layers), so neither a value nor an
+    /// absence can be stated and the rule does not apply to that source. A
+    /// fact about the source, never about one object, so the runtime reports
+    /// it once per rule and source.
+    NotRecorded,
 }
 /// Explicit fail-closed evaluation outcome. This is not a compliance finding.
+///
+/// On the wire `object_id` is always written (`null` unless the outcome is
+/// about one object) and `source` only for a source-scoped outcome, so object-
+/// and rule-level outcomes serialize exactly as before scopes existed.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "NotEvaluatedWire", into = "NotEvaluatedWire")]
 pub struct NotEvaluated {
     pub rule_id: RuleId,
-    pub object_id: Option<ObjectId>,
+    /// What could not be evaluated: one object, one source, or the rule as a
+    /// whole (`Scope::Project`).
+    pub scope: Scope,
     pub reason: NotEvaluatedReason,
     pub message: String,
 }
+
+impl NotEvaluated {
+    /// The object that could not be evaluated, if the outcome is about one.
+    #[must_use]
+    pub fn object_id(&self) -> Option<&ObjectId> {
+        self.scope.object()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NotEvaluatedWire {
+    rule_id: RuleId,
+    #[serde(default)]
+    object_id: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<SourceId>,
+    reason: NotEvaluatedReason,
+    message: String,
+}
+
+impl From<NotEvaluated> for NotEvaluatedWire {
+    fn from(outcome: NotEvaluated) -> Self {
+        let (object_id, source) = outcome.scope.into_wire();
+        Self {
+            rule_id: outcome.rule_id,
+            object_id,
+            source,
+            reason: outcome.reason,
+            message: outcome.message,
+        }
+    }
+}
+
+impl TryFrom<NotEvaluatedWire> for NotEvaluated {
+    type Error = String;
+    fn try_from(wire: NotEvaluatedWire) -> Result<Self, String> {
+        Ok(Self {
+            rule_id: wire.rule_id,
+            scope: Scope::from_wire(wire.object_id, wire.source)?,
+            reason: wire.reason,
+            message: wire.message,
+        })
+    }
+}
 /// Ordered report from a plan execution.
+///
+/// `tables` holds the measured values rules report beside their findings,
+/// ordered by rule and table name. It is omitted from the serialized form
+/// when empty, so a report without tables serializes byte for byte as
+/// before tables existed.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Report {
     pub findings: Vec<Finding>,
-    /// Findings about a rule's population as a whole. Absent from reports
-    /// that have none, so older reports read unchanged.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub rule_findings: Vec<RuleFinding>,
     #[serde(default)]
     pub not_evaluated: Vec<NotEvaluated>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<ReportTable>,
 }
 impl Report {
     /// Findings in deterministic order.
     pub fn findings(&self) -> &[Finding] {
         &self.findings
     }
-    /// Findings about whole populations, in deterministic order.
-    pub fn rule_findings(&self) -> &[RuleFinding] {
-        &self.rule_findings
-    }
-    /// Whether any finding, about an object or a population, was reported.
-    /// A report without findings may still be incomplete; see
-    /// [`Report::not_evaluated`].
-    pub fn has_findings(&self) -> bool {
-        !self.findings.is_empty() || !self.rule_findings.is_empty()
-    }
     /// Fail-closed rule or object evaluations in deterministic order.
     pub fn not_evaluated(&self) -> &[NotEvaluated] {
         &self.not_evaluated
+    }
+    /// Tables of measured values, by rule and table name.
+    pub fn tables(&self) -> &[ReportTable] {
+        &self.tables
+    }
+    /// The table `name` of `rule_id`, if the report has it.
+    pub fn table(&self, rule_id: &RuleId, name: &str) -> Option<&ReportTable> {
+        self.tables
+            .iter()
+            .find(|table| table.rule_id() == rule_id && table.name() == name)
     }
 }

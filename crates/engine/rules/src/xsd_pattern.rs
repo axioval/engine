@@ -25,6 +25,22 @@ const NOT_WORD_CLASS: &str = r"[\p{P}\p{Z}\p{C}]";
 /// Returns a description of the construct that cannot be translated exactly,
 /// or of the syntax error.
 pub(crate) fn compile(pattern: &str) -> Result<Regex, String> {
+    let translated = translate(pattern)?;
+    Regex::new(&format!(r"\A(?:{translated})\z")).map_err(|error| error.to_string())
+}
+
+/// Translates an XML Schema pattern into `regex` syntax with the same meaning.
+///
+/// The result is unanchored: anchor it to the whole value, as a property
+/// selector's `matches` operator does, to keep the XML Schema meaning. It is
+/// known to compile.
+///
+/// # Errors
+///
+/// Returns a description of the construct that cannot be translated exactly
+/// (character-class subtraction, `\i`/`\c` name escapes, `\p{Is…}` block
+/// escapes), or of the syntax error.
+pub fn translate(pattern: &str) -> Result<String, String> {
     let mut out = String::with_capacity(pattern.len() + 8);
     let mut chars = pattern.chars().peekable();
     let mut in_class = false;
@@ -97,7 +113,8 @@ pub(crate) fn compile(pattern: &str) -> Result<Regex, String> {
     if in_class {
         return Err("unterminated character class".into());
     }
-    Regex::new(&format!(r"\A(?:{out})\z")).map_err(|error| error.to_string())
+    Regex::new(&format!(r"\A(?:{out})\z")).map_err(|error| error.to_string())?;
+    Ok(out)
 }
 
 /// Escapes that mean the same in both dialects, and `\p{…}` categories.

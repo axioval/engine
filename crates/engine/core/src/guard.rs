@@ -35,14 +35,38 @@ pub enum GuardError {
     InvalidSearch,
 }
 
-/// How far to look for candidates, and how finely to sample an edge.
+/// How far to look for candidates, how finely to sample an edge, which
+/// walking surfaces to measure, and which objects may play each role.
 ///
 /// Measurement inputs, not thresholds: these bound the search, they do not
-/// judge what is found.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// judge what is found. The surfaces come from the rule's selection, so which
+/// edges are checked for fall protection is stated in the ruleset rather than
+/// guessed by a host.
+///
+/// The candidate sets work the same way. A mesh does not say whether a body
+/// is a railing or a cupboard, so without them any nearby body counts as a
+/// barrier, landing or climbing aid. A set that is present restricts that role
+/// to its members; an absent set leaves the role open to every body.
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuardSearch {
     candidate_radius_metres: f64,
     sample_spacing_metres: f64,
+    surfaces: Vec<ObjectId>,
+    barriers: Option<Vec<ObjectId>>,
+    landings: Option<Vec<ObjectId>>,
+    climbables: Option<Vec<ObjectId>>,
+}
+
+/// Sorts and deduplicates a candidate set so requests compare canonically.
+fn canonical(mut objects: Vec<ObjectId>) -> Vec<ObjectId> {
+    objects.sort();
+    objects.dedup();
+    objects
+}
+
+/// Whether `object` may play a role restricted to `set`.
+fn admits(set: Option<&[ObjectId]>, object: &ObjectId) -> bool {
+    set.is_none_or(|set| set.binary_search(object).is_ok())
 }
 
 impl GuardSearch {
@@ -57,7 +81,63 @@ impl GuardSearch {
         Ok(Self {
             candidate_radius_metres,
             sample_spacing_metres,
+            surfaces: Vec::new(),
+            barriers: None,
+            landings: None,
+            climbables: None,
         })
+    }
+    /// Asks for these walking surfaces to be measured, in canonical order.
+    #[must_use]
+    pub fn with_surfaces(mut self, surfaces: Vec<ObjectId>) -> Self {
+        self.surfaces = canonical(surfaces);
+        self
+    }
+    /// Restricts barriers to these objects. An empty set admits none.
+    #[must_use]
+    pub fn with_barrier_candidates(mut self, barriers: Vec<ObjectId>) -> Self {
+        self.barriers = Some(canonical(barriers));
+        self
+    }
+    /// Restricts landings to these objects. An empty set admits none.
+    #[must_use]
+    pub fn with_landing_candidates(mut self, landings: Vec<ObjectId>) -> Self {
+        self.landings = Some(canonical(landings));
+        self
+    }
+    /// Restricts climbing aids to these objects. An empty set admits none.
+    #[must_use]
+    pub fn with_climbable_candidates(mut self, climbables: Vec<ObjectId>) -> Self {
+        self.climbables = Some(canonical(climbables));
+        self
+    }
+    /// Walking surfaces the caller asks to be measured.
+    pub fn surfaces(&self) -> &[ObjectId] {
+        &self.surfaces
+    }
+    /// Objects allowed to count as barriers, or `None` when any body may.
+    pub fn barrier_candidates(&self) -> Option<&[ObjectId]> {
+        self.barriers.as_deref()
+    }
+    /// Objects allowed to count as landings, or `None` when any body may.
+    pub fn landing_candidates(&self) -> Option<&[ObjectId]> {
+        self.landings.as_deref()
+    }
+    /// Objects allowed to count as climbing aids, or `None` when any body may.
+    pub fn climbable_candidates(&self) -> Option<&[ObjectId]> {
+        self.climbables.as_deref()
+    }
+    /// Whether `object` may be reported as a barrier.
+    pub fn admits_barrier(&self, object: &ObjectId) -> bool {
+        admits(self.barrier_candidates(), object)
+    }
+    /// Whether `object` may be reported as a landing.
+    pub fn admits_landing(&self, object: &ObjectId) -> bool {
+        admits(self.landing_candidates(), object)
+    }
+    /// Whether `object` may be reported as a climbing aid.
+    pub fn admits_climbable(&self, object: &ObjectId) -> bool {
+        admits(self.climbable_candidates(), object)
     }
     pub fn candidate_radius_metres(&self) -> f64 {
         self.candidate_radius_metres
@@ -365,5 +445,24 @@ mod tests {
             Err(GuardError::InvalidSearch)
         );
         assert!(GuardSearch::try_new(1.0, 0.1).is_ok());
+    }
+
+    /// An absent set admits every body; a present one only its members, and
+    /// an empty one none at all.
+    #[test]
+    fn candidate_sets_restrict_only_their_own_role() {
+        let open = GuardSearch::try_new(1.0, 0.1).unwrap();
+        assert!(open.admits_barrier(&oid("cupboard")));
+        assert!(open.admits_landing(&oid("cupboard")));
+        assert!(open.admits_climbable(&oid("cupboard")));
+
+        let restricted = open
+            .with_barrier_candidates(vec![oid("rail"), oid("rail")])
+            .with_landing_candidates(Vec::new());
+        assert_eq!(restricted.barrier_candidates(), Some(&[oid("rail")][..]));
+        assert!(restricted.admits_barrier(&oid("rail")));
+        assert!(!restricted.admits_barrier(&oid("cupboard")));
+        assert!(!restricted.admits_landing(&oid("terrace")));
+        assert!(restricted.admits_climbable(&oid("cupboard")));
     }
 }

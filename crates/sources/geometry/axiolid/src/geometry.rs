@@ -26,10 +26,10 @@ use axioval_ir::ObjectId;
 #[derive(Clone, Debug, Default)]
 pub struct AxiolidGeometry {
     meshes: BTreeMap<ObjectId, TriMesh>,
-    doorways: BTreeMap<ObjectId, usize>,
     chord_deviations: BTreeMap<ObjectId, f64>,
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
+    groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
 }
 
 impl AxiolidGeometry {
@@ -57,6 +57,47 @@ impl AxiolidGeometry {
     pub fn with_unmeasured(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
         self.unmeasured.insert(object, reason.into());
         self
+    }
+
+    /// Declares a bodiless group (a zone, say) and the objects it groups.
+    ///
+    /// Membership is a semantic fact a mesh cannot show, so the host states
+    /// it. A group has no body of its own, so it is also declared bodiless:
+    /// it obstructs nothing. Its plan footprint is the union of its members'
+    /// footprints; a member may itself be a declared group.
+    #[must_use]
+    pub fn with_group(
+        mut self,
+        group: ObjectId,
+        members: impl IntoIterator<Item = ObjectId>,
+    ) -> Self {
+        let mut members: Vec<ObjectId> = members.into_iter().collect();
+        members.sort();
+        members.dedup();
+        self.bodiless.insert(group.clone());
+        self.groups.insert(group, Ok(members));
+        self
+    }
+
+    /// Declares a bodiless group whose membership the host could not decide.
+    ///
+    /// Measurements that need its members refuse with `reason`, rather than
+    /// take the group as empty.
+    #[must_use]
+    pub fn with_undecided_group(mut self, group: ObjectId, reason: impl Into<String>) -> Self {
+        self.bodiless.insert(group.clone());
+        self.groups.insert(group, Err(reason.into()));
+        self
+    }
+
+    /// A declared group's members in identity order, or the reason its
+    /// membership is undecided; `None` when the object is no declared group.
+    #[must_use]
+    pub fn group_members(&self, group: &ObjectId) -> Option<Result<&[ObjectId], &str>> {
+        self.groups.get(group).map(|members| match members {
+            Ok(members) => Ok(members.as_slice()),
+            Err(reason) => Err(reason.as_str()),
+        })
     }
 
     /// Whether the host declared the object bodiless.
@@ -163,34 +204,9 @@ impl AxiolidGeometry {
         })
     }
 
-    /// Records how many doorways interrupt an object's perimeter.
-    ///
-    /// Openings are a semantic fact: a mesh of a room does not say which of
-    /// its wall segments are doors. The host supplies the count rather than
-    /// this adapter guessing at it from geometry alone.
-    #[must_use]
-    pub fn with_doorways(mut self, object: ObjectId, count: usize) -> Self {
-        self.doorways.insert(object, count);
-        self
-    }
-
-    /// Doorways recorded for an object; absent means none were declared.
-    #[must_use]
-    pub fn doorway_count(&self, object: &ObjectId) -> usize {
-        self.doorways.get(object).copied().unwrap_or(0)
-    }
-
     /// Every registered object and its mesh, in identity order.
     pub(crate) fn objects(&self) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
         self.meshes.iter()
-    }
-
-    /// Every registered object other than `subject`, in identity order.
-    pub(crate) fn counterparts(
-        &self,
-        subject: &ObjectId,
-    ) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
-        self.meshes.iter().filter(move |(id, _)| *id != subject)
     }
 }
 

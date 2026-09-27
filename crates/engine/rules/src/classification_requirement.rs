@@ -9,29 +9,30 @@ use axioval_ir::Evidence;
 use axioval_ir::contract::ParameterValue;
 use regex::Regex;
 
-use crate::property_value::finding;
 use crate::selection::select_objects;
+use crate::support::finding;
 use crate::xsd_pattern;
 
-/// Requires an object to carry a classification, optionally with a code and
-/// a system meeting the given literals or XML Schema patterns.
+/// Requires an object to carry a classification, optionally in a system and
+/// with a code meeting the given literals or XML Schema patterns.
 ///
-/// An object's classifications are every assignment its source states,
-/// each with its whole code chain, so a code matches when it is the assigned
-/// item or any ancestor of it. The code and the system requirements are each
-/// met by any assignment, not necessarily the same one. Without any
-/// classification the object fails, unless `optional`. With `prohibited` the
-/// verdict is inverted: meeting the requirement is the violation.
+/// This is the requirement a `classification` selector cannot state: a
+/// system without a code, a system or code given as a pattern, and an
+/// optional classification. It reads the same classification service and
+/// decides the same way: one assignment must meet the system and the code
+/// together, and a code matches when it is the assigned item or any ancestor
+/// of it. An unclassified object fails, unless `optional`: an optional
+/// classification holds for an object that carries none at all, and must be
+/// met by one that carries any, as IDS reads an optional facet. With
+/// `prohibited` the verdict is inverted: meeting the requirement is the
+/// violation.
 ///
 /// An assignment whose system the source does not state can neither meet
 /// nor rule out a system requirement; when it could decide the verdict the
 /// object is not evaluated.
 pub struct ClassificationRequirement;
-impl RuleCapability for ClassificationRequirement {
-    fn selectable(&self) -> bool {
-        true
-    }
 
+impl RuleCapability for ClassificationRequirement {
     fn id(&self) -> &'static str {
         "axioval:capability.classification"
     }
@@ -63,13 +64,13 @@ impl RuleCapability for ClassificationRequirement {
             (Err(message), _) | (_, Err(message)) => {
                 return CapabilityEvaluation::not_evaluated(
                     NotEvaluatedReason::InvalidDeclaration,
-                    format!("classification parameters are invalid: {message}"),
+                    format!("classification: parameters are invalid: {message}"),
                 );
             }
             _ => {
                 return CapabilityEvaluation::not_evaluated(
                     NotEvaluatedReason::InvalidDeclaration,
-                    "classification cannot be both optional and prohibited",
+                    "classification: a requirement cannot be both optional and prohibited",
                 );
             }
         };
@@ -79,7 +80,7 @@ impl RuleCapability for ClassificationRequirement {
                 evaluation.push_object_not_evaluated(
                     object.id.clone(),
                     NotEvaluatedReason::MissingService,
-                    "classification service is not registered",
+                    "classification service is not registered; classifications are unknown",
                 );
             }
             return evaluation;
@@ -89,10 +90,8 @@ impl RuleCapability for ClassificationRequirement {
                 Ok(assignments) => assignments,
                 Err(error) => {
                     let reason = match error {
-                        ClassificationError::UncoveredSource(_) => {
-                            NotEvaluatedReason::MissingService
-                        }
-                        _ => NotEvaluatedReason::InvalidEvidence,
+                        ClassificationError::Unreadable(_) => NotEvaluatedReason::InvalidEvidence,
+                        _ => NotEvaluatedReason::BackendUnavailable,
                     };
                     evaluation.push_object_not_evaluated(
                         object.id.clone(),
@@ -102,24 +101,26 @@ impl RuleCapability for ClassificationRequirement {
                     continue;
                 }
             };
-            let violation = match judge(&assignments, &code, &system, optional, prohibited) {
-                Judgement::Undecided => {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "a classification of this object is not linked to a system",
+            match judge(&assignments, &code, &system, optional, prohibited) {
+                Judgement::Holds => {}
+                Judgement::Undecided => evaluation.push_object_not_evaluated(
+                    object.id.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "a classification of this object is not linked to a system",
+                ),
+                Judgement::Violation(message) => {
+                    let evidence = Evidence::exact(
+                        object.id.source.clone(),
+                        format!("classifications:{}", object.id),
                     );
-                    continue;
+                    evaluation.push_finding(finding(
+                        rule,
+                        &object.id,
+                        message,
+                        vec![evidence],
+                        Vec::new(),
+                    ));
                 }
-                Judgement::Violation(message) => Some(message),
-                Judgement::Holds => None,
-            };
-            if let Some(message) = violation {
-                let evidence = Evidence::exact(
-                    object.id.source.clone(),
-                    format!("classifications:{}", object.id),
-                );
-                evaluation.push_finding(finding(rule, object, message, vec![evidence]));
             }
         }
         evaluation
@@ -133,6 +134,27 @@ enum Judgement {
     Undecided,
 }
 
+/// Three-valued: `None` when the assignment's system is unknown and the
+/// requirement names one.
+fn in_system(assignment: &ClassificationAssignment, system: &Matcher) -> Option<bool> {
+    if system.is_none() {
+        return Some(true);
+    }
+    assignment
+        .system
+        .as_deref()
+        .map(|name| system.matches(name))
+}
+
+fn has_code(assignment: &ClassificationAssignment, code: &Matcher) -> bool {
+    code.is_none()
+        || assignment
+            .codes
+            .iter()
+            .flatten()
+            .any(|value| code.matches(value))
+}
+
 fn judge(
     assignments: &[ClassificationAssignment],
     code: &Matcher,
@@ -140,57 +162,71 @@ fn judge(
     optional: bool,
     prohibited: bool,
 ) -> Judgement {
-    let classified = !assignments.is_empty();
-    let code_met = code.is_none()
-        || assignments
-            .iter()
-            .flat_map(|assignment| assignment.codes.iter().flatten())
-            .any(|value| code.matches(value));
-    let known_systems: Vec<&str> = assignments
-        .iter()
-        .filter_map(|assignment| assignment.system.as_deref())
-        .collect();
-    let system_met = system.is_none() || known_systems.iter().any(|value| system.matches(value));
-    // An unstated system could flip an unmet requirement to met.
-    if classified
-        && code_met
-        && !system_met
-        && assignments
-            .iter()
-            .any(|assignment| assignment.system.is_none())
-    {
-        return Judgement::Undecided;
+    // Whether one assignment meets the system and the code together; `None`
+    // when an assignment of unknown system could make it so.
+    let mut met = Some(false);
+    for assignment in assignments {
+        let code_met = has_code(assignment, code);
+        // An unknown system cannot make a code that does not match meet.
+        let meets = if code_met {
+            in_system(assignment, system)
+        } else {
+            Some(false)
+        };
+        met = or(met, meets);
     }
-    let met = classified && code_met && system_met;
-    let violation = if prohibited {
-        met.then(|| "the object carries a prohibited classification".to_owned())
-    } else if !classified {
-        (!optional).then(|| "the object has no classification".to_owned())
+    let holds = if prohibited {
+        met.map(|met| !met)
+    } else if optional && assignments.is_empty() {
+        Some(true)
     } else {
-        (!met).then(|| {
-            let systems = if known_systems.is_empty() {
+        met
+    };
+    match holds {
+        Some(true) => Judgement::Holds,
+        None => Judgement::Undecided,
+        Some(false) if prohibited => {
+            Judgement::Violation("the object carries a prohibited classification".to_owned())
+        }
+        Some(false) if assignments.is_empty() => {
+            Judgement::Violation("the object has no classification".to_owned())
+        }
+        Some(false) => {
+            let mut systems: Vec<&str> = assignments
+                .iter()
+                .filter_map(|assignment| assignment.system.as_deref())
+                .collect();
+            systems.sort_unstable();
+            systems.dedup();
+            let systems = if systems.is_empty() {
                 "none stated".to_owned()
             } else {
-                known_systems.join(", ")
+                systems.join(", ")
             };
-            format!("no classification meets the requirement (systems: {systems})")
-        })
-    };
-    violation.map_or(Judgement::Holds, Judgement::Violation)
+            Judgement::Violation(format!(
+                "no classification meets the requirement (systems: {systems})"
+            ))
+        }
+    }
+}
+
+/// Three-valued disjunction.
+fn or(left: Option<bool>, right: Option<bool>) -> Option<bool> {
+    match (left, right) {
+        (Some(true), _) | (_, Some(true)) => Some(true),
+        (Some(false), Some(false)) => Some(false),
+        _ => None,
+    }
 }
 
 /// Literals or patterns one text must meet; neither means no requirement.
-pub(crate) struct Matcher {
+struct Matcher {
     literals: Vec<String>,
     patterns: Vec<Regex>,
 }
 
 impl Matcher {
-    pub(crate) fn read(
-        rule: &CompiledRule,
-        literals: &str,
-        patterns: &str,
-    ) -> Result<Self, String> {
+    fn read(rule: &CompiledRule, literals: &str, patterns: &str) -> Result<Self, String> {
         let list = |name: &str| match rule.parameters.get(name) {
             Some(ParameterValue::StringList { value }) => value.clone(),
             _ => Vec::new(),
@@ -207,12 +243,12 @@ impl Matcher {
         })
     }
 
-    pub(crate) fn is_none(&self) -> bool {
+    fn is_none(&self) -> bool {
         self.literals.is_empty() && self.patterns.is_empty()
     }
 
-    /// Literals and patterns together are one requirement: all must hold.
-    pub(crate) fn matches(&self, value: &str) -> bool {
+    /// Literals and patterns together are one requirement: both must hold.
+    fn matches(&self, value: &str) -> bool {
         (self.literals.is_empty() || self.literals.iter().any(|literal| literal == value))
             && (self.patterns.is_empty() || self.patterns.iter().any(|regex| regex.is_match(value)))
     }

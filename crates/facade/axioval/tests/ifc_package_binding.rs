@@ -107,7 +107,7 @@ fn unbound_package_over_ifc4_is_not_evaluated_never_an_empty_pass() {
     );
     let outcome = &report.not_evaluated()[0];
     assert_eq!(outcome.reason, NotEvaluatedReason::UnboundConcept);
-    assert_eq!(outcome.object_id, None);
+    assert_eq!(outcome.object_id(), None);
     assert!(
         outcome
             .message
@@ -130,7 +130,7 @@ fn package_bound_to_ifc4_selects_subtypes_and_checks_real_properties() {
     // the IFC4 schema's inheritance, and lacks it. #3 is a slab, not a wall.
     assert_eq!(report.findings().len(), 1, "{:?}", report.findings());
     let finding = &report.findings()[0];
-    assert_eq!(finding.object_id.local_id, "#2");
+    assert_eq!(finding.object_id().unwrap().local_id, "#2");
     assert!(
         finding
             .evidence

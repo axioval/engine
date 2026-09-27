@@ -7,8 +7,8 @@ use axioval_ir::NotEvaluatedReason;
 use axioval_ir::PropertyValue;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_rules::{
-    ConsistentValue, ManualIssue, NameSequence, RelatedCount, RelativeCount, SelectorConformance,
-    UniqueValue, register_builtins,
+    ConsistentValue, ManualIssue, NameSequence, NumberingConsistency, RelatedCount, RelativeCount,
+    SelectorConformance, UniqueValue, register_builtins,
 };
 use common::{
     Model, boolean, findings, flagged, integer, kind, property, rule, selector, string, unevaluated,
@@ -22,6 +22,10 @@ fn matches(set: &str, name: &str, pattern: &str) -> Selector {
         property: name.into(),
         operator: ComparisonOperator::Matches,
         value: Some(string(pattern)),
+        case_sensitive: true,
+        trim: false,
+        quantifier: None,
+        precision: None,
     }
 }
 
@@ -94,12 +98,64 @@ mod conformance {
         );
         assert_eq!(
             findings(&evaluation),
-            [("s2".into(), "unknown space".into())]
+            [(
+                "s2".into(),
+                "unknown space: axioval:attributes.LongName `Office`, axioval:attributes.Name `201`"
+                    .into()
+            )]
         );
         assert_eq!(
             unevaluated(&evaluation),
             [("s4".to_owned(), NotEvaluatedReason::BackendUnavailable)]
         );
+    }
+
+    #[test]
+    fn no_value_is_its_own_result_and_unknown_values_are_grouped() {
+        let model = spaces()
+            .object("s5", "space")
+            .object("s6", "space")
+            .object("s7", "space")
+            .text("s5", ATTR, "LongName", "Kitchen")
+            .text("s6", ATTR, "LongName", " ")
+            .text("s7", ATTR, "LongName", "kitchen");
+        let evaluation = model.evaluate(
+            &SelectorConformance,
+            &rule(ID, kind("space"), vec![("requirement", agreed())]),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [
+                (
+                    "s6".into(),
+                    "axioval:attributes.LongName, axioval:attributes.Name has no value to \
+                     compare with the agreed list"
+                        .into()
+                ),
+                (
+                    "s4".into(),
+                    "does not match any agreed combination of values: \
+                     axioval:attributes.LongName `Kitchen`, axioval:attributes.Name absent"
+                        .into()
+                ),
+                (
+                    "s2".into(),
+                    "does not match any agreed combination of values: \
+                     axioval:attributes.LongName `Office`, axioval:attributes.Name `201`"
+                        .into()
+                ),
+                (
+                    "s7".into(),
+                    "does not match any agreed combination of values: \
+                     axioval:attributes.LongName `kitchen`, axioval:attributes.Name absent"
+                        .into()
+                ),
+            ]
+        );
+        // One finding per unknown value, relating every object that holds it.
+        let kitchen = &evaluation.findings()[1];
+        assert_eq!(kitchen.related.len(), 1);
+        assert_eq!(kitchen.related[0].local_id, "s5");
     }
 }
 
@@ -145,7 +201,7 @@ mod unique {
         let s1 = evaluation
             .findings()
             .iter()
-            .find(|finding| finding.object_id.local_id == "s1")
+            .find(|finding| finding.object_id().unwrap().local_id == "s1")
             .unwrap();
         assert_eq!(
             s1.message,
@@ -210,18 +266,71 @@ mod consistent {
                 ],
             ),
         );
-        // T1 disagrees; T2 spans two kinds and is not compared; d5 has no mark.
-        assert_eq!(flagged(&evaluation), ["d1", "d2", "d3", "d5"]);
+        // T1 disagrees; T2 spans two kinds and is not compared; d5 has no
+        // mark, but no other unmarked door disagrees with it.
+        assert_eq!(flagged(&evaluation), ["d1", "d2", "d3"]);
         let d3 = evaluation
             .findings()
             .iter()
-            .find(|finding| finding.object_id.local_id == "d3")
+            .find(|finding| finding.object_id().unwrap().local_id == "d3")
             .unwrap();
         assert_eq!(
             d3.message,
             "Pset.FireRating is `F90` where other objects with Pset.Mark `T1` have `F30`"
         );
         assert_eq!(d3.related.len(), 2);
+    }
+
+    #[test]
+    fn a_missing_key_is_reported_only_when_unkeyed_objects_conflict() {
+        let rule = rule(
+            ID,
+            Selector::All,
+            vec![
+                ("key", property(Some("Pset"), "Mark")),
+                ("value", property(Some("Pset"), "FireRating")),
+            ],
+        );
+        let agreeing = Model::default()
+            .object("d1", "door")
+            .object("d2", "door")
+            .text("d1", "Pset", "FireRating", "F30")
+            .text("d2", "Pset", "Mark", " ")
+            .text("d2", "Pset", "FireRating", "F30");
+        let evaluation = agreeing.evaluate(&ConsistentValue, &rule);
+        assert!(
+            evaluation.findings().is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+        assert!(evaluation.not_evaluated_outcomes().is_empty());
+
+        let conflicting = Model::default()
+            .object("d1", "door")
+            .object("d2", "door")
+            .object("d3", "door")
+            .text("d1", "Pset", "FireRating", "F30")
+            .text("d2", "Pset", "FireRating", "F90")
+            .text("d3", "Pset", "Mark", "T1")
+            .text("d3", "Pset", "FireRating", "F60");
+        let evaluation = conflicting.evaluate(&ConsistentValue, &rule);
+        assert_eq!(
+            findings(&evaluation),
+            [
+                (
+                    "d1".into(),
+                    "Pset.Mark has no value, and Pset.FireRating is `F30` where other \
+                     objects without Pset.Mark have `F90`"
+                        .into()
+                ),
+                (
+                    "d2".into(),
+                    "Pset.Mark has no value, and Pset.FireRating is `F90` where other \
+                     objects without Pset.Mark have `F30`"
+                        .into()
+                ),
+            ]
+        );
     }
 }
 
@@ -288,6 +397,10 @@ mod related_count {
             property: "FireRated".into(),
             operator: ComparisonOperator::Equals,
             value: Some(boolean(true)),
+            case_sensitive: true,
+            trim: false,
+            quantifier: None,
+            precision: None,
         };
         let evaluation = model.evaluate(
             &RelatedCount,
@@ -318,6 +431,10 @@ mod related_count {
                             property: "FireRated".into(),
                             operator: ComparisonOperator::Exists,
                             value: None,
+                            case_sensitive: true,
+                            trim: false,
+                            quantifier: None,
+                            precision: None,
                         }),
                     ),
                     ("relationship", string("bounds")),
@@ -515,6 +632,32 @@ mod name_sequence {
     }
 
     #[test]
+    fn a_number_below_the_start_is_separate_from_an_order_break() {
+        let evaluation = check(building(&[
+            ("a", "1", Some(0.0)),
+            ("b1", "0", Some(1.0)),
+            ("c", "2", Some(2.0)),
+            ("d", "1", Some(3.0)),
+        ]));
+        // `0` does not become the member below `2`, which follows `1`.
+        assert_eq!(
+            findings(&evaluation),
+            [
+                (
+                    "b1".into(),
+                    "axioval:attributes.Name 0 is below the start 1".into()
+                ),
+                (
+                    "d".into(),
+                    "axioval:attributes.Name 1 is not above 2, the member below it".into()
+                ),
+            ]
+        );
+        assert!(evaluation.findings()[0].related.is_empty());
+        assert_eq!(evaluation.findings()[1].related[0].local_id, "c");
+    }
+
+    #[test]
     fn a_member_without_an_order_value_leaves_the_anchor_unordered() {
         let evaluation = check(building(&[("a", "1", Some(0.0)), ("b1", "2", None)]));
         assert!(evaluation.findings().is_empty());
@@ -525,12 +668,194 @@ mod name_sequence {
     }
 }
 
+mod numbering {
+    use super::*;
+
+    const ID: &str = "axioval:capability.numbering-consistency";
+
+    /// Storey 1: B-101, B-102, B-104, a lobby and a bare `101`; storey 2:
+    /// B-201, B-202, B-301.
+    fn spaces() -> Model {
+        let mut model = Model::default()
+            .object("st1", "storey")
+            .object("st2", "storey");
+        for (storey, space, name) in [
+            ("st1", "s1", "B-101"),
+            ("st1", "s2", "B-102"),
+            ("st1", "s3", "B-104"),
+            ("st1", "s4", "B-Lobby"),
+            ("st1", "s5", "101"),
+            ("st2", "s6", "B-201"),
+            ("st2", "s7", "B-202"),
+            ("st2", "s8", "B-301"),
+        ] {
+            model = model
+                .object(space, "space")
+                .edge("aggregates", storey, space)
+                .text(space, ATTR, "Name", name);
+        }
+        model
+    }
+
+    fn check(
+        model: Model,
+        extra: Vec<(&str, ParameterValue)>,
+    ) -> axioval_engine::CapabilityEvaluation {
+        let mut parameters = vec![
+            ("property", property(Some(ATTR), "Name")),
+            ("pattern", string(r"B-(\d+)")),
+            ("relationship", string("aggregates")),
+            ("direction", string("backward")),
+        ];
+        parameters.extend(extra);
+        model.evaluate(&NumberingConsistency, &rule(ID, kind("space"), parameters))
+    }
+
+    #[test]
+    fn a_gap_and_a_different_prefix_are_reported_per_storey() {
+        let evaluation = check(
+            spaces(),
+            vec![("prefix_length", integer(1)), ("gap_free", boolean(true))],
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [
+                (
+                    "s3".into(),
+                    "axioval:attributes.Name `B-104` follows 102; 103 is missing".into()
+                ),
+                (
+                    "s8".into(),
+                    "axioval:attributes.Name `B-301` does not start with 2, the prefix of 2 other object(s)"
+                        .into()
+                ),
+                (
+                    "s8".into(),
+                    "axioval:attributes.Name `B-301` follows 202; 203 to 300 are missing".into()
+                ),
+            ]
+        );
+        // The gap names the object below it.
+        assert_eq!(evaluation.findings()[0].related[0].local_id, "s2");
+        // Values the pattern does not number are not evaluated, never passed.
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s4".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("s5".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+    }
+
+    #[test]
+    fn each_check_runs_only_when_declared() {
+        let prefix = check(spaces(), vec![("prefix_length", integer(1))]);
+        assert_eq!(flagged(&prefix), ["s8"]);
+        let gaps = check(spaces(), vec![("gap_free", boolean(true))]);
+        assert_eq!(flagged(&gaps), ["s3", "s8"]);
+    }
+
+    #[test]
+    fn without_a_predominant_prefix_every_object_is_reported() {
+        let model = spaces()
+            .object("s9", "space")
+            .edge("aggregates", "st2", "s9")
+            .text("s9", ATTR, "Name", "B-302");
+        let evaluation = check(model, vec![("prefix_length", integer(1))]);
+        assert_eq!(flagged(&evaluation), ["s6", "s7", "s8", "s9"]);
+        assert!(evaluation.findings()[0].message.contains("2 (2), 3 (2)"));
+    }
+
+    #[test]
+    fn an_unreadable_number_withholds_the_gap_it_could_fill() {
+        let evaluation = check(spaces().unreadable("s2"), vec![("gap_free", boolean(true))]);
+        assert!(
+            evaluation
+                .findings()
+                .iter()
+                .all(|finding| finding.object_id().unwrap().local_id != "s3"),
+            "{:?}",
+            findings(&evaluation)
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s2".to_owned(), NotEvaluatedReason::BackendUnavailable),
+                ("s4".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("s5".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("s3".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+        // Storey 2 is unaffected.
+        assert_eq!(flagged(&evaluation), ["s8"]);
+    }
+
+    #[test]
+    fn a_missing_service_leaves_every_object_unevaluated() {
+        use axioval_engine::RuleCapability;
+        let project = axioval_ir::Project::new(vec![
+            axioval_ir::Object::new(common::id("s1"), "space"),
+            axioval_ir::Object::new(common::id("s2"), "space"),
+        ])
+        .unwrap();
+        let services = axioval_engine::ServiceRegistry::new();
+        let evaluation = NumberingConsistency.evaluate(
+            &axioval_engine::RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &rule(
+                ID,
+                kind("space"),
+                vec![
+                    ("property", property(Some(ATTR), "Name")),
+                    ("pattern", string(r"B-(\d+)")),
+                    ("gap_free", boolean(true)),
+                ],
+            ),
+        );
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s1".to_owned(), NotEvaluatedReason::MissingService),
+                ("s2".to_owned(), NotEvaluatedReason::MissingService),
+            ]
+        );
+    }
+
+    #[test]
+    fn declarations_that_check_nothing_or_capture_no_number_are_refused() {
+        for extra in [
+            vec![],
+            vec![("gap_free", boolean(false))],
+            vec![("gap_free", boolean(true)), ("pattern", string(r"B-\d+"))],
+            vec![
+                ("gap_free", boolean(true)),
+                ("pattern", string(r"(B)-(\d+)")),
+            ],
+            vec![("prefix_length", integer(0))],
+            vec![("gap_free", boolean(true)), ("pattern", string("["))],
+        ] {
+            let evaluation = check(spaces(), extra);
+            assert!(evaluation.findings().is_empty());
+            assert_eq!(
+                unevaluated(&evaluation),
+                [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+            );
+        }
+    }
+}
+
 mod manual {
     use super::*;
 
     #[test]
-    fn every_selected_object_carries_the_instruction() {
-        let model = Model::default().object("x", "stair").object("y", "wall");
+    fn one_finding_names_every_selected_object() {
+        let model = Model::default()
+            .object("x", "stair")
+            .object("y", "wall")
+            .object("z", "stair");
         let evaluation = model.evaluate(
             &ManualIssue,
             &rule(
@@ -550,6 +875,30 @@ mod manual {
                 "Safety: Check handrail height: Measure on site.".into()
             )]
         );
+        assert_eq!(evaluation.findings()[0].related.len(), 1);
+        assert_eq!(evaluation.findings()[0].related[0].local_id, "z");
+    }
+
+    /// The check is owed even when nothing matches: it is raised once for
+    /// the project, never silently dropped.
+    #[test]
+    fn an_empty_selection_still_owes_the_check_at_project_level() {
+        let model = Model::default().object("y", "wall");
+        let evaluation = model.evaluate(
+            &ManualIssue,
+            &rule(
+                "axioval:capability.manual-issue",
+                kind("stair"),
+                vec![("title", string("Check handrail height"))],
+            ),
+        );
+        assert_eq!(evaluation.findings().len(), 1);
+        let finding = &evaluation.findings()[0];
+        assert_eq!(finding.scope, axioval_ir::Scope::Project);
+        assert_eq!(
+            finding.message,
+            "Check handrail height (no object matches the selection)"
+        );
     }
 }
 
@@ -563,6 +912,7 @@ fn every_new_capability_is_a_builtin() {
         "related-count",
         "relative-count",
         "name-sequence",
+        "numbering-consistency",
         "manual-issue",
     ] {
         assert!(

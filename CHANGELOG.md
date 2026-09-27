@@ -6,6 +6,1205 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Escape routes: multiplied sections and passage widths.**
+  `escape-route` takes a `sections` table (`objects`, `factor` of at least
+  one, optional `shared_by` and `label`): a metre walked on those objects
+  counts `factor` times, and with `shared_by` only where at least that many
+  checked spaces reach the section along `section_path`. Metric routing
+  answers the plain walk, so the multiplied travel is bracketed between the
+  plain walk's lower bound and its upper bound times the largest factor of
+  a section the walk may cross; a section whose horizontal distance from
+  the start surely exceeds that bound is left out. Travel within the
+  maximum only unmultiplied is not evaluated, never a pass. With
+  `passage_selector`, passages (reached along `passage_path`, or the space
+  itself) must be as wide as the new `widths` column `passage_width` for
+  the summed load of every checked space relying on them: a stated
+  `passage_width_property` decides both ways, the shorter side of the
+  least-area rectangle enclosing the footprint only a failure, and a space
+  of unknown load leaves the passage not evaluated. Exit door opening
+  direction stays open (openbimrs/ifc#148). **Breaking:** definitions bound
+  to `escape-route` must declare the new optional parameters `sections`,
+  `section_path`, `passage_path`, `passage_selector` and
+  `passage_width_property`, and the new `widths` column `passage_width`.
+  (#79)
+
+- **Stair and ramp widths, landings and headroom below.** (Refs #85) A
+  `Tread` and a `SlopedRun` may carry the positions of their sides across
+  the walking direction (`with_sides`, along `across`), stated only where
+  the surface fills that rectangle; `TreadFlight::width` is the narrowest
+  tread's. `WalkingSurfaceService::measure_landing` answers a
+  `LandingRequest` (subject, `WalkingEnd`, the candidates a rule selects)
+  with `LandingEvidence`: the direction leaving the end, its arrival line
+  (the first riser, the last riser, a run's end) and the `Landing` a
+  candidate's level surface carries there, with its far side and sides
+  when it is a rectangle, so depth and width are derived as sure intervals.
+  `measure_clearance_below` answers a `ClearanceBelowRequest` with the
+  least height of the subject's underside above the floors of the spaces a
+  rule selects, leaving out where it rests on them. Both default to a
+  refusal. `AxiolidWalkingSurfaceService` proves rectangles from the
+  boundary edges of the faces and their area, finds one landing surface
+  per end within `LANDING_REACH` (several are refused, never merged; a
+  ramp may carry its own landings, a flight's top tread is no landing) and
+  measures the clearance below with a numerical margin, never exactly.
+  `stair-geometry` and `ramp-geometry` take `width_minimum` and
+  `width_maximum` (the flight's or each run's width), `landing_objects`
+  with `landing_depth_minimum`, `landing_width_minimum` and
+  `landing_at_least_walking_width` (the landing at least as deep and wide
+  as the flight or run), and `minimum_headroom_below` with
+  `headroom_below_spaces`; `stair-geometry` also takes `landings_required`
+  (a selected slab or landing meets both ends). A landing that fills no
+  rectangle, or an end the selection leaves undecided, is not evaluated.
+  **Breaking:** definitions bound to `stair-geometry` must declare the nine
+  new optional parameters, those bound to `ramp-geometry` the eight.
+  Handrails, doors on ramp landings, free space at a ramp's ends, a stair
+  near a ramp, winders and open risers remain open.
+- **Surface transparency.** `axioval:presentation.Transparency`
+  (`axioval_ir::PRESENTATION_TRANSPARENCY`) lists every distinct
+  transparency of an object's styled body surfaces, ascending, from `0.0`
+  (opaque) to `1.0`, so a selector can leave see-through objects out of a
+  view's blockers: `not` `Transparency` `greaterThanOrEquals 0.5` with
+  `quantifier: all` keeps opaque and unstyled objects and drops glazing.
+  The IFC adapter reads it through `ifc-style` 0.3.0: an item's own
+  `IfcStyledItem`, else its `IfcPresentationLayerWithStyle`, is
+  authoritative; mapped representations are followed; an item with no
+  surface style of its own is drawn with the styles of its object's
+  material (`IfcMaterialDefinitionRepresentation`). An unset
+  `Transparency` is opaque, as the schema states. An object without a
+  styled surface is exactly absent; a surface style without shading, and
+  two styled items on one item, are refused; the material fallback in
+  IFC2X3 waits on openbimrs/ifc#77. (#71)
+- **Footprints with their own axes.** `PlanSpanService::measure_rectangle`
+  answers the rectangle of least area enclosing a footprint as a
+  `PlanRectangle`: centre and radius, two unit axes and how far they may be
+  turned, and the half extents as intervals. `RectangleOrientation` says
+  whether the axes are the footprint's own (`Unique`), one of several
+  least-area orientations (`Tied`) or unproven on a tessellation;
+  `width_and_length` answers only for a unique orientation, `long_axis`
+  also needs one side surely longer (a square has none), and
+  `long_axis_angle` bounds the acute angle between two long axes. The
+  default refuses. The Axiolid service measures it with the overlay's exact
+  rotating calipers (axiolid-overlay 0.3.2, now the workspace's minimum),
+  widened by the kernel's rounding bound, and exactly from the extreme
+  coordinates when the rectangle lies along the coordinate axes.
+  `PlanAreaService::measure_outside_bands` measures a footprint's area
+  outside a set of `PlanBand`s, each the convex hull of two footprints cut
+  to the stretch along a direction that both reach; the default refuses,
+  and the Axiolid service brackets each computed cut inwards and outwards
+  and refuses a band bounded by a tessellated footprint. (#87, #61)
+- **Parking bays.** `parking-bay` checks each selected bay along its own
+  axes, never its bounding box: `min_width`, `max_width`, `min_length`,
+  `max_length`, `min_height` and `max_height`; with `aisles`,
+  `orientation` (`parallel`, `perpendicular` or `angled`) and
+  `angle_tolerance`, its long axis against an aisle within `aisle_reach`;
+  with `obstacles`, `obstruction_reach`, `end_obstructions` and
+  `side_obstructions` (`none`, `one`, `both`), how many ends and sides
+  objects within reach obstruct, from their extents along the bay's axes.
+  A bay turned 45 degrees whose box is long enough but which is itself too
+  short is found. A bay without a unique orientation, or a square one
+  where its ends matter, is not evaluated. (#87)
+- **Wall spacing.** `wall-spacing` judges the parallel walls or beams a
+  storey reaches along `member_path`: pairs whose long axes lie within
+  `angle_tolerance` of parallel and that face each other must stand at
+  least `minimum` apart in plan, and with `maximum`, `footprints`,
+  `footprint_path` and `uncovered_above`, the bands between pairs at most
+  `maximum` apart must cover each footprint object up to that area. Sure
+  and possible pairs bound the uncovered area from above and below. (#61)
+- **Axis-compatible counterparts.** `counterpart-coverage` takes an
+  optional `axis_tolerance`: only counterparts whose long axis lies within
+  it of parallel to the element's count, one surely at another angle is
+  left out, and one whose angle or axes are undecided is a possible cover
+  only. **Breaking:** definitions bound to `counterpart-coverage` must
+  declare the new optional parameter `axis_tolerance`. (#63)
+- **Containment and cover.** The new capability `containment` checks that
+  the selected inner elements (columns, reinforcement) lie in
+  `counterparts` (walls, concrete bodies): their certified shared volume is
+  at least `minimum_volume_ratio` of the smaller body's, judged on the
+  interval, and with `combine_adjacent` outer elements whose surfaces meet
+  count together, the combined volume bounded by inclusion and exclusion. A
+  `cover` table bounds the signed distance from the inner body to one class
+  of the outer element's faces (`top`, `side`, `bottom`, `any`) from
+  `inside` (a cover) or `outside` (a protrusion) between a minimum and a
+  maximum; `minimum_count` and `maximum_count` bound the inner elements per
+  outer element, and `report_orphans` reports one lying in none. Undecided
+  containments, straddling intervals and counts the undecided elements
+  could change are not evaluated. The proximity contract gains
+  `measure_face_distance` (`FaceDistanceRequest`, `FaceClass`,
+  `FaceDistanceEvidence`, `FaceDistanceError`), a signed distance positive
+  inside the host and negative outside, refused by default; the Axiolid
+  adapter answers it exactly for a body wholly inside an exact planar host
+  and with sound bounds otherwise, refusing a tessellated or open host. (#59)
+- **Intersection volume and a volume tolerance.** `ProximityEvidence`
+  carries an optional `IntersectionVolume`: the certified volume two closed
+  bodies share and each body's own, as `VolumeInterval`s
+  (`with_intersection_volume`, `intersection_volume`,
+  `ratio_of_smaller`). The Axiolid adapter measures it with
+  `axiolid-inspect`'s certified volume integrals, exactly zero for bodies
+  apart, unmeasured for open or refused meshes, and widened for a
+  tessellation by the volume within its chord deviation. `clash` and the
+  `clash-matrix` cells take `volume_tolerance_cubic_metres`: an
+  intersection counts only when its shared volume exceeds it, a straddling
+  or unmeasured volume leaving the pair not evaluated. **Breaking:**
+  definitions bound to `clash` must declare the new optional parameter, and
+  `clash-matrix` definitions the new optional `cells` column. (#57)
+
+- **Escape routes.** The new capability `escape-route` checks each space
+  against the first row of a `uses` table whose `spaces` selector picks it:
+  `maximum_travel` from the farthest point of its walkable area
+  (`route_start: farthest-point`, the default) or from each of its doors
+  (`door`, through `door_path` and `door_selector`) to the nearest exit,
+  the number of `exits`, and, with `area_per_occupant`, exit widths for
+  the occupant load (footprint over area per occupant, rounded up) from a
+  `widths` table (`occupants`, `width` per exit, optional `total_width`).
+  Exits are the `exit_selector` objects `exit_path` reaches, as for
+  `exit-separation`. Widths are stated clear widths
+  (`clear_width_property`); without one, an exit whose whole footprint is
+  narrower than required is a finding and anything else is not evaluated.
+  Travel follows a point's walking line (`walking_height`,
+  `walking_step`) and is bounded through the sure exits from above and
+  every possible exit from below; part of a space that reaches no exit is
+  a finding. Stair and shared-section multipliers, passage widths and exit
+  door opening direction (door leaves, openbimrs/ifc#148) are not checked.
+  (#79)
+- **Nearest targets and farthest points in metric routing.**
+  `MetricRoutingService` gains `nearest_target` (`NearestTargetRequest`,
+  `NearestTargetOutcome`: the distance from one point to the nearest of
+  several targets, or complete evidence that none is reachable) and
+  `farthest_point` (`FarthestPointRequest`, `FarthestPointOutcome`: a
+  certified interval on the largest distance from any point of a region to
+  its nearest target, with a witness point and convergence against a
+  tolerance, or a point of the region no target reaches). Both default to a
+  refusal; the handle binds every answer to its request.
+  `AxiolidMetricRoutingService` answers them with one `axiolid-route`
+  distance map per query: targets may stand in a portal, so exit doors
+  (also to the outside) are targets; the upper bound holds on any level and
+  the lower bound and unreachable verdicts need a closed one with every
+  target placed; farthest points are for a point body only.
+  `space-distance` now walks with two nearest-target queries (sure and
+  possible destinations) instead of one route per pair, so a body sweep is
+  proven to one destination only. **Breaking:** `MetricRoutingError` gains
+  `NoTargets`, `InvalidTolerance` and `InconsistentResponse`; the workspace
+  requires `axiolid-route` 0.3.2. (#79)
+- **Floating clearance volumes and size modes.** `component-clearance`
+  takes `slide_from` and `slide_to`: the volume floats and is free when it
+  is free at some offset between the two across the side. It is decided by
+  the placement search in the spaces `space_path` reaches, with a
+  frame-offset domain anchored on the component where `align` and
+  `lateral_offset` put the volume and the obstacle band from its base up by
+  its height; a witness for the volume grown by its position interval
+  passes, a proof that the shrunk volume fits at no offset is a finding
+  relating the spaces, anything else is not evaluated. `size_mode`
+  (`minimum`, the default, `maximum` or `fixed`) and `size_tolerance`
+  bound the size: a minimum is checked less the tolerance, a maximum is
+  exceeded when the volume one tolerance larger in any one dimension is
+  free, fixed or floating. The largest fitting volume is not measured.
+  **Breaking:** definitions bound to `component-clearance` must declare the
+  new optional parameters `slide_from`, `slide_to`, `size_mode` and
+  `size_tolerance`. (#83)
+- **Passing spaces on accessible routes.** `accessible-route` takes
+  `passing_width_metres`, `passing_length_metres`,
+  `passing_spacing_metres` and `passing_reach_metres`: every proven route
+  must offer a free box that size, `clear_height_metres` high, at most every
+  `passing_spacing_metres` along it, its ends counting as passing spaces.
+  The route is the metric-routing polyline between the start's and the
+  destination's representative points; it is searched in tiles no longer
+  than half the spacing, segment by segment, with frame-offset placement
+  domains anchored on the segments in the route spaces it crosses. A
+  witness in every interior tile passes, a run of tiles proven empty longer
+  than the spacing is a finding relating the start, and anything else is
+  not evaluated, as is a destination without the metric-routing, plan-span,
+  vertical-extent or free-space service. **Breaking:** definitions bound
+  to `accessible-route` must declare the four new optional parameters.
+  (#77)
+- **Free floor space options.** `free-floor-circle` and
+  `free-floor-rectangle` take an `obstacles` selector (default: every other
+  object, as before), an elevation band `band_from_metres` /
+  `band_to_metres` above the floor in which obstacles count (default: the
+  floor up by `height_metres`), and a `merge_path` whose spaces are searched
+  together with the selected one, such as a derived
+  `overlapping-group-space` or a stated grouping. An obstacle the selection
+  cannot decide can only keep a proof of absence open: the proof is asked
+  again without it and stands only if it still holds. Merged spaces are
+  never obstacles, are related to the finding, and make the request
+  unconstrained instead of supported by one space. `PlacementRequest`
+  gains `with_band` (`ElevationBand`) and `with_merged_scopes`; a
+  frame-offset anchor may be grounded on another object than the scope,
+  such as a door, and `FrameOffsetPlacement::contains_frame` is public. The
+  Axiolid placement search clips obstacles to the band, searches the union
+  of merged scopes on one floor, and answers frame-offset domains: the
+  configuration space intersected with the box of admitted offsets, exact
+  for fixed orientations, with absence proven against the box grown by
+  1 µm. Its witness search now also tries slab midpoints, so a free region
+  around a column is no longer refused. A free corridor width is left out:
+  deciding whether an eroded region connects two sides is not sound yet.
+  **Breaking:** definitions bound to either capability must declare the
+  new optional parameters `obstacles`, `band_from_metres`,
+  `band_to_metres` and `merge_path`; `FreeSpaceError` gains
+  `InvalidElevationBand` and `MergedScopeConflict`; a frame-offset anchor
+  grounded on another object is no longer refused as
+  `PlacementScopeMismatch`. (#84)
+- **Shelf capacity measures a real layout.** `shelf-capacity` no longer
+  bounds shelving by the footprint's bounding box with a lower bound of zero,
+  which no room could pass. The Axiolid adapter lays parallel bands
+  `shelf_depth_metres` deep across the footprint, a band against a wall, an
+  aisle `horizontal_spacing_metres` wide, two bands back to back, and so on,
+  each band served by the aisle along one side; a band carries shelving where
+  its whole depth lies on the floor outside every door clearance and its
+  aisle on the floor. A door's swing is unknown, so its clearance is every
+  point within `door_clearance_metres` of its footprint, measured from the
+  room's side of the wall. Bands run along both axes of the footprint's and
+  every door's least-area rectangle, anchored at either wall, and the
+  longest layout counts, stacked in whole tiers up to the lower of the top
+  elevation and the clear height. The interval holds the layout's length on
+  the true geometry, so a compliant room passes: a 6 × 4 m room with one 1 m
+  door holds 84 m in the documented arrangement. A space whose clear height
+  lies below `top_elevation_metres` is a new finding, `space too low for the
+  shelving`. Doors and openings are the rule's selection: `access_path`
+  (required), `door_selector`, `opening_selector` and `space_selector` read
+  them as `space-connection` does (`axioval:derived.adjacent-space`, or a
+  stated relationship), and they travel in the request. Findings take the
+  rule's severity and relate the doors. **Breaking:** definitions bound to
+  `shelf-capacity` must declare the four new parameters, `access_path`
+  required; `horizontal_spacing_metres` is now the aisle between bands, not
+  the pitch of uprights, and `door_clearance_metres` the clearance's reach,
+  not wall length per doorway. `AxiolidGeometry::with_doorways` and
+  `doorway_count` are removed, and the CLI no longer counts doorways from
+  space boundaries; `LinearQuantityRequest` gains `with_doors` and `doors`,
+  `LinearQuantityEvidence` `with_clear_height` and `clear_height`, and
+  `AxiolidLinearQuantityService` takes opening voids. The bands follow the
+  same least-area rectangles `measure_rectangle` answers; any orientation,
+  tied or unproven, only proposes a layout. (#55)
+- **Building envelope: recesses and light wells.** `recess-width` requires
+  every recess of a footprint, a pocket between its outer boundary and its
+  convex hull, to be as wide at its mouth as the first row of a
+  `requirements` table keyed by depth demands (`minimum_depth_metres`,
+  `maximum_depth_metres`, `minimum_width_metres`,
+  `minimum_width_per_depth`). The convex hull is the reference because it is
+  orientation-free and each of its pockets is a genuine indentation; a
+  minimum-area rectangle would also report the corners of a trapezoidal room.
+  `light-well` judges the spaces `member_path` reaches from each well: no
+  vertical gap above `gap_tolerance_metres`, a shared plan section (the
+  intersection of their footprints) that is not empty, and that section's
+  area and width, the short side of its least-area rectangle, against the
+  first row of `requirements` whose `maximum_height_metres` the well's
+  height does not exceed. `PlanSpanService` gains `measure_recesses`
+  (`PlanRecesses`, `PlanRecess`) and `measure_section` (`PlanSection`), both
+  refused by default; the Axiolid adapter measures them on exact footprints
+  and refuses tessellated ones. A section's sides come from the same
+  least-area rectangle as `PlanRectangle` and only for a unique orientation:
+  a tied section is refused and its well not evaluated. Adjacency to a wall declared external is a
+  `distance` rule (`counterparts` the walls with `IsExternal` true,
+  `nearest`, `horizontal`, `maximum_metres`), documented with an end-to-end
+  test; it needs no capability of its own. (#67)
+- **Component visibility.** `component-visibility` requires targets within
+  a `radius` of an eye `eye_height` above each component's base, over its
+  footprint centre, to be in view past the `blockers` selection: at least
+  `minimum` of them (`mode: at-least`, default 1) or none (`mode: none`).
+  The new line-of-sight contract (`SightService`, `SightServiceHandle`,
+  `SightRequest`, `SightEvidence`, `SightOutcome`) answers `Visible` with a
+  witness point, `Hidden` with the occluders, which must be requested
+  blockers, or `Undecided`, and bounds the distance to the target so a
+  target surely beyond the range is not looked at. The Axiolid adapter
+  (`AxiolidSightService`) answers with the kernel's certified
+  `line_of_sight`: a target covered only where two separate blockers meet
+  stays undecided, and tessellated targets in range or blockers that may
+  matter refuse. Undecided targets, straddling distances and undecided
+  blockers decide only what they cannot change. The CLI registers the
+  service with `--geometry`. See-through blockers are left out by the
+  `blockers` selection, through `axioval:presentation.Transparency`. (#71)
+- **Effective coverage.** `effective-coverage` requires the union of the
+  `sources`' effect areas, clipped to each element's footprint, to cover at
+  least `minimum_ratio` of it. An effect reaches `range` as `mode` says:
+  the source's footprint grown (`grown`), grown but only for sources
+  touching the element within `touch_tolerance` (`touching`), the points
+  within that travel distance of the source's centre (`travel`), or the
+  points its centre sees (`visible`), travel and sight going round the
+  `blockers`' footprints. With `capacity_property` and
+  `capacity_multiplier`, the summed property of the sources reaching the
+  element times the multiplier must also reach its area. The plan-area
+  contract gains `measure_coverage` (`CoverageRequest`, `Participant`,
+  `EffectReach`, `CoverageEvidence`, `EffectMeets`; the default refuses): the
+  covered area is an interval from the certain sources' inner bounds to
+  every source's outer bound, whole when an effect cannot be measured, and
+  each source's effect is reported as meeting the footprint surely,
+  possibly, not or unmeasured. The Axiolid adapter dilates footprints with a
+  stated side (`Region::dilate_inner`, `dilate_outer`), cuts the exact
+  visibility polygon to discs inscribed in and circumscribing the range, and
+  judges convex cells of the free region by the kernel's travel-distance
+  map. Uncertain sources raise only the upper bound, uncertain blockers
+  narrow only the lower. Effects propagating into connected spaces and an
+  area taken from a property wait. (#72)
+- **Above or below in vertical distances.** `distance` takes a
+  `vertical_direction` (`either`, the default, `above` or `below`) with the
+  `vertical` projection, so a rule can require a sprinkler at most 0.5 m
+  below the ceiling (`nearest`, `maximum_metres` 0.5, `above`) or nothing
+  above within 2 m (`none_closer_than`, `above`). A counterpart is above
+  unless it lies lower at both ends of its vertical extent, below unless it
+  lies higher at both; the distance is the one-sided gap, zero when the
+  extents overlap. `ProximityProjection::Vertical` carries a
+  `VerticalDirection`; `projected_candidate_pairs` prunes each direction by
+  its one-sided box gap and drops counterparts whose box lies wholly on the
+  other side, keeping a pair when either orientation the groups allow
+  qualifies. The Axiolid adapter measures directions exactly on planar
+  meshes and leaves the side open where a tessellated end lies within the
+  combined chord deviation of the subject's. **Breaking:** definitions bound
+  to `distance` must declare the new optional parameter
+  `vertical_direction`; `ProximityProjection::Vertical` gains the
+  `direction` field, so code constructing or matching it must name it. Door
+  swing footprints as distance sources wait on door leaves
+  (openbimrs/ifc#148). (#60)
+- **Report tables.** A report carries named tables of measured values
+  beside its findings (`Report::tables`, `axioval_ir::ReportTable`): per
+  rule, typed columns (`quantity` with its SI dimension, `number`, `text`)
+  and one row per scope, keyed like findings (`object_id`, `source`, or
+  neither for the project), with `exact`, `interval` or `unknown` numbers
+  and text. Tables are ordered by rule and name, rows by scope; names,
+  row widths and values are validated when built and when read. The
+  field is omitted when empty, so a report without tables serializes byte
+  for byte as before. Capabilities add tables with
+  `CapabilityEvaluation::push_table`; the runtime binds each to its
+  compiled rule and fails the run (`EngineError::DuplicateReportTable`)
+  when a rule reports one name twice. `level-spacing` reports `levels`
+  (`elevation`, `height`) and, with `space_selector`, `spaces` (`level`,
+  `height`, `level_height`); `plan-area` reports `areas` (`plan_area` or
+  `facade_area`); `area-ratio` reports `ratios` (`numerator_area`,
+  `denominator_area`, `ratio`). They report every measured value, passing
+  or not, and need no new parameter. `axioval report` summarizes each
+  table as a group (rows, columns, example objects) and lists its rows
+  with `--section tables`, filtered by `--rule` and `--object`; BCF export
+  ignores tables. Space height against its storey's height stays with
+  `level-spacing` (`space_selector`), now visible per space in `spaces`.
+  **Breaking:** `Report` gains the public field `tables`, so a struct
+  literal must set it; `EngineError` gains a variant; a report containing
+  tables needs a reader of this version, since older readers reject the
+  unknown field. (#56)
+
+- **Accessible route.** `accessible-route` requires each selected
+  destination to be reachable from a start point through the route spaces
+  for a mobility profile (`width_metres`, `clear_height_metres`), through
+  the selected portals and the lifts, ramps and stairs selected by kind.
+  Portals must be at least `door_width_metres` wide, ramps and stairs
+  `ramp_width_metres` and `stair_width_metres`, read from
+  `clear_width_property` where the model states them and from the
+  geometry's upper bound otherwise; `forbid_stairs` (the default) makes a
+  room reached by stairs only a finding. A proven route passes, a proven
+  block is a finding that relates the blocking doors, stairs or rooms, and
+  anything else is not evaluated. Stated door widths go into the
+  walkability request, so a model that states them lets the geometry prove
+  a door passable. (#77)
+- **Rule judgement of walkable passages.**
+  `WalkabilitySnapshot::route_between_admitting` routes with a
+  `PassageAdmission` (`Admitted`, `Undecided`, `Refused`) per passage on
+  top of its width, and `blocking_passages` returns the cut of passages
+  that blocks an unreachable route. `WalkabilityRequest::with_stated_clear_widths`
+  carries clear widths a rule reads from its source; `AxiolidWalkabilityService`
+  treats them as host-stated ones (the narrower wins) and bounds even an
+  opening's crossing by them. `WalkabilityError` gains
+  `InvalidStatedClearWidth`; matching it exhaustively is a breaking change.
+  (#77)
+- **Door clear widths in `keyed-limit`.** The new `quantity` `clear-width`
+  limits a door's clear width per door type: the length
+  `quantity_property` states, else, when that is exactly absent, the length
+  the new parameter `overall_width` states (with IFC,
+  `axioval:attributes.OverallWidth`) less the new `width_deduction`, a
+  non-negative length the rule states for frame and lining. The deduction
+  is the rule author's declared approximation: the finding says so and cites
+  the inexact evidence entry
+  `axioval:derived.clear-width:<door>:step=overall-width-less-deduction;deduction=<metres>`.
+  A stated value that is null, not a length or not positive, an absent
+  overall width and a deduction leaving no width are not evaluated, never
+  replaced by the next step. Widths are read as the decimals they display,
+  so a 1 m door less 0.1 m meets a 0.9 m minimum. The capability model's
+  new "Doors" section maps every door-accessibility sub-check to a rule:
+  clear width, threshold height and glazing ratio as stated values, the
+  distance between doors through `distance` (`none_closer_than`,
+  `horizontal`), and the clear areas beside the leaf and the opening
+  direction as not yet decidable (door leaves, openbimrs/ifc#148; lining
+  and panel properties, openbimrs/ifc#149; rectangles fixed to the door,
+  #18). **Breaking:** definitions bound to `keyed-limit` must declare the
+  new optional parameters `overall_width` and `width_deduction`. (#82)
+- **Distances and connections between spaces.** Two capabilities.
+  `space-connection` checks each space against the rows of a `connections`
+  table whose `from` selector picks it: direct access to a space `to` picks
+  `allowed`, `required` or `forbidden`, through `any` door or opening, only
+  `doors` or only `openings`, and a direct exit to the outside likewise.
+  `space-distance` checks the nearest destination a row of its `distances`
+  table names (`to`, optionally on the same storey and with direct access)
+  against a `minimum` and a `maximum`, in a straight line between the
+  footprints' centroids or walking the metric route between them. Doors
+  (`door_selector`) and openings (`opening_selector`) reach their spaces
+  through `access_path`: with `axioval:derived.adjacent-space` two spaces
+  must lie on opposite faces and a face entering no space is the outside;
+  a stated relationship such as `IfcRelSpaceBoundary` connects spaces but
+  cannot show an exit. A walk starts at a space's centroid on its floor and
+  refuses a space whose centroid lies outside its footprint. Everything is
+  three-valued: an element of undecided type or unreadable spaces, a refused
+  route or an undecided destination leaves only what it could change not
+  evaluated; a blocked route is no destination. Each pair is routed on its
+  own until a many-target search exists (axiolid/kernel#186). (#80)
+- **Footprint centres.** `PlanSpanService::measure_centre` (default: refuse)
+  returns a `PlanCentre`: the centroid the `centres` span measures from, the
+  radius the true one lies within, and a `CentrePlacement` (`Inside`,
+  `Outside`, `Undecided`); the handle refuses a centre of another object.
+  `AxiolidPlanSpanService` places it against the measured footprint, off
+  every edge by more than its radius plus the chord deviation. (#80)
+- **Free space around components.** The new capability
+  `component-clearance` requires a fixed box (`width`, `depth`) or cylinder
+  (`radius`), `height` high, on a stated `side` (`front`, `back`, `left`,
+  `right`, optionally `both_sides`) of each selected component, placed in
+  its placement frame. The rule states which axis is the front
+  (`front_axis`: `forward`, `-forward`, `right`, `-right`, or `stated` for a
+  front the source states); none is inferred. The volume starts at the
+  component's outermost point on that side plus `offset`, is centred on it
+  or flush with an edge (`align`, `lateral_offset`), and rises from the
+  floor of the spaces `space_path` reaches or the component's bottom or top
+  (`height_reference`, `vertical_offset`). `obstacles` less
+  `allowed_intruders` may obstruct it; `protrusion` lets them reach that far
+  in through any plan side; `within_space` also requires its plan inside the
+  (merged) spaces. Measured positions are intervals: the union of every
+  position must be clear, or their common part obstructed, otherwise the
+  side is not evaluated; undecided obstacles can only obstruct. A sliding
+  (floating) volume waits for the placement search. (#83)
+- **Clearance containment.** `FreeSpaceService::assess_containment` answers
+  a `ContainmentRequest` (a clearance frame and shape and the scopes it must
+  lie in) with `ContainmentOutcome::Inside` or `Outside`, exact and bound to
+  the request; the default implementation refuses. `AxiolidFreeSpaceService`
+  implements it from the overlay difference of the footprint's bounds less
+  the scopes' footprints, refusing a cylinder whose band straddles a scope
+  boundary and a scope without a mesh or tessellated. The clearance frame's
+  origin is documented as the centre of the volume's base. (#83)
+- **Walkability and metric routing from geometry.** `axioval-axiolid` now
+  implements both contracts, and `--geometry` registers them.
+  `AxiolidWalkabilityService` builds a region per selected surface (its floor
+  footprint minus the obstacles' parts inside the headroom band) and two per
+  selected entrance, one per face. A portal crossing's width is at most the
+  longest free interval of its mid-line (and a stated clear width), so a door
+  narrower than the route width makes the route `Unreachable` with complete
+  evidence; a crossing is definite only when a sweep of the body from
+  landing to landing is proven inside the free region with exact booleans
+  and the leaf and lining admit it (a bodiless opening, or a door whose clear
+  width the host states). `AxiolidMetricRoutingService` routes on the
+  origin's level over host-declared surfaces, portals and connectors, every
+  other body obstructing between the maximum step and the clear height: a
+  proven sweep gives `Reachable` with its length as the upper bound and the
+  exact point shortest path (narrow portals cut) as the lower bound; a level
+  that the points or narrow portals separate, with no vertical connector
+  touching it, is `Blocked`. A gap narrower than the body inside a room is
+  refused rather than reported blocked until one-sided erosion is published
+  (axiolid-overlay 0.3.1). The CLI declares every `IfcSpace` a surface,
+  every `IfcDoor` and opening element a portal and every stair, ramp and
+  transport element a connector, and states no clear widths. Passage and
+  route evidence cites the measured object's own source, so it stays right
+  with several models; both services are bound to every snapshot. New
+  dependency:
+  `axiolid-route` 0.3.0. (#76)
+- **Typed vertical connectors.** `VerticalConnector` pairs an object with a
+  `VerticalConnectorKind` (`Lift`, `Ramp`, `Stair`);
+  `WalkabilityRequest::with_connectors` selects them and
+  `VerifiedWalkablePassage::with_connector` marks a climb, which the snapshot
+  accepts only for a requested connector of the same kind.
+  `WalkabilitySnapshot::route_between_avoiding` routes without the forbidden
+  kinds, so a stairs-only connection is `Unreachable` once stairs are
+  forbidden. `WalkabilityError` gains `ConflictingConnector`,
+  `PortalConnectorPassage`, `ForbiddenConnectorPassage` and
+  `Unavailable(String)` (a backend refusal); matching it exhaustively is a
+  breaking change. (#76)
+- **Clash matrix.** The new capability `clash-matrix` judges each candidate
+  pair with the tolerance profile and severity of one row of its `cells`
+  table. A cell keys both sides of the pair (`subject_*`, `counterpart_*`)
+  by a pattern over the discipline the object's source plays, patterns over
+  the text properties `key_1` to `key_3` name, and a selector (an entity
+  class), and gives `clash`'s tolerances and class switches as columns, with
+  an optional `severity` and `label`. The single most specific cell applies:
+  the one keying the most categories, then the one with the most literal
+  pattern characters; cells cover a pair either way round unless
+  `symmetric` is false. Tied cells or an unreadable category leave the pair
+  not evaluated; a pair no cell covers is ignored or, with
+  `report_unmatched`, reported. Same-system exclusion is on by default and
+  needs `system_path` (or `exclude_same_system: false`); same-layer
+  exclusion is off by default; `exclude_paths` works as for `clash`. The pair
+  judgement, measurement and exclusions are shared with `clash`, so a cell
+  means exactly what a `clash` rule with its values means. (#58)
+- **Clash classes, axis tolerances and pair exclusions.** `clash` now puts
+  each pair in one class: a **duplicate** (the two surfaces lie within
+  `duplicate_tolerance_metres` of each other, default zero), one body
+  **inside** the other, or an **intersection**, which counts only when its
+  extent exceeds `horizontal_tolerance_metres` along both plan axes and
+  `vertical_tolerance_metres` in height. `report_duplicates`,
+  `report_containment` and `report_intersections` switch each class off; a
+  switched-off class is not reported as another. `exclude_paths` skips pairs
+  whose objects reach a shared target, or each other, through a relationship
+  path (`IfcRelAssignsToGroup:backward` for the same system,
+  `IfcRelAggregates:backward` for the same parent element, a port path for
+  connected elements), and `exclude_same_layer` pairs on a shared
+  presentation layer. Every comparison is on an interval: a straddling
+  tolerance or an exclusion that cannot be decided leaves a pair not
+  evaluated unless it is a finding either way. The contract gains
+  `OverlapExtents` (the intersection's extent along x, y and z as intervals)
+  and the Hausdorff distance between two surfaces on `ProximityEvidence`
+  (`with_overlap_extents`, `with_hausdorff`); `AxiolidProximityService`
+  measures both, witnessing the intersection's vertices from edge crossings
+  and inside vertices and bounding the Hausdorff distance per triangle. The
+  intersection volume, and a volume tolerance, wait on a certified mesh
+  boolean (axiolid/kernel#183). **Breaking:** definitions bound to `clash`
+  must declare the eight new optional parameters; a service that measures
+  no Hausdorff distance leaves touching pairs not evaluated while duplicates
+  are reported. (#57)
+- **Counterpart coverage.** The new capability `counterpart-coverage` checks
+  that each selected element is covered by the objects `counterparts` picks,
+  typically another discipline's elements (a `discipline` selector with an
+  entity type), in plan and in height: the share of its footprint outside
+  the union of the counterparts' footprints grown by the horizontal
+  tolerance, and the share of its vertical extent outside the vertical
+  extents, grown by the vertical tolerance, of the counterparts overlapping
+  it in plan. Coverage declares one `tolerance`, conformity
+  `horizontal_tolerance` and `vertical_tolerance`; a negative tolerance
+  switches its check off. `info_above`, `warning_above` and `error_above`
+  grade the uncovered share into severities. Shares are intervals: one
+  straddling the lowest threshold is not evaluated, and undecided or
+  unmeasurable counterparts leave only a pass standing. Counterparts are not
+  filtered by axis yet. (#63)
+- **Uncovered areas and vertical differences.** `PlanAreaService` gains
+  `measure_uncovered_area`: an object's footprint outside the union of a
+  cover's footprints grown by a stated length, refused by default.
+  `AxiolidPlanAreaService` measures it exactly for planar meshes where the
+  growth is zero or the grown corners lie outside the element, and otherwise
+  brackets the grown disc between an inscribed and a circumscribed 16-gon and
+  widens by the chord deviations. `VerticalExtent` gains `height_metres` and
+  `uncovered_height`, the height of an extent outside a set of grown extents
+  as sure bounds.
+- **Stair and ramp geometry.** (Refs #85) A new `WalkingSurfaceService`
+  (`WalkingSurfaceServiceHandle`) measures a straight stair flight's base,
+  top and treads (elevation, nosing and back edge along the direction it
+  climbs), a ramp's sloped runs, and the headroom above a walking surface to
+  the obstacles a request names. Risers, goings, nosings, rises, run lengths
+  and slopes are derived in the contract as intervals sure to hold the exact
+  value. `AxiolidWalkingSurfaceService` measures exact, closed, outward
+  meshes: treads are upward level faces, the walking direction comes from
+  the treads' centres, runs are planar upward faces flatter than 45°;
+  tessellations, winders and turning flights, flights in several pieces and
+  warped runs are refused. The CLI registers it with `--geometry`. Two
+  capabilities judge it: `stair-geometry` (riser, going, `2r + g`, nosing
+  ranges, riser count, flight rise, riser and going uniformity, headroom)
+  and `ramp-geometry` (`slope_limits` rows of maximum slope with optional
+  maximum run length and rise, equal slopes, headroom). Winders, open
+  risers, headroom under a flight, landing sizes, clear width, handrails and
+  the slab connection remain open.
+- **IDS translation of every facet a capability decides exactly.** (#50)
+  The staging IDS importer (`staging/ids`) now translates entity predefined
+  types (resolved as IDS resolves them: type object first, user-defined
+  element, process and object types, `NOTDEFINED` deferring), attribute,
+  classification, material and part-of facets in the applicability and as
+  requirements, entity requirements for other classes, class patterns,
+  prohibited properties and attributes without a value
+  (`property-requirements` rows excluding `not-empty`, one per enumerated
+  name), prohibited material, part-of and attribute facets
+  (`selector-conformance` with the negated selector), classification
+  requirements through the new `classification` capability (a system
+  alone, patterns, optional and prohibited), material values against
+  `axioval:material.Names`, `totalDigits` and
+  `fractionDigits`, and specification cardinality (`object-count` per
+  source, so a required specification reports a model without applicable
+  objects and a prohibited one a model with any). What no capability
+  decides exactly stays a reported gap: applicability property facets,
+  property name patterns (openbimrs/ifc#78) and enumerations outside a
+  prohibited facet, prohibited property values, material values
+  restricted by several facets at once, applicability classifications
+  without a value or given as patterns, part-of without a relation, through
+  voids and fills, or to a type object, and requirements on a prohibited
+  specification. The buildingSMART corpus runs without a mismatch (126
+  exact passes, 42 sound passes, 80 caught fails). See the new "IDS
+  import" page.
+- **`classification` requirements.** The `classification` capability
+  requires what a `classification` selector cannot state: `systems` and
+  `codes` as literals, `system_patterns` and `code_patterns` as XML Schema
+  patterns, a system alone, `optional` (holds for an object without any
+  classification, must be met by one with any) and `prohibited`. It reads
+  the classification service and decides as the selector does: one
+  assignment meets the system and the code together, a code matches the
+  assigned item or any ancestor, and an assignment without a stated system
+  is not evaluated when it could decide the verdict.
+- **Chained relationship steps.** A `path` step ending in `+`, such as
+  `IfcRelAggregates:backward+`, is taken one or more times, in `related`
+  selectors and every capability that takes a `path`.
+- **Digit limits in `property-value`.** `total_digits` and `fraction_digits`
+  bound a number's digits as XML Schema counts them; a decimal is counted on
+  its shortest round-trip decimal. Text, booleans and dates are an invalid
+  declaration. **Breaking:** definitions bound to `property-value` must
+  declare the two new optional parameters.
+- `axioval_rules::translate_xsd_pattern` exposes the XML Schema pattern
+  translation behind `property-value` for `matches` selectors.
+
+- **Exit separation.** The new capability `exit-separation` requires each
+  selected space's exits, reached through `exit_path` (such as
+  `axioval:derived.adjacent-space:backward`) and filtered by
+  `exit_selector`, to lie at least `fraction` (one half by default) of the
+  space's longest plan diagonal apart, or `flagged_fraction` when the boolean
+  `flag`, read on the space or through `flag_path` (its storey, its
+  building), is true: a third when sprinklered. `separation` measures between
+  closest points (the proximity service's `horizontal` distance), `centres`
+  or `farthest` points; `pairs` `any` (the default) needs one pair far
+  enough apart, `all` every pair; `minimum_exits` makes too few exits a
+  finding. Lengths are intervals: a straddling pair is not evaluated, an
+  unknown flag widens the requirement to both fractions, and an exit the
+  selector cannot decide leaves a verdict it could change not evaluated.
+  (#81)
+- **Plan spans.** A new `PlanSpanService` (`PlanSpanServiceHandle`) measures
+  an object's longest plan diagonal and the centre-to-centre and
+  farthest-point distances between two footprints as `PlanLength`
+  intervals. `AxiolidPlanSpanService` measures them from convex-hull vertices
+  and the overlay centroid of the plan-area footprints, exactly for planar
+  meshes and within a derived bound for tessellated ones; the CLI registers
+  it with `--geometry`.
+- **Model quality checks.** (#74) Three capabilities, mapped per sub-check
+  in the capability docs' "Model quality" section:
+  - `body-extent` measures each object's body along one of its own
+    placement axes (`axis` `right`, `forward` or `up`) and compares it with a
+    stated length (`target_property`, within a `tolerance`) or a
+    `minimum`/`maximum`. With `forward` and the material set's
+    `TotalThickness` it checks a wall's layer thickness against its body.
+    The extent is the whole body's depth along the axis, so it is the
+    thickness only of a straight wall; intervals straddling the target are
+    not evaluated, an absent target is a finding.
+  - `triangle-count` limits the triangles of each object's mesh. The count
+    is of the mesh the host produced, not a source fact; a tessellation of
+    curved faces is counted with approximate evidence and its finding says
+    the count depends on the tessellation.
+  - `same-container` requires an object to lie in the same nearest
+    containers as every counterpart a path reaches from it: a door or window
+    on another storey than its host wall. Undecided containers or
+    counterparts are not evaluated.
+
+  The vertical-extent seam gains `DirectionalExtent`
+  (`measure_directional_extent`, refused by default), which the Axiolid
+  service answers exactly along coordinate axes and as a rounding-widened
+  interval along any other direction. A new `TriangleCountService`
+  (`TriangleCountServiceHandle`) is implemented by
+  `AxiolidTriangleCountService` and registered by the CLI with
+  `--geometry`. Space-boundary coverage stays open: no service measures the
+  boundaries' connection geometry. Door swing direction waits on door
+  leaves (openbimrs/ifc#148).
+- **Model comparison on the command line, with placement, geometry and
+  coordinate-system facets.** `axioval compare --base A.ifc --revised B.ifc`
+  compares two revisions of one model, matched by `GlobalId`, on kind,
+  classifications, relationships, each `--property SET.NAME`, placement and
+  coordinate system, and with `--geometry` each object's measured bounds.
+  Lengths and angles are judged against `--length-tolerance` (default
+  0.005 m) and `--angle-tolerance` (default 0.01°); a tessellated difference
+  straddling the tolerance is undetermined, never rounded. The result has
+  the shape of a check's, so `--report`, `--summary`, `--bcf` and
+  `axioval report` work unchanged, plus a `comparison` field listing every
+  added, removed, changed and incomplete identity with its differences per
+  facet, the counts, unidentified and ambiguous objects, and the coordinate
+  systems. Exit status as for `check`: 0 identical, 3 differences, 4
+  incomplete. Two files with one name become the sources `name@base` and
+  `name@revised`. In `axioval-rules`, `ComparisonRequest` gains
+  `with_placement`, `with_geometry` and `with_coordinate_systems`, each
+  with a `ComparisonTolerance`: placement compares object frames (origin
+  distance, axis rotation), geometry compares bounds widened by both chord
+  deviations, and coordinate systems compare each pair of sources (the only
+  one per side, else one per declared discipline). A comparison is a host
+  entry point, not a registered capability, since it needs two sessions.
+  A certified mesh difference (two-sided Hausdorff distance) waits on
+  axiolid/kernel#148; until then geometry compares bounds only.
+  **Breaking:** `ObjectChange::Matched` gains `undetermined`, `Unresolved`
+  names its `Facet` and `subject`, `Difference` gains `Measured` and
+  `Stated`, `ComparisonError` gains `InvalidTolerance`, and
+  `ModelComparison::report` gives each entry a rule id per facet
+  (`RULE.added`, `RULE.removed`, `RULE.property`, `RULE.placement`, ...,
+  `RULE.identity`) and one finding per changed facet. (#73)
+- **Source coordinate systems.** A new `CoordinateSystemService`
+  (`CoordinateSystemServiceHandle`) states per source its world frame
+  (`CoordinateFrame`, in metres), true north and map conversion
+  (`MapConversion`: target system, offset, rotation, scale, and the map unit
+  when known exactly), each `None` when unstated. The IFC session registers
+  it from the model context's `WorldCoordinateSystem` and `TrueNorth` and an
+  IFC4 `IfcMapConversion`; ambiguous statements are refused. Federated
+  sessions route it by source.
+- **Bodiless is not unmeasured in proximity.** `ProximityError::NoBody`
+  reports an object declared to occupy no material; Axiolid proximity
+  returns it for host-declared bodiless objects instead of `Unavailable`.
+  Clash and distance treat it as before. **Breaking:** `ProximityError`
+  gains a variant.
+
+- **Sill heights in `keyed-limit`.** The new `quantity` `sill-height`
+  limits each object's bottom elevation above the floor of every object the
+  new parameter `floor_path` reaches from it, through the vertical-extent
+  service: with `floor_path` and `key_1_path` set to
+  `axioval:derived.adjacent-space`, one table bounds window sills per space
+  type. Each reached floor is judged on its own, so a window between spaces
+  with different floor elevations is found when it is too high above either;
+  the finding names and relates that space. Sill heights are intervals that
+  always hold the exact difference; one straddling a bound, an unmeasurable
+  floor (unless another floor fails) or window, and a path reaching nothing
+  are not evaluated. Windows at corridor ends are not decided yet: that needs
+  a corridor axis no service provides. **Breaking:** definitions bound to
+  `keyed-limit` must declare the new optional parameter `floor_path`. (#86)
+- **Manual checks on an empty selection.** `manual-issue` raises its check
+  once for the project when the selection decidedly picks nothing, instead
+  of raising nothing.
+- **Object frames.** A new `ObjectFrameService` (`ObjectFrameServiceHandle`)
+  supplies an object's placement frame as a `MetricFrame` grounded on the
+  object, in canonical metres with right-handed right, forward and up axes,
+  and an `ObjectFront` that is `Stated` only where the source states one. The
+  handle refuses uncovered sources and frames of another object; evidence
+  must be exact and reviewable. The IFC session registers it without
+  geometry: frames compose the `IfcLocalPlacement` chain through
+  `ifc-geometry`'s placement resolver and convert the origin through the
+  exact project length unit. IFC states no front, so every IFC frame reports
+  `NotStated`; unplaced objects are `NotPlaced`, and `IfcGridPlacement` and
+  unresolvable length units are refused. Door leaves are still to come. (#36)
+- **Several models in one check, with a discipline per source.**
+  `axioval check` takes `--model` repeatedly; each file is one source of one
+  session, under source-qualified identities, and `--model PATH:DISCIPLINE`
+  declares the discipline it plays (`arch.ifc:architecture`). With
+  `--geometry` every model is meshed into one geometry set bound to all
+  snapshots, so a clash between two files is an ordinary pair. Two models
+  with one file name are refused, and an invalid discipline is a usage
+  error. Summaries over several documents name objects `arch.ifc/#42`, and
+  `report --object` now accepts that form. `EvidenceSession::federate`
+  combines sessions over disjoint sources and routes each semantic service
+  (properties, relationships, type hierarchy, classifications, integrity,
+  object frames) to the member owning the request's source, refusing an
+  uncovered source
+  and a member holding a service it cannot route (`UnfederableService`).
+  `EvidenceSession::with_discipline` declares a source's `Discipline` (a
+  lowercase token, new in `axioval-ir`), kept beside the snapshot rather
+  than in its identity; the runtime installs the declarations per run as
+  `SourceDisciplines`. The new `discipline` selector
+  (`{"kind": "discipline", "value": "structure"}`) selects every object of
+  the sources playing that discipline; an object whose source declares none
+  is not evaluated, once per rule and source, never a non-match. Axiolid
+  contact, facade-area, vertical-extent, shelf-length, clear-height and
+  derived-relationship evidence now cites the measured object's source.
+  **Breaking:** `Selector` and `IrError` gain the `Discipline` and
+  `InvalidDiscipline` variants, `EvidenceSessionError` gains `UnknownSource`,
+  `DuplicateDiscipline` and `UnfederableService`;
+  `TypeHierarchyServiceHandle` is no longer a tuple struct;
+  `AxiolidContactService::new`, `AxiolidDerivedRelationshipService::new`,
+  `AxiolidFacadeAreaService::new`, `AxiolidLinearQuantityService::new` and
+  `AxiolidVerticalExtentService::new` no longer take a `SourceId`; the CLI's
+  `--model` value is parsed as `PATH[:DISCIPLINE]`. The MCS package schema
+  needs the matching `discipline` selector. (#28)
+
+- **Derived light-opening area in `area-ratio`.** With
+  `numerator_derivation` `light-area`, each numerator member's area is its
+  light-transmitting area from the first step that produces one: the area
+  `numerator_property` states, else the most specific `light_area_table` row
+  keyed on a `type` name pattern (`light_type`, optionally via
+  `light_type_path`) and the member's `overall_width` × `overall_height`
+  (within `light_size_tolerance`), else width × height less the frame
+  allowance 2·(W+H)·`frame_width`. A step is skipped only when its input is
+  exactly absent, never on a wrong-typed value, an unknown type name or tied
+  rows; a member no step gives an area leaves its anchor not evaluated. Each
+  area carries an `axioval:derived.light-area:<member>:step=<step>` evidence
+  entry and findings count the areas per step. A stated light area larger
+  than the member's overall area is a finding against the member (its anchor
+  is not evaluated), and `empty_numerator_finding` reports an anchor that
+  reaches no numerator object, such as a space with no window, instead of a
+  ratio of 0. `measure: facade` with `light-area` is an invalid
+  declaration. **Breaking:** definitions bound to `area-ratio` must declare
+  the new optional parameters `numerator_derivation`,
+  `empty_numerator_finding`, `overall_width`, `overall_height`,
+  `light_area_table`, `light_type`, `light_type_path`,
+  `light_size_tolerance` and `frame_width`. (#54)
+- **Envelope bounding spaces come from the rule.** `external-wall-validation`
+  takes `derivations`, a list of `all-spaces` and `gross-area-groups`, and
+  runs each on its own in one rule; every finding and not-evaluated outcome
+  names its derivation. `all-spaces` is bounded by the objects
+  `bounding_selector` selects, `gross-area-groups` by the members of the
+  groups `gross_area_group_selector` selects, reached along
+  `gross_area_group_path` (with IFC, `IfcRelAssignsToGroup:forward`). The
+  resolved set travels in the `EnvelopeMembershipRequest` and the Axiolid
+  adapter derives around exactly those objects. A derivation without its
+  bounding input is an invalid declaration; an undecided selection, an empty
+  one, groups with no member or a refused relationship answer leave that
+  derivation not evaluated while the other still runs. A bounding object
+  without a mesh (bodiless, unmeasured or undescribed) makes the derivation
+  unavailable instead of being skipped, and a bounding object's own
+  declaration no longer takes part in the comparison. The CLI registers the
+  envelope service with `--geometry` alone. **Breaking:** the
+  `envelope_derivation` parameter is replaced by `derivations`, and
+  definitions must declare the three new optional parameters;
+  `EnvelopeMembershipRequest::new` takes the bounding objects, the request is
+  no longer `Copy` and `EnvelopeMembershipEvidence::request` returns a
+  reference; `AxiolidEnvelopeMembershipService::with_space` and
+  `with_gross_area_space` are removed; the CLI's `--envelope-zone` is
+  removed (a usage error, status 2), since a rule states the same zone with
+  `gross_area_group_selector` and `gross_area_group_path`.
+- **Distance modes, projections and scoping.** `distance` takes a `mode`:
+  `nearest` (the default, as before), `none_closer_than` (no counterpart
+  closer than `minimum_metres`) or `at_least` (at least `count`
+  counterparts within `maximum_metres`, and no nearer than
+  `minimum_metres` when declared, so N within a range). A `projection`
+  measures the distance in space (`minimum_3d`, the default), in plan
+  between footprints (`horizontal`), between the vertical extents of bodies
+  above one another (`vertical`, related when their footprints overlap or,
+  with `footprint_offset_metres`, come closer than the offset), or as
+  overlapping footprints (`plan_overlap`). The traversal parameters
+  (`relationship` or `path`, as elsewhere) scope counterparts to those
+  sharing a container with the subject, declared or derived
+  (`axioval:derived.contained-in-space`). Every distance is judged as an
+  interval: undecided counterparts (a straddling interval, an unmeasured
+  distance or extent, an undecided container) count as unknown, and a
+  verdict is given only when they cannot change it. `ProximityRequest`
+  carries a `ProximityProjection` (`ProximityRequest::projected`),
+  `ProximityService::measure_distance` returns a
+  `ProjectedDistanceEvidence` interval (exact evidence is a point;
+  infinite bounds say the bodies are unrelated in the projection), and
+  `projected_candidate_pairs` keeps the broad phase complete in each
+  projection. The Axiolid adapter measures horizontal distance exactly over
+  the projected triangles, non-convex footprints and edge-on sheets
+  included, and widens every projection on tessellated geometry by the
+  chord deviation; it asserts a tessellated plan overlap only from a
+  witness point deeper than the deviations, and leaves it open otherwise.
+  Door-swing footprints as sources wait on object frames (#36).
+  **Breaking:** definitions bound to `distance` must declare the new
+  optional parameters (`mode`, `count`, `projection`,
+  `footprint_offset_metres` and the traversal parameters); `distance`
+  judges tessellated measurements by their interval, so one straddling a
+  bound is now not evaluated rather than decided on the mesh value;
+  `ProximityError` has the new variant `UnsupportedProjection`,
+  `ProximityRequest` a projection field, and `ProximityEvidence::try_new`
+  refuses a request in any projection but `minimum_3d`.
+- **Date and date-time values.** `PropertyValue::Date` is a calendar day
+  (`{"type": "date", "value": "2026-09-27"}`) and `PropertyValue::DateTime`
+  an instant with the UTC offset it was stated in
+  (`{"type": "dateTime", "value": "2026-09-27T10:00:00+02:00"}`), both
+  validated ISO 8601 (`axioval_ir::temporal`, no new dependency). A
+  date-time without an offset is not representable. Packages state `date`
+  and `dateTime` literals (`ParameterValue`, `ParameterKind`,
+  `PropertyValueKind` and `ParameterType` variants); one that is no real
+  day, or a date-time without an offset, is refused when the package is
+  read. Dates compare by day and date-times as instants whatever their
+  offsets; a date-time compares with a date only when the rule states
+  `precision` `day`, which reads it as the calendar day it states in its own
+  offset. `property-predicate` takes `date` and `date_time` targets and
+  `precision`, `property-comparison` `target_date`, `target_date_time` and
+  `precision`, `property-value` casts literals to dates and takes
+  `precision`, and property selectors take `date` and `dateTime` values with
+  an optional `precision: day` (lists under a `quantifier` too); `between`
+  ranges and table columns do not take dates yet. Without day precision a
+  date-time against a date is not evaluated, never guessed. `unique-value` and
+  `consistent-value` treat one instant in two offsets as one value. The IFC
+  adapter reads `IfcDate` as a date, `IfcDateTime` with an offset and
+  `IfcTimeStamp` (UTC) as date-times, in property sets and attributes; an
+  `IfcDateTime` without an offset is refused as incomplete, and text that is
+  not the type's ISO 8601 form is an invalid value. **Breaking:**
+  `PropertyValue`, `ParameterValue`, `ParameterKind`, `PropertyValueKind`
+  and `ParameterType` have new variants; `Selector::Property` has the new
+  field `precision` (omitted when unset, so existing packages read and write
+  unchanged); definitions bound to `property-predicate`,
+  `property-comparison` and `property-value` must declare the new optional
+  parameters; IFC date and time properties, previously text or integers,
+  are now dates, so a text or integer rule over them is not evaluated or
+  fails as a type mismatch; `PropertyResolutionError::InvalidValue` now
+  reads "property value is invalid for its type".
+- **Property requirement tables.** The new capability
+  `property-requirements` checks each selected object against every row of
+  a `requirements` table that applies to it (`applies_to`, a selector such
+  as one exact class or a class with its subtypes). A row names a property
+  by `property_set` and `property`, marks it `required`, `optional` or
+  `forbidden`, and may constrain its value with `value_like` (a wildcard
+  pattern), `one_of` (`|`-separated values) and a `minimum`/`maximum` range
+  in `unit`, optionally divided `per` the object's measured plan area or
+  its stated area (`area_property`) or volume (`volume_property`). Each
+  failing row is a finding whose message names its result: missing
+  property, missing value, forbidden property present, forbidden value or
+  wrong value. Property set and property names are resolved exactly: the
+  property service cannot list an object's properties, so a row with a
+  wildcard name or a set without a property is reported not evaluated for
+  the rule while the other rows are checked.
+- **Filtered requirement templates in `property-requirements`.** A row may
+  now carry a `state` instead of a `requirement`: its statement must hold
+  (`include`), must not hold (`exclude`) or is skipped (`ignore`, also on a
+  `requirement` row, which then is neither checked nor refused). The
+  statement is a `presence` (`defined`, `undefined`, `empty`, `not-empty`)
+  or value conditions, which gain `one_of_like` (`|`-separated wildcard
+  patterns), `contains` (a substring of text, an element of a list) and
+  `decimals` (round a ranged value in the row's unit before bounding it).
+  The rule's selector is the template's element filter and `applies_to` its
+  class. With the new `group_by_value`, findings of one row, result and
+  value found are one finding naming the count and relating the objects;
+  with the new `category_property`, findings start with the object's
+  category in brackets, as in `property-comparison`, and groups split by it.
+  Rows without the new columns behave as before. **Breaking:** the
+  `requirements` table has the new optional columns `state`, `presence`,
+  `one_of_like`, `contains` and `decimals`, and `requirement` is now
+  optional; the capability has the new optional parameters `group_by_value`
+  and `category_property`. A definition bound to `property-requirements`
+  must declare them.
+- **Keyed limit tables.** The new capability `keyed-limit` checks a
+  quantity of each selected object against the single applicable row of a
+  `limits` table: a fire compartment's area limit by its building's fire
+  class, its use class, and whether its storey is sprinklered. Up to four
+  keys `key_1` … `key_4` are property references, each read from the
+  object or, with `key_<n>_path`, from the objects a relationship path
+  reaches from it; rows key them with text patterns, and the most specific
+  matching row applies. `quantity` is `plan-area` (the measured footprint,
+  three-valued as in `plan-area`) or `property` (`quantity_property`, in SI
+  units), bounded by the row's `minimum` and `maximum`. No matching row is a
+  "no limit defined" finding; a row without bounds sets no limit; a key
+  that is missing or disagrees across reached objects, when a row testing
+  it could apply, and rows tied for most specific are not evaluated.
+
+- **Doors, windows and openings connect the spaces their wall calls for.**
+  The new capability `opening-spaces` requires each selected element to
+  relate to two spaces, one on each side, when its host wall is internal,
+  and to one space with the other side outside when it is external. The host
+  is reached through `host_path` (fills and voids) among `host_selector`
+  objects, and its exposure is the boolean `external_property` (such as
+  `IsExternal`) resolved through the property service; an undeclared,
+  null or non-boolean value leaves the element not evaluated. The spaces are
+  reached through `space_path`, a stated relationship such as
+  `IfcRelSpaceBoundary` or the derived `axioval:derived.adjacent-space`,
+  whose recorded sides must be opposite: two spaces on the same face are a
+  finding. A source in which no host wall is declared external is reported
+  against the source. The engine exports `AdjacentSide` and
+  `adjacent_side`, which read the side an adjacency evidence locator
+  records, and documents that locator form as the provider contract.
+- **Storey metrics.** `level-spacing` measures the highest level from
+  geometry with `content_path` (and optionally `content_selector`): the
+  highest top of the contents the path reaches, through the vertical-extent
+  service, less the level's elevation, judged as an interval. With
+  `space_selector`, `space_path` and `space_tolerance`, each level's spaces
+  must be as high as the level. A new facade-area service
+  (`FacadeAreaService`, `FacadeArea`, `FacadeAreaServiceHandle`) measures an
+  object's outward-facing surface, with an Axiolid implementation
+  (`AxiolidFacadeAreaService`) that the CLI registers with every `IfcSpace` as
+  the interior; `area-ratio` and `plan-area` take `measure: facade` to judge
+  facade areas instead of footprints, which gives the facade area per storey
+  and the window-to-wall ratio per storey and per building. Net-to-gross and
+  empty-area ratios, storeys without elements and compartment-to-group areas
+  are compositions of existing capabilities, documented under "Storey
+  metrics". A tabular report beside the findings is not part of this change.
+  **Breaking:** the `level-spacing`, `area-ratio` and `plan-area` signatures
+  gain optional parameters, so definitions bound to them must declare them.
+
+- **Selecting objects by related objects.** The new selector kind
+  `related` follows a relationship `path` from each candidate (steps
+  `Relationship` or `Relationship:direction`, as in the `path` parameter)
+  and tests the reached objects against a nested `selector` under a
+  `quantifier`: `any` (the default, omitted when serialized), `all` (at
+  least one reached, and every one matches) or `none`. Fire-wall doors are
+  doors whose wall, reached through `IfcRelFillsElement` then
+  `IfcRelVoidsElement` backwards, states `Compartmentation` true. A refused
+  relationship answer or a reached object the nested selector cannot decide
+  leaves the candidate not evaluated unless the others settle the verdict.
+  **Breaking:** `Selector` has the new variant `Related`, beside the new
+  enum `RelatedQuantifier`; existing packages serialize unchanged.
+- **Table allocation.** The new capability `table-allocation` assigns each
+  selected object to exactly one row of a `rows` table, by the first or the
+  most specific matching row (`mode`), and checks each row per anchor
+  (`anchor_selector` and the traversal parameters, such as per storey), per
+  source or across the project: exactly `count` objects, and a summed plan
+  area within `area` ± `area_tolerance` square metres, measured or stated
+  by `area_property`. Rows key on text patterns over up to three properties
+  the rule declares as `key_1` to `key_3`. Objects no row matches and rows
+  that matched nothing are findings; ties, undecided keys and straddling
+  areas are not evaluated.
+- **Group composition.** The new capability `group-composition` requires
+  each selected group to hold the members a `requirements` table lists:
+  entries keyed by text patterns over up to three member properties
+  (`key_1` to `key_3`, as in `table-allocation`), each taking `count`
+  members. Members are reached through the (required) traversal parameters
+  and restricted by `member_selector`. A member may fit several entries but
+  fills one place: members are allocated by a maximum bipartite matching,
+  not in declared order. Per group, entries every maximum allocation leaves
+  short are findings, jointly when competing entries could each be the short
+  one; members beyond the places they fit, and members fitting no entry, are
+  surplus findings. With `group_key`, rows with a `group` pattern apply only
+  to matching groups, and a group no such row matches is a finding. With
+  `ungrouped_selector`, objects no group reaches are findings. An undecided
+  membership, member key or group key leaves the group not evaluated.
+- **Every presentation layer of an object, and models without layers.**
+  `axioval:presentation.Layer` now lists all distinct layers of an object,
+  sorted by name, as the new `PropertyValue::List` (scalar elements only;
+  the resolver rejects a null or nested element). Property selectors take a
+  `quantifier`: `any` or `all` elements must satisfy the operator, a scalar
+  counts as a list of one, and `all` never holds for an empty list. "Every
+  layer is agreed" is `oneOf` with `quantifier: all`, "at least one layer is
+  agreed" the same with `any`. A source that records a kind of fact for no
+  object answers `PropertyResolutionError::NotRecorded`, reported as the new
+  `NotEvaluatedReason::NotRecorded` once per rule and source like an unbound
+  concept: the IFC adapter answers so for a model without any
+  `IfcPresentationLayerAssignment`, so a layer rule over it is not
+  applicable rather than a pass or a "no value" finding per object.
+  **Breaking:** an object on several layers is no longer a conflict; its
+  layer is a list, which a selector without `quantifier` leaves not
+  evaluated, so existing layer rules must add one. `Selector::Property` has
+  the new field `quantifier` (omitted from serialized packages when unset),
+  and `PropertyValue`, `PropertyResolutionError` and `NotEvaluatedReason`
+  each have a new variant. `property-value` does not evaluate a list.
+- **Plan area ranges.** The new capability `plan-area` requires each
+  selected object's measured footprint to lie within `minimum` and
+  `maximum` square metres (a space area range, a fire compartment's area
+  limit), or, with `member_selector`, the summed footprints of the members
+  each anchor reaches through the declared traversal (the space area of each
+  storey). Tessellated areas are intervals, and one straddling a bound is not
+  evaluated; an object without a body, or an anchor with such a member, is
+  not evaluated. Undecided members can only add area, so only an excess
+  over the maximum stands.
+- **Table-valued rule parameters.** A `table` parameter declares named
+  `columns`, each with a kind (`string`, `textPattern`, `number`,
+  `quantity`, `integer`, `boolean`, `selector` or `reference`) and whether
+  it is required; its value is a list of rows mapping column IDs to cells of
+  those kinds. Capabilities declare the columns with
+  `ParameterType::Table(&[TableColumn])`, and the binder requires the
+  definition to declare the same columns and every row to fit them: an
+  unknown column, a cell of another kind, a missing required cell or a
+  malformed text pattern fails compilation with
+  `EngineError::InvalidTableRow`. `axioval-rules` gains a shared row
+  matcher (first match, most specific match, all matches) that fails closed
+  on undecided rows and reports ties. **Breaking:** `ParameterKind`,
+  `ParameterValue`, `ParameterType` and `EngineError` have new variants, and
+  `ParameterDefinition` has a `columns` field; it is omitted when empty, so
+  existing packages read and write unchanged.
+- **Relationships derived from geometry.** Checks that relate components to
+  the space they stand in, doors and openings to the spaces they connect, or
+  rooms to a larger group space no longer need the model to state those
+  relationships. `DerivedRelationshipServiceHandle` answers the same
+  relationship-selection requests for three identities,
+  `axioval:derived.contained-in-space`, `axioval:derived.adjacent-space` and
+  `axioval:derived.overlapping-group-space`, with their tolerances as
+  `;key=value` parameters and the derivation named in every evidence locator.
+  `EvidenceSession::with_derived_relationships` routes those identities to it
+  and every other one to the semantic service, so every capability taking a
+  `relationship` or `path` (`related-count`, `property-comparison`'s
+  `same_space`, and the rest) uses them unchanged.
+  `AxiolidDerivedRelationshipService` derives them: containment by winding
+  number with a nearest-space fallback, per-side adjacency by a probe swept
+  from each face of the opening (an external door relates to one space and
+  records the outside side), and footprint-overlap grouping. Unmeasured or
+  bodiless spaces, points on a boundary, ties and tessellated geometry near
+  the decision refuse. `axioval check --geometry` declares every `IfcSpace`,
+  `IfcDoor`, `IfcWindow` and `IfcOpeningElement`, meshing opening voids for
+  the derivation alone.
+- **Property comparison along paths, within spaces and buildings.**
+  `property-comparison` takes a relationship `path` in `related` mode, and
+  new `same_space` and `same_building` modes compare with the objects that
+  share a nearest `container_selector` object, climbed to through the
+  relationship service along the declared steps. New operators, named as in
+  property selectors: `like` (whole-value wildcards `*` and `?`, `\`
+  escapes), `matches` (a regular expression anchored to the whole value),
+  `contains` over a text list, `is_defined` and `is_undefined`, and
+  `between` for an inclusive range, which gives `count` and `sum` a minimum
+  and maximum in one rule. `case_sensitive` relaxes text comparison, and
+  `category_property` prefixes each finding with a property value of the
+  checked object. The geometric same-space variant is not included. Invalid
+  declarations now say what is wrong. **Breaking:** a definition bound to
+  `property-comparison` must declare the new optional parameters `path`,
+  `container_selector`, `case_sensitive`, `minimum_number`,
+  `maximum_number`, `minimum_quantity`, `maximum_quantity` and
+  `category_property`.
+- **A zone's footprint is the union of its members.** A bodiless group, such
+  as an `IfcZone` modelling a fire compartment, measured a zero plan
+  footprint, so `plan-coverage` and area limits against it could never pass.
+  `AxiolidGeometry::with_group` declares a group's members and
+  `with_undecided_group` a membership the host could not decide;
+  `AxiolidPlanAreaService` then measures the group as the union of its
+  members' footprints, nested groups included. A member without a body, an
+  unmeasured or undescribed member, an empty or self-containing group and an
+  undecided membership make the footprint unavailable, never zero; a
+  tessellated member makes it approximate. `axioval check --geometry` reads
+  every `IfcGroup`'s members from `IfcRelAssignsToGroup` and declares them.
+- **Materials.** The reserved `axioval:material` set (`MATERIAL_SET`) names
+  the material an object is made of: its `Kind`, `Name` and `Category`, a
+  layer set's `TotalThickness`, the member `Count`, and numbered members
+  such as `Layer1.Material` and `Layer1.Thickness`, and `Names`, a list of
+  every name and category the material, its members and their materials go
+  by (`MATERIAL_NAMES`), which a selector with `quantifier: any` matches
+  without enumerating members. Every property capability and selector
+  reads them. The IFC adapter answers them from
+  `IfcRelAssociatesMaterial` through `ifc-material` 0.2.0, on the object or
+  else its type object: single materials, layer sets (directly or through
+  a usage), constituent sets, profile sets and material lists, thicknesses
+  in metres with exact provenance; a unit the file does not resolve refuses
+  that measure alone. An object without material is an exact absence; two
+  assignments conflict. IFC2X3 materials are refused until
+  `ifc-material` binds to the file's release (openbimrs/ifc#77).
+- **Property selectors on par with `property-predicate`.** Selectors take
+  the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,
+  `oneOf` and `noneOf` (a string list), and the options `caseSensitive`
+  (default `true`) and `trim` (default `false`) for text comparisons.
+  Quantities compare in SI with a quantity of the same dimension, so
+  `2400 mm` selects a length of `2.4 m`. `Selector::property` builds a
+  selector with the default options. **Breaking:** `Selector::Property`
+  has the two new fields; they are omitted from serialized packages when
+  default, so existing packages read and write unchanged. `matches` now
+  matches the whole value, as in `property-predicate`: `EI\d+` no longer
+  selects `EI30-T1` (write `EI\d+.*`). A value of another type than the
+  selector compares (text against a number, a quantity against a unit-less
+  number or another dimension) makes the object not evaluated instead of
+  silently dropping it from the selection, `notEquals` included. A value
+  that does not fit its operator is an invalid declaration.
+- **Findings about a source or the whole project.** A finding or
+  not-evaluated outcome now has a `Scope`: one object, one source, or the
+  project. "The model has no building" is a finding against the source
+  instead of nothing, which read as a pass. Scoped findings carry exact
+  evidence and related objects like object findings; the runtime orders
+  project, then sources, then objects. `CapabilityEvaluation` gains
+  `push_source_not_evaluated`, and an unbound concept, already reported once
+  per source, is now scoped to that source. **Breaking:** `Finding::object_id`
+  and `NotEvaluated::object_id` are replaced by `scope`, with `object_id()`
+  accessors; `Finding::new` and `with_evidence` build one. The serialized
+  form of object findings and rule-level outcomes is unchanged, but a report
+  with scoped entries (a finding without `object_id`, or with `source`) needs
+  a reader of this version.
+- **Existence and cardinality checks.** `object-count` requires the rule's
+  selection to hold between `minimum` and `maximum` objects (at least one
+  by default) per source, or in the project with `across_sources`, and
+  reports an empty selection as "no object matches the selection" against
+  that source or the project.
+- **Model-level BCF topics and CLI entries.** A source or project finding
+  becomes a BCF topic without a viewpoint or component, whose GUID does not
+  depend on the source's file name; object and rule-level topics keep their
+  GUIDs. `axioval report` lists such an entry with `scope` in place of
+  `object`, and `--object` accepts a source document name.
+- **Relative counts by group, for small counts and at table edges.**
+  `relative-count` takes `group_property` to count per property value (a
+  location code, say) instead of per anchor, within one source unless
+  `across_sources`; a group with required objects and no provided object is
+  reported as present only in the required set. In ratio mode,
+  `small_required_below` and `small_provided` state the requirement for
+  small nonzero required counts explicitly. Below a table's first row the
+  anchor or group is now skipped; it was extrapolated from zero with the
+  increments.
+- **Numeric tolerance and rounding.** `unique-value`, `property-comparison`
+  and `property-predicate` take optional `tolerance` (absolute),
+  `relative_tolerance` (a fraction of the larger magnitude) or `decimals`
+  (round half away from zero, as the value is displayed) for numbers and
+  quantities, quantities in SI units. Within the tolerance two values are
+  equal, boundary included, and only beyond it greater or less. Rounding
+  groups `unique-value` keys into classes; a tolerance is not transitive, so
+  `unique-value` judges it pair by pair and each finding names exactly the
+  objects within the tolerance of its own value. Findings state the
+  tolerance used. **Breaking:** a definition bound to one of these
+  capabilities must declare the three new optional parameters.
+- **Slab stack spacing.** `slab-stack-spacing` pairs slabs whose footprints
+  overlap by at least a declared share of the smaller one, orders each stack
+  by top elevation, and checks consecutive top-to-top, bottom-to-bottom and
+  top-to-underside distances against optional bands, optionally requiring
+  them equal within a tolerance. Elevations come from the new source-neutral
+  `VerticalExtentService` (bottom and top as intervals with evidence),
+  implemented by `AxiolidVerticalExtentService` and registered by
+  `axioval check --geometry`. A tessellated slab's elevations are never
+  exact; a distance, overlap or order its intervals leave open is not
+  evaluated.
+- **Numbering consistency.** `numbering-consistency` reads a number from
+  each value through a pattern with one captured group and requires the
+  numbers of one scope (a source, or a storey reached through a relationship)
+  to share a leading prefix and, optionally, to leave no gaps. A value the
+  pattern does not number is not evaluated, never passed.
+- **Slab-contact scope.** `slab-contact` takes an optional `counterparts`
+  selector, and `ContactRequest` now carries the resolved candidates
+  (`ContactRequest::new` takes them; a breaking change). The Axiolid adapter
+  measures only those and refuses only when one of them is unmeasured or
+  undescribed, not when any object anywhere is. Evidence naming an object
+  outside the candidates is refused (`ContactError::UnrequestedCandidate`).
+  `skip_top_storey` and `skip_bottom_storey` leave out subjects on the
+  highest or lowest `storey_selector` object, ordered by the `Elevation`
+  attribute; an unknown elevation or storey assignment is not evaluated.
+
 - **Unbound concepts are reported once.** A package concept the source's
   declared vocabulary cannot express is now `NotEvaluatedReason::UnboundConcept`
   (it was `InvalidDeclaration`) and is reported once per rule, source and
@@ -29,37 +1228,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates instead of refusing them. Contact and space measurements refuse
   while an unmeasured object could change them, where they previously
   measured as if it were not there.
-- **Predefined types.** The reserved set `axioval:predefined-type`
-  (`PREDEFINED_TYPE_SET`) answers an object's predefined type through the
-  property resolver: `PredefinedType` is the designation, `UserDefined`
-  whether it is user-defined. The IFC session follows IDS (type object first,
-  user-defined designations by their text). The capability
-  `axioval:capability.predefined-type` checks it against values, patterns or
-  "user-defined", and `axioval:capability.entity` against its
-  `predefined_types`. Direct attributes need no capability of their own: IDS
-  attribute facets become `property-required` / `property-value` rules in the
-  reserved attribute set.
-- **Materials and decomposition.** `MaterialService` / `MaterialServiceHandle`
-  report the names an object's material is known by, and
-  `DecompositionService` / `DecompositionServiceHandle` the wholes it is part
-  of per relation. The IFC session registers both (materials IFC4 only, via
-  `ifc-material`).
-- **`meets` selectors.** `Selector::Meets` selects the objects that meet a
-  selectable capability's requirement on their own. Capabilities opt in with
-  `RuleCapability::selectable`; the compiler checks the capability and its
-  parameters, and the runtime evaluates it with the plan's registry. Adding
-  the variant breaks exhaustive matches on `Selector`.
-- **Findings about populations.** `Report::rule_findings` (`RuleFinding`)
-  holds conclusive outcomes about a rule's population rather than one
-  object, such as "no applicable object exists"; `Report::has_findings`
-  counts both kinds. `axioval:capability.population` requires `min`/`max`
-  selected objects. The BCF sink writes rule findings as topics and
-  `axioval check` counts them for status 3 and in its summary and listings.
-  Reports without rule findings serialize as before; code building
-  `Report` with a struct literal must set the new field.
-- **Requirement capabilities.** `axioval:capability.classification`,
-  `axioval:capability.material`, `axioval:capability.part-of` and
-  `axioval:capability.entity`; `property-value` takes `prohibited`.
 - **Bounded views of a check result.** `axioval check --summary` prints one
   line per rule, not-evaluated reason and integrity code, with counts, the
   most frequent message, example objects and the next command to run.
@@ -209,6 +1377,43 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A clearance volume could be obstructed by a body that never entered
+  it.** `AxiolidFreeSpaceService::assess_clearance` named an obstacle as a
+  blocker when its height range overlapped the volume's band and its plan
+  outline overlapped the volume's footprint, tested separately, so an
+  L-shaped body with a low foot under the volume and a tall column beside
+  it, or a table whose top overhangs the volume above its band, was
+  reported `Obstructed` with exact evidence. An obstacle now obstructs only
+  when its solid shares interior with the volume: one of its triangles
+  meets the volume shrunk by 1 µm (the triangle's part inside the height
+  band, compared with the footprint in plan), or the volume's centre lies
+  inside it. Contact with a face stays clear. A cylinder keeps its
+  inscribed and circumscribed 64-gons, now as prisms. An obstacle whose
+  mesh box reaches the volume must be a closed, consistently and outward
+  wound surface, or the request is refused: an open or inward-facing mesh
+  bounds no solid to decide either way. `component-clearance` inherits the
+  fix. (#88)
+- **Breaking. A model with no objects could not be checked, and would have
+  passed an existence rule.** `EvidenceSession::try_new` refused a snapshot
+  whose source contributes no object, so an IFC file holding only
+  presentation data failed with "snapshot source is not present in the
+  project". Such a snapshot is now an empty source of the session, also as a
+  federation member. `EvidenceSessionError::UnexpectedSource` is removed:
+  an empty source is legitimate input, and a snapshot without objects cannot
+  be told apart from one. `MissingSource` and `DuplicateSource` are kept.
+  The runtime installs the run's sources per run as `SessionSources`
+  (replacing any host copy, like `SourceDisciplines`), listing every
+  snapshot's source, or the sources a bare project's objects name.
+  `object-count` and `table-allocation` (without `anchor_selector`) form one
+  scope per listed source, so an empty source reports "no object matches the
+  selection in source …" and each row it cannot meet, instead of never
+  being judged. Other capabilities judge only sources holding a selected
+  object, so an empty source is to them what a source without a match is.
+- **A derived relationship was unusable as a `path` step.** A step was split
+  at its first colon, so `axioval:derived.adjacent-space` read as the
+  relationship `axioval` with the direction `derived.adjacent-space` and was
+  an invalid declaration. A derived step now ends only at a trailing
+  `:forward`, `:backward` or `:either`.
 - **Tessellated parts were measured as exact.** Axiolid contact, envelope,
   free-space, guard and space evidence is exact by contract, but it was
   reported for curved parts registered as tessellations. Each service now
@@ -302,11 +1507,47 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking.** Semantic capability results are closer to what a reviewer
+  acts on. `manual-issue` raises one finding per rule, against the first
+  selected object and relating the others, instead of one per object.
+  `selector-conformance` separates an object with no value for any consulted
+  property from one with values the agreed list does not know, and reports
+  each unknown combination of values once, relating every object holding it;
+  `message` is now followed by those values. `consistent-value` groups
+  objects without a key together and reports a missing key only when those
+  objects disagree, instead of always. `name-sequence` reports a number
+  below `first` as "is below the start" and no longer treats it as the
+  member below the next one, so it no longer causes an order finding there.
 - **Breaking.** `RuleInstance::applicability` is `RuleApplicability`, and
   `PackageMetadata::name`/`description` are `LocalizedText`.
 - **Breaking.** `Runtime::run` over a bare `Project` declares no type systems,
   so a compiled package's concepts bind to nothing there; run an
   `EvidenceSession` to evaluate packages.
+
+### Removed
+
+- **Breaking.** `axioval-spec` drops the rule plans that registered
+  capabilities now express, together with their `CheckSemantics` variants:
+  `RelativeCountPlanSpec` (`rule::aggregate`, now `relative-count`),
+  `PropertyComparisonPlanSpec` (`rule::comparison`, now
+  `property-comparison`), `ManualIssuePlanSpec` (`rule::manual_issue`, now
+  `manual-issue`), `LayerAgreementPlanSpec` (`rule::layer_agreement`, now
+  `selector-conformance` over presentation layers),
+  `ModelArchitecturePlanSpec` (`rule::model_architecture`, now one rule per
+  sub-check), `BuildingStoreyPlanSpec` (`rule::building_storey`, now the
+  storey-metric compositions), and from `rule::model`
+  `RequiredComponentsPlanSpec` (`object-count`),
+  `SpacesInDerivedGroupsPlanSpec` and `SpaceGroupContainmentPlanSpec`
+  (`group-composition`), `FireCompartmentAreaPlanSpec` (`keyed-limit`) and
+  `StoreyNameSequencePlanSpec` (`name-sequence`), with their row and enum
+  types. Nothing in the engine consumed them. `ModelSelectionSpec` remains.
+  The "Retired rule plans" table on the capability migration page maps each
+  plan's fields to capability parameters. (#41)
+- **Breaking.** `axioval-spec` drops `ComponentContainmentPlanSpec` (the
+  `rule::containment` module with `HostSurface`, `SurfaceSide` and
+  `DimensionBandSpec`) and its `CheckSemantics::ComponentContainment`
+  variant, now expressed by `containment`; the migration page maps its
+  fields. (#59)
 
 ## [0.2.0] - 2026-09-24
 

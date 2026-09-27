@@ -146,12 +146,3 @@ fn property_sets_named_like_attributes_are_untouched() {
         Ok(PropertyResolution::Absent(_))
     ));
 }
-
-#[test]
-fn ifc2x3_slots_come_from_the_ifc2x3_schema() {
-    // IFC2X3 IfcWall has no PredefinedType; its eighth attribute is Tag.
-    let bytes = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC2X3'));\nENDSEC;\nDATA;\n#1=IFCWALL('0000000000000000000001',$,'W-1',$,$,$,$,'T-9');\nENDSEC;\nEND-ISO-10303-21;\n";
-    let session = import_ifc_session("model.ifc", bytes.as_bytes()).unwrap();
-    assert_eq!(value(&session, "#1", ATTRIBUTE_SET, "Tag"), text("T-9"));
-    assert_eq!(value(&session, "#1", ATTRIBUTE_SET, "PredefinedType"), None);
-}

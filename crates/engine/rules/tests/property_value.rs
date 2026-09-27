@@ -256,6 +256,25 @@ fn decimals_equal_within_tolerance_and_bound_exactly() {
 }
 
 #[test]
+fn digits_bound_numbers_and_refuse_text() {
+    let total = |digits| ("total_digits", ParameterValue::Integer { value: digits });
+    let fraction = |digits| ("fraction_digits", ParameterValue::Integer { value: digits });
+    let integer = |value| Some(PropertyValue::Integer(value));
+    let decimal = |value| Some(PropertyValue::Decimal(value));
+    assert!(meets(&check(integer(-999), None, &[total(3)])));
+    assert!(fails(&check(integer(1000), None, &[total(3)])));
+    assert!(meets(&check(integer(120), None, &[fraction(0)])));
+    assert!(meets(&check(decimal(12.5), None, &[total(3), fraction(1)])));
+    assert!(fails(&check(decimal(12.25), None, &[fraction(1)])));
+    assert!(fails(&check(decimal(12.25), None, &[total(3)])));
+    // 0.1 is not a binary double; its shortest decimal has one digit.
+    assert!(meets(&check(decimal(0.1), None, &[total(1), fraction(1)])));
+    assert!(invalid(&check(string("12"), None, &[total(3)])));
+    assert!(invalid(&check(integer(1), None, &[total(0)])));
+    assert!(invalid(&check(integer(1), None, &[fraction(-1)])));
+}
+
+#[test]
 fn quantities_need_units_and_are_not_evaluated() {
     let quantity = Some(PropertyValue::Quantity {
         value: 2.5,
@@ -338,51 +357,4 @@ fn a_rule_without_constraints_is_an_invalid_declaration() {
 fn the_capability_is_registered() {
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
     assert!(registry.get("axioval:capability.property-value").is_some());
-}
-
-fn prohibited() -> (&'static str, ParameterValue) {
-    ("prohibited", ParameterValue::Boolean { value: true })
-}
-
-#[test]
-fn a_prohibited_requirement_fails_exactly_when_the_required_one_holds() {
-    // Presence alone: a non-empty value is the violation.
-    assert!(fails(&check(string("x"), None, &[prohibited()])));
-    for absent in [None, Some(PropertyValue::Null), string(" ")] {
-        assert!(meets(&check(absent, None, &[prohibited()])));
-    }
-    // With a value: only a matching one is the violation.
-    assert!(fails(&check(
-        string("x"),
-        None,
-        &[values(&["x"]), prohibited()]
-    )));
-    assert!(meets(&check(
-        string("y"),
-        None,
-        &[values(&["x"]), prohibited()]
-    )));
-    // With a type: only that type is the violation.
-    let label = text("data_type", "IFCLABEL");
-    assert!(fails(&check(
-        string("x"),
-        Some("IFCLABEL"),
-        &[label.clone(), prohibited()]
-    )));
-    assert!(meets(&check(
-        string("x"),
-        Some("IFCTEXT"),
-        &[label, prohibited()]
-    )));
-    // Undecidable stays undecided.
-    assert!(invalid(&check(
-        string("x"),
-        None,
-        &[values(&[]), text("min_inclusive", "1"), prohibited()]
-    )));
-    assert!(invalid(&check(
-        string("x"),
-        None,
-        &[optional(), prohibited()]
-    )));
 }

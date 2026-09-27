@@ -19,7 +19,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use axioval::ir::{
-    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, RuleFinding, Severity,
+    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, ReportColumn, ReportRow,
+    ReportTable, ReportValue, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +44,127 @@ pub struct CheckOutput {
     /// How the model's bodies were meshed, when `check --geometry` ran.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geometry: Option<GeometryRecord>,
+    /// What `compare` found, per object and facet, beside the report it
+    /// projects to. Absent from a `check` result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<ComparisonRecord>,
+}
+
+/// The structured result of `compare`: every identity that is not unchanged,
+/// with its differences per facet, and everything that could not be matched.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ComparisonRecord {
+    /// The base source, `system:document`.
+    pub base: String,
+    /// The revised source.
+    pub revised: String,
+    /// The identity scheme objects were matched by.
+    pub scheme: String,
+    /// The facets compared, in order.
+    pub facets: Vec<String>,
+    pub tolerance: ToleranceRecord,
+    pub counts: ComparisonCounts,
+    /// Added, removed, changed and incomplete identities, by identity.
+    /// Unchanged identities are only counted.
+    pub objects: Vec<ComparedRecord>,
+    /// Objects without an identity in the scheme.
+    pub unidentified: Vec<SideObject>,
+    /// Identities claimed by several objects of one side.
+    pub ambiguous: Vec<AmbiguousRecord>,
+    /// Coordinate systems, per pair of sources.
+    pub coordinate_systems: Vec<SourceRecord>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ToleranceRecord {
+    pub length_metres: f64,
+    pub angle_degrees: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct ComparisonCounts {
+    pub added: usize,
+    pub removed: usize,
+    pub changed: usize,
+    pub unchanged: usize,
+    /// Matched without a difference, but with a facet not compared or a
+    /// measure undetermined.
+    pub incomplete: usize,
+    pub unidentified: usize,
+    pub ambiguous: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ComparedRecord {
+    pub identity: String,
+    /// `added`, `removed`, `changed` or `incomplete`.
+    pub state: String,
+    /// The object's kind, from the revised side when it has one.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<ChangeRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<GapRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undetermined: Vec<ChangeRecord>,
+}
+
+/// One difference, or one undetermined measure.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChangeRecord {
+    pub facet: String,
+    pub detail: String,
+    /// The measure, for a measured difference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measure: Option<String>,
+    /// The difference lies in `[lower, upper]`, in `unit`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lower: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upper: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<f64>,
+    /// `m`, `rad`, or empty for a ratio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+/// A facet that could not be compared.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GapRecord {
+    pub facet: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SideObject {
+    pub side: String,
+    pub object: ObjectId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AmbiguousRecord {
+    pub side: String,
+    pub identity: String,
+    pub objects: Vec<ObjectId>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SourceRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<SourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised: Option<SourceId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<ChangeRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<GapRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undetermined: Vec<ChangeRecord>,
 }
 
 /// Outcome of meshing, so a reader can tell "no finding" from "not measured".
@@ -94,18 +216,16 @@ impl CheckOutput {
                 .flat_map(|g| g.unmeasured.iter().map(|u| &u.object)),
         );
         for finding in report.findings() {
-            named.insert(&finding.object_id);
-            named.extend(&finding.related);
-        }
-        for finding in report.rule_findings() {
+            named.extend(finding.object_id());
             named.extend(&finding.related);
         }
         named.extend(
             report
                 .not_evaluated()
                 .iter()
-                .filter_map(|n| n.object_id.as_ref()),
+                .filter_map(NotEvaluated::object_id),
         );
+        named.extend(table_objects(&report));
         let objects = named
             .into_iter()
             .filter_map(|id| {
@@ -124,13 +244,37 @@ impl CheckOutput {
             integrity,
             objects,
             geometry,
+            comparison: None,
         }
+    }
+
+    /// The same result carrying what `compare` found.
+    #[must_use]
+    pub fn with_comparison(mut self, comparison: ComparisonRecord) -> Self {
+        self.comparison = Some(comparison);
+        self
     }
 
     /// Whether the report spans more than one source document, in which case
     /// a bare local id like `#2` is ambiguous and is qualified.
     fn several_documents(&self) -> bool {
-        let mut documents = self.referenced().map(|id| &id.source);
+        let scoped = self
+            .report
+            .findings()
+            .iter()
+            .map(|f| &f.scope)
+            .chain(self.report.not_evaluated().iter().map(|n| &n.scope))
+            .chain(
+                self.report
+                    .tables()
+                    .iter()
+                    .flat_map(|table| table.rows().iter().map(ReportRow::scope)),
+            )
+            .filter_map(|scope| match scope {
+                Scope::Source(source) => Some(source),
+                Scope::Project | Scope::Object(_) => None,
+            });
+        let mut documents = self.referenced().map(|id| &id.source).chain(scoped);
         let first = documents.next();
         documents.any(|other| Some(other) != first)
     }
@@ -139,24 +283,19 @@ impl CheckOutput {
         self.report
             .findings()
             .iter()
-            .flat_map(|f| std::iter::once(&f.object_id).chain(&f.related))
-            .chain(
-                self.report
-                    .rule_findings()
-                    .iter()
-                    .flat_map(|f| f.related.iter()),
-            )
+            .flat_map(|f| f.object_id().into_iter().chain(&f.related))
             .chain(
                 self.report
                     .not_evaluated()
                     .iter()
-                    .filter_map(|n| n.object_id.as_ref()),
+                    .filter_map(NotEvaluated::object_id),
             )
             .chain(
                 self.geometry
                     .iter()
                     .flat_map(|g| g.unmeasured.iter().map(|u| &u.object)),
             )
+            .chain(table_objects(&self.report))
     }
 
     /// `#2 IFCWALL 2O2Fr$t4X7Zf8NOew3FLOH`: local id, kind, GlobalId when known.
@@ -175,11 +314,26 @@ impl CheckOutput {
         text
     }
 
-    /// Whether `query` names `id`: its full id, its local id, or its GlobalId.
+    /// What an entry is about: the object as [`Self::describe`] names it, or
+    /// `source <document>` or `project` for an entry about no single object.
+    fn subject(&self, scope: &Scope, qualify: bool) -> String {
+        match scope {
+            Scope::Object(id) => self.describe(id, qualify),
+            Scope::Source(source) => format!("source {}", source.document),
+            Scope::Project => "project".to_owned(),
+        }
+    }
+
+    /// Whether `query` names `id`: its full id, its local id, its local id
+    /// qualified by its document (`model.ifc/#2`, as a summary over several
+    /// documents prints it), or its GlobalId.
     fn names(&self, id: &ObjectId, query: &str) -> bool {
         let full = id.to_string();
         full == query
             || id.local_id == query
+            || query.split_once('/').is_some_and(|(document, local)| {
+                document == id.source.document && local == id.local_id
+            })
             || self
                 .objects
                 .get(&full)
@@ -197,6 +351,8 @@ pub enum Section {
     Integrity,
     /// Objects `check --geometry` could not mesh.
     Geometry,
+    /// Rows of the tables of measured values rules report.
+    Tables,
 }
 
 impl Section {
@@ -206,8 +362,62 @@ impl Section {
             Self::NotEvaluated => "not-evaluated",
             Self::Integrity => "integrity",
             Self::Geometry => "geometry",
+            Self::Tables => "table",
         }
     }
+}
+
+/// The objects the rows of the report's tables are about.
+fn table_objects(report: &Report) -> impl Iterator<Item = &ObjectId> {
+    report
+        .tables()
+        .iter()
+        .flat_map(|table| table.rows().iter().filter_map(|row| row.scope().object()))
+}
+
+/// A column as a summary names it: `height (m)`.
+fn column_text(column: &ReportColumn) -> String {
+    match column.kind.unit_symbol() {
+        Some(unit) => format!("{} ({unit})", column.id),
+        None => column.id.clone(),
+    }
+}
+
+/// A table's columns, as the message of its summary group.
+fn columns_text(table: &ReportTable) -> String {
+    let columns: Vec<String> = table.columns().iter().map(column_text).collect();
+    format!("columns: {}", columns.join(", "))
+}
+
+/// A number as a reader reads it: at most six decimals.
+fn decimal(value: f64) -> String {
+    format!("{}", (value * 1e6).round() / 1e6)
+}
+
+/// One row's values, `elevation 3 m · height 3.49..3.51 m`.
+fn row_text(table: &ReportTable, values: &[ReportValue]) -> String {
+    table
+        .columns()
+        .iter()
+        .zip(values)
+        .map(|(column, value)| {
+            let unit = column
+                .kind
+                .unit_symbol()
+                .map(|unit| format!(" {unit}"))
+                .unwrap_or_default();
+            let text = match value {
+                ReportValue::Unknown => "unknown".to_owned(),
+                ReportValue::Exact { value } => format!("{}{unit}", decimal(*value)),
+                ReportValue::Interval { lower, upper } => {
+                    format!("{}..{}{unit}", decimal(*lower), decimal(*upper))
+                }
+                ReportValue::Text { value } => value.clone(),
+            };
+            format!("{} {text}", column.id)
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// Entries sharing a rule (or integrity code) and a severity (or reason).
@@ -243,14 +453,26 @@ pub struct Summary {
     pub integrity: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<GeometryCounts>,
+    /// What `compare` found, when the result is a comparison.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<ComparisonDigest>,
     pub groups: Vec<Group>,
     /// Groups left out by the `top` limit, per section.
     pub omitted_groups: BTreeMap<&'static str, usize>,
     pub next: Vec<String>,
 }
 
+/// The head of a comparison's summary.
+#[derive(Debug, Serialize)]
+pub struct ComparisonDigest {
+    pub base: String,
+    pub revised: String,
+    pub facets: Vec<String>,
+    pub counts: ComparisonCounts,
+}
+
 pub fn status(report: &Report) -> &'static str {
-    if report.has_findings() {
+    if !report.findings().is_empty() {
         "findings"
     } else if !report.not_evaluated().is_empty() {
         "incomplete"
@@ -275,6 +497,7 @@ fn reason(reason: &NotEvaluatedReason) -> &'static str {
         NotEvaluatedReason::InvalidEvidence => "invalid-evidence",
         NotEvaluatedReason::InvalidDeclaration => "invalid-declaration",
         NotEvaluatedReason::UnboundConcept => "unbound-concept",
+        NotEvaluatedReason::NotRecorded => "not-recorded",
         NotEvaluatedReason::ResourceLimit => "resource-limit",
     }
 }
@@ -368,24 +591,10 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
             .or_default()
             .add(
                 &finding.message,
-                Some(output.describe(&finding.object_id, qualify)),
+                // A source or project finding names its scope in its
+                // message; an example is always an object to drill into.
+                finding.object_id().map(|id| output.describe(id, qualify)),
             );
-    }
-    // A finding about a whole population fires on the rule, not an object;
-    // its participants, when it has any, are the examples.
-    for finding in output.report.rule_findings() {
-        let tally = tallies
-            .entry((
-                Section::Findings,
-                finding.rule_id.to_string(),
-                severity(&finding.severity).to_owned(),
-            ))
-            .or_default();
-        let mut related = finding.related.iter();
-        tally.add(
-            &finding.message,
-            related.next().map(|id| output.describe(id, qualify)),
-        );
     }
     for outcome in output.report.not_evaluated() {
         tallies
@@ -397,10 +606,7 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
             .or_default()
             .add(
                 &outcome.message,
-                outcome
-                    .object_id
-                    .as_ref()
-                    .map(|id| output.describe(id, qualify)),
+                outcome.object_id().map(|id| output.describe(id, qualify)),
             );
     }
     for record in &output.integrity {
@@ -429,6 +635,23 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
                 &unmeasured.reason,
                 Some(output.describe(&unmeasured.object, qualify)),
             );
+    }
+    // One group per table: its rows are the count, its columns the message.
+    for table in output.report.tables() {
+        let columns = columns_text(table);
+        let tally = tallies
+            .entry((
+                Section::Tables,
+                table.rule_id().to_string(),
+                table.name().to_owned(),
+            ))
+            .or_default();
+        for row in table.rows() {
+            tally.add(
+                &columns,
+                row.scope().object().map(|id| output.describe(id, qualify)),
+            );
+        }
     }
 
     tallies
@@ -473,14 +696,18 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
         .iter()
         .any(|n| n.reason == NotEvaluatedReason::MissingService);
     if output.geometry.is_none() && missing_service {
-        next.push(
-            "some rules lack an evidence service; if they are geometric, rerun `axioval check` with --geometry"
-                .into(),
-        );
+        let command = if output.comparison.is_some() {
+            "compare"
+        } else {
+            "check"
+        };
+        next.push(format!(
+            "some rules lack an evidence service; if they are geometric, rerun `axioval {command}` with --geometry"
+        ));
     }
     Summary {
         status: status(&output.report),
-        findings: output.report.findings().len() + output.report.rule_findings().len(),
+        findings: output.report.findings().len(),
         not_evaluated: output.report.not_evaluated().len(),
         integrity: output.integrity.len(),
         geometry: output.geometry.as_ref().map(|g| GeometryCounts {
@@ -488,6 +715,12 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             tessellated: g.tessellated,
             no_body: g.no_body,
             unmeasured: g.unmeasured.len(),
+        }),
+        comparison: output.comparison.as_ref().map(|c| ComparisonDigest {
+            base: c.base.clone(),
+            revised: c.revised.clone(),
+            facets: c.facets.clone(),
+            counts: c.counts,
         }),
         groups: kept,
         omitted_groups,
@@ -516,6 +749,10 @@ fn next_steps(
                 format!("axioval report {quoted} --code {}", shell_quote(&group.key))
             }
             Section::Geometry => format!("axioval report {quoted} --section geometry"),
+            Section::Tables => format!(
+                "axioval report {quoted} --section tables --rule {}",
+                shell_quote(&group.key)
+            ),
             _ => format!("axioval report {quoted} --rule {}", shell_quote(&group.key)),
         });
     }
@@ -527,6 +764,12 @@ fn next_steps(
         && groups.iter().any(|g| g.section == Section::Geometry)
     {
         next.push(format!("axioval report {quoted} --section geometry"));
+    }
+    // Measured values are what a reader asks for next once issues are known.
+    if groups.first().is_some_and(|g| g.section != Section::Tables)
+        && groups.iter().any(|g| g.section == Section::Tables)
+    {
+        next.push(format!("axioval report {quoted} --section tables"));
     }
     if let Some(example) = groups.iter().flat_map(|g| &g.examples).next() {
         let id = example.split(' ').next().unwrap_or(example);
@@ -555,8 +798,32 @@ pub fn shell_quote(text: &str) -> String {
 }
 
 pub fn render_summary(summary: &Summary) -> String {
-    let mut out = format!(
-        "status: {} · {} finding(s) · {} not evaluated · {} integrity issue(s)\n",
+    let mut out = String::new();
+    // A comparison says first what was compared with what.
+    if let Some(comparison) = &summary.comparison {
+        let counts = comparison.counts;
+        let _ = writeln!(
+            out,
+            "compared: {} -> {} · {}",
+            comparison.base,
+            comparison.revised,
+            comparison.facets.join(", ")
+        );
+        let _ = writeln!(
+            out,
+            "objects: {} added · {} removed · {} changed · {} unchanged · {} incomplete · {} unidentified · {} ambiguous",
+            counts.added,
+            counts.removed,
+            counts.changed,
+            counts.unchanged,
+            counts.incomplete,
+            counts.unidentified,
+            counts.ambiguous
+        );
+    }
+    let _ = writeln!(
+        out,
+        "status: {} · {} finding(s) · {} not evaluated · {} integrity issue(s)",
         summary.status, summary.findings, summary.not_evaluated, summary.integrity
     );
     if let Some(geometry) = &summary.geometry {
@@ -620,6 +887,9 @@ pub struct Entry {
     pub level: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub object: Option<String>,
+    /// `source <document>` or `project` for an entry about no single object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<String>,
     pub message: String,
@@ -657,28 +927,24 @@ pub fn list(
             let findings = output.report.findings().iter().filter(|finding| {
                 rule_ok(&finding.rule_id.to_string())
                     && filter.object.as_deref().is_none_or(|query| {
-                        std::iter::once(&finding.object_id)
-                            .chain(&finding.related)
-                            .any(|id| output.names(id, query))
+                        names_source(&finding.scope, query)
+                            || finding
+                                .object_id()
+                                .into_iter()
+                                .chain(&finding.related)
+                                .any(|id| output.names(id, query))
                     })
             });
             matched.extend(findings.map(|f| finding_entry(output, f, qualify, evidence)));
-            let populations = output.report.rule_findings().iter().filter(|finding| {
-                rule_ok(&finding.rule_id.to_string())
-                    && filter.object.as_deref().is_none_or(|query| {
-                        finding.related.iter().any(|id| output.names(id, query))
-                    })
-            });
-            matched.extend(populations.map(|f| rule_finding_entry(output, f, qualify, evidence)));
         }
         if wants(Section::NotEvaluated) {
             let outcomes = output.report.not_evaluated().iter().filter(|outcome| {
                 rule_ok(&outcome.rule_id.to_string())
                     && filter.object.as_deref().is_none_or(|query| {
-                        outcome
-                            .object_id
-                            .as_ref()
-                            .is_some_and(|id| output.names(id, query))
+                        names_source(&outcome.scope, query)
+                            || outcome
+                                .object_id()
+                                .is_some_and(|id| output.names(id, query))
                     })
             });
             matched.extend(outcomes.map(|o| not_evaluated_entry(output, o, qualify)));
@@ -700,6 +966,7 @@ pub fn list(
             key: record.code.clone(),
             level: record.severity.clone(),
             object: None,
+            scope: None,
             related: vec![],
             message: record.message.trim().to_owned(),
             evidence: if evidence {
@@ -725,10 +992,15 @@ pub fn list(
             key: "unmeasured".to_owned(),
             level: "unmeasured".to_owned(),
             object: Some(output.describe(&u.object, qualify)),
+            scope: None,
             related: vec![],
             message: u.reason.clone(),
             evidence: vec![],
         }));
+    }
+
+    if filter.code.is_none() && wants(Section::Tables) {
+        matched.extend(table_entries(output, filter, qualify));
     }
 
     let total = matched.len();
@@ -743,29 +1015,65 @@ pub fn list(
     }
 }
 
-/// A finding about a whole population: no object is at fault.
-fn rule_finding_entry(
+/// The rows of the report's tables that `filter`'s rule and object select,
+/// in table order.
+fn table_entries(output: &CheckOutput, filter: &Filter, qualify: bool) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    for table in output.report.tables() {
+        if filter
+            .rule
+            .as_deref()
+            .is_some_and(|wanted| wanted != table.rule_id().to_string())
+        {
+            continue;
+        }
+        let rows = table.rows().iter().filter(|row| {
+            filter.object.as_deref().is_none_or(|query| {
+                names_source(row.scope(), query)
+                    || row
+                        .scope()
+                        .object()
+                        .is_some_and(|id| output.names(id, query))
+            })
+        });
+        entries.extend(rows.map(|row| {
+            let (object, scope) = subject_fields(output, row.scope(), qualify);
+            Entry {
+                section: Section::Tables,
+                key: table.rule_id().to_string(),
+                level: table.name().to_owned(),
+                object,
+                scope,
+                related: vec![],
+                message: row_text(table, row.values()),
+                evidence: vec![],
+            }
+        }));
+    }
+    entries
+}
+
+/// Whether `query` names the source a source-scoped entry is about, by its
+/// full id or its document.
+fn names_source(scope: &Scope, query: &str) -> bool {
+    match scope {
+        Scope::Source(SourceId { system, document }) => {
+            query == document || query == format!("{system}:{document}")
+        }
+        Scope::Project | Scope::Object(_) => false,
+    }
+}
+
+/// The `object` and `scope` fields of an entry about `scope`.
+fn subject_fields(
     output: &CheckOutput,
-    finding: &RuleFinding,
+    scope: &Scope,
     qualify: bool,
-    evidence: bool,
-) -> Entry {
-    Entry {
-        section: Section::Findings,
-        key: finding.rule_id.to_string(),
-        level: severity(&finding.severity).to_owned(),
-        object: None,
-        related: finding
-            .related
-            .iter()
-            .map(|id| output.describe(id, qualify))
-            .collect(),
-        message: finding.message.trim().to_owned(),
-        evidence: if evidence {
-            finding.evidence.iter().map(|e| e.locator.clone()).collect()
-        } else {
-            vec![]
-        },
+) -> (Option<String>, Option<String>) {
+    let text = output.subject(scope, qualify);
+    match scope {
+        Scope::Object(_) => (Some(text), None),
+        Scope::Source(_) | Scope::Project => (None, Some(text)),
     }
 }
 
@@ -779,11 +1087,13 @@ fn mentions(message: &str, local: &str) -> bool {
 }
 
 fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidence: bool) -> Entry {
+    let (object, scope) = subject_fields(output, &finding.scope, qualify);
     Entry {
         section: Section::Findings,
         key: finding.rule_id.to_string(),
         level: severity(&finding.severity).to_owned(),
-        object: Some(output.describe(&finding.object_id, qualify)),
+        object,
+        scope,
         related: finding
             .related
             .iter()
@@ -806,14 +1116,13 @@ fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidenc
 }
 
 fn not_evaluated_entry(output: &CheckOutput, outcome: &NotEvaluated, qualify: bool) -> Entry {
+    let (object, scope) = subject_fields(output, &outcome.scope, qualify);
     Entry {
         section: Section::NotEvaluated,
         key: outcome.rule_id.to_string(),
         level: reason(&outcome.reason).to_owned(),
-        object: outcome
-            .object_id
-            .as_ref()
-            .map(|id| output.describe(id, qualify)),
+        object,
+        scope,
         related: vec![],
         message: outcome.message.trim().to_owned(),
         evidence: vec![],
@@ -832,6 +1141,9 @@ pub fn render_listing(listing: &Listing) -> String {
         );
         if let Some(object) = &entry.object {
             let _ = write!(out, "  {object}");
+        }
+        if let Some(scope) = &entry.scope {
+            let _ = write!(out, "  ({scope})");
         }
         let _ = writeln!(out, "\n    {}", entry.message);
         if !entry.related.is_empty() {

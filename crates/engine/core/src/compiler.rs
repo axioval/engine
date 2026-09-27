@@ -6,15 +6,15 @@ use std::{
 };
 
 use axioval_ir::contract::{
-    ParameterKind, ParameterValue, RuleApplicability, RuleDefinition, RuleFolder, RuleInstance,
-    Selector,
+    ColumnKind, ParameterKind, ParameterValue, RuleApplicability, RuleDefinition, RuleFolder,
+    RuleInstance, Selector, TableColumnDefinition, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
 use crate::concepts::{ConceptCatalog, ConceptKind};
 use crate::{
     CapabilityRegistry, CompiledRule, DeferredRule, EngineError, ExecutionPlan,
-    ParameterDescriptor, ParameterType,
+    ParameterDescriptor, ParameterType, TableColumn,
 };
 
 /// Normalized Axioval Schema version implemented by this compiler.
@@ -52,7 +52,6 @@ pub fn compile(
         for value in parameters.values() {
             validate_parameter_concepts(&concepts, &rule.id, value)?;
         }
-        validate_meets(registry, &rule.id, &rule.applicability)?;
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
         match applicability_selector(&concepts, rule)? {
@@ -148,6 +147,18 @@ fn bind_parameters(
                 capability: definition.capability.clone(),
                 parameter: name.clone(),
             });
+        }
+        if let (ParameterType::Table(columns), ParameterValue::Table { value: rows }) =
+            (descriptor.parameter_type, value)
+        {
+            for (row, cells) in rows.iter().enumerate() {
+                validate_row(columns, cells).map_err(|detail| EngineError::InvalidTableRow {
+                    capability: definition.capability.clone(),
+                    parameter: name.clone(),
+                    row,
+                    detail,
+                })?;
+            }
         }
         let definition_parameter = &definition.parameters[name];
         if !definition_parameter.allowed_values.is_empty()
@@ -264,7 +275,7 @@ fn validate_selector_concepts(
     selector: &Selector,
 ) -> Result<(), EngineError> {
     match selector {
-        Selector::All | Selector::Classification { .. } => Ok(()),
+        Selector::All | Selector::Classification { .. } | Selector::Discipline { .. } => Ok(()),
         Selector::EntityType { object_type, .. } => {
             require_concept(concepts, rule, ConceptKind::ObjectType, object_type)
         }
@@ -286,86 +297,7 @@ fn validate_selector_concepts(
             .iter()
             .try_for_each(|operand| validate_selector_concepts(concepts, rule, operand)),
         Selector::Not { operand } => validate_selector_concepts(concepts, rule, operand),
-        Selector::Meets { parameters, .. } => parameters
-            .values()
-            .try_for_each(|value| validate_parameter_concepts(concepts, rule, value)),
-    }
-}
-
-/// Every `meets` selector names a registered, selectable capability and
-/// binds its parameters as a rule would.
-fn validate_meets(
-    registry: &CapabilityRegistry,
-    rule: &str,
-    applicability: &RuleApplicability,
-) -> Result<(), EngineError> {
-    match applicability {
-        RuleApplicability::Selector(selector) => validate_meets_selector(registry, rule, selector),
-        RuleApplicability::Groups(groups) => groups
-            .groups
-            .values()
-            .try_for_each(|group| validate_meets_selector(registry, rule, &group.selector)),
-    }
-}
-
-fn validate_meets_selector(
-    registry: &CapabilityRegistry,
-    rule: &str,
-    selector: &Selector,
-) -> Result<(), EngineError> {
-    match selector {
-        Selector::Meets {
-            capability,
-            parameters,
-        } => {
-            let trusted = registry
-                .get(capability)
-                .ok_or_else(|| EngineError::UnknownCapability(capability.clone()))?;
-            let contract = |detail: String| EngineError::CapabilityContract {
-                definition: rule.to_owned(),
-                capability: capability.clone(),
-                detail,
-            };
-            if !trusted.selectable() {
-                return Err(contract("capability cannot select objects".into()));
-            }
-            let descriptors = trusted.parameters();
-            for descriptor in &descriptors {
-                if descriptor.required && !parameters.contains_key(&descriptor.name) {
-                    return Err(EngineError::MissingParameter {
-                        capability: capability.clone(),
-                        parameter: descriptor.name.clone(),
-                    });
-                }
-            }
-            for (name, value) in parameters {
-                let descriptor = descriptors
-                    .iter()
-                    .find(|descriptor| &descriptor.name == name)
-                    .ok_or_else(|| EngineError::UnknownParameter {
-                        capability: capability.clone(),
-                        parameter: name.clone(),
-                    })?;
-                if !descriptor.parameter_type.accepts(value) {
-                    return Err(EngineError::InvalidParameterType {
-                        capability: capability.clone(),
-                        parameter: name.clone(),
-                    });
-                }
-                if let ParameterValue::Selector { value } = value {
-                    validate_meets_selector(registry, rule, value)?;
-                }
-            }
-            Ok(())
-        }
-        Selector::AllOf { operands } | Selector::AnyOf { operands } => operands
-            .iter()
-            .try_for_each(|operand| validate_meets_selector(registry, rule, operand)),
-        Selector::Not { operand } => validate_meets_selector(registry, rule, operand),
-        Selector::All
-        | Selector::EntityType { .. }
-        | Selector::Property { .. }
-        | Selector::Classification { .. } => Ok(()),
+        Selector::Related { selector, .. } => validate_selector_concepts(concepts, rule, selector),
     }
 }
 
@@ -388,6 +320,10 @@ fn validate_parameter_concepts(
                 .try_for_each(|set| require_set_concept(concepts, rule, set))
         }
         ParameterValue::Selector { value } => validate_selector_concepts(concepts, rule, value),
+        ParameterValue::Table { value: rows } => rows
+            .iter()
+            .flat_map(TableRow::values)
+            .try_for_each(|cell| validate_parameter_concepts(concepts, rule, cell)),
         _ => Ok(()),
     }
 }
@@ -465,12 +401,121 @@ fn validate_signature(
             return contract_error(definition_id, capability_id, "parameter name differs");
         };
         if descriptor.required != parameter.required
-            || descriptor.parameter_type != from_kind(&parameter.kind)
+            || !same_type(descriptor.parameter_type, &parameter.kind)
         {
             return contract_error(definition_id, capability_id, "parameter signature differs");
         }
+        match descriptor.parameter_type {
+            ParameterType::Table(columns) => {
+                if !same_columns(columns, &parameter.columns) {
+                    return contract_error(
+                        definition_id,
+                        capability_id,
+                        &format!("table parameter `{}` columns differ", descriptor.name),
+                    );
+                }
+                if !parameter.allowed_values.is_empty() {
+                    return contract_error(
+                        definition_id,
+                        capability_id,
+                        &format!(
+                            "table parameter `{}` must not declare allowedValues",
+                            descriptor.name
+                        ),
+                    );
+                }
+            }
+            _ if !parameter.columns.is_empty() => {
+                return contract_error(
+                    definition_id,
+                    capability_id,
+                    &format!(
+                        "only a table parameter declares columns, not `{}`",
+                        descriptor.name
+                    ),
+                );
+            }
+            _ => {}
+        }
     }
     Ok(())
+}
+
+/// Whether a definition's columns are the descriptor's, in any order.
+///
+/// Column names and descriptions are presentation; IDs, kinds and whether a
+/// cell is required are the contract. Duplicate IDs never match.
+fn same_columns(trusted: &[TableColumn], declared: &[TableColumnDefinition]) -> bool {
+    let mut trusted: Vec<_> = trusted
+        .iter()
+        .map(|column| (column.id, column.kind, column.required))
+        .collect();
+    let mut declared: Vec<_> = declared
+        .iter()
+        .map(|column| (column.id.as_str(), column.kind, column.required))
+        .collect();
+    trusted.sort_unstable();
+    declared.sort_unstable();
+    let distinct = declared.windows(2).all(|pair| pair[0].0 != pair[1].0);
+    distinct && trusted == declared
+}
+
+/// Checks one table row against the trusted columns.
+fn validate_row(columns: &[TableColumn], row: &TableRow) -> Result<(), String> {
+    for (id, cell) in row {
+        let column = columns
+            .iter()
+            .find(|column| column.id == id)
+            .ok_or_else(|| format!("unknown column `{id}`"))?;
+        if !cell_fits(column.kind, cell) {
+            return Err(format!(
+                "column `{id}` takes a {} cell",
+                column.kind.as_str()
+            ));
+        }
+    }
+    match columns
+        .iter()
+        .find(|column| column.required && !row.contains_key(column.id))
+    {
+        Some(column) => Err(format!("required column `{}` is empty", column.id)),
+        None => Ok(()),
+    }
+}
+
+fn cell_fits(kind: ColumnKind, cell: &ParameterValue) -> bool {
+    match (kind, cell) {
+        (ColumnKind::String, ParameterValue::String { .. })
+        | (ColumnKind::Integer, ParameterValue::Integer { .. })
+        | (ColumnKind::Boolean, ParameterValue::Boolean { .. })
+        | (ColumnKind::Selector, ParameterValue::Selector { .. })
+        | (ColumnKind::Reference, ParameterValue::Reference { .. }) => true,
+        (ColumnKind::TextPattern, ParameterValue::String { value }) => well_formed_pattern(value),
+        (ColumnKind::Number, ParameterValue::Number { value }) => value.is_finite(),
+        (ColumnKind::Quantity, ParameterValue::Quantity { value, unit }) => {
+            value.is_finite() && !unit.is_empty()
+        }
+        _ => false,
+    }
+}
+
+/// A wildcard pattern whose every backslash escapes a following character.
+fn well_formed_pattern(pattern: &str) -> bool {
+    let mut chars = pattern.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' && chars.next().is_none() {
+            return false;
+        }
+    }
+    true
+}
+
+fn same_type(parameter_type: ParameterType, kind: &ParameterKind) -> bool {
+    match (parameter_type, kind) {
+        (ParameterType::Table(_), ParameterKind::Table) => true,
+        (ParameterType::Table(_), _) | (_, ParameterKind::Table) => false,
+        (parameter_type, kind) => parameter_type == from_kind(kind),
+    }
 }
 
 fn contract_error<T>(definition: &str, capability: &str, detail: &str) -> Result<T, EngineError> {
@@ -489,11 +534,14 @@ fn from_kind(kind: &ParameterKind) -> ParameterType {
         ParameterKind::Number => ParameterType::Number,
         ParameterKind::Quantity => ParameterType::Quantity,
         ParameterKind::Enum => ParameterType::Enum,
+        ParameterKind::Date => ParameterType::Date,
+        ParameterKind::DateTime => ParameterType::DateTime,
         ParameterKind::Reference => ParameterType::Reference,
         ParameterKind::ObjectTypeReference => ParameterType::ObjectTypeReference,
         ParameterKind::PropertyReference => ParameterType::PropertyReference,
         ParameterKind::Selector => ParameterType::Selector,
         ParameterKind::StringList => ParameterType::StringList,
         ParameterKind::ReferenceList => ParameterType::ReferenceList,
+        ParameterKind::Table => ParameterType::Table(&[]),
     }
 }

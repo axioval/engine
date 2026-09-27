@@ -4,11 +4,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, ClearanceShape, CompiledRule,
+    ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, CompiledRule,
     CompletePlacementEvidence, CompleteSupportEvidence, FreeAreaEvidence, FreeAreaRequest,
     FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
     MetricPoint, NotEvaluatedReason, PlacementDomain, PlacementOutcome, PlacementRequest,
-    RuleCapability, RuleContext, ServiceRegistry,
+    PlacementShape, RuleCapability, RuleContext, ServiceRegistry,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -100,7 +100,7 @@ impl FreeSpaceService for FakeService {
             &[ObjectId::new(source(), "chair").unwrap()]
         );
 
-        let ClearanceShape::Cylinder(shape) = request.shape() else {
+        let PlacementShape::Cylinder(shape) = request.shape() else {
             panic!("expected cylinder")
         };
         assert!(shape.radius_metres().total_cmp(&0.75).is_eq());

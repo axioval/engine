@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    BlockedMetricRouteEvidence, CompleteMetricEvidence, LengthInterval, MetricPoint,
-    MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
-    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, ServiceRegistry,
-    ThresholdVerdict,
+    BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
+    FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
+    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
+    MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
+    NearestTargetRequest, ServiceRegistry, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -215,4 +216,165 @@ fn blocked_evidence_is_bound_to_the_exact_request() {
         service.route(&request),
         Err(MetricRoutingError::ResponseEndpointMismatch)
     );
+}
+
+/// Answers many-target queries with whatever `answer` says, to test the
+/// handle's checks.
+struct ManyTargets {
+    target: usize,
+    last: MetricPoint,
+    converged: bool,
+    witness: ObjectId,
+}
+
+impl MetricRoutingService for ManyTargets {
+    fn route(
+        &self,
+        _request: &MetricRouteRequest,
+    ) -> Result<MetricRouteOutcome, MetricRoutingError> {
+        Err(MetricRoutingError::Unavailable(
+            "pairs are not routed".into(),
+        ))
+    }
+
+    fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        Ok(NearestTargetOutcome::Reached(
+            NearestTargetEvidence::try_new(
+                self.target,
+                LengthInterval::try_new(2.0, 2.5)?,
+                vec![request.origin().clone(), self.last.clone()],
+                evidence("nearest"),
+            )?,
+        ))
+    }
+
+    fn farthest_point(
+        &self,
+        _request: &FarthestPointRequest,
+    ) -> Result<FarthestPointOutcome, MetricRoutingError> {
+        Ok(FarthestPointOutcome::Bounded(
+            FarthestPointEvidence::try_new(
+                LengthInterval::try_new(7.0, 7.5)?,
+                MetricPoint::try_new(self.witness.clone(), [1.0, 1.0, 0.0])?,
+                self.converged,
+                evidence("farthest"),
+            )?,
+        ))
+    }
+}
+
+fn many(target: usize, last: MetricPoint, converged: bool, witness: ObjectId) -> ManyTargets {
+    ManyTargets {
+        target,
+        last,
+        converged,
+        witness,
+    }
+}
+
+#[test]
+fn many_target_requests_need_targets_and_a_valid_tolerance() {
+    assert_eq!(
+        NearestTargetRequest::try_new(point("cad", "a", 0.0), Vec::new(), profile()),
+        Err(MetricRoutingError::NoTargets)
+    );
+    assert_eq!(
+        FarthestPointRequest::try_new(object("cad", "room"), Vec::new(), profile(), 0.01),
+        Err(MetricRoutingError::NoTargets)
+    );
+    for tolerance in [-0.1, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            FarthestPointRequest::try_new(
+                object("cad", "room"),
+                vec![point("cad", "exit", 1.0)],
+                profile(),
+                tolerance,
+            ),
+            Err(MetricRoutingError::InvalidTolerance)
+        );
+    }
+}
+
+#[test]
+fn a_nearest_target_answer_must_reach_the_target_it_names() {
+    let targets = vec![point("cad", "x", 3.0), point("cad", "y", 4.0)];
+    let request =
+        NearestTargetRequest::try_new(point("cad", "a", 0.0), targets.clone(), profile()).unwrap();
+    let handle = |service: ManyTargets| MetricRoutingServiceHandle::new(Arc::new(service));
+    let room = object("cad", "room");
+    let answered = handle(many(1, targets[1].clone(), false, room.clone()))
+        .nearest_target(&request)
+        .unwrap();
+    let NearestTargetOutcome::Reached(reached) = answered else {
+        panic!("expected a reached target");
+    };
+    assert_eq!(reached.target(), 1);
+    assert_eq!(
+        handle(many(0, targets[1].clone(), false, room.clone())).nearest_target(&request),
+        Err(MetricRoutingError::ResponseEndpointMismatch)
+    );
+    assert_eq!(
+        handle(many(2, targets[1].clone(), false, room)).nearest_target(&request),
+        Err(MetricRoutingError::InconsistentResponse)
+    );
+}
+
+#[test]
+fn a_farthest_point_answer_must_lie_on_the_region_and_converge_honestly() {
+    let room = object("cad", "room");
+    let exit = point("cad", "exit", 1.0);
+    let handle = |service: ManyTargets| MetricRoutingServiceHandle::new(Arc::new(service));
+    let request = |tolerance| {
+        FarthestPointRequest::try_new(room.clone(), vec![exit.clone()], profile(), tolerance)
+            .unwrap()
+    };
+    // The interval is 0.5 m wide: converged for a 0.5 m tolerance, not 0.1 m.
+    assert!(
+        handle(many(0, exit.clone(), true, room.clone()))
+            .farthest_point(&request(0.5))
+            .is_ok()
+    );
+    assert_eq!(
+        handle(many(0, exit.clone(), true, room.clone())).farthest_point(&request(0.1)),
+        Err(MetricRoutingError::InconsistentResponse)
+    );
+    assert!(
+        handle(many(0, exit.clone(), false, room.clone()))
+            .farthest_point(&request(0.1))
+            .is_ok()
+    );
+    assert_eq!(
+        handle(many(0, exit.clone(), false, object("cad", "elsewhere")))
+            .farthest_point(&request(0.1)),
+        Err(MetricRoutingError::ResponseEndpointMismatch)
+    );
+}
+
+#[test]
+fn a_backend_without_many_target_search_refuses_rather_than_answers() {
+    let service = MetricRoutingServiceHandle::new(Arc::new(DeterministicRouter));
+    let request = NearestTargetRequest::try_new(
+        point("cad", "a", 0.0),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+    )
+    .unwrap();
+    assert!(matches!(
+        service.nearest_target(&request),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
+    let request = FarthestPointRequest::try_new(
+        object("cad", "room"),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+        0.01,
+    )
+    .unwrap();
+    assert!(matches!(
+        service.farthest_point(&request),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
 }

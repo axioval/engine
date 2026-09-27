@@ -3,10 +3,11 @@
 use axioval_engine::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
+    ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
     FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
-    ObstructionEvidence, PlacementDomain, PlacementOutcome, PlacementRequest, ServiceRegistry,
-    SignedDistanceInterval, SupportedPlacement, ThresholdVerdict,
+    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
+    PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportedPlacement, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -41,13 +42,92 @@ fn request(doc: &str, local: &str) -> ClearanceRequest {
 fn placement_request(doc: &str, local: &str) -> PlacementRequest {
     PlacementRequest::new(
         object(doc, local),
-        ClearanceShape::Box(BoxClearance::try_new(1.5, 1.2, 2.0).unwrap()),
+        placement_shape(),
         vec![object(doc, "wall")],
     )
 }
 
-fn placement_shape() -> ClearanceShape {
-    ClearanceShape::Box(BoxClearance::try_new(1.5, 1.2, 2.0).unwrap())
+/// A box fixed to the identity axes, which every anchor in these tests uses.
+fn placement_shape() -> PlacementShape {
+    PlacementShape::Box {
+        shape: BoxClearance::try_new(1.5, 1.2, 2.0).unwrap(),
+        orientation: PlacementOrientation::Fixed(placement_frame("cad", "door")),
+    }
+}
+
+fn any_box() -> PlacementShape {
+    PlacementShape::Box {
+        shape: BoxClearance::try_new(1.5, 1.2, 2.0).unwrap(),
+        orientation: PlacementOrientation::Any,
+    }
+}
+
+fn quarter_turn(doc: &str, local: &str) -> MetricFrame {
+    MetricFrame::try_new(
+        point(doc, local),
+        direction([0.0, 1.0, 0.0]),
+        direction([-1.0, 0.0, 0.0]),
+        direction([0.0, 0.0, 1.0]),
+    )
+    .unwrap()
+}
+
+#[test]
+fn fixed_orientation_witness_must_follow_the_fixed_axes() {
+    let r = placement_request("cad", "room");
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(
+            r.clone(),
+            quarter_turn("cad", "room"),
+            evidence("rotated")
+        ),
+        Err(FreeSpaceError::PlacementOrientationMismatch)
+    );
+    assert!(
+        ClearancePlacementEvidence::try_new(r, placement_frame("cad", "room"), evidence("aligned"))
+            .is_ok()
+    );
+}
+
+#[test]
+fn any_orientation_accepts_a_rotated_witness() {
+    let r = PlacementRequest::new(object("cad", "room"), any_box(), vec![]);
+    assert!(
+        ClearancePlacementEvidence::try_new(r, quarter_turn("cad", "room"), evidence("rotated"))
+            .is_ok()
+    );
+}
+
+#[test]
+fn cylinder_placement_carries_no_orientation() {
+    let shape = PlacementShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    assert_eq!(shape.orientation(), None);
+    let r = PlacementRequest::new(object("cad", "room"), shape, vec![]);
+    assert!(
+        ClearancePlacementEvidence::try_new(r, quarter_turn("cad", "room"), evidence("any"))
+            .is_ok()
+    );
+}
+
+#[test]
+fn frame_offset_box_must_be_fixed_to_the_anchor_axes() {
+    for shape in [
+        any_box(),
+        PlacementShape::Box {
+            shape: BoxClearance::try_new(1.5, 1.2, 2.0).unwrap(),
+            orientation: PlacementOrientation::Fixed(quarter_turn("cad", "door")),
+        },
+    ] {
+        assert_eq!(
+            PlacementRequest::new_in_domain(
+                object("cad", "room"),
+                shape,
+                vec![],
+                relative_domain("cad"),
+            ),
+            Err(FreeSpaceError::OrientationDomainConflict)
+        );
+    }
 }
 
 fn direction(components: [f64; 3]) -> MetricDirection {
@@ -366,14 +446,70 @@ fn placement_witness_must_satisfy_frame_offset_domain() {
 }
 
 #[test]
-fn relative_domain_anchor_must_match_request_scope() {
+fn relative_domain_anchor_may_stand_on_another_object_but_witnesses_stay_in_scope() {
+    // The anchor is a door's frame; the search scope is the room in front of it.
+    let offsets = FrameOffsetPlacement::new(
+        placement_frame("cad", "door"),
+        SignedDistanceInterval::try_new(-1.0, 1.0).unwrap(),
+        SignedDistanceInterval::try_new(0.0, 2.0).unwrap(),
+        SignedDistanceInterval::exact(0.0).unwrap(),
+    );
     let r = PlacementRequest::new_in_domain(
-        object("cad", "other"),
+        object("cad", "room"),
         placement_shape(),
         vec![],
-        relative_domain("cad"),
+        PlacementDomain::FrameOffsets(offsets.clone()),
+    )
+    .unwrap();
+    let in_room = placement_frame_at("cad", "room", [0.5, 1.0, 0.0]);
+    assert!(offsets.contains_frame(&in_room));
+    assert!(ClearancePlacementEvidence::try_new(r.clone(), in_room, evidence("placement")).is_ok());
+    let on_door = placement_frame_at("cad", "door", [0.5, 1.0, 0.0]);
+    assert_eq!(
+        ClearancePlacementEvidence::try_new(r, on_door, evidence("placement")),
+        Err(FreeSpaceError::PlacementScopeMismatch)
     );
-    assert_eq!(r, Err(FreeSpaceError::PlacementScopeMismatch));
+}
+
+#[test]
+fn elevation_band_defaults_to_the_shape_height_and_rejects_bad_bands() {
+    let r = placement_request("cad", "room");
+    assert_eq!(r.band(), None);
+    assert_eq!(
+        r.effective_band(),
+        ElevationBand::try_new(0.0, 2.0).unwrap()
+    );
+    let band = ElevationBand::try_new(0.1, 0.67).unwrap();
+    let banded = r.clone().with_band(band);
+    assert_eq!(banded.band(), Some(band));
+    assert_eq!(banded.effective_band(), band);
+    assert_ne!(banded, r, "the band is part of the request identity");
+    for (from, to) in [(-0.1, 1.0), (1.0, 1.0), (1.0, 0.5), (0.0, f64::INFINITY)] {
+        assert_eq!(
+            ElevationBand::try_new(from, to),
+            Err(FreeSpaceError::InvalidElevationBand)
+        );
+    }
+}
+
+#[test]
+fn merged_scopes_are_sorted_and_never_the_scope_or_an_obstacle() {
+    let r = placement_request("cad", "room")
+        .with_merged_scopes(vec![
+            object("cad", "b"),
+            object("cad", "a"),
+            object("cad", "b"),
+        ])
+        .unwrap();
+    assert_eq!(r.merged_scopes(), &[object("cad", "a"), object("cad", "b")]);
+    assert_eq!(
+        placement_request("cad", "room").with_merged_scopes(vec![object("cad", "room")]),
+        Err(FreeSpaceError::MergedScopeConflict)
+    );
+    assert_eq!(
+        placement_request("cad", "room").with_merged_scopes(vec![object("cad", "wall")]),
+        Err(FreeSpaceError::MergedScopeConflict)
+    );
 }
 
 fn placement_frame_at(doc: &str, local: &str, xyz: [f64; 3]) -> MetricFrame {
@@ -612,5 +748,66 @@ fn support_proof_must_be_exact_and_reviewable() {
             approximate
         ),
         Err(FreeSpaceError::InexactSupportEvidence)
+    );
+}
+
+fn containment(doc: &str, scopes: Vec<ObjectId>) -> ContainmentRequest {
+    let volume = request(doc, "wc");
+    ContainmentRequest::new(volume.frame().clone(), volume.shape(), scopes)
+}
+
+/// Answers every containment question about another volume.
+struct WrongContainment;
+impl FreeSpaceService for WrongContainment {
+    fn assess_clearance(&self, req: &ClearanceRequest) -> Result<ClearanceOutcome, FreeSpaceError> {
+        DeterministicFreeSpace.assess_clearance(req)
+    }
+    fn find_placement(&self, req: &PlacementRequest) -> Result<PlacementOutcome, FreeSpaceError> {
+        DeterministicFreeSpace.find_placement(req)
+    }
+    fn measure_free_area(&self, req: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
+        DeterministicFreeSpace.measure_free_area(req)
+    }
+    fn assess_containment(
+        &self,
+        _req: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        Ok(ContainmentOutcome::Inside(ContainmentEvidence::try_new(
+            containment("other", vec![object("other", "room")]),
+            evidence("inside-other-room"),
+        )?))
+    }
+}
+
+#[test]
+fn containment_scopes_are_deterministic() {
+    let request = containment(
+        "cad",
+        vec![object("cad", "b"), object("cad", "a"), object("cad", "b")],
+    );
+    assert_eq!(request.scopes(), &[object("cad", "a"), object("cad", "b")]);
+}
+
+#[test]
+fn a_service_without_containment_refuses_rather_than_answering() {
+    let handle = FreeSpaceServiceHandle::new(Arc::new(DeterministicFreeSpace));
+    assert!(matches!(
+        handle.assess_containment(&containment("cad", vec![object("cad", "room")])),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+}
+
+#[test]
+fn containment_evidence_must_be_exact_and_bound_to_the_request() {
+    let mut approximate = evidence("inside");
+    approximate.exact = false;
+    assert_eq!(
+        ContainmentEvidence::try_new(containment("cad", vec![]), approximate),
+        Err(FreeSpaceError::IncompleteClearanceEvidence)
+    );
+    let handle = FreeSpaceServiceHandle::new(Arc::new(WrongContainment));
+    assert_eq!(
+        handle.assess_containment(&containment("cad", vec![object("cad", "room")])),
+        Err(FreeSpaceError::ResponseRequestMismatch)
     );
 }

@@ -278,6 +278,45 @@ pub enum Cap {
     Bottom,
 }
 
+/// A request for the coverage of one cap of a space.
+///
+/// Which elements may form the cap is a policy choice, so a rule can state it:
+/// [`Self::with_elements`] carries the rule's selection, and the service then
+/// considers exactly those elements. Without it the service falls back to the
+/// cap elements its host declared (slabs for the bottom, slabs and roofs for
+/// the top).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapRequest {
+    cap: Cap,
+    elements: Option<Vec<ObjectId>>,
+}
+
+impl CapRequest {
+    /// Asks for `cap`, bounded by the host-declared cap elements.
+    #[must_use]
+    pub fn new(cap: Cap) -> Self {
+        Self {
+            cap,
+            elements: None,
+        }
+    }
+    /// Asks for `cap` bounded by exactly these elements, in canonical order.
+    #[must_use]
+    pub fn with_elements(mut self, mut elements: Vec<ObjectId>) -> Self {
+        elements.sort();
+        elements.dedup();
+        self.elements = Some(elements);
+        self
+    }
+    pub fn cap(&self) -> Cap {
+        self.cap
+    }
+    /// The elements the caller chose, or `None` to use the host's declaration.
+    pub fn elements(&self) -> Option<&[ObjectId]> {
+        self.elements.as_deref()
+    }
+}
+
 /// Measures the geometry a space-validation policy reasons about.
 ///
 /// ADR 0004: every method returns a measurement. None returns a finding, and
@@ -291,8 +330,13 @@ pub trait SpaceService: Send + Sync + 'static {
     fn measure_boundary_gaps(&self, space: &ObjectId) -> Result<Vec<BoundaryGap>, SpaceError>;
     /// Bodies overlapping `space`.
     fn measure_overlaps(&self, space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError>;
-    /// Coverage of one horizontal cap of `space`.
-    fn measure_cap_coverage(&self, space: &ObjectId, cap: Cap) -> Result<CapCoverage, SpaceError>;
+    /// Coverage of one horizontal cap of `space`, by the elements `request`
+    /// names or, when it names none, by the host-declared cap elements.
+    fn measure_cap_coverage(
+        &self,
+        space: &ObjectId,
+        request: &CapRequest,
+    ) -> Result<CapCoverage, SpaceError>;
     /// Floor area belonging to no space, per storey.
     fn measure_storey_residuals(&self) -> Result<Vec<StoreyResidual>, SpaceError>;
     /// Counts of the elements that can form horizontal caps.
@@ -349,6 +393,22 @@ mod tests {
     fn negative_zero_coverage_is_normalised() {
         let coverage = CapCoverage::try_new(10.0, -0.0, Vec::new()).unwrap();
         assert_eq!(format!("{:.1}", coverage.covered_ratio() * 100.0), "0.0");
+    }
+
+    #[test]
+    fn cap_request_elements_are_canonical_and_absent_by_default() {
+        assert_eq!(CapRequest::new(Cap::Top).elements(), None);
+        let request =
+            CapRequest::new(Cap::Bottom).with_elements(vec![oid("b"), oid("a"), oid("b")]);
+        assert_eq!(request.cap(), Cap::Bottom);
+        assert_eq!(request.elements(), Some(&[oid("a"), oid("b")][..]));
+        // An explicit empty selection is a statement, not an absence.
+        assert_eq!(
+            CapRequest::new(Cap::Top)
+                .with_elements(Vec::new())
+                .elements(),
+            Some(&[][..])
+        );
     }
 
     #[test]

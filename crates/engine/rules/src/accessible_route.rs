@@ -18,6 +18,11 @@
 //! portal's from the geometry's bound otherwise; a stated portal width also
 //! goes into the request, so the geometry can admit the body through a door.
 //!
+//! With `passing_width_metres`, `passing_length_metres` and
+//! `passing_spacing_metres`, a proven route must also offer a free box that
+//! size at most every `passing_spacing_metres` along it (see
+//! [`crate::passing_spaces`]).
+//!
 //! Three-valued throughout: a destination some start reaches definitely
 //! passes, one every start is proven cut off from is a finding relating the
 //! elements that block it, and anything else is not evaluated. Objects whose
@@ -35,6 +40,7 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
+use crate::passing_spaces::{self, Ground, PassingSpaces, Spacing};
 use crate::plan_area::shown;
 use crate::selection::{Selection, select_objects, selector_matches};
 use crate::support::{Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve};
@@ -56,6 +62,7 @@ struct Declaration<'a> {
     stair_width: Option<f64>,
     forbid_stairs: bool,
     clear_width: Option<PropertyRef<'a>>,
+    passing: Option<PassingSpaces>,
 }
 
 fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
@@ -67,6 +74,7 @@ fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavai
 
 fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
+    let clear_height = length(&parameters, "clear_height_metres")?;
     Ok(Declaration {
         route: parameters.required_selector("route_selector")?,
         starts: parameters.required_selector("start_selector")?,
@@ -88,12 +96,13 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         obstacles: parameters.selector("obstacle_selector")?,
         width: length(&parameters, "width_metres")?
             .ok_or_else(|| invalid("parameter `width_metres` is required"))?,
-        clear_height: length(&parameters, "clear_height_metres")?,
+        clear_height,
         door_width: length(&parameters, "door_width_metres")?,
         ramp_width: length(&parameters, "ramp_width_metres")?,
         stair_width: length(&parameters, "stair_width_metres")?,
         forbid_stairs: parameters.boolean("forbid_stairs")?.unwrap_or(true),
         clear_width: parameters.property("clear_width_property")?,
+        passing: PassingSpaces::parse(&parameters, clear_height)?,
     })
 }
 
@@ -103,7 +112,7 @@ impl RuleCapability for AccessibleRoute {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
+        let mut parameters = vec![
             ParameterDescriptor::required("route_selector", ParameterType::Selector),
             ParameterDescriptor::required("start_selector", ParameterType::Selector),
             ParameterDescriptor::optional("portal_selector", ParameterType::Selector),
@@ -118,7 +127,9 @@ impl RuleCapability for AccessibleRoute {
             ParameterDescriptor::optional("stair_width_metres", ParameterType::Number),
             ParameterDescriptor::optional("forbid_stairs", ParameterType::Boolean),
             ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
-        ]
+        ];
+        parameters.extend(passing_spaces::parameters());
+        parameters
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -179,6 +190,7 @@ impl RuleCapability for AccessibleRoute {
             }
         };
         let judge = Judge {
+            context,
             declared: &declared,
             scene: &scene,
             snapshot: &snapshot,
@@ -193,6 +205,9 @@ impl RuleCapability for AccessibleRoute {
                 Verdict::Reachable => {}
                 Verdict::Blocked(blocked) => {
                     evaluation.push_finding(judge.finding(rule, &destination.id, blocked));
+                }
+                Verdict::Crowded(missed) => {
+                    evaluation.push_finding(judge.crowded(rule, &destination.id, missed));
                 }
                 Verdict::Undecided(reason, message) => {
                     evaluation.push_object_not_evaluated(destination.id.clone(), reason, message);
@@ -454,10 +469,14 @@ impl Judgement {
 enum Verdict {
     Reachable,
     Blocked(Vec<Judgement>),
+    /// Every proven route lacks passing spaces: per start, the message and
+    /// evidence.
+    Crowded(Vec<(ObjectId, String, Vec<Evidence>)>),
     Undecided(NotEvaluatedReason, String),
 }
 
 struct Judge<'a> {
+    context: &'a RuleContext<'a>,
     declared: &'a Declaration<'a>,
     scene: &'a Scene,
     snapshot: &'a WalkabilitySnapshot,
@@ -701,11 +720,15 @@ impl Judge<'_> {
         judged
     }
 
+    #[allow(clippy::too_many_lines)]
     fn destination(&self, destination: &ObjectId) -> Verdict {
         let scene = self.scene;
         let mut blocked: Vec<Judgement> = Vec::new();
         let mut undecided: BTreeSet<String> = BTreeSet::new();
         let mut open = false;
+        let mut spacing_reason = NotEvaluatedReason::IncompleteEvidence;
+        let mut spacing_open: BTreeSet<String> = BTreeSet::new();
+        let mut crowded = Vec::new();
         let starts = scene
             .starts
             .decided
@@ -739,7 +762,16 @@ impl Judge<'_> {
                 Ok(WalkabilityRouteOutcome::Reachable(_))
                     if why.is_none() && ends.admission == PassageAdmission::Admitted =>
                 {
-                    return Verdict::Reachable;
+                    match self.spacing(start, destination) {
+                        Spacing::Met => return Verdict::Reachable,
+                        Spacing::Missed(message, evidence) => {
+                            crowded.push((start.clone(), message, evidence));
+                        }
+                        Spacing::Unknown(reason, message) => {
+                            spacing_reason = reason;
+                            spacing_open.insert(message);
+                        }
+                    }
                 }
                 Ok(
                     WalkabilityRouteOutcome::Reachable(_) | WalkabilityRouteOutcome::Indeterminate,
@@ -786,13 +818,56 @@ impl Judge<'_> {
                  and none is ruled out",
                 metres(self.declared.width)
             );
+            undecided.extend(spacing_open);
             if !undecided.is_empty() {
                 message.push_str(": ");
                 message.push_str(&undecided.into_iter().collect::<Vec<_>>().join("; "));
             }
             return Verdict::Undecided(NotEvaluatedReason::IncompleteEvidence, message);
         }
+        if !spacing_open.is_empty() {
+            return Verdict::Undecided(
+                spacing_reason,
+                format!(
+                    "a route to {destination} is proven, but not its passing spaces: {}",
+                    spacing_open.into_iter().collect::<Vec<_>>().join("; ")
+                ),
+            );
+        }
+        if !crowded.is_empty() {
+            return Verdict::Crowded(crowded);
+        }
         Verdict::Blocked(blocked)
+    }
+
+    /// Whether the proven route from `start` has its passing spaces.
+    fn spacing(&self, start: &ObjectId, destination: &ObjectId) -> Spacing {
+        let Some(passing) = &self.declared.passing else {
+            return Spacing::Met;
+        };
+        if start == destination {
+            return Spacing::Met;
+        }
+        let services = match passing_spaces::Services::of(self.context) {
+            Ok(services) => services,
+            Err((reason, message)) => return Spacing::Unknown(reason, message),
+        };
+        let scene = self.scene;
+        let spaces: BTreeSet<ObjectId> = scene
+            .route
+            .decided
+            .iter()
+            .chain([start, destination])
+            .filter(|object| !scene.portals.contains(object))
+            .cloned()
+            .collect();
+        let ground = Ground {
+            spaces: &spaces,
+            portals: &scene.portals.decided,
+            obstacles: &scene.obstacles,
+            body: self.declared.width,
+        };
+        passing_spaces::judge(passing, &services, &ground, start, destination)
     }
 
     /// Why `passage` blocks: its own judgement, or its width.
@@ -824,6 +899,34 @@ impl Judge<'_> {
             evidence: vec![passage.evidence().clone()],
             stairs_only: false,
         }
+    }
+
+    /// The finding for a destination whose every proven route lacks
+    /// passing spaces.
+    fn crowded(
+        &self,
+        rule: &CompiledRule,
+        destination: &ObjectId,
+        missed: Vec<(ObjectId, String, Vec<Evidence>)>,
+    ) -> axioval_ir::Finding {
+        let mut evidence = vec![self.snapshot.evidence().clone()];
+        let mut related = Vec::new();
+        let mut messages = Vec::new();
+        for (start, message, cited) in missed {
+            related.push(start);
+            messages.push(message);
+            evidence.extend(cited);
+        }
+        finding(
+            rule,
+            destination,
+            format!(
+                "no route to {destination} has its passing spaces: {}",
+                messages.join("; ")
+            ),
+            evidence,
+            related,
+        )
     }
 
     fn finding(

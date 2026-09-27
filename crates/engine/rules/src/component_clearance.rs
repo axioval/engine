@@ -1,15 +1,17 @@
 //! `component-clearance`: a free box or cylinder in front of, behind or
 //! beside each selected component, placed in the component's own frame on
-//! a side the rule states.
+//! a side the rule states, fixed or sliding sideways.
 
 use std::collections::BTreeSet;
 
 use axioval_engine::{
     BoxClearance, CapabilityEvaluation, ClearanceOutcome, ClearanceRequest, ClearanceShape,
-    CompiledRule, ContainmentOutcome, ContainmentRequest, CylinderClearance, FreeSpaceError,
-    FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, NotEvaluatedReason,
-    ObjectFrame, ObjectFrameServiceHandle, ObjectFront, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext, VerticalExtentServiceHandle,
+    CompiledRule, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
+    FrameOffsetPlacement, FreeSpaceError, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
+    MetricPoint, NotEvaluatedReason, ObjectFrame, ObjectFrameServiceHandle, ObjectFront,
+    ParameterDescriptor, ParameterType, PlacementDomain, PlacementOrientation, PlacementOutcome,
+    PlacementRequest, PlacementShape, RuleCapability, RuleContext, SignedDistanceInterval,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
@@ -37,8 +39,18 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 /// looking out of that side), moved by `lateral_offset`; its base lies
 /// `vertical_offset` above the `height_reference`: the floor (the lowest
 /// point of the spaces `space_path` reaches), or the component's bottom or
-/// top. A minimum size is checked as a box of that size: a larger free
-/// volume holds it.
+/// top.
+///
+/// `size_mode` says what the size is: a `minimum` (the default: the volume,
+/// less `size_tolerance` in every dimension, must be free), a `maximum` (no
+/// volume `size_tolerance` larger in any one dimension may be free) or
+/// `fixed` (both).
+///
+/// With `slide_from` and `slide_to`, the volume floats: it may slide across
+/// the side by any offset between the two, to the right as seen looking out
+/// of it, and is free when it is free at one of them. A floating volume is
+/// searched in the spaces `space_path` reaches, so it always lies inside
+/// them.
 ///
 /// Obstacles are the `obstacles` selection less the component itself and
 /// the `allowed_intruders`. With `protrusion`, an obstacle may reach up to
@@ -50,12 +62,11 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 /// judged on its own.
 ///
 /// Positions are measured intervals, so the volume's position is too. The
-/// check measures the union of every position the volume could take (clear
-/// means clear wherever it is) and their common part (obstructed there
+/// check measures the union of every position the volume could take (free
+/// there means free wherever it is) and their common part (obstructed there
 /// means obstructed wherever it is); anything between is not evaluated. An
-/// obstacle the selection cannot decide can only obstruct, so a clear
-/// volume stands and an obstruction by undecided objects alone is not
-/// evaluated.
+/// obstacle the selection cannot decide can only obstruct, so a free volume
+/// stands and an obstruction by undecided objects alone is not evaluated.
 pub struct ComponentClearance;
 
 const ID: &str = "axioval:capability.component-clearance";
@@ -176,11 +187,129 @@ enum Shape {
     Cylinder { radius: f64 },
 }
 
+/// A volume's plan shape and height.
+#[derive(Clone, Copy)]
+struct Size {
+    shape: Shape,
+    height: f64,
+}
+
+impl Size {
+    fn describe(self) -> String {
+        let height = metres(self.height);
+        match self.shape {
+            Shape::Box { width, depth } => format!(
+                "{} wide, {} deep, {height} high",
+                metres(width),
+                metres(depth)
+            ),
+            Shape::Cylinder { radius } => {
+                format!("{} in radius, {height} high", metres(radius))
+            }
+        }
+    }
+
+    /// Every dimension changed by `by`.
+    fn changed(self, by: f64) -> Self {
+        Self {
+            shape: match self.shape {
+                Shape::Box { width, depth } => Shape::Box {
+                    width: width + by,
+                    depth: depth + by,
+                },
+                Shape::Cylinder { radius } => Shape::Cylinder {
+                    radius: radius + by,
+                },
+            },
+            height: self.height + by,
+        }
+    }
+
+    /// The sizes `by` larger in one dimension each, with that dimension's
+    /// name.
+    fn larger(self, by: f64) -> Vec<(&'static str, Self)> {
+        let taller = Self {
+            height: self.height + by,
+            ..self
+        };
+        let mut sizes = match self.shape {
+            Shape::Box { width, depth } => vec![
+                (
+                    "width",
+                    Self {
+                        shape: Shape::Box {
+                            width: width + by,
+                            depth,
+                        },
+                        ..self
+                    },
+                ),
+                (
+                    "depth",
+                    Self {
+                        shape: Shape::Box {
+                            width,
+                            depth: depth + by,
+                        },
+                        ..self
+                    },
+                ),
+            ],
+            Shape::Cylinder { radius } => vec![(
+                "radius",
+                Self {
+                    shape: Shape::Cylinder {
+                        radius: radius + by,
+                    },
+                    ..self
+                },
+            )],
+        };
+        sizes.push(("height", taller));
+        sizes
+    }
+
+    /// The plan shape reaching `by` further out and in: a box `2 by` deeper,
+    /// a cylinder `by` wider.
+    fn deeper(self, by: f64) -> Self {
+        Self {
+            shape: match self.shape {
+                Shape::Box { width, depth } => Shape::Box {
+                    width,
+                    depth: depth + 2.0 * by,
+                },
+                Shape::Cylinder { radius } => Shape::Cylinder {
+                    radius: radius + by,
+                },
+            },
+            ..self
+        }
+    }
+
+    /// Whether `protrusion` leaves a volume of this size.
+    fn holds(self, protrusion: f64) -> bool {
+        self.height > 0.0
+            && match self.shape {
+                Shape::Box { width, depth } => 2.0 * protrusion < width.min(depth),
+                Shape::Cylinder { radius } => protrusion < radius,
+            }
+    }
+}
+
+/// What the declared size bounds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SizeMode {
+    Minimum,
+    Maximum,
+    Fixed,
+}
+
 struct Config<'a> {
     sides: Vec<Side>,
     front: FrontAxis,
-    shape: Shape,
-    height: f64,
+    size: Size,
+    mode: SizeMode,
+    tolerance: f64,
     offset: f64,
     lateral_offset: f64,
     align: Align,
@@ -190,6 +319,8 @@ struct Config<'a> {
     allowed: Option<&'a Selector>,
     protrusion: f64,
     within_space: bool,
+    /// The offsets across the side a floating volume may slide by.
+    slide: Option<(f64, f64)>,
     spaces: Option<Traversal<'a>>,
 }
 
@@ -209,50 +340,95 @@ fn positive(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unav
     }
 }
 
+fn non_negative(parameters: &Parameters<'_>, name: &str) -> Result<f64, Unavailable> {
+    match length(parameters, name)? {
+        Some(value) if value < 0.0 => Err(invalid(format!("`{name}` is negative"))),
+        other => Ok(other.unwrap_or(0.0)),
+    }
+}
+
+/// The size, its mode and tolerance, checked against `protrusion`.
+fn sizes(
+    parameters: &Parameters<'_>,
+    protrusion: f64,
+) -> Result<(Size, SizeMode, f64), Unavailable> {
+    let height =
+        positive(parameters, "height")?.ok_or_else(|| invalid("parameter `height` is required"))?;
+    let shape = match (
+        positive(parameters, "width")?,
+        positive(parameters, "depth")?,
+        positive(parameters, "radius")?,
+    ) {
+        (Some(width), Some(depth), None) => Shape::Box { width, depth },
+        (None, None, Some(radius)) => Shape::Cylinder { radius },
+        _ => {
+            return Err(invalid(
+                "declare `width` and `depth` for a box or `radius` for a cylinder",
+            ));
+        }
+    };
+    let size = Size { shape, height };
+    let mode = match parameters.string("size_mode")? {
+        None | Some("minimum") => SizeMode::Minimum,
+        Some("maximum") => SizeMode::Maximum,
+        Some("fixed") => SizeMode::Fixed,
+        Some(other) => {
+            return Err(invalid(format!(
+                "size_mode `{other}` is unsupported; use `minimum`, `maximum` or `fixed`"
+            )));
+        }
+    };
+    let tolerance = non_negative(parameters, "size_tolerance")?;
+    if mode != SizeMode::Minimum && tolerance <= 0.0 {
+        return Err(invalid(
+            "a `maximum` or `fixed` size needs a positive `size_tolerance`: the free volume \
+             that larger in one dimension is the one that must not fit",
+        ));
+    }
+    if !size.holds(protrusion) {
+        return Err(invalid(match shape {
+            Shape::Box { .. } => {
+                "`protrusion` leaves no volume: it must be less than half the width and the \
+                 depth"
+            }
+            Shape::Cylinder { .. } => {
+                "`protrusion` leaves no volume: it must be less than the radius"
+            }
+        }));
+    }
+    if mode != SizeMode::Maximum && !size.changed(-tolerance).holds(protrusion) {
+        return Err(invalid(
+            "`size_tolerance` and `protrusion` leave no volume of the minimum size",
+        ));
+    }
+    Ok((size, mode, tolerance))
+}
+
+/// The offsets a floating volume may slide by.
+fn slide(parameters: &Parameters<'_>) -> Result<Option<(f64, f64)>, Unavailable> {
+    match (
+        length(parameters, "slide_from")?,
+        length(parameters, "slide_to")?,
+    ) {
+        (None, None) => Ok(None),
+        (Some(from), Some(to)) if from <= to => Ok(Some((from, to))),
+        (Some(_), Some(_)) => Err(invalid("`slide_from` lies beyond `slide_to`")),
+        _ => Err(invalid("`slide_from` and `slide_to` go together")),
+    }
+}
+
 impl<'a> Config<'a> {
     fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
         let parameters = Parameters(rule);
-        let side = Side::parse(parameters.required_string("side")?)?;
+        let stated = Side::parse(parameters.required_string("side")?)?;
         let sides = if parameters.boolean("both_sides")?.unwrap_or(false) {
-            vec![side, side.opposite()]
+            vec![stated, stated.opposite()]
         } else {
-            vec![side]
+            vec![stated]
         };
         let front = FrontAxis::parse(parameters.required_string("front_axis")?)?;
-        let height = positive(&parameters, "height")?
-            .ok_or_else(|| invalid("parameter `height` is required"))?;
-        let protrusion = match length(&parameters, "protrusion")? {
-            Some(value) if value < 0.0 => return Err(invalid("`protrusion` is negative")),
-            other => other.unwrap_or(0.0),
-        };
-        let shape = match (
-            positive(&parameters, "width")?,
-            positive(&parameters, "depth")?,
-            positive(&parameters, "radius")?,
-        ) {
-            (Some(width), Some(depth), None) => {
-                if 2.0 * protrusion >= width.min(depth) {
-                    return Err(invalid(
-                        "`protrusion` leaves no volume: it must be less than half the width \
-                         and the depth",
-                    ));
-                }
-                Shape::Box { width, depth }
-            }
-            (None, None, Some(radius)) => {
-                if protrusion >= radius {
-                    return Err(invalid(
-                        "`protrusion` leaves no volume: it must be less than the radius",
-                    ));
-                }
-                Shape::Cylinder { radius }
-            }
-            _ => {
-                return Err(invalid(
-                    "declare `width` and `depth` for a box or `radius` for a cylinder",
-                ));
-            }
-        };
+        let protrusion = non_negative(&parameters, "protrusion")?;
+        let (size, mode, tolerance) = sizes(&parameters, protrusion)?;
         let align = match parameters.string("align")? {
             None | Some("centre") => Align::Centre,
             Some("left") => Align::Left,
@@ -273,21 +449,24 @@ impl<'a> Config<'a> {
                 )));
             }
         };
+        let slide = slide(&parameters)?;
         let within_space = parameters.boolean("within_space")?.unwrap_or(false);
         let spaces = match parameters.strings("space_path")? {
             Some(path) => Some(Traversal::path(path)?),
             None => None,
         };
-        let needs_spaces = within_space || matches!(reference, Reference::Floor);
+        let needs_spaces = within_space || slide.is_some() || matches!(reference, Reference::Floor);
         match (needs_spaces, &spaces) {
             (true, None) => {
                 return Err(invalid(
-                    "`height_reference` `floor` and `within_space` need `space_path`",
+                    "`height_reference` `floor`, `within_space` and a floating volume need \
+                     `space_path`",
                 ));
             }
             (false, Some(_)) => {
                 return Err(invalid(
-                    "`space_path` applies only to `height_reference` `floor` or `within_space`",
+                    "`space_path` applies only to `height_reference` `floor`, `within_space` \
+                     or a floating volume",
                 ));
             }
             _ => {}
@@ -295,8 +474,9 @@ impl<'a> Config<'a> {
         Ok(Self {
             sides,
             front,
-            shape,
-            height,
+            size,
+            mode,
+            tolerance,
             offset: length(&parameters, "offset")?.unwrap_or(0.0),
             lateral_offset: length(&parameters, "lateral_offset")?.unwrap_or(0.0),
             align,
@@ -306,22 +486,9 @@ impl<'a> Config<'a> {
             allowed: parameters.selector("allowed_intruders")?,
             protrusion,
             within_space,
+            slide,
             spaces,
         })
-    }
-
-    fn describe(&self) -> String {
-        let height = metres(self.height);
-        match self.shape {
-            Shape::Box { width, depth } => format!(
-                "{} wide, {} deep, {height} high",
-                metres(width),
-                metres(depth)
-            ),
-            Shape::Cylinder { radius } => {
-                format!("{} in radius, {height} high", metres(radius))
-            }
-        }
     }
 }
 
@@ -339,9 +506,13 @@ impl RuleCapability for ComponentClearance {
             ParameterDescriptor::optional("depth", ParameterType::Quantity),
             ParameterDescriptor::optional("radius", ParameterType::Quantity),
             ParameterDescriptor::required("height", ParameterType::Quantity),
+            ParameterDescriptor::optional("size_mode", ParameterType::String),
+            ParameterDescriptor::optional("size_tolerance", ParameterType::Quantity),
             ParameterDescriptor::optional("offset", ParameterType::Quantity),
             ParameterDescriptor::optional("lateral_offset", ParameterType::Quantity),
             ParameterDescriptor::optional("align", ParameterType::String),
+            ParameterDescriptor::optional("slide_from", ParameterType::Quantity),
+            ParameterDescriptor::optional("slide_to", ParameterType::Quantity),
             ParameterDescriptor::required("height_reference", ParameterType::String),
             ParameterDescriptor::optional("vertical_offset", ParameterType::Quantity),
             ParameterDescriptor::required("obstacles", ParameterType::Selector),
@@ -388,7 +559,7 @@ impl RuleCapability for ComponentClearance {
                     Ok(Some((message, evidence, related))) => evaluation.push_finding(finding(
                         rule,
                         &object.id,
-                        format!("{label} ({}) {message}", config.describe()),
+                        format!("{label} {message}"),
                         evidence,
                         related,
                     )),
@@ -467,9 +638,29 @@ impl Obstacles {
             failed,
         }
     }
+
+    /// Sure and possible obstacles, less `excluded`.
+    fn without(&self, excluded: &[&ObjectId]) -> (Vec<ObjectId>, Vec<ObjectId>) {
+        let keep = |set: &BTreeSet<ObjectId>| -> Vec<ObjectId> {
+            set.iter()
+                .filter(|id| !excluded.contains(id))
+                .cloned()
+                .collect()
+        };
+        (keep(&self.sure), keep(&self.maybe))
+    }
 }
 
 type Judged = Result<Option<(String, Vec<Evidence>, Vec<ObjectId>)>, Unavailable>;
+
+/// Whether a volume is free, three-valued; errors are the third value.
+enum Freedom {
+    /// Free wherever the volume is: the evidence.
+    Free(Vec<Evidence>),
+    /// Obstructed wherever it is: what it says, the evidence and the
+    /// objects it relates.
+    Blocked(String, Vec<Evidence>, Vec<ObjectId>),
+}
 
 /// One result per checked side and question, in order.
 fn check(
@@ -491,15 +682,54 @@ fn check(
     };
     let mut results = Vec::new();
     for side in &config.sides {
-        let volume = placed.volume(config, services, object, *side);
-        let clearance = match &volume {
-            Ok(volume) => clearance(config, services, obstacles, object, volume),
-            Err(error) => Err(error.clone()),
+        let faces = placed.faces(services, object, *side);
+        let free = |size: Size| -> Result<Freedom, Unavailable> {
+            let volume = faces.as_ref().map_err(Clone::clone)?.volume(config, size);
+            match config.slide {
+                None => clearance(config, services, obstacles, object, &volume, size),
+                Some(slide) => search(
+                    config, services, obstacles, &placed, object, &volume, size, slide,
+                ),
+            }
         };
-        results.push((*side, clearance));
-        if config.within_space {
-            let containment = match &volume {
-                Ok(volume) => containment(config, services, &placed, object, volume),
+        if config.mode != SizeMode::Maximum {
+            let size = config.size.changed(-config.tolerance);
+            let judged = free(size).map(|freedom| match freedom {
+                Freedom::Free(_) => None,
+                Freedom::Blocked(message, evidence, related) => Some((
+                    format!("({}) {message}", size.describe()),
+                    evidence,
+                    related,
+                )),
+            });
+            results.push((*side, judged));
+        }
+        if config.mode != SizeMode::Minimum {
+            for (dimension, size) in config.size.larger(config.tolerance) {
+                let judged = free(size).map(|freedom| match freedom {
+                    Freedom::Blocked(..) => None,
+                    Freedom::Free(evidence) => Some((
+                        format!(
+                            "({}) is free, so the free volume exceeds the maximum {dimension}",
+                            size.describe()
+                        ),
+                        evidence,
+                        Vec::new(),
+                    )),
+                });
+                results.push((*side, judged));
+            }
+        }
+        // A floating volume is searched in the spaces, so it lies in them.
+        if config.within_space && config.slide.is_none() {
+            let containment = match &faces {
+                Ok(faces) => containment(
+                    config,
+                    services,
+                    &placed,
+                    object,
+                    &faces.volume(config, config.size),
+                ),
                 Err(error) => Err(error.clone()),
             };
             results.push((*side, containment));
@@ -597,25 +827,17 @@ impl Placement {
         })
     }
 
-    /// The volume on `side`, with the intervals its position is known to.
-    fn volume(
+    /// The component's faces on `side`: the axes and the intervals its
+    /// outermost point and its edges across the side are known to.
+    fn faces(
         &self,
-        config: &Config<'_>,
         services: &Services<'_>,
         object: &Object,
         side: Side,
-    ) -> Result<Volume, Unavailable> {
+    ) -> Result<Faces, Unavailable> {
         let outward = side.outward(self.front, self.up);
         // Looking out of the side with up overhead, the box's right.
         let across = cross(outward, self.up);
-        let direction = |vector: [f64; 3]| {
-            MetricDirection::try_new(vector).map_err(|error| {
-                (
-                    NotEvaluatedReason::InvalidEvidence,
-                    format!("clearance axis: {error}"),
-                )
-            })
-        };
         let (outward, across, up) = (direction(outward)?, direction(across)?, direction(self.up)?);
         let along = services
             .extents
@@ -628,32 +850,69 @@ impl Placement {
         let mut evidence = self.evidence.clone();
         evidence.push(along.evidence().clone());
         evidence.push(beside.evidence().clone());
-        // The component's outermost point on this side.
-        let face = (along.upper().lower_metres(), along.upper().upper_metres());
         let (low, high) = (beside.lower(), beside.upper());
-        let half = match config.shape {
+        Ok(Faces {
+            outward,
+            across,
+            up,
+            face: (along.upper().lower_metres(), along.upper().upper_metres()),
+            low: (low.lower_metres(), low.upper_metres()),
+            high: (high.lower_metres(), high.upper_metres()),
+            base: self.base,
+            evidence,
+        })
+    }
+}
+
+fn direction(vector: [f64; 3]) -> Result<MetricDirection, Unavailable> {
+    MetricDirection::try_new(vector).map_err(|error| {
+        (
+            NotEvaluatedReason::InvalidEvidence,
+            format!("clearance axis: {error}"),
+        )
+    })
+}
+
+/// A component's measured faces on one side.
+struct Faces {
+    outward: MetricDirection,
+    across: MetricDirection,
+    up: MetricDirection,
+    /// The component's outermost point on this side.
+    face: (f64, f64),
+    /// Its left and right edges across the side.
+    low: (f64, f64),
+    high: (f64, f64),
+    /// Elevation interval of the height reference.
+    base: (f64, f64),
+    evidence: Vec<Evidence>,
+}
+
+impl Faces {
+    /// The volume of `size` on this side, with the intervals its position
+    /// is known to.
+    fn volume(&self, config: &Config<'_>, size: Size) -> Volume {
+        let (low, high) = (self.low, self.high);
+        let half = match size.shape {
             Shape::Box { width, .. } => width / 2.0,
             Shape::Cylinder { radius } => radius,
         };
         let centre_across = match config.align {
-            Align::Centre => (
-                f64::midpoint(low.lower_metres(), high.lower_metres()),
-                f64::midpoint(low.upper_metres(), high.upper_metres()),
-            ),
-            Align::Left => (low.lower_metres() + half, low.upper_metres() + half),
-            Align::Right => (high.lower_metres() - half, high.upper_metres() - half),
+            Align::Centre => (f64::midpoint(low.0, high.0), f64::midpoint(low.1, high.1)),
+            Align::Left => (low.0 + half, low.1 + half),
+            Align::Right => (high.0 - half, high.1 - half),
         };
-        let reach = match config.shape {
+        let reach = match size.shape {
             Shape::Box { depth, .. } => depth / 2.0,
             Shape::Cylinder { radius } => radius,
         };
-        Ok(Volume {
-            outward,
-            across,
-            up,
+        Volume {
+            outward: self.outward,
+            across: self.across,
+            up: self.up,
             centre_out: (
-                face.0 + config.offset + reach,
-                face.1 + config.offset + reach,
+                self.face.0 + config.offset + reach,
+                self.face.1 + config.offset + reach,
             ),
             centre_across: (
                 centre_across.0 + config.lateral_offset,
@@ -663,8 +922,8 @@ impl Placement {
                 self.base.0 + config.vertical_offset,
                 self.base.1 + config.vertical_offset,
             ),
-            evidence,
-        })
+            evidence: self.evidence.clone(),
+        }
     }
 }
 
@@ -682,10 +941,23 @@ struct Volume {
 /// Which of the volume's possible positions a request stands for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Bound {
-    /// Every position together: clear here is clear anywhere.
+    /// Every position together: free here is free anywhere.
     Union,
     /// What every position shares: obstructed here is obstructed anywhere.
     Common,
+}
+
+impl Bound {
+    fn sign(self) -> f64 {
+        match self {
+            Self::Union => 1.0,
+            Self::Common => -1.0,
+        }
+    }
+}
+
+fn spread((low, high): (f64, f64)) -> f64 {
+    high - low
 }
 
 impl Volume {
@@ -695,31 +967,18 @@ impl Volume {
         point(self.centre_out) && point(self.centre_across) && point(self.base)
     }
 
-    /// The frame and shape of one bound, shrunk by `inset` on every plan
-    /// side; `None` when the common part is empty.
-    fn bound(
+    /// The plan shape of one bound, `height` high, shrunk by `inset` on
+    /// every plan side; `None` when the common part is empty.
+    fn shape(
         &self,
-        config: &Config<'_>,
-        object: &ObjectId,
+        size: Size,
         inset: f64,
+        height: f64,
         bound: Bound,
-    ) -> Result<Option<(MetricFrame, ClearanceShape)>, Unavailable> {
-        let spread = |(low, high): (f64, f64)| high - low;
-        let sign = match bound {
-            Bound::Union => 1.0,
-            Bound::Common => -1.0,
-        };
-        let (out, across, rise) = (
-            spread(self.centre_out),
-            spread(self.centre_across),
-            spread(self.base),
-        );
-        let height = config.height + sign * rise;
-        let base = match bound {
-            Bound::Union => self.base.0,
-            Bound::Common => self.base.1,
-        };
-        let shape = match config.shape {
+    ) -> Result<Option<ClearanceShape>, Unavailable> {
+        let sign = bound.sign();
+        let (out, across) = (spread(self.centre_out), spread(self.centre_across));
+        match size.shape {
             Shape::Box { width, depth } => {
                 let width = width - 2.0 * inset + sign * across;
                 let depth = depth - 2.0 * inset + sign * out;
@@ -739,7 +998,12 @@ impl Volume {
                 CylinderClearance::try_new(radius, height).map(ClearanceShape::Cylinder)
             }
         }
-        .map_err(|error| free_space_error(&error))?;
+        .map(Some)
+        .map_err(|error| free_space_error(&error))
+    }
+
+    /// The middle of the volume's positions, at elevation `elevation`.
+    fn centre(&self, object: &ObjectId, elevation: f64) -> Result<MetricPoint, Unavailable> {
         let (o, a, u) = (
             self.outward.components(),
             self.across.components(),
@@ -749,15 +1013,39 @@ impl Volume {
             f64::midpoint(self.centre_out.0, self.centre_out.1),
             f64::midpoint(self.centre_across.0, self.centre_across.1),
         );
-        let origin = [0, 1, 2].map(|i| co * o[i] + ca * a[i] + base * u[i]);
-        let point = MetricPoint::try_new(object.clone(), origin).map_err(|error| {
+        let origin = [0, 1, 2].map(|i| co * o[i] + ca * a[i] + elevation * u[i]);
+        MetricPoint::try_new(object.clone(), origin).map_err(|error| {
             (
                 NotEvaluatedReason::InvalidEvidence,
                 format!("clearance origin: {error}"),
             )
-        })?;
-        let frame = MetricFrame::try_new(point, self.across, self.outward, self.up)
-            .map_err(|error| free_space_error(&error))?;
+        })
+    }
+
+    /// The frame and shape of one bound, shrunk by `inset` on every plan
+    /// side; `None` when the common part is empty.
+    fn bound(
+        &self,
+        size: Size,
+        object: &ObjectId,
+        inset: f64,
+        bound: Bound,
+    ) -> Result<Option<(MetricFrame, ClearanceShape)>, Unavailable> {
+        let height = size.height + bound.sign() * spread(self.base);
+        let Some(shape) = self.shape(size, inset, height, bound)? else {
+            return Ok(None);
+        };
+        let base = match bound {
+            Bound::Union => self.base.0,
+            Bound::Common => self.base.1,
+        };
+        let frame = MetricFrame::try_new(
+            self.centre(object, base)?,
+            self.across,
+            self.outward,
+            self.up,
+        )
+        .map_err(|error| free_space_error(&error))?;
         Ok(Some((frame, shape)))
     }
 }
@@ -773,26 +1061,32 @@ fn free_space_error(error: &FreeSpaceError) -> Unavailable {
     (reason, format!("free space: {error}"))
 }
 
-/// Whether the volume is free of obstacles, three-valued.
+fn names(objects: &[ObjectId]) -> String {
+    objects
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Whether the fixed volume is free of obstacles, three-valued.
 fn clearance(
     config: &Config<'_>,
     services: &Services<'_>,
     obstacles: &Obstacles,
     object: &Object,
     volume: &Volume,
-) -> Judged {
+    size: Size,
+) -> Result<Freedom, Unavailable> {
     if let Some(failed) = &obstacles.failed {
         return Err(failed.clone());
     }
-    let without = |set: &BTreeSet<ObjectId>| -> Vec<ObjectId> {
-        set.iter().filter(|id| **id != object.id).cloned().collect()
-    };
-    let sure = without(&obstacles.sure);
+    let (sure, maybe) = obstacles.without(&[&object.id]);
     let mut candidates = sure.clone();
-    candidates.extend(without(&obstacles.maybe));
+    candidates.extend(maybe);
     let ask = |bound: Bound, candidates: &[ObjectId]| {
         volume
-            .bound(config, &object.id, config.protrusion, bound)?
+            .bound(size, &object.id, config.protrusion, bound)?
             .map(|(frame, shape)| {
                 services
                     .free_space
@@ -801,9 +1095,14 @@ fn clearance(
             })
             .transpose()
     };
+    let cited = |proof: &Evidence| {
+        let mut evidence = volume.evidence.clone();
+        evidence.push(proof.clone());
+        evidence
+    };
     let union = ask(Bound::Union, &candidates);
-    if let Ok(Some(ClearanceOutcome::Clear(_))) = &union {
-        return Ok(None);
+    if let Ok(Some(ClearanceOutcome::Clear(proof))) = &union {
+        return Ok(Freedom::Free(cited(proof.evidence())));
     }
     let common = if volume.exact() {
         union.clone()
@@ -811,14 +1110,11 @@ fn clearance(
         ask(Bound::Common, &candidates)
     };
     let found = |blockers: &[ObjectId], proof: &Evidence| {
-        let mut evidence = volume.evidence.clone();
-        evidence.push(proof.clone());
-        let names: Vec<String> = blockers.iter().map(ToString::to_string).collect();
-        Ok(Some((
-            format!("is obstructed by {}", names.join(", ")),
-            evidence,
+        Ok(Freedom::Blocked(
+            format!("is obstructed by {}", names(blockers)),
+            cited(proof),
             blockers.to_vec(),
-        )))
+        ))
     };
     if let Ok(Some(ClearanceOutcome::Obstructed(proof))) = &common {
         let decided: Vec<ObjectId> = proof
@@ -840,12 +1136,7 @@ fn clearance(
                 NotEvaluatedReason::IncompleteEvidence,
                 format!(
                     "obstructed only by objects the obstacle selection cannot decide: {}",
-                    proof
-                        .blockers()
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    names(proof.blockers())
                 ),
             )),
             Err(error) => Err(error),
@@ -861,6 +1152,195 @@ fn clearance(
     ))
 }
 
+/// Keeps a frame-offset anchor's floor within this of the floor measured.
+const FLOOR_MARGIN: f64 = 1.0e-6;
+
+/// How far a witness of a floating volume may stand off its line: a
+/// domain without area is searched only at points moved onto it, which
+/// rarely verify, so the free volume is searched `SLACK` deeper on each side
+/// within `SLACK` of the line, and holds the volume on the line.
+const SLACK: f64 = 1.0e-3;
+
+/// Whether the floating volume fits at some offset across the side,
+/// three-valued, by a placement search in the component's spaces.
+///
+/// The volume's position is an interval. A fit of the volume grown by it
+/// (the union) at an offset holds the volume at that offset wherever it
+/// is; the volume shrunk by it (the common part) fits at every offset the
+/// volume fits at, so its absence proves the volume's.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn search(
+    config: &Config<'_>,
+    services: &Services<'_>,
+    obstacles: &Obstacles,
+    placed: &Placement,
+    object: &Object,
+    volume: &Volume,
+    size: Size,
+    (from, to): (f64, f64),
+) -> Result<Freedom, Unavailable> {
+    if let Some(failed) = &obstacles.failed {
+        return Err(failed.clone());
+    }
+    let Some((scope, merged)) = placed.spaces.split_first() else {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            "`space_path` reaches no space to search for the floating volume".into(),
+        ));
+    };
+    let floor = extent(services.extents, scope)?;
+    let mut evidence = volume.evidence.clone();
+    evidence.push(floor.evidence().clone());
+    let floor = (floor.bottom().lower_metres(), floor.bottom().upper_metres());
+    let mut excluded: Vec<&ObjectId> = placed.spaces.iter().collect();
+    excluded.push(&object.id);
+    let (sure, maybe) = obstacles.without(&excluded);
+    // The anchor stands in the middle of the volume's positions, on the
+    // floor, with the plan axes of the side; only the offset across it
+    // slides.
+    let outward = volume.outward.components();
+    let outward = direction([outward[0], outward[1], 0.0])?;
+    let up = direction([0.0, 0.0, 1.0])?;
+    let across = direction(cross(outward.components(), up.components()))?;
+    let floor_middle = f64::midpoint(floor.0, floor.1);
+    let anchor = MetricFrame::try_new(
+        volume.centre(&object.id, floor_middle)?,
+        across,
+        outward,
+        up,
+    )
+    .map_err(|error| free_space_error(&error))?;
+    let reach = spread(floor) / 2.0 + FLOOR_MARGIN;
+    let offsets = |slack: f64| {
+        Ok::<_, FreeSpaceError>(FrameOffsetPlacement::new(
+            anchor.clone(),
+            SignedDistanceInterval::try_new(from, to)?,
+            SignedDistanceInterval::try_new(-slack, slack)?,
+            SignedDistanceInterval::try_new(-reach, reach)?,
+        ))
+    };
+    // The base above the scope's floor, as an interval.
+    let lowest = volume.base.0 - floor.1;
+    let highest = volume.base.1 - floor.0;
+    let request = |bound: Bound,
+                   candidates: Vec<ObjectId>|
+     -> Result<Option<PlacementRequest>, Unavailable> {
+        let (band_from, band_to) = match bound {
+            Bound::Union => (lowest, highest + size.height),
+            Bound::Common => (highest, lowest + size.height),
+        };
+        if band_to <= band_from {
+            return Ok(None);
+        }
+        let band = ElevationBand::try_new(band_from, band_to).map_err(|_| {
+            (
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "the volume's base lies {} to {} above the floor of {scope}; a floating \
+                     volume must stand at or above it",
+                    metres(lowest),
+                    metres(highest)
+                ),
+            )
+        })?;
+        // A witness may stand off the line by the slack, which the deeper
+        // volume makes up for; an absence is proven on the line itself.
+        let (slack, size) = match bound {
+            Bound::Union => (SLACK, size.deeper(SLACK)),
+            Bound::Common => (0.0, size),
+        };
+        let Some(shape) = volume.shape(size, config.protrusion, band_to - band_from, bound)? else {
+            return Ok(None);
+        };
+        let offsets = offsets(slack).map_err(|error| free_space_error(&error))?;
+        let shape = match shape {
+            ClearanceShape::Box(shape) => PlacementShape::Box {
+                shape,
+                orientation: PlacementOrientation::Fixed(anchor.clone()),
+            },
+            ClearanceShape::Cylinder(shape) => PlacementShape::Cylinder(shape),
+        };
+        PlacementRequest::new_in_domain(
+            scope.clone(),
+            shape,
+            candidates,
+            PlacementDomain::FrameOffsets(offsets),
+        )
+        .and_then(|request| request.with_merged_scopes(merged.to_vec()))
+        .map(|request| Some(request.with_band(band)))
+        .map_err(|error| free_space_error(&error))
+    };
+    let find = |request: &Option<PlacementRequest>| {
+        request
+            .as_ref()
+            .map(|request| {
+                services
+                    .free_space
+                    .find_placement(request)
+                    .map_err(|error| free_space_error(&error))
+            })
+            .transpose()
+    };
+    let ask = |bound: Bound, candidates: Vec<ObjectId>| find(&request(bound, candidates)?);
+    let cited = |proof: &Evidence| {
+        let mut evidence = evidence.clone();
+        evidence.push(proof.clone());
+        evidence
+    };
+    let mut candidates = sure.clone();
+    candidates.extend(maybe.iter().cloned());
+    let asked = request(Bound::Union, candidates.clone())?;
+    let union = find(&asked);
+    if let Ok(Some(PlacementOutcome::Found(found))) = &union {
+        return Ok(Freedom::Free(cited(found.evidence())));
+    }
+    // A volume known exactly on an exact floor asks one question.
+    let common_request = request(Bound::Common, candidates)?;
+    let common = if common_request == asked {
+        union.clone()
+    } else {
+        find(&common_request)
+    };
+    let blocked = |proof: &Evidence| {
+        Ok(Freedom::Blocked(
+            format!(
+                "fits nowhere between {} and {} across the side in {}",
+                metres(from),
+                metres(to),
+                names(&placed.spaces)
+            ),
+            cited(proof),
+            placed.spaces.clone(),
+        ))
+    };
+    if let Ok(Some(PlacementOutcome::NoPlacement(proof))) = &common {
+        if maybe.is_empty() {
+            return blocked(proof.evidence());
+        }
+        // Undecided obstacles may be what leaves no room: ask again
+        // without them.
+        return match ask(Bound::Common, sure) {
+            Ok(Some(PlacementOutcome::NoPlacement(proof))) => blocked(proof.evidence()),
+            Ok(_) => Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "the volume fits only if objects the obstacle selection cannot decide are \
+                     not obstacles: {}",
+                    names(&maybe)
+                ),
+            )),
+            Err(error) => Err(error),
+        };
+    }
+    union?;
+    common?;
+    Err((
+        NotEvaluatedReason::IncompleteEvidence,
+        "the volume fits at some positions the measured component leaves open but not at all"
+            .into(),
+    ))
+}
+
 /// Whether the declared volume's plan lies inside the reached spaces.
 fn containment(
     config: &Config<'_>,
@@ -869,17 +1349,18 @@ fn containment(
     object: &Object,
     volume: &Volume,
 ) -> Judged {
+    let described = config.size.describe();
     let spaces: Vec<String> = placed.spaces.iter().map(ToString::to_string).collect();
     if placed.spaces.is_empty() {
         return Ok(Some((
-            "has no space to lie in: `space_path` reaches none".into(),
+            format!("({described}) has no space to lie in: `space_path` reaches none"),
             volume.evidence.clone(),
             Vec::new(),
         )));
     }
     let ask = |bound: Bound| {
         volume
-            .bound(config, &object.id, 0.0, bound)?
+            .bound(config.size, &object.id, 0.0, bound)?
             .map(|(frame, shape)| {
                 services
                     .free_space
@@ -905,7 +1386,7 @@ fn containment(
         let mut evidence = volume.evidence.clone();
         evidence.push(proof.evidence().clone());
         return Ok(Some((
-            format!("extends outside {}", spaces.join(", ")),
+            format!("({described}) extends outside {}", spaces.join(", ")),
             evidence,
             placed.spaces.clone(),
         )));

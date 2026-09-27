@@ -534,3 +534,138 @@ fn declarations_and_services_fail_closed() {
         "{outcome:#?}"
     );
 }
+
+#[test]
+fn a_floating_transfer_area_fits_after_sliding_past_the_basin() {
+    // Looking out of the WC's left (west) side, right is north. Slid 0.5 m
+    // north or more, the area (y 0.5 to 1.2) passes the basin (y 0.2 to 0.5).
+    let outcome =
+        basin(Scene::wc()).check(&[("slide_from", metres(0.0)), ("slide_to", metres(1.5))]);
+    assert!(clean(&outcome), "{outcome:#?}");
+    // Within 0.3 m either way it meets the basin wherever it stands, and
+    // south of the room it leaves the space.
+    let outcome =
+        basin(Scene::wc()).check(&[("slide_from", metres(-0.5)), ("slide_to", metres(0.3))]);
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "left clearance (0.7 m wide, 0.9 m deep, 2 m high) fits nowhere between -0.5 m and \
+             0.3 m across the side in cad:model/room"
+                .to_owned(),
+            vec!["room".to_owned()]
+        )],
+        "{outcome:#?}"
+    );
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // The basin hangs 0.8 m above the floor: a volume 0.8 m high slides
+    // under it without moving.
+    let outcome = basin(Scene::wc()).check(&[
+        ("height", metres(0.8)),
+        ("slide_from", metres(-0.5)),
+        ("slide_to", metres(0.3)),
+    ]);
+    assert!(clean(&outcome), "{outcome:#?}");
+}
+
+#[test]
+fn a_floating_volume_needs_its_spaces_and_both_offsets() {
+    let outcome = Scene::wc().check(&[("slide_from", metres(0.0))]);
+    assert_eq!(
+        unevaluated(&outcome)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
+    let outcome = Scene::wc().check(&[
+        ("slide_from", metres(0.0)),
+        ("slide_to", metres(1.0)),
+        ("height_reference", text("bottom")),
+        ("space_path", none()),
+    ]);
+    assert_eq!(
+        unevaluated(&outcome)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
+    let outcome = Scene::wc().check(&[("slide_from", metres(1.0)), ("slide_to", metres(0.0))]);
+    assert_eq!(
+        unevaluated(&outcome)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+#[test]
+fn a_maximum_size_is_exceeded_by_a_larger_free_volume() {
+    let maximum = [
+        ("size_mode", text("maximum")),
+        ("size_tolerance", metres(0.05)),
+    ];
+    // In the empty room a volume 5 cm larger in any dimension is free.
+    let outcome = Scene::wc().check(&maximum);
+    let found: Vec<String> = findings(&outcome)
+        .into_iter()
+        .map(|(message, _)| message)
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "left clearance (0.75 m wide, 0.9 m deep, 2 m high) is free, so the free volume \
+             exceeds the maximum width",
+            "left clearance (0.7 m wide, 0.95 m deep, 2 m high) is free, so the free volume \
+             exceeds the maximum depth",
+            "left clearance (0.7 m wide, 0.9 m deep, 2.05 m high) is free, so the free volume \
+             exceeds the maximum height",
+        ],
+        "{outcome:#?}"
+    );
+    // The basin bounds every larger volume.
+    assert!(clean(&basin(Scene::wc()).check(&maximum)));
+    // A fixed size needs both: the basin obstructs the smallest volume.
+    let outcome = basin(Scene::wc()).check(&[
+        ("size_mode", text("fixed")),
+        ("size_tolerance", metres(0.05)),
+    ]);
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "left clearance (0.65 m wide, 0.85 m deep, 1.95 m high) is obstructed by \
+             cad:model/basin"
+                .to_owned(),
+            vec!["basin".to_owned()]
+        )],
+        "{outcome:#?}"
+    );
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // A maximum without a tolerance says nothing.
+    let outcome = Scene::wc().check(&[("size_mode", text("maximum"))]);
+    assert_eq!(
+        unevaluated(&outcome)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+#[test]
+fn a_floating_maximum_is_searched_too() {
+    // A larger volume slides past the basin.
+    let outcome = basin(Scene::wc()).check(&[
+        ("size_mode", text("maximum")),
+        ("size_tolerance", metres(0.05)),
+        ("slide_from", metres(0.0)),
+        ("slide_to", metres(1.5)),
+    ]);
+    assert_eq!(findings(&outcome).len(), 3, "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+}
+
+#[test]
+fn a_turned_component_floats_its_volume_as_an_interval() {
+    // Turned 30 degrees, the WC's faces are intervals. Its left side looks
+    // south-west, so sliding the volume clear of the south wall pushes it
+    // into the west wall: 0.5 m deep it fits in between, 0.9 m deep nowhere.
+    let turned = || Scene::wc().turned_wc(30_f64.to_radians());
+    let slide = [("slide_from", metres(0.0)), ("slide_to", metres(1.0))];
+    let outcome = turned().check(&[slide[0].clone(), slide[1].clone(), ("depth", metres(0.5))]);
+    assert!(clean(&outcome), "{outcome:#?}");
+    let outcome = turned().check(&slide);
+    let found = findings(&outcome);
+    assert_eq!(found.len(), 1, "{outcome:#?}");
+    assert!(found[0].0.contains("fits nowhere"), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+}

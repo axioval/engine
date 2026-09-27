@@ -35,6 +35,7 @@ mod opening_spaces;
 mod orientation;
 mod pairs;
 mod parking_bay;
+mod passing_spaces;
 mod plan_area;
 mod property_comparison;
 mod property_predicate;

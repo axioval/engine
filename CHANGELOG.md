@@ -132,6 +132,37 @@ All notable changes are documented here. This project follows Semantic Versionin
   proven to one destination only. **Breaking:** `MetricRoutingError` gains
   `NoTargets`, `InvalidTolerance` and `InconsistentResponse`; the workspace
   requires `axiolid-route` 0.3.2, which is not yet published. (#79)
+- **Floating clearance volumes and size modes.** `component-clearance`
+  takes `slide_from` and `slide_to`: the volume floats and is free when it
+  is free at some offset between the two across the side. It is decided by
+  the placement search in the spaces `space_path` reaches, with a
+  frame-offset domain anchored on the component where `align` and
+  `lateral_offset` put the volume and the obstacle band from its base up by
+  its height; a witness for the volume grown by its position interval
+  passes, a proof that the shrunk volume fits at no offset is a finding
+  relating the spaces, anything else is not evaluated. `size_mode`
+  (`minimum`, the default, `maximum` or `fixed`) and `size_tolerance`
+  bound the size: a minimum is checked less the tolerance, a maximum is
+  exceeded when the volume one tolerance larger in any one dimension is
+  free, fixed or floating. The largest fitting volume is not measured.
+  **Breaking:** definitions bound to `component-clearance` must declare the
+  new optional parameters `slide_from`, `slide_to`, `size_mode` and
+  `size_tolerance`. (#83)
+- **Passing spaces on accessible routes.** `accessible-route` takes
+  `passing_width_metres`, `passing_length_metres`,
+  `passing_spacing_metres` and `passing_reach_metres`: every proven route
+  must offer a free box that size, `clear_height_metres` high, at most every
+  `passing_spacing_metres` along it, its ends counting as passing spaces.
+  The route is the metric-routing polyline between the start's and the
+  destination's representative points; it is searched in tiles no longer
+  than half the spacing, segment by segment, with frame-offset placement
+  domains anchored on the segments in the route spaces it crosses. A
+  witness in every interior tile passes, a run of tiles proven empty longer
+  than the spacing is a finding relating the start, and anything else is
+  not evaluated, as is a destination without the metric-routing, plan-span,
+  vertical-extent or free-space service. **Breaking:** definitions bound
+  to `accessible-route` must declare the four new optional parameters.
+  (#77)
 - **Free floor space options.** `free-floor-circle` and
   `free-floor-rectangle` take an `obstacles` selector (default: every other
   object, as before), an elevation band `band_from_metres` /
@@ -216,8 +247,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   block is a finding that relates the blocking doors, stairs or rooms, and
   anything else is not evaluated. Stated door widths go into the
   walkability request, so a model that states them lets the geometry prove
-  a door passable. Passing spaces are not checked yet: they need the
-  placement search. (#77)
+  a door passable. (#77)
 - **Rule judgement of walkable passages.**
   `WalkabilitySnapshot::route_between_admitting` routes with a
   `PassageAdmission` (`Admitted`, `Undecided`, `Refused`) per passage on

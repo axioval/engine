@@ -44,7 +44,9 @@ Both carry exact evidence bound to the request. The Axiolid adapter takes the ov
 
 Every measured position is an interval, so the volume's position is too. The capability asks two questions: whether the union of every position the volume could take is clear (then it is clear wherever it is), and whether the part every position shares is obstructed (then it is obstructed wherever it is). Along a coordinate axis the intervals are points and one request answers both. Anything between is not evaluated.
 
-A floating box, one that may slide sideways until it fits, needs the placement search below with a frame-offset domain and is not part of this capability yet (#83).
+A floating volume, one that may slide sideways until it fits, is a placement search below instead: the scope is the first space `space_path` reaches, merged with the others; the domain is a frame-offset domain anchored on the component, with the side's plan axes, the slide interval across and the base on the scope's floor; the box is fixed to the anchor's axes; the band runs from the base up by the height above the floor. The union and common part become the volume grown and shrunk by the position interval. A found witness is a volume free wherever the component is (the grown volume is also searched 1 mm deeper within 1 mm of the side's line, so the search is not confined to a line, which has no area); a proof of no placement for the shrunk volume is a volume obstructed at every offset. A maximum size is asked as the volume one tolerance larger in each dimension, fixed or floating, with the answers swapped: free is the finding.
+
+Accessible routes use the same search for passing spaces: frame-offset domains anchored on each segment of the walked route, one tile of the route at a time (see [Capabilities](./capabilities.md#passing-spaces)).
 
 ## Placement search
 

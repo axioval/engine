@@ -289,7 +289,12 @@ Door leaves come from `openbim-ifc`'s `door_operation` (0.7.0, openbimrs/ifc#148
 - The lining thickness is `IfcDoorLiningProperties.LiningThickness` and each leaf's depth its panel set's `PanelDepth`, through the exact project length unit; the occurrence's own lining set governs, else its type's, and several are refused. The panel's offset across the wall (`LiningOffset`, `LiningToPanelOffsetX`) is not applied: IFC defines it only by figures that disagree.
 - The locator names the door, the operation and the sets: `door-operation:#20:SINGLE_SWING_LEFT:panels=#30:lining=#40`. Derivations are cached per door.
 
-Window leaves are not read: no published crate derives them.
+Window panels are leaves too, from `openbim-ifc`'s `window_operation` (0.7.2, openbimrs/ifc#170), the window counterpart of `door_operation`: it joins the window's placement, its partitioning (the occurrence's `PartitioningType` or its `IfcWindowType`'s, both stated must agree; IFC2X3 `IfcWindowStyle.OperationType`), its `IfcWindowPanelProperties` and, for a split window, the mullion and transom offsets of its `IfcWindowLiningProperties`. Panels tile the placement's XZ plane and open towards local +y. An object `door_operation` calls no door is tried as a window; one that is neither is `NotADoor`.
+
+- Single, double and triple partitionings are placed. A side-hung panel is a `Swing` leaf, a tilt-and-turn panel a `TiltAndTurn` leaf, a top- or bottom-hung one a `Tilt` leaf, a sliding one `Slide` along its width or height, and `Removable` and `Fixed` panels neither swing nor tilt. Each leaf carries the panel's height; its swing sector lies in the plane of its bottom edge, its tilt sector in the vertical plane through the low end of its top or bottom hinge. The hinge side is the operation's hand seen from above, and the other side for a placement turned over.
+- `NOTDEFINED` and `USERDEFINED` partitionings, pivot, `OTHEROPERATION` and `NOTDEFINED` panels, panels contradicting the partitioning, conflicting partitionings and a split whose offset lies outside the window are refused (`Refused`); a missing partitioning, `OverallWidth`, `OverallHeight`, panel set, lining set or offset a split needs is `NotStated`.
+- The lining thickness is `IfcWindowLiningProperties.LiningThickness`, chosen as for doors, and each leaf's depth its panel set's `FrameDepth`. Lining, mullion and transom thicknesses are not applied to the panels.
+- The locator names the window, the partitioning and the sets: `window-operation:#20:DOUBLE_PANEL_VERTICAL:panels=#30,#31:lining=#40`.
 
 ### Coordinate system
 

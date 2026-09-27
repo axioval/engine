@@ -1,11 +1,15 @@
-//! Door swings for capabilities: leaves read through the object-frame
-//! service and swing footprints bracketed by convex plan regions.
+//! Door and window swings for capabilities: leaves read through the
+//! object-frame service and swing footprints bracketed by convex plan
+//! regions.
 //!
-//! A footprint is the union of the sectors a door's hinged leaves sweep.
-//! Each sector is bracketed by an inscribed and a circumscribed convex
-//! polygon (`SwingSector::plan_bounds`, `SEGMENTS` per quarter turn), so a
-//! distance measured to the circumscribed one bounds the true distance from
-//! below and one to the inscribed one from above.
+//! A footprint is the union of what a door's or window's leaves sweep in
+//! plan. Each side-hinged sector is bracketed by an inscribed and a
+//! circumscribed convex polygon (`SwingSector::plan_bounds`, `SEGMENTS` per
+//! quarter turn), so a distance measured to the circumscribed one bounds
+//! the true distance from below and one to the inscribed one from above. A
+//! window panel tilting on a top or bottom hinge sweeps, in plan, exactly
+//! the rectangle its width spans out to its height along its opening
+//! direction.
 
 use axioval_engine::{
     BoxClearance, ClearanceShape, ContainmentOutcome, ContainmentRequest, ConvexPlanRegion,
@@ -122,18 +126,52 @@ pub(crate) fn handle(leaves: &DoorLeaves) -> Result<[f64; 3], Unavailable> {
     }
 }
 
-/// The plan footprint a door's hinged leaves sweep.
+/// The plan footprint a door's or window's leaves sweep.
 pub(crate) struct Footprint {
-    /// Per hinged leaf, an inscribed and a circumscribed region.
+    /// Per swing or tilt, an inscribed and a circumscribed region.
     pub(crate) parts: Vec<(ConvexPlanRegion, ConvexPlanRegion)>,
     pub(crate) evidence: Evidence,
 }
 
 impl Footprint {
-    /// The swing footprint of `leaves`; empty when no leaf is hinged.
+    /// The swing footprint of `leaves`: every side-hinged leaf's swing and
+    /// every window panel's tilt; empty when no leaf swings or tilts.
     pub(crate) fn of(leaves: &DoorLeaves) -> Result<Self, Unavailable> {
         let door = leaves.door();
         let mut parts = Vec::new();
+        for leaf in leaves.leaves() {
+            let Some(tilt) = leaf.tilt() else { continue };
+            let (along, open) = (leaf.along().components(), tilt.open().components());
+            if along[2].abs() > LEVEL || open[2].abs() > LEVEL {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!("a leaf of {door} does not tilt over a plan area"),
+                ));
+            }
+            // The tilt sweeps from its hinge out to its radius along the
+            // opening direction, along the whole width of the leaf.
+            let [hx, hy, _] = tilt.hinge();
+            let (width, reach) = (leaf.width_metres(), tilt.radius_metres());
+            let mut ring = vec![
+                [hx, hy],
+                [hx + width * along[0], hy + width * along[1]],
+                [
+                    hx + width * along[0] + reach * open[0],
+                    hy + width * along[1] + reach * open[1],
+                ],
+                [hx + reach * open[0], hy + reach * open[1]],
+            ];
+            if signed_area(&ring) < 0.0 {
+                ring.reverse();
+            }
+            let region = ConvexPlanRegion::try_new(ring).map_err(|error| {
+                (
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("the tilt of {door} is no convex region: {error}"),
+                )
+            })?;
+            parts.push((region.clone(), region));
+        }
         for leaf in leaves.hinged() {
             let Some((inner, outer)) = leaf.swing().and_then(|sector| sector.plan_bounds(SEGMENTS))
             else {
@@ -183,6 +221,14 @@ impl Footprint {
         }
         bounds
     }
+}
+
+/// Twice the signed area of a plan ring: positive when anticlockwise.
+fn signed_area(ring: &[[f64; 2]]) -> f64 {
+    ring.iter()
+        .zip(ring.iter().cycle().skip(1))
+        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+        .sum()
 }
 
 /// The plan gap between two boxes: zero when they meet.

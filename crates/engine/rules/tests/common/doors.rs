@@ -89,6 +89,33 @@ pub fn sliding(origin: [f64; 3], along: [f64; 3], width: f64) -> DoorLeaf {
     .unwrap()
 }
 
+/// One bottom-hung window panel `width` wide and `height` high, its bottom
+/// hinge from `hinge` along +x, tilting open towards +y.
+pub fn bottom_hung(hinge: [f64; 3], width: f64, height: f64) -> DoorLeaf {
+    let (along, open, up) = (
+        direction([1.0, 0.0, 0.0]),
+        direction([0.0, 1.0, 0.0]),
+        direction([0.0, 0.0, 1.0]),
+    );
+    DoorLeaf::try_new(
+        LeafPosition::NotDefined,
+        LeafMotion::Tilt,
+        hinge,
+        along,
+        open,
+        up,
+        width,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .with_height(height)
+    .unwrap()
+    .with_tilt(SwingSector::try_new(hinge, height, up, open, false).unwrap())
+    .unwrap()
+}
+
 impl Doors {
     /// `local` is a door with `leaves`, `overall` wide with a lining
     /// `lining` thick.

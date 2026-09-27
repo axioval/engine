@@ -14,9 +14,10 @@
 //! [`ObjectFront::NotStated`], never guessed from the axes, the shape or the
 //! object's type.
 //!
-//! The same service supplies a door's leaves ([`ObjectFrameService::leaves`],
-//! see [`crate::DoorLeaves`]): they are placed in the door's frame, so the
-//! source that places the door states them. The method refuses by default.
+//! The same service supplies a door's leaves and a window's panels
+//! ([`ObjectFrameService::leaves`], see [`crate::DoorLeaves`]): they are
+//! placed in the door's or window's frame, so the source that places it
+//! states them. The method refuses by default.
 
 use std::sync::Arc;
 
@@ -140,8 +141,9 @@ pub trait ObjectFrameService: Send + Sync + 'static {
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// The placement frame of `object`, or why it has none.
     fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError>;
-    /// The leaves of `door`: each leaf's closed position, width, motion,
-    /// hinge side and swing sector.
+    /// The leaves of `door`, a door or a window: each leaf's (or window
+    /// panel's) closed position, width, motion, hinge side and swing
+    /// sector, and a window panel's height and tilt sector.
     ///
     /// The default refuses with [`DoorLeavesError::Unsupported`], so a
     /// service that reads no door operation fails closed.
@@ -180,8 +182,8 @@ impl ObjectFrameServiceHandle {
         Ok(frame)
     }
 
-    /// The leaves of `door`. Doors of an uncovered source are refused, and
-    /// so are leaves of another door.
+    /// The leaves of `door`, a door or a window. Objects of an uncovered
+    /// source are refused, and so are leaves of another object.
     pub fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
         if !self
             .0

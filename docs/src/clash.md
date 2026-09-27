@@ -533,7 +533,7 @@ declared distance. It takes these parameters:
 | `projection` | string, optional | `minimum_3d` (default), `horizontal`, `vertical`, `plan_overlap` |
 | `footprint_offset_metres` | number, optional | grows the subject's footprint for `vertical` |
 | `vertical_direction` | string, optional | `either` (default), `above` or `below`: where a counterpart must lie for `vertical` |
-| `subject_extent`, `counterpart_extent` | string, optional | `body` (default) or `door_swing`: what each side is measured by |
+| `subject_extent`, `counterpart_extent` | string, optional | `body` (default) or `leaf_swing` (also `door_swing`): what each side is measured by |
 | `relationship`, `direction`, `follow_chain`, `path`, `skip_absent_relationship_ends` | optional | the container traversal |
 
 The modes:
@@ -578,24 +578,30 @@ unknown. When nothing lies within a maximum, that is a finding: the broad
 phase is complete, so a pair it does not report is farther apart than the
 margin.
 
-**Door swings.** With `subject_extent` or `counterpart_extent`
-`door_swing`, that side is measured by its door-swing footprint instead of
-its body: the floor sectors its hinged leaves sweep, as the object-frame
-service states them (`ObjectFrameService::leaves`). Only `horizontal` is
+**Door and window swings.** With `subject_extent` or `counterpart_extent`
+`leaf_swing` (`door_swing` is the same extent under its older name), that
+side is measured by its swing footprint instead of its body: the plan
+sectors its side-hinged leaves sweep (a door's leaves, a window's
+casements), and the rectangle each tilting window panel sweeps out to its
+height along its opening direction, as the object-frame service states
+them (`ObjectFrameService::leaves`). Only `horizontal` is
 allowed, since a footprint is a plan shape; anything else is an invalid
 declaration. Each sector is bracketed between an inscribed and a
 circumscribed convex polygon (64 per quarter turn, a radial gap under
 0.12 mm per metre of leaf), so the distance is the interval from the
 circumscribed polygons' distance to the inscribed ones'. A swing measured
 against a body goes through `measure_region_distance`; two swings are
-measured against each other without geometry. A door without a hinged leaf
-(sliding, rolling, fixed) sweeps nothing and has no distance to anything. A
-door whose leaves cannot be read, or an object that is not a door, is not
-evaluated as a subject and unknown as a counterpart. The broad phase is the
+measured against each other without geometry. A door or window whose
+leaves neither swing nor tilt (sliding, rolling, fixed) sweeps nothing and
+has no distance to anything. One whose leaves cannot be read, or an object
+that is neither a door nor a window, is not evaluated as a subject and
+unknown as a counterpart. A window panel tilting in a plane that is not
+vertical (a skylight) is not evaluated. The broad phase is the
 plan gap between the footprint's box and the counterpart's box grown by its
 chord deviation, which bounds the distance from below. "No column within
 0.5 m of a door's swing" is `none_closer_than` with `subject_extent`
-`door_swing`; "no door swing within 0.5 m of another" declares both sides.
+`leaf_swing`; "no door swing within 0.5 m of another" declares both sides,
+and "no casement opening over a walkway" selects the windows.
 
 These capabilities fail closed:
 

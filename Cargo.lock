@@ -1302,9 +1302,9 @@ checksum = "34c684331685f7678a2766f3990cca967b3053a6e75ea1523e3e8449ec07217c"
 
 [[package]]
 name = "openbim-ifc"
-version = "0.7.0"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "002de7950436cf8536a308887f793696e8a024ea842b839e5f9fccfb0b6c09db"
+checksum = "68e51d8afbb045f50839bcc49d736b74c2723ee2528b2e11402d259b905db2b4"
 dependencies = [
  "ifc-geometry",
  "ifc-model",

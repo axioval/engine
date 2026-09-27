@@ -1,11 +1,18 @@
-//! Door leaves: how each leaf of a door moves, which side it hangs on and
-//! the floor sector it sweeps.
+//! Door and window leaves: how each leaf of a door or panel of a window
+//! moves, which side it hangs on and the sectors it sweeps.
 //!
 //! Door clearances, swing directions, escape doors and landings are judged
-//! from a door's leaves. This seam supplies them through
-//! [`crate::ObjectFrameService::leaves`], which refuses by default: a
-//! source that states no door operation answers
-//! [`DoorLeavesError::Unsupported`], never an empty set of leaves.
+//! from a door's leaves, and a casement's swing from a window's. This seam
+//! supplies them through [`crate::ObjectFrameService::leaves`], which
+//! refuses by default: a source that states no operation answers
+//! [`DoorLeavesError::Unsupported`], never an empty set of leaves. The
+//! types keep their door names; a window's panels are leaves alike.
+//!
+//! A window panel also states its height along `up` and, when it tilts on
+//! a top or bottom hinge, the tilt sector it sweeps in the vertical plane
+//! through that hinge ([`DoorLeaf::tilt`]). Its side swing lies in the
+//! plane of its bottom edge, at sill height, and it sweeps that sector up
+//! its whole height.
 //!
 //! Everything is in canonical metres and world coordinates. A leaf is
 //! described by its closed position (a segment from `origin` along `along`,
@@ -43,8 +50,8 @@ pub enum DoorLeavesError {
     /// The object is not part of the source.
     #[error("object `{0}` is not in the source")]
     UnknownObject(ObjectId),
-    /// The object is not a door, so it has no leaves.
-    #[error("`{0}` is not a door")]
+    /// The object is neither a door nor a window, so it has no leaves.
+    #[error("`{0}` is not a door or window")]
     NotADoor(ObjectId),
     /// The source does not state what the leaves need: an operation type,
     /// an overall width or panel definitions. Nothing is defaulted.
@@ -103,6 +110,10 @@ pub enum LeafPosition {
     Middle,
     /// At the high end of the door's width.
     Right,
+    /// At the bottom of a window.
+    Bottom,
+    /// At the top of a window.
+    Top,
     /// Not stated.
     NotDefined,
 }
@@ -114,19 +125,36 @@ pub enum LeafMotion {
     Swing,
     /// Swings about its hinge to both sides.
     DoubleSwing,
-    /// Slides along the door's width in the given direction when opening.
+    /// Turns on its side hinge like [`Self::Swing`], or tilts on its
+    /// bottom hinge (a tilt-and-turn window panel).
+    TiltAndTurn,
+    /// Tilts on a top or bottom hinge only (a top- or bottom-hung window
+    /// panel).
+    Tilt,
+    /// Slides in the given direction when opening: along the door's width,
+    /// or along a window panel's width or height.
     Slide(MetricDirection),
     /// Rolls up out of the opening, sweeping no floor area.
     RollUp,
+    /// Is taken out rather than opened (a removable window casement).
+    Removable,
     /// Does not open.
     Fixed,
 }
 
 impl LeafMotion {
-    /// Whether the leaf is hinged and sweeps a sector.
+    /// Whether the leaf turns on a side hinge and sweeps a [`SwingSector`]
+    /// ([`DoorLeaf::swing`]).
     #[must_use]
     pub fn is_hinged(self) -> bool {
-        matches!(self, Self::Swing | Self::DoubleSwing)
+        matches!(self, Self::Swing | Self::DoubleSwing | Self::TiltAndTurn)
+    }
+
+    /// Whether the leaf tilts on a top or bottom hinge and sweeps a tilt
+    /// sector ([`DoorLeaf::tilt`]).
+    #[must_use]
+    pub fn tilts(self) -> bool {
+        matches!(self, Self::TiltAndTurn | Self::Tilt)
     }
 
     /// The motion's spelling in messages and evidence.
@@ -135,8 +163,11 @@ impl LeafMotion {
         match self {
             Self::Swing => "swinging",
             Self::DoubleSwing => "double-acting",
+            Self::TiltAndTurn => "tilt-and-turn",
+            Self::Tilt => "tilting",
             Self::Slide(_) => "sliding",
             Self::RollUp => "rolling up",
+            Self::Removable => "removable",
             Self::Fixed => "fixed",
         }
     }
@@ -341,6 +372,8 @@ pub struct DoorLeaf {
     depth: Option<f64>,
     hinge_side: Option<HingeSide>,
     swing: Option<SwingSector>,
+    height: Option<f64>,
+    tilt: Option<SwingSector>,
 }
 
 impl DoorLeaf {
@@ -351,8 +384,10 @@ impl DoorLeaf {
     /// leaf needs a hinge side and a sector whose radius is the width,
     /// whose open direction is `opening` and whose closed direction runs
     /// along the leaf; every other leaf has neither. A sliding leaf slides
-    /// along `along` or against it. `depth`, the leaf's thickness where the
-    /// source states it, must be positive.
+    /// along `along` or against it (a window panel also along `up`).
+    /// `depth`, the leaf's thickness where the source states it, must be
+    /// positive. A window panel adds its height with [`Self::with_height`]
+    /// and, when it tilts, its tilt sector with [`Self::with_tilt`].
     #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         position: LeafPosition,
@@ -378,7 +413,11 @@ impl DoorLeaf {
             return Err(invalid("a leaf's stated depth must be positive"));
         }
         match (motion, hinge_side, &swing) {
-            (LeafMotion::Swing | LeafMotion::DoubleSwing, Some(_), Some(sector)) => {
+            (
+                LeafMotion::Swing | LeafMotion::DoubleSwing | LeafMotion::TiltAndTurn,
+                Some(_),
+                Some(sector),
+            ) => {
                 let double = matches!(motion, LeafMotion::DoubleSwing);
                 let same = |a: [f64; 3], b: [f64; 3]| {
                     a.iter().zip(b).all(|(a, b)| (a - b).abs() <= TOLERANCE)
@@ -393,14 +432,15 @@ impl DoorLeaf {
                     ));
                 }
             }
-            (LeafMotion::Swing | LeafMotion::DoubleSwing, _, _) => {
+            (LeafMotion::Swing | LeafMotion::DoubleSwing | LeafMotion::TiltAndTurn, _, _) => {
                 return Err(invalid("a hinged leaf needs a hinge side and a sector"));
             }
             (_, None, None) => {
                 if let LeafMotion::Slide(direction) = motion
                     && dot(direction.components(), x).abs() < 1.0 - TOLERANCE
+                    && dot(direction.components(), z).abs() < 1.0 - TOLERANCE
                 {
-                    return Err(invalid("a leaf slides along its width"));
+                    return Err(invalid("a leaf slides along its width or height"));
                 }
             }
             _ => return Err(invalid("only a hinged leaf has a hinge side or a sector")),
@@ -416,7 +456,42 @@ impl DoorLeaf {
             depth,
             hinge_side,
             swing,
+            height: None,
+            tilt: None,
         })
+    }
+
+    /// The leaf with its height along `up`, in metres: a window panel's,
+    /// which must be positive.
+    pub fn with_height(mut self, height: f64) -> Result<Self, DoorLeavesError> {
+        if !height.is_finite() || height <= 0.0 {
+            return Err(invalid("a leaf's height must be positive"));
+        }
+        self.height = Some(height);
+        Ok(self)
+    }
+
+    /// The leaf with the sector it sweeps tilting on a top or bottom hinge.
+    ///
+    /// Only a tilting leaf ([`LeafMotion::tilts`]) with a height has one:
+    /// its radius is the height, its `open` the leaf's opening direction
+    /// and its `closed` runs along `up`, up from a bottom hinge or down
+    /// from a top one. The leaf sweeps it along its width.
+    pub fn with_tilt(mut self, tilt: SwingSector) -> Result<Self, DoorLeavesError> {
+        let Some(height) = self.height.filter(|_| self.motion.tilts()) else {
+            return Err(invalid("only a tilting leaf with a height has a tilt"));
+        };
+        let same =
+            |a: [f64; 3], b: [f64; 3]| a.iter().zip(b).all(|(a, b)| (a - b).abs() <= TOLERANCE);
+        if tilt.is_double_acting()
+            || (tilt.radius_metres() - height).abs() > TOLERANCE * height.max(1.0)
+            || !same(tilt.open().components(), self.opening.components())
+            || dot(tilt.closed().components(), self.up.components()).abs() < 1.0 - TOLERANCE
+        {
+            return Err(invalid("a leaf's tilt does not match its height or axes"));
+        }
+        self.tilt = Some(tilt);
+        Ok(self)
     }
 
     /// Where the leaf sits in its door.
@@ -504,6 +579,20 @@ impl DoorLeaf {
     pub fn swing(&self) -> Option<&SwingSector> {
         self.swing.as_ref()
     }
+
+    /// The leaf's height along `up` in metres, where the source states it
+    /// (a window panel's).
+    #[must_use]
+    pub fn height_metres(&self) -> Option<f64> {
+        self.height
+    }
+
+    /// The sector a tilting leaf sweeps in the vertical plane through one
+    /// end of its top or bottom hinge; `None` for any other leaf.
+    #[must_use]
+    pub fn tilt(&self) -> Option<&SwingSector> {
+        self.tilt.as_ref()
+    }
 }
 
 /// Every leaf of one door, with provenance.
@@ -522,9 +611,11 @@ impl DoorLeaves {
     /// name for it), `overall_width` metres wide, with the lining thickness
     /// the source states.
     ///
-    /// A door has at least one leaf, and the evidence must be exact,
-    /// reviewable and from the door's source: the leaves are derived from
-    /// what the source states, never estimated.
+    /// A door has at least one leaf, every tilting leaf its tilt, and the
+    /// evidence must be exact, reviewable and from the door's source: the
+    /// leaves are derived from what the source states, never estimated.
+    /// For a window, `door` is the window, `operation` its partitioning and
+    /// the leaves its panels.
     pub fn try_new(
         door: ObjectId,
         operation: impl Into<String>,
@@ -536,6 +627,12 @@ impl DoorLeaves {
         let operation = operation.into();
         if operation.trim().is_empty() || leaves.is_empty() {
             return Err(invalid("a door has an operation and at least one leaf"));
+        }
+        if leaves
+            .iter()
+            .any(|leaf| leaf.motion.tilts() && leaf.tilt.is_none())
+        {
+            return Err(invalid("a tilting leaf needs its tilt sector"));
         }
         if !overall_width.is_finite() || overall_width <= 0.0 {
             return Err(invalid("a door's overall width must be positive"));
@@ -587,7 +684,8 @@ impl DoorLeaves {
         &self.leaves
     }
 
-    /// The leaves that swing: single-swing and double-acting.
+    /// The leaves that swing on a side hinge: single-swing, double-acting
+    /// and tilt-and-turn.
     pub fn hinged(&self) -> impl Iterator<Item = &DoorLeaf> {
         self.leaves.iter().filter(|leaf| leaf.motion.is_hinged())
     }
@@ -729,6 +827,8 @@ mod tests {
         assert!(build(LeafMotion::Fixed, Some(HingeSide::Left), None).is_err());
         assert!(build(LeafMotion::Slide(axes.1), None, None).is_err());
         assert!(build(LeafMotion::Slide(axes.0), None, None).is_ok());
+        assert!(build(LeafMotion::Slide(axes.2), None, None).is_ok());
+        assert!(build(LeafMotion::TiltAndTurn, Some(HingeSide::Left), None).is_err());
         // Mirrored axes are accepted and reported.
         let mirrored = DoorLeaf::try_new(
             LeafPosition::Left,
@@ -770,5 +870,60 @@ mod tests {
             );
         }
         assert!(DoorLeaves::try_new(door(), "X", 1.0, None, vec![], exact).is_err());
+    }
+    #[test]
+    fn a_tilting_panel_states_its_height_and_tilt() {
+        let axes = (
+            direction([1.0, 0.0, 0.0]),
+            direction([0.0, 1.0, 0.0]),
+            direction([0.0, 0.0, 1.0]),
+        );
+        let tilt = |radius: f64, closed: [f64; 3]| {
+            SwingSector::try_new([0.0, 0.0, 0.9], radius, direction(closed), axes.1, false).unwrap()
+        };
+        let panel = || {
+            DoorLeaf::try_new(
+                LeafPosition::NotDefined,
+                LeafMotion::Tilt,
+                [0.0, 0.0, 0.9],
+                axes.0,
+                axes.1,
+                axes.2,
+                0.8,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+        };
+        let tilted = panel()
+            .with_height(1.2)
+            .unwrap()
+            .with_tilt(tilt(1.2, [0.0, 0.0, 1.0]))
+            .unwrap();
+        assert_eq!(tilted.height_metres(), Some(1.2));
+        assert!(!tilted.tilt().unwrap().is_horizontal());
+        // A tilt of another radius, across the width, or without a height
+        // is refused, and so is a tilting leaf without its tilt.
+        let tall = || panel().with_height(1.2).unwrap();
+        assert!(tall().with_tilt(tilt(1.0, [0.0, 0.0, 1.0])).is_err());
+        assert!(tall().with_tilt(tilt(1.2, [1.0, 0.0, 0.0])).is_err());
+        assert!(panel().with_tilt(tilt(1.2, [0.0, 0.0, 1.0])).is_err());
+        assert!(panel().with_height(0.0).is_err());
+        let exact = Evidence::exact(source(), "window-operation:d");
+        assert!(
+            DoorLeaves::try_new(
+                door(),
+                "SINGLE_PANEL",
+                0.8,
+                None,
+                vec![tall()],
+                exact.clone()
+            )
+            .is_err()
+        );
+        assert!(
+            DoorLeaves::try_new(door(), "SINGLE_PANEL", 0.8, None, vec![tilted], exact).is_ok()
+        );
     }
 }

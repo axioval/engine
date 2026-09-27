@@ -15,7 +15,7 @@ use axioval_engine::{
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, ObjectId};
 use axioval_rules::Distance;
-use common::doors::{Doors, hinged, sliding};
+use common::doors::{Doors, bottom_hung, hinged, sliding};
 use common::{Model, kind, number, rule, selector, source, string, unevaluated};
 
 const CAPABILITY: &str = "axioval:capability.distance";
@@ -260,4 +260,61 @@ fn a_door_swing_is_measured_in_plan_only() {
             .iter()
             .all(|(_, reason)| *reason == NotEvaluatedReason::InvalidDeclaration)
     );
+}
+
+#[test]
+fn a_window_swing_is_measured_by_its_casement_and_tilt() {
+    // Window `w` has a casement hinged at (0, 3, 0.9) swinging from +x to
+    // +y, 0.6 m wide, and a bottom-hung panel beside it from (0.6, 3, 0.9),
+    // 0.5 m wide and 0.8 m high: in plan it tilts over x 0.6 to 1.1, y 3
+    // to 3.8. Column `post` stands at x 1.3 to 1.5, 0.2 m beyond it.
+    let windows = Doors::default().door(
+        "w",
+        vec![
+            hinged(
+                [0.0, 3.0, 0.9],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                0.6,
+                false,
+            ),
+            bottom_hung([0.6, 3.0, 0.9], 0.5, 0.8),
+        ],
+        1.1,
+        None,
+    );
+    let proximity = Arc::new(Boxes::default().at("post", [1.3, 3.2], [1.5, 3.4]));
+    let model = Model::default()
+        .object("w", "window")
+        .object("post", "column");
+    let outcome = model.evaluate_with(
+        &Distance,
+        &rule(
+            CAPABILITY,
+            kind("window"),
+            vec![
+                ("counterparts", selector(kind("column"))),
+                ("projection", string("horizontal")),
+                ("subject_extent", string("leaf_swing")),
+                ("mode", string("none_closer_than")),
+                ("minimum_metres", number(0.5)),
+            ],
+        ),
+        |services| {
+            services
+                .register(ProximityServiceHandle::new(proximity))
+                .unwrap();
+            services.register(windows.handle()).unwrap();
+        },
+    );
+    let found = findings(&outcome);
+    let [(window, message)] = &found[..] else {
+        panic!("one finding: {found:?}")
+    };
+    assert_eq!(window, "w");
+    assert!(
+        message.contains("/post at horizontal distance 0.2000 m"),
+        "{message}"
+    );
+    assert!(unevaluated(&outcome).is_empty());
 }

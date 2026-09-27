@@ -17,8 +17,8 @@
 //! from. Every frame from this service therefore reports
 //! `ObjectFront::NotStated`.
 //!
-//! The same service answers a door's leaves (`crate::doors`), cached per
-//! door.
+//! The same service answers a door's leaves (`crate::doors`) and a window's
+//! panels (`crate::windows`), cached per object.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};

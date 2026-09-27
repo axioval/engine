@@ -16,11 +16,13 @@
 //! plan. Counterparts may be scoped to the subject's containers (its space,
 //! its group) through the traversal parameters.
 //!
-//! With `subject_extent` or `counterpart_extent` `door_swing`, that side is
-//! measured by the floor area its doors' leaves sweep (the door-swing
-//! footprint) instead of its body, in plan (`projection: horizontal`). Each
-//! sector is bracketed between an inscribed and a circumscribed polygon, so
-//! its distance is an interval too; a door without a hinged leaf sweeps
+//! With `subject_extent` or `counterpart_extent` `leaf_swing` (or its older
+//! name `door_swing`), that side is measured by the plan area its doors'
+//! leaves and windows' panels sweep (the swing footprint) instead of its
+//! body, in plan (`projection: horizontal`). Each side-hinged sector is
+//! bracketed between an inscribed and a circumscribed polygon, so its
+//! distance is an interval too; a tilting window panel sweeps an exact
+//! rectangle. A door or window whose leaves neither swing nor tilt sweeps
 //! nothing and has no distance to anything.
 //!
 //! Every distance is an interval, a point for exact geometry. A counterpart
@@ -158,15 +160,15 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     };
     let extent = |name: &str| match parameters.string(name)? {
         None | Some("body") => Ok(false),
-        Some("door_swing") => Ok(true),
+        Some("leaf_swing" | "door_swing") => Ok(true),
         Some(other) => Err(invalid(format!(
-            "`{name}` `{other}` is unsupported; use `body` or `door_swing`"
+            "`{name}` `{other}` is unsupported; use `body` or `leaf_swing`"
         ))),
     };
     let swings = (extent("subject_extent")?, extent("counterpart_extent")?);
     if (swings.0 || swings.1) && projection != ProximityProjection::Horizontal {
         return Err(invalid(
-            "a `door_swing` extent is a plan footprint: declare `projection` `horizontal`",
+            "a `leaf_swing` extent is a plan footprint: declare `projection` `horizontal`",
         ));
     }
     Ok(Declaration {
@@ -587,7 +589,7 @@ fn candidates(
 enum Extent {
     /// The body, with its plan box grown by the chord deviation.
     Body(([f64; 2], [f64; 2])),
-    /// The door-swing footprint.
+    /// The swing footprint of a door's or window's leaves.
     Swing(Footprint),
 }
 

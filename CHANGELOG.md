@@ -6,6 +6,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Window leaves.** (#36) `ObjectFrameService::leaves` answers a window's
+  panels as leaves, as it answers a door's: the IFC adapter derives them
+  with `openbim-ifc`'s `window_operation` (openbimrs/ifc#170) from the
+  window's placement, partitioning (IFC2X3 `IfcWindowStyle`), panel
+  properties and lining offsets. A side-hung casement swings like a door
+  leaf, in the plane of its bottom edge; each panel states its height,
+  and a top-, bottom-hung or tilt-and-turn panel its tilt sector
+  (`DoorLeaf::tilt`). `distance`'s swing extent is now `leaf_swing`,
+  measuring a door's or window's swing footprint, a tilting panel's plan
+  rectangle included; `door_swing` still works. **Breaking:**
+  `LeafMotion` gains `TiltAndTurn`, `Tilt` and `Removable`, and
+  `LeafPosition` gains `Bottom` and `Top`; `LeafMotion::is_hinged` holds
+  for tilt-and-turn panels, and a sliding leaf may slide along its height.
 - **Openings in free outlines.** (#65) The body set states an arbitrary
   profile's outline as `Profile.OutlineX` and `Profile.OutlineY`, lists of
   vertex coordinates in the profile's plane, and each void's as

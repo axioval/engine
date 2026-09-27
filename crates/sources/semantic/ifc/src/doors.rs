@@ -80,7 +80,7 @@ fn property_error(error: &ExactPropertyError) -> DoorLeavesError {
     DoorLeavesError::Unreadable(format!("a door property cannot be read exactly: {error}"))
 }
 
-fn direction(vector: [f64; 3]) -> Result<MetricDirection, DoorLeavesError> {
+pub(crate) fn direction(vector: [f64; 3]) -> Result<MetricDirection, DoorLeavesError> {
     MetricDirection::try_new(vector)
         .map_err(|_| DoorLeavesError::InvalidLeaves("a leaf axis is degenerate".into()))
 }
@@ -139,20 +139,21 @@ fn governing(sets: Vec<ExactPredefinedSet>) -> Vec<ExactPredefinedSet> {
     if own.is_empty() { sets } else { own }
 }
 
-/// The lining thickness the door states, and the lining set it comes from.
-fn lining(
+/// The lining thickness a door or window states in its `set` (its
+/// `IfcDoorLiningProperties` or `IfcWindowLiningProperties`), and the
+/// lining set it comes from.
+pub(crate) fn lining(
     model: &Model,
     door: EntityId,
+    set: &str,
 ) -> Result<(Option<f64>, Option<EntityId>), DoorLeavesError> {
-    let sets = governing(
-        exact_predefined_sets(model, door, "IfcDoorLiningProperties")
-            .map_err(|error| property_error(&error))?,
-    );
+    let sets =
+        governing(exact_predefined_sets(model, door, set).map_err(|error| property_error(&error))?);
     match sets.as_slice() {
         [] => Ok((None, None)),
         [set] => Ok((length(model, set, "LiningThickness")?, Some(set.set_id))),
         _ => Err(DoorLeavesError::Refused(format!(
-            "{} lining property sets govern the door",
+            "{} lining property sets govern the object",
             sets.len()
         ))),
     }
@@ -233,17 +234,23 @@ fn leaf(leaf: &Leaf, depth: Option<f64>) -> Result<DoorLeaf, DoorLeavesError> {
     )
 }
 
-/// The leaves of `door` (entity `id`), cited under `fingerprint`.
+/// The leaves of `door` (entity `id`), cited under `fingerprint`: a door's
+/// leaves, or a window's panels (`crate::windows`) when it is a window.
 pub(crate) fn door_leaves(
     model: &Model,
     fingerprint: &str,
     door: &ObjectId,
     id: EntityId,
 ) -> Result<DoorLeaves, DoorLeavesError> {
-    let operation: DoorOperation =
-        door_operation(model, id).map_err(|error| operation_error(door, &error))?;
+    let operation: DoorOperation = match door_operation(model, id) {
+        Ok(operation) => operation,
+        Err(DoorOperationError::NotADoor { .. }) => {
+            return crate::windows::window_leaves(model, fingerprint, door, id);
+        }
+        Err(error) => return Err(operation_error(door, &error)),
+    };
     let name = operation_name(operation.operation)?;
-    let (lining_thickness, lining_set) = lining(model, id)?;
+    let (lining_thickness, lining_set) = lining(model, id, "IfcDoorLiningProperties")?;
     let panels = exact_predefined_sets(model, id, "IfcDoorPanelProperties")
         .map_err(|error| property_error(&error))?;
     let leaves = operation

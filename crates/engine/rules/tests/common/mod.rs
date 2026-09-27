@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, CompletePropertyAbsenceEvidence,
-    CompleteRelationshipSelection, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipQuery,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
-    RelationshipSelectionServiceHandle, ResolvedProperty, RuleCapability, RuleContext,
-    ServiceRegistry, TraversalDirection,
+    CompleteRelationshipSelection, PropertyEnumeration, PropertyEnumerationRequest,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipQuery, RelationshipSelectionError,
+    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
+    ResolvedProperty, RuleCapability, RuleContext, ServiceRegistry, TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId, SourceId};
@@ -24,7 +24,6 @@ pub fn id(local: &str) -> ObjectId {
 }
 
 /// Objects, their exact property values, and directed relationship edges.
-#[derive(Default)]
 pub struct Model {
     objects: Vec<Object>,
     values: BTreeMap<(ObjectId, String, String), PropertyValue>,
@@ -35,9 +34,30 @@ pub struct Model {
     /// relationship -> (anchor, locator): further evidence an answer from
     /// that anchor cites.
     citations: BTreeMap<String, Vec<(ObjectId, String)>>,
+    /// Whether the source can enumerate an object's properties.
+    enumerable: bool,
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            objects: Vec::new(),
+            values: BTreeMap::new(),
+            edges: BTreeMap::new(),
+            unreadable: BTreeSet::new(),
+            citations: BTreeMap::new(),
+            enumerable: true,
+        }
+    }
 }
 
 impl Model {
+    /// A source that resolves names but cannot list properties.
+    pub fn names_only(mut self) -> Self {
+        self.enumerable = false;
+        self
+    }
+
     pub fn object(mut self, local: &str, kind: &str) -> Self {
         self.objects.push(Object::new(id(local), kind));
         self
@@ -151,6 +171,34 @@ impl PropertyResolutionService for Model {
                 )?,
             )),
         }
+    }
+
+    fn enumerate(
+        &self,
+        request: &PropertyEnumerationRequest,
+    ) -> Result<PropertyEnumeration, PropertyResolutionError> {
+        if self.unreadable.contains(request.object_id()) || !self.enumerable {
+            return Err(PropertyResolutionError::Unavailable("unreadable".into()));
+        }
+        let properties = self
+            .values
+            .iter()
+            .filter(|((object, set, name), _)| {
+                object == request.object_id()
+                    && request.property_set().matches(set)
+                    && request.property().matches(name)
+            })
+            .map(|((object, set, name), value)| {
+                Property::new(set.clone(), name.clone(), value.clone())
+                    .unwrap()
+                    .with_evidence(Evidence::exact(source(), format!("{object}:{set}.{name}")))
+            })
+            .collect();
+        PropertyEnumeration::try_new(
+            request.clone(),
+            properties,
+            Evidence::exact(source(), format!("enumerated:{}", request.object_id())),
+        )
     }
 }
 

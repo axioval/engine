@@ -4,14 +4,17 @@
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, NamePattern, NotEvaluatedReason,
+    ParameterDescriptor, ParameterType, PropertyEnumeration, RuleCapability, RuleContext,
+    TableColumn,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{Evidence, Object, ObjectId, Property, PropertyValue, QuantityDimension};
 
 use crate::plan_area::{Verdict, footprint, judge, shown};
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{
+    NameSpec, Selection, enumerate, select_objects, selector_matches, xsd_name_pattern,
+};
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     MAX_DECIMALS, Parameters, PropertyRef, Unavailable, category_prefix, display, exact_f64,
@@ -22,6 +25,8 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("applies_to", ColumnKind::Selector),
     TableColumn::optional("property_set", ColumnKind::TextPattern),
     TableColumn::optional("property", ColumnKind::TextPattern),
+    TableColumn::optional("property_set_pattern", ColumnKind::String),
+    TableColumn::optional("property_pattern", ColumnKind::String),
     TableColumn::optional("requirement", ColumnKind::String),
     TableColumn::optional("state", ColumnKind::String),
     TableColumn::optional("presence", ColumnKind::String),
@@ -59,17 +64,25 @@ const COLUMNS: &[TableColumn] = &[
 /// every selected object.
 ///
 /// Each row yields at most one finding per object, whose message begins with
-/// its result: `missing property`, `missing value`, `forbidden property
-/// present`, `forbidden value` or `wrong value`. With `category_property`
+/// its result: `missing property set`, `missing property`, `missing value`,
+/// `forbidden property set present`, `forbidden property present`,
+/// `forbidden value` or `wrong value`. With `category_property`
 /// each finding starts with the object's category in brackets; with
 /// `group_by_value` the findings of one row, category and result that found
 /// the same value are one finding relating all their objects.
 ///
-/// Property sets and properties are resolved by exact name only: the
-/// property service cannot list an object's sets or properties, so a row
-/// whose set or property name is a wildcard pattern, or a row naming a set
-/// without a property (set presence), is reported not evaluated for the
-/// whole rule while the other rows are checked.
+/// `property_set` and `property` hold exact names or wildcard patterns;
+/// `property_set_pattern` and `property_pattern` hold XML Schema patterns
+/// instead, as IDS names sets and properties (`Pset_.*Common`). A pattern
+/// matches the whole name the source states, never a concept. A row with a
+/// pattern is checked against every matching property, enumerated exactly
+/// through the property service: an included statement must hold for each
+/// and needs one to match, an excluded one must hold for none, and the
+/// first failing property (by set and name) is reported. A row naming a set
+/// without a property asks whether the set holds a property. A required
+/// property whose named set holds none is a `missing property set`. A
+/// source that cannot enumerate leaves a pattern or set row not evaluated,
+/// and keeps `missing property` for an exact one.
 pub struct PropertyRequirements;
 
 impl RuleCapability for PropertyRequirements {
@@ -99,15 +112,6 @@ impl RuleCapability for PropertyRequirements {
             }
         };
         let (subjects, mut evaluation) = select_objects(context, &rule.selector);
-        for (index, requirement) in declared.rows.iter().enumerate() {
-            if let (Target::Unsupported(why), false) = (&requirement.target, requirement.ignored())
-            {
-                evaluation.push_not_evaluated(
-                    NotEvaluatedReason::MissingService,
-                    format!("property-requirements row {index}: {why}"),
-                );
-            }
-        }
         let mut groups = declared.group_by_value.then(BTreeMap::new);
         for subject in subjects {
             check(
@@ -119,7 +123,7 @@ impl RuleCapability for PropertyRequirements {
                 &mut evaluation,
             );
         }
-        for ((index, category, result, _), group) in groups.into_iter().flatten() {
+        for ((index, category, result, ..), group) in groups.into_iter().flatten() {
             let count = group.objects.len();
             let objects = if count == 1 { "object" } else { "objects" };
             let first = group.objects[0].clone();
@@ -173,8 +177,38 @@ enum Statement {
 enum Target {
     /// One exactly named property, optionally in one exactly named set.
     Exact { set: Option<String>, name: String },
-    /// A row the property contract cannot answer, and why.
-    Unsupported(String),
+    /// Every property whose set and name match, enumerated exactly; with
+    /// `property` `Any`, a set-only row asking for the set's presence.
+    Matched {
+        set: NameSel,
+        property: NameSel,
+        shown: String,
+    },
+}
+
+/// A set or property name of a row: any, exact, or a pattern as written.
+enum NameSel {
+    Any,
+    Exact(String),
+    Pattern(NamePattern, String),
+}
+
+impl NameSel {
+    fn spec(&self) -> NameSpec<'_> {
+        match self {
+            Self::Any => NameSpec::Any,
+            Self::Exact(name) => NameSpec::Exact(name),
+            Self::Pattern(pattern, _) => NameSpec::Pattern(pattern),
+        }
+    }
+
+    fn shown(&self) -> &str {
+        match self {
+            Self::Any => "*",
+            Self::Exact(name) => name,
+            Self::Pattern(_, shown) => shown,
+        }
+    }
 }
 
 /// What a row's numeric bounds are divided by.
@@ -332,9 +366,9 @@ fn parse_row(
     volume_property: Option<PropertyRef<'_>>,
 ) -> Result<RequirementRow, Unavailable> {
     let condition = parse_condition(row, case_sensitive, area_property, volume_property)?;
-    let (state, statement) = parse_statement(row, &condition)?;
-    let set = row.text("property_set")?;
-    let name = row.text("property")?;
+    let (state, mut statement) = parse_statement(row, &condition)?;
+    let set = name_cell(row, "property_set", "property_set_pattern")?;
+    let name = name_cell(row, "property", "property_pattern")?;
     let target = match (set, name) {
         (None, None) => return Err(invalid("names neither a property set nor a property")),
         (Some(set), None) => {
@@ -343,23 +377,45 @@ fn parse_row(
                     "a value condition needs a property, not only a property set",
                 ));
             }
-            Target::Unsupported(format!(
-                "property set `{set}` without a property asks for the set's presence, but the \
-                 property service resolves one named property and cannot list an object's \
-                 property sets"
-            ))
+            // A set is present when it holds a property: `required` asks
+            // for that, and only presence or absence can be stated of it.
+            statement = match (statement, row.text("requirement")?.is_some()) {
+                (Statement::Presence(Presence::NotEmpty), true) => {
+                    Statement::Presence(Presence::Defined)
+                }
+                (Statement::Presence(Presence::Empty | Presence::NotEmpty), _) => {
+                    return Err(invalid(
+                        "a property set without a property states only `defined` or `undefined`",
+                    ));
+                }
+                (other, _) => other,
+            };
+            Target::Matched {
+                shown: set.shown().to_owned(),
+                set,
+                property: NameSel::Any,
+            }
         }
-        (set, Some(name)) => match (set.map(literal).transpose()?, literal(name)?) {
-            (Some(None), _) | (_, None) => Target::Unsupported(format!(
-                "`{}` is a name pattern, but the property service resolves one exactly named \
-                 property and cannot list an object's property sets or properties",
-                set.map_or_else(|| name.to_owned(), |set| format!("{set}.{name}"))
-            )),
-            (set, Some(name)) => Target::Exact {
-                set: set.flatten(),
+        (set, Some(NameSel::Exact(name))) if matches!(set, None | Some(NameSel::Exact(_))) => {
+            Target::Exact {
+                set: match set {
+                    Some(NameSel::Exact(set)) => Some(set),
+                    _ => None,
+                },
                 name,
-            },
-        },
+            }
+        }
+        (set, Some(property)) => {
+            let set = set.unwrap_or(NameSel::Any);
+            Target::Matched {
+                shown: match &set {
+                    NameSel::Any => property.shown().to_owned(),
+                    set => format!("{}.{}", set.shown(), property.shown()),
+                },
+                set,
+                property,
+            }
+        }
     };
     Ok(RequirementRow {
         applies_to: row.selector("applies_to")?.cloned(),
@@ -442,6 +498,51 @@ fn parse_statement(row: Row<'_>, condition: &Condition) -> Result<(State, Statem
             (state, Statement::Value { optional: false })
         }
     })
+}
+
+/// A set or property name from its wildcard cell or its XML Schema
+/// pattern cell, never both; `None` when neither is given.
+fn name_cell(row: Row<'_>, wildcard: &str, pattern: &str) -> Result<Option<NameSel>, Unavailable> {
+    match (row.text(wildcard)?, row.text(pattern)?) {
+        (Some(_), Some(_)) => Err(invalid(format!(
+            "declare `{wildcard}` or `{pattern}`, not both"
+        ))),
+        (Some(cell), None) => Ok(Some(match literal(cell)? {
+            Some(name) => NameSel::Exact(name),
+            None => NameSel::Pattern(
+                NamePattern::new(wildcard_regex(cell)?)
+                    .map_err(|error| invalid(error.to_string()))?,
+                cell.to_owned(),
+            ),
+        })),
+        (None, Some(cell)) => Ok(Some(NameSel::Pattern(
+            xsd_name_pattern(cell)
+                .map_err(|why| invalid(format!("`{pattern}` {cell:?}: {why}")))?,
+            format!("/{cell}/"),
+        ))),
+        (None, None) => Ok(None),
+    }
+}
+
+/// A wildcard cell as a regular expression: `*` any run, `?` one
+/// character, a backslash making the next character literal.
+fn wildcard_regex(cell: &str) -> Result<String, Unavailable> {
+    let mut out = String::with_capacity(cell.len() + 8);
+    let mut chars = cell.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' => out.push_str("(?s:.*)"),
+            '?' => out.push_str("(?s:.)"),
+            '\\' => {
+                let escaped = chars
+                    .next()
+                    .ok_or_else(|| invalid("a name pattern ends with a backslash"))?;
+                out.push_str(&regex::escape(&escaped.to_string()));
+            }
+            other => out.push_str(&regex::escape(&other.to_string())),
+        }
+    }
+    Ok(out)
 }
 
 /// The name a pattern cell spells literally, or `None` when it holds a
@@ -615,8 +716,8 @@ fn split_values(column: &str, cell: &str, keep_escapes: bool) -> Result<Vec<Stri
     Ok(values)
 }
 
-/// Grouped findings: (row, category heading, result, value key).
-type GroupKey = (usize, String, &'static str, String);
+/// Grouped findings: (row, category heading, result, property, value key).
+type GroupKey = (usize, String, &'static str, String, String);
 
 /// Objects of one row, category and result that found one value.
 struct Group {
@@ -670,16 +771,33 @@ fn check(
     };
     let mut failures = Vec::new();
     for (index, row) in rows {
-        let Target::Exact { set, name } = &row.target else {
-            continue;
+        let (checked, set) = match &row.target {
+            Target::Exact { set, name } => {
+                let property = PropertyRef {
+                    set: set.as_deref(),
+                    name,
+                };
+                (
+                    check_row(context, declared, subject, row, property)
+                        .map(|failure| failure.map(|failure| (property.to_string(), failure))),
+                    set.as_deref().map(|set| (NameSpec::Exact(set), set)),
+                )
+            }
+            Target::Matched {
+                set,
+                property,
+                shown,
+            } => (
+                check_matched_row(context, declared, subject, row, (set, property, shown)),
+                Some((set.spec(), set.shown())).filter(|(set, _)| !matches!(set, NameSpec::Any)),
+            ),
         };
-        let property = PropertyRef {
-            set: set.as_deref(),
-            name,
-        };
-        match check_row(context, declared, subject, row, property) {
+        match checked {
             Ok(None) => {}
-            Ok(Some(failure)) => failures.push((index, property.to_string(), failure)),
+            Ok(Some((property, failure))) => {
+                let (property, failure) = missing_set(context, subject, set, property, failure);
+                failures.push((index, property, failure));
+            }
             Err((reason, message)) => evaluation.push_object_not_evaluated(
                 subject.id.clone(),
                 reason,
@@ -728,7 +846,10 @@ fn report(
         let mut evidence = failure.evidence;
         evidence.extend(selected.iter().cloned());
         evidence.extend(cited.iter().cloned());
-        let shown = display(failure.value.as_ref());
+        let shown = failure
+            .shown
+            .clone()
+            .unwrap_or_else(|| display(failure.value.as_ref()));
         match groups.as_deref_mut() {
             Some(groups) => {
                 let key = failure.value.as_ref().map_or_else(
@@ -736,7 +857,13 @@ fn report(
                     |value| value_key(value, false, true),
                 );
                 let group = groups
-                    .entry((index, category.clone(), failure.result, key))
+                    .entry((
+                        index,
+                        category.clone(),
+                        failure.result,
+                        property.clone(),
+                        key,
+                    ))
                     .or_insert_with(|| Group {
                         property,
                         shown,
@@ -767,6 +894,8 @@ fn report(
 
 /// How one row failed on one object.
 struct Failure {
+    /// What the message says was found, when not the value (a set).
+    shown: Option<String>,
     /// The result a message begins with, such as `wrong value`.
     result: &'static str,
     /// The value found; `None` when the property is absent.
@@ -779,6 +908,8 @@ struct Failure {
 }
 
 const MISSING_PROPERTY: &str = "missing property";
+const MISSING_SET: &str = "missing property set";
+const FORBIDDEN_SET: &str = "forbidden property set present";
 const MISSING_VALUE: &str = "missing value";
 const FORBIDDEN_PROPERTY: &str = "forbidden property present";
 const FORBIDDEN_VALUE: &str = "forbidden value";
@@ -796,6 +927,7 @@ fn check_row(
     let value = resolved.value();
     let fail = |result, detail: String, evidence| {
         Some(Failure {
+            shown: None,
             result,
             value: value.cloned(),
             quotient: None,
@@ -855,6 +987,7 @@ fn check_row(
     };
     match meets(condition, found, divisor, include) {
         Holds::No(quotient) if include => Ok(Some(Failure {
+            shown: None,
             result: WRONG_VALUE,
             value: value.cloned(),
             quotient,
@@ -1171,5 +1304,232 @@ fn holds(condition: &Condition, value: &PropertyValue, divisor: Option<Divisor>)
                 (None, _) => "in canonical SI units".to_owned(),
             }
         )),
+    }
+}
+
+/// Refines a missing property to a missing set when the row names a set and
+/// the object has no property in it at all.
+///
+/// The finding stands either way; a set the source cannot enumerate keeps
+/// the plain `missing property`.
+fn missing_set(
+    context: &RuleContext<'_>,
+    subject: &Object,
+    set: Option<(NameSpec<'_>, &str)>,
+    property: String,
+    mut failure: Failure,
+) -> (String, Failure) {
+    let Some((set, shown)) = set.filter(|_| failure.result == MISSING_PROPERTY) else {
+        return (property, failure);
+    };
+    match enumerate(context, subject, set, NameSpec::Any) {
+        Ok(enumeration) if enumeration.properties().is_empty() => {
+            failure.result = MISSING_SET;
+            failure.evidence.push(enumeration.evidence().clone());
+            (shown.to_owned(), failure)
+        }
+        _ => (property, failure),
+    }
+}
+
+/// The properties a row matched on one object, with the row's name as
+/// written for failures about none of them.
+struct Matches<'e> {
+    enumeration: &'e PropertyEnumeration,
+    shown: &'e str,
+}
+
+/// A failure with the property it names.
+type Named = Option<(String, Failure)>;
+
+impl Matches<'_> {
+    fn properties(&self) -> &[Property] {
+        self.enumeration.properties()
+    }
+
+    /// A failure about `found`, or about the row's name when `None`.
+    fn failure(
+        &self,
+        result: &'static str,
+        found: Option<&Property>,
+        detail: &str,
+    ) -> (String, Failure) {
+        let mut evidence = vec![self.enumeration.evidence().clone()];
+        if let Some(found) = found {
+            evidence.extend(found.evidence.iter().cloned());
+        }
+        (
+            found.map_or_else(
+                || self.shown.to_owned(),
+                |found| format!("{}.{}", found.property_set, found.name),
+            ),
+            Failure {
+                shown: None,
+                result,
+                value: found.map(|found| found.value.clone()),
+                quotient: None,
+                detail: detail.to_owned(),
+                evidence,
+            },
+        )
+    }
+}
+
+fn is_empty(found: &Property) -> bool {
+    undefined(Some(&found.value))
+}
+
+/// One row naming its set or property by pattern, or a set alone, on one
+/// object: every matched property must meet an included statement and none
+/// may meet an excluded one. The first failing property is reported, in
+/// set and name order.
+fn check_matched_row(
+    context: &RuleContext<'_>,
+    declared: &Declared<'_>,
+    subject: &Object,
+    row: &RequirementRow,
+    (set, property, shown): (&NameSel, &NameSel, &str),
+) -> Result<Named, Unavailable> {
+    let enumeration = enumerate(context, subject, set.spec(), property.spec())?;
+    let matched = Matches {
+        enumeration: &enumeration,
+        shown,
+    };
+    let include = row.state == State::Include;
+    let set_only = matches!(property, NameSel::Any);
+    match row.statement {
+        Statement::Presence(presence) if set_only => Ok(set_presence(&matched, include, presence)),
+        Statement::Presence(presence) => Ok(matched_presence(&matched, include, presence)),
+        // An optional set-only row states nothing.
+        Statement::Value { .. } if set_only => Ok(None),
+        Statement::Value { optional } => {
+            matched_values(context, declared, subject, row, &matched, optional)
+        }
+    }
+}
+
+/// A set-only row: the set is present when it holds a property.
+fn set_presence(matched: &Matches<'_>, include: bool, presence: Presence) -> Named {
+    let present = !matched.properties().is_empty();
+    match (include, presence, present) {
+        (true, Presence::Defined, false) | (false, Presence::Undefined, false) => {
+            Some(matched.failure(MISSING_SET, None, ""))
+        }
+        (true, Presence::Undefined, true) | (false, Presence::Defined, true) => {
+            let (label, mut failure) = matched.failure(FORBIDDEN_SET, None, "");
+            let count = matched.properties().len();
+            failure.shown = Some(format!(
+                "present with {count} propert{}",
+                if count == 1 { "y" } else { "ies" }
+            ));
+            Some((label, failure))
+        }
+        _ => None,
+    }
+}
+
+/// A presence statement over every matched property: an included one holds
+/// for each and needs one to match, an excluded one for none.
+fn matched_presence(matched: &Matches<'_>, include: bool, presence: Presence) -> Named {
+    let found = matched.properties();
+    if found.is_empty() {
+        let missing = if include {
+            presence != Presence::Undefined
+        } else {
+            presence == Presence::Undefined
+        };
+        return if missing {
+            Some(matched.failure(MISSING_PROPERTY, None, ""))
+        } else {
+            None
+        };
+    }
+    let first_empty = found.iter().find(|found| is_empty(found));
+    let first_filled = found.iter().find(|found| !is_empty(found));
+    match (include, presence) {
+        (true, Presence::Undefined) | (false, Presence::Defined) => {
+            Some(matched.failure(FORBIDDEN_PROPERTY, found.first(), ""))
+        }
+        (true, Presence::NotEmpty) | (false, Presence::Empty) => {
+            first_empty.map(|found| matched.failure(MISSING_VALUE, Some(found), ""))
+        }
+        (true, Presence::Empty) => {
+            first_filled.map(|found| matched.failure(WRONG_VALUE, Some(found), "; required empty"))
+        }
+        (false, Presence::NotEmpty) => first_filled
+            .map(|found| matched.failure(FORBIDDEN_VALUE, Some(found), ", which is not empty")),
+        (true, Presence::Defined) | (false, Presence::Undefined) => None,
+    }
+}
+
+/// Value conditions over every matched property: an included row needs one
+/// to match and each to meet them, an excluded row fails on the first that
+/// meets them. A property the conditions cannot judge leaves the row open
+/// unless another decides it.
+fn matched_values(
+    context: &RuleContext<'_>,
+    declared: &Declared<'_>,
+    subject: &Object,
+    row: &RequirementRow,
+    matched: &Matches<'_>,
+    optional: bool,
+) -> Result<Named, Unavailable> {
+    let include = row.state == State::Include;
+    if matched.properties().is_empty() {
+        return Ok(if include && !optional {
+            Some(matched.failure(MISSING_PROPERTY, None, ""))
+        } else {
+            None
+        });
+    }
+    let condition = &row.condition;
+    let mut divided = Vec::new();
+    let divisor = match condition.range.as_ref().and_then(|range| range.per) {
+        Some(per) => Some(measure_divisor(
+            context,
+            declared,
+            subject,
+            per,
+            &mut divided,
+        )?),
+        None => None,
+    };
+    let mut open = None;
+    for found in matched.properties() {
+        if is_empty(found) {
+            if include && !optional {
+                return Ok(Some(matched.failure(MISSING_VALUE, Some(found), "")));
+            }
+            continue;
+        }
+        let judged = match meets(condition, &found.value, divisor, include) {
+            Holds::No(quotient) if include => {
+                let (label, mut failure) = matched.failure(
+                    WRONG_VALUE,
+                    Some(found),
+                    &format!("; required {}", condition.describe()),
+                );
+                failure.quotient = quotient;
+                Some((label, failure))
+            }
+            Holds::Yes if !include => Some(matched.failure(
+                FORBIDDEN_VALUE,
+                Some(found),
+                &format!(", which is {}", condition.describe()),
+            )),
+            Holds::Undecided(why) => {
+                open.get_or_insert(why);
+                None
+            }
+            Holds::Yes | Holds::No(_) => None,
+        };
+        if let Some((label, mut failure)) = judged {
+            failure.evidence.extend(divided);
+            return Ok(Some((label, failure)));
+        }
+    }
+    match open {
+        Some(why) => Err((NotEvaluatedReason::IncompleteEvidence, why)),
+        None => Ok(None),
     }
 }

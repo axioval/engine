@@ -58,6 +58,17 @@ in `axioval:body`. Capabilities that read these sets themselves (the
 presentation layer in `clash`, the body in `allowed-profile` and
 `opening-zone`) ask by the engine's own names, never through binding.
 
+## Name patterns
+
+A property set or property named by a pattern (a `propertyPattern`
+selector, `property-value`'s `property_pattern`, the wildcard and pattern
+cells of `property-requirements`) is not a concept either: the pattern
+matches the names the source states and is never bound. An exact name
+beside it in the same rule binds as usual, so a concept set with a pattern
+property searches the bound set only. A package whose patterns spell one
+release's names (`Pset_.*Common`) should say which releases it targets, as
+it does for concepts.
+
 ## Subtypes
 
 `includeSubtypes` is honoured through `TypeHierarchyServiceHandle`. An object

@@ -52,6 +52,46 @@ All notable changes are documented here. This project follows Semantic Versionin
   describe exactly is refused for every name, never answered in part; an
   object without a body, an unset optional attribute and another family's
   parameter are exact absences.
+- **Property sets and properties named by pattern.** (Refs #44) The
+  property service enumerates an object's properties:
+  `PropertyResolutionService::enumerate` answers a
+  `PropertyEnumerationRequest` (a `NameMatch` for the set and for the
+  property: `Any`, `Exact` or a whole-name `NamePattern`) with a
+  `PropertyEnumeration`: every selected property, sorted and distinct,
+  each with exact evidence, and exact evidence that there is no other, so
+  an empty one proves absence. The trait's default refuses; reserved sets
+  are never enumerated; the handle binds the answer to its request and
+  federation routes it by source. The IFC adapter enumerates through
+  `ifc-properties`' `exact_properties_where` (openbimrs/ifc#78), with the
+  traversal and refusals of `exact_property`; an unselected complex
+  property no longer refuses an answer about its neighbours. Rules name
+  sets and properties by XML Schema pattern, matched against the names the
+  source states and never bound as concepts: the new `propertyPattern`
+  selector compares every matching property under `matched` (`any` or
+  `all`), no match being no match; `property-value` takes
+  `property_pattern` and `property_set_pattern` instead of `property`,
+  each matching property meeting the constraints and one having to match
+  unless optional; `property-requirements` reads wildcards in its
+  `property_set` and `property` cells and XML Schema patterns in the new
+  `property_set_pattern` and `property_pattern` columns, checks an included
+  statement against every match and an excluded one against none (so a
+  forbidden pattern is decided), and answers set-only rows by whether the
+  set holds a property. A required property whose named set holds no
+  property is reported as `missing property set`, and a forbidden set
+  present as `forbidden property set present`; a source that cannot
+  enumerate leaves pattern and set rows not evaluated per object instead
+  of once per rule.
+  **Breaking:** `Selector` has the variant `PropertyPattern`;
+  `PropertyEnumeration`, `PropertyEnumerationRequest`, `NameMatch` and
+  `NamePattern` are new, and `axioval-engine` depends on `regex`.
+  Definitions bound to `property-value` must declare `property` as
+  optional and the optional `property_set_pattern` and `property_pattern`
+  (`string`); definitions bound to `property-requirements` must declare the
+  optional columns `property_set_pattern` and `property_pattern`
+  (`string`). A required property missing together with its whole set now
+  reads `missing property set: <set> is absent` where the source can
+  enumerate. The MCS schema does not yet declare `propertyPattern`.
+
 - **Enumerated, list, bounded and table property values.** (Refs #44)
   `PropertyValue` gains `Bounded { lower, upper, set_point }` (a range, each
   part an optional scalar, at least one stated, an unstated bound leaving

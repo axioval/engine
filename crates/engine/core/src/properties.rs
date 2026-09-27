@@ -1,6 +1,7 @@
 //! Exact source-neutral property-resolution host-service contracts.
 
-use axioval_ir::{Evidence, ObjectId, Property, PropertyValue};
+use axioval_ir::{Evidence, ObjectId, Property, PropertyValue, is_reserved_set};
+use regex::Regex;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -164,6 +165,221 @@ pub enum PropertyResolution {
     Absent(CompletePropertyAbsenceEvidence),
 }
 
+/// A regular expression over whole property-set or property names.
+///
+/// The syntax is the `regex` crate's; callers holding an XML Schema pattern
+/// translate it first (`axioval_rules::translate_xsd_pattern`). The pattern
+/// always matches a whole name. Two patterns are equal when their text is.
+#[derive(Clone, Debug)]
+pub struct NamePattern {
+    pattern: String,
+    regex: Regex,
+}
+impl NamePattern {
+    /// Compiles `pattern` to match whole names.
+    ///
+    /// # Errors
+    ///
+    /// [`PropertyResolutionError::InvalidRequest`] when the pattern does not
+    /// compile.
+    pub fn new(pattern: impl Into<String>) -> Result<Self, PropertyResolutionError> {
+        let pattern = pattern.into();
+        let regex = Regex::new(&format!(r"\A(?:{pattern})\z"))
+            .map_err(|_| PropertyResolutionError::InvalidRequest)?;
+        Ok(Self { pattern, regex })
+    }
+    /// The pattern as written.
+    pub fn as_str(&self) -> &str {
+        &self.pattern
+    }
+    /// Whether the whole of `name` matches.
+    pub fn is_match(&self, name: &str) -> bool {
+        self.regex.is_match(name)
+    }
+}
+impl PartialEq for NamePattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern
+    }
+}
+impl Eq for NamePattern {}
+impl PartialOrd for NamePattern {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for NamePattern {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.pattern.cmp(&other.pattern)
+    }
+}
+
+/// Which property-set or property names an enumeration selects.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NameMatch {
+    /// Every name.
+    Any,
+    /// One exact name, compared as the source spells it.
+    Exact(String),
+    /// Every name the pattern matches as a whole.
+    Pattern(NamePattern),
+}
+impl NameMatch {
+    /// Whether `name` is selected.
+    pub fn matches(&self, name: &str) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Exact(exact) => exact == name,
+            Self::Pattern(pattern) => pattern.is_match(name),
+        }
+    }
+}
+impl std::fmt::Display for NameMatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Any => f.write_str("*"),
+            Self::Exact(name) => f.write_str(name),
+            Self::Pattern(pattern) => write!(f, "/{}/", pattern.as_str()),
+        }
+    }
+}
+
+/// Request for every property of one object whose set and name match.
+///
+/// Enumeration covers the source's own property sets, as
+/// [`PropertyRequest`] does with occurrence/type inheritance, and never the
+/// reserved sets ([`axioval_ir::is_reserved_set`]), which name engine
+/// vocabulary and are resolved by name only: an exact reserved set is an
+/// invalid request, and a pattern never selects one.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PropertyEnumerationRequest {
+    object_id: ObjectId,
+    property_set: NameMatch,
+    property: NameMatch,
+}
+impl PropertyEnumerationRequest {
+    /// Creates a request.
+    ///
+    /// # Errors
+    ///
+    /// [`PropertyResolutionError::InvalidRequest`] for a blank exact name or
+    /// an exact reserved set.
+    pub fn try_new(
+        object_id: ObjectId,
+        property_set: NameMatch,
+        property: NameMatch,
+    ) -> Result<Self, PropertyResolutionError> {
+        let blank =
+            |name: &NameMatch| matches!(name, NameMatch::Exact(name) if name.trim().is_empty());
+        if blank(&property_set)
+            || blank(&property)
+            || matches!(&property_set, NameMatch::Exact(set) if is_reserved_set(set))
+        {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        Ok(Self {
+            object_id,
+            property_set,
+            property,
+        })
+    }
+    /// Requested object.
+    pub fn object_id(&self) -> &ObjectId {
+        &self.object_id
+    }
+    /// Which property sets are searched.
+    pub fn property_set(&self) -> &NameMatch {
+        &self.property_set
+    }
+    /// Which properties of those sets are selected.
+    pub fn property(&self) -> &NameMatch {
+        &self.property
+    }
+    /// Whether `property` is one the request selects.
+    pub fn selects(&self, property: &Property) -> bool {
+        !is_reserved_set(&property.property_set)
+            && self.property_set.matches(&property.property_set)
+            && self.property.matches(&property.name)
+    }
+}
+
+/// Every property an enumeration request selects, exactly, with the evidence
+/// that nothing else is selected.
+///
+/// Properties are sorted by set and name; no set and name occurs twice. An
+/// empty enumeration is an exact proof that the object has no selected
+/// property, as [`CompletePropertyAbsenceEvidence`] is for one name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PropertyEnumeration {
+    request: PropertyEnumerationRequest,
+    properties: Vec<Property>,
+    evidence: Evidence,
+}
+impl PropertyEnumeration {
+    /// Creates a request-bound enumeration.
+    ///
+    /// # Errors
+    ///
+    /// [`PropertyResolutionError::InexactEvidence`] when the completeness
+    /// evidence or a property's evidence is not exact, reviewable and from
+    /// the object's source; [`PropertyResolutionError::ResponseRequestMismatch`]
+    /// for a property the request does not select;
+    /// [`PropertyResolutionError::InvalidValue`] for an invalid value; and
+    /// [`PropertyResolutionError::Conflicting`] when a set and name occur
+    /// twice.
+    pub fn try_new(
+        request: PropertyEnumerationRequest,
+        mut properties: Vec<Property>,
+        evidence: Evidence,
+    ) -> Result<Self, PropertyResolutionError> {
+        let source = &request.object_id().source;
+        if !reviewable(&evidence) || evidence.source != *source {
+            return Err(PropertyResolutionError::InexactEvidence);
+        }
+        for property in &properties {
+            if !request.selects(property) {
+                return Err(PropertyResolutionError::ResponseRequestMismatch);
+            }
+            if !property
+                .evidence
+                .as_ref()
+                .is_some_and(|evidence| reviewable(evidence) && evidence.source == *source)
+            {
+                return Err(PropertyResolutionError::InexactEvidence);
+            }
+            if !valid_value(&property.value) {
+                return Err(PropertyResolutionError::InvalidValue);
+            }
+        }
+        properties.sort_by(|a, b| (&a.property_set, &a.name).cmp(&(&b.property_set, &b.name)));
+        if let Some(pair) = properties.windows(2).find(|pair| {
+            pair[0].property_set == pair[1].property_set && pair[0].name == pair[1].name
+        }) {
+            return Err(PropertyResolutionError::Conflicting(format!(
+                "{}.{} is enumerated twice",
+                pair[0].property_set, pair[0].name
+            )));
+        }
+        Ok(Self {
+            request,
+            properties,
+            evidence,
+        })
+    }
+    /// Bound request.
+    pub fn request(&self) -> &PropertyEnumerationRequest {
+        &self.request
+    }
+    /// The selected properties, sorted by set and name.
+    pub fn properties(&self) -> &[Property] {
+        &self.properties
+    }
+    /// Exact reviewable evidence that the enumeration is complete.
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Trusted adapter seam for property resolution.
 pub trait PropertyResolutionService: Send + Sync {
     /// Exact source snapshots used to construct this resolver.
@@ -178,6 +394,21 @@ pub trait PropertyResolutionService: Send + Sync {
         &self,
         request: &PropertyRequest,
     ) -> Result<PropertyResolution, PropertyResolutionError>;
+    /// Enumerates every property of one object the request selects, or
+    /// reports why the enumeration is not conclusive.
+    ///
+    /// The default refuses: a source that cannot list an object's
+    /// properties never answers with an empty enumeration, which would be a
+    /// proof of absence.
+    fn enumerate(
+        &self,
+        request: &PropertyEnumerationRequest,
+    ) -> Result<PropertyEnumeration, PropertyResolutionError> {
+        let _ = request;
+        Err(PropertyResolutionError::Unavailable(
+            "this property source cannot enumerate an object's properties".into(),
+        ))
+    }
 }
 
 /// Cloneable, type-erased property service registered by the host.
@@ -227,6 +458,20 @@ impl PropertyResolutionServiceHandle {
             }
         }
         Ok(resolution)
+    }
+    /// Enumerates and validates request binding and exact provenance.
+    ///
+    /// The enumeration's own constructor already checked every property
+    /// against the request; this binds the answer to this very request.
+    pub fn enumerate(
+        &self,
+        request: &PropertyEnumerationRequest,
+    ) -> Result<PropertyEnumeration, PropertyResolutionError> {
+        let enumeration = self.service.enumerate(request)?;
+        if enumeration.request() != request {
+            return Err(PropertyResolutionError::ResponseRequestMismatch);
+        }
+        Ok(enumeration)
     }
 }
 

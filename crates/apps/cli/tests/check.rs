@@ -6361,3 +6361,78 @@ fn enumerated_bounded_and_table_values_are_checked_value_by_value() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+#[test]
+fn property_sets_and_properties_named_by_pattern_are_enumerated() {
+    let case = Case::new("property-patterns");
+    let string = |value: &str| json!({"type": "string", "value": value});
+    let packages = property_packages(
+        &case,
+        &[
+            (
+                "requirements",
+                "property-requirements",
+                json!({"requirements": {"type": "table", "value": [
+                    {"property_set_pattern": string("Pset_Ch.*"),
+                     "property_pattern": string("Check[A-Z]"),
+                     "requirement": string("required")},
+                    {"property_set_pattern": string("Pset_Draft"),
+                     "requirement": string("forbidden")},
+                    {"property_set": string("axioval:example.ifc.Pset_Kinds"),
+                     "property_pattern": string("Sta.*"),
+                     "requirement": string("required"),
+                     "one_of": string("NEW|EXISTING|DEMOLISH")},
+                ]}}),
+            ),
+            (
+                "checks-ok",
+                "property-value",
+                json!({"property_set_pattern": string("Pset_.*"),
+                       "property_pattern": string("Check.*"),
+                       "values": {"type": "stringList", "value": ["ok"]},
+                       "optional": {"type": "boolean", "value": true}}),
+            ),
+        ],
+    );
+    let (output, result) = check_packages(&case, PROPERTY_KINDS, packages);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let expected: Vec<(String, String, String)> = [
+        (
+            "checks-ok",
+            "#1",
+            "property Pset_Checks.CheckB is \"\", not one of the required values",
+        ),
+        (
+            "checks-ok",
+            "#2",
+            "property Pset_Checks.CheckB is \"\", not one of the required values",
+        ),
+        (
+            "requirements",
+            "#1",
+            "missing value: Pset_Checks.CheckB is `` (requirement row 0)",
+        ),
+        (
+            "requirements",
+            "#2",
+            "forbidden property set present: /Pset_Draft/ is present with 1 property \
+             (requirement row 1)",
+        ),
+        (
+            "requirements",
+            "#2",
+            "missing value: Pset_Checks.CheckB is `` (requirement row 0)",
+        ),
+    ]
+    .iter()
+    .map(|(rule, object, message)| {
+        (
+            (*rule).to_owned(),
+            (*object).to_owned(),
+            (*message).to_owned(),
+        )
+    })
+    .collect();
+    assert_eq!(rule_findings(&result), expected, "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

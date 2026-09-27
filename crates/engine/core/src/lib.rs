@@ -560,7 +560,8 @@ pub use plan_span::{
     PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
 };
 pub use properties::{
-    CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    CompletePropertyAbsenceEvidence, NameMatch, NamePattern, PropertyEnumeration,
+    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use proximity::{

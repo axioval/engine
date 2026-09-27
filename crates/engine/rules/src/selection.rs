@@ -2,9 +2,10 @@
 
 use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationError, ClassificationServiceHandle,
-    ConceptBindings, NotEvaluatedReason, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, SourceDisciplines,
-    TypeHierarchyError, TypeHierarchyServiceHandle,
+    ConceptBindings, NameMatch, NamePattern, NotEvaluatedReason, PropertyEnumeration,
+    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionServiceHandle, RuleContext, SourceDisciplines, TypeHierarchyError,
+    TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{
     ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, Selector,
@@ -90,6 +91,32 @@ pub(crate) fn selector_matches(
             object,
             property_set.as_deref(),
             property,
+            (
+                operator,
+                value.as_ref(),
+                TextOptions {
+                    case_sensitive: *case_sensitive,
+                    trim: *trim,
+                },
+                *quantifier,
+                *precision,
+            ),
+            evidence,
+        ),
+        Selector::PropertyPattern {
+            property_set_pattern,
+            property_pattern,
+            matched,
+            operator,
+            value,
+            case_sensitive,
+            trim,
+            quantifier,
+            precision,
+        } => property_pattern_matches(
+            context,
+            object,
+            (property_set_pattern.as_deref(), property_pattern, *matched),
             (
                 operator,
                 value.as_ref(),
@@ -445,21 +472,9 @@ fn property_selector_matches(
     evidence: &mut Vec<Evidence>,
 ) -> Selection {
     let (operator, expected, options, quantifier, precision) = test;
-    let parsed = Test::parse(operator, expected, options, precision).and_then(|test| {
-        if quantifier.is_some() && matches!(test, Test::Exists) {
-            Err("`quantifier` applies to value comparisons, not to `exists`".into())
-        } else {
-            Ok(test)
-        }
-    });
-    let test = match parsed {
+    let test = match selector_test(operator, expected, options, quantifier, precision) {
         Ok(test) => test,
-        Err(message) => {
-            return Selection::NotEvaluated(
-                NotEvaluatedReason::InvalidDeclaration,
-                format!("property selector: {message}"),
-            );
-        }
+        Err(invalid) => return invalid,
     };
     let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
         return Selection::NotEvaluated(
@@ -489,6 +504,186 @@ fn property_selector_matches(
         }
         Err(error) => unavailable(error),
     }
+}
+
+/// The comparison a property selector states, or why it is invalid.
+fn selector_test(
+    operator: &ComparisonOperator,
+    expected: Option<&ParameterValue>,
+    options: TextOptions,
+    quantifier: Option<Quantifier>,
+    precision: Option<TemporalPrecision>,
+) -> Result<Test, Selection> {
+    Test::parse(operator, expected, options, precision)
+        .and_then(|test| {
+            if quantifier.is_some() && matches!(test, Test::Exists) {
+                Err("`quantifier` applies to value comparisons, not to `exists`".into())
+            } else {
+                Ok(test)
+            }
+        })
+        .map_err(|message| {
+            Selection::NotEvaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                format!("property selector: {message}"),
+            )
+        })
+}
+
+/// A `propertyPattern` selector: the properties whose set and name match,
+/// enumerated exactly, compared under `matched`.
+fn property_pattern_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    patterns: (Option<&str>, &str, Quantifier),
+    test: (
+        &ComparisonOperator,
+        Option<&ParameterValue>,
+        TextOptions,
+        Option<Quantifier>,
+        Option<TemporalPrecision>,
+    ),
+    evidence: &mut Vec<Evidence>,
+) -> Selection {
+    let (set_pattern, name_pattern, matched) = patterns;
+    let (operator, expected, options, quantifier, precision) = test;
+    let test = match selector_test(operator, expected, options, quantifier, precision) {
+        Ok(test) => test,
+        Err(invalid) => return invalid,
+    };
+    let compile = |pattern: &str| {
+        xsd_name_pattern(pattern).map_err(|message| {
+            Selection::NotEvaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                format!("property selector: name pattern {pattern:?}: {message}"),
+            )
+        })
+    };
+    let set = match set_pattern.map(compile).transpose() {
+        Ok(set) => set,
+        Err(invalid) => return invalid,
+    };
+    let name = match compile(name_pattern) {
+        Ok(name) => name,
+        Err(invalid) => return invalid,
+    };
+    let set = set.as_ref().map_or(NameSpec::Any, NameSpec::Pattern);
+    let enumeration = match enumerate(context, object, set, NameSpec::Pattern(&name)) {
+        Ok(enumeration) => enumeration,
+        Err((reason, message)) => return Selection::NotEvaluated(reason, message),
+    };
+    evidence.push(enumeration.evidence().clone());
+    if enumeration.properties().is_empty() {
+        return Selection::NoMatch;
+    }
+    let decisive = matches!(matched, Quantifier::Any);
+    let mut undecided = None;
+    for property in enumeration.properties() {
+        evidence.extend(property.evidence.iter().cloned());
+        match test.holds_quantified(&property.value, quantifier, options) {
+            Ok(held) if held == decisive => return verdict(decisive),
+            Ok(_) => {}
+            Err(message) => {
+                undecided.get_or_insert(format!(
+                    "property selector on `{}.{}`: {message}",
+                    property.property_set, property.name
+                ));
+            }
+        }
+    }
+    match undecided {
+        Some(message) => Selection::NotEvaluated(NotEvaluatedReason::InvalidEvidence, message),
+        None => verdict(!decisive),
+    }
+}
+
+/// How a rule names a property set or a property for an enumeration.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum NameSpec<'a> {
+    /// Every name.
+    Any,
+    /// A concept (or, natively, a source name), bound through the package
+    /// vocabulary like a property request's names.
+    Exact(&'a str),
+    /// A pattern over the source's own names; never bound.
+    Pattern(&'a NamePattern),
+}
+
+impl std::fmt::Display for NameSpec<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Any => f.write_str("*"),
+            Self::Exact(name) => f.write_str(name),
+            Self::Pattern(pattern) => write!(f, "/{}/", pattern.as_str()),
+        }
+    }
+}
+
+/// A whole-name matcher for an XML Schema pattern, as IDS names property
+/// sets and properties.
+pub(crate) fn xsd_name_pattern(pattern: &str) -> Result<NamePattern, String> {
+    let translated = crate::xsd_pattern::translate(pattern)?;
+    NamePattern::new(translated).map_err(|error| error.to_string())
+}
+
+/// A request enumerating `object`'s properties, exact names bound through the
+/// package vocabulary as in [`bound_property_request`]. A pattern names the
+/// source's own names and is never bound.
+pub(crate) fn bound_enumeration_request(
+    context: &RuleContext<'_>,
+    object: &Object,
+    set: NameSpec<'_>,
+    property: NameSpec<'_>,
+) -> Result<PropertyEnumerationRequest, (NotEvaluatedReason, String)> {
+    let bind =
+        |spec: NameSpec<'_>, is_set: bool| -> Result<NameMatch, (NotEvaluatedReason, String)> {
+            Ok(match spec {
+                NameSpec::Any => NameMatch::Any,
+                NameSpec::Pattern(pattern) => NameMatch::Pattern(pattern.clone()),
+                NameSpec::Exact(name) => NameMatch::Exact(match vocabulary(context) {
+                    Vocabulary::Native => name.to_owned(),
+                    Vocabulary::Package(_) if is_set && axioval_ir::is_reserved_set(name) => {
+                        name.to_owned()
+                    }
+                    Vocabulary::Package(bindings) => {
+                        let source = &object.id.source;
+                        let bound = if is_set {
+                            bindings.property_set(name, source)
+                        } else {
+                            bindings.property(name, source)
+                        };
+                        bound.map_err(|error| binding_error(&error))?.to_owned()
+                    }
+                }),
+            })
+        };
+    PropertyEnumerationRequest::try_new(object.id.clone(), bind(set, true)?, bind(property, false)?)
+        .map_err(|_| {
+            (
+                NotEvaluatedReason::InvalidDeclaration,
+                format!(
+                    "properties {set}.{property} cannot be enumerated: a name is blank or a reserved set"
+                ),
+            )
+        })
+}
+
+/// Every property of `object` in the sets `set` names whose names `property`
+/// names, with the evidence that there are no others.
+pub(crate) fn enumerate(
+    context: &RuleContext<'_>,
+    object: &Object,
+    set: NameSpec<'_>,
+    property: NameSpec<'_>,
+) -> Result<PropertyEnumeration, (NotEvaluatedReason, String)> {
+    let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
+        return Err((
+            NotEvaluatedReason::MissingService,
+            "property-resolution service is not registered".into(),
+        ));
+    };
+    let request = bound_enumeration_request(context, object, set, property)?;
+    service.enumerate(&request).map_err(property_error)
 }
 
 pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedReason, String) {

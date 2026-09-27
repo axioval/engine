@@ -23,8 +23,9 @@
 //! under the declared `quantifier`, a range also by its open ends.
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, NamePattern, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, PropertyResolution, PropertyResolutionServiceHandle, RuleCapability,
+    RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Quantifier};
 use axioval_ir::{
@@ -33,7 +34,9 @@ use axioval_ir::{
 
 use crate::support::temporal_order;
 
-use crate::selection::{bound_property_request, property_error, select_objects};
+use crate::selection::{
+    NameSpec, bound_property_request, enumerate, property_error, select_objects, xsd_name_pattern,
+};
 use crate::xsd_pattern;
 
 /// IDS equality tolerance for doubles, relative and absolute.
@@ -181,7 +184,9 @@ enum Verdict {
 
 /// Requires a property's value to meet lexical constraints, cast to its kind.
 ///
-/// Parameters: `property`; optionally `data_type` (the source-declared type,
+/// Parameters: `property`, or `property_pattern` with an optional
+/// `property_set_pattern` (XML Schema patterns over the source's own names,
+/// matching them whole); optionally `data_type` (the source-declared type,
 /// as in `property-data-type`), `values` (any of), `patterns` (XML Schema
 /// regular expressions, any of, whole value), `min_inclusive`,
 /// `max_inclusive`, `min_exclusive`, `max_exclusive`, `length`,
@@ -193,6 +198,10 @@ enum Verdict {
 /// form a model's literal has. Without `optional`, absence, `null`, blank
 /// text and an empty list are violations; with it, an absent or `null`
 /// property passes and any present value, empty text included, is checked.
+///
+/// With patterns, every matching property, enumerated exactly through the
+/// property service, must meet the constraints, and one must match unless
+/// the rule is optional; each failing property is its own finding.
 ///
 /// A list, a bounded value or a table is judged by its stated values (see
 /// `PropertyValue::stated_values`) under `quantifier`: `any` holds when one
@@ -211,11 +220,13 @@ impl RuleCapability for PropertyValueConstraint {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![ParameterDescriptor::required(
+        let mut parameters = vec![ParameterDescriptor::optional(
             "property",
             ParameterType::PropertyReference,
         )];
         for name in [
+            "property_set_pattern",
+            "property_pattern",
             "data_type",
             "min_inclusive",
             "max_inclusive",
@@ -248,15 +259,14 @@ impl RuleCapability for PropertyValueConstraint {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let Some(ParameterValue::PropertyReference {
-            property: name,
-            property_set: set,
-        }) = rule.parameters.get("property")
-        else {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::InvalidDeclaration,
-                "property-value has no valid property reference",
-            );
+        let target = match Target::read(rule) {
+            Ok(target) => target,
+            Err(message) => {
+                return CapabilityEvaluation::not_evaluated(
+                    NotEvaluatedReason::InvalidDeclaration,
+                    format!("property-value: {message}"),
+                );
+            }
         };
         let constraints = match Constraints::read(rule) {
             Ok(constraints) => constraints,
@@ -279,50 +289,179 @@ impl RuleCapability for PropertyValueConstraint {
             return evaluation;
         };
         for object in selected {
-            let request = match bound_property_request(context, object, set.as_deref(), name) {
-                Ok(request) => request,
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                    continue;
+            match &target {
+                Target::Exact { set, name } => {
+                    check_exact(
+                        context,
+                        rule,
+                        service,
+                        object,
+                        (*set, name),
+                        &constraints,
+                        &mut evaluation,
+                    );
                 }
-            };
-            match service.resolve(&request) {
-                Ok(PropertyResolution::Present(resolved)) => {
-                    let property = resolved.property();
-                    match judge(property, name, &constraints) {
-                        Verdict::Meets => {}
-                        Verdict::Fails(message) => evaluation.push_finding(finding(
-                            rule,
-                            object,
-                            message,
-                            property.evidence.clone().into_iter().collect(),
-                        )),
-                        Verdict::Inapplicable(reason, message) => {
-                            evaluation.push_object_not_evaluated(
-                                object.id.clone(),
-                                reason,
-                                message,
-                            );
-                        }
-                    }
-                }
-                Ok(PropertyResolution::Absent(proof)) => {
-                    if !constraints.optional {
-                        evaluation.push_finding(finding(
-                            rule,
-                            object,
-                            format!("missing required property {name}"),
-                            vec![proof.evidence().clone()],
-                        ));
-                    }
-                }
-                Err(error) => {
-                    let (reason, message) = property_error(error);
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                Target::Matched { set, name, shown } => {
+                    check_matched(
+                        context,
+                        rule,
+                        object,
+                        (set.as_ref(), name, shown),
+                        &constraints,
+                        &mut evaluation,
+                    );
                 }
             }
         }
         evaluation
+    }
+}
+
+/// The property a rule judges: one named exactly, or every one whose name
+/// (and set) match XML Schema patterns.
+enum Target<'r> {
+    Exact {
+        set: Option<&'r str>,
+        name: &'r str,
+    },
+    Matched {
+        set: Option<NamePattern>,
+        name: NamePattern,
+        shown: String,
+    },
+}
+
+impl<'r> Target<'r> {
+    fn read(rule: &'r CompiledRule) -> Result<Self, String> {
+        let text = |name: &str| match rule.parameters.get(name) {
+            Some(ParameterValue::String { value }) => Ok(Some(value.as_str())),
+            None => Ok(None),
+            Some(_) => Err(format!("`{name}` is not a string")),
+        };
+        let reference = match rule.parameters.get("property") {
+            Some(ParameterValue::PropertyReference {
+                property,
+                property_set,
+            }) => Some((property_set.as_deref(), property.as_str())),
+            None => None,
+            Some(_) => return Err("`property` is not a property reference".into()),
+        };
+        let set_pattern = text("property_set_pattern")?;
+        let name_pattern = text("property_pattern")?;
+        let compile = |pattern: &str| {
+            xsd_name_pattern(pattern).map_err(|why| format!("name pattern {pattern:?}: {why}"))
+        };
+        match (reference, set_pattern, name_pattern) {
+            (Some((set, name)), None, None) => Ok(Self::Exact { set, name }),
+            (None, set, Some(name)) => Ok(Self::Matched {
+                shown: format!(
+                    "{}/{name}/",
+                    set.map_or_else(String::new, |set| format!("/{set}/."))
+                ),
+                set: set.map(compile).transpose()?,
+                name: compile(name)?,
+            }),
+            (Some(_), _, Some(_)) => {
+                Err("declare `property` or `property_pattern`, not both".into())
+            }
+            (_, Some(_), None) => Err("`property_set_pattern` needs `property_pattern`".into()),
+            (None, None, None) => Err("declare `property` or `property_pattern`".into()),
+        }
+    }
+}
+
+fn check_exact(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    service: &PropertyResolutionServiceHandle,
+    object: &Object,
+    (set, name): (Option<&str>, &str),
+    constraints: &Constraints<'_>,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let request = match bound_property_request(context, object, set, name) {
+        Ok(request) => request,
+        Err((reason, message)) => {
+            evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+            return;
+        }
+    };
+    match service.resolve(&request) {
+        Ok(PropertyResolution::Present(resolved)) => {
+            let property = resolved.property();
+            match judge(property, name, constraints) {
+                Verdict::Meets => {}
+                Verdict::Fails(message) => evaluation.push_finding(finding(
+                    rule,
+                    object,
+                    message,
+                    property.evidence.clone().into_iter().collect(),
+                )),
+                Verdict::Inapplicable(reason, message) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                }
+            }
+        }
+        Ok(PropertyResolution::Absent(proof)) => {
+            if !constraints.optional {
+                evaluation.push_finding(finding(
+                    rule,
+                    object,
+                    format!("missing required property {name}"),
+                    vec![proof.evidence().clone()],
+                ));
+            }
+        }
+        Err(error) => {
+            let (reason, message) = property_error(error);
+            evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+        }
+    }
+}
+
+/// Every matched property must meet the constraints, and one must match
+/// unless the rule is optional. Each failing property is a finding; one
+/// that cannot be judged leaves the object not evaluated as well.
+fn check_matched(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    object: &Object,
+    (set, name, shown): (Option<&NamePattern>, &NamePattern, &str),
+    constraints: &Constraints<'_>,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let set = set.map_or(NameSpec::Any, NameSpec::Pattern);
+    let enumeration = match enumerate(context, object, set, NameSpec::Pattern(name)) {
+        Ok(enumeration) => enumeration,
+        Err((reason, message)) => {
+            evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+            return;
+        }
+    };
+    if enumeration.properties().is_empty() {
+        if !constraints.optional {
+            evaluation.push_finding(finding(
+                rule,
+                object,
+                format!("missing required property {shown}: no property matches"),
+                vec![enumeration.evidence().clone()],
+            ));
+        }
+        return;
+    }
+    for property in enumeration.properties() {
+        let label = format!("{}.{}", property.property_set, property.name);
+        match judge(property, &label, constraints) {
+            Verdict::Meets => {}
+            Verdict::Fails(message) => {
+                let mut evidence = vec![enumeration.evidence().clone()];
+                evidence.extend(property.evidence.iter().cloned());
+                evaluation.push_finding(finding(rule, object, message, evidence));
+            }
+            Verdict::Inapplicable(reason, message) => {
+                evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+            }
+        }
     }
 }
 

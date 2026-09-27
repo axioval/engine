@@ -191,7 +191,9 @@ fn consulted_properties<'a>(selector: &'a Selector, found: &mut Vec<PropertyRef<
         Selector::Not { operand } => consulted_properties(operand, found),
         // A related selector consults the properties of other objects, not
         // of the one being judged.
+        // A pattern names no one property to report.
         Selector::All
+        | Selector::PropertyPattern { .. }
         | Selector::EntityType { .. }
         | Selector::Classification { .. }
         | Selector::Discipline { .. }

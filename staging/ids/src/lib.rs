@@ -1443,6 +1443,8 @@ const REQUIREMENT_COLUMNS: &[(&str, ColumnKind)] = &[
     ("applies_to", ColumnKind::Selector),
     ("property_set", ColumnKind::TextPattern),
     ("property", ColumnKind::TextPattern),
+    ("property_set_pattern", ColumnKind::String),
+    ("property_pattern", ColumnKind::String),
     ("requirement", ColumnKind::String),
     ("state", ColumnKind::String),
     ("presence", ColumnKind::String),
@@ -1516,8 +1518,14 @@ impl Kind {
                 parameter("data_type", ParameterKind::String, true),
             ],
             Kind::Value => {
-                let mut parameters = vec![property()];
+                let mut parameters = vec![parameter(
+                    "property",
+                    ParameterKind::PropertyReference,
+                    false,
+                )];
                 for id in [
+                    "property_set_pattern",
+                    "property_pattern",
                     "data_type",
                     "min_inclusive",
                     "max_inclusive",

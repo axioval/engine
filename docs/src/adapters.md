@@ -66,6 +66,16 @@ answered as absent, when:
 
 Any other absence is exact.
 
+The session also enumerates an object's properties through
+`exact_properties_where` (`ifc-properties` 0.4.1, openbimrs/ifc#78): the
+traversal, validation and refusals are those of `exact_property`, so an
+exact set and name enumerate what they resolve, and an empty answer is a
+proof. Quantities and predefined-set attributes are enumerated like
+properties, an occurrence value overrides an inherited one of the same set
+and name, and ambiguity is refused per source. Only selected members must
+be readable: an unselected complex property does not refuse the answer, a
+selected reference value does. A set of a reserved name is never selected.
+
 Direct-property completeness does not imply relationship completeness. The IFC
 session registers an exact relationship-selection service: a relationship
 identity is the entity name, in the source's own release, of an objectified relationship type (for

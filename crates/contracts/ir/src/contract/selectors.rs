@@ -41,6 +41,43 @@ pub enum Selector {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         precision: Option<TemporalPrecision>,
     },
+    /// Objects by the properties whose set and name match XML Schema
+    /// patterns, as IDS names them (`Pset_.*Common`).
+    ///
+    /// A pattern matches the whole name the source states; it names no
+    /// concept and is never bound through the package vocabulary. Without
+    /// `propertySetPattern` every property set is searched. The selector
+    /// holds when at least one property matches and the comparison holds
+    /// for `matched` of them (`any` or `all`); no matching property is no
+    /// match. The other fields compare each matched property's value as a
+    /// `property` selector does.
+    PropertyPattern {
+        #[serde(
+            rename = "propertySetPattern",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        property_set_pattern: Option<String>,
+        #[serde(rename = "propertyPattern")]
+        property_pattern: String,
+        /// Which matched properties must satisfy the comparison.
+        matched: Quantifier,
+        operator: ComparisonOperator,
+        value: Option<ParameterValue>,
+        #[serde(
+            rename = "caseSensitive",
+            default = "yes",
+            skip_serializing_if = "is_true"
+        )]
+        case_sensitive: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        trim: bool,
+        /// How each matched list, bounded or table value is compared.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quantifier: Option<Quantifier>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        precision: Option<TemporalPrecision>,
+    },
     Classification {
         system: String,
         code: String,

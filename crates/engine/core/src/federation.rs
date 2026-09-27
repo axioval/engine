@@ -15,11 +15,12 @@ use crate::{
     ClassificationServiceHandle, CompleteRelationshipSelection, CoordinateSystemError,
     CoordinateSystemService, CoordinateSystemServiceHandle, EvidenceSessionError, IntegrityError,
     IntegrityIssue, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
-    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionService, RelationshipSelectionServiceHandle, ServiceRegistry,
-    SnapshotBoundService, SourceCoordinateSystem, SourceIntegrityService,
-    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyServiceHandle,
+    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
+    RelationshipSelectionServiceHandle, ServiceRegistry, SnapshotBoundService,
+    SourceCoordinateSystem, SourceIntegrityService, SourceIntegrityServiceHandle, SourceSnapshot,
+    TypeHierarchyServiceHandle,
 };
 
 /// How many of `registry`'s services federation can route.
@@ -125,6 +126,16 @@ impl PropertyResolutionService for Router<PropertyResolutionServiceHandle> {
             .member(source)
             .ok_or_else(|| PropertyResolutionError::Unavailable(uncovered(source)))?;
         member.resolve(request)
+    }
+    fn enumerate(
+        &self,
+        request: &PropertyEnumerationRequest,
+    ) -> Result<PropertyEnumeration, PropertyResolutionError> {
+        let source = &request.object_id().source;
+        let (_, member) = self
+            .member(source)
+            .ok_or_else(|| PropertyResolutionError::Unavailable(uncovered(source)))?;
+        member.enumerate(request)
     }
 }
 

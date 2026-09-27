@@ -62,7 +62,7 @@ fn a_required_property_that_is_absent_is_a_missing_property() {
         findings(&evaluation),
         [(
             "w1".into(),
-            "missing property: Pset_WallCommon.Reference is absent (requirement row 0)".into()
+            "missing property set: Pset_WallCommon is absent (requirement row 0)".into()
         )]
     );
     assert!(unevaluated(&evaluation).is_empty());
@@ -476,57 +476,234 @@ fn a_row_applies_to_an_exact_class_or_to_its_subtypes() {
 }
 
 #[test]
-fn name_patterns_and_set_presence_are_refused_while_other_rows_are_checked() {
-    // Both sets match `Pset_*Common`, but the property service can only
-    // answer exactly named properties, so the row is refused, never passed.
+fn a_name_pattern_holds_for_every_matching_property() {
+    // Both sets match `Pset_*Common`: each `Reference` must hold a value.
     let model = Model::default()
         .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
         .text("w1", "Pset_WallCommon", "Reference", "W-01")
-        .text("w1", "Pset_ConcreteCommon", "Reference", "C-01");
+        .text("w1", "Pset_ConcreteCommon", "Reference", "C-01")
+        .text("w2", "Pset_WallCommon", "Reference", "W-02")
+        .text("w2", "Pset_ConcreteCommon", "Reference", " ")
+        .text("w3", "Pset_Other", "Reference", "O-03");
     let evaluation = run(
         model,
-        requirements(vec![
-            row(&[
-                ("property_set", string("Pset_*Common")),
-                ("property", string("Reference")),
-                ("requirement", string("required")),
-            ]),
-            row(&[
-                ("property_set", string("Pset_WallCommon")),
-                ("requirement", string("required")),
-            ]),
-            row(&[
-                ("property_set", string("Pset_WallCommon")),
-                ("property", string("Status")),
-                ("requirement", string("required")),
-            ]),
-        ]),
+        requirements(vec![row(&[
+            ("property_set", string("Pset_*Common")),
+            ("property", string("Reference")),
+            ("requirement", string("required")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "w2".into(),
+                "missing value: Pset_ConcreteCommon.Reference is ` ` (requirement row 0)".into()
+            ),
+            (
+                "w3".into(),
+                "missing property set: Pset_*Common is absent (requirement row 0)".into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn xml_schema_patterns_name_properties_and_values_hold_for_each() {
+    let model = Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
+        .text("w1", "Foo_Bar", "Foobar", "x")
+        .text("w1", "Foo_Bar", "Foobaz", "x")
+        .text("w2", "Foo_Bar", "Foobar", "x")
+        .text("w2", "Foo_Bar", "Foobaz", "y")
+        .text("w3", "Foo_Bar", "Other", "x");
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set_pattern", string("Foo_.*")),
+            ("property_pattern", string("Foo.*")),
+            ("requirement", string("required")),
+            ("one_of", string("x")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "w2".into(),
+                "wrong value: Foo_Bar.Foobaz is `y`; required one of `x` (requirement row 0)"
+                    .into()
+            ),
+            (
+                "w3".into(),
+                "missing property: /Foo_.*/./Foo.*/ is absent (requirement row 0)".into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_forbidden_pattern_is_decided_from_the_enumeration() {
+    let model = Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
+        .text("w1", "Pset_Draft", "NoteA", "temporary")
+        .value("w2", "Pset_Draft", "NoteB", PropertyValue::Null)
+        .text("w3", "Pset_Final", "Note", "kept");
+    let forbidden = |presence: &str| {
+        run(
+            Model::default()
+                .object("w1", "wall")
+                .object("w2", "wall")
+                .object("w3", "wall")
+                .text("w1", "Pset_Draft", "NoteA", "temporary")
+                .value("w2", "Pset_Draft", "NoteB", PropertyValue::Null)
+                .text("w3", "Pset_Final", "Note", "kept"),
+            requirements(vec![row(&[
+                ("state", string("exclude")),
+                ("property_set", string("Pset_Draft")),
+                ("property_pattern", string("Note[A-Z]")),
+                ("presence", string(presence)),
+            ])]),
+        )
+    };
+    // No matched property may hold a value; a null one does not.
+    assert_eq!(
+        findings(&forbidden("not-empty")),
+        [(
+            "w1".into(),
+            "forbidden value: Pset_Draft.NoteA is `temporary`, which is not empty (requirement row 0)"
+                .into()
+        )]
+    );
+    // None may be there at all.
+    assert_eq!(
+        findings(&forbidden("defined"))
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect::<Vec<_>>(),
+        ["w1", "w2"]
+    );
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set", string("Pset_Draft")),
+            ("requirement", string("forbidden")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "w1".into(),
+                "forbidden property set present: Pset_Draft is present with 1 property (requirement row 0)"
+                    .into()
+            ),
+            (
+                "w2".into(),
+                "forbidden property set present: Pset_Draft is present with 1 property (requirement row 0)"
+                    .into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_set_alone_asks_for_its_presence() {
+    let model = Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .text("w1", "Pset_WallCommon", "Reference", "W-01");
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set", string("Pset_WallCommon")),
+            ("requirement", string("required")),
+        ])]),
     );
     assert_eq!(
         findings(&evaluation),
         [(
-            "w1".into(),
-            "missing property: Pset_WallCommon.Status is absent (requirement row 2)".into()
+            "w2".into(),
+            "missing property set: Pset_WallCommon is absent (requirement row 0)".into()
         )]
     );
+    let malformed = run(
+        Model::default().object("w1", "wall"),
+        requirements(vec![row(&[
+            ("state", string("include")),
+            ("property_set", string("Pset_WallCommon")),
+            ("presence", string("not-empty")),
+        ])]),
+    );
     assert_eq!(
-        unevaluated(&evaluation),
-        [
-            ("-".into(), NotEvaluatedReason::MissingService),
-            ("-".into(), NotEvaluatedReason::MissingService),
-        ]
+        unevaluated(&malformed),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
     );
-    let messages: Vec<_> = evaluation
-        .not_evaluated_outcomes()
-        .iter()
-        .map(|outcome| outcome.message().to_owned())
-        .collect();
-    assert!(
-        messages[0]
-            .starts_with("property-requirements row 0: `Pset_*Common.Reference` is a name pattern"),
-        "{messages:?}"
+}
+
+#[test]
+fn a_missing_property_in_a_present_set_or_an_unlistable_source_stays_a_missing_property() {
+    let rows = || {
+        requirements(vec![row(&[
+            ("property_set", string("Pset_WallCommon")),
+            ("property", string("Status")),
+            ("requirement", string("required")),
+        ])])
+    };
+    let present_set =
+        Model::default()
+            .object("w1", "wall")
+            .text("w1", "Pset_WallCommon", "Reference", "W-01");
+    assert_eq!(
+        findings(&run(present_set, rows())),
+        [(
+            "w1".into(),
+            "missing property: Pset_WallCommon.Status is absent (requirement row 0)".into()
+        )]
     );
-    assert!(messages[1].contains("presence"), "{messages:?}");
+    // A source that cannot list sets keeps the plain result, and cannot
+    // decide a pattern.
+    let names_only = Model::default().object("w1", "wall").names_only();
+    assert_eq!(
+        findings(&run(names_only, rows())),
+        [(
+            "w1".into(),
+            "missing property: Pset_WallCommon.Status is absent (requirement row 0)".into()
+        )]
+    );
+    let pattern = run(
+        Model::default().object("w1", "wall").names_only(),
+        requirements(vec![row(&[
+            ("property_set", string("Pset_*")),
+            ("property", string("Status")),
+            ("requirement", string("required")),
+        ])]),
+    );
+    assert!(findings(&pattern).is_empty());
+    assert_eq!(
+        unevaluated(&pattern),
+        [("w1".into(), NotEvaluatedReason::BackendUnavailable)]
+    );
+    let both = run(
+        Model::default().object("w1", "wall"),
+        requirements(vec![row(&[
+            ("property_set", string("Pset")),
+            ("property_set_pattern", string("Pset")),
+            ("property", string("Status")),
+            ("requirement", string("required")),
+        ])]),
+    );
+    assert_eq!(
+        unevaluated(&both),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
 }
 
 #[test]
@@ -676,7 +853,7 @@ fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
 fn an_included_presence_must_hold() {
     assert_eq!(
         presence("include", "defined"),
-        pairs(&[("w1", "missing property: Pset.Status is absent")])
+        pairs(&[("w1", "missing property set: Pset is absent")])
     );
     assert_eq!(
         presence("include", "undefined"),
@@ -689,14 +866,14 @@ fn an_included_presence_must_hold() {
     assert_eq!(
         presence("include", "empty"),
         pairs(&[
-            ("w1", "missing property: Pset.Status is absent"),
+            ("w1", "missing property set: Pset is absent"),
             ("w4", "wrong value: Pset.Status is `new`; required empty"),
         ])
     );
     assert_eq!(
         presence("include", "not-empty"),
         pairs(&[
-            ("w1", "missing property: Pset.Status is absent"),
+            ("w1", "missing property set: Pset is absent"),
             ("w2", "missing value: Pset.Status is null"),
             ("w3", "missing value: Pset.Status is ` `"),
         ])
@@ -715,7 +892,7 @@ fn an_excluded_presence_must_not_hold() {
     );
     assert_eq!(
         presence("exclude", "undefined"),
-        pairs(&[("w1", "missing property: Pset.Status is absent")])
+        pairs(&[("w1", "missing property set: Pset is absent")])
     );
     assert_eq!(
         presence("exclude", "empty"),
@@ -835,7 +1012,7 @@ fn an_included_condition_needs_a_value_and_an_excluded_one_passes_without() {
         [
             (
                 "w1".into(),
-                "missing property: Pset.Status is absent (requirement row 0)".into()
+                "missing property set: Pset is absent (requirement row 0)".into()
             ),
             (
                 "w2".into(),
@@ -991,7 +1168,7 @@ fn findings_group_by_the_value_found() {
         [
             (
                 "w6".into(),
-                "missing property: Pset.FireRating is absent on 1 object \
+                "missing property set: Pset is absent on 1 object \
                  (requirement row 0)"
                     .into()
             ),
@@ -1050,7 +1227,7 @@ fn findings_are_categorised_by_a_property() {
             ),
             (
                 "w6".into(),
-                "missing property: Pset.FireRating is absent (requirement row 0)".into()
+                "missing property set: Pset is absent (requirement row 0)".into()
             ),
         ]
     );
@@ -1070,8 +1247,7 @@ fn groups_are_split_by_category() {
         [
             (
                 "w6".into(),
-                "missing property: Pset.FireRating is absent on 1 object (requirement row 0)"
-                    .into()
+                "missing property set: Pset is absent on 1 object (requirement row 0)".into()
             ),
             (
                 "w5".into(),

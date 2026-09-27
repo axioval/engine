@@ -293,6 +293,10 @@ fn validate_selector_concepts(
                 .iter()
                 .try_for_each(|value| validate_parameter_concepts(concepts, rule, value))
         }
+        // Name patterns match source names and bind to no concept.
+        Selector::PropertyPattern { value, .. } => value
+            .iter()
+            .try_for_each(|value| validate_parameter_concepts(concepts, rule, value)),
         Selector::AllOf { operands } | Selector::AnyOf { operands } => operands
             .iter()
             .try_for_each(|operand| validate_selector_concepts(concepts, rule, operand)),

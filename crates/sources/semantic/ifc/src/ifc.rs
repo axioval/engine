@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use axioval_engine::{
     ClassificationServiceHandle, CompletePropertyAbsenceEvidence, CoordinateSystemServiceHandle,
-    EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle, ResolvedProperty,
-    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
-    TypeHierarchyServiceHandle,
+    EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, PropertyEnumeration,
+    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
+    ResolvedProperty, SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError,
+    TypeHierarchyService, TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyTableRow,
@@ -15,7 +15,7 @@ use axioval_ir::{
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
     ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactTableValue,
-    ExactTypedValue, ExactValue, exact_property,
+    ExactTypedValue, ExactValue, exact_properties_where, exact_property,
 };
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
@@ -93,16 +93,44 @@ struct IfcPropertyService {
 }
 
 impl IfcPropertyService {
-    fn entity_id(request: &PropertyRequest) -> Result<EntityId, PropertyResolutionError> {
-        let local = request
-            .object_id()
+    fn entity_id(object: &ObjectId) -> Result<EntityId, PropertyResolutionError> {
+        let local = object
             .local_id
             .strip_prefix('#')
-            .unwrap_or(&request.object_id().local_id);
+            .unwrap_or(&object.local_id);
         local
             .parse::<u64>()
             .map(EntityId)
             .map_err(|_| PropertyResolutionError::InvalidRequest)
+    }
+
+    /// The property `exact` resolved under `name`, with its declared type
+    /// and occurrence or type provenance.
+    fn property(
+        &self,
+        exact: &ExactProperty,
+        name: &str,
+    ) -> Result<Property, PropertyResolutionError> {
+        let provenance = match exact.source {
+            ExactSource::Occurrence => "occurrence".to_owned(),
+            ExactSource::Type(type_id) => format!("type:{type_id}"),
+            _ => return Err(PropertyResolutionError::InexactEvidence),
+        };
+        let (value, data_type) = self.pset_value(exact)?;
+        let mut property = Property::new(exact.property_set.as_ref(), name, value)
+            .map_err(|_| PropertyResolutionError::InvalidRequest)?;
+        if let Some(data_type) = data_type {
+            property = property
+                .with_data_type(data_type)
+                .map_err(|_| PropertyResolutionError::InexactEvidence)?;
+        }
+        Ok(property.with_evidence(Evidence::exact(
+            self.snapshots[0].source().clone(),
+            self.locator(format_args!(
+                "{provenance}:{}/{}",
+                exact.set_id, exact.property_id
+            )),
+        )))
     }
 
     fn locator(&self, detail: impl std::fmt::Display) -> String {
@@ -399,7 +427,7 @@ impl PropertyResolutionService for IfcPropertyService {
         if request.object_id().source != *self.snapshots[0].source() {
             return Err(PropertyResolutionError::InvalidRequest);
         }
-        let object = Self::entity_id(request)?;
+        let object = Self::entity_id(request.object_id())?;
         if let Some(set) = request.property_set().filter(|set| is_reserved_set(set)) {
             return self.resolve_attribute(request, object, set);
         }
@@ -410,30 +438,9 @@ impl PropertyResolutionService for IfcPropertyService {
             request.property(),
         ) {
             Ok(ExactResolution::Present(exact)) => {
-                let provenance = match exact.source {
-                    ExactSource::Occurrence => "occurrence".to_owned(),
-                    ExactSource::Type(type_id) => format!("type:{type_id}"),
-                    _ => return Err(PropertyResolutionError::InexactEvidence),
-                };
-                let (value, data_type) = self.pset_value(&exact)?;
-                let mut property =
-                    Property::new(exact.property_set.as_ref(), request.property(), value)
-                        .map_err(|_| PropertyResolutionError::InvalidRequest)?;
-                if let Some(data_type) = data_type {
-                    property = property
-                        .with_data_type(data_type)
-                        .map_err(|_| PropertyResolutionError::InexactEvidence)?;
-                }
-                let property = property.with_evidence(Evidence::exact(
-                    self.snapshots[0].source().clone(),
-                    self.locator(format_args!(
-                        "{provenance}:{}/{}",
-                        exact.set_id, exact.property_id
-                    )),
-                ));
                 Ok(PropertyResolution::Present(ResolvedProperty::try_new(
                     request.clone(),
-                    property,
+                    self.property(&exact, request.property())?,
                 )?))
             }
             Ok(ExactResolution::Absent) => Ok(PropertyResolution::Absent(
@@ -453,6 +460,48 @@ impl PropertyResolutionService for IfcPropertyService {
             Err(error) => Err(map_resolution_error(&error)),
         }
     }
+
+    /// Every property, quantity and predefined-set attribute of the object
+    /// the request selects, through `exact_properties_where`: the traversal
+    /// and refusals of `exact_property`, so an empty answer is as exact as
+    /// its absence. A set of a reserved name is never selected, and a
+    /// selected value the IR cannot carry refuses the whole answer.
+    fn enumerate(
+        &self,
+        request: &PropertyEnumerationRequest,
+    ) -> Result<PropertyEnumeration, PropertyResolutionError> {
+        let source = self.snapshots[0].source().clone();
+        if request.object_id().source != source {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let object = Self::entity_id(request.object_id())?;
+        if self.model.get(object).is_none() {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let entries = exact_properties_where(
+            &self.model,
+            object,
+            |set| !is_reserved_set(set) && request.property_set().matches(set),
+            |name| request.property().matches(name),
+        )
+        .map_err(|error| map_resolution_error(&error))?;
+        let properties = entries
+            .iter()
+            .map(|entry| self.property(&entry.property, &entry.name))
+            .collect::<Result<Vec<_>, _>>()?;
+        PropertyEnumeration::try_new(
+            request.clone(),
+            properties,
+            Evidence::exact(
+                source,
+                self.locator(format_args!(
+                    "enumeration:{object}:{}:{}",
+                    request.property_set(),
+                    request.property()
+                )),
+            ),
+        )
+    }
 }
 
 fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
@@ -470,7 +519,8 @@ fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
         }
         ExactPropertyError::MultipleTypeAssignments { .. }
         | ExactPropertyError::DuplicateMatchingSets { .. }
-        | ExactPropertyError::DuplicateMatchingProperties { .. } => {
+        | ExactPropertyError::DuplicateMatchingProperties { .. }
+        | ExactPropertyError::InconsistentValues { .. } => {
             PropertyResolutionError::Conflicting(error.to_string())
         }
         ExactPropertyError::UnsupportedDefinition { .. }

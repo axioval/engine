@@ -287,3 +287,25 @@ fn bounded_and_table_values_round_trip() {
     assert!(PropertyValue::Integer(1).stated_values().is_none());
     assert!(!bounded.is_scalar() && !table.is_scalar() && !PropertyValue::Null.is_scalar());
 }
+
+#[test]
+fn a_property_pattern_selector_round_trips() {
+    let json = serde_json::json!({
+        "kind": "propertyPattern",
+        "propertySetPattern": "Pset_.*Common",
+        "propertyPattern": "Is.*",
+        "matched": "all",
+        "operator": "equals",
+        "value": {"type": "boolean", "value": true},
+    });
+    let selector: Selector = serde_json::from_value(json.clone()).unwrap();
+    assert!(matches!(
+        &selector,
+        Selector::PropertyPattern {
+            matched: axioval_ir::contract::Quantifier::All,
+            case_sensitive: true,
+            ..
+        }
+    ));
+    assert_eq!(serde_json::to_value(&selector).unwrap(), json);
+}

@@ -20,7 +20,8 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
 axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
   --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
-  [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
+  [--geometry] [--locate storeys|containers|geometry] [--report result.json] \
+  [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
 ```
 
@@ -172,6 +173,16 @@ Without `--geometry` the archive is the same as before cameras existed.
 `--bcf-version` is `2.1` (default) or `3.0`. BCF 3.0 requires a camera on
 every viewpoint, so it needs `--geometry` and bounds for every selected
 object; otherwise the run fails with status 1 and nothing is written.
+
+`--locate` locates every finding and not-evaluated outcome by storey and
+space (see [Locations](./refinement.md#locations)): `storeys` climbs
+`IfcRelContainedInSpatialStructure` and `IfcRelAggregates` to
+`IfcBuildingStorey`s, `containers` also to `IfcSpace`s, and `geometry` takes
+spaces from the bodies that contain or meet each object, so it needs
+`--geometry`. Places are named by their `Name`. Each outcome then has a
+`location`, BCF topics are labelled `Storey: <name>` and `Space: <name>`,
+and listings print it. Without `--locate` (or with `--locate none`) the
+result is unchanged, byte for byte.
 
 Everything is built before anything is written: a failing run leaves no
 partial report or archive behind.
@@ -330,10 +341,22 @@ next:
   axioval report r.json --object '#100410' --evidence
 ```
 
-**Listing** (any of `--section`, `--rule`, `--code`, `--object`): the matching
-entries, `--limit` per page (default 20) from `--offset`. `--object` accepts a
-local id (`#42`), a full id, or a GlobalId. Evidence locators are long and
-rarely needed, so they appear only with `--evidence`.
+**Listing** (any of `--section`, `--rule`, `--code`, `--object`,
+`--location`): the matching entries, `--limit` per page (default 20) from
+`--offset`. `--object` accepts a local id (`#42`), a full id, or a GlobalId.
+Evidence locators are long and rarely needed, so they appear only with
+`--evidence`.
+
+`--location` lists the findings and not-evaluated outcomes located in a
+storey or space, named by its name (`--location "Level 1"`) or as `--object`
+names an object; it needs a result from `check --locate`. An outcome whose
+location is unresolved is listed too, since it may lie there. Located
+entries print their place:
+
+```text
+[finding] error ducts-through-walls  #29 IFCDUCTSEGMENT …
+    location: storey Level 1 (#100); space 101 (#39)
+```
 
 **Entries without an object.** A finding or not-evaluated outcome can be about
 a whole source ("the model has no space") or the whole project rather than one

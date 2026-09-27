@@ -247,6 +247,7 @@ pub(crate) fn evaluate(
                     None => message.into(),
                 },
                 evidence: absent.evidence,
+                location: None,
             }),
             Err((reason, message)) => {
                 evaluation.push_object_not_evaluated(space.id.clone(), reason, message);

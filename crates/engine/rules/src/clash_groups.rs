@@ -157,6 +157,7 @@ impl Reported {
             message: self.message,
             related: Vec::new(),
             evidence: self.evidence,
+            location: None,
         }
         .with_related([self.counterpart])
     }
@@ -412,6 +413,7 @@ fn group_finding(rule: &CompiledRule, by: GroupBy, key: &Key, members: Vec<Repor
         message: format!("{what}{on}: {}", parts.join("; ")),
         related: Vec::new(),
         evidence,
+        location: None,
     }
     .with_related(related)
 }

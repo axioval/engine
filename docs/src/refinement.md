@@ -118,3 +118,44 @@ Categories apply to every capability. `property-comparison` and
 `property-requirements` keep their own `category_property`, which heads one
 property and adds nothing for no value; declared together, the rule's
 categories come first.
+
+## Locations
+
+Reviewers group, filter and export findings by storey and space. A host may
+ask the runtime to locate every finding and not-evaluated outcome
+(`Runtime::with_locations(LocationPolicy)`); a package never does. The
+policy names the method and what storeys and spaces are in the sources' own
+vocabulary: object kinds, a containment path and the property naming a
+place.
+
+| Method | Storeys | Spaces |
+|---|---|---|
+| `Storeys` | the nearest storeys up the containment path | none |
+| `Containers` | as `Storeys` | the nearest spaces up the containment path |
+| `Geometry` | as `Storeys` | the spaces whose body contains or meets the object (`axioval:derived.contained-in-space`) |
+
+The containment path's steps are climbed in any order, stopping at each
+storey or space reached; an object that is itself a storey or space lies in
+itself, and one placed in no storey lies on its spaces' storeys. A finding is
+located by its subject and every related object together (a duct–wall clash
+by both), a not-evaluated outcome by its object; an outcome naming no object
+has no location.
+
+```json
+"location": {
+  "storeys": [{"id": {"source": {...}, "local_id": "#100"}, "name": "Level 1"}],
+  "spaces": [{"id": {"source": {...}, "local_id": "#39"}, "name": "101"}]
+}
+```
+
+`Finding::location` and `NotEvaluated::location` are `None` unless the host
+asked, and absent from the wire then, so a report without locations
+serializes byte for byte as before. A location decides nothing about the
+outcome. When part of it cannot be derived (a relationship refused, no
+derived relationships without geometry), `unresolved` says why and the lists
+may be incomplete; readers filtering by location keep such an outcome.
+Locating needs the registry's outcome refiner; without one the run fails
+(`EngineError::MissingRefiner`).
+
+Locations are not part of a finding's identity: the BCF sink's GUID key
+ignores them, so a finding keeps its GUID whether or not it was located.

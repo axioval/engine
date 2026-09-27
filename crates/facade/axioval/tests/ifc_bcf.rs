@@ -40,6 +40,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
             message: format!("{object} has insufficient contact"),
             related: vec![],
             evidence: vec![],
+            location: None,
         }
         .with_related([id(related)])
     };

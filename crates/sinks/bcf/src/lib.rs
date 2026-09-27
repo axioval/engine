@@ -51,7 +51,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_ir::{
-    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Scope, Severity,
+    Finding, Location, NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report, Scope,
+    Severity,
 };
 use openbim_bcf::Component;
 use openbim_bcf::write::{
@@ -321,7 +322,8 @@ struct Entry {
     title: String,
     topic_type: String,
     priority: Option<&'static str>,
-    label: String,
+    /// The rule id, then the location's storeys and spaces.
+    labels: Vec<String>,
     description: String,
     /// GUID input without source qualification.
     key: String,
@@ -369,7 +371,7 @@ impl Entry {
             title: title(&finding.message, &finding.rule_id.to_string()),
             topic_type: severity(&finding.severity).to_owned(),
             priority: Some(priority(&finding.severity)),
-            label: finding.rule_id.to_string(),
+            labels: labels(&finding.rule_id.to_string(), finding.location.as_ref()),
             description: description.join("\n"),
             // An object finding's key is unchanged from before scopes
             // existed, so its GUID is too. A scoped one is marked, never
@@ -417,7 +419,7 @@ impl Entry {
             topic_type: NOT_EVALUATED_TOPIC_TYPE.to_owned(),
             // No severity was decided, so none is claimed.
             priority: None,
-            label: outcome.rule_id.to_string(),
+            labels: labels(&outcome.rule_id.to_string(), outcome.location.as_ref()),
             description: description.join("\n"),
             key: format!(
                 "not-evaluated\n{}\n{}\n{reason}\n{}",
@@ -463,7 +465,7 @@ impl Entry {
             topic_type: Some(self.topic_type.clone()),
             topic_status: Some(options.status.clone()),
             priority: self.priority.map(str::to_owned),
-            labels: vec![self.label.clone()],
+            labels: self.labels.clone(),
             creation_date: options.date.clone(),
             creation_author: options.author.clone(),
             viewpoints,
@@ -605,6 +607,30 @@ impl Resolved {
             unanchored,
         })
     }
+}
+
+/// A topic's labels: the rule id, then `Storey: <name>` for each storey and
+/// `Space: <name>` for each space the entry is located in (the place's id
+/// when it has no name). An unlocated entry has the rule id alone, as
+/// before locations existed; the labels never enter the GUID key.
+fn labels(rule: &str, location: Option<&Location>) -> Vec<String> {
+    let mut labels = vec![rule.to_owned()];
+    let named = |place: &Place| place.name.clone().unwrap_or_else(|| place.id.to_string());
+    if let Some(location) = location {
+        labels.extend(
+            location
+                .storeys
+                .iter()
+                .map(|place| format!("Storey: {}", named(place))),
+        );
+        labels.extend(
+            location
+                .spaces
+                .iter()
+                .map(|place| format!("Space: {}", named(place))),
+        );
+    }
+    labels
 }
 
 /// A title the writer accepts: the message, or the rule id when it is blank.

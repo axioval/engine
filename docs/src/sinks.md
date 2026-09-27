@@ -22,7 +22,7 @@ for object in &export.unanchored {
 
 | Report entry | Topic |
 |---|---|
-| Finding | `TopicType` is the severity (`Error`, `Warning`, `Info`); `Priority` follows it (`High`, `Normal`, `Low`); the label is the rule id |
+| Finding | `TopicType` is the severity (`Error`, `Warning`, `Info`); `Priority` follows it (`High`, `Normal`, `Low`); the labels are the rule id, then `Storey: <name>` and `Space: <name>` for a located finding |
 | Not-evaluated outcome | `TopicType` is `Not evaluated`; no `Priority`, since no severity was decided; the description names the reason |
 
 Every topic's description repeats the message, the rule, the source-qualified

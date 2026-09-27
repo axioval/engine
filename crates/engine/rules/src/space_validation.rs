@@ -234,6 +234,7 @@ fn finding(
         severity,
         message,
         evidence: vec![evidence.clone()],
+        location: None,
     }
 }
 

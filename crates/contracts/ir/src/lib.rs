@@ -918,6 +918,43 @@ impl fmt::Display for Scope {
     }
 }
 
+/// One storey or space an outcome is located in.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Place {
+    pub id: ObjectId,
+    /// The name the source gives it, when it states one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Where a finding or not-evaluated outcome is: the storeys and spaces its
+/// objects lie in, as the host's location method derived them.
+///
+/// Empty lists are a located outcome in no storey or space. `unresolved`
+/// says why part of the location could not be derived: the lists may then
+/// be incomplete, so a reader filtering by location keeps the outcome
+/// rather than dropping what might be there.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Location {
+    /// Sorted by identity, distinct.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub storeys: Vec<Place>,
+    /// Sorted by identity, distinct.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spaces: Vec<Place>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unresolved: Option<String>,
+}
+
+impl Location {
+    /// Every storey and space, storeys first.
+    pub fn places(&self) -> impl Iterator<Item = &Place> {
+        self.storeys.iter().chain(&self.spaces)
+    }
+}
+
 /// A deterministic, source-qualified validation outcome.
 ///
 /// On the wire an object finding carries `object_id`, a source finding
@@ -941,6 +978,9 @@ pub struct Finding {
     /// it fails to rest on. Empty when the subject alone explains the finding.
     pub related: Vec<ObjectId>,
     pub evidence: Vec<Evidence>,
+    /// The storeys and spaces the finding lies in, when the host located
+    /// it. `None` (and absent on the wire) unless it asked.
+    pub location: Option<Location>,
 }
 
 impl Finding {
@@ -959,6 +999,7 @@ impl Finding {
             message: message.into(),
             related: Vec::new(),
             evidence: Vec::new(),
+            location: None,
         }
     }
     /// The object the finding is reported against, if it is about one.
@@ -1007,6 +1048,8 @@ struct FindingWire {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     related: Vec<ObjectId>,
     evidence: Vec<Evidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    location: Option<Location>,
 }
 
 impl From<Finding> for FindingWire {
@@ -1020,6 +1063,7 @@ impl From<Finding> for FindingWire {
             message: finding.message,
             related: finding.related,
             evidence: finding.evidence,
+            location: finding.location,
         }
     }
 }
@@ -1034,6 +1078,7 @@ impl TryFrom<FindingWire> for Finding {
             message: wire.message,
             related: wire.related,
             evidence: wire.evidence,
+            location: wire.location,
         })
     }
 }
@@ -1072,6 +1117,9 @@ pub struct NotEvaluated {
     pub scope: Scope,
     pub reason: NotEvaluatedReason,
     pub message: String,
+    /// The storeys and spaces the outcome's object lies in, when the host
+    /// located it. `None` (and absent on the wire) unless it asked.
+    pub location: Option<Location>,
 }
 
 impl NotEvaluated {
@@ -1092,6 +1140,8 @@ struct NotEvaluatedWire {
     source: Option<SourceId>,
     reason: NotEvaluatedReason,
     message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    location: Option<Location>,
 }
 
 impl From<NotEvaluated> for NotEvaluatedWire {
@@ -1103,6 +1153,7 @@ impl From<NotEvaluated> for NotEvaluatedWire {
             source,
             reason: outcome.reason,
             message: outcome.message,
+            location: outcome.location,
         }
     }
 }
@@ -1115,6 +1166,7 @@ impl TryFrom<NotEvaluatedWire> for NotEvaluated {
             scope: Scope::from_wire(wire.object_id, wire.source)?,
             reason: wire.reason,
             message: wire.message,
+            location: wire.location,
         })
     }
 }

@@ -192,6 +192,31 @@ mod scope {
     }
 
     #[test]
+    fn a_located_finding_writes_its_storeys_and_spaces_and_reads_back() {
+        let object = ObjectId::new(source(), "#1").unwrap();
+        let mut located = finding(Scope::Object(object));
+        located.location = Some(axioval_ir::Location {
+            storeys: vec![axioval_ir::Place {
+                id: ObjectId::new(source(), "#10").unwrap(),
+                name: Some("Level 1".into()),
+            }],
+            spaces: vec![],
+            unresolved: Some("why".into()),
+        });
+        let value = serde_json::to_value(&located).unwrap();
+        assert_eq!(
+            value["location"],
+            json!({
+                "storeys": [{"id": {"source": {"system": "ifc-step", "document": "model.ifc"},
+                                    "local_id": "#10"},
+                             "name": "Level 1"}],
+                "unresolved": "why",
+            })
+        );
+        assert_eq!(serde_json::from_value::<Finding>(value).unwrap(), located);
+    }
+
+    #[test]
     fn source_and_project_findings_round_trip() {
         for scope in [Scope::Source(source()), Scope::Project] {
             let original = finding(scope);
@@ -229,6 +254,7 @@ mod scope {
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,
             message: "m".into(),
+            location: None,
         };
         let value = serde_json::to_value(&outcome).unwrap();
         assert_eq!(value["object_id"], Value::Null);
@@ -320,6 +346,7 @@ mod tables {
                 scope: Scope::Project,
                 reason: NotEvaluatedReason::MissingService,
                 message: "m".into(),
+                location: None,
             }],
             tables,
         }

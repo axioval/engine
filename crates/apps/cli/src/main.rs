@@ -27,7 +27,8 @@ use axioval::{
     bcf,
     engine::{
         DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, IntegritySeverity,
-        Runtime, SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile_rulesets,
+        LocationMethod, LocationPolicy, Runtime, SourceIntegrityServiceHandle, SourceMetadata,
+        UnmappedReason, compile_rulesets,
     },
     ifc::import_ifc_session,
     ir::{
@@ -106,8 +107,47 @@ struct CheckArgs {
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
     geometry: bool,
+    /// Locate every finding and not-evaluated outcome by storey and space:
+    /// `storeys` climbs the spatial containment to storeys, `containers` to
+    /// storeys and spaces, `geometry` takes spaces from the bodies that
+    /// contain or meet each object (with `--geometry`). Off by default,
+    /// and then the result is unchanged.
+    #[arg(long, value_enum, default_value_t = Locate::None)]
+    locate: Locate,
     #[command(flatten)]
     output: OutputArgs,
+}
+
+/// How `check --locate` locates outcomes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum Locate {
+    None,
+    Storeys,
+    Containers,
+    Geometry,
+}
+
+impl Locate {
+    /// The IFC location policy: storeys and spaces by class, climbed to
+    /// along spatial containment and aggregation, named by `Name`.
+    fn policy(self) -> Option<LocationPolicy> {
+        let method = match self {
+            Self::None => return None,
+            Self::Storeys => LocationMethod::Storeys,
+            Self::Containers => LocationMethod::Containers,
+            Self::Geometry => LocationMethod::Geometry,
+        };
+        Some(LocationPolicy {
+            method,
+            storey_kinds: vec!["IfcBuildingStorey".to_owned()],
+            space_kinds: vec!["IfcSpace".to_owned()],
+            containment: vec![
+                "IfcRelContainedInSpatialStructure:backward".to_owned(),
+                "IfcRelAggregates:backward".to_owned(),
+            ],
+            name: Some((axioval::ir::ATTRIBUTE_SET.to_owned(), "Name".to_owned())),
+        })
+    }
 }
 
 /// Where and how a result is written; shared by `check` and `compare`.
@@ -175,6 +215,12 @@ struct ReportArgs {
     /// id, or a `GlobalId`.
     #[arg(long)]
     object: Option<String>,
+    /// Only findings and not-evaluated outcomes located in this storey or
+    /// space (by name, local id, full id or `GlobalId`), as `check
+    /// --locate` located them. An outcome whose location is unresolved is
+    /// kept: it may lie there.
+    #[arg(long)]
+    location: Option<String>,
     /// Include evidence locators in listed entries.
     #[arg(long)]
     evidence: bool,
@@ -368,6 +414,9 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let (definitions, rulesets) = packages(&args.definitions, &args.rulesets)?;
     let registry = axioval::default_registry()?;
     let plan = compile_rulesets(&registry, &definitions, &rulesets)?;
+    if args.locate == Locate::Geometry && !args.geometry {
+        return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
+    }
     let (session, bytes) = sources(&args.models)?;
     let session = session.with_discipline_map(
         &args
@@ -383,7 +432,11 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     } else {
         (session, None)
     };
-    let result = Runtime::new(registry).run_session(&session, plan)?;
+    let mut runtime = Runtime::new(registry);
+    if let Some(policy) = args.locate.policy() {
+        runtime = runtime.with_locations(policy);
+    }
+    let result = runtime.run_session(&session, plan)?;
     let integrity = integrity(&session)?;
 
     let geometry = meshed.map(|report| digest::GeometryRecord {
@@ -471,7 +524,8 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
     let filtered = args.section.is_some()
         || args.rule.is_some()
         || args.code.is_some()
-        || args.object.is_some();
+        || args.object.is_some()
+        || args.location.is_some();
     let text = if filtered {
         let command = listing_command(&path, &args);
         let filter = Filter {
@@ -479,6 +533,7 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
             rule: args.rule,
             code: args.code,
             object: args.object,
+            location: args.location,
         };
         let listing = digest::list(
             &output,
@@ -572,6 +627,7 @@ fn listing_command(path: &str, args: &ReportArgs) -> String {
         ("--rule", &args.rule),
         ("--code", &args.code),
         ("--object", &args.object),
+        ("--location", &args.location),
     ] {
         if let Some(value) = value {
             let _ = write!(command, " {flag} {}", digest::shell_quote(value));

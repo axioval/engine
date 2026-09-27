@@ -148,9 +148,53 @@ pub trait OutcomeRefiner: Send + Sync {
         &self,
         context: &RuleContext<'_>,
         rule: &CompiledRule,
-        refinement: &RuleRefinement,
+        refining: &Refining<'_>,
         evaluation: &mut CapabilityEvaluation,
     );
+}
+
+/// What one call of an [`OutcomeRefiner`] applies: the rule's declarations
+/// and the host's location policy.
+#[derive(Clone, Copy, Debug)]
+pub struct Refining<'a> {
+    /// What the rule instance declares; empty for a rule declaring nothing.
+    pub refinement: &'a RuleRefinement,
+    /// How the host locates outcomes; `None` when it does not.
+    pub locations: Option<&'a LocationPolicy>,
+}
+
+/// How outcomes are located by storey and space; a host's choice, never a
+/// package's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocationMethod {
+    /// The storeys each object lies in, climbed to along the containment
+    /// path; no spaces.
+    Storeys,
+    /// The nearest storeys and spaces each object lies in, climbed to along
+    /// the containment path.
+    Containers,
+    /// Storeys as for [`Self::Containers`]; spaces are those whose body
+    /// contains or meets each object, through the geometry-derived
+    /// `axioval:derived.contained-in-space` relationship.
+    Geometry,
+}
+
+/// A host's location policy: the method, and what storeys and spaces are in
+/// its sources' own vocabulary.
+///
+/// Storeys and spaces are objects of the named kinds (compared ignoring
+/// case). The containment path's steps are climbed in any order and any
+/// number of times, stopping at each storey or space reached, as a
+/// `related` selector's steps read. An object that is itself a storey or
+/// space is located in itself. `name` is the property (set, name) whose
+/// value names a place, read natively.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocationPolicy {
+    pub method: LocationMethod,
+    pub storey_kinds: Vec<String>,
+    pub space_kinds: Vec<String>,
+    pub containment: Vec<String>,
+    pub name: Option<(String, String)>,
 }
 
 /// Checks a rule's bands: each threshold finite and positive, strictly

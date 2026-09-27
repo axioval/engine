@@ -19,8 +19,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use axioval::ir::{
-    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, ReportColumn, ReportRow,
-    ReportTable, ReportValue, Scope, Severity, SourceId,
+    Finding, Location, NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report,
+    ReportColumn, ReportRow, ReportTable, ReportValue, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -244,6 +244,10 @@ impl CheckOutput {
         for finding in report.findings() {
             named.extend(finding.object_id());
             named.extend(&finding.related);
+            named.extend(places(finding.location.as_ref()));
+        }
+        for outcome in report.not_evaluated() {
+            named.extend(places(outcome.location.as_ref()));
         }
         named.extend(
             report
@@ -358,6 +362,18 @@ impl CheckOutput {
         }
     }
 
+    /// Whether `location` may lie in the storey or space `query` names (by
+    /// name or as [`Self::names`] reads an id): an unresolved location
+    /// might, an absent one does not.
+    fn located(&self, location: Option<&Location>, query: &str) -> bool {
+        location.is_some_and(|location| {
+            location.unresolved.is_some()
+                || location.places().any(|place| {
+                    place.name.as_deref() == Some(query) || self.names(&place.id, query)
+                })
+        })
+    }
+
     /// Whether `query` names `id`: its full id, its local id, its local id
     /// qualified by its document (`model.ifc/#2`, as a summary over several
     /// documents prints it), or its GlobalId.
@@ -399,6 +415,42 @@ impl Section {
             Self::Tables => "table",
         }
     }
+}
+
+/// A location as a reader reads it: `storey Level 1 (#10); space 101
+/// (#20)`, and why it may be incomplete.
+fn location_text(location: &Location, qualify: bool) -> String {
+    let place = |kind: &str, place: &Place| {
+        let id = if qualify {
+            format!("{}/{}", place.id.source.document, place.id.local_id)
+        } else {
+            place.id.local_id.clone()
+        };
+        match &place.name {
+            Some(name) => format!("{kind} {name} ({id})"),
+            None => format!("{kind} {id}"),
+        }
+    };
+    let mut parts: Vec<String> = location
+        .storeys
+        .iter()
+        .map(|storey| place("storey", storey))
+        .chain(location.spaces.iter().map(|space| place("space", space)))
+        .collect();
+    if parts.is_empty() {
+        parts.push("no storey or space".to_owned());
+    }
+    if let Some(why) = &location.unresolved {
+        parts.push(format!("unresolved: {why}"));
+    }
+    parts.join("; ")
+}
+
+/// The storeys and spaces of a location.
+fn places(location: Option<&Location>) -> impl Iterator<Item = &ObjectId> {
+    location
+        .into_iter()
+        .flat_map(|location| location.places().map(|place| &place.id))
 }
 
 /// The objects the rows of the report's tables are about.
@@ -909,6 +961,8 @@ pub struct Filter {
     pub rule: Option<String>,
     pub code: Option<String>,
     pub object: Option<String>,
+    /// A storey or space; only located findings and outcomes match.
+    pub location: Option<String>,
 }
 
 /// One listed entry.
@@ -926,6 +980,9 @@ pub struct Entry {
     pub scope: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<String>,
+    /// The storeys and spaces a located entry lies in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
     pub message: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<String>,
@@ -940,6 +997,7 @@ pub struct Listing {
     pub next: Option<String>,
 }
 
+#[allow(clippy::too_many_lines)]
 /// Entries matching `filter`, paged. Evidence locators are long and rarely
 /// needed, so they are included only on request.
 pub fn list(
@@ -953,6 +1011,14 @@ pub fn list(
     let qualify = output.several_documents();
     let wants = |section: Section| filter.section.is_none_or(|wanted| wanted == section);
     let rule_ok = |rule: &str| filter.rule.as_deref().is_none_or(|wanted| wanted == rule);
+    let place_ok = |location: Option<&Location>| {
+        filter
+            .location
+            .as_deref()
+            .is_none_or(|query| output.located(location, query))
+    };
+    // Only findings and not-evaluated outcomes are located.
+    let unlocated = filter.location.is_none();
     let mut matched: Vec<Entry> = Vec::new();
 
     // `--code` names integrity issues only; rules never match it.
@@ -960,6 +1026,7 @@ pub fn list(
         if wants(Section::Findings) {
             let findings = output.report.findings().iter().filter(|finding| {
                 rule_ok(&finding.rule_id.to_string())
+                    && place_ok(finding.location.as_ref())
                     && filter.object.as_deref().is_none_or(|query| {
                         names_source(&finding.scope, query)
                             || finding
@@ -974,6 +1041,7 @@ pub fn list(
         if wants(Section::NotEvaluated) {
             let outcomes = output.report.not_evaluated().iter().filter(|outcome| {
                 rule_ok(&outcome.rule_id.to_string())
+                    && place_ok(outcome.location.as_ref())
                     && filter.object.as_deref().is_none_or(|query| {
                         names_source(&outcome.scope, query)
                             || outcome
@@ -984,7 +1052,7 @@ pub fn list(
             matched.extend(outcomes.map(|o| not_evaluated_entry(output, o, qualify)));
         }
     }
-    if filter.rule.is_none() && wants(Section::Integrity) {
+    if unlocated && filter.rule.is_none() && wants(Section::Integrity) {
         let records = output.integrity.iter().filter(|record| {
             filter
                 .code
@@ -1002,6 +1070,7 @@ pub fn list(
             object: None,
             scope: None,
             related: vec![],
+            location: None,
             message: record.message.trim().to_owned(),
             evidence: if evidence {
                 vec![record.locator.clone()]
@@ -1010,7 +1079,7 @@ pub fn list(
             },
         }));
     }
-    if filter.rule.is_none() && filter.code.is_none() && wants(Section::Geometry) {
+    if unlocated && filter.rule.is_none() && filter.code.is_none() && wants(Section::Geometry) {
         let unmeasured = output
             .geometry
             .iter()
@@ -1028,12 +1097,13 @@ pub fn list(
             object: Some(output.describe(&u.object, qualify)),
             scope: None,
             related: vec![],
+            location: None,
             message: u.reason.clone(),
             evidence: vec![],
         }));
     }
 
-    if filter.code.is_none() && wants(Section::Tables) {
+    if unlocated && filter.code.is_none() && wants(Section::Tables) {
         matched.extend(table_entries(output, filter, qualify));
     }
 
@@ -1079,6 +1149,7 @@ fn table_entries(output: &CheckOutput, filter: &Filter, qualify: bool) -> Vec<En
                 object,
                 scope,
                 related: vec![],
+                location: None,
                 message: row_text(table, row.values()),
                 evidence: vec![],
             }
@@ -1133,6 +1204,10 @@ fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidenc
             .iter()
             .map(|id| output.describe(id, qualify))
             .collect(),
+        location: finding
+            .location
+            .as_ref()
+            .map(|location| location_text(location, qualify)),
         message: finding.message.trim().to_owned(),
         evidence: if evidence {
             finding
@@ -1158,6 +1233,10 @@ fn not_evaluated_entry(output: &CheckOutput, outcome: &NotEvaluated, qualify: bo
         object,
         scope,
         related: vec![],
+        location: outcome
+            .location
+            .as_ref()
+            .map(|location| location_text(location, qualify)),
         message: outcome.message.trim().to_owned(),
         evidence: vec![],
     }
@@ -1182,6 +1261,9 @@ pub fn render_listing(listing: &Listing) -> String {
         let _ = writeln!(out, "\n    {}", entry.message);
         if !entry.related.is_empty() {
             let _ = writeln!(out, "    related: {}", entry.related.join("; "));
+        }
+        if let Some(location) = &entry.location {
+            let _ = writeln!(out, "    location: {location}");
         }
         for evidence in &entry.evidence {
             let _ = writeln!(out, "    evidence: {evidence}");

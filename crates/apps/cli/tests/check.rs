@@ -692,6 +692,140 @@ fn with_geometry_a_severity_override_raises_a_clash_involving_a_wall() {
     assert_eq!(severities(&result), ["error"], "{result:#}");
 }
 
+/// Storey #100 ("Level 1") holds wall #19 and duct #29, which crosses the
+/// wall inside space #39 ("101"), aggregated to the storey.
+fn a_duct_through_a_wall_on_a_storey() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let duct = "IFCDUCTSEGMENT('GID',$,$,$,$,PL,REP,$,$)";
+    let space = "IFCSPACE('GID',$,'101',$,$,PL,REP,$,.ELEMENT.,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}\
+         #100=IFCBUILDINGSTOREY('0000000000000000000100',$,'Level 1',$,$,$,$,$,.ELEMENT.,0.);\n\
+         #101=IFCRELAGGREGATES('0000000000000000000101',$,$,$,#100,(#39));\n\
+         #102=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000102',$,$,$,(#19,#29),#100);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [5.0, 5.0, 0.0], [0.2, 8.0, 3.0], wall),
+        placed_box(20, [5.0, 5.0, 1.0], [4.0, 0.3, 0.3], duct),
+        placed_box(30, [5.0, 5.0, 0.0], [10.0, 10.0, 3.0], space),
+    )
+}
+
+impl Case {
+    /// Checks the duct against walls with `args` added, saving the result.
+    fn located_clash(&self, args: &[&str]) -> (Output, Value) {
+        self.write("model.ifc", &a_duct_through_a_wall_on_a_storey());
+        self.geometry_rule_with(
+            &["model.ifc"],
+            &[("duct", "IfcDuctSegment")],
+            (
+                "axioval:capability.clash",
+                &registry_signature("axioval:capability.clash"),
+            ),
+            entity("duct"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+            }),
+            &json!({}),
+            args,
+        )
+    }
+}
+
+#[test]
+fn with_geometry_a_duct_wall_clash_is_located_by_storey_and_derived_space() {
+    let case = Case::new("clash-located");
+    let (output, result) = case.located_clash(&["--locate", "geometry"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let location = &findings[0]["location"];
+    assert_eq!(
+        location["storeys"][0]["id"]["local_id"], "#100",
+        "{result:#}"
+    );
+    assert_eq!(location["storeys"][0]["name"], "Level 1", "{result:#}");
+    assert_eq!(location["spaces"][0]["id"]["local_id"], "#39", "{result:#}");
+    assert_eq!(location["spaces"][0]["name"], "101", "{result:#}");
+    assert!(location.get("unresolved").is_none(), "{result:#}");
+
+    // The saved result filters by storey name.
+    let saved = case.path("result.json");
+    let saved = saved.to_str().unwrap();
+    let listed = report(&[saved, "--location", "Level 1"]);
+    assert_eq!(listed.status.code(), Some(0), "{}", stderr(&listed));
+    let text = stdout(&listed);
+    assert!(text.contains("[finding] error under-test"), "{text}");
+    assert!(
+        text.contains("location: storey Level 1 (#100); space 101 (#39)"),
+        "{text}"
+    );
+    assert!(text.contains("showing 1–1 of 1"), "{text}");
+    let elsewhere = stdout(&report(&[saved, "--location", "Level 2"]));
+    assert!(elsewhere.contains("no matching entries"), "{elsewhere}");
+
+    // The BCF topic is labelled with the storey and the space.
+    let bcf = case.path("located.bcfzip");
+    let (output, _) = case.located_clash(&[
+        "--locate",
+        "geometry",
+        "--bcf",
+        bcf.to_str().unwrap(),
+        "--bcf-date",
+        "2026-09-27T00:00:00Z",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let archive = openbim_bcf::read_slice(&std::fs::read(&bcf).unwrap()).unwrap();
+    let topic = &archive.topics().next().unwrap().topic;
+    assert_eq!(
+        topic.labels,
+        ["under-test", "Storey: Level 1", "Space: 101"],
+        "{topic:?}"
+    );
+}
+
+#[test]
+fn without_locating_the_result_is_byte_identical() {
+    let case = Case::new("clash-unlocated");
+    let (output, _) = case.located_clash(&[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let plain = std::fs::read(case.path("result.json")).unwrap();
+    let (output, _) = case.located_clash(&["--locate", "none"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let none = std::fs::read(case.path("result.json")).unwrap();
+    assert_eq!(plain, none);
+    assert!(!String::from_utf8(plain).unwrap().contains("location"));
+
+    // Deriving spaces needs the bodies.
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .current_dir(case.path("."))
+        .args([
+            "check",
+            "--model",
+            "model.ifc",
+            "--definitions",
+            "definitions.json",
+        ])
+        .args(["--ruleset", "ruleset.json", "--locate", "geometry"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("--locate geometry"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 /// The two walls cross 0.2 m wide in plan and 3 m high. Axis tolerances
 /// below that keep the clash; one above it hides it.
 #[test]

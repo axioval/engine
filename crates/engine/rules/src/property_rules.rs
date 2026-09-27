@@ -48,6 +48,7 @@ fn finding(
         },
         message,
         evidence,
+        location: None,
     }
 }
 

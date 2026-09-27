@@ -605,6 +605,7 @@ impl Run<'_> {
                 message,
                 related: Vec::new(),
                 evidence,
+                location: None,
             }
             .with_related(related),
         );

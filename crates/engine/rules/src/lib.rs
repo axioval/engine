@@ -42,6 +42,7 @@ mod levels;
 mod light_area;
 mod light_well;
 mod local_circulation;
+mod location;
 mod manual_issue;
 mod name_sequence;
 mod numbering_consistency;

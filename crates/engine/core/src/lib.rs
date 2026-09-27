@@ -7,7 +7,8 @@ use std::{collections::BTreeMap, sync::Arc};
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
 use axioval_ir::{
-    Finding, NotEvaluated, ObjectId, Project, Report, ReportTable, RuleId, Scope, SourceId,
+    Finding, Location, NotEvaluated, ObjectId, Project, Report, ReportTable, RuleId, Scope,
+    SourceId,
 };
 use thiserror::Error;
 
@@ -108,6 +109,10 @@ pub enum EngineError {
     /// no deviation.
     #[error("rule `{rule}`: {detail}")]
     InvalidRefinement { rule: String, detail: String },
+    /// The host asked the runtime to refine every outcome (locate it) and
+    /// registered no outcome refiner to do so.
+    #[error("{0} needs an outcome refiner, and the host registered none")]
+    MissingRefiner(&'static str),
 }
 
 pub use schema::ColumnKind;
@@ -282,6 +287,7 @@ pub struct CapabilityNotEvaluated {
     scope: Scope,
     reason: NotEvaluatedReason,
     message: String,
+    location: Option<Location>,
 }
 impl CapabilityNotEvaluated {
     /// The object that could not be evaluated, if the outcome is about one.
@@ -301,6 +307,16 @@ impl CapabilityNotEvaluated {
     #[must_use]
     pub fn message(&self) -> &str {
         &self.message
+    }
+    /// Where the outcome's object lies, once an [`OutcomeRefiner`] located
+    /// it.
+    #[must_use]
+    pub fn location(&self) -> Option<&Location> {
+        self.location.as_ref()
+    }
+    /// Locates the outcome; for an [`OutcomeRefiner`].
+    pub fn set_location(&mut self, location: Location) {
+        self.location = Some(location);
     }
 }
 
@@ -392,6 +408,14 @@ impl CapabilityEvaluation {
             finding.severity = severity;
         }
     }
+    /// Findings, for an [`OutcomeRefiner`] to refine in place.
+    pub fn findings_mut(&mut self) -> &mut [Finding] {
+        &mut self.findings
+    }
+    /// Not-evaluated outcomes, for an [`OutcomeRefiner`] to locate.
+    pub fn not_evaluated_outcomes_mut(&mut self) -> &mut [CapabilityNotEvaluated] {
+        &mut self.not_evaluated
+    }
     /// Removes and returns every finding, for an [`OutcomeRefiner`] to put
     /// back refined; deviations are dropped with them.
     pub fn take_findings(&mut self) -> Vec<Finding> {
@@ -441,6 +465,7 @@ impl CapabilityEvaluation {
             scope,
             reason,
             message: message.into(),
+            location: None,
         });
     }
 }
@@ -693,7 +718,10 @@ pub use proximity::{
     ProximityServiceHandle, RegionDistanceEvidence, RegionDistanceRequest, VerticalDirection,
     VolumeInterval,
 };
-pub use refinement::{Deviation, OutcomeRefiner, RuleRefinement, report_severity};
+pub use refinement::{
+    Deviation, LocationMethod, LocationPolicy, OutcomeRefiner, Refining, RuleRefinement,
+    report_severity,
+};
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
@@ -770,6 +798,7 @@ fn collapse_source_wide(
                 scope,
                 reason,
                 message: outcome.message,
+                location: outcome.location,
             }),
         }
     }
@@ -795,6 +824,7 @@ fn collapse_source_wide(
                 objects.len(),
                 examples.join(", ")
             ),
+            location: None,
         }
     }));
     kept
@@ -804,6 +834,7 @@ fn collapse_source_wide(
 pub struct Runtime {
     registry: CapabilityRegistry,
     services: ServiceRegistry,
+    locations: Option<LocationPolicy>,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -811,7 +842,16 @@ impl Runtime {
         Self {
             registry,
             services: ServiceRegistry::new(),
+            locations: None,
         }
+    }
+    /// Locates every finding and not-evaluated outcome by storey and space
+    /// as `policy` says. Off by default, and then reports carry no
+    /// location. Needs the registry's outcome refiner.
+    #[must_use]
+    pub fn with_locations(mut self, policy: LocationPolicy) -> Self {
+        self.locations = Some(policy);
+        self
     }
     /// Adds adapter-provided host services to subsequent evaluations.
     #[must_use]
@@ -889,6 +929,10 @@ impl Runtime {
         services.replace(metadata);
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
+        let refiner = self.registry.refiner();
+        if self.locations.is_some() && refiner.is_none() {
+            return Err(EngineError::MissingRefiner("locating outcomes"));
+        }
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
@@ -901,6 +945,7 @@ impl Runtime {
                 scope: Scope::Project,
                 reason: NotEvaluatedReason::InvalidDeclaration,
                 message: rule.reason,
+                location: None,
             })
             .collect();
         for rule in plan.rules {
@@ -910,11 +955,19 @@ impl Runtime {
                 .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
             let rule_id = rule.id.clone();
             let mut evaluation = capability.evaluate(&context, &rule);
-            if let Some(refinement) = plan.refinements.get(&rule_id) {
+            let refinement = plan.refinements.get(&rule_id);
+            if let Some(refinement) = refinement {
                 evaluation.grade(&refinement.severity_bands);
-                if let Some(refiner) = self.registry.refiner() {
-                    refiner.refine(&context, &rule, refinement, &mut evaluation);
-                }
+            }
+            if let Some(refiner) = refiner
+                && (refinement.is_some() || self.locations.is_some())
+            {
+                let unrefined = RuleRefinement::default();
+                let refining = Refining {
+                    refinement: refinement.unwrap_or(&unrefined),
+                    locations: self.locations.as_ref(),
+                };
+                refiner.refine(&context, &rule, &refining, &mut evaluation);
             }
             findings.extend(evaluation.findings);
             // The compiled rule is the table's identity, whatever the capability named.

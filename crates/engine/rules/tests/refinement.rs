@@ -511,3 +511,163 @@ mod categories {
         ));
     }
 }
+
+mod locations {
+    use super::*;
+    use axioval_engine::{LocationMethod, LocationPolicy, Runtime};
+    use axioval_ir::{Location, Place};
+
+    const CLASH: &str = "axioval:capability.clash";
+
+    /// Storey `s1` ("Level 1") aggregates space `r1` ("101"). Duct `d1` is
+    /// contained in `r1` and clashes with wall `w1`, contained in `s1`.
+    /// Duct `d2` in `r1` has no geometry.
+    fn building() -> EvidenceSession {
+        let model = Model::default()
+            .object("s1", "IfcBuildingStorey")
+            .object("r1", "IfcSpace")
+            .object("d1", "duct")
+            .object("d2", "duct")
+            .object("w1", "wall")
+            .text("s1", "Attributes", "Name", "Level 1")
+            .text("r1", "Attributes", "Name", "101")
+            .edge("aggregates", "s1", "r1")
+            .edge("contains", "r1", "d1")
+            .edge("contains", "r1", "d2")
+            .edge("contains", "s1", "w1");
+        let boxes = Boxes(BTreeMap::from([(id("d1"), 0.0), (id("w1"), 0.5)]));
+        session(model)
+            .with_host_service(ProximityServiceHandle::new(Arc::new(boxes)), &[snapshot()])
+            .unwrap()
+    }
+
+    fn policy(method: LocationMethod, containment: &[&str]) -> LocationPolicy {
+        LocationPolicy {
+            method,
+            storey_kinds: vec!["IfcBuildingStorey".into()],
+            space_kinds: vec!["IfcSpace".into()],
+            containment: containment.iter().map(|step| (*step).to_owned()).collect(),
+            name: Some(("Attributes".into(), "Name".into())),
+        }
+    }
+
+    fn check(configure: impl FnOnce(Runtime) -> Runtime) -> Report {
+        let registry = registry();
+        let definitions = definitions(&registry, &[CLASH], &["duct", "wall"], &[], &[]);
+        let rule = rule(
+            "ducts-through-walls",
+            CLASH,
+            "error",
+            entity("duct"),
+            json!({
+                "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 },
+            }),
+            json!({}),
+        );
+        let plan = plan(&registry, &definitions, vec![rule]).unwrap();
+        run(registry, plan, &building(), configure).unwrap()
+    }
+
+    fn place(local: &str, name: &str) -> Place {
+        Place {
+            id: id(local),
+            name: Some(name.into()),
+        }
+    }
+
+    const CLIMB: &[&str] = &["contains:backward", "aggregates:backward"];
+
+    #[test]
+    fn a_clash_is_located_on_its_storey_and_in_its_space() {
+        let report =
+            check(|runtime| runtime.with_locations(policy(LocationMethod::Containers, CLIMB)));
+        let [finding] = report.findings() else {
+            panic!("{report:?}");
+        };
+        assert_eq!(
+            finding.location,
+            Some(Location {
+                storeys: vec![place("s1", "Level 1")],
+                spaces: vec![place("r1", "101")],
+                unresolved: None,
+            })
+        );
+        // The duct that could not be measured is located too.
+        let unmeasured = report
+            .not_evaluated()
+            .iter()
+            .find(|outcome| outcome.object_id() == Some(&id("d2")))
+            .unwrap();
+        assert_eq!(
+            unmeasured
+                .location
+                .as_ref()
+                .map(|location| &location.spaces),
+            Some(&vec![place("r1", "101")])
+        );
+    }
+
+    #[test]
+    fn storeys_only_names_no_space() {
+        let report =
+            check(|runtime| runtime.with_locations(policy(LocationMethod::Storeys, CLIMB)));
+        let location = report.findings()[0].location.clone().unwrap();
+        assert_eq!(location.storeys, [place("s1", "Level 1")]);
+        assert!(location.spaces.is_empty());
+    }
+
+    #[test]
+    fn a_containment_that_cannot_be_climbed_is_unresolved_never_empty() {
+        let report = check(|runtime| {
+            runtime.with_locations(policy(LocationMethod::Containers, &["hosts:backward"]))
+        });
+        let location = report.findings()[0].location.clone().unwrap();
+        assert!(location.unresolved.is_some(), "{location:?}");
+    }
+
+    #[test]
+    fn without_a_location_method_the_report_is_unchanged() {
+        let plain = check(|runtime| runtime);
+        assert!(
+            plain
+                .findings()
+                .iter()
+                .all(|finding| finding.location.is_none())
+        );
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(!json.contains("location"), "{json}");
+        let located =
+            check(|runtime| runtime.with_locations(policy(LocationMethod::Containers, CLIMB)));
+        assert_eq!(located.findings().len(), plain.findings().len());
+        assert!(
+            serde_json::to_string(&located)
+                .unwrap()
+                .contains("\"location\"")
+        );
+    }
+
+    #[test]
+    fn locating_needs_a_refiner() {
+        let registry = CapabilityRegistry::new().register(Clash).unwrap();
+        let definitions = definitions(&registry, &[CLASH], &["duct", "wall"], &[], &[]);
+        let rule = rule(
+            "r",
+            CLASH,
+            "error",
+            entity("duct"),
+            json!({
+                "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 },
+            }),
+            json!({}),
+        );
+        let plan = plan(&registry, &definitions, vec![rule]).unwrap();
+        assert!(matches!(
+            run(registry, plan, &building(), |runtime| {
+                runtime.with_locations(policy(LocationMethod::Containers, CLIMB))
+            }),
+            Err(EngineError::MissingRefiner(_))
+        ));
+    }
+}

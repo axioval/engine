@@ -102,6 +102,14 @@ The runtime orders findings by rule, then scope, then message, and not-evaluated
 
 A record naming both an object and a source is rejected: an object id already names its source. Readers written before scopes existed reject a finding without `object_id` or with `source`, so a report containing scoped entries needs a reader of this version.
 
+### Location
+
+A finding or not-evaluated outcome may carry a `location`: the storeys and
+spaces (`Place`: id and name) its objects lie in, and `unresolved` when part
+of it could not be derived. Only a host asking for it gets one (see
+[Locations](./refinement.md#locations)); otherwise the field is absent and a
+report serializes exactly as before.
+
 ### Tables
 
 A finding says what is wrong; a table says what was measured, whether it passed or not: one row per storey with its elevation and height, one per anchor with its areas and their ratio. `Report::tables` holds `ReportTable`s, each reported by one rule under a name unique for that rule.

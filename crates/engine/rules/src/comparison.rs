@@ -708,6 +708,7 @@ impl ModelComparison {
                     "{side:?} object has no `{}` identity and cannot be matched",
                     self.scheme
                 ),
+                location: None,
             });
         }
         for ambiguous in &self.ambiguous {
@@ -723,6 +724,7 @@ impl ModelComparison {
                         ambiguous.identity,
                         ambiguous.objects.len()
                     ),
+                    location: None,
                 });
             }
         }
@@ -811,6 +813,7 @@ impl Projection<'_> {
                 locator: format!("comparison:{}:{identity}", self.scheme),
                 exact: true,
             }],
+            location: None,
         }
         .with_related(related.cloned());
         self.findings.push(finding);
@@ -822,6 +825,7 @@ impl Projection<'_> {
             scope,
             reason: NotEvaluatedReason::IncompleteEvidence,
             message,
+            location: None,
         });
     }
 

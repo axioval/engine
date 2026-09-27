@@ -7,17 +7,19 @@
 //! never a default.
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, OutcomeRefiner, RuleContext,
-    RuleRefinement, report_severity,
+    CapabilityEvaluation, CompiledRule, LocationPolicy, NotEvaluatedReason, OutcomeRefiner,
+    Refining, RuleContext, report_severity,
 };
 use axioval_ir::contract::{CategoryLevel, SeverityOverride};
-use axioval_ir::{Evidence, Finding, Object, Scope, Severity};
+use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope, Severity};
 
+use crate::location::Locator;
 use crate::selection::{Selection, selector_matches};
 use crate::support::category_headings;
 
 /// Applies a rule instance's severity overrides, then its nested
-/// categories, to every finding.
+/// categories, to every finding, and locates every outcome when the host
+/// asks.
 ///
 /// Registered by [`crate::register_builtins`]; a host registering
 /// capabilities one by one registers it with
@@ -30,31 +32,63 @@ impl OutcomeRefiner for Refiner {
         &self,
         context: &RuleContext<'_>,
         _rule: &CompiledRule,
-        refinement: &RuleRefinement,
+        refining: &Refining<'_>,
         evaluation: &mut CapabilityEvaluation,
     ) {
+        let refinement = refining.refinement;
         let (overrides, categories) = (&refinement.severity_overrides, &refinement.categories);
-        if overrides.is_empty() && categories.is_empty() {
-            return;
-        }
-        for finding in evaluation.take_findings() {
-            let refined = if overrides.is_empty() {
-                Ok(finding)
-            } else {
-                overridden(context, overrides, finding)
-            };
-            let refined = match refined {
-                Ok(finding) if !categories.is_empty() => categorised(context, categories, finding),
-                refined => refined,
-            };
-            match refined {
-                Ok(finding) => evaluation.push_finding(finding),
-                Err(Undecided {
-                    scope,
-                    reason,
-                    message,
-                }) => evaluation.push_not_evaluated_about(scope, reason, message),
+        if !overrides.is_empty() || !categories.is_empty() {
+            for finding in evaluation.take_findings() {
+                let refined = if overrides.is_empty() {
+                    Ok(finding)
+                } else {
+                    overridden(context, overrides, finding)
+                };
+                let refined = match refined {
+                    Ok(finding) if !categories.is_empty() => {
+                        categorised(context, categories, finding)
+                    }
+                    refined => refined,
+                };
+                match refined {
+                    Ok(finding) => evaluation.push_finding(finding),
+                    Err(Undecided {
+                        scope,
+                        reason,
+                        message,
+                    }) => evaluation.push_not_evaluated_about(scope, reason, message),
+                }
             }
+        }
+        if let Some(policy) = refining.locations {
+            locate(context, policy, evaluation);
+        }
+    }
+}
+
+/// Locates every finding by its subject and related objects, and every
+/// not-evaluated outcome by its object. An outcome naming no object has no
+/// location.
+fn locate(
+    context: &RuleContext<'_>,
+    policy: &LocationPolicy,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let mut locator = Locator::new(context, policy);
+    for finding in evaluation.findings_mut() {
+        let objects: Vec<ObjectId> = finding
+            .object_id()
+            .into_iter()
+            .chain(&finding.related)
+            .cloned()
+            .collect();
+        if !objects.is_empty() {
+            finding.location = Some(locator.location(context, &objects));
+        }
+    }
+    for outcome in evaluation.not_evaluated_outcomes_mut() {
+        if let Some(object) = outcome.object_id().cloned() {
+            outcome.set_location(locator.location(context, [&object]));
         }
     }
 }

@@ -54,6 +54,7 @@ fn report(document: &str, first: u64) -> Report {
                 message: "Wall has insufficient contact with the slab below".into(),
                 related: vec![],
                 evidence: vec![Evidence::exact(source, "contact:wall")],
+                location: None,
             }
             .with_related([id(document, first + 1)]),
             Finding {
@@ -63,6 +64,7 @@ fn report(document: &str, first: u64) -> Report {
                 message: "FireRating is missing".into(),
                 related: vec![],
                 evidence: vec![],
+                location: None,
             },
         ],
         not_evaluated: vec![NotEvaluated {
@@ -70,6 +72,7 @@ fn report(document: &str, first: u64) -> Report {
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,
             message: "no geometry service is registered".into(),
+            location: None,
         }],
         tables: vec![],
     }
@@ -95,6 +98,40 @@ fn viewpoints(bytes: &[u8]) -> Vec<String> {
         }
     }
     texts
+}
+
+#[test]
+fn a_located_entry_is_labelled_by_storey_and_space_under_the_same_guid() {
+    let plain = report("a.ifc", 1);
+    let mut located = plain.clone();
+    located.findings[0].location = Some(axioval_ir::Location {
+        storeys: vec![axioval_ir::Place {
+            id: id("a.ifc", 90),
+            name: Some("Level 1".into()),
+        }],
+        spaces: vec![axioval_ir::Place {
+            id: id("a.ifc", 91),
+            name: None,
+        }],
+        unresolved: None,
+    });
+    let topics = |report: &Report| {
+        export(report, &model("a.ifc", 1), &options())
+            .unwrap()
+            .document
+            .topics
+    };
+    let (plain, located) = (topics(&plain), topics(&located));
+    assert_eq!(plain[0].labels, ["slab-contact"]);
+    assert_eq!(
+        located[0].labels,
+        [
+            "slab-contact",
+            "Storey: Level 1",
+            "Space: ifc-step:a.ifc/#91"
+        ]
+    );
+    assert_eq!(located[0].guid, plain[0].guid);
 }
 
 #[test]
@@ -266,6 +303,7 @@ fn related_objects_alone_are_never_selected() {
             message: "Door is not hosted by an opening".into(),
             related: vec![],
             evidence: vec![],
+            location: None,
         }
         .with_related([id("a.ifc", 1)]),
     ];
@@ -300,6 +338,7 @@ fn scoped_report(document: &str, first: u64) -> Report {
             scope: Scope::Source(source),
             reason: NotEvaluatedReason::IncompleteEvidence,
             message: "0 object(s) match and 3 more may".into(),
+            location: None,
         }],
         tables: vec![],
     }

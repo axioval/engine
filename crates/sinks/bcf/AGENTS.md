@@ -34,3 +34,6 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
   them; do not post-process the writer's XML.
 - Run `cargo test -p axioval-bcf` and `cargo test -p axioval --all-features`;
   `tests/export.rs` is the contract and reads every archive back.
+- A located entry's topic is labelled `Storey: <name>` and `Space: <name>`
+  after the rule id (the place's id when unnamed). Labels never enter the
+  GUID key: locating a finding must not change its GUID.

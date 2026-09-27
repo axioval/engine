@@ -532,6 +532,7 @@ pub(crate) fn finding(
         },
         message,
         evidence,
+        location: None,
     }
     .with_related(related)
 }

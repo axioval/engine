@@ -3,31 +3,23 @@
 //! ADR 0004: this module measures positions; whether a riser is too high or
 //! a ramp too steep is a rule's decision.
 //!
-//! Only an exact planar mesh is measured, and only a closed, outward-facing
-//! one, since whether a face looks up is read from its winding. A
-//! tessellation of curved faces is refused: its "treads" are chords, not the
-//! body's surfaces. Plane detection on meshed bodies (axiolid/kernel#131) is
-//! not available, so a tread is recognised only where it is level, which an
-//! exact mesh of a planar body is.
+//! Only a closed, outward-facing mesh is measured, since whether a face
+//! looks up is read from its winding.
 //!
-//! - **Treads** are the upward-facing faces whose three corners share one
-//!   elevation up to [`LEVEL_TOLERANCE`], the rounding a placement transform
-//!   leaves in coordinates, grouped by elevation; a tread is measured at the
-//!   interval of its corners' elevations. A flight also having a sloped
-//!   face flatter than 45° looking up is refused: that face is neither a
-//!   tread nor measured.
-//! - The **walking direction** is derived from the treads, not the
+//! - **Flights** are measured from the planes plane detection finds
+//!   (axiolid/kernel#131; see `flight.rs`): treads are the level planes
+//!   facing up, the walking direction of a straight flight and the walking
+//!   line of a turning one are derived from the treads, never the
 //!   placement, since a source's placement axes say nothing about which way
-//!   a flight climbs: it runs in plan from the centre of the lowest tread's
-//!   bounding rectangle to that of the highest. Every tread's centre must
-//!   lie on that line within [`STRAIGHT_TOLERANCE`] and further along it
-//!   than the one below; otherwise the flight turns (winders, a quarter
-//!   landing) and is refused. A direction along a coordinate axis projects
-//!   exactly; any other is widened by a bound on the rounding of the
-//!   projection and reported as approximate.
+//!   a flight climbs. A tread's centre lying off the line from the lowest
+//!   tread's centre to the highest's by more than [`STRAIGHT_TOLERANCE`]
+//!   (plus twice a tessellation's chord deviation) makes the flight a
+//!   turning one. A tessellated flight is measured as intervals widened by
+//!   its chord deviation, never exactly.
 //! - A flight must be **one piece**: its lowest point is where its first
-//!   riser starts. A flight in several pieces (open risers, separate
-//!   treads) does not carry the floor it starts from, and is refused.
+//!   riser starts. A flight in several pieces (separate treads) does not
+//!   carry the floor it starts from, and is refused; open risers on
+//!   stringers are one piece.
 //! - A ramp's **runs** are the connected sets of upward-facing sloped faces
 //!   flatter than 45°; each must be planar within [`PLANAR_TOLERANCE`], and
 //!   its direction is its plane's steepest ascent. Horizontal faces between
@@ -65,8 +57,8 @@ use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh, component_count};
 use axioval_engine::{
     ClearanceBelow, ClearanceBelowRequest, ElevationInterval, HandrailEvidence, HandrailRequest,
     Headroom, HeadroomRequest, Landing, LandingEvidence, LandingExtent, LandingRequest,
-    MeasuredInterval, MetricDirection, SlopedRun, SlopedSurface, Tread, TreadFlight, WalkingEnd,
-    WalkingSurfaceError, WalkingSurfaceService,
+    MeasuredInterval, MetricDirection, SlopedRun, SlopedSurface, TreadFlight, TreadFlightRequest,
+    WalkingEnd, WalkingLine, WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -126,7 +118,7 @@ enum Facing {
 
 /// The plan cross product of a triangle (twice its signed plan area) and a
 /// bound under which its sign is not trusted.
-fn plan_cross([a, b, c]: &Triangle) -> (f64, f64) {
+pub(crate) fn plan_cross([a, b, c]: &Triangle) -> (f64, f64) {
     let first = (b.x - a.x) * (c.y - a.y);
     let second = (b.y - a.y) * (c.x - a.x);
     (
@@ -196,9 +188,12 @@ fn facing(object: &ObjectId, triangle: &Triangle) -> Result<Facing, WalkingSurfa
 }
 
 /// A body this service can read faces of.
-struct Solid<'a> {
-    mesh: &'a TriMesh,
-    soup: Vec<Triangle>,
+pub(crate) struct Solid<'a> {
+    pub(crate) mesh: &'a TriMesh,
+    pub(crate) soup: Vec<Triangle>,
+    /// How far the true surface may lie from the mesh: zero for an exact
+    /// mesh, the chord deviation for a tessellation.
+    pub(crate) deviation: f64,
 }
 
 impl AxiolidWalkingSurfaceService {
@@ -234,6 +229,13 @@ impl AxiolidWalkingSurfaceService {
                  surface"
             )));
         }
+        let deviation = self
+            .geometry
+            .fidelity(object)
+            .map_err(|_| {
+                WalkingSurfaceError::Unavailable(format!("{object} has an invalid chord deviation"))
+            })?
+            .deviation_metres();
         let tolerance = Tolerance::new(LINEAR_TOLERANCE, ANGULAR_TOLERANCE)
             .map_err(|_| WalkingSurfaceError::Unavailable("invalid audit tolerance".into()))?;
         let health = audit_mesh(mesh, tolerance);
@@ -254,7 +256,11 @@ impl AxiolidWalkingSurfaceService {
                 "the mesh of {object} faces inward, so which faces look up is unknown"
             )));
         }
-        Ok(Solid { mesh, soup })
+        Ok(Solid {
+            mesh,
+            soup,
+            deviation,
+        })
     }
 }
 
@@ -264,20 +270,20 @@ fn exact(value: f64) -> Result<ElevationInterval, WalkingSurfaceError> {
 }
 
 /// Positions of points along a horizontal direction.
-struct Projection {
+pub(crate) struct Projection {
     axis: [f64; 3],
-    on_axis: bool,
+    pub(crate) on_axis: bool,
 }
 
 impl Projection {
-    fn new(direction: MetricDirection) -> Self {
+    pub(crate) fn new(direction: MetricDirection) -> Self {
         let axis = direction.components();
         let on_axis = axis.iter().filter(|component| **component != 0.0).count() == 1;
         Self { axis, on_axis }
     }
 
     /// `(lowest, highest)` positions of `points`, each an interval.
-    fn span<'p>(
+    pub(crate) fn span<'p>(
         &self,
         points: impl Iterator<Item = &'p Point3>,
     ) -> Result<(ElevationInterval, ElevationInterval), WalkingSurfaceError> {
@@ -310,7 +316,10 @@ impl Projection {
 /// The plan direction from `from` to `to`, exactly a coordinate axis when
 /// the two share a coordinate.
 #[allow(clippy::float_cmp)]
-fn plan_direction(from: [f64; 2], to: [f64; 2]) -> Result<MetricDirection, WalkingSurfaceError> {
+pub(crate) fn plan_direction(
+    from: [f64; 2],
+    to: [f64; 2],
+) -> Result<MetricDirection, WalkingSurfaceError> {
     let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
     let vector = if dy == 0.0 {
         [dx.signum(), 0.0, 0.0]
@@ -322,132 +331,20 @@ fn plan_direction(from: [f64; 2], to: [f64; 2]) -> Result<MetricDirection, Walki
     MetricDirection::try_new(vector).map_err(|_| WalkingSurfaceError::InvalidMeasurement)
 }
 
-/// Upward level faces at one elevation, known to lie in `[low, high]`.
-struct Level {
-    low: f64,
-    high: f64,
-    faces: Vec<Triangle>,
-}
-
-/// Level faces grouped by elevation, lowest first: faces whose elevations
-/// lie within [`LEVEL_TOLERANCE`] of each other share a level.
-fn group_levels(mut faces: Vec<Triangle>) -> Vec<Level> {
-    faces.sort_by(|a, b| elevations(a).0.total_cmp(&elevations(b).0));
-    let mut levels: Vec<Level> = Vec::new();
-    for face in faces {
-        let (low, high) = elevations(&face);
-        let scale = high.abs().max(1.0);
-        match levels.last_mut() {
-            Some(level) if low <= level.high + LEVEL_TOLERANCE * scale => {
-                level.high = level.high.max(high);
-                level.faces.push(face);
-            }
-            _ => levels.push(Level {
-                low,
-                high,
-                faces: vec![face],
-            }),
-        }
-    }
-    levels
-}
-
-impl Level {
-    fn centre(&self) -> [f64; 2] {
-        let mut min = [f64::INFINITY; 2];
-        let mut max = [f64::NEG_INFINITY; 2];
-        for point in self.faces.iter().flatten() {
-            min = [min[0].min(point.x), min[1].min(point.y)];
-            max = [max[0].max(point.x), max[1].max(point.y)];
-        }
-        [f64::midpoint(min[0], max[0]), f64::midpoint(min[1], max[1])]
-    }
-}
-
 impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
-    fn measure_tread_flight(&self, object: &ObjectId) -> Result<TreadFlight, WalkingSurfaceError> {
-        let solid = self.solid(object)?;
+    fn measure_tread_flight(
+        &self,
+        request: &TreadFlightRequest,
+    ) -> Result<TreadFlight, WalkingSurfaceError> {
+        let object = request.object();
+        let solid = self.body(object, true)?;
         if component_count(solid.mesh) != 1 {
             return Err(WalkingSurfaceError::Unsupported(format!(
-                "{object} is in several pieces (open risers or separate treads); its first \
-                 riser needs the floor it starts from, which it does not carry"
+                "{object} is in several pieces (separate treads); its first riser needs the \
+                 floor it starts from, which it does not carry"
             )));
         }
-        let mut level_faces: Vec<Triangle> = Vec::new();
-        for triangle in &solid.soup {
-            match facing(object, triangle)? {
-                Facing::Level => level_faces.push(*triangle),
-                Facing::Sloped => {
-                    return Err(WalkingSurfaceError::Unsupported(format!(
-                        "{object} has a sloped face looking up, which is no tread"
-                    )));
-                }
-                Facing::Other => {}
-            }
-        }
-        let levels = group_levels(level_faces);
-        let (Some(lowest), Some(highest)) = (levels.first(), levels.last()) else {
-            return Err(WalkingSurfaceError::Unsupported(format!(
-                "{object} has no horizontal face looking up, so no tread"
-            )));
-        };
-        if levels.len() < 2 {
-            return Err(WalkingSurfaceError::Unsupported(format!(
-                "{object} has a single tread, which gives no walking direction"
-            )));
-        }
-        let origin = lowest.centre();
-        let direction = plan_direction(origin, highest.centre())?;
-        let [ux, uy, _] = direction.components();
-        let mut along = f64::NEG_INFINITY;
-        for level in &levels {
-            let centre = level.centre();
-            let (dx, dy) = (centre[0] - origin[0], centre[1] - origin[1]);
-            let lateral = (dx * uy - dy * ux).abs();
-            let ahead = dx * ux + dy * uy;
-            if lateral > STRAIGHT_TOLERANCE || ahead <= along {
-                return Err(WalkingSurfaceError::Unsupported(format!(
-                    "the treads of {object} do not follow one straight line: winders or a \
-                     turning flight are not measured"
-                )));
-            }
-            along = ahead;
-        }
-        let projection = Projection::new(direction);
-        let frame = PlanFrame::new(direction);
-        let treads = levels
-            .iter()
-            .map(|level| {
-                let (front, back) = projection.span(level.faces.iter().flatten())?;
-                let elevation = ElevationInterval::try_new(level.low, level.high)
-                    .map_err(|_| WalkingSurfaceError::InvalidMeasurement)?;
-                let tread = Tread::try_new(elevation, front, back)?;
-                match rectangle(&level.faces, &frame)? {
-                    Some([_, (left, right)]) => tread.with_sides(left, right),
-                    None => Ok(tread),
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let (base, top) = solid
-            .soup
-            .iter()
-            .flatten()
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), point| {
-                (low.min(point.z), high.max(point.z))
-            });
-        let evidence = Evidence {
-            source: object.source.clone(),
-            locator: format!("tread-flight:{object}"),
-            exact: treads.iter().all(Tread::is_exact),
-        };
-        TreadFlight::try_new(
-            object.clone(),
-            direction,
-            exact(base)?,
-            exact(top)?,
-            treads,
-            evidence,
-        )
+        crate::flight::measure(request, &solid)
     }
 
     fn measure_sloped_runs(&self, object: &ObjectId) -> Result<SlopedSurface, WalkingSurfaceError> {
@@ -613,19 +510,18 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
                  measured"
             )));
         }
-        let landing =
-            found.pop().map(|(carrier, faces)| {
-                let extent = rectangle(&faces, &frame).ok().flatten().and_then(
-                    |[(_, far), (left, right)]| {
-                        if far.lower_metres() > end.edge.upper_metres() {
-                            LandingExtent::try_new(far, left, right).ok()
-                        } else {
-                            None
-                        }
-                    },
-                );
-                Landing::new(carrier, extent)
-            });
+        let landing = found.pop().map(|(carrier, faces)| {
+            let extent = rectangle(&faces, &frame, 0.0).ok().flatten().and_then(
+                |[(_, far), (left, right)]| {
+                    if far.lower_metres() > end.edge.upper_metres() {
+                        LandingExtent::try_new(far, left, right).ok()
+                    } else {
+                        None
+                    }
+                },
+            );
+            Landing::new(carrier, extent)
+        });
         let exact = end.edge.is_exact()
             && landing
                 .as_ref()
@@ -832,7 +728,7 @@ fn run(object: &ObjectId, faces: &[Triangle]) -> Result<SlopedRun, WalkingSurfac
             (low.min(point.z), high.max(point.z))
         });
     let run = SlopedRun::try_new(direction, exact(bottom)?, exact(top)?, start, end)?;
-    match rectangle(faces, &PlanFrame::new(direction))? {
+    match rectangle(faces, &PlanFrame::new(direction), 0.0)? {
         Some([_, (left, right)]) => run.with_sides(left, right),
         None => Ok(run),
     }
@@ -943,7 +839,7 @@ fn clip_convex(subject: Vec<[f64; 2]>, clip: &[[f64; 2]]) -> Vec<[f64; 2]> {
 
 /// Plan positions along a horizontal direction and across it (a quarter
 /// turn anticlockwise), as [`axioval_engine::across`] defines it.
-struct PlanFrame {
+pub(crate) struct PlanFrame {
     along: [f64; 2],
     across: [f64; 2],
     on_axis: bool,
@@ -951,7 +847,7 @@ struct PlanFrame {
 
 impl PlanFrame {
     #[allow(clippy::float_cmp)]
-    fn new(direction: MetricDirection) -> Self {
+    pub(crate) fn new(direction: MetricDirection) -> Self {
         let [x, y, _] = direction.components();
         Self {
             along: [x, y],
@@ -977,6 +873,23 @@ impl PlanFrame {
         } else {
             8.0 * f64::EPSILON * (x.abs() + y.abs()).max(f64::MIN_POSITIVE)
         }
+    }
+}
+
+/// The direction a straight flight climbs. A turning flight has none: its
+/// treads' positions are arc lengths along its walking line and their sides
+/// lie across each tread's own direction, so `what` (landings, handrails)
+/// is refused rather than measured in a frame the flight does not have.
+pub(crate) fn straight_direction(
+    flight: &TreadFlight,
+    what: &str,
+) -> Result<MetricDirection, WalkingSurfaceError> {
+    match flight.walking_line() {
+        WalkingLine::Straight(direction) => Ok(*direction),
+        WalkingLine::Turning(_) => Err(WalkingSurfaceError::Unsupported(format!(
+            "{} is a turning flight; its {what} are measured only along a straight one",
+            flight.object()
+        ))),
     }
 }
 
@@ -1032,10 +945,15 @@ fn edge_counts(faces: &[Triangle]) -> BTreeMap<EdgeKey, EdgeUse> {
 /// A region whose boundary lies on a rectangle's sides is that rectangle, so
 /// its width holds all along its length. Along a coordinate axis positions
 /// are exact and an edge must lie exactly on a side; along any other
-/// direction both are widened by the rounding of the projection.
-fn rectangle(
+/// direction both are widened by the rounding of the projection. With
+/// `slack` (a tessellation's displacement of its corners), an edge within
+/// it of a side lies on that side, the area may fall short by the band it
+/// sweeps along the sides, and every side widens by it, so the positions
+/// still hold wherever the region's boundary may lie.
+pub(crate) fn rectangle(
     faces: &[Triangle],
     frame: &PlanFrame,
+    slack: f64,
 ) -> Result<Option<[(ElevationInterval, ElevationInterval); 2]>, WalkingSurfaceError> {
     if faces.is_empty() {
         return Ok(None);
@@ -1053,11 +971,12 @@ fn rectangle(
             highest[axis] = (highest[axis].0.max(low), highest[axis].1.max(high));
         }
     }
-    let tolerance = if frame.on_axis {
-        0.0
-    } else {
-        32.0 * f64::EPSILON * scale
-    };
+    let tolerance = slack
+        + if frame.on_axis {
+            0.0
+        } else {
+            32.0 * f64::EPSILON * scale
+        };
     let on =
         |value: f64, (low, high): (f64, f64)| value >= low - tolerance && value <= high + tolerance;
     for (count, a, b) in edge_counts(faces).into_values() {
@@ -1084,12 +1003,17 @@ fn rectangle(
         .iter()
         .map(|face| plan_cross(face).0.abs() / 2.0)
         .sum();
-    if (covered - rectangle).abs() > 1e-9 * rectangle + 1e-12 * scale * scale {
+    let perimeter =
+        2.0 * ((middle(highest[0]) - middle(lowest[0])) + (middle(highest[1]) - middle(lowest[1])));
+    if (covered - rectangle).abs()
+        > slack.mul_add(perimeter, 1e-9 * rectangle + 1e-12 * scale * scale)
+    {
         return Ok(None);
     }
+    let side = |(low, high): (f64, f64)| interval((low - slack, high + slack));
     Ok(Some([
-        (interval(lowest[0])?, interval(highest[0])?),
-        (interval(lowest[1])?, interval(highest[1])?),
+        (side(lowest[0])?, side(highest[0])?),
+        (side(lowest[1])?, side(highest[1])?),
     ]))
 }
 
@@ -1137,16 +1061,18 @@ impl AxiolidWalkingSurfaceService {
     ) -> Result<EndGeometry, WalkingSurfaceError> {
         match end {
             WalkingEnd::FlightBottom | WalkingEnd::FlightTop => {
-                let flight = self.measure_tread_flight(subject)?;
+                let flight =
+                    self.measure_tread_flight(&TreadFlightRequest::new(subject.clone()))?;
                 let (Some(first), Some(last)) = (flight.treads().first(), flight.treads().last())
                 else {
                     return Err(WalkingSurfaceError::InvalidMeasurement);
                 };
+                let climbing = straight_direction(&flight, "landings")?;
                 let bottom = end == WalkingEnd::FlightBottom;
                 let direction = if bottom {
-                    reversed(flight.direction())?
+                    reversed(climbing)?
                 } else {
-                    flight.direction()
+                    climbing
                 };
                 // Where the body ends along the leaving direction.
                 let frame = PlanFrame::new(direction);

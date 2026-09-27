@@ -3872,6 +3872,198 @@ fn with_geometry_a_ramp_without_a_stair_nearby_is_found() {
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
 
+/// A closed, outward solid standing on `z = 0` as `(positions, triangles)`:
+/// every cell, a convex counter-clockwise polygon of `points` sharing
+/// corners by index, rises to its height, and a wall falls from each cell
+/// to a lower neighbour or the outside, split at every height meeting its
+/// ends.
+fn stepped(points: &[[f64; 2]], cells: &[(Vec<usize>, f64)]) -> (Vec<[f64; 3]>, Vec<[usize; 3]>) {
+    let mut heights: Vec<Vec<f64>> = vec![vec![0.0]; points.len()];
+    for (corners, height) in cells {
+        for corner in corners {
+            heights[*corner].push(*height);
+        }
+    }
+    let mut positions = Vec::new();
+    let mut first = Vec::with_capacity(points.len());
+    for (point, levels) in points.iter().zip(&mut heights) {
+        levels.sort_by(f64::total_cmp);
+        levels.dedup();
+        first.push(positions.len());
+        positions.extend(levels.iter().map(|z| [point[0], point[1], *z]));
+    }
+    let vertex = |point: usize, height: f64| {
+        first[point]
+            + heights[point]
+                .iter()
+                .position(|z| z.total_cmp(&height).is_eq())
+                .unwrap()
+    };
+    let owner: std::collections::BTreeMap<(usize, usize), f64> = cells
+        .iter()
+        .flat_map(|(corners, height)| {
+            (0..corners.len()).map(|k| ((corners[k], corners[(k + 1) % corners.len()]), *height))
+        })
+        .collect();
+    let mut triangles = Vec::new();
+    for (corners, height) in cells {
+        for k in 1..corners.len() - 1 {
+            triangles.push([
+                vertex(corners[0], *height),
+                vertex(corners[k], *height),
+                vertex(corners[k + 1], *height),
+            ]);
+            triangles.push([
+                vertex(corners[0], 0.0),
+                vertex(corners[k + 1], 0.0),
+                vertex(corners[k], 0.0),
+            ]);
+        }
+        for k in 0..corners.len() {
+            let (a, b) = (corners[k], corners[(k + 1) % corners.len()]);
+            let other = owner.get(&(b, a)).copied().unwrap_or(0.0);
+            if other >= *height {
+                continue;
+            }
+            let side = |point: usize| -> Vec<usize> {
+                heights[point]
+                    .iter()
+                    .filter(|z| **z >= other && **z <= *height)
+                    .map(|z| vertex(point, *z))
+                    .collect()
+            };
+            let (left, right) = (side(a), side(b));
+            let (mut i, mut j) = (0, 0);
+            while i + 1 < left.len() || j + 1 < right.len() {
+                if j + 1 < right.len()
+                    && (i + 1 == left.len()
+                        || positions[right[j + 1]][2] <= positions[left[i + 1]][2])
+                {
+                    triangles.push([left[i], right[j], right[j + 1]]);
+                    j += 1;
+                } else {
+                    triangles.push([left[i], right[j], left[i + 1]]);
+                    i += 1;
+                }
+            }
+        }
+    }
+    (positions, triangles)
+}
+
+/// Stair flight #105, a quarter turn 1 m wide as one triangulated face set:
+/// three straight treads 0.28 m deep along +x, three winders turning left
+/// 30° each about the inner corner (0.84, 1), three straight treads along
+/// +y, every riser 0.18 m and closed, the last tread its top.
+fn quarter_turn_flight() -> String {
+    let slope = 1.0 / 3.0_f64.sqrt();
+    let points = [
+        [0.0, 0.0],
+        [0.0, 1.0],
+        [0.28, 0.0],
+        [0.28, 1.0],
+        [0.56, 0.0],
+        [0.56, 1.0],
+        [0.84, 0.0],
+        [0.84, 1.0],
+        [0.84 + slope, 0.0],
+        [1.84, 0.0],
+        [1.84, 1.0 - slope],
+        [1.84, 1.0],
+        [0.84, 1.28],
+        [1.84, 1.28],
+        [0.84, 1.56],
+        [1.84, 1.56],
+        [0.84, 1.84],
+        [1.84, 1.84],
+    ];
+    let cells: Vec<(Vec<usize>, f64)> = [
+        vec![0, 2, 3, 1],
+        vec![2, 4, 5, 3],
+        vec![4, 6, 7, 5],
+        vec![6, 8, 7],
+        vec![8, 9, 10, 7],
+        vec![10, 11, 7],
+        vec![7, 11, 13, 12],
+        vec![12, 13, 15, 14],
+        vec![14, 15, 17, 16],
+    ]
+    .into_iter()
+    .zip(1_u32..)
+    .map(|(cell, step)| (cell, 0.18 * f64::from(step)))
+    .collect();
+    let (positions, triangles) = stepped(&points, &cells);
+    let coordinates = positions
+        .iter()
+        .map(|[x, y, z]| format!("({x:?},{y:?},{z:?})"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let indices = triangles
+        .iter()
+        .map(|[a, b, c]| format!("({},{},{})", a + 1, b + 1, c + 1))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #100=IFCCARTESIANPOINTLIST3D(({coordinates}));\n\
+         #101=IFCTRIANGULATEDFACESET(#100,$,.T.,({indices}),$);\n\
+         #102=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#101));\n\
+         #103=IFCPRODUCTDEFINITIONSHAPE($,$,(#102));\n\
+         #104=IFCLOCALPLACEMENT($,#2);\n\
+         #105=IFCSTAIRFLIGHT('{:022}',$,$,$,$,#104,#103,$,$,$,$,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        105
+    )
+}
+
+#[test]
+fn with_geometry_a_quarter_turn_flights_winders_are_found_and_its_width_left_open() {
+    let case = Case::new("geometry-quarter-turn");
+    let (output, result) = case.geometry_rule(
+        &quarter_turn_flight(),
+        &[("flight", "IfcStairFlight")],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "riser_maximum": {"type": "quantity", "value": 19, "unit": "cm"},
+            "going_minimum": {"type": "quantity", "value": 26, "unit": "cm"},
+            "winder_angle_maximum": {"type": "quantity", "value": 25, "unit": "deg"},
+            "width_minimum": {"type": "quantity", "value": 1.1, "unit": "m"},
+            "forbid_open_risers": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The three winders turn 30° each. Risers, goings along the centre line
+    // and closed risers pass.
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#105".to_owned(),
+            "winder angle 4 of 8 is 30°, winder angle 5 of 8 is 30°, winder angle 6 of 8 is 30°; \
+             at most 25° required"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    // Every straight tread is 1 m wide, but a winder tapers: the flight's
+    // width is not measured, so the width check is left open.
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert!(
+        not_evaluated[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("the flight's width is not measured")),
+        "{result:#}"
+    );
+}
+
 /// Lobby #19 (x 0..4) and rooms #29 (x 4.2..8), #39 (x -4..-0.2) and #49
 /// (above the lobby, floor at 3.3 m), all 4 m deep in y. Door #59, 0.9 m
 /// wide, joins the lobby to #29 and states a clear width of 0.85 m; door

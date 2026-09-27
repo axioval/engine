@@ -250,9 +250,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-inspect"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c320d1a84b3c91df05c072a803c7f64f827fe1c00c8bb64d1cf2edee0ded92"
+checksum = "f8fec47cb9cf579aaf340b1090a19b440b635fd004818129a9dcd0f8a8397ed6"
 dependencies = [
  "axiolid-core",
  "axiolid-exact",
@@ -422,9 +422,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-predicates"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50b696b06ec53f2efa706f5874de8acf96d9ff0f580cadddf1908056111af7e1"
+checksum = "d020f1f58bbd8c0a017d18cbe921d9a35bdebf3032e8317ec4dff0171c6e17d9"
 dependencies = [
  "axiolid-core",
  "axiolid-guarantees",

@@ -8,6 +8,8 @@
 //! binary rounding of decimal coordinates; one straddling it leaves that
 //! check not evaluated. Each check that fails is its own finding, so a
 //! flight with an irregular riser and too little headroom is found twice.
+//! A turning flight is walked along the line the rule places
+//! (`walking_line_offset`), and its goings are measured along it.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -18,9 +20,9 @@ mod ramp_ends;
 use axioval_engine::{
     CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, ElevationInterval,
     FreeSpaceServiceHandle, HeadroomRequest, Landing, LandingEvidence, LandingRequest,
-    MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability,
-    RuleContext, SlopedRun, TableColumn, TreadFlight, WalkingEnd, WalkingStretch,
-    WalkingSurfaceError, WalkingSurfaceServiceHandle,
+    MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType, RiserClosure,
+    RuleCapability, RuleContext, SlopedRun, TableColumn, TreadFlight, TreadFlightRequest,
+    WalkingEnd, WalkingStretch, WalkingSurfaceError, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
@@ -37,8 +39,10 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// The flight is measured through the walking-surface service: its treads
 /// are its upward-facing horizontal faces, its risers the height
 /// differences from its lowest point through the treads to its top, its
-/// goings the distances between consecutive nosings along the direction it
-/// climbs. Every declared check is judged on its own:
+/// goings the distances between consecutive nosings along its walking line:
+/// the direction a straight flight climbs, or for a turning flight a line
+/// through its treads midway across them or `walking_line_offset` from the
+/// side it turns towards. Every declared check is judged on its own:
 ///
 /// - `riser_minimum`/`riser_maximum` bound every riser, `going_minimum`/
 ///   `going_maximum` every going and `nosing_minimum`/`nosing_maximum`
@@ -49,10 +53,14 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 ///   `maximum_rise` the flight's rise;
 /// - `riser_tolerance`/`going_tolerance` bound the difference between the
 ///   largest and smallest riser or going of the flight;
+/// - `winder_angle_maximum` bounds the plan angle between consecutive
+///   nosings, which is zero for straight treads;
+/// - `forbid_open_risers` makes every open riser a finding;
 /// - `minimum_headroom` bounds the vertical clearance above the treads to
 ///   the `headroom_obstacles` the rule selects;
 /// - `width_minimum`/`width_maximum` bound the flight's width, its
-///   narrowest tread's across the direction it climbs;
+///   narrowest tread's across the direction it climbs; a winder tapers and
+///   has no width, so a flight with winders leaves the check not evaluated;
 /// - `landing_depth_minimum`, `landing_width_minimum` and
 ///   `landing_at_least_walking_width` bound the landing at each end, the
 ///   level surface of a `landing_objects` object meeting it, and
@@ -67,6 +75,11 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 ///   rail runs along. A rail belongs to the flight within
 ///   `handrail_reach_across` of its sides and `handrail_reach_above` above
 ///   its nosing line.
+///
+/// A turning flight's landings and handrails are measured along no one
+/// direction, so the service refuses them and those checks are not
+/// evaluated; its headroom above and below is measured as a straight
+/// flight's.
 pub struct StairGeometryCheck;
 
 /// Requires each selected ramp's sloped runs, measured from its body, to fit
@@ -116,6 +129,15 @@ fn range(parameters: &Parameters<'_>, name: &str) -> Result<Range, Unavailable> 
         )));
     }
     Ok((minimum, maximum))
+}
+
+fn angle(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
+    match parameters.quantity(name)? {
+        None => Ok(None),
+        Some((value, QuantityDimension::PlaneAngle)) if value >= 0.0 => Ok(Some(value)),
+        Some((_, QuantityDimension::PlaneAngle)) => Err(invalid(format!("`{name}` is negative"))),
+        Some(_) => Err(invalid(format!("`{name}` is not a plane angle"))),
+    }
 }
 
 fn count(parameters: &Parameters<'_>, name: &str) -> Result<Option<usize>, Unavailable> {
@@ -354,6 +376,10 @@ fn bound_words(minimum: Option<f64>, maximum: Option<f64>, unit: fn(f64) -> Stri
     }
 }
 
+fn degrees(value: f64) -> String {
+    format!("{}°", (value.to_degrees() * 1e4).round() / 1e4)
+}
+
 fn ratio(value: f64) -> String {
     format!("{}", (value * 1e6).round() / 1e6)
 }
@@ -376,28 +402,84 @@ enum Check {
 }
 
 /// Every `values` interval against `range`, each named `label n of N`.
-fn every(label: &str, values: &[MeasuredInterval], (minimum, maximum): Range, slack: f64) -> Check {
+fn every(label: &str, values: &[MeasuredInterval], range: Range, slack: f64) -> Check {
+    let values: Vec<Option<MeasuredInterval>> = values.iter().copied().map(Some).collect();
+    every_measured(label, &values, range, slack, metres)
+}
+
+/// Every value against `range`, each named `label n of N`, in `unit`; a
+/// value not measured leaves the check undecided.
+fn every_measured(
+    label: &str,
+    values: &[Option<MeasuredInterval>],
+    (minimum, maximum): Range,
+    slack: f64,
+    unit: fn(f64) -> String,
+) -> Check {
     let (low, high) = (minimum.map(|m| m - slack), maximum.map(|m| m + slack));
     let total = values.len();
     let mut failing = Vec::new();
     let mut undecided = Vec::new();
+    let mut unmeasured = Vec::new();
     for (index, value) in values.iter().enumerate() {
-        let named = format!(
-            "{label} {} of {total} is {}",
-            index + 1,
-            shown(value.lower(), value.upper())
-        );
+        let Some(value) = value else {
+            unmeasured.push(format!("{label} {} of {total}", index + 1));
+            continue;
+        };
+        let (lower, upper) = (unit(value.lower()), unit(value.upper()));
+        let measured = if lower == upper {
+            lower
+        } else {
+            format!("between {lower} and {upper}")
+        };
+        let named = format!("{label} {} of {total} is {measured}", index + 1);
         match judge(value.lower(), value.upper(), low, high) {
             Verdict::Pass => {}
             Verdict::Fail(_) => failing.push(named),
             Verdict::Undecided(_) => undecided.push(named),
         }
     }
-    let bound = bound_words(minimum, maximum, metres);
+    let bound = bound_words(minimum, maximum, unit);
     if !failing.is_empty() {
         Check::Fail(format!("{}; {bound} required", failing.join(", ")))
-    } else if !undecided.is_empty() {
-        Check::Undecided(format!("{}, which straddles {bound}", undecided.join(", ")))
+    } else if !undecided.is_empty() || !unmeasured.is_empty() {
+        let mut message = Vec::new();
+        if !undecided.is_empty() {
+            message.push(format!("{}, which straddles {bound}", undecided.join(", ")));
+        }
+        if !unmeasured.is_empty() {
+            message.push(format!("{} not measured", unmeasured.join(", ")));
+        }
+        Check::Undecided(message.join("; "))
+    } else {
+        Check::Pass
+    }
+}
+
+/// Every riser's closure: an open one fails, one not measured is
+/// undecided.
+fn closed(closures: &[RiserClosure]) -> Check {
+    let total = closures.len();
+    let named = |wanted: RiserClosure| -> Vec<String> {
+        closures
+            .iter()
+            .enumerate()
+            .filter(|(_, closure)| **closure == wanted)
+            .map(|(index, _)| format!("riser {} of {total}", index + 1))
+            .collect()
+    };
+    let (open, unknown) = (named(RiserClosure::Open), named(RiserClosure::NotMeasured));
+    if !open.is_empty() {
+        let open: Vec<String> = open
+            .iter()
+            .map(|riser| format!("{riser} is open"))
+            .collect();
+        Check::Fail(format!("{}; closed risers required", open.join(", ")))
+    } else if !unknown.is_empty() {
+        Check::Undecided(format!(
+            "whether {} is closed is not measured",
+            unknown.join(" or ")
+        ))
     } else {
         Check::Pass
     }
@@ -877,6 +959,9 @@ impl Dimension<'_> {
 }
 
 struct StairConfig<'a> {
+    walking_line_offset: Option<f64>,
+    winder_angle_maximum: Option<f64>,
+    forbid_open_risers: bool,
     riser: Range,
     going: Range,
     step_length: Range,
@@ -892,7 +977,14 @@ struct StairConfig<'a> {
 impl<'a> StairConfig<'a> {
     fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
         let parameters = Parameters(rule);
+        let walking_line_offset = length(&parameters, "walking_line_offset")?;
+        if walking_line_offset == Some(0.0) {
+            return Err(invalid("`walking_line_offset` is zero"));
+        }
         let config = Self {
+            walking_line_offset,
+            winder_angle_maximum: angle(&parameters, "winder_angle_maximum")?,
+            forbid_open_risers: parameters.boolean("forbid_open_risers")?.unwrap_or(false),
             riser: range(&parameters, "riser")?,
             going: range(&parameters, "going")?,
             step_length: range(&parameters, "step_length")?,
@@ -921,6 +1013,8 @@ impl<'a> StairConfig<'a> {
             && config.maximum_rise.is_none()
             && config.riser_tolerance.is_none()
             && config.going_tolerance.is_none()
+            && config.winder_angle_maximum.is_none()
+            && !config.forbid_open_risers
             && config.headroom.is_none()
             && !config.walking.declared()
         {
@@ -946,6 +1040,9 @@ impl RuleCapability for StairGeometryCheck {
             ParameterDescriptor::optional("maximum_rise", ParameterType::Quantity),
             ParameterDescriptor::optional("riser_tolerance", ParameterType::Quantity),
             ParameterDescriptor::optional("going_tolerance", ParameterType::Quantity),
+            ParameterDescriptor::optional("walking_line_offset", ParameterType::Quantity),
+            ParameterDescriptor::optional("winder_angle_maximum", ParameterType::Quantity),
+            ParameterDescriptor::optional("forbid_open_risers", ParameterType::Boolean),
         ]);
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
@@ -971,7 +1068,11 @@ impl RuleCapability for StairGeometryCheck {
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         for object in selected {
-            let flight = match stairs.measure_tread_flight(&object.id) {
+            let request = match config.walking_line_offset {
+                None => Ok(TreadFlightRequest::new(object.id.clone())),
+                Some(offset) => TreadFlightRequest::from_inner_side(object.id.clone(), offset),
+            };
+            let flight = match request.and_then(|request| stairs.measure_tread_flight(&request)) {
                 Ok(flight) => flight,
                 Err(error) => {
                     let (reason, message) = service_error(&error);
@@ -997,7 +1098,7 @@ impl RuleCapability for StairGeometryCheck {
                     None => (
                         Check::Undecided(
                             "the flight's width is not measured: a tread fills no rectangle \
-                             along the direction it climbs"
+                             along the direction it climbs, as a winder never does"
                                 .into(),
                         ),
                         vec![],
@@ -1146,8 +1247,36 @@ fn stair_checks(
     if let Some(tolerance) = config.going_tolerance {
         push(uniform("going", &goings, tolerance, 2.0 * slack, metres));
     }
+    checks.extend(
+        turning_checks(config, flight)
+            .into_iter()
+            .map(|check| (check, Vec::new(), Vec::new())),
+    );
     checks
 }
+
+/// The checks a turning or open flight adds: winder angles and open
+/// risers.
+fn turning_checks(config: &StairConfig<'_>, flight: &TreadFlight) -> Vec<Check> {
+    let mut checks = Vec::new();
+    if let Some(maximum) = config.winder_angle_maximum {
+        checks.push(every_measured(
+            "winder angle",
+            &flight.winder_angles(),
+            (None, Some(maximum)),
+            ANGLE_SLACK,
+            degrees,
+        ));
+    }
+    if config.forbid_open_risers {
+        checks.push(closed(&flight.riser_closures()));
+    }
+    checks
+}
+
+/// Decimal coordinates read in binary turn a nosing by a few units in the
+/// last place of a radian.
+const ANGLE_SLACK: f64 = 1e-9;
 
 /// One row of `slope_limits`, in canonical units.
 struct SlopeLimit {

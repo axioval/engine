@@ -7,15 +7,16 @@
 //!
 //! A service reports **positions**, never the derived lengths: tread
 //! elevations, the positions of each tread's front and back edge along the
-//! flight's walking direction, a run's lowest and highest points and its
-//! extent along its own ascending direction. Risers, goings, tread depths,
-//! nosings, rises, run lengths and slopes are computed here from those
-//! positions as intervals sure to hold the exact value, so no adapter can
-//! report a riser that disagrees with its treads. A position is an interval;
-//! the evidence is exact exactly when every position is a point.
+//! flight's walking line, a run's lowest and highest points and its extent
+//! along its own ascending direction. Risers, goings, tread depths,
+//! nosings, rises, run lengths, slopes, tread widths and winder angles are
+//! computed here from those positions as intervals sure to hold the exact
+//! value, so no adapter can report a riser that disagrees with its treads.
+//! A position is an interval; the evidence is exact exactly when every
+//! position is a point.
 //!
 //! Widths come the same way: a tread or a run may report the positions of
-//! its two sides across the walking direction ([`across`]), stated only
+//! its two sides across its walking direction ([`across`]), stated only
 //! where it fills the rectangle between its ends and those sides. A landing
 //! ([`LandingEvidence`]) is the level surface a request's candidate carries
 //! at one end of a flight or run, reported as the positions of its far side
@@ -24,14 +25,24 @@
 //! ([`ClearanceBelow`]) is its height above the floors of the spaces a
 //! request names.
 //!
+//! A flight climbs along its **walking line** ([`WalkingLine`]): a straight
+//! flight along one horizontal direction, a turning flight (winders, a
+//! quarter turn) along a plan polyline with a vertex on every tread. The
+//! request says where a turning flight's line runs
+//! ([`WalkingLinePlacement`]): midway across the treads, or at a stated
+//! distance from the side the flight turns towards. Goings are measured
+//! along that line, nosing to nosing. A turning flight's tread walks along
+//! its own direction, square to its nosing, and a winder fills no rectangle
+//! along any, so it has no sides and the flight no width. Treads may also
+//! carry their nosing edge ([`PlanSegment`]), from which winder angles are
+//! derived, and whether the riser below them is closed ([`RiserClosure`]).
+//!
 //! Handrails ([`HandrailEvidence`]) along a flight or a run are the rule's
 //! selection, reported as positions along and across the walking direction
 //! and as the height of their top above the pitch line: the nosing line of a
 //! flight, the surface of a run.
 //!
-//! What the seam does not measure yet (Refs #85): winders and turning
-//! flights and open risers. A service refuses a shape it cannot decide
-//! rather than approximate it.
+//! A service refuses a shape it cannot decide rather than approximate it.
 
 use std::sync::Arc;
 
@@ -157,16 +168,120 @@ fn divide(x: f64, y: f64, up: bool) -> f64 {
     }
 }
 
+/// A straight edge in plan whose ends are known within `radius` metres.
+///
+/// A tread's nosing is one: the edge the walking line climbs onto it
+/// across. An exact mesh gives its ends as points (radius zero); a
+/// tessellation widens them by its chord deviation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlanSegment {
+    from: [f64; 2],
+    to: [f64; 2],
+    radius: f64,
+}
+
+impl PlanSegment {
+    /// The edge from `from` to `to`, each end within `radius` of the given
+    /// point. Coordinates must be finite, the ends distinct and the radius
+    /// finite and not negative.
+    pub fn try_new(from: [f64; 2], to: [f64; 2], radius: f64) -> Result<Self, WalkingSurfaceError> {
+        let finite = from.iter().chain(&to).all(|value| value.is_finite());
+        #[allow(clippy::float_cmp)]
+        if !finite || from == to || !radius.is_finite() || radius < 0.0 {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(Self { from, to, radius })
+    }
+
+    /// One end.
+    #[must_use]
+    pub fn from(&self) -> [f64; 2] {
+        self.from
+    }
+
+    /// The other end.
+    #[must_use]
+    pub fn to(&self) -> [f64; 2] {
+        self.to
+    }
+
+    /// How far each true end may lie from the given one.
+    #[must_use]
+    pub fn radius(&self) -> f64 {
+        self.radius
+    }
+
+    /// The angle between the lines of two edges, in radians from `0`
+    /// (parallel) to `π/2` (square), as an interval sure to hold the angle
+    /// between any two edges whose ends lie within the radii. `None` when an
+    /// edge is too short for its radius to fix a direction.
+    #[must_use]
+    pub fn angle_to(&self, other: &PlanSegment) -> Option<MeasuredInterval> {
+        // Moving each end of an edge of length `L` by at most `r` turns it
+        // by at most `asin(2r / L)`. The subtraction below rounds each
+        // component by at most `ε·|coordinate|`, which counts as radius.
+        let turn = |segment: &PlanSegment| -> Option<([f64; 2], f64)> {
+            let vector = [
+                segment.to[0] - segment.from[0],
+                segment.to[1] - segment.from[1],
+            ];
+            let magnitude = segment
+                .from
+                .iter()
+                .chain(&segment.to)
+                .fold(0.0_f64, |most, value| most.max(value.abs()));
+            let radius = 4.0f64.mul_add(f64::EPSILON * magnitude, segment.radius);
+            let length = vector[0].hypot(vector[1]) * 4.0f64.mul_add(-f64::EPSILON, 1.0);
+            if length <= 2.0 * radius {
+                return None;
+            }
+            Some((vector, (2.0 * radius / length).asin()))
+        };
+        let (u, first) = turn(self)?;
+        let (v, second) = turn(other)?;
+        let cross = u[0].mul_add(v[1], -(u[1] * v[0]));
+        let dot = u[0].mul_add(v[0], u[1] * v[1]);
+        let angle = cross.abs().atan2(dot.abs());
+        // The products and `atan2` round by a few units in the last place
+        // of an angle no larger than π/2.
+        let spread = first + second + 16.0 * f64::EPSILON;
+        let lower = (angle - spread).max(0.0);
+        let upper = (angle + spread).min(std::f64::consts::FRAC_PI_2).max(lower);
+        MeasuredInterval::try_new(lower, upper).ok()
+    }
+
+    fn is_exact(&self) -> bool {
+        self.radius == 0.0
+    }
+}
+
+/// Whether the riser below a tread closes the step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RiserClosure {
+    /// A riser rises from the tread below across the whole step.
+    Closed,
+    /// The step is open: the tread below ends in a face falling away from
+    /// it rather than in a riser climbing to this tread.
+    Open,
+    /// The service did not decide it, such as the first riser of a flight
+    /// whose front face does not reach the level it starts from.
+    NotMeasured,
+}
+
 /// One tread: an upward-facing horizontal face of a flight.
 ///
-/// `front` and `back` are the positions of its nearest and farthest points
-/// along the flight's walking direction; the front edge is the nosing.
+/// `front` and `back` are the positions along the flight's walking line
+/// where the line climbs onto the tread and leaves it; the front edge is
+/// the nosing. A service may add the nosing edge itself, the tread's extent
+/// across the walking line and whether the riser below it is closed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tread {
     elevation: ElevationInterval,
     front: ElevationInterval,
     back: ElevationInterval,
     sides: Option<Sides>,
+    nosing: Option<PlanSegment>,
+    riser_below: RiserClosure,
 }
 
 /// The positions of a surface's two sides across a walking direction, along
@@ -204,7 +319,7 @@ fn least(widths: impl Iterator<Item = MeasuredInterval>) -> Option<MeasuredInter
 
 impl Tread {
     /// A tread at `elevation` spanning `front` to `back` along the walking
-    /// direction.
+    /// line.
     pub fn try_new(
         elevation: ElevationInterval,
         front: ElevationInterval,
@@ -219,13 +334,17 @@ impl Tread {
             front,
             back,
             sides: None,
+            nosing: None,
+            riser_below: RiserClosure::NotMeasured,
         })
     }
 
-    /// The tread with the positions of its sides along [`across`] the
-    /// walking direction. A service states them only where the tread fills
-    /// the rectangle between its front, back and sides, so the width holds
-    /// all along its depth.
+    /// The tread with the positions of its sides along [`across`] its
+    /// walking direction: the flight's for a straight flight, the direction
+    /// square to its nosing for a turning flight's tread. A service states
+    /// them only where the tread fills the rectangle between its front,
+    /// back and sides, so the width holds all along its depth; a winder has
+    /// none.
     pub fn with_sides(
         mut self,
         left: ElevationInterval,
@@ -235,15 +354,29 @@ impl Tread {
         Ok(self)
     }
 
-    /// The positions of the tread's sides across the walking direction, when
-    /// measured.
+    /// The tread with its nosing edge in plan.
+    #[must_use]
+    pub fn with_nosing(mut self, nosing: PlanSegment) -> Self {
+        self.nosing = Some(nosing);
+        self
+    }
+
+    /// The tread with whether the riser below it closes the step.
+    #[must_use]
+    pub fn with_riser_below(mut self, riser: RiserClosure) -> Self {
+        self.riser_below = riser;
+        self
+    }
+
+    /// The positions of the tread's sides across its walking direction,
+    /// when measured.
     #[must_use]
     pub fn sides(&self) -> Option<(ElevationInterval, ElevationInterval)> {
         self.sides
     }
 
-    /// The tread's width across the walking direction, when its sides were
-    /// measured.
+    /// The tread's width across its walking direction, when its sides were
+    /// measured. Nothing is deducted for handrails.
     #[must_use]
     pub fn width(&self) -> Option<MeasuredInterval> {
         self.sides.map(|(left, right)| between(right, left))
@@ -255,19 +388,31 @@ impl Tread {
         self.elevation
     }
 
-    /// Position of the front edge (the nosing) along the walking direction.
+    /// Position of the front edge (the nosing) along the walking line.
     #[must_use]
     pub fn front(&self) -> ElevationInterval {
         self.front
     }
 
-    /// Position of the back edge along the walking direction.
+    /// Position of the back edge along the walking line.
     #[must_use]
     pub fn back(&self) -> ElevationInterval {
         self.back
     }
 
-    /// The tread's depth along the walking direction, back less front.
+    /// The nosing edge in plan, when measured.
+    #[must_use]
+    pub fn nosing(&self) -> Option<PlanSegment> {
+        self.nosing
+    }
+
+    /// Whether the riser below the tread closes the step.
+    #[must_use]
+    pub fn riser_below(&self) -> RiserClosure {
+        self.riser_below
+    }
+
+    /// The tread's depth along the walking line, back less front.
     #[must_use]
     pub fn depth(&self) -> MeasuredInterval {
         between(self.back, self.front)
@@ -280,10 +425,98 @@ impl Tread {
             && self.front.is_exact()
             && self.back.is_exact()
             && sides_exact(self.sides)
+            && self.nosing.is_none_or(|nosing| nosing.is_exact())
     }
 }
 
-/// A straight stair flight measured from its body.
+/// Where a turning flight's walking line runs across its treads.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WalkingLinePlacement {
+    /// Midway across each tread: the flight's centre line.
+    Centre,
+    /// This many metres from the side the flight turns towards, across
+    /// each tread. Built through [`TreadFlightRequest::from_inner_side`].
+    FromInnerSide(f64),
+}
+
+/// A request for an object's stair flight, with where its walking line
+/// runs should it turn. A straight flight's goings are the same on every
+/// line along it, so it ignores the placement.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TreadFlightRequest {
+    object: ObjectId,
+    walking_line: WalkingLinePlacement,
+}
+
+impl TreadFlightRequest {
+    /// The flight of `object`, its walking line on its centre line.
+    #[must_use]
+    pub fn new(object: ObjectId) -> Self {
+        Self {
+            object,
+            walking_line: WalkingLinePlacement::Centre,
+        }
+    }
+
+    /// The flight of `object`, its walking line `offset` metres from the
+    /// side it turns towards. The offset must be finite and positive.
+    pub fn from_inner_side(object: ObjectId, offset: f64) -> Result<Self, WalkingSurfaceError> {
+        if !offset.is_finite() || offset <= 0.0 {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(Self {
+            object,
+            walking_line: WalkingLinePlacement::FromInnerSide(offset),
+        })
+    }
+
+    /// The object whose flight is measured.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// Where the walking line runs.
+    #[must_use]
+    pub fn walking_line(&self) -> WalkingLinePlacement {
+        self.walking_line
+    }
+}
+
+/// The line a flight is walked along, in plan.
+#[derive(Clone, Debug, PartialEq)]
+pub enum WalkingLine {
+    /// A straight flight climbs along one horizontal direction; positions
+    /// along it are projections onto that direction.
+    Straight(MetricDirection),
+    /// A turning flight climbs along a polyline with a vertex on every
+    /// tread, bottom to top; positions along it are arc lengths from its
+    /// first vertex, before that vertex and after its last along its end
+    /// segments extended.
+    Turning(Vec<[f64; 2]>),
+}
+
+impl WalkingLine {
+    /// Whether the line turns.
+    #[must_use]
+    pub fn is_turning(&self) -> bool {
+        matches!(self, Self::Turning(_))
+    }
+
+    #[allow(clippy::float_cmp)]
+    fn is_valid(&self) -> bool {
+        match self {
+            Self::Straight(direction) => direction.components()[2] == 0.0,
+            Self::Turning(vertices) => {
+                vertices.len() >= 2
+                    && vertices.iter().flatten().all(|value| value.is_finite())
+                    && vertices.windows(2).all(|pair| pair[0] != pair[1])
+            }
+        }
+    }
+}
+
+/// A stair flight measured from its body.
 ///
 /// The flight rises from `base`, its body's lowest point, through its treads
 /// in ascending order, to `top`, its body's highest point. The first riser
@@ -295,32 +528,33 @@ impl Tread {
 /// refused.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreadFlight {
-    object: ObjectId,
-    direction: MetricDirection,
+    request: TreadFlightRequest,
+    walking_line: WalkingLine,
     base: ElevationInterval,
     top: ElevationInterval,
     treads: Vec<Tread>,
     ends_in_riser: bool,
+    final_riser: RiserClosure,
     evidence: Evidence,
 }
 
 impl TreadFlight {
-    /// A flight of `object` climbing along the horizontal `direction`.
+    /// The flight answering `request`, climbing along `walking_line`.
     ///
     /// Treads must be given bottom to top, strictly ascending in elevation
     /// and in front position; the base must lie below the first tread and
-    /// the top at or above the last, decidably. The evidence is exact
-    /// exactly when every position is a point.
+    /// the top at or above the last, decidably. A straight line must be
+    /// horizontal, a turning one at least two distinct plan points. The
+    /// evidence is exact exactly when every position is a point.
     pub fn try_new(
-        object: ObjectId,
-        direction: MetricDirection,
+        request: TreadFlightRequest,
+        walking_line: WalkingLine,
         base: ElevationInterval,
         top: ElevationInterval,
         treads: Vec<Tread>,
         evidence: Evidence,
     ) -> Result<Self, WalkingSurfaceError> {
-        #[allow(clippy::float_cmp)]
-        if direction.components()[2] != 0.0 {
+        if !walking_line.is_valid() {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
         let (Some(first), Some(last)) = (treads.first(), treads.last()) else {
@@ -352,26 +586,42 @@ impl TreadFlight {
             return Err(WalkingSurfaceError::InexactEvidence);
         }
         Ok(Self {
-            object,
-            direction,
+            request,
+            walking_line,
             base,
             top,
             treads,
             ends_in_riser,
+            final_riser: RiserClosure::NotMeasured,
             evidence,
         })
+    }
+
+    /// The flight with whether its final riser, from the last tread to the
+    /// top, closes the step; ignored when the flight ends on its last
+    /// tread.
+    #[must_use]
+    pub fn with_final_riser(mut self, riser: RiserClosure) -> Self {
+        self.final_riser = riser;
+        self
+    }
+
+    /// The request this answers.
+    #[must_use]
+    pub fn request(&self) -> &TreadFlightRequest {
+        &self.request
     }
 
     /// The measured object.
     #[must_use]
     pub fn object(&self) -> &ObjectId {
-        &self.object
+        &self.request.object
     }
 
-    /// The horizontal direction the flight climbs along.
+    /// The line the flight climbs along.
     #[must_use]
-    pub fn direction(&self) -> MetricDirection {
-        self.direction
+    pub fn walking_line(&self) -> &WalkingLine {
+        &self.walking_line
     }
 
     /// Elevation of the body's lowest point, where the first riser starts.
@@ -415,9 +665,22 @@ impl TreadFlight {
             .collect()
     }
 
-    /// Goings, bottom to top: the horizontal distance along the walking
-    /// direction from each tread's nosing to the next one's. A flight of
-    /// `n` treads has `n - 1` goings.
+    /// Whether each riser closes its step, in the order of
+    /// [`Self::risers`]: the riser below each tread, then the final riser
+    /// when the flight ends in one.
+    #[must_use]
+    pub fn riser_closures(&self) -> Vec<RiserClosure> {
+        let mut closures: Vec<RiserClosure> =
+            self.treads.iter().map(|tread| tread.riser_below).collect();
+        if self.ends_in_riser {
+            closures.push(self.final_riser);
+        }
+        closures
+    }
+
+    /// Goings, bottom to top: the distance along the walking line from
+    /// each tread's nosing to the next one's. A flight of `n` treads has
+    /// `n - 1` goings.
     #[must_use]
     pub fn goings(&self) -> Vec<MeasuredInterval> {
         self.treads
@@ -434,6 +697,21 @@ impl TreadFlight {
         self.treads
             .windows(2)
             .map(|pair| between(pair[0].back, pair[1].front))
+            .collect()
+    }
+
+    /// Winder angles, bottom to top: for each tread below the last, the
+    /// plan angle between its nosing and the next tread's, `0` for a
+    /// straight tread. `None` where a nosing is not measured or too short
+    /// for its uncertainty to fix a direction.
+    #[must_use]
+    pub fn winder_angles(&self) -> Vec<Option<MeasuredInterval>> {
+        self.treads
+            .windows(2)
+            .map(|pair| match (pair[0].nosing, pair[1].nosing) {
+                (Some(lower), Some(upper)) => lower.angle_to(&upper),
+                _ => None,
+            })
             .collect()
     }
 
@@ -755,6 +1033,10 @@ impl Headroom {
 }
 
 /// One end of a stair flight or of a ramp's run.
+///
+/// A flight's ends are placed along the one direction a straight flight
+/// climbs; a turning flight has none, and a service refuses its ends rather
+/// than measure them in a frame its treads' positions are not given in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WalkingEnd {
     /// Where a straight flight starts, in front of its first riser.
@@ -1125,7 +1407,9 @@ fn governed(
 }
 
 /// The stretch of walking surface a handrail is measured along: a straight
-/// flight, or one run of a ramp by its index in [`SlopedSurface::runs`].
+/// flight, or one run of a ramp by its index in [`SlopedSurface::runs`]. A
+/// turning flight has no one direction to measure along, and a service
+/// refuses it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WalkingStretch {
     /// A straight stair flight, along its nosing line.
@@ -1469,8 +1753,12 @@ impl HandrailEvidence {
 
 /// Measures stair flights, ramps and the headroom above them.
 pub trait WalkingSurfaceService: Send + Sync + 'static {
-    /// The treads, base and top of `object` as a straight stair flight.
-    fn measure_tread_flight(&self, object: &ObjectId) -> Result<TreadFlight, WalkingSurfaceError>;
+    /// The treads, base and top of the request's object as a stair flight,
+    /// walked along the requested line should it turn.
+    fn measure_tread_flight(
+        &self,
+        request: &TreadFlightRequest,
+    ) -> Result<TreadFlight, WalkingSurfaceError>;
 
     /// The sloped runs of `object` as a ramp.
     fn measure_sloped_runs(&self, object: &ObjectId) -> Result<SlopedSurface, WalkingSurfaceError>;
@@ -1528,13 +1816,14 @@ impl WalkingSurfaceServiceHandle {
         Self(service)
     }
 
-    /// The flight of `object`; one naming another object is refused.
+    /// The flight answering `request`; an answer to another request is
+    /// refused.
     pub fn measure_tread_flight(
         &self,
-        object: &ObjectId,
+        request: &TreadFlightRequest,
     ) -> Result<TreadFlight, WalkingSurfaceError> {
-        let flight = self.0.measure_tread_flight(object)?;
-        if flight.object() != object {
+        let flight = self.0.measure_tread_flight(request)?;
+        if flight.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
         Ok(flight)
@@ -1622,6 +1911,10 @@ mod tests {
         ElevationInterval::exact(value).unwrap()
     }
 
+    fn request(local: &str) -> TreadFlightRequest {
+        TreadFlightRequest::new(id(local))
+    }
+
     fn x() -> MetricDirection {
         MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap()
     }
@@ -1652,8 +1945,8 @@ mod tests {
             tread(0.55, 0.56, 0.86),
         ];
         let flight = TreadFlight::try_new(
-            id("a"),
-            x(),
+            request("a"),
+            WalkingLine::Straight(x()),
             point(0.0),
             point(0.72),
             treads,
@@ -1663,6 +1956,14 @@ mod tests {
         assert!(flight.ends_in_riser());
         let risers = flight.risers();
         assert_eq!(risers.len(), 4);
+        // One closure per riser, the final one as the service states it.
+        let closures = flight
+            .clone()
+            .with_final_riser(RiserClosure::Open)
+            .riser_closures();
+        assert_eq!(closures.len(), 4);
+        assert_eq!(closures[3], RiserClosure::Open);
+        assert_eq!(flight.riser_closures()[3], RiserClosure::NotMeasured);
         for (riser, expected) in risers.iter().zip([0.17, 0.17, 0.21, 0.17]) {
             assert!(contains(*riser, expected), "{riser:?} {expected}");
             assert!(riser.upper() - riser.lower() <= 2.0 * f64::EPSILON);
@@ -1683,9 +1984,15 @@ mod tests {
     #[test]
     fn a_flight_whose_top_is_its_last_tread_has_no_final_riser() {
         let treads = vec![tread(0.2, 0.0, 0.3), tread(0.4, 0.3, 0.6)];
-        let flight =
-            TreadFlight::try_new(id("a"), x(), point(0.0), point(0.4), treads, evidence(true))
-                .unwrap();
+        let flight = TreadFlight::try_new(
+            request("a"),
+            WalkingLine::Straight(x()),
+            point(0.0),
+            point(0.4),
+            treads,
+            evidence(true),
+        )
+        .unwrap();
         assert!(!flight.ends_in_riser());
         assert_eq!(flight.risers().len(), 2);
         assert!(contains(flight.rise(), 0.4));
@@ -1698,8 +2005,8 @@ mod tests {
         let reversed = vec![tread(0.4, 0.3, 0.6), tread(0.2, 0.0, 0.3)];
         assert_eq!(
             TreadFlight::try_new(
-                id("a"),
-                x(),
+                request("a"),
+                WalkingLine::Straight(x()),
                 point(0.0),
                 point(0.4),
                 reversed,
@@ -1710,8 +2017,8 @@ mod tests {
         // A base above the first tread, and a top below the last.
         assert_eq!(
             TreadFlight::try_new(
-                id("a"),
-                x(),
+                request("a"),
+                WalkingLine::Straight(x()),
                 point(0.3),
                 point(0.4),
                 ordered(),
@@ -1721,8 +2028,8 @@ mod tests {
         );
         assert_eq!(
             TreadFlight::try_new(
-                id("a"),
-                x(),
+                request("a"),
+                WalkingLine::Straight(x()),
                 point(0.0),
                 point(0.3),
                 ordered(),
@@ -1732,14 +2039,21 @@ mod tests {
         );
         // No treads, or a sloped direction.
         assert_eq!(
-            TreadFlight::try_new(id("a"), x(), point(0.0), point(0.4), vec![], evidence(true)),
+            TreadFlight::try_new(
+                request("a"),
+                WalkingLine::Straight(x()),
+                point(0.0),
+                point(0.4),
+                vec![],
+                evidence(true)
+            ),
             Err(WalkingSurfaceError::InvalidMeasurement)
         );
         let sloped = MetricDirection::try_new([1.0, 0.0, 1.0]).unwrap();
         assert_eq!(
             TreadFlight::try_new(
-                id("a"),
-                sloped,
+                request("a"),
+                WalkingLine::Straight(sloped),
                 point(0.0),
                 point(0.4),
                 ordered(),
@@ -1750,8 +2064,8 @@ mod tests {
         // Exactness must match the positions.
         assert_eq!(
             TreadFlight::try_new(
-                id("a"),
-                x(),
+                request("a"),
+                WalkingLine::Straight(x()),
                 point(0.0),
                 point(0.4),
                 ordered(),
@@ -1761,7 +2075,14 @@ mod tests {
         );
         let widened = ElevationInterval::try_new(0.39, 0.41).unwrap();
         assert_eq!(
-            TreadFlight::try_new(id("a"), x(), point(0.0), widened, ordered(), evidence(true)),
+            TreadFlight::try_new(
+                request("a"),
+                WalkingLine::Straight(x()),
+                point(0.0),
+                widened,
+                ordered(),
+                evidence(true)
+            ),
             Err(WalkingSurfaceError::InvalidMeasurement)
         );
     }
@@ -1809,10 +2130,13 @@ mod tests {
 
     struct Other;
     impl WalkingSurfaceService for Other {
-        fn measure_tread_flight(&self, _: &ObjectId) -> Result<TreadFlight, WalkingSurfaceError> {
+        fn measure_tread_flight(
+            &self,
+            _: &TreadFlightRequest,
+        ) -> Result<TreadFlight, WalkingSurfaceError> {
             TreadFlight::try_new(
-                id("b"),
-                x(),
+                request("b"),
+                WalkingLine::Straight(x()),
                 point(0.0),
                 point(0.2),
                 vec![tread(0.2, 0.0, 0.3)],
@@ -1837,7 +2161,7 @@ mod tests {
     fn answers_about_another_object_are_refused() {
         let handle = WalkingSurfaceServiceHandle::new(Arc::new(Other));
         assert_eq!(
-            handle.measure_tread_flight(&id("a")),
+            handle.measure_tread_flight(&request("a")),
             Err(WalkingSurfaceError::InvalidMeasurement)
         );
         assert_eq!(
@@ -1848,7 +2172,7 @@ mod tests {
             handle.measure_headroom(&HeadroomRequest::new(id("a"), [])),
             Err(WalkingSurfaceError::InvalidMeasurement)
         );
-        assert!(handle.measure_tread_flight(&id("b")).is_ok());
+        assert!(handle.measure_tread_flight(&request("b")).is_ok());
         // Landings and the clearance below are refused by default, never
         // answered empty.
         assert!(matches!(
@@ -1959,15 +2283,27 @@ mod tests {
                 .unwrap()
         };
         let treads = vec![sided(0.2, 0.0, 1.2), sided(0.4, 0.3, 1.1)];
-        let flight =
-            TreadFlight::try_new(id("a"), x(), point(0.0), point(0.4), treads, evidence(true))
-                .unwrap();
+        let flight = TreadFlight::try_new(
+            request("a"),
+            WalkingLine::Straight(x()),
+            point(0.0),
+            point(0.4),
+            treads,
+            evidence(true),
+        )
+        .unwrap();
         assert!(contains(flight.width().unwrap(), 1.1));
         // One tread without sides leaves the flight's width unknown.
         let treads = vec![sided(0.2, 0.0, 1.2), tread(0.4, 0.3, 0.6)];
-        let flight =
-            TreadFlight::try_new(id("a"), x(), point(0.0), point(0.4), treads, evidence(true))
-                .unwrap();
+        let flight = TreadFlight::try_new(
+            request("a"),
+            WalkingLine::Straight(x()),
+            point(0.0),
+            point(0.4),
+            treads,
+            evidence(true),
+        )
+        .unwrap();
         assert_eq!(flight.width(), None);
         // Sides out of order, and widened sides reported as exact.
         assert_eq!(
@@ -1980,8 +2316,8 @@ mod tests {
         assert!(!widened.is_exact());
         assert_eq!(
             TreadFlight::try_new(
-                id("a"),
-                x(),
+                request("a"),
+                WalkingLine::Straight(x()),
                 point(0.0),
                 point(0.2),
                 vec![widened],
@@ -2073,5 +2409,134 @@ mod tests {
             Err(WalkingSurfaceError::InexactEvidence)
         );
         assert!(ClearanceBelow::try_new(request, None, vec![], evidence(false)).is_ok());
+    }
+
+    #[test]
+    fn winder_angles_and_widths_come_from_nosings_and_sides() {
+        // A quarter turn over three winders: nosings at 0°, 30°, 60° and
+        // 90° about the inner corner at the origin.
+        let nosing = |degrees: f64| {
+            let (sin, cos) = degrees.to_radians().sin_cos();
+            PlanSegment::try_new([0.0, 0.0], [cos, sin], 0.0).unwrap()
+        };
+        let treads: Vec<Tread> = [0.0, 30.0, 60.0, 90.0]
+            .iter()
+            .enumerate()
+            .map(|(step, degrees)| {
+                #[allow(clippy::cast_precision_loss)]
+                let step = step as f64;
+                tread(0.18 * (step + 1.0), 0.3 * step, 0.3 * step + 0.3)
+                    .with_nosing(nosing(*degrees))
+                    .with_sides(point(-0.4), point(0.5))
+                    .unwrap()
+                    .with_riser_below(RiserClosure::Closed)
+            })
+            .collect();
+        let line = WalkingLine::Turning(vec![[0.5, 0.1], [0.4, 0.3], [0.3, 0.4], [0.1, 0.5]]);
+        let flight = TreadFlight::try_new(
+            request("a"),
+            line.clone(),
+            point(0.0),
+            point(0.72),
+            treads,
+            evidence(false),
+        )
+        .unwrap_err();
+        // Exact positions and nosings make exact evidence.
+        assert_eq!(flight, WalkingSurfaceError::InexactEvidence);
+        let treads: Vec<Tread> = [0.0, 30.0, 60.0, 90.0]
+            .iter()
+            .enumerate()
+            .map(|(step, degrees)| {
+                #[allow(clippy::cast_precision_loss)]
+                let step = step as f64;
+                let tread = tread(0.18 * (step + 1.0), 0.3 * step, 0.3 * step + 0.3)
+                    .with_nosing(nosing(*degrees));
+                // Only the first tread fills a rectangle; the winders taper.
+                if step == 0.0 {
+                    tread.with_sides(point(-0.4), point(0.5)).unwrap()
+                } else {
+                    tread
+                }
+            })
+            .collect();
+        let flight = TreadFlight::try_new(
+            request("a"),
+            line,
+            point(0.0),
+            point(0.72),
+            treads,
+            evidence(true),
+        )
+        .unwrap();
+        assert!(flight.walking_line().is_turning());
+        let angles = flight.winder_angles();
+        assert_eq!(angles.len(), 3);
+        for angle in angles {
+            let angle = angle.unwrap();
+            assert!(contains(angle, 30.0_f64.to_radians()), "{angle:?}");
+            assert!(angle.upper() - angle.lower() < 1e-12);
+        }
+        let width = flight.treads()[0].width().unwrap();
+        assert!(contains(width, 0.9));
+        // A winder has no sides, so the flight has no width.
+        assert_eq!(flight.treads()[1].width(), None);
+        assert_eq!(flight.width(), None);
+        assert_eq!(flight.treads()[0].riser_below(), RiserClosure::NotMeasured);
+    }
+
+    #[test]
+    fn an_uncertain_nosing_widens_its_angle_and_a_short_one_has_none() {
+        let a = PlanSegment::try_new([0.0, 0.0], [1.0, 0.0], 0.001).unwrap();
+        let b = PlanSegment::try_new([0.0, 0.0], [0.0, 1.0], 0.001).unwrap();
+        let square = a.angle_to(&b).unwrap();
+        assert!(square.upper() <= std::f64::consts::FRAC_PI_2);
+        assert!(square.lower() < std::f64::consts::FRAC_PI_2 - 0.0039);
+        let parallel = a.angle_to(&a).unwrap();
+        assert!(parallel.lower() == 0.0 && parallel.upper() > 0.0039);
+        let short = PlanSegment::try_new([0.0, 0.0], [0.001, 0.0], 0.001).unwrap();
+        assert_eq!(short.angle_to(&a), None);
+        assert_eq!(
+            PlanSegment::try_new([0.0, 0.0], [0.0, 0.0], 0.0),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            PlanSegment::try_new([0.0, 0.0], [1.0, 0.0], -1.0),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn walking_lines_and_offsets_are_checked() {
+        assert!(TreadFlightRequest::from_inner_side(id("a"), 0.0).is_err());
+        assert!(TreadFlightRequest::from_inner_side(id("a"), f64::NAN).is_err());
+        let request = TreadFlightRequest::from_inner_side(id("a"), 0.4).unwrap();
+        assert_eq!(
+            request.walking_line(),
+            WalkingLinePlacement::FromInnerSide(0.4)
+        );
+        let treads = || vec![tread(0.2, 0.0, 0.3), tread(0.4, 0.3, 0.6)];
+        for line in [
+            WalkingLine::Turning(vec![[0.0, 0.0]]),
+            WalkingLine::Turning(vec![[0.0, 0.0], [0.0, 0.0]]),
+            WalkingLine::Turning(vec![[0.0, 0.0], [f64::INFINITY, 0.0]]),
+        ] {
+            assert_eq!(
+                TreadFlight::try_new(
+                    request.clone(),
+                    line,
+                    point(0.0),
+                    point(0.4),
+                    treads(),
+                    evidence(true)
+                ),
+                Err(WalkingSurfaceError::InvalidMeasurement)
+            );
+        }
+        assert!(
+            tread(0.2, 0.0, 0.3)
+                .with_sides(point(1.0), point(0.0))
+                .is_err()
+        );
     }
 }

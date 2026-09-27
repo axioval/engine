@@ -12,8 +12,9 @@ use axioval_engine::{
     FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
     HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing, LandingEvidence,
     LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, ObstructionEvidence,
-    PlacementOutcome, PlacementRequest, RailMeasurement, SlopedRun, SlopedSurface, Tread,
-    TreadFlight, WalkingEnd, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
+    PlacementOutcome, PlacementRequest, PlanSegment, RailMeasurement, RiserClosure, SlopedRun,
+    SlopedSurface, Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine,
+    WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
     WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
@@ -40,6 +41,53 @@ fn around(value: f64, margin: f64) -> ElevationInterval {
 
 fn x() -> MetricDirection {
     MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap()
+}
+
+/// The parts of a flight a request is answered with.
+#[derive(Clone)]
+struct Parts {
+    line: WalkingLine,
+    base: ElevationInterval,
+    top: ElevationInterval,
+    treads: Vec<Tread>,
+    /// The treads measured along a line from the inner side, if different.
+    inner: Option<Vec<Tread>>,
+    evidence: Evidence,
+}
+
+impl Parts {
+    fn answer(&self, request: &TreadFlightRequest) -> Result<TreadFlight, WalkingSurfaceError> {
+        let treads = match (request.walking_line(), &self.inner) {
+            (WalkingLinePlacement::FromInnerSide(_), Some(inner)) => inner.clone(),
+            _ => self.treads.clone(),
+        };
+        TreadFlight::try_new(
+            request.clone(),
+            self.line.clone(),
+            self.base,
+            self.top,
+            treads,
+            self.evidence.clone(),
+        )
+    }
+}
+
+impl From<TreadFlight> for Parts {
+    fn from(flight: TreadFlight) -> Self {
+        Self {
+            line: flight.walking_line().clone(),
+            base: flight.base(),
+            top: flight.top(),
+            treads: flight.treads().to_vec(),
+            inner: None,
+            evidence: flight.evidence().clone(),
+        }
+    }
+}
+
+/// The flight of `object`, its walking line on its centre line.
+fn straight(object: &str) -> TreadFlightRequest {
+    TreadFlightRequest::new(id(object))
 }
 
 /// A flight on the floor with the given risers and 0.28 m goings, 1.2 m
@@ -76,7 +124,15 @@ fn wide_flight(object: &str, risers: &[f64], margin: f64, width: f64) -> TreadFl
         exact: margin == 0.0,
     };
     let top = treads.last().unwrap().elevation();
-    TreadFlight::try_new(id(object), x(), point(0.0), top, treads, evidence).unwrap()
+    TreadFlight::try_new(
+        straight(object),
+        WalkingLine::Straight(x()),
+        point(0.0),
+        top,
+        treads,
+        evidence,
+    )
+    .unwrap()
 }
 
 fn ramp(object: &str, runs: &[(f64, f64)]) -> SlopedSurface {
@@ -110,7 +166,7 @@ type StatedLanding = (ObjectId, Option<(f64, f64)>);
 /// Flights, ramps and headroom per object; anything else is unsupported.
 #[derive(Default)]
 struct Stairs {
-    flights: BTreeMap<ObjectId, TreadFlight>,
+    flights: BTreeMap<ObjectId, Parts>,
     ramps: BTreeMap<ObjectId, SlopedSurface>,
     /// Clearance per subject and obstacle.
     above: BTreeMap<(ObjectId, ObjectId), f64>,
@@ -125,7 +181,13 @@ struct Stairs {
 
 impl Stairs {
     fn flight(mut self, flight: TreadFlight) -> Self {
-        self.flights.insert(flight.object().clone(), flight);
+        self.flights
+            .insert(flight.object().clone(), Parts::from(flight));
+        self
+    }
+
+    fn parts(mut self, object: &str, parts: Parts) -> Self {
+        self.flights.insert(id(object), parts);
         self
     }
 
@@ -171,12 +233,27 @@ impl Stairs {
     }
 }
 
+impl Stairs {
+    /// Refuses `what` of a turning flight.
+    fn straight(&self, subject: &ObjectId, what: &str) -> Result<(), WalkingSurfaceError> {
+        match self.flights.get(subject) {
+            Some(parts) if parts.line.is_turning() => Err(WalkingSurfaceError::Unsupported(
+                format!("{subject} is a turning flight; its {what} are not measured"),
+            )),
+            _ => Ok(()),
+        }
+    }
+}
+
 impl WalkingSurfaceService for Stairs {
-    fn measure_tread_flight(&self, object: &ObjectId) -> Result<TreadFlight, WalkingSurfaceError> {
+    fn measure_tread_flight(
+        &self,
+        request: &TreadFlightRequest,
+    ) -> Result<TreadFlight, WalkingSurfaceError> {
         self.flights
-            .get(object)
-            .cloned()
-            .ok_or_else(|| WalkingSurfaceError::Unsupported("winders".into()))
+            .get(request.object())
+            .ok_or_else(|| WalkingSurfaceError::Unsupported("several pieces".into()))?
+            .answer(request)
     }
 
     fn measure_sloped_runs(&self, object: &ObjectId) -> Result<SlopedSurface, WalkingSurfaceError> {
@@ -214,11 +291,13 @@ impl WalkingSurfaceService for Stairs {
     }
 
     /// Landings stated per end, found only when their carrier is requested;
-    /// every one runs along x from an edge at 0.
+    /// every one runs along x from an edge at 0. A turning flight's are
+    /// refused, as the contract allows.
     fn measure_landing(
         &self,
         request: &LandingRequest,
     ) -> Result<LandingEvidence, WalkingSurfaceError> {
+        self.straight(request.subject(), "landings")?;
         let landing = self
             .landings
             .get(&(request.subject().clone(), request.end()))
@@ -272,7 +351,9 @@ impl WalkingSurfaceService for Stairs {
         let subject = request.subject();
         let (pitch, sides) = match request.stretch() {
             WalkingStretch::Flight => {
-                let flight = self.measure_tread_flight(subject)?;
+                self.straight(subject, "handrails")?;
+                let flight =
+                    self.measure_tread_flight(&TreadFlightRequest::new(subject.clone()))?;
                 let sides = flight.treads()[0].sides().unwrap();
                 ((point(0.0), point(0.84)), sides)
             }
@@ -479,7 +560,7 @@ fn an_irregular_riser_is_found_from_the_flight_geometry() {
         evaluation.findings()[0].evidence[0].locator,
         "tread-flight:irregular"
     );
-    // The winder cannot be measured and says so.
+    // The flight in pieces cannot be measured and says so.
     assert_eq!(
         unevaluated(&evaluation),
         [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
@@ -775,7 +856,7 @@ fn a_narrow_flight_and_a_shallow_landing_are_found() {
             .iter()
             .any(|evidence| evidence.locator == "landing:regular")
     );
-    // The winder is not measured; no landing at the bottom of `irregular`
+    // The flight in pieces is not measured; no landing at the bottom of `irregular`
     // is nothing to check.
     assert_eq!(
         unevaluated(&evaluation),
@@ -870,8 +951,8 @@ fn a_landing_filling_no_rectangle_or_beside_an_unmeasured_flight_is_not_evaluate
             ];
             let evidence = Evidence::exact(source(), "tread-flight:irregular");
             TreadFlight::try_new(
-                id("irregular"),
-                x(),
+                straight("irregular"),
+                WalkingLine::Straight(x()),
                 point(0.0),
                 point(0.34),
                 treads,
@@ -1030,9 +1111,9 @@ fn a_service_without_landings_leaves_them_not_evaluated() {
     impl WalkingSurfaceService for FlightsOnly {
         fn measure_tread_flight(
             &self,
-            object: &ObjectId,
+            request: &TreadFlightRequest,
         ) -> Result<TreadFlight, WalkingSurfaceError> {
-            stairs().measure_tread_flight(object)
+            stairs().measure_tread_flight(request)
         }
         fn measure_sloped_runs(
             &self,
@@ -1166,7 +1247,7 @@ fn handrails_too_low_too_short_sloping_or_on_one_side_are_found() {
             .iter()
             .any(|evidence| evidence.locator == "handrails:regular")
     );
-    // The winder is not measured.
+    // The flight in pieces is not measured.
     assert_eq!(
         unevaluated(&evaluation),
         [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
@@ -1322,9 +1403,9 @@ fn a_service_without_handrails_leaves_them_not_evaluated() {
     impl WalkingSurfaceService for FlightsOnly {
         fn measure_tread_flight(
             &self,
-            object: &ObjectId,
+            request: &TreadFlightRequest,
         ) -> Result<TreadFlight, WalkingSurfaceError> {
-            stairs().measure_tread_flight(object)
+            stairs().measure_tread_flight(request)
         }
         fn measure_sloped_runs(
             &self,
@@ -1488,5 +1569,244 @@ fn a_ramp_needs_a_landing_at_every_run_end_when_required() {
             "steep".into(),
             "no selected slab or landing meets the top of run 1 of 1".into()
         )]
+    );
+}
+
+fn degrees(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "deg".into(),
+    }
+}
+
+/// A turning flight of five treads, 0.18 m risers: two straight treads,
+/// two winders turning 35° each, and a straight tread. Along its centre
+/// line every going is 0.28 m; along a line from its inner side the
+/// winders' goings are 0.22 m. The straight treads are 0.9 m wide.
+fn winder() -> Parts {
+    let build = |fronts: [f64; 5]| -> Vec<Tread> {
+        [0.0_f64, 0.0, 35.0, 70.0, 70.0]
+            .iter()
+            .zip(fronts)
+            .enumerate()
+            .map(|(step, (angle, front))| {
+                let (sin, cos) = angle.to_radians().sin_cos();
+                #[allow(clippy::cast_precision_loss)]
+                let elevation = 0.18 * (step + 1) as f64;
+                let tread = Tread::try_new(point(elevation), point(front), point(front + 0.3))
+                    .unwrap()
+                    .with_nosing(PlanSegment::try_new([0.0, 0.0], [cos, sin], 0.0).unwrap())
+                    .with_riser_below(RiserClosure::Closed);
+                if (2..4).contains(&step) {
+                    tread
+                } else {
+                    tread.with_sides(point(0.0), point(0.9)).unwrap()
+                }
+            })
+            .collect()
+    };
+    let treads = build([0.0, 0.28, 0.56, 0.84, 1.12]);
+    Parts {
+        line: WalkingLine::Turning(vec![
+            [0.14, 0.45],
+            [0.42, 0.45],
+            [0.7, 0.55],
+            [0.85, 0.8],
+            [0.9, 1.1],
+        ]),
+        base: point(0.0),
+        top: treads.last().unwrap().elevation(),
+        inner: Some(build([0.0, 0.28, 0.5, 0.72, 1.0])),
+        treads,
+        evidence: Evidence::exact(source(), "tread-flight:winder"),
+    }
+}
+
+#[test]
+fn sharp_winders_are_found() {
+    let evaluation = check_stairs(
+        model(),
+        stairs().parts("winder", winder()),
+        vec![("winder_angle_maximum", degrees(30.0))],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "winder".into(),
+            "winder angle 2 of 4 is 35°, winder angle 3 of 4 is 35°; at most 30° required".into()
+        )]
+    );
+    // Flights whose nosings are not measured are not evaluated.
+    let unevaluated = unevaluated(&evaluation);
+    assert!(unevaluated.contains(&("regular".into(), NotEvaluatedReason::IncompleteEvidence)));
+    let message = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .map(|outcome| outcome.message().to_owned())
+        .find(|message| message.contains("winder angle"))
+        .unwrap();
+    assert!(
+        message.starts_with(
+            "winder angle 1 of 3, winder angle 2 of 3, winder angle 3 of 3 not measured"
+        ),
+        "{message}"
+    );
+
+    // Within the bound, nothing is found.
+    let evaluation = check_stairs(
+        model(),
+        stairs().parts("winder", winder()),
+        vec![("winder_angle_maximum", degrees(35.0))],
+    );
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+}
+
+#[test]
+fn a_turning_flight_is_walked_where_the_rule_places_its_line() {
+    let centre = check_stairs(
+        model(),
+        stairs().parts("winder", winder()),
+        vec![("going_minimum", metres(0.25))],
+    );
+    assert!(findings(&centre).is_empty(), "{:?}", findings(&centre));
+    let inner = check_stairs(
+        model(),
+        stairs().parts("winder", winder()),
+        vec![
+            ("going_minimum", metres(0.25)),
+            ("walking_line_offset", metres(0.3)),
+        ],
+    );
+    assert_eq!(
+        findings(&inner),
+        [(
+            "winder".into(),
+            "going 2 of 4 is 0.22 m, going 3 of 4 is 0.22 m; at least 0.25 m required".into()
+        )]
+    );
+}
+
+#[test]
+fn open_risers_are_found_when_forbidden() {
+    use RiserClosure::{Closed, NotMeasured, Open};
+    let closing = |risers: [RiserClosure; 4], object: &str| {
+        let mut parts = Parts::from(flight(object, &[0.17; 4], 0.0));
+        parts.treads = parts
+            .treads
+            .iter()
+            .zip(risers)
+            .map(|(tread, riser)| tread.with_riser_below(riser))
+            .collect();
+        parts
+    };
+    let stairs = Stairs::default()
+        .parts("regular", closing([Closed, Open, Open, Closed], "regular"))
+        .parts(
+            "irregular",
+            closing([NotMeasured, Closed, Closed, Closed], "irregular"),
+        )
+        .parts("winder", closing([Closed; 4], "winder"));
+    let evaluation = check_stairs(model(), stairs, vec![("forbid_open_risers", boolean(true))]);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            "riser 2 of 4 is open, riser 3 of 4 is open; closed risers required".into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("irregular".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("whether riser 1 of 4 is closed is not measured")
+    );
+}
+
+#[test]
+fn walking_line_and_winder_declarations_are_checked() {
+    for parameters in [
+        vec![("walking_line_offset", metres(0.0))],
+        vec![("winder_angle_maximum", metres(0.3))],
+        vec![("width_minimum", degrees(1.0))],
+        vec![("forbid_open_risers", number(1.0))],
+    ] {
+        let evaluation = check_stairs(model(), stairs(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+/// A turning flight has headroom below it measured as any flight's, but no
+/// width (its winders taper), and the service refuses its landings and
+/// handrails: those checks are not evaluated rather than judged on a frame
+/// the flight does not have.
+#[test]
+fn a_turning_flight_keeps_its_headroom_below_and_leaves_width_landings_and_rails_open() {
+    let stairs = Stairs::default()
+        .parts("winder", winder())
+        .below("winder", "hall", 1.8)
+        .landing("winder", WalkingEnd::FlightTop, "slab", Some((2.0, 2.0)))
+        .rail(
+            "winder",
+            WalkingStretch::Flight,
+            "left_rail",
+            rail((0.95, 1.0), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+        );
+    let evaluation = check_stairs(
+        model(),
+        stairs,
+        handrail_parameters(vec![
+            ("width_minimum", metres(0.8)),
+            ("landing_objects", slabs()),
+            ("landings_required", boolean(true)),
+            ("minimum_headroom_below", metres(2.0)),
+            ("headroom_below_spaces", selector(kind("space"))),
+            ("handrail_height_minimum", metres(0.8)),
+        ]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "winder".into(),
+            "headroom below the flight is 1.8 m over the floor of test:model/hall; at least 2 m \
+             required"
+                .into()
+        )]
+    );
+    let messages: Vec<String> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| outcome.object_id() == Some(&id("winder")))
+        .map(|outcome| outcome.message().to_owned())
+        .collect();
+    assert_eq!(messages.len(), 4, "{messages:?}");
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.starts_with("the flight's width is not measured")),
+        "{messages:?}"
+    );
+    for end in ["bottom", "top"] {
+        assert!(
+            messages.iter().any(|message| message
+                .starts_with(&format!("landing at the {end} of the flight: "))
+                && message.contains("turning flight")),
+            "{messages:?}"
+        );
+    }
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("handrails") && message.contains("turning flight")),
+        "{messages:?}"
     );
 }

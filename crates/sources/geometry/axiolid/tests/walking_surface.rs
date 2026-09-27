@@ -1,12 +1,15 @@
 //! Stair flights, ramps and headroom over generated meshes.
 
-use axiolid_core::Point3;
-use axiolid_mesh::{TriMesh, compose};
+use std::collections::BTreeMap;
+
+use axiolid_core::{Point3, Tolerance};
+use axiolid_mesh::{TriMesh, audit_mesh, compose};
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkingSurfaceService};
 use axioval_engine::{
     ClearanceBelowRequest, HandrailEvidence, HandrailRequest, HeadroomRequest, LandingEvidence,
-    LandingRequest, MeasuredInterval, MetricDirection, RailMeasurement, RailSide, WalkingEnd,
-    WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
+    LandingRequest, MeasuredInterval, MetricDirection, RailMeasurement, RailSide, RiserClosure,
+    Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingStretch,
+    WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -117,6 +120,21 @@ fn service(geometry: AxiolidGeometry) -> AxiolidWalkingSurfaceService {
     AxiolidWalkingSurfaceService::new(geometry)
 }
 
+/// The flight of `local` walked along its centre line.
+fn walk(
+    stairs: &AxiolidWalkingSurfaceService,
+    local: &str,
+) -> Result<TreadFlight, WalkingSurfaceError> {
+    stairs.measure_tread_flight(&TreadFlightRequest::new(id(local)))
+}
+
+fn direction(flight: &TreadFlight) -> MetricDirection {
+    match flight.walking_line() {
+        WalkingLine::Straight(direction) => *direction,
+        WalkingLine::Turning(_) => panic!("a straight flight turns: {flight:?}"),
+    }
+}
+
 fn flight(risers: &[f64], angle: f64) -> AxiolidWalkingSurfaceService {
     service(AxiolidGeometry::new().with_mesh(
         id("flight"),
@@ -126,11 +144,9 @@ fn flight(risers: &[f64], angle: f64) -> AxiolidWalkingSurfaceService {
 
 #[test]
 fn a_straight_flight_measures_its_risers_and_goings_exactly() {
-    let measured = flight(&[0.17, 0.17, 0.21, 0.17], 0.0)
-        .measure_tread_flight(&id("flight"))
-        .unwrap();
+    let measured = walk(&flight(&[0.17, 0.17, 0.21, 0.17], 0.0), "flight").unwrap();
     assert!(measured.is_exact(), "{measured:?}");
-    assert!(measured.direction() == MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap());
+    assert!(direction(&measured) == MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap());
     assert_eq!(measured.treads().len(), 4);
     assert!(!measured.ends_in_riser());
     let risers = measured.risers();
@@ -144,6 +160,15 @@ fn a_straight_flight_measures_its_risers_and_goings_exactly() {
     assert!(holds(measured.rise(), 0.72));
     assert!(holds(measured.treads()[0].depth(), 0.28));
     assert!(measured.nosings().iter().all(|nosing| holds(*nosing, 0.0)));
+    // Straight treads 1.2 m wide, every riser closed, no winder.
+    for tread in measured.treads() {
+        assert!(holds(tread.width().unwrap(), 1.2));
+        assert_eq!(tread.riser_below(), RiserClosure::Closed);
+    }
+    for angle in measured.winder_angles() {
+        let angle = angle.unwrap();
+        assert!(angle.lower() == 0.0 && angle.upper() < 1e-12, "{angle:?}");
+    }
     assert_eq!(
         measured.evidence().locator,
         format!("tread-flight:{}", id("flight"))
@@ -152,11 +177,9 @@ fn a_straight_flight_measures_its_risers_and_goings_exactly() {
 
 #[test]
 fn a_turned_flight_measures_within_the_rounding_of_its_direction() {
-    let measured = flight(&[0.18; 5], 0.5)
-        .measure_tread_flight(&id("flight"))
-        .unwrap();
+    let measured = walk(&flight(&[0.18; 5], 0.5), "flight").unwrap();
     assert!(!measured.is_exact());
-    let [x, y, z] = measured.direction().components();
+    let [x, y, z] = direction(&measured).components();
     assert!((x - 0.5_f64.cos()).abs() < 1e-12 && (y - 0.5_f64.sin()).abs() < 1e-12);
     assert!(z.abs() < f64::EPSILON);
     assert!(
@@ -183,10 +206,12 @@ fn a_flight_ending_in_a_riser_counts_it() {
         [0.28, 0.18],
         [0.0, 0.18],
     ];
-    let measured = service(
-        AxiolidGeometry::new().with_mesh(id("flight"), prism(&profile, 1.0, 0.0, [0.0; 3])),
+    let measured = walk(
+        &service(
+            AxiolidGeometry::new().with_mesh(id("flight"), prism(&profile, 1.0, 0.0, [0.0; 3])),
+        ),
+        "flight",
     )
-    .measure_tread_flight(&id("flight"))
     .unwrap();
     assert!(measured.ends_in_riser());
     assert_eq!(measured.treads().len(), 3);
@@ -194,29 +219,18 @@ fn a_flight_ending_in_a_riser_counts_it() {
     assert_eq!(risers.len(), 4);
     assert!(risers.iter().all(|riser| holds(*riser, 0.18)), "{risers:?}");
     assert!(holds(measured.rise(), 0.72));
+    // The final riser rises from the last tread's back edge.
+    assert_eq!(measured.riser_closures(), [RiserClosure::Closed; 4]);
 }
 
 #[test]
-fn turning_flights_open_meshes_and_pieces_are_refused() {
-    // Move the top tread sideways: the treads no longer follow a line.
-    let mut mesh = prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]);
-    #[allow(clippy::float_cmp)]
-    for point in &mut mesh.positions {
-        if point.z == 0.72 {
-            point.y += 0.5;
-        }
-    }
-    let turning = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh))
-        .measure_tread_flight(&id("flight"));
-    assert!(
-        matches!(&turning, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("straight")),
-        "{turning:?}"
-    );
-
+fn open_meshes_and_pieces_are_refused() {
     let mut open = prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]);
     open.indices.truncate(open.indices.len() - 3);
-    let open = service(AxiolidGeometry::new().with_mesh(id("flight"), open))
-        .measure_tread_flight(&id("flight"));
+    let open = walk(
+        &service(AxiolidGeometry::new().with_mesh(id("flight"), open)),
+        "flight",
+    );
     assert!(
         matches!(&open, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("closed")),
         "{open:?}"
@@ -231,8 +245,10 @@ fn turning_flights_open_meshes_and_pieces_are_refused() {
             [0.56, 0.0, 0.36],
         ),
     ]);
-    let pieces = service(AxiolidGeometry::new().with_mesh(id("flight"), pieces))
-        .measure_tread_flight(&id("flight"));
+    let pieces = walk(
+        &service(AxiolidGeometry::new().with_mesh(id("flight"), pieces)),
+        "flight",
+    );
     assert!(
         matches!(&pieces, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("pieces")),
         "{pieces:?}"
@@ -240,19 +256,21 @@ fn turning_flights_open_meshes_and_pieces_are_refused() {
 }
 
 #[test]
-fn tessellated_bodiless_unmeasured_and_unknown_flights_are_refused() {
+fn bodiless_unmeasured_and_unknown_flights_are_refused() {
     let mesh = prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]);
     let geometry = AxiolidGeometry::new()
         .with_tessellated_mesh(id("curved"), mesh, 0.001)
         .with_no_body(id("zone"))
         .with_unmeasured(id("broken"), "no representation");
     let stairs = service(geometry);
+    // A tessellated ramp is still refused: its runs' planes are not
+    // certified yet.
     assert!(matches!(
-        stairs.measure_tread_flight(&id("curved")),
+        stairs.measure_sloped_runs(&id("curved")),
         Err(WalkingSurfaceError::InexactGeometry(_))
     ));
     assert!(matches!(
-        stairs.measure_tread_flight(&id("zone")),
+        walk(&stairs, "zone"),
         Err(WalkingSurfaceError::Unavailable(_))
     ));
     assert!(matches!(
@@ -260,7 +278,7 @@ fn tessellated_bodiless_unmeasured_and_unknown_flights_are_refused() {
         Err(WalkingSurfaceError::Unavailable(_))
     ));
     assert_eq!(
-        stairs.measure_tread_flight(&id("missing")),
+        walk(&stairs, "missing"),
         Err(WalkingSurfaceError::UnknownObject(id("missing")))
     );
 }
@@ -458,9 +476,11 @@ fn a_tread_off_level_by_rounding_is_measured_as_an_interval() {
         .unwrap();
     let level = mesh.positions[nudged].z;
     mesh.positions[nudged].z = level.next_down();
-    let measured = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh))
-        .measure_tread_flight(&id("flight"))
-        .unwrap();
+    let measured = walk(
+        &service(AxiolidGeometry::new().with_mesh(id("flight"), mesh)),
+        "flight",
+    )
+    .unwrap();
     assert!(!measured.is_exact());
     let second = measured.treads()[1].elevation();
     assert_eq!(
@@ -472,8 +492,10 @@ fn a_tread_off_level_by_rounding_is_measured_as_an_interval() {
     // A real fall is no rounding: the tread slopes and is refused.
     let mut mesh = prism(&flight_profile(&[0.18; 3], 0.28), 1.2, 0.0, [0.0; 3]);
     mesh.positions[nudged].z = 0.359;
-    let sloped = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh))
-        .measure_tread_flight(&id("flight"));
+    let sloped = walk(
+        &service(AxiolidGeometry::new().with_mesh(id("flight"), mesh)),
+        "flight",
+    );
     assert!(
         matches!(&sloped, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("sloped")),
         "{sloped:?}"
@@ -498,7 +520,7 @@ fn evidence_cites_each_measured_objects_own_source() {
             )
             .with_mesh(id("slab"), cuboid([-1.0, 3.0, 3.0], [9.0, 7.0, 3.2])),
     );
-    let flight = stairs.measure_tread_flight(&id("flight")).unwrap();
+    let flight = walk(&stairs, "flight").unwrap();
     assert_eq!(flight.evidence().source, source());
     let sloped = stairs.measure_sloped_runs(&ramp).unwrap();
     assert_eq!(sloped.evidence().source, other);
@@ -512,7 +534,7 @@ fn evidence_cites_each_measured_objects_own_source() {
 #[test]
 fn a_rectangular_flight_and_run_measure_their_width() {
     let straight = flight(&[0.17; 4], 0.0)
-        .measure_tread_flight(&id("flight"))
+        .measure_tread_flight(&TreadFlightRequest::new(id("flight")))
         .unwrap();
     assert!(straight.is_exact());
     let width = straight.width().unwrap();
@@ -525,7 +547,7 @@ fn a_rectangular_flight_and_run_measure_their_width() {
     );
 
     let turned = flight(&[0.18; 5], 0.5)
-        .measure_tread_flight(&id("flight"))
+        .measure_tread_flight(&TreadFlightRequest::new(id("flight")))
         .unwrap();
     let width = turned.width().unwrap();
     assert!(holds(width, 1.2) && !width.is_point(), "{width:?}");
@@ -552,7 +574,7 @@ fn a_tread_filling_no_rectangle_has_no_width() {
         }
     }
     let measured = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh))
-        .measure_tread_flight(&id("flight"))
+        .measure_tread_flight(&TreadFlightRequest::new(id("flight")))
         .unwrap();
     assert!(measured.treads()[0].width().is_some());
     assert!(measured.treads()[2].width().is_none());
@@ -1057,4 +1079,472 @@ fn a_handrail_along_a_turned_flight_measures_within_rounding() {
     assert!(rail.lowest().upper() - rail.lowest().lower() < 1e-9);
     assert!(holds(measured.top_extension(rail), 0.3));
     assert!(rail.top_rise().unwrap().upper() < 1e-9);
+}
+
+/// A closed, outward solid standing on `z = 0`: every cell, a convex
+/// counter-clockwise polygon of `points` (corners shared by index, no
+/// corner of one cell on another's edge), rises to its height. Where a
+/// cell meets a lower one or the outside, a wall falls from its height to
+/// the other's, split at every height meeting its ends so the mesh is a
+/// closed two-manifold.
+fn stepped(points: &[[f64; 2]], cells: &[(Vec<usize>, f64)]) -> TriMesh {
+    let mut heights: Vec<Vec<f64>> = vec![vec![0.0]; points.len()];
+    for (corners, height) in cells {
+        for corner in corners {
+            heights[*corner].push(*height);
+        }
+    }
+    let mut positions = Vec::new();
+    let mut first = Vec::with_capacity(points.len());
+    for (point, levels) in points.iter().zip(&mut heights) {
+        levels.sort_by(f64::total_cmp);
+        levels.dedup();
+        first.push(u32::try_from(positions.len()).unwrap());
+        positions.extend(levels.iter().map(|z| Point3::new(point[0], point[1], *z)));
+    }
+    let vertex = |point: usize, height: f64| -> u32 {
+        let level = heights[point]
+            .iter()
+            .position(|z| z.total_cmp(&height).is_eq())
+            .unwrap();
+        first[point] + u32::try_from(level).unwrap()
+    };
+    let mut owner: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+    for (corners, height) in cells {
+        for k in 0..corners.len() {
+            owner.insert((corners[k], corners[(k + 1) % corners.len()]), *height);
+        }
+    }
+    let mut indices = Vec::new();
+    for (corners, height) in cells {
+        for k in 1..corners.len() - 1 {
+            indices.extend([
+                vertex(corners[0], *height),
+                vertex(corners[k], *height),
+                vertex(corners[k + 1], *height),
+            ]);
+            indices.extend([
+                vertex(corners[0], 0.0),
+                vertex(corners[k + 1], 0.0),
+                vertex(corners[k], 0.0),
+            ]);
+        }
+        for k in 0..corners.len() {
+            let (a, b) = (corners[k], corners[(k + 1) % corners.len()]);
+            let other = owner.get(&(b, a)).copied().unwrap_or(0.0);
+            if other >= *height {
+                continue;
+            }
+            let side = |point: usize| -> Vec<u32> {
+                heights[point]
+                    .iter()
+                    .filter(|z| **z >= other && **z <= *height)
+                    .map(|z| vertex(point, *z))
+                    .collect()
+            };
+            // Outward is to the right of a -> b: wind (a, lo), (b, lo),
+            // (b, hi), (a, hi), zipping up both sides.
+            let (left, right) = (side(a), side(b));
+            let level = |index: u32| positions[index as usize].z;
+            let (mut i, mut j) = (0, 0);
+            while i + 1 < left.len() || j + 1 < right.len() {
+                if j + 1 < right.len()
+                    && (i + 1 == left.len() || level(right[j + 1]) <= level(left[i + 1]))
+                {
+                    indices.extend([left[i], right[j], right[j + 1]]);
+                    j += 1;
+                } else {
+                    indices.extend([left[i], right[j], left[i + 1]]);
+                    i += 1;
+                }
+            }
+        }
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A quarter-turn flight 1 m wide, 0.18 m risers: three straight treads
+/// 0.28 m deep climbing along +x, three winders turning left through the
+/// square x 0.84..1.84, y 0..1 about its inner corner (0.84, 1), their
+/// nosings 30° apart, and three straight treads climbing along +y. The
+/// last tread is the top.
+fn quarter_turn() -> TriMesh {
+    let slope = 1.0 / 3.0_f64.sqrt();
+    let points = vec![
+        [0.0, 0.0],          // 0
+        [0.0, 1.0],          // 1
+        [0.28, 0.0],         // 2
+        [0.28, 1.0],         // 3
+        [0.56, 0.0],         // 4
+        [0.56, 1.0],         // 5
+        [0.84, 0.0],         // 6
+        [0.84, 1.0],         // 7: the inner corner
+        [0.84 + slope, 0.0], // 8: the -60° nosing
+        [1.84, 0.0],         // 9
+        [1.84, 1.0 - slope], // 10: the -30° nosing
+        [1.84, 1.0],         // 11
+        [0.84, 1.28],        // 12
+        [1.84, 1.28],        // 13
+        [0.84, 1.56],        // 14
+        [1.84, 1.56],        // 15
+        [0.84, 1.84],        // 16
+        [1.84, 1.84],        // 17
+    ];
+    let cells: Vec<Vec<usize>> = vec![
+        vec![0, 2, 3, 1],
+        vec![2, 4, 5, 3],
+        vec![4, 6, 7, 5],
+        vec![6, 8, 7],
+        vec![8, 9, 10, 7],
+        vec![10, 11, 7],
+        vec![7, 11, 13, 12],
+        vec![12, 13, 15, 14],
+        vec![14, 15, 17, 16],
+    ];
+    let cells: Vec<(Vec<usize>, f64)> = cells
+        .into_iter()
+        .zip(1_u32..)
+        .map(|(cell, step)| (cell, 0.18 * f64::from(step)))
+        .collect();
+    stepped(&points, &cells)
+}
+
+fn is_closed(mesh: &TriMesh) -> bool {
+    audit_mesh(mesh, Tolerance::new(1e-9, 1e-9).unwrap()).is_closed_two_manifold()
+}
+
+#[test]
+fn a_quarter_turn_flight_is_walked_along_its_walking_line() {
+    let mesh = quarter_turn();
+    assert!(is_closed(&mesh));
+    let stairs = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh));
+    let centre = walk(&stairs, "flight").unwrap();
+    assert!(!centre.is_exact());
+    let WalkingLine::Turning(vertices) = centre.walking_line() else {
+        panic!("the flight turns: {centre:?}");
+    };
+    assert_eq!(vertices.len(), 9);
+    // The centre line runs midway across the straight treads.
+    assert!((vertices[0][1] - 0.5).abs() < 1e-9 && (vertices[8][0] - 1.34).abs() < 1e-9);
+    let risers = centre.risers();
+    assert_eq!(risers.len(), 9);
+    assert!(risers.iter().all(|riser| holds(*riser, 0.18)), "{risers:?}");
+    assert!(!centre.ends_in_riser());
+    let goings = centre.goings();
+    assert_eq!(goings.len(), 8);
+    // Nosing to nosing along the line: 0.28 m where it runs square to the
+    // nosings, more where it crosses one obliquely on its way round.
+    for going in [goings[0], goings[1], goings[7]] {
+        assert!(holds(going, 0.28), "{goings:?}");
+        assert!(going.upper() - going.lower() < 1e-8);
+    }
+    for going in &goings[2..7] {
+        assert!(going.lower() > 0.28 && going.upper() < 0.42, "{goings:?}");
+    }
+    // The nosings turn 30° over each winder and not at all elsewhere.
+    let angles: Vec<MeasuredInterval> = centre
+        .winder_angles()
+        .into_iter()
+        .map(Option::unwrap)
+        .collect();
+    for (angle, degrees) in angles
+        .iter()
+        .zip([0.0, 0.0, 0.0, 30.0, 30.0, 30.0, 0.0, 0.0])
+    {
+        let expected: f64 = f64::to_radians(degrees);
+        assert!(holds(*angle, expected), "{angle:?} {degrees}");
+        assert!(angle.upper() - angle.lower() < 1e-12);
+    }
+    // Every straight tread is 1 m wide along its nosing; a winder tapers
+    // and has no width of its own.
+    let widths: Vec<Option<MeasuredInterval>> = centre.treads().iter().map(Tread::width).collect();
+    for (index, width) in widths.iter().enumerate() {
+        if (3..6).contains(&index) {
+            assert_eq!(*width, None, "{widths:?}");
+        } else {
+            assert!(holds(width.unwrap(), 1.0), "{widths:?}");
+        }
+    }
+    assert!(
+        centre
+            .treads()
+            .iter()
+            .all(|tread| tread.riser_below() == RiserClosure::Closed)
+    );
+
+    // Nearer the inner side, the winders' goings shrink and the straight
+    // ones stay.
+    let inner = stairs
+        .measure_tread_flight(&TreadFlightRequest::from_inner_side(id("flight"), 0.3).unwrap())
+        .unwrap();
+    let near = inner.goings();
+    for index in [0, 7] {
+        assert!(holds(near[index], 0.28), "{near:?}");
+    }
+    for index in 3..5 {
+        assert!(
+            near[index].upper() < goings[index].lower(),
+            "{near:?} {goings:?}"
+        );
+    }
+    // A line wider than the treads leaves them.
+    let outside = stairs
+        .measure_tread_flight(&TreadFlightRequest::from_inner_side(id("flight"), 1.5).unwrap());
+    assert!(
+        matches!(&outside, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("outside")),
+        "{outside:?}"
+    );
+}
+
+/// A closed, outward union of grid cells, `filled` saying which cell
+/// between consecutive `xs`, `ys` and `zs` is solid. Cells may meet only
+/// face to face, never along an edge alone.
+fn voxels(
+    xs: &[f64],
+    ys: &[f64],
+    zs: &[f64],
+    filled: impl Fn(usize, usize, usize) -> bool,
+) -> TriMesh {
+    let (nx, ny, nz) = (xs.len() - 1, ys.len() - 1, zs.len() - 1);
+    let solid = |i: isize, j: isize, k: isize| {
+        let (Ok(i), Ok(j), Ok(k)) = (usize::try_from(i), usize::try_from(j), usize::try_from(k))
+        else {
+            return false;
+        };
+        i < nx && j < ny && k < nz && filled(i, j, k)
+    };
+    let mut positions = Vec::new();
+    let mut known: BTreeMap<[usize; 3], u32> = BTreeMap::new();
+    let mut vertex = |corner: [usize; 3]| -> u32 {
+        *known.entry(corner).or_insert_with(|| {
+            positions.push(Point3::new(xs[corner[0]], ys[corner[1]], zs[corner[2]]));
+            u32::try_from(positions.len() - 1).unwrap()
+        })
+    };
+    let mut indices = Vec::new();
+    for i in 0..nx {
+        for j in 0..ny {
+            for k in 0..nz {
+                if !filled(i, j, k) {
+                    continue;
+                }
+                let cell = [i, j, k];
+                for axis in 0..3 {
+                    for positive in [false, true] {
+                        let mut next = cell.map(|c| isize::try_from(c).unwrap());
+                        next[axis] += if positive { 1 } else { -1 };
+                        if solid(next[0], next[1], next[2]) {
+                            continue;
+                        }
+                        let (first, second) = ((axis + 1) % 3, (axis + 2) % 3);
+                        let corner = |along_first: usize, along_second: usize| {
+                            let mut corner = cell;
+                            corner[axis] += usize::from(positive);
+                            corner[first] += along_first;
+                            corner[second] += along_second;
+                            corner
+                        };
+                        // (u, v, axis) is right-handed: counter-clockwise
+                        // in (u, v) faces +axis.
+                        let mut quad = [corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 1)];
+                        if !positive {
+                            quad.reverse();
+                        }
+                        let [a, b, c, d] = quad.map(&mut vertex);
+                        indices.extend([a, b, c, a, c, d]);
+                    }
+                }
+            }
+        }
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// Four open-riser treads, plates 0.04 m thick at 0.18 m rises and 0.28 m
+/// goings, 1 m wide, joined by a 0.1 m spine under their middle that
+/// stands on the floor.
+fn open_risers() -> TriMesh {
+    let (rise, thickness, spine) = (0.18, 0.04, 0.23);
+    let tread = |k: usize| rise * f64::from(u32::try_from(k + 1).unwrap());
+    let mut zs = vec![0.0];
+    for k in 0..4 {
+        zs.extend([
+            tread(k),
+            tread(k) - thickness,
+            (tread(k) - thickness - spine).max(0.0),
+        ]);
+    }
+    zs.sort_by(f64::total_cmp);
+    zs.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+    let xs = [0.0, 0.28, 0.56, 0.84, 1.12];
+    let ys = [0.0, 0.45, 0.55, 1.0];
+    let cells = zs.clone();
+    voxels(&xs, &ys, &zs, move |i, j, k| {
+        let (bottom, top) = (cells[k], cells[k + 1]);
+        let within = |low: f64, high: f64| bottom >= low - 1e-12 && top <= high + 1e-12;
+        let plate = within(tread(i) - thickness, tread(i));
+        let spine = j == 1
+            && within(
+                (tread(i) - thickness - spine).max(0.0),
+                tread(i) - thickness,
+            );
+        plate || spine
+    })
+}
+
+#[test]
+fn open_risers_are_found_between_treads() {
+    let mesh = open_risers();
+    assert!(is_closed(&mesh));
+    let stairs = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh));
+    let measured = walk(&stairs, "flight").unwrap();
+    assert!(measured.is_exact(), "{measured:?}");
+    assert_eq!(measured.treads().len(), 4);
+    assert!(measured.risers().iter().all(|riser| holds(*riser, 0.18)));
+    assert!(measured.goings().iter().all(|going| holds(*going, 0.28)));
+    let closures: Vec<RiserClosure> = measured.treads().iter().map(Tread::riser_below).collect();
+    // The strip under the first nosing is open but for the spine; whether
+    // a riser stands set back behind it is not measured.
+    assert_eq!(
+        closures,
+        [
+            RiserClosure::NotMeasured,
+            RiserClosure::Open,
+            RiserClosure::Open,
+            RiserClosure::Open
+        ]
+    );
+}
+
+/// A small deterministic displacement in `[-1, 1]`.
+fn wobble(state: &mut u64) -> f64 {
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    #[allow(clippy::cast_precision_loss)]
+    let unit = (*state >> 11) as f64 / (1_u64 << 53) as f64;
+    2.0 * unit - 1.0
+}
+
+#[test]
+fn a_tessellated_flight_is_measured_within_its_chord_deviation() {
+    let deviation = 0.001;
+    let mut mesh = prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]);
+    let mut state = 85;
+    for point in &mut mesh.positions {
+        point.x += 0.4 * deviation * wobble(&mut state);
+        point.y += 0.4 * deviation * wobble(&mut state);
+        point.z += 0.4 * deviation * wobble(&mut state);
+    }
+    let stairs =
+        service(AxiolidGeometry::new().with_tessellated_mesh(id("flight"), mesh, deviation));
+    let measured = walk(&stairs, "flight").unwrap();
+    assert!(!measured.is_exact());
+    assert!(!measured.walking_line().is_turning());
+    let risers = measured.risers();
+    assert_eq!(risers.len(), 4);
+    for riser in &risers {
+        assert!(holds(*riser, 0.18), "{risers:?}");
+        assert!(
+            riser.upper() - riser.lower() <= 6.0 * deviation,
+            "{risers:?}"
+        );
+    }
+    for going in measured.goings() {
+        assert!(holds(going, 0.28), "{going:?}");
+    }
+    for tread in measured.treads() {
+        assert!(holds(tread.width().unwrap(), 1.2));
+        assert_eq!(tread.riser_below(), RiserClosure::Closed);
+    }
+    for angle in measured.winder_angles() {
+        assert!(holds(angle.unwrap(), 0.0));
+    }
+
+    // The same flight tessellated but not displaced is measured as an
+    // interval all the same.
+    let mesh = prism(&flight_profile(&[0.18; 4], 0.28), 1.2, 0.0, [0.0; 3]);
+    let stairs =
+        service(AxiolidGeometry::new().with_tessellated_mesh(id("flight"), mesh, deviation));
+    let measured = walk(&stairs, "flight").unwrap();
+    assert!(!measured.is_exact());
+    let first = measured.risers()[0];
+    assert!(holds(first, 0.18) && first.upper() - first.lower() >= 4.0 * deviation - 1e-12);
+}
+
+#[test]
+fn a_flight_turning_both_ways_has_no_inner_side() {
+    // Square treads 1 m wide climbing along +y, turning right to +x,
+    // then left to +y again.
+    let points = vec![
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [0.0, 2.0],
+        [1.0, 2.0],
+        [2.0, 1.0],
+        [2.0, 2.0],
+        [1.0, 3.0],
+        [2.0, 3.0],
+        [1.0, 4.0],
+        [2.0, 4.0],
+    ];
+    let cells = vec![
+        (vec![0, 1, 3, 2], 0.18),
+        (vec![2, 3, 5, 4], 0.36),
+        (vec![3, 6, 7, 5], 0.54),
+        (vec![5, 7, 9, 8], 0.72),
+        (vec![8, 9, 11, 10], 0.90),
+    ];
+    let mesh = stepped(&points, &cells);
+    let stairs = service(AxiolidGeometry::new().with_mesh(id("flight"), mesh));
+    let inner = stairs
+        .measure_tread_flight(&TreadFlightRequest::from_inner_side(id("flight"), 0.3).unwrap());
+    assert!(
+        matches!(&inner, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("both ways")),
+        "{inner:?}"
+    );
+}
+
+#[test]
+fn a_quarter_turn_flight_measures_headroom_below_and_refuses_landings_rails_and_width() {
+    // The quarter turn raised 2 m above a hall's floor.
+    let mut mesh = quarter_turn();
+    for point in &mut mesh.positions {
+        point.z += 2.0;
+    }
+    let stairs = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("flight"), mesh)
+            .with_mesh(id("hall"), cuboid([-1.0, -1.0, 0.0], [3.0, 3.0, 2.5]))
+            .with_mesh(id("upper"), cuboid([0.84, 1.84, 3.42], [1.84, 3.0, 3.62]))
+            .with_mesh(id("rail"), cuboid([0.0, -0.1, 2.9], [0.84, -0.05, 2.95])),
+    );
+    let flight = walk(&stairs, "flight").unwrap();
+    assert!(flight.walking_line().is_turning());
+    // Its straight treads fill rectangles, its winders taper: no width.
+    assert_eq!(flight.width(), None);
+    assert!(flight.treads()[0].width().is_some());
+    assert!(flight.treads()[8].width().is_some());
+    // Headroom below needs no walking direction.
+    let below = stairs
+        .measure_clearance_below(&ClearanceBelowRequest::new(id("flight"), [id("hall")]))
+        .unwrap();
+    assert!(holds(below.clearance().unwrap(), 2.0), "{below:?}");
+    // Landings and handrails are placed along one direction, which a
+    // turning flight does not have: refused, never measured in another
+    // frame.
+    for end in [WalkingEnd::FlightBottom, WalkingEnd::FlightTop] {
+        let refused = landing(&stairs, end, &["upper", "hall"]);
+        assert!(
+            matches!(&refused, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("turning")),
+            "{refused:?}"
+        );
+    }
+    let rails = handrails(&stairs, WalkingStretch::Flight, "flight", &["rail"]);
+    assert!(
+        matches!(&rails, Err(WalkingSurfaceError::Unsupported(m)) if m.contains("turning")),
+        "{rails:?}"
+    );
 }

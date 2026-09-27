@@ -13,6 +13,7 @@ pub mod derived_relationships;
 pub mod envelope_membership;
 pub mod facade_area;
 mod face_distance;
+pub(crate) mod flight;
 pub mod free_space;
 pub mod geometry;
 pub mod guard;

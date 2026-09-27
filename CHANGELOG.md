@@ -6,6 +6,39 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Winders, turning flights, open risers and tessellated flights.**
+  (Refs #85) `WalkingSurfaceService::measure_tread_flight` takes a
+  `TreadFlightRequest` saying where a turning flight's walking line runs
+  (`WalkingLinePlacement`: its centre line, or a distance from the side it
+  turns towards), and a `TreadFlight` climbs along a `WalkingLine`:
+  `Straight` (a direction) or `Turning` (a plan polyline with a vertex on
+  every tread, positions being arc lengths along it). A `Tread` may carry
+  its nosing (`PlanSegment`) and whether the riser below it is closed
+  (`RiserClosure`); the contract derives winder angles
+  (`TreadFlight::winder_angles`) and every riser's closure
+  (`riser_closures`). A turning flight's tread states its sides across its
+  own direction, square to its nosing; a winder tapers and states none, so
+  a flight with winders has no width. `AxiolidWalkingSurfaceService` now
+  finds treads with plane detection (`axiolid-inspect` 0.3.2,
+  `detect_planes`, axiolid/kernel#131): it measures winders and turning
+  flights along a walking line through each tread (along the nosing of a
+  tread with parallel edges, along the bisector of a winder's), open
+  risers (the tread below ending in a face falling away), and tessellated
+  flights with every position widened by the chord deviation (a
+  tessellated tread's rectangle is proven within twice it). A turning
+  flight's landings and handrails are refused, since they are placed along
+  one direction; its headroom above and below is measured as any flight's.
+  `stair-geometry` gains `walking_line_offset`, `winder_angle_maximum` (a
+  plane angle) and `forbid_open_risers`; its `width_minimum` and
+  `width_maximum` leave a flight with winders not evaluated, as they do its
+  landing and handrail checks on a turning flight.
+  **Breaking:** `measure_tread_flight` takes a `TreadFlightRequest` instead
+  of an `ObjectId`; `TreadFlight::try_new` takes the request and a
+  `WalkingLine` instead of an `ObjectId` and a direction, and
+  `TreadFlight::direction` is replaced by `walking_line`; definitions bound
+  to `stair-geometry` must declare the three new optional parameters
+  `walking_line_offset`, `winder_angle_maximum` and `forbid_open_risers`;
+  the workspace requires `axiolid-inspect` 0.3.2.
 - **Stair and ramp handrails, ramp end spaces and landing doors.** (Refs
   #85) `WalkingSurfaceService::measure_handrails` answers a
   `HandrailRequest` (subject, `WalkingStretch`, the rails a rule selects,
@@ -36,8 +69,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   eight new optional handrail parameters, those bound to `ramp-geometry`
   those eight and `landings_required`, `end_space_depth`,
   `end_space_width`, `end_space_height`, `end_space_obstacles`,
-  `landing_doors` and `landing_door_height`. Winders, turning flights and
-  open risers remain open.
+  `landing_doors` and `landing_door_height`.
 - **Escape routes: multiplied sections and passage widths.**
   `escape-route` takes a `sections` table (`objects`, `factor` of at least
   one, optional `shared_by` and `label`): a metre walked on those objects
@@ -88,7 +120,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   rectangle, or an end the selection leaves undecided, is not evaluated.
   **Breaking:** definitions bound to `stair-geometry` must declare the nine
   new optional parameters, those bound to `ramp-geometry` the eight.
-  Winders and open risers remain open.
 - **Surface transparency.** `axioval:presentation.Transparency`
   (`axioval_ir::PRESENTATION_TRANSPARENCY`) lists every distinct
   transparency of an object's styled body surfaces, ascending, from `0.0`

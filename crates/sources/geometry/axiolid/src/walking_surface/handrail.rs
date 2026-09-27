@@ -30,12 +30,14 @@
 use axiolid_core::Point3;
 use axioval_engine::{
     ElevationInterval, HandrailEvidence, HandrailRequest, MeasuredInterval, MetricDirection,
-    RailMeasurement, Tread, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
+    RailMeasurement, Tread, TreadFlightRequest, WalkingStretch, WalkingSurfaceError,
+    WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
 use super::{
     AxiolidWalkingSurfaceService, PlanFrame, edge_counts, interval, plan_cross, rectangle,
+    straight_direction,
 };
 use crate::geometry::{Triangle, mesh_extent};
 
@@ -272,7 +274,9 @@ impl AxiolidWalkingSurfaceService {
         };
         match stretch {
             WalkingStretch::Flight => {
-                let flight = self.measure_tread_flight(subject)?;
+                let flight =
+                    self.measure_tread_flight(&TreadFlightRequest::new(subject.clone()))?;
+                let direction = straight_direction(&flight, "handrails")?;
                 let treads = flight.treads();
                 let mut points: Vec<_> = treads
                     .iter()
@@ -302,7 +306,7 @@ impl AxiolidWalkingSurfaceService {
                 let left = fold(|side| side.0, f64::min).ok_or_else(unmeasured)?;
                 let right = fold(|side| side.1, f64::max).ok_or_else(unmeasured)?;
                 Ok(Pitch {
-                    direction: flight.direction(),
+                    direction,
                     points,
                     sides: (interval(left)?, interval(right)?),
                 })
@@ -505,7 +509,7 @@ impl AxiolidWalkingSurfaceService {
             })
             .copied()
             .collect();
-        let Some([(start, end), across]) = rectangle(&upward, frame)? else {
+        let Some([(start, end), across]) = rectangle(&upward, frame, 0.0)? else {
             return Err(WalkingSurfaceError::Unsupported(format!(
                 "rail {rail} does not run straight along {subject}: its plan is no rectangle \
                  along the walking direction"

@@ -332,6 +332,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates' plan triangles, never exactly. **Breaking:** definitions
   bound to `component-clearance` must declare the optional parameters
   `wall_selector`, `wall_reach` and `wall_inset`.
+- **Stair end spaces and the remaining handrail, winder and ramp
+  landing options.** (Refs #132) `stair-geometry` takes `end_space_depth`,
+  `end_space_width`, `end_space_height` and `end_space_obstacles`: a free
+  box before the first riser and beyond the last, placed along the
+  direction and arrival line of the flight's end as the landing
+  measurement gives them, so a cupboard 1 m before the bottom riser
+  obstructs a 1.5 m end space. `handrail_extension_maximum` bounds how far
+  a handrail reaches beyond each end (stairs and ramps), and
+  `handrail_extension_from` `riser` measures a flight's extensions from its
+  first and last riser, read from its riser closures and nosings.
+  `winder_angle_minimum` requires every winder (an angle not surely zero)
+  to turn at least that far. `ramp-geometry`'s `end_landing_depth_minimum`
+  and `end_landing_width_minimum` judge the landings at its two ends
+  instead of the general landing minimums. **Breaking:** definitions
+  bound to `stair-geometry` must declare the new optional parameters
+  `end_space_depth`, `end_space_width`, `end_space_height`,
+  `end_space_obstacles`, `winder_angle_minimum`,
+  `handrail_extension_maximum` and `handrail_extension_from`; definitions
+  bound to `ramp-geometry` the new optional parameters
+  `handrail_extension_maximum`, `end_landing_depth_minimum` and
+  `end_landing_width_minimum`.
+
 - **Door heights, measured thresholds, widest leaves and revolving
   doors.** (Closes #131) `keyed-limit` gains two quantities. `clear-height`
   is a stated clear height, else `overall_height` less the head lining

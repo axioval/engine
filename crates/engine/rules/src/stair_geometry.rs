@@ -56,7 +56,8 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// - `riser_tolerance`/`going_tolerance` bound the difference between the
 ///   largest and smallest riser or going of the flight;
 /// - `winder_angle_maximum` bounds the plan angle between consecutive
-///   nosings, which is zero for straight treads;
+///   nosings, which is zero for straight treads, and `winder_angle_minimum`
+///   every winder's (an angle not surely zero);
 /// - `forbid_open_risers` makes every open riser a finding;
 /// - `minimum_headroom` bounds the vertical clearance above the treads to
 ///   the `headroom_obstacles` the rule selects;
@@ -81,7 +82,12 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 ///   `handrail_both_sides_above_width` both for wider flights) the sides a
 ///   rail runs along. A rail belongs to the flight within
 ///   `handrail_reach_across` of its sides and `handrail_reach_above` above
-///   its nosing line.
+///   its nosing line. `handrail_extension_maximum` bounds the extension
+///   from above, and `handrail_extension_from` `riser` measures it from the
+///   first and last riser;
+/// - `end_space_depth`, `end_space_width` and `end_space_height` place a
+///   free space before the first riser and beyond the last, which no
+///   `end_space_obstacles` object may reach into.
 ///
 /// A turning flight's landing is placed along the tread meeting it and
 /// compared with that tread's width; its handrails are measured in its
@@ -108,6 +114,9 @@ pub struct StairGeometryCheck;
 /// object may reach into, and no `landing_doors` object may reach into the
 /// column `landing_door_height` high over a landing at a run's end; with
 /// `landing_door_swing`, no such door's leaves may swing over the landing.
+/// `end_landing_depth_minimum` and `end_landing_width_minimum` judge the
+/// landings before the lowest and beyond the highest run instead of the
+/// landing minimums.
 pub struct RampGeometryCheck;
 
 const SLOPE_LIMITS: &[TableColumn] = &[
@@ -209,18 +218,35 @@ fn below_check<'a>(parameters: &Parameters<'a>) -> Result<Option<BelowCheck<'a>>
     }
 }
 
-/// The landing checks both capabilities share; `required` is the stair's.
+/// The landing checks both capabilities share; `required` is the stair's,
+/// `end_depth` and `end_width` the ramp's own minimums at its two ends.
 struct LandingCheck<'a> {
     objects: &'a Selector,
     depth: Option<f64>,
     width: Option<f64>,
+    end_depth: Option<f64>,
+    end_width: Option<f64>,
     at_least_walking_width: bool,
     required: bool,
 }
 
 impl LandingCheck<'_> {
     fn sizes(&self) -> bool {
-        self.depth.is_some() || self.width.is_some() || self.at_least_walking_width
+        self.depth.is_some()
+            || self.width.is_some()
+            || self.end_depth.is_some()
+            || self.end_width.is_some()
+            || self.at_least_walking_width
+    }
+
+    /// The depth and width minimums at a landing: a ramp's end landing takes
+    /// its own where declared.
+    fn minimums(&self, end: bool) -> (Option<f64>, Option<f64>) {
+        if end {
+            (self.end_depth.or(self.depth), self.end_width.or(self.width))
+        } else {
+            (self.depth, self.width)
+        }
     }
 }
 
@@ -231,17 +257,26 @@ fn landing_check<'a>(
     let objects = parameters.selector("landing_objects")?;
     let depth = length(parameters, "landing_depth_minimum")?;
     let width = length(parameters, "landing_width_minimum")?;
+    let end_depth = length(parameters, "end_landing_depth_minimum")?;
+    let end_width = length(parameters, "end_landing_width_minimum")?;
     let at_least_walking_width = parameters
         .boolean("landing_at_least_walking_width")?
         .unwrap_or(false);
     let required = parameters.boolean("landings_required")?.unwrap_or(false);
-    let declared =
-        depth.is_some() || width.is_some() || at_least_walking_width || required || doors;
+    let declared = depth.is_some()
+        || width.is_some()
+        || end_depth.is_some()
+        || end_width.is_some()
+        || at_least_walking_width
+        || required
+        || doors;
     match (objects, declared) {
         (Some(objects), true) => Ok(Some(LandingCheck {
             objects,
             depth,
             width,
+            end_depth,
+            end_width,
             at_least_walking_width,
             required,
         })),
@@ -266,11 +301,12 @@ fn walking_descriptors() -> Vec<ParameterDescriptor> {
     ]);
     parameters.extend(handrails::descriptors());
     parameters.extend(ramp_ends::door_descriptors());
+    parameters.extend(ramp_ends::end_space_descriptors());
     parameters
 }
 
-/// The width, landing, landing-door, clearance-below and handrail checks
-/// both capabilities share, and the ramp's end spaces.
+/// The width, landing, landing-door, clearance-below, handrail and
+/// end-space checks both capabilities share.
 struct WalkingConfig<'a> {
     width: Range,
     landing: Option<LandingCheck<'a>>,
@@ -282,17 +318,13 @@ struct WalkingConfig<'a> {
 
 impl<'a> WalkingConfig<'a> {
     fn parse(parameters: &Parameters<'a>, ramp: bool) -> Result<Self, Unavailable> {
-        let end_space = if ramp {
-            ramp_ends::parse_end_space(parameters)?
-        } else {
-            None
-        };
+        let end_space = ramp_ends::parse_end_space(parameters)?;
         let doors = ramp_ends::parse_doors(parameters)?;
         Ok(Self {
             width: range(parameters, "width")?,
             landing: landing_check(parameters, doors.is_some())?,
             below: below_check(parameters)?,
-            handrail: handrails::parse(parameters)?,
+            handrail: handrails::parse(parameters, ramp)?,
             end_space,
             doors,
         })
@@ -811,6 +843,9 @@ struct End<'a> {
     width: Option<MeasuredInterval>,
     /// `flight` or `run`.
     noun: &'a str,
+    /// Whether this is one of a ramp's two outermost ends, where its
+    /// end-landing minimums apply.
+    outermost: bool,
 }
 
 /// A landing dimension against the declared minimum and, when the rule asks
@@ -939,7 +974,11 @@ fn landing_sizes(
     };
     let slack = 2.0 * slack(landing_scale(measured));
     let mut checks = Vec::new();
-    for (value, stated, words) in [(depth, check.depth, "deep"), (width, check.width, "wide")] {
+    let (depth_minimum, width_minimum) = check.minimums(at.outermost);
+    for (value, stated, words) in [
+        (depth, depth_minimum, "deep"),
+        (width, width_minimum, "wide"),
+    ] {
         if stated.is_none() && walking.is_none() {
             continue;
         }
@@ -1033,6 +1072,7 @@ impl Dimension<'_> {
 struct StairConfig<'a> {
     walking_line_offset: Option<f64>,
     winder_angle_maximum: Option<f64>,
+    winder_angle_minimum: Option<f64>,
     forbid_open_risers: bool,
     riser: Range,
     going: Range,
@@ -1056,6 +1096,7 @@ impl<'a> StairConfig<'a> {
         let config = Self {
             walking_line_offset,
             winder_angle_maximum: angle(&parameters, "winder_angle_maximum")?,
+            winder_angle_minimum: angle(&parameters, "winder_angle_minimum")?,
             forbid_open_risers: parameters.boolean("forbid_open_risers")?.unwrap_or(false),
             riser: range(&parameters, "riser")?,
             going: range(&parameters, "going")?,
@@ -1076,6 +1117,14 @@ impl<'a> StairConfig<'a> {
         {
             return Err(invalid("`minimum_risers` exceeds `maximum_risers`"));
         }
+        if let (Some(minimum), Some(maximum)) =
+            (config.winder_angle_minimum, config.winder_angle_maximum)
+            && minimum > maximum
+        {
+            return Err(invalid(
+                "`winder_angle_minimum` exceeds `winder_angle_maximum`",
+            ));
+        }
         let none = |range: Range| range == (None, None);
         if none(config.riser)
             && none(config.going)
@@ -1086,6 +1135,7 @@ impl<'a> StairConfig<'a> {
             && config.riser_tolerance.is_none()
             && config.going_tolerance.is_none()
             && config.winder_angle_maximum.is_none()
+            && config.winder_angle_minimum.is_none()
             && !config.forbid_open_risers
             && config.headroom.is_none()
             && !config.walking.declared()
@@ -1118,7 +1168,9 @@ impl RuleCapability for StairGeometryCheck {
             ParameterDescriptor::optional("going_tolerance", ParameterType::Quantity),
             ParameterDescriptor::optional("walking_line_offset", ParameterType::Quantity),
             ParameterDescriptor::optional("winder_angle_maximum", ParameterType::Quantity),
+            ParameterDescriptor::optional("winder_angle_minimum", ParameterType::Quantity),
             ParameterDescriptor::optional("forbid_open_risers", ParameterType::Boolean),
+            ParameterDescriptor::optional("handrail_extension_from", ParameterType::String),
         ]);
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
@@ -1144,73 +1196,118 @@ impl RuleCapability for StairGeometryCheck {
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         let free = context.services.get::<FreeSpaceServiceHandle>();
+        let flights = Flights {
+            stairs,
+            free,
+            config: &config,
+            selections: &selections,
+        };
         for object in selected {
-            let request = match config.walking_line_offset {
-                None => Ok(TreadFlightRequest::new(object.id.clone())),
-                Some(offset) => TreadFlightRequest::from_inner_side(object.id.clone(), offset),
-            };
-            let flight = match request.and_then(|request| stairs.measure_tread_flight(&request)) {
+            let flight = match flights.measure(&object.id) {
                 Ok(flight) => flight,
-                Err(error) => {
-                    let (reason, message) = service_error(&error);
+                Err((reason, message)) => {
                     evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
                     continue;
                 }
             };
-            let mut checks = stair_checks(&config, &flight);
-            if let (Some(check), Some(obstacles)) = (&config.headroom, &selections.headroom) {
-                checks.push(headroom(stairs, check, obstacles, &object.id));
-            }
-            let width = flight.width();
-            if config.walking.width != (None, None) {
-                checks.push(match width {
-                    Some(width) => {
-                        let slack = slack(flight_scale(&flight));
-                        (
-                            flight_width(width, config.walking.width, slack),
-                            vec![],
-                            vec![],
-                        )
-                    }
-                    None => (
-                        Check::Undecided(
-                            "the flight's width is not measured: a tread fills no rectangle \
-                             along the direction it climbs, as a winder never does"
-                                .into(),
-                        ),
-                        vec![],
-                        vec![],
-                    ),
-                });
-            }
-            let door = LandingDoors {
-                free,
-                walking: &config.walking,
-                selections: &selections,
-            };
-            checks.extend(flight_landings(stairs, &door, &flight));
-            if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
-                checks.push(below(stairs, check, spaces, &object.id, "flight"));
-            }
-            if let (Some(check), Some(rails)) = (&config.walking.handrail, &selections.rails) {
-                let along = handrails::Along {
-                    object: &object.id,
-                    stretch: WalkingStretch::Flight,
-                    label: "the flight",
-                    width,
-                };
-                checks.extend(handrails::handrails(stairs, check, rails, &along));
-            }
-            let checks = checks
-                .into_iter()
-                .map(|(check, mut evidence, related)| {
-                    evidence.insert(0, flight.evidence().clone());
-                    (check, evidence, related)
-                })
-                .collect();
-            report(&mut evaluation, rule, &object.id, checks);
+            report(&mut evaluation, rule, &object.id, flights.checks(&flight));
         }
         evaluation
+    }
+}
+
+/// One rule's flights: how each is measured and checked.
+struct Flights<'s, 'a> {
+    stairs: &'s WalkingSurfaceServiceHandle,
+    free: Option<&'s FreeSpaceServiceHandle>,
+    config: &'s StairConfig<'a>,
+    selections: &'s Selections,
+}
+
+impl Flights<'_, '_> {
+    /// The flight `object`, walked where the rule places its line.
+    fn measure(&self, object: &ObjectId) -> Result<TreadFlight, Unavailable> {
+        let request = match self.config.walking_line_offset {
+            None => Ok(TreadFlightRequest::new(object.clone())),
+            Some(offset) => TreadFlightRequest::from_inner_side(object.clone(), offset),
+        };
+        request
+            .and_then(|request| self.stairs.measure_tread_flight(&request))
+            .map_err(|error| service_error(&error))
+    }
+
+    /// Every check the rule declares on one flight, each citing it.
+    fn checks(&self, flight: &TreadFlight) -> Checks {
+        let (stairs, config, selections) = (self.stairs, self.config, self.selections);
+        let object = flight.object();
+        let mut checks = stair_checks(config, flight);
+        if let (Some(check), Some(obstacles)) = (&config.headroom, &selections.headroom) {
+            checks.push(headroom(stairs, check, obstacles, object));
+        }
+        let width = flight.width();
+        if config.walking.width != (None, None) {
+            checks.push(match width {
+                Some(width) => {
+                    let slack = slack(flight_scale(flight));
+                    (
+                        flight_width(width, config.walking.width, slack),
+                        vec![],
+                        vec![],
+                    )
+                }
+                None => (
+                    Check::Undecided(
+                        "the flight's width is not measured: a tread fills no rectangle along \
+                         the direction it climbs, as a winder never does"
+                            .into(),
+                    ),
+                    vec![],
+                    vec![],
+                ),
+            });
+        }
+        let door = LandingDoors {
+            free: self.free,
+            walking: &config.walking,
+            selections,
+        };
+        checks.extend(flight_landings(stairs, &door, flight));
+        if let (Some(check), Some(obstacles)) = (&config.walking.end_space, &selections.ends) {
+            for (end, top) in [
+                (WalkingEnd::FlightBottom, false),
+                (WalkingEnd::FlightTop, true),
+            ] {
+                checks.push(ramp_ends::flight_end_space(
+                    stairs,
+                    self.free,
+                    check,
+                    obstacles,
+                    flight,
+                    top,
+                    landing_level(flight, end),
+                ));
+            }
+        }
+        if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
+            checks.push(below(stairs, check, spaces, object, "flight"));
+        }
+        if let (Some(check), Some(rails)) = (&config.walking.handrail, &selections.rails) {
+            let along = handrails::Along {
+                object,
+                stretch: WalkingStretch::Flight,
+                label: "the flight",
+                width,
+                risers: Some(handrails::RiserOffsets::of(flight)),
+            };
+            checks.extend(handrails::handrails(stairs, check, rails, &along));
+        }
+        checks
+            .into_iter()
+            .map(|(check, mut evidence, related)| {
+                evidence.insert(0, flight.evidence().clone());
+                (check, evidence, related)
+            })
+            .collect()
     }
 }
 
@@ -1246,6 +1343,7 @@ fn flight_landings(
             label,
             width,
             noun: "flight",
+            outermost: false,
         };
         let (found, measured) = landing(stairs, check, candidates, &at);
         checks.extend(found);
@@ -1400,10 +1498,74 @@ fn turning_checks(config: &StairConfig<'_>, flight: &TreadFlight) -> Vec<Check> 
             degrees,
         ));
     }
+    // A straight flight has no winder to judge.
+    if let Some(minimum) = config.winder_angle_minimum
+        && flight.walking_line().is_turning()
+    {
+        checks.push(winders_at_least(&flight.winder_angles(), minimum));
+    }
     if config.forbid_open_risers {
         checks.push(closed(&flight.riser_closures()));
     }
     checks
+}
+
+/// Every winder's angle against a minimum: a straight tread (an angle surely
+/// zero) is no winder and is skipped; an angle that may be zero or a
+/// winder's too small one, or one not measured, is undecided.
+fn winders_at_least(angles: &[Option<MeasuredInterval>], minimum: f64) -> Check {
+    let total = angles.len();
+    let mut failing = Vec::new();
+    let mut worst = None;
+    let mut undecided = Vec::new();
+    for (index, angle) in angles.iter().enumerate() {
+        let named = |angle: MeasuredInterval| {
+            let (lower, upper) = (degrees(angle.lower()), degrees(angle.upper()));
+            let measured = if lower == upper {
+                lower
+            } else {
+                format!("between {lower} and {upper}")
+            };
+            format!("winder angle {} of {total} is {measured}", index + 1)
+        };
+        let Some(angle) = angle else {
+            undecided.push(format!(
+                "winder angle {} of {total} not measured",
+                index + 1
+            ));
+            continue;
+        };
+        if angle.upper() <= ANGLE_SLACK || angle.lower() >= minimum - ANGLE_SLACK {
+            continue;
+        }
+        if angle.lower() > ANGLE_SLACK && angle.upper() < minimum - ANGLE_SLACK {
+            failing.push(named(*angle));
+            worst = worse(
+                worst,
+                Some(Deviation::below(minimum, angle.lower(), angle.upper())),
+            );
+        } else {
+            undecided.push(format!(
+                "{}, which may be a straight tread or straddles at least {}",
+                named(*angle),
+                degrees(minimum)
+            ));
+        }
+    }
+    if !failing.is_empty() {
+        Check::failed(
+            format!(
+                "{}; at least {} required for a winder",
+                failing.join(", "),
+                degrees(minimum)
+            ),
+            worst,
+        )
+    } else if !undecided.is_empty() {
+        Check::Undecided(undecided.join("; "))
+    } else {
+        Check::Pass
+    }
 }
 
 /// Decimal coordinates read in binary turn a nosing by a few units in the
@@ -1507,7 +1669,10 @@ impl RuleCapability for RampGeometryCheck {
         ];
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
-        parameters.extend(ramp_ends::end_space_descriptors());
+        parameters.extend([
+            ParameterDescriptor::optional("end_landing_depth_minimum", ParameterType::Quantity),
+            ParameterDescriptor::optional("end_landing_width_minimum", ParameterType::Quantity),
+        ]);
         parameters
     }
 
@@ -1605,6 +1770,8 @@ fn ramp(
                     label: &label,
                     width: run.width(),
                     noun: "run",
+                    outermost: (index == 0 && place == "bottom")
+                        || (index + 1 == total && place == "top"),
                 };
                 let (mut found, measured) = landing(stairs, check, candidates, &at);
                 if let Some(measured) = &measured {
@@ -1696,6 +1863,7 @@ fn rails_and_ends(
                 stretch: WalkingStretch::Run(index),
                 label: &label,
                 width: run.width(),
+                risers: None,
             };
             checks.extend(handrails::handrails(stairs, check, rails, &along));
         }

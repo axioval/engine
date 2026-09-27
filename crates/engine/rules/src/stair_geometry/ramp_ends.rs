@@ -1,5 +1,6 @@
 //! The checks at the ends of a ramp or a flight: a free space of given size
-//! in front of a ramp's lowest and above its highest run, and no door
+//! in front of a ramp's lowest and above its highest run, or before a
+//! flight's first and after its last step, and no door
 //! standing on a landing at the end of a ramp's run or of a flight. Both
 //! place a box and ask the free-space service whether a selected object
 //! reaches into it. With `landing_door_swing`, no door may swing over a
@@ -8,9 +9,10 @@
 
 use axioval_engine::{
     BoxClearance, ClearanceOutcome, ClearanceRequest, ClearanceShape, ConvexPlanRegion,
-    ElevationInterval, FreeSpaceServiceHandle, Landing, LandingEvidence, MetricDirection,
-    MetricFrame, MetricPoint, ObjectFrameServiceHandle, ParameterDescriptor, ParameterType,
-    RuleContext, SlopedRun, VerticalExtentServiceHandle, across,
+    ElevationInterval, FreeSpaceServiceHandle, Landing, LandingEvidence, LandingRequest,
+    MetricDirection, MetricFrame, MetricPoint, ObjectFrameServiceHandle, ParameterDescriptor,
+    ParameterType, RuleContext, SlopedRun, Tread, TreadFlight, VerticalExtentServiceHandle,
+    WalkingEnd, WalkingSurfaceServiceHandle, across,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
@@ -20,7 +22,7 @@ use crate::door_swing::{self, Footprint};
 use crate::level_spacing::{extent, metres};
 use crate::support::{Parameters, Unavailable, invalid};
 
-/// The free space a ramp needs at each end.
+/// The free space a ramp or a flight needs at each end.
 pub(super) struct EndSpaceCheck<'a> {
     pub(super) obstacles: &'a Selector,
     depth: f64,
@@ -36,7 +38,7 @@ pub(super) struct DoorCheck<'a> {
     pub(super) swing: bool,
 }
 
-/// The ramp's end-space parameters.
+/// The end-space parameters a ramp and a flight share.
 pub(super) fn end_space_descriptors() -> Vec<ParameterDescriptor> {
     vec![
         ParameterDescriptor::optional("end_space_depth", ParameterType::Quantity),
@@ -271,6 +273,81 @@ pub(super) fn end_space(
     assess(free, &placed, ramp, obstacles, &what, |names| {
         format!("{names} obstructs {what}")
     })
+}
+
+/// The free space at the bottom (`top == false`) or top of a flight, in
+/// front of its first riser or beyond its last, standing on `elevation`
+/// (the level at that end) and centred across the end tread. The end's
+/// direction and arrival line come from the walking-surface service's
+/// landing measurement, asked with no candidate; a position along it that
+/// is an interval widens the box to hold every place it may start.
+pub(super) fn flight_end_space(
+    stairs: &WalkingSurfaceServiceHandle,
+    free: Option<&FreeSpaceServiceHandle>,
+    check: &EndSpaceCheck<'_>,
+    obstacles: &Result<(Vec<ObjectId>, bool), Unavailable>,
+    flight: &TreadFlight,
+    top: bool,
+    elevation: ElevationInterval,
+) -> (Check, Vec<Evidence>, Vec<ObjectId>) {
+    let (end, word) = if top {
+        (WalkingEnd::FlightTop, "top")
+    } else {
+        (WalkingEnd::FlightBottom, "bottom")
+    };
+    let tread = if top {
+        flight.treads().last()
+    } else {
+        flight.treads().first()
+    };
+    let Some((left, right)) = tread.and_then(Tread::sides) else {
+        return (
+            Check::Undecided(format!(
+                "the tread at the {word} of the flight fills no rectangle, so the free space \
+                 there is not placed"
+            )),
+            vec![],
+            vec![],
+        );
+    };
+    let request = LandingRequest::new(flight.object().clone(), end, []);
+    let measured = match stairs.measure_landing(&request) {
+        Ok(measured) => measured,
+        Err(error) => {
+            return (
+                Check::Undecided(format!(
+                    "the free space at the {word} of the flight is not placed: {error}"
+                )),
+                vec![],
+                vec![],
+            );
+        }
+    };
+    // A tread's sides lie across the direction it climbs; the bottom's
+    // leaving direction runs the other way, so its positions turn over.
+    let centre = f64::midpoint(middle(left), middle(right));
+    let edge = measured.edge();
+    let depth = check.depth + (edge.upper_metres() - edge.lower_metres());
+    let placed = Placed {
+        direction: measured.direction(),
+        along: edge.lower_metres() + depth / 2.0,
+        across: if top { centre } else { -centre },
+        elevation: elevation.upper_metres(),
+        width: check.width,
+        depth,
+        height: check.height,
+    };
+    let what = format!(
+        "the free space at the {word} of the flight ({} deep, {} wide)",
+        metres(check.depth),
+        metres(check.width)
+    );
+    let (check, mut evidence, related) =
+        assess(free, &placed, flight.object(), obstacles, &what, |names| {
+            format!("{names} obstructs {what}")
+        });
+    evidence.insert(0, measured.evidence().clone());
+    (check, evidence, related)
 }
 
 /// Whether a selected door stands on the landing at one end of a run or a

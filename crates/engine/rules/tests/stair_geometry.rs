@@ -181,6 +181,9 @@ struct Stairs {
     /// A turning flight's straight parts, per subject; a turning flight
     /// without them has its landings and handrails refused.
     turning: BTreeMap<ObjectId, Vec<StretchPart>>,
+    /// The leaving direction and arrival line per subject and end, where
+    /// not along x from 0.
+    ends: BTreeMap<(ObjectId, WalkingEnd), (MetricDirection, f64)>,
 }
 
 impl Stairs {
@@ -214,6 +217,17 @@ impl Stairs {
     ) -> Self {
         self.landings
             .insert((id(subject), end), (id(carrier), size));
+        self
+    }
+
+    fn end(
+        mut self,
+        subject: &str,
+        end: WalkingEnd,
+        direction: MetricDirection,
+        edge: f64,
+    ) -> Self {
+        self.ends.insert((id(subject), end), (direction, edge));
         self
     }
 
@@ -323,7 +337,12 @@ impl WalkingSurfaceService for Stairs {
                 Landing::new(carrier.clone(), extent)
             });
         let evidence = Evidence::exact(source(), format!("landing:{}", request.subject().local_id));
-        LandingEvidence::try_new(request.clone(), x(), point(0.0), landing, evidence)
+        let (direction, edge) = self
+            .ends
+            .get(&(request.subject().clone(), request.end()))
+            .copied()
+            .unwrap_or((x(), 0.0));
+        LandingEvidence::try_new(request.clone(), direction, point(edge), landing, evidence)
     }
 
     fn measure_clearance_below(
@@ -2190,5 +2209,299 @@ fn a_door_on_or_swinging_over_a_stair_landing_is_found() {
     assert_eq!(
         unevaluated(&evaluation),
         [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+fn check_stairs_with(
+    stairs: Stairs,
+    floor: Option<Floor>,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model().evaluate_with(
+        &StairGeometryCheck,
+        &rule(STAIR, kind("flight"), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+            if let Some(floor) = floor {
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(floor)))
+                    .unwrap();
+            }
+        },
+    )
+}
+
+fn minus_x() -> MetricDirection {
+    MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap()
+}
+
+/// A free space before a flight's first step and after its last: a
+/// cupboard 1 m before the bottom riser obstructs a 1.5 m end space, not a
+/// 0.9 m one.
+#[test]
+fn a_cupboard_before_the_bottom_riser_obstructs_a_flights_end_space() {
+    // `regular` climbs along x from its first riser at x 0 to its last
+    // tread's nosing at 0.84 m, 1.2 m wide from y 0; the bin stands 1 m to
+    // 1.2 m before the first riser.
+    let stairs = || {
+        stairs()
+            .end("regular", WalkingEnd::FlightBottom, minus_x(), 0.0)
+            .end("regular", WalkingEnd::FlightTop, x(), 0.84)
+            .end("irregular", WalkingEnd::FlightBottom, minus_x(), 0.0)
+            .end("irregular", WalkingEnd::FlightTop, x(), 0.84)
+    };
+    let floor = || Floor::default().blocker("bin", [-1.2, 0.4], [-1.0, 0.8]);
+    let parameters = |depth: f64| {
+        vec![
+            ("end_space_depth", metres(depth)),
+            ("end_space_width", metres(1.2)),
+            ("end_space_height", metres(2.0)),
+            ("end_space_obstacles", selector(kind("furniture"))),
+        ]
+    };
+    let evaluation = check_stairs_with(stairs(), Some(floor()), parameters(1.5));
+    let bin = id("bin");
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "irregular".into(),
+                format!(
+                    "{bin} obstructs the free space at the bottom of the flight (1.5 m deep, \
+                     1.2 m wide)"
+                )
+            ),
+            (
+                "regular".into(),
+                format!(
+                    "{bin} obstructs the free space at the bottom of the flight (1.5 m deep, \
+                     1.2 m wide)"
+                )
+            ),
+        ]
+    );
+    assert_eq!(evaluation.findings()[0].related, [bin]);
+    // The flight in pieces is not measured.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let evaluation = check_stairs_with(stairs(), Some(floor()), parameters(0.9));
+    assert!(findings(&evaluation).is_empty());
+    // Without the free-space service the end spaces are not checked.
+    let evaluation = check_stairs_with(stairs(), None, parameters(1.5));
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(unevaluated(&evaluation).len(), 5);
+}
+
+/// `regular`'s treads overhanging the one below by 2 cm, every riser
+/// closed.
+fn overhung() -> TreadFlight {
+    let treads: Vec<Tread> = (0..4_u8)
+        .map(|step| {
+            let (elevation, front) = (0.17 * f64::from(step + 1), 0.28 * f64::from(step));
+            Tread::try_new(point(elevation), point(front), point(front + 0.3))
+                .unwrap()
+                .with_sides(point(0.0), point(1.2))
+                .unwrap()
+                .with_riser_below(RiserClosure::Closed)
+        })
+        .collect();
+    let top = treads.last().unwrap().elevation();
+    TreadFlight::try_new(
+        straight("regular"),
+        WalkingLine::Straight(x()),
+        point(0.0),
+        top,
+        treads,
+        Evidence::exact(source(), "tread-flight:regular"),
+    )
+    .unwrap()
+}
+
+/// A maximum bounds the extension, and from the riser the top extension
+/// loses the last tread's overhang.
+#[test]
+fn a_handrail_extension_is_bounded_and_measured_from_the_riser() {
+    // The rail reaches 0.3 m beyond both ends of the pitch line.
+    let rails = |stairs: Stairs| {
+        stairs.rail(
+            "regular",
+            WalkingStretch::Flight,
+            "left_rail",
+            rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+        )
+    };
+    let evaluation = check_stairs(
+        model(),
+        rails(stairs()),
+        handrail_parameters(vec![("handrail_extension_maximum", metres(0.25))]),
+    );
+    let rail = id("left_rail");
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "regular".into(),
+                format!(
+                    "handrail {rail} reaches 0.3 m beyond the bottom of the flight; at most 0.25 \
+                     m required"
+                )
+            ),
+            (
+                "regular".into(),
+                format!(
+                    "handrail {rail} reaches 0.3 m beyond the top of the flight; at most 0.25 m \
+                     required"
+                )
+            ),
+        ]
+    );
+    // From the riser: the closed first riser lies under the first nosing,
+    // the last 2 cm behind the last nosing.
+    let from_riser = |minimum: f64| {
+        handrail_parameters(vec![
+            ("handrail_extension_minimum", metres(minimum)),
+            ("handrail_extension_from", string("riser")),
+        ])
+    };
+    let evaluation = check_stairs(
+        model(),
+        rails(stairs().flight(overhung())),
+        from_riser(0.29),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            format!(
+                "handrail {rail} reaches 0.28 m beyond the top riser of the flight; at least \
+                 0.29 m required"
+            )
+        )]
+    );
+    // Measured from the nosing it passes.
+    let evaluation = check_stairs(
+        model(),
+        rails(stairs().flight(overhung())),
+        handrail_parameters(vec![("handrail_extension_minimum", metres(0.29))]),
+    );
+    assert!(findings(&evaluation).is_empty());
+    // A first riser that is not measured may lie anywhere under the first
+    // tread, and a last one not measured is unknown.
+    let evaluation = check_stairs(model(), rails(stairs()), from_riser(0.35));
+    assert!(findings(&evaluation).is_empty());
+    let undecided: Vec<_> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| {
+            outcome
+                .object_id()
+                .is_some_and(|id| id.local_id == "regular")
+        })
+        .map(|outcome| outcome.message().to_owned())
+        .collect();
+    assert_eq!(undecided.len(), 2, "{undecided:?}");
+    assert!(
+        undecided[0].contains("beyond the bottom riser of the flight, which straddles"),
+        "{undecided:?}"
+    );
+    assert!(undecided[1].contains("is not known"), "{undecided:?}");
+    // The riser applies to stairs, with an extension bound.
+    for parameters in [
+        handrail_parameters(vec![
+            ("handrail_sides", string("one")),
+            ("handrail_extension_from", string("riser")),
+        ]),
+        handrail_parameters(vec![
+            ("handrail_extension_minimum", metres(0.3)),
+            ("handrail_extension_from", string("tread")),
+        ]),
+        handrail_parameters(vec![
+            ("handrail_extension_minimum", metres(0.3)),
+            ("handrail_extension_maximum", metres(0.2)),
+        ]),
+    ] {
+        let evaluation = check_stairs(model(), stairs(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+#[test]
+fn winders_too_gentle_are_found_and_straight_treads_are_not_winders() {
+    let check = |minimum: f64| {
+        check_stairs(
+            model(),
+            stairs().parts("winder", winder()),
+            vec![("winder_angle_minimum", degrees(minimum))],
+        )
+    };
+    let evaluation = check(40.0);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "winder".into(),
+            "winder angle 2 of 4 is 35°, winder angle 3 of 4 is 35°; at least 40° required for a \
+             winder"
+                .into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    let evaluation = check(30.0);
+    assert!(findings(&evaluation).is_empty());
+    assert!(unevaluated(&evaluation).is_empty());
+    let evaluation = check_stairs(
+        model(),
+        stairs(),
+        vec![
+            ("winder_angle_minimum", degrees(40.0)),
+            ("winder_angle_maximum", degrees(30.0)),
+        ],
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+/// A ramp's two end landings take their own minimums; the landing between
+/// its runs the general one.
+#[test]
+fn a_ramps_end_landings_have_their_own_minimums() {
+    let stairs = stairs()
+        .landing(
+            "gentle",
+            WalkingEnd::RunBottom(0),
+            "floor",
+            Some((1.4, 1.5)),
+        )
+        .landing("gentle", WalkingEnd::RunTop(0), "gentle", Some((1.4, 1.5)))
+        .landing(
+            "gentle",
+            WalkingEnd::RunBottom(1),
+            "gentle",
+            Some((1.4, 1.5)),
+        )
+        .landing("gentle", WalkingEnd::RunTop(1), "slab", Some((1.6, 1.5)));
+    let evaluation = check_ramps_with(
+        stairs,
+        None,
+        vec![
+            ("landing_objects", slabs()),
+            ("landing_depth_minimum", metres(1.2)),
+            ("end_landing_depth_minimum", metres(1.5)),
+        ],
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "gentle".into(),
+            "the landing at the bottom of run 1 of 2 is 1.4 m deep; at least 1.5 m required".into()
+        )]
     );
 }

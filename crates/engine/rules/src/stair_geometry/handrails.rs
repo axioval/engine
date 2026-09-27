@@ -14,7 +14,8 @@ use std::collections::BTreeSet;
 
 use axioval_engine::{
     Deviation, HandrailEvidence, HandrailRequest, MeasuredInterval, ParameterDescriptor,
-    ParameterType, RailMeasurement, RailSide, WalkingStretch, WalkingSurfaceServiceHandle,
+    ParameterType, RailMeasurement, RailSide, RiserClosure, Tread, TreadFlight, WalkingStretch,
+    WalkingSurfaceServiceHandle,
 };
 use axioval_ir::ObjectId;
 use axioval_ir::contract::Selector;
@@ -43,7 +44,11 @@ pub(super) struct HandrailCheck<'a> {
     reach: f64,
     above: f64,
     height: Range,
-    extension: Option<f64>,
+    /// The least and greatest extension beyond each end.
+    extension: Range,
+    /// Whether a flight's extension is measured from its first and last
+    /// riser rather than its nosings.
+    from_riser: bool,
     gap: Option<f64>,
     sides: Option<Required>,
 }
@@ -56,20 +61,44 @@ pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
         ParameterDescriptor::optional("handrail_height_minimum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_height_maximum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_extension_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("handrail_extension_maximum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_gap_maximum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_sides", ParameterType::String),
         ParameterDescriptor::optional("handrail_both_sides_above_width", ParameterType::Quantity),
     ]
 }
 
+/// The handrail checks the rule declares; `ramp` refuses measuring an
+/// extension from a riser, which a ramp does not have.
 pub(super) fn parse<'a>(
     parameters: &Parameters<'a>,
+    ramp: bool,
 ) -> Result<Option<HandrailCheck<'a>>, Unavailable> {
     let rails = parameters.selector("handrail_objects")?;
     let reach = length(parameters, "handrail_reach_across")?;
     let above = length(parameters, "handrail_reach_above")?;
     let height = range(parameters, "handrail_height")?;
-    let extension = length(parameters, "handrail_extension_minimum")?;
+    let extension = range(parameters, "handrail_extension")?;
+    let from_riser = match (parameters.string("handrail_extension_from")?, ramp) {
+        (None | Some("nosing"), _) => false,
+        (Some("riser"), false) => true,
+        (Some("riser"), true) => {
+            return Err(invalid(
+                "`handrail_extension_from` `riser` applies only to stairs",
+            ));
+        }
+        (Some(other), _) => {
+            return Err(invalid(format!(
+                "`handrail_extension_from` `{other}` is unsupported; use `nosing` or `riser`"
+            )));
+        }
+    };
+    if from_riser && extension == (None, None) {
+        return Err(invalid(
+            "`handrail_extension_from` needs `handrail_extension_minimum` or \
+             `handrail_extension_maximum`",
+        ));
+    }
     let gap = length(parameters, "handrail_gap_maximum")?;
     let wider = length(parameters, "handrail_both_sides_above_width")?;
     let sides = match (parameters.string("handrail_sides")?, wider) {
@@ -89,7 +118,7 @@ pub(super) fn parse<'a>(
         }
     };
     let declared =
-        height != (None, None) || extension.is_some() || gap.is_some() || sides.is_some();
+        height != (None, None) || extension != (None, None) || gap.is_some() || sides.is_some();
     match (rails, reach, above, declared) {
         (Some(rails), Some(reach), Some(above), true) => Ok(Some(HandrailCheck {
             rails,
@@ -97,6 +126,7 @@ pub(super) fn parse<'a>(
             above,
             height,
             extension,
+            from_riser,
             gap,
             sides,
         })),
@@ -119,6 +149,58 @@ pub(super) struct Along<'a> {
     pub(super) label: &'a str,
     /// Its width, when measured.
     pub(super) width: Option<MeasuredInterval>,
+    /// Where a flight's first and last risers lie from its pitch line's
+    /// ends; `None` for a ramp's run.
+    pub(super) risers: Option<RiserOffsets>,
+}
+
+/// How far a flight's first riser lies beyond the pitch line's bottom end
+/// (towards the top) and its last riser before the top end, as intervals,
+/// or why they are not known. An extension measured from the riser is the
+/// one from the pitch line plus the bottom offset, or less the top one.
+pub(super) struct RiserOffsets {
+    bottom: Result<(f64, f64), String>,
+    top: Result<(f64, f64), String>,
+}
+
+impl RiserOffsets {
+    /// The offsets of `flight`'s risers. The first riser lies under the
+    /// first nosing when it is closed flush below it, and somewhere under
+    /// the first tread when that is not measured; the last lies at the
+    /// upper floor's edge when a closed final riser arrives there, else at
+    /// the back of the tread below the last, the last tread's nosing
+    /// overhanging it. An open riser is no riser to measure from.
+    pub(super) fn of(flight: &TreadFlight) -> Self {
+        let treads = flight.treads();
+        let bottom = match treads.first() {
+            None => Err("the flight has no tread".into()),
+            Some(first) => match first.riser_below() {
+                RiserClosure::Closed => Ok((0.0, 0.0)),
+                RiserClosure::NotMeasured => Ok((0.0, first.depth().upper().max(0.0))),
+                RiserClosure::Open => Err("the flight's first riser is open".into()),
+            },
+        };
+        let closures = flight.riser_closures();
+        let top = if flight.ends_in_riser() {
+            match closures.last() {
+                Some(RiserClosure::Closed) => Ok((0.0, 0.0)),
+                Some(RiserClosure::Open) => Err("the flight's last riser is open".into()),
+                _ => Err("where the flight's last riser lies is not measured".into()),
+            }
+        } else {
+            match (
+                treads.last().map(Tread::riser_below),
+                flight.nosings().last(),
+            ) {
+                (Some(RiserClosure::Closed), Some(overhang)) => {
+                    Ok((overhang.lower().max(0.0), overhang.upper().max(0.0)))
+                }
+                (Some(RiserClosure::Open), _) => Err("the flight's last riser is open".into()),
+                _ => Err("where the flight's last riser lies is not measured".into()),
+            }
+        };
+        Self { bottom, top }
+    }
 }
 
 /// The handrails along one stretch against the rule's handrail checks.
@@ -137,7 +219,7 @@ pub(super) fn handrails(
         along.stretch,
         candidates.iter().cloned(),
         (check.reach, check.above),
-        check.extension.unwrap_or(0.0),
+        check.extension.0.unwrap_or(0.0),
     ) {
         Ok(request) => request,
         Err(error) => {
@@ -168,6 +250,11 @@ pub(super) fn handrails(
         slack: slack(scale(&measured)),
         along,
         undecided: *undecided,
+        risers: if check.from_riser {
+            along.risers.as_ref()
+        } else {
+            None
+        },
     };
     let mut checks: Checks = Vec::new();
     let mut push = |check: Check, related: Vec<ObjectId>| {
@@ -180,10 +267,10 @@ pub(super) fn handrails(
         }
         push_all(&mut push, all, judged.pending(Check::Pass));
     }
-    if let Some(minimum) = check.extension {
+    if check.extension != (None, None) {
         push_all(
             &mut push,
-            judged.extensions(minimum),
+            judged.extensions(check.extension),
             judged.pending(Check::Pass),
         );
     }
@@ -300,6 +387,9 @@ struct Judged<'m> {
     /// Whether the selection left an object undecided, which may be a
     /// rail.
     undecided: bool,
+    /// With `handrail_extension_from` `riser`, where the flight's risers
+    /// lie from the pitch line's ends.
+    risers: Option<&'m RiserOffsets>,
 }
 
 impl Judged<'_> {
@@ -329,7 +419,7 @@ impl Judged<'_> {
     /// The extension of the handrail along each side, from its first piece
     /// at the bottom and its last at the top, and of each rail reaching
     /// over the middle on its own.
-    fn extensions(&self, minimum: f64) -> Vec<(Check, Vec<ObjectId>)> {
+    fn extensions(&self, bounds: Range) -> Vec<(Check, Vec<ObjectId>)> {
         let mut checks = Vec::new();
         for side in [RailSide::Left, RailSide::Right] {
             match self.measured.side_rail(side) {
@@ -338,7 +428,7 @@ impl Judged<'_> {
                         let Some((rail, measurement)) = piece else {
                             continue;
                         };
-                        let check = self.extension(rail, measurement, end, minimum);
+                        let check = self.extension(rail, measurement, end, bounds);
                         checks.push((self.continued(check, "continue it"), vec![rail.clone()]));
                     }
                 }
@@ -356,12 +446,18 @@ impl Judged<'_> {
                 continue;
             }
             for end in [End::Bottom, End::Top] {
-                let check = match self.extension(rail, measurement, end, minimum) {
-                    Check::Fail(message) | Check::Graded(message, _) => Check::Undecided(format!(
-                        "{message}; it reaches over the middle of {}, so it may be one piece of a \
+                let check = match self.extension(rail, measurement, end, bounds) {
+                    // Falling short, it may be one piece of a longer rail;
+                    // reaching too far, it reaches too far whatever it is.
+                    Check::Fail(message) | Check::Graded(message, _)
+                        if !self.too_far(measurement, end, bounds) =>
+                    {
+                        Check::Undecided(format!(
+                            "{message}; it reaches over the middle of {}, so it may be one piece of a \
                          longer rail",
-                        self.along.label
-                    )),
+                            self.along.label
+                        ))
+                    }
                     other => other,
                 };
                 checks.push((check, vec![rail.clone()]));
@@ -370,61 +466,116 @@ impl Judged<'_> {
         checks
     }
 
-    /// A rail's extension beyond one end against the rule's minimum, and
-    /// whether it runs level over it.
+    /// A rail's extension beyond one end, measured from the pitch line's
+    /// end or, with `handrail_extension_from` `riser`, from the flight's
+    /// riser there; `Err` names why it is not known.
+    fn reach(
+        &self,
+        measurement: &RailMeasurement,
+        end: End,
+    ) -> Option<Result<MeasuredInterval, String>> {
+        let reach = match end {
+            End::Bottom => self.measured.bottom_extension(measurement),
+            End::Top => self.measured.top_extension(measurement),
+        }?;
+        let Some(risers) = self.risers else {
+            return Some(Ok(reach));
+        };
+        let shifted = match end {
+            End::Bottom => risers.bottom.as_ref().map(|(low, high)| {
+                (
+                    (reach.lower() + low).next_down(),
+                    (reach.upper() + high).next_up(),
+                )
+            }),
+            End::Top => risers.top.as_ref().map(|(low, high)| {
+                (
+                    (reach.lower() - high).next_down(),
+                    (reach.upper() - low).next_up(),
+                )
+            }),
+        };
+        Some(match shifted {
+            Ok((lower, upper)) => MeasuredInterval::try_new(lower, upper)
+                .map_err(|error| format!("the extension from the riser: {error}")),
+            Err(why) => Err(why.clone()),
+        })
+    }
+
+    /// Whether a rail surely reaches beyond one end farther than the
+    /// maximum allows.
+    fn too_far(&self, measurement: &RailMeasurement, end: End, (_, maximum): Range) -> bool {
+        maximum.is_some_and(|maximum| {
+            matches!(self.reach(measurement, end), Some(Ok(reach)) if reach.lower() > maximum + self.slack)
+        })
+    }
+
+    /// A rail's extension beyond one end against the rule's bounds, and
+    /// whether it runs level over the minimum.
     fn extension(
         &self,
         rail: &ObjectId,
         measurement: &RailMeasurement,
         end: End,
-        minimum: f64,
+        (minimum, maximum): Range,
     ) -> Check {
-        let (words, reach, rise) = match end {
-            End::Bottom => (
-                "bottom",
-                self.measured.bottom_extension(measurement),
-                measurement.bottom_rise(),
-            ),
-            End::Top => (
-                "top",
-                self.measured.top_extension(measurement),
-                measurement.top_rise(),
-            ),
+        let (words, rise) = match end {
+            End::Bottom => ("bottom", measurement.bottom_rise()),
+            End::Top => ("top", measurement.top_rise()),
+        };
+        let from = if self.risers.is_some() {
+            format!("beyond the {words} riser of {}", self.along.label)
+        } else {
+            format!("beyond the {words} of {}", self.along.label)
         };
         let place = format!("beyond the {words} of {}", self.along.label);
-        let Some(reach) = reach else {
+        let bound = bound_words(minimum, maximum, metres);
+        let Some(reach) = self.reach(measurement, end) else {
             // Measured along another part of a turning flight: the handrail
             // does not run along the end part at all.
             let other = match end {
                 End::Bottom => "a later",
                 End::Top => "an earlier",
             };
-            return Check::Fail(format!(
+            let words = format!(
                 "handrail {rail} runs along {other} straight part of {} only, so it does not \
-                 reach {place}; at least {} required",
+                 reach {from}",
                 self.along.label,
-                metres(minimum)
-            ));
+            );
+            return match minimum {
+                Some(_) => Check::Fail(format!("{words}; {bound} required")),
+                None => Check::Pass,
+            };
+        };
+        let reach = match reach {
+            Ok(reach) => reach,
+            Err(why) => {
+                return Check::Undecided(format!(
+                    "how far handrail {rail} reaches {from} is not known: {why}"
+                ));
+            }
         };
         let measured = format!(
-            "handrail {rail} reaches {} {place}",
+            "handrail {rail} reaches {} {from}",
             shown(reach.lower(), reach.upper())
         );
-        let required = format!("at least {} required", metres(minimum));
         match judge(
             reach.lower(),
             reach.upper(),
-            Some(minimum - self.slack),
-            None,
+            minimum.map(|minimum| minimum - self.slack),
+            maximum.map(|maximum| maximum + self.slack),
         ) {
-            Verdict::Fail(_) => Check::Graded(
-                format!("{measured}; {required}"),
-                Deviation::below(minimum, reach.lower(), reach.upper()),
+            Verdict::Fail(_) => Check::failed(
+                format!("{measured}; {bound} required"),
+                deviation(reach.lower(), reach.upper(), minimum, maximum),
             ),
             Verdict::Undecided(_) => {
-                Check::Undecided(format!("{measured}, which straddles {required}"))
+                Check::Undecided(format!("{measured}, which straddles {bound}"))
             }
-            Verdict::Pass => level(rail, rise, minimum, &place),
+            Verdict::Pass => match minimum {
+                Some(minimum) => level(rail, rise, minimum, &place),
+                None => Check::Pass,
+            },
         }
     }
 

@@ -12,11 +12,17 @@
 //! The uncovered area of a footprint is what remains of it once the union of
 //! other footprints, each grown in plan by a stated length, is taken away:
 //! how much of an architectural wall no structural wall stands under.
+//!
+//! The covered area of a footprint is the union of several sources' effect
+//! areas clipped to it ([`crate::CoverageRequest`]): how much of a room the
+//! devices placed in it reach.
 
 use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
+
+use crate::coverage::{CoverageEvidence, CoverageRequest, check_answer};
 
 /// Failure to measure a plan area.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -194,6 +200,21 @@ pub trait PlanAreaService: Send + Sync + 'static {
             "this plan-area service does not measure bands".into(),
         ))
     }
+
+    /// How much of the request's subject footprint the union of its
+    /// sources' effect areas covers.
+    ///
+    /// A service that does not measure coverage refuses; it never answers
+    /// with an empty or a whole cover.
+    fn measure_coverage(
+        &self,
+        request: &CoverageRequest,
+    ) -> Result<CoverageEvidence, PlanAreaError> {
+        Err(PlanAreaError::Unavailable(format!(
+            "this plan-area service does not measure the coverage of {}",
+            request.subject()
+        )))
+    }
 }
 
 /// Registry handle for a [`PlanAreaService`].
@@ -279,6 +300,19 @@ impl PlanAreaServiceHandle {
         });
         bands.dedup();
         self.0.measure_outside_bands(object, &bands)
+    }
+
+    /// How much of the request's subject footprint its sources cover.
+    ///
+    /// An answer about another subject, or not listing exactly the
+    /// requested sources in order, is refused.
+    pub fn measure_coverage(
+        &self,
+        request: &CoverageRequest,
+    ) -> Result<CoverageEvidence, PlanAreaError> {
+        let answer = self.0.measure_coverage(request)?;
+        check_answer(request, &answer)?;
+        Ok(answer)
     }
 }
 

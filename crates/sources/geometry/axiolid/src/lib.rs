@@ -8,6 +8,7 @@
 
 pub mod contact;
 pub(crate) mod containment;
+pub(crate) mod coverage;
 pub mod derived_relationships;
 pub mod envelope_membership;
 pub mod facade_area;
@@ -22,6 +23,7 @@ pub mod plan_area;
 pub mod plan_span;
 pub(crate) mod planar;
 pub mod proximity;
+pub mod sight;
 pub mod space;
 pub mod triangle_count;
 pub mod vertical_extent;
@@ -41,6 +43,7 @@ pub use metric_routing::AxiolidMetricRoutingService;
 pub use plan_area::AxiolidPlanAreaService;
 pub use plan_span::AxiolidPlanSpanService;
 pub use proximity::AxiolidProximityService;
+pub use sight::AxiolidSightService;
 pub use space::AxiolidSpaceService;
 pub use triangle_count::AxiolidTriangleCountService;
 pub use vertical_extent::AxiolidVerticalExtentService;

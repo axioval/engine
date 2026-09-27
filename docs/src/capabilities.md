@@ -867,6 +867,52 @@ Each side and each question (clear, inside the space) is its own finding or not-
 
 **Size modes.** A `minimum` is one question per side: is the volume, less `size_tolerance` in every dimension, free? A `maximum` asks, per dimension (width, depth and height, or radius and height), whether the volume `size_tolerance` larger in that dimension is free, grown the way the volume is anchored (the depth away from the component, the width away from an aligned edge or both ways when centred, the height upwards): a free one is a finding (`… is free, so the free volume exceeds the maximum width`), an obstructed one passes. `fixed` asks both. Each question is its own finding or not-evaluated outcome, fixed or floating. The largest volume that fits is not measured: a maximum is decided by the one larger volume only.
 
+### Visibility of targets
+
+`axioval:capability.component-visibility` requires targets to be in view from an eye above each selected component: a reception desk that must see the entrance doors, or a device that must be seen from nowhere. The eye stands `eye_height` above the component's base (the bottom of its vertical extent) over the centre of its footprint, read through `VerticalExtentService` and `PlanSpanService`; each target is asked about through the line-of-sight service (`SightService`), so it needs a geometry adapter.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `targets` | `selector` | Required. What must (or must not) be seen, such as doors. |
+| `blockers` | `selector` | Required. What may hide a target, such as walls and columns. The component and the target itself never do. |
+| `eye_height` | `quantity` | Required. The eye's height above the component's base. |
+| `radius` | `quantity` | Required. Only targets whose nearest point lies within this distance of the eye count. |
+| `mode` | `string` | Required. `at-least` (at least `minimum` targets in view) or `none` (no target in view). |
+| `minimum` | `integer` | With `at-least`, how many targets must be in view (default 1). |
+
+A target is **in view** when a straight segment from the eye reaches it before any blocker; the service names a witness point on the target. It is **hidden** when the blockers cover every ray from the eye to it; the service names the occluders. Neither may be provable: a target only grazed, or covered only where two separate blockers meet, is **undecided**, never guessed. A wall of one body covers as a whole; a column of one closed convex body counts as a solid.
+
+`at-least` passes when enough targets are surely in view and is a finding when too few could be, even counting every undecided one (`0 target(s) within 6 m of the eye 1.2 m above the base of … are in view; required at least 1; 1 hidden`, relating the hidden ones); otherwise it is not evaluated. `none` is a finding naming every target surely in view, passes when none could be, and is otherwise not evaluated. A target whose selection is undecided, whose distance straddles the radius, or which the service cannot assess is undecided. A blocker whose selection is undecided may hide a target: a target hidden only with its help is re-asked without it, and stays undecided unless the certain blockers hide it too. An eye whose centre or base is not known exactly (a tessellated component) is not evaluated.
+
+The rule has no transparency threshold of its own: leave glazing and other see-through elements out of `blockers` with a condition on `axioval:presentation.Transparency`, as shown for selectors above.
+
+### Effective coverage
+
+`axioval:capability.effective-coverage` requires the union of sources' effect areas to cover enough of each selected element's footprint: how much of a room its sprinklers, detectors or extinguishers reach. It measures through the plan-area service's coverage (`PlanAreaService::measure_coverage`) and finds the sources near each element with the proximity service's broad phase.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `sources` | `selector` | Required. The objects whose effect areas cover. |
+| `mode` | `string` | Required. How far an effect reaches: `grown`, `touching`, `travel` or `visible` (below). |
+| `range` | `quantity` | Required. The effect's range. |
+| `minimum_ratio` | `number` | Required, in (0, 1]. The share of the footprint that must be covered. |
+| `blockers` | `selector` | With `travel` and `visible`: objects whose footprints travel and sight go round. |
+| `touch_tolerance` | `quantity` | With `touching`: how far apart in plan a source may stand and still touch (default 0). |
+| `capacity_property`, `capacity_multiplier` | `propertyReference`, `number` | Together: also require the summed property of the sources reaching the element, times the multiplier, to reach its area. |
+
+- `grown`: a source's footprint grown by `range` in every plan direction.
+- `touching`: the same, counting only sources whose footprint touches the element's, within `touch_tolerance`.
+- `travel`: the points of the element's **free region** within `range` of travel from the centre of the source's footprint, going round blockers.
+- `visible`: the points of the free region the source's centre sees, no farther than `range`.
+
+The free region is the element's footprint less the blockers' footprints; a source whose centre lies outside it reaches none of it. The union of the effect areas, clipped to the footprint and divided by its area, must reach `minimum_ratio`: a finding says `0.5052 of the footprint (20.2083 of 40 m²) lies within the sources' effect areas (visible by 20 m); required at least 0.9` and relates the sources that surely reach the element.
+
+The covered area is an interval. Effect areas are bracketed between an inner and an outer bound (a disc has no exact polygon, and travel distance is known cell by cell), a source whose selection or touch is undecided counts only towards the upper bound, a blocker whose selection is undecided only narrows the lower bound, and a source whose effect or extent cannot be measured leaves the upper bound at the whole footprint. A share straddling the minimum is not evaluated, with the reasons.
+
+The capacity check sums the property over the sources whose effect meets the footprint (surely for the lower sum, possibly for the upper), reading a number or a quantity in its SI unit: extinguisher rating units times the floor area one unit serves must reach the room's area. A source that states no non-negative value leaves the check undecided unless the other sources already settle it. It is its own finding (`capacity: …`) or not-evaluated outcome.
+
+Not decided yet (#72): effects that propagate into connected spaces, and the element's area taken from a property instead of its footprint.
+
 ### Stairs and ramps
 
 `stair-geometry` and `ramp-geometry` judge what `WalkingSurfaceService` measures from each selected object's body (see [Typed host services](./services.md)), so they need a geometry adapter; declared values such as `RiserHeight` or `NumberOfRisers` are checked with `property-predicate` instead. Select the objects the measure fits: single flights (`IfcStairFlight`) and ramp flights (`IfcRampFlight`), not a whole stair whose landing would count as a tread.

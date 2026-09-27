@@ -43,7 +43,7 @@ use axioval::axiolid::{
     AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
     AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
     AxiolidLinearQuantityService, AxiolidMetricRoutingService, AxiolidPlanAreaService,
-    AxiolidPlanSpanService, AxiolidProximityService, AxiolidSpaceService,
+    AxiolidPlanSpanService, AxiolidProximityService, AxiolidSightService, AxiolidSpaceService,
     AxiolidTriangleCountService, AxiolidVerticalExtentService, AxiolidWalkabilityService,
     AxiolidWalkingSurfaceService,
 };
@@ -53,8 +53,8 @@ use axioval::engine::{
     LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
     PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
     ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, SourceSnapshot, SpaceServiceHandle,
-    TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
+    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
     VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, SourceId};
@@ -324,6 +324,12 @@ fn register(
             WalkingSurfaceServiceHandle::new(Arc::new(AxiolidWalkingSurfaceService::new(
                 geometry.clone(),
             ))),
+            bound,
+        )?
+        // Eyes, targets and blockers are the visibility rule's selection,
+        // carried in each request.
+        .with_host_service(
+            SightServiceHandle::new(Arc::new(AxiolidSightService::new(geometry.clone()))),
             bound,
         )?
         .with_host_service(

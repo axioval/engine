@@ -456,6 +456,7 @@ mod compiler;
 mod concepts;
 mod contact;
 mod coordinate_system;
+mod coverage;
 mod derived_relationships;
 mod envelope_membership;
 mod facade_area;
@@ -473,6 +474,7 @@ mod properties;
 mod proximity;
 mod relationships;
 mod services;
+mod sight;
 mod space;
 mod topology;
 mod triangle_count;
@@ -496,6 +498,7 @@ pub use coordinate_system::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
     MapConversion, SourceCoordinateSystem,
 };
+pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
     DerivedRelationshipServiceHandle, adjacent_side,
@@ -563,6 +566,9 @@ pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{
     EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
     SourceSnapshot,
+};
+pub use sight::{
+    SightError, SightEvidence, SightOutcome, SightRequest, SightService, SightServiceHandle,
 };
 pub use space::{
     BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,

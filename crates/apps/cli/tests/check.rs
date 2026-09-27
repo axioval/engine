@@ -4902,3 +4902,168 @@ fn with_geometry_a_component_away_from_every_external_wall_is_found() {
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     assert_eq!(finding_ids(&result), ["#108"], "{result:#}");
 }
+
+/// The IFC4 header and project shared by the generated visibility and
+/// coverage models, around `body`.
+fn ifc4_model(body: &str) -> String {
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {body}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// Desk #19 at the origin faces door #39 4 m away behind wall #29; desk
+/// #49 at x 20 faces door #69 4 m away past column #59, which hides only
+/// the door's middle.
+fn desks_and_doors() -> String {
+    let desk = "IFCFURNISHINGELEMENT('GID',$,$,$,$,PL,REP,$)";
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.,1.,$,$,$)";
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,$)";
+    ifc4_model(&format!(
+        "{}{}{}{}{}{}",
+        placed_box(10, [0.0, 0.0, 0.0], [1.0, 0.6, 0.8], desk),
+        placed_box(20, [2.0, 0.0, 0.0], [0.2, 6.0, 3.0], wall),
+        placed_box(30, [4.0, 0.0, 0.0], [0.1, 1.0, 2.0], door),
+        placed_box(40, [20.0, 0.0, 0.0], [1.0, 0.6, 0.8], desk),
+        placed_box(50, [22.0, 0.0, 0.0], [0.2, 0.2, 3.0], column),
+        placed_box(60, [24.0, 0.0, 0.0], [0.1, 1.0, 2.0], door),
+    ))
+}
+
+#[test]
+fn with_geometry_a_door_hidden_by_a_wall_is_found_and_one_past_a_column_is_seen() {
+    let case = Case::new("geometry-component-visibility");
+    let (output, result) = case.geometry_rule(
+        &desks_and_doors(),
+        &[
+            ("desk", "IfcFurnishingElement"),
+            ("door", "IfcDoor"),
+            ("column", "IfcColumn"),
+        ],
+        "axioval:capability.component-visibility",
+        &registry_signature("axioval:capability.component-visibility"),
+        entity("desk"),
+        json!({
+            "targets": {"type": "selector", "value": entity("door")},
+            "blockers": {"type": "selector", "value": {"kind": "anyOf", "operands": [
+                entity("wall"), entity("column"),
+            ]}},
+            "eye_height": {"type": "quantity", "value": 1.2, "unit": "m"},
+            "radius": {"type": "quantity", "value": 6, "unit": "m"},
+            "mode": {"type": "string", "value": "at-least"},
+            "minimum": {"type": "integer", "value": 1},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#19".to_owned(),
+            "0 target(s) within 6 m of the eye 1.2 m above the base of ifc-step:model.ifc/#19 \
+             are in view; required at least 1; 1 hidden"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(
+        result["report"]["findings"][0]["related"][0]["local_id"], "#39",
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// Room #19 (x 0 to 10, y 0 to 4) with one sprinkler, #29 at (2.5, 2),
+/// and wall #59 across it at x 5 to 5.2 up to y 3.5; room #39 (y 10 to 14)
+/// with sprinklers #49 at (2.5, 12) and #69 at (7.5, 12).
+fn sprinklered_rooms() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let sprinkler = "IFCFIRESUPPRESSIONTERMINAL('GID',$,$,$,$,PL,REP,$,.SPRINKLER.)";
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    ifc4_model(&format!(
+        "{}{}{}{}{}{}",
+        placed_box(10, [5.0, 2.0, 0.0], [10.0, 4.0, 3.0], space),
+        placed_box(20, [2.5, 2.0, 2.6], [0.2, 0.2, 0.1], sprinkler),
+        placed_box(30, [5.0, 12.0, 0.0], [10.0, 4.0, 3.0], space),
+        placed_box(40, [2.5, 12.0, 2.6], [0.2, 0.2, 0.1], sprinkler),
+        placed_box(50, [5.1, 1.75, 0.0], [0.2, 3.5, 3.0], wall),
+        placed_box(60, [7.5, 12.0, 2.6], [0.2, 0.2, 0.1], sprinkler),
+    ))
+}
+
+#[test]
+fn with_geometry_rooms_are_judged_by_how_much_of_them_their_sprinklers_reach() {
+    let case = Case::new("geometry-effective-coverage");
+    let types = [
+        ("space", "IfcSpace"),
+        ("sprinkler", "IfcFireSuppressionTerminal"),
+    ];
+    let signature = registry_signature("axioval:capability.effective-coverage");
+    // Grown by 3 m, #29 reaches just over half of #19; #49 and #69 all of
+    // #39 but its corners.
+    let (output, result) = case.geometry_rule(
+        &sprinklered_rooms(),
+        &types,
+        "axioval:capability.effective-coverage",
+        &signature,
+        entity("space"),
+        json!({
+            "sources": {"type": "selector", "value": entity("sprinkler")},
+            "mode": {"type": "string", "value": "grown"},
+            "range": {"type": "quantity", "value": 3, "unit": "m"},
+            "minimum_ratio": {"type": "number", "value": 0.9},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#19");
+    assert!(
+        found[0].1.starts_with("between 0.5")
+            && found[0]
+                .1
+                .ends_with("(grown by 3 m); required at least 0.9"),
+        "{found:#?}"
+    );
+    // Seen from its centre, #29 sees the west half of #19 and a wedge
+    // through the gap past the wall; the wall stands in the way.
+    let (output, result) = case.geometry_rule(
+        &sprinklered_rooms(),
+        &types,
+        "axioval:capability.effective-coverage",
+        &signature,
+        entity("space"),
+        json!({
+            "sources": {"type": "selector", "value": entity("sprinkler")},
+            "mode": {"type": "string", "value": "visible"},
+            "range": {"type": "quantity", "value": 20, "unit": "m"},
+            "minimum_ratio": {"type": "number", "value": 0.9},
+            "blockers": {"type": "selector", "value": entity("wall")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#19");
+    assert!(found[0].1.contains("(visible by 20 m)"), "{found:#?}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

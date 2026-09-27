@@ -37,7 +37,10 @@
 
 use axiolid_core::Point2;
 use axiolid_overlay::{Polygon, Ring};
-use axioval_engine::{GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService, PlanBand};
+use axioval_engine::{
+    CoverageEvidence, CoverageRequest, GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService,
+    PlanBand,
+};
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
@@ -79,6 +82,11 @@ impl AxiolidPlanAreaService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
         Self { geometry, source }
+    }
+
+    /// Whether the host declared the object bodiless.
+    pub(crate) fn has_no_body(&self, object: &ObjectId) -> bool {
+        self.geometry.has_no_body(object)
     }
 
     fn deviation(&self, object: &ObjectId) -> Result<f64, PlanAreaError> {
@@ -470,5 +478,12 @@ impl PlanAreaService for AxiolidPlanAreaService {
                 exact,
             },
         )
+    }
+
+    fn measure_coverage(
+        &self,
+        request: &CoverageRequest,
+    ) -> Result<CoverageEvidence, PlanAreaError> {
+        crate::coverage::measure(self, request)
     }
 }

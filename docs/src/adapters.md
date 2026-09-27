@@ -275,6 +275,30 @@ unmeasured, undescribed or a group that cannot give a footprint refuses the
 measurement, never zero. The 0.3.0 overlay's region dilation is not used: it
 does not state on which side of the true offset its polygon lies.
 
+Coverage (`measure_coverage`) brackets every source's effect area between an
+inner region, inside the true one, and an outer region holding it. A grown
+effect is the source's footprint dilated by the range with a stated side
+(`Region::dilate_inner` and `dilate_outer`, axiolid-overlay 0.3.2). A visible
+effect is the exact visibility polygon of the source's footprint centre in
+the free region (`Region::visibility_polygon`), cut to a regular 64-gon
+inscribed in the range's disc or circumscribing it. A travel effect cuts the
+free region into convex cells and judges each by the shortest-path distance
+at its centroid from the kernel's distance map (`axiolid-route`
+`distance_map`, `DistanceMap::nearest`): within a convex cell of the free
+region the distance is 1-Lipschitz, so a cell lies within range when the
+centroid's distance plus the cell's radius does, and out of range when the
+distance less the radius exceeds it; other cells are split, up to seven
+times and 4096 queries per effect, and the rest count towards the outer
+bound only. The free region is the subject's footprint less the blockers'
+footprints: all of them for inner bounds, the certain ones for outer bounds.
+A centre outside the free region reaches none of it; one on its boundary is
+unmeasured. Effects are handed to the overlay as convex pieces, clipped to
+the footprint and united. Only exact meshes are measured: a tessellated
+subject or blocker refuses the request, while a tessellated or unmeasured
+source, or a bodiless one that has no centre to travel or look from, leaves
+its own effect unmeasured, which keeps the upper bound at the whole
+footprint. A bodiless source grows nothing.
+
 A bodiless group, such as a zone that makes up a fire compartment, has no
 mesh of its own. Membership is a semantic fact, so the host declares it:
 `with_group(group, members)`, or `with_undecided_group(group, reason)` when it
@@ -424,6 +448,22 @@ as does a tessellated space whose enclosing extent comes within the
 derivation's reach of the question. A curved space elsewhere blocks nothing.
 Answers are cached per derivation and subject, so counting per space measures
 each component once.
+
+`AxiolidSightService` answers lines of sight with the kernel's certified
+`line_of_sight` (axiolid-inspect 0.3.1). A visible answer is one ray, checked
+with exact predicates, that crosses a target triangle before any blocker
+triangle. A hidden answer covers every ray to the target by single blocker
+pieces: a triangle, two coplanar triangles of one mesh forming a convex
+quadrilateral (a wall face), or a whole closed convex blocker (a column). A
+target covered only where two separate blocker meshes meet stays undecided.
+The distance to the target is the least distance from the eye to its
+triangles, widened by a rounding bound (and a tessellated target's chord
+deviation), so a target is left unlooked-at only when surely beyond the
+range. A blocker whose box lies apart from the box holding the eye and the
+target cannot meet any segment between them and is not handed over. A
+tessellated target in range or tessellated blocker that may matter refuses,
+since its mesh is not its shape; an unmeasured blocker refuses; a bodiless
+blocker is skipped and a bodiless target refused.
 
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 

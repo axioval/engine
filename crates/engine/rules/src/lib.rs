@@ -9,12 +9,14 @@ mod clash;
 mod clash_matrix;
 mod comparison;
 mod component_clearance;
+mod component_visibility;
 mod conformance;
 mod consistent_value;
 mod containment;
 mod counterpart_coverage;
 mod counts;
 mod distance;
+mod effective_coverage;
 mod escape_route;
 mod exit_separation;
 mod external_wall_validation;
@@ -72,12 +74,14 @@ pub use comparison::{
     Side, SourceComparison, Unresolved, compare_sessions,
 };
 pub use component_clearance::ComponentClearance;
+pub use component_visibility::ComponentVisibility;
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
 pub use containment::Containment;
 pub use counterpart_coverage::CounterpartCoverage;
 pub use counts::RelatedCount;
 pub use distance::Distance;
+pub use effective_coverage::EffectiveCoverage;
 pub use escape_route::EscapeRoute;
 pub use exit_separation::ExitSeparation;
 pub use external_wall_validation::ExternalWallValidation;
@@ -181,4 +185,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(SpaceConnection))
         .and_then(|registry| registry.register(SpaceDistance))
         .and_then(|registry| registry.register(ComponentClearance))
+        .and_then(|registry| registry.register(ComponentVisibility))
+        .and_then(|registry| registry.register(EffectiveCoverage))
 }

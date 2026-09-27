@@ -243,6 +243,44 @@ All notable changes are documented here. This project follows Semantic Versionin
   `distance` rule (`counterparts` the walls with `IsExternal` true,
   `nearest`, `horizontal`, `maximum_metres`), documented with an end-to-end
   test; it needs no capability of its own. (#67)
+- **Component visibility.** `component-visibility` requires targets within
+  a `radius` of an eye `eye_height` above each component's base, over its
+  footprint centre, to be in view past the `blockers` selection: at least
+  `minimum` of them (`mode: at-least`, default 1) or none (`mode: none`).
+  The new line-of-sight contract (`SightService`, `SightServiceHandle`,
+  `SightRequest`, `SightEvidence`, `SightOutcome`) answers `Visible` with a
+  witness point, `Hidden` with the occluders, which must be requested
+  blockers, or `Undecided`, and bounds the distance to the target so a
+  target surely beyond the range is not looked at. The Axiolid adapter
+  (`AxiolidSightService`) answers with the kernel's certified
+  `line_of_sight`: a target covered only where two separate blockers meet
+  stays undecided, and tessellated targets in range or blockers that may
+  matter refuse. Undecided targets, straddling distances and undecided
+  blockers decide only what they cannot change. The CLI registers the
+  service with `--geometry`. See-through blockers are left out by the
+  `blockers` selection, through `axioval:presentation.Transparency`. (#71)
+- **Effective coverage.** `effective-coverage` requires the union of the
+  `sources`' effect areas, clipped to each element's footprint, to cover at
+  least `minimum_ratio` of it. An effect reaches `range` as `mode` says:
+  the source's footprint grown (`grown`), grown but only for sources
+  touching the element within `touch_tolerance` (`touching`), the points
+  within that travel distance of the source's centre (`travel`), or the
+  points its centre sees (`visible`), travel and sight going round the
+  `blockers`' footprints. With `capacity_property` and
+  `capacity_multiplier`, the summed property of the sources reaching the
+  element times the multiplier must also reach its area. The plan-area
+  contract gains `measure_coverage` (`CoverageRequest`, `Participant`,
+  `EffectReach`, `CoverageEvidence`, `EffectMeets`; the default refuses): the
+  covered area is an interval from the certain sources' inner bounds to
+  every source's outer bound, whole when an effect cannot be measured, and
+  each source's effect is reported as meeting the footprint surely,
+  possibly, not or unmeasured. The Axiolid adapter dilates footprints with a
+  stated side (`Region::dilate_inner`, `dilate_outer`), cuts the exact
+  visibility polygon to discs inscribed in and circumscribing the range, and
+  judges convex cells of the free region by the kernel's travel-distance
+  map. Uncertain sources raise only the upper bound, uncertain blockers
+  narrow only the lower. Effects propagating into connected spaces and an
+  area taken from a property wait. (#72)
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m

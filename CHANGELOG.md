@@ -6,6 +6,9 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Manual checks on an empty selection.** `manual-issue` raises its check
+  once for the project when the selection decidedly picks nothing, instead
+  of raising nothing.
 - **Object frames.** A new `ObjectFrameService` (`ObjectFrameServiceHandle`)
   supplies an object's placement frame as a `MetricFrame` grounded on the
   object, in canonical metres with right-handed right, forward and up axes,

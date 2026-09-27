@@ -878,6 +878,28 @@ mod manual {
         assert_eq!(evaluation.findings()[0].related.len(), 1);
         assert_eq!(evaluation.findings()[0].related[0].local_id, "z");
     }
+
+    /// The check is owed even when nothing matches: it is raised once for
+    /// the project, never silently dropped.
+    #[test]
+    fn an_empty_selection_still_owes_the_check_at_project_level() {
+        let model = Model::default().object("y", "wall");
+        let evaluation = model.evaluate(
+            &ManualIssue,
+            &rule(
+                "axioval:capability.manual-issue",
+                kind("stair"),
+                vec![("title", string("Check handrail height"))],
+            ),
+        );
+        assert_eq!(evaluation.findings().len(), 1);
+        let finding = &evaluation.findings()[0];
+        assert_eq!(finding.scope, axioval_ir::Scope::Project);
+        assert_eq!(
+            finding.message,
+            "Check handrail height (no object matches the selection)"
+        );
+    }
 }
 
 #[test]

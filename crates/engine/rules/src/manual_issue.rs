@@ -5,6 +5,9 @@ use axioval_engine::{
     RuleContext,
 };
 
+use axioval_ir::{Finding, Scope};
+
+use crate::pairs::severity;
 use crate::selection::select_objects;
 use crate::support::{Parameters, finding, invalid};
 
@@ -14,7 +17,10 @@ use crate::support::{Parameters, finding, invalid};
 /// signage by hand": the rule records once that the check is owed and names
 /// every object it concerns. The first selected object is the subject and
 /// the others are related objects. Nothing is judged, so no evidence is
-/// attached. A selection that picks nothing raises nothing.
+/// attached. A selection that decidedly picks nothing still owes the check:
+/// it is raised once against the project, saying that no object matched.
+/// A selection with undecided objects raises nothing of its own; those
+/// objects are reported not evaluated.
 pub struct ManualIssue;
 
 impl RuleCapability for ManualIssue {
@@ -62,6 +68,13 @@ impl RuleCapability for ManualIssue {
         let mut objects = selected.into_iter().map(|object| object.id.clone());
         if let Some(first) = objects.next() {
             evaluation.push_finding(finding(rule, &first, text, vec![], objects.collect()));
+        } else if evaluation.not_evaluated_outcomes().is_empty() {
+            evaluation.push_finding(Finding::new(
+                rule.id.clone(),
+                Scope::Project,
+                severity(rule),
+                format!("{text} (no object matches the selection)"),
+            ));
         }
         evaluation
     }

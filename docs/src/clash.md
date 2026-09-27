@@ -261,6 +261,94 @@ not evaluated instead, and one that passes stays passed.
 The intersection volume and a volume tolerance wait on
 axiolid/kernel#183.
 
+### Clash matrix
+
+`axioval:capability.clash-matrix` gives each pair of categories its own
+tolerance profile and severity. Pairs are proposed as for `clash` (the rule's
+subjects against `counterparts`), within the widest clearance any cell
+declares. It is a capability of its own rather than a mode of `clash`,
+because a matrix moves every tolerance into the table: a `clash` rule's
+flat parameters would all be meaningless beside it. The pair judgement is
+shared: a cell means exactly what a `clash` rule with the same values means,
+classes, switches, interval handling and exclusions included.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `counterparts` | selector | the objects checked against |
+| `cells` | table, required | one row per cell, columns below |
+| `key_1` … `key_3` | property, optional | the text properties the `*_key_<n>` columns match |
+| `case_sensitive` | boolean, optional | whether patterns match case; default true |
+| `symmetric` | boolean, optional | a cell covers a pair either way round; default true |
+| `report_unmatched` | boolean, optional | report a pair no cell covers; default false |
+| `exclude_same_system` | boolean, optional | skip pairs in one system; default true |
+| `system_path` | string, optional | the relationship path from an object to its system |
+| `exclude_paths` | string list, optional | further exclusion paths, as for `clash` |
+| `exclude_same_layer` | boolean, optional | skip pairs sharing a presentation layer; default false |
+
+Each cell keys both sides of the pair: `subject_*` and `counterpart_*`.
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `*_discipline` | pattern | the discipline the object's source plays |
+| `*_selector` | selector | a selector the object must match, such as an entity type |
+| `*_key_1` … `*_key_3` | pattern | the value of the property `key_<n>` names |
+| `penetration_tolerance_metres` | number, required | as for `clash` |
+| `clearance_metres`, `duplicate_tolerance_metres`, `horizontal_tolerance_metres`, `vertical_tolerance_metres` | number | as for `clash` |
+| `report_duplicates`, `report_containment`, `report_intersections` | boolean | as for `clash`; default true |
+| `severity` | string | `error`, `warning` or `info`; default the rule's |
+| `label` | string | names the cell in findings |
+
+Patterns are whole-value wildcards (`*`, `?`), read as `like` reads them. A
+blank column accepts any object; an absent property matches no pattern. A
+cell for `architecture` against `mep` and one for `architecture` against
+`structure`, each with its own penetration tolerance, check both pairs in
+one run:
+
+```json
+"cells": { "type": "table", "value": [
+  { "subject_discipline": { "type": "string", "value": "architecture" },
+    "counterpart_discipline": { "type": "string", "value": "structure" },
+    "penetration_tolerance_metres": { "type": "number", "value": 0.01 },
+    "severity": { "type": "string", "value": "error" } },
+  { "subject_discipline": { "type": "string", "value": "architecture" },
+    "counterpart_discipline": { "type": "string", "value": "mep" },
+    "penetration_tolerance_metres": { "type": "number", "value": 0.05 },
+    "severity": { "type": "string", "value": "warning" } } ] }
+```
+
+**Choosing the cell.** Each pair is judged with its single most specific
+cell, through `support::table`'s row matching. A cell keying more categories
+is more specific, whatever its patterns; among cells keying as many, the one
+with more literal pattern characters is. With `symmetric` a cell covers a
+pair when it matches either way round, at the more specific orientation.
+The broad phase reports a pair of one group once, with the lesser identity
+as subject, so an ordered matrix (`symmetric: false`) is meaningful only
+between disjoint groups.
+
+- **Tie.** Cells tied for most specific leave the pair not evaluated
+  (`invalid-declaration`), naming the cells; declaration order never breaks
+  the tie.
+- **Unknown category.** A category that cannot be read (a property the
+  source cannot answer, a selector it cannot decide, a source declaring no
+  discipline) leaves the pair not evaluated when a cell testing it could
+  apply. A source declaring no discipline is reported once per source.
+- **Unmatched.** A pair no cell covers is ignored, or, with
+  `report_unmatched`, a finding naming both objects' categories. It is not
+  measured either way.
+- **Switched off.** A cell with every class off and no clearance covers its
+  pairs without checking them: they are neither measured nor unmatched.
+
+**Exclusions** apply to the whole matrix and are decided before a cell is
+chosen. Same-system exclusion is on unless switched off, and then needs
+`system_path` (in IFC, `IfcRelAssignsToGroup:backward`): the engine names no
+source's relationships, so a matrix without the path and without
+`exclude_same_system: false` is an invalid declaration. Same-layer
+exclusion is off unless switched on.
+
+A finding carries its cell's severity, ends with the cell it was judged by
+(``(clash matrix cell 0 `architecture x structure`)``), and carries the
+evidence of the category values read to choose it.
+
 `axioval:capability.distance` requires each subject's counterparts to keep a
 declared distance. It takes these parameters:
 
@@ -311,7 +399,7 @@ margin.
 
 Door-swing footprints as distance sources wait on object frames (#36).
 
-Both capabilities fail closed:
+These capabilities fail closed:
 
 - A missing service or an invalid declaration refuses every subject.
 - An object whose extent cannot be read is reported not evaluated, because

@@ -3008,6 +3008,149 @@ fn two_models_with_one_file_name_or_a_bad_discipline_are_refused() {
     );
 }
 
+/// A clash matrix cell keyed by discipline on both sides.
+fn discipline_cell(subject: &str, counterpart: &str, tolerance: f64, severity: &str) -> Value {
+    json!({
+        "label": {"type": "string", "value": format!("{subject} x {counterpart}")},
+        "severity": {"type": "string", "value": severity},
+        "subject_discipline": {"type": "string", "value": subject},
+        "counterpart_discipline": {"type": "string", "value": counterpart},
+        "penetration_tolerance_metres": {"type": "number", "value": tolerance},
+    })
+}
+
+impl Case {
+    /// Three files: architectural walls #16 (y = 0) and #26 (y = 20), a
+    /// structural wall through #16 and a building-services wall through
+    /// #26, each 0.1 m deep; every wall checked against every other by a
+    /// clash matrix of `cells`, with `extra` parameters.
+    fn clash_matrix(&self, cells: &Value, extra: &Value) -> (Output, Value) {
+        let case = self;
+        case.write(
+            "arch.ifc",
+            &walls_file(&[
+                (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000A16"),
+                (20, 2.0, 20.0, 4.0, 0.2, "0000000000000000000A26"),
+            ]),
+        );
+        case.write(
+            "struct.ifc",
+            &walls_file(&[(10, 0.5, 0.0, 0.2, 4.0, "0000000000000000000S16")]),
+        );
+        case.write(
+            "mep.ifc",
+            &walls_file(&[(10, 0.5, 20.0, 0.2, 4.0, "0000000000000000000M16")]),
+        );
+        let (definitions, ruleset) = case.clash_packages();
+        let mut definitions: Value =
+            serde_json::from_str(&std::fs::read_to_string(&definitions).unwrap()).unwrap();
+        let definition = &mut definitions["definitions"]["axioval:example.clash"];
+        definition["capability"] = json!("axioval:capability.clash-matrix");
+        definition["parameters"] = registry_signature("axioval:capability.clash-matrix");
+        let mut ruleset: Value =
+            serde_json::from_str(&std::fs::read_to_string(&ruleset).unwrap()).unwrap();
+        let mut parameters = json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "cells": {"type": "table", "value": cells},
+            // Same-system exclusion is on by default; IFC reaches a system
+            // through its group assignment.
+            "system_path": {"type": "string", "value": "IfcRelAssignsToGroup:backward"},
+        });
+        for (name, value) in extra.as_object().unwrap() {
+            parameters[name] = value.clone();
+        }
+        ruleset["root"]["rules"][0]["parameters"] = parameters;
+        let definitions = case.write("definitions.json", &definitions.to_string());
+        let ruleset = case.write("ruleset.json", &ruleset.to_string());
+        let saved = case.path("result.json");
+        let _ = std::fs::remove_file(&saved);
+        let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .current_dir(&case.dir)
+            .arg("check")
+            .args(["--model", "arch.ifc:architecture"])
+            .args(["--model", "struct.ifc:structure"])
+            .args(["--model", "mep.ifc:mep"])
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(["--geometry", "--report", saved.to_str().unwrap()])
+            .env("SOURCE_DATE_EPOCH", "1790416800")
+            .output()
+            .unwrap();
+        let result = std::fs::read_to_string(&saved)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or(Value::Null);
+        (output, result)
+    }
+}
+
+/// One matrix judges both crossings, each with its own cell.
+#[test]
+fn a_clash_matrix_judges_each_discipline_pair_with_its_own_cell_across_files() {
+    let case = Case::new("clash-matrix");
+    // Architecture against structure accepts 0.05 m, against building
+    // services 0.15 m: only the structural crossing is a clash.
+    let (output, result) = case.clash_matrix(
+        &json!([
+            discipline_cell("architecture", "structure", 0.05, "warning"),
+            discipline_cell("architecture", "mep", 0.15, "error"),
+        ]),
+        &json!({}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let finding = &findings[0];
+    assert_eq!(finding["severity"], "warning", "{finding:#}");
+    let documents = [
+        finding["object_id"]["source"]["document"].as_str().unwrap(),
+        finding["related"][0]["source"]["document"]
+            .as_str()
+            .unwrap(),
+    ];
+    assert!(
+        documents == ["arch.ifc", "struct.ifc"] || documents == ["struct.ifc", "arch.ifc"],
+        "{finding:#}"
+    );
+    let message = finding["message"].as_str().unwrap();
+    assert!(message.contains("penetration 0.1000 m"), "{message}");
+    assert!(
+        message.ends_with("(clash matrix cell 0 `architecture x structure`)"),
+        "{message}"
+    );
+
+    // With the structural tolerance relaxed and no building-services cell,
+    // the structural crossing passes and the uncovered pair is reported
+    // when asked to.
+    let (output, result) = case.clash_matrix(
+        &json!([discipline_cell(
+            "architecture",
+            "structure",
+            0.15,
+            "warning"
+        )]),
+        &json!({"report_unmatched": {"type": "boolean", "value": true}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("no clash matrix cell covers")
+            && message.contains("discipline `mep`")
+            && message.contains("discipline `architecture`"),
+        "{message}"
+    );
+}
+
 /// Walls in metres, each 4 m long and 3 m high. #19 is 0.3 m thick and #29
 /// 0.25 m, both across world y and both stating a 0.3 m layer set. #49 is
 /// placed a quarter turn round, so it runs along world y and is 0.24 m thick

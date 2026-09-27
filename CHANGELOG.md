@@ -42,6 +42,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   `PortalConnectorPassage`, `ForbiddenConnectorPassage` and
   `Unavailable(String)` (a backend refusal); matching it exhaustively is a
   breaking change. (#76)
+- **Clash matrix.** The new capability `clash-matrix` judges each candidate
+  pair with the tolerance profile and severity of one row of its `cells`
+  table. A cell keys both sides of the pair (`subject_*`, `counterpart_*`)
+  by a pattern over the discipline the object's source plays, patterns over
+  the text properties `key_1` to `key_3` name, and a selector (an entity
+  class), and gives `clash`'s tolerances and class switches as columns, with
+  an optional `severity` and `label`. The single most specific cell applies:
+  the one keying the most categories, then the one with the most literal
+  pattern characters; cells cover a pair either way round unless
+  `symmetric` is false. Tied cells or an unreadable category leave the pair
+  not evaluated; a pair no cell covers is ignored or, with
+  `report_unmatched`, reported. Same-system exclusion is on by default and
+  needs `system_path` (or `exclude_same_system: false`); same-layer
+  exclusion is off by default; `exclude_paths` works as for `clash`. The pair
+  judgement, measurement and exclusions are shared with `clash`, so a cell
+  means exactly what a `clash` rule with its values means. (#58)
 - **Clash classes, axis tolerances and pair exclusions.** `clash` now puts
   each pair in one class: a **duplicate** (the two surfaces lie within
   `duplicate_tolerance_metres` of each other, default zero), one body

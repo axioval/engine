@@ -5,6 +5,7 @@ use axioval_engine::{CapabilityRegistry, EngineError};
 
 mod body_extent;
 mod clash;
+mod clash_matrix;
 mod comparison;
 mod conformance;
 mod consistent_value;
@@ -48,6 +49,7 @@ mod xsd_pattern;
 
 pub use body_extent::BodyExtent;
 pub use clash::Clash;
+pub use clash_matrix::ClashMatrix;
 pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
     ComparisonTolerance, Difference, Facet, Measure, Measurement, ModelComparison, ObjectChange,
@@ -113,6 +115,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(FreeFloorCircle))
         .and_then(|registry| registry.register(FreeFloorRectangle))
         .and_then(|registry| registry.register(Clash))
+        .and_then(|registry| registry.register(ClashMatrix))
         .and_then(|registry| registry.register(Distance))
         .and_then(|registry| registry.register(SelectorConformance))
         .and_then(|registry| registry.register(UniqueValue))

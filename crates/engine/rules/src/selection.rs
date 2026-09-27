@@ -122,23 +122,38 @@ fn discipline_matches(
     object: &Object,
     discipline: &Discipline,
 ) -> Selection {
+    match discipline_of(context, object, "the `discipline` selector") {
+        Ok(declared) if declared == discipline => Selection::Match,
+        Ok(_) => Selection::NoMatch,
+        Err((reason, message)) => Selection::NotEvaluated(reason, message),
+    }
+}
+
+/// The discipline `object`'s source plays, for `reader` (named in the
+/// message when none is declared).
+///
+/// A source that declares none is `NotRecorded`, with a message naming the
+/// source only, so the runtime reports it once per rule and source.
+pub(crate) fn discipline_of<'c>(
+    context: &RuleContext<'c>,
+    object: &Object,
+    reader: &str,
+) -> Result<&'c Discipline, (NotEvaluatedReason, String)> {
     let Some(disciplines) = context.services.get::<SourceDisciplines>() else {
-        return Selection::NotEvaluated(
+        return Err((
             NotEvaluatedReason::MissingService,
             "source disciplines are not available outside an evidence session".into(),
-        );
+        ));
     };
-    match disciplines.of(&object.id.source) {
-        Some(declared) if declared == discipline => Selection::Match,
-        Some(_) => Selection::NoMatch,
-        None => Selection::NotEvaluated(
+    disciplines.of(&object.id.source).ok_or_else(|| {
+        (
             NotEvaluatedReason::NotRecorded,
             format!(
-                "source `{}` declares no discipline, so the `discipline` selector cannot decide",
+                "source `{}` declares no discipline, so {reader} cannot decide",
                 object.id.source
             ),
-        ),
-    }
+        )
+    })
 }
 
 /// Whether the objects `path` reaches from `object` satisfy `selector`

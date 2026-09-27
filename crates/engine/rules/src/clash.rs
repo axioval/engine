@@ -41,11 +41,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use axioval_engine::{
     BodyContainment, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
     ParameterType, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityEvidence, ProximityProjection, ProximityRequest, RuleCapability, RuleContext,
+    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest,
+    ProximityServiceHandle, RuleCapability, RuleContext,
 };
-use axioval_ir::{Finding, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue};
+use axioval_ir::{
+    Evidence, Finding, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue,
+    Severity,
+};
 
-use crate::pairs::{fidelity_note, prepare, reason, refuse_declaration, severity};
+use crate::pairs::{Unevaluated, fidelity_note, prepare, reason, refuse_declaration, severity};
 use crate::selection::property_error;
 use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
@@ -60,65 +64,125 @@ struct Report {
     intersection: bool,
 }
 
-struct Declaration {
+/// The tolerances a pair is judged against and the classes it reports: a
+/// rule's parameters for `clash`, one cell's for `clash-matrix`.
+pub(crate) struct Profile {
     penetration_tolerance: f64,
     clearance: Option<f64>,
     duplicate_tolerance: f64,
     horizontal_tolerance: f64,
     vertical_tolerance: f64,
     report: Report,
+}
+
+/// Reads one named value; absent is `None`, another type an error.
+pub(crate) type Read<'f, T> = &'f dyn Fn(&str) -> Result<Option<T>, Unavailable>;
+
+impl Profile {
+    /// Reads a profile by name from a rule's parameters or a table row's
+    /// cells, which name its values alike.
+    pub(crate) fn read(
+        number: Read<'_, f64>,
+        boolean: Read<'_, bool>,
+    ) -> Result<Self, Unavailable> {
+        let length = |name: &str| -> Result<Option<f64>, Unavailable> {
+            match number(name)? {
+                Some(value) if value < 0.0 => {
+                    Err(invalid(format!("`{name}` must not be negative")))
+                }
+                other => Ok(other),
+            }
+        };
+        let penetration_tolerance = length("penetration_tolerance_metres")?
+            .ok_or_else(|| invalid("`penetration_tolerance_metres` is required"))?;
+        let clearance = length("clearance_metres")?;
+        if clearance == Some(0.0) {
+            return Err(invalid("`clearance_metres` must be positive"));
+        }
+        let switch =
+            |name: &str| -> Result<bool, Unavailable> { Ok(boolean(name)?.unwrap_or(true)) };
+        Ok(Self {
+            penetration_tolerance,
+            clearance,
+            duplicate_tolerance: length("duplicate_tolerance_metres")?.unwrap_or(0.0),
+            horizontal_tolerance: length("horizontal_tolerance_metres")?.unwrap_or(0.0),
+            vertical_tolerance: length("vertical_tolerance_metres")?.unwrap_or(0.0),
+            report: Report {
+                duplicate: switch("report_duplicates")?,
+                containment: switch("report_containment")?,
+                intersection: switch("report_intersections")?,
+            },
+        })
+    }
+
+    /// Whether a class is reported or a clearance declared.
+    pub(crate) fn checks_anything(&self) -> bool {
+        self.report.duplicate
+            || self.report.containment
+            || self.report.intersection
+            || self.clearance.is_some()
+    }
+
+    /// How far apart the broad phase must still propose a pair.
+    pub(crate) fn margin(&self) -> f64 {
+        self.clearance.unwrap_or(0.0)
+    }
+}
+
+/// The profile's value names, shared by the `clash` parameters and the
+/// `clash-matrix` cell columns.
+pub(crate) const PROFILE_NUMBERS: [&str; 5] = [
+    "penetration_tolerance_metres",
+    "clearance_metres",
+    "duplicate_tolerance_metres",
+    "horizontal_tolerance_metres",
+    "vertical_tolerance_metres",
+];
+pub(crate) const PROFILE_SWITCHES: [&str; 3] = [
+    "report_duplicates",
+    "report_containment",
+    "report_intersections",
+];
+
+struct Declaration {
+    profile: Profile,
     /// Relationship paths, each a list of steps.
     exclude_paths: Vec<Vec<String>>,
     exclude_same_layer: bool,
 }
 
-fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
-    match parameters.number(name)? {
-        Some(value) if value < 0.0 => Err(invalid(format!("`{name}` must not be negative"))),
-        other => Ok(other),
-    }
-}
-
-fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
-    let parameters = Parameters(rule);
-    let penetration_tolerance = length(&parameters, "penetration_tolerance_metres")?
-        .ok_or_else(|| invalid("parameter `penetration_tolerance_metres` is required"))?;
-    let clearance = length(&parameters, "clearance_metres")?;
-    if clearance == Some(0.0) {
-        return Err(invalid("`clearance_metres` must be positive"));
-    }
-    let switch =
-        |name: &str| -> Result<bool, Unavailable> { Ok(parameters.boolean(name)?.unwrap_or(true)) };
-    let report = Report {
-        duplicate: switch("report_duplicates")?,
-        containment: switch("report_containment")?,
-        intersection: switch("report_intersections")?,
-    };
-    if !(report.duplicate || report.containment || report.intersection) && clearance.is_none() {
-        return Err(invalid(
-            "every class is switched off and no clearance is declared: nothing is checked",
-        ));
-    }
-    let exclude_paths: Vec<Vec<String>> = parameters
+/// The `exclude_paths` parameter, each entry split into its steps.
+pub(crate) fn exclusion_paths(
+    parameters: &Parameters<'_>,
+) -> Result<Vec<Vec<String>>, Unavailable> {
+    let paths: Vec<Vec<String>> = parameters
         .strings("exclude_paths")?
         .unwrap_or_default()
         .iter()
         .map(|path| path.split_whitespace().map(str::to_owned).collect())
         .collect();
-    for path in &exclude_paths {
+    for path in &paths {
         if path.is_empty() {
             return Err(invalid("an `exclude_paths` entry has no steps"));
         }
         Traversal::path(path)?;
     }
+    Ok(paths)
+}
+
+fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
+    let parameters = Parameters(rule);
+    let profile = Profile::read(&|name| parameters.number(name), &|name| {
+        parameters.boolean(name)
+    })?;
+    if !profile.checks_anything() {
+        return Err(invalid(
+            "every class is switched off and no clearance is declared: nothing is checked",
+        ));
+    }
     Ok(Declaration {
-        penetration_tolerance,
-        clearance,
-        duplicate_tolerance: length(&parameters, "duplicate_tolerance_metres")?.unwrap_or(0.0),
-        horizontal_tolerance: length(&parameters, "horizontal_tolerance_metres")?.unwrap_or(0.0),
-        vertical_tolerance: length(&parameters, "vertical_tolerance_metres")?.unwrap_or(0.0),
-        report,
-        exclude_paths,
+        profile,
+        exclude_paths: exclusion_paths(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
     })
 }
@@ -142,7 +206,7 @@ impl Holds {
 }
 
 /// What a pair amounts to.
-enum Outcome {
+pub(crate) enum Outcome {
     Pass,
     Finding(String),
     Open(NotEvaluatedReason, String),
@@ -164,8 +228,8 @@ impl Outcome {
     }
 }
 
-impl Declaration {
-    fn judge(&self, measured: &ProximityEvidence, counterpart: &ObjectId) -> Outcome {
+impl Profile {
+    pub(crate) fn judge(&self, measured: &ProximityEvidence, counterpart: &ObjectId) -> Outcome {
         let note = fidelity_note(measured.fidelity());
         let tolerance = self.duplicate_tolerance;
         let (lower, upper) = match measured.hausdorff_interval_metres() {
@@ -342,7 +406,7 @@ type Reached = Result<BTreeSet<ObjectId>, Unavailable>;
 
 /// Whether pairs share a relationship target or a presentation layer, with
 /// every walk and layer read cached per object.
-struct Exclusions<'r> {
+pub(crate) struct Exclusions<'r> {
     context: &'r RuleContext<'r>,
     paths: Vec<Traversal<'r>>,
     same_layer: bool,
@@ -352,15 +416,18 @@ struct Exclusions<'r> {
 }
 
 impl<'r> Exclusions<'r> {
-    fn new(context: &'r RuleContext<'r>, declared: &'r Declaration) -> Result<Self, Unavailable> {
+    pub(crate) fn new(
+        context: &'r RuleContext<'r>,
+        paths: &'r [Vec<String>],
+        same_layer: bool,
+    ) -> Result<Self, Unavailable> {
         Ok(Self {
             context,
-            paths: declared
-                .exclude_paths
+            paths: paths
                 .iter()
                 .map(|path| Traversal::path(path))
                 .collect::<Result<_, _>>()?,
-            same_layer: declared.exclude_same_layer,
+            same_layer,
             everything: context.project.objects().collect(),
             reached: BTreeMap::new(),
             layers: BTreeMap::new(),
@@ -425,7 +492,11 @@ impl<'r> Exclusions<'r> {
 
     /// Why the pair is excluded, `None` when it is not, or why that cannot
     /// be decided.
-    fn excluded(&mut self, a: &ObjectId, b: &ObjectId) -> Result<Option<String>, Unavailable> {
+    pub(crate) fn excluded(
+        &mut self,
+        a: &ObjectId,
+        b: &ObjectId,
+    ) -> Result<Option<String>, Unavailable> {
         let mut undecided = None;
         for path in 0..self.paths.len() {
             let from_a = self.reached(path, a).clone();
@@ -486,25 +557,134 @@ impl<'r> Exclusions<'r> {
     }
 }
 
+/// Measures one pair, refusing a measurement that names another pair.
+pub(crate) fn measure(
+    service: &ProximityServiceHandle,
+    subject: &ObjectId,
+    counterpart: &ObjectId,
+) -> Result<ProximityEvidence, Unavailable> {
+    ProximityRequest::try_new(subject.clone(), counterpart.clone())
+        .and_then(|request| service.measure_proximity(&request))
+        .and_then(|measured| {
+            // A measurement of another pair answers a different question.
+            if measured.request().subject() == subject
+                && measured.request().counterpart() == counterpart
+            {
+                Ok(measured)
+            } else {
+                Err(ProximityError::InvalidMeasurement)
+            }
+        })
+        .map_err(|error| {
+            (
+                reason(error),
+                format!("proximity to {counterpart} could not be measured: {error}"),
+            )
+        })
+}
+
+/// A pair's outcome once an undecided exclusion is taken into account: it
+/// never hides a finding and never reports one.
+pub(crate) fn unless_excluded(
+    outcome: Outcome,
+    exclusion: Result<Option<String>, Unavailable>,
+    counterpart: &ObjectId,
+) -> Outcome {
+    match (outcome, exclusion) {
+        (Outcome::Pass, _) => Outcome::Pass,
+        // A fact the source records for nothing is about the source, not
+        // the pair: keep its message free of object names, so the runtime
+        // reports it once per source.
+        (_, Err((NotEvaluatedReason::NotRecorded, message))) => Outcome::Open(
+            NotEvaluatedReason::NotRecorded,
+            format!("a clash may be excluded: {message}"),
+        ),
+        (_, Err((reason, message))) => Outcome::Open(
+            reason,
+            format!("the pair with {counterpart} may be excluded: {message}"),
+        ),
+        (outcome, _) => outcome,
+    }
+}
+
+/// Records a pair's outcome against its subject.
+pub(crate) struct Recorder<'r> {
+    pub(crate) rule: &'r CompiledRule,
+    pub(crate) evaluation: CapabilityEvaluation,
+    pub(crate) unevaluated: Unevaluated,
+}
+
+impl Recorder<'_> {
+    pub(crate) fn record(
+        &mut self,
+        subject: &ObjectId,
+        counterpart: &ObjectId,
+        outcome: Outcome,
+        severity: Severity,
+        evidence: Vec<Evidence>,
+    ) {
+        match outcome {
+            Outcome::Finding(message) => self.evaluation.push_finding(
+                Finding {
+                    rule_id: self.rule.id.clone(),
+                    scope: axioval_ir::Scope::Object(subject.clone()),
+                    severity,
+                    message,
+                    related: Vec::new(),
+                    evidence,
+                }
+                .with_related([counterpart.clone()]),
+            ),
+            Outcome::Open(reason, message) => {
+                self.unevaluated.push(subject.clone(), reason, message);
+            }
+            Outcome::Pass => {}
+        }
+    }
+
+    pub(crate) fn finish(self) -> CapabilityEvaluation {
+        let Self {
+            mut evaluation,
+            unevaluated,
+            ..
+        } = self;
+        unevaluated.drain_into(&mut evaluation);
+        evaluation
+    }
+}
+
+/// The parameters of a profile, in `clash`'s order.
+pub(crate) fn profile_columns() -> impl Iterator<Item = (&'static str, bool)> {
+    PROFILE_NUMBERS
+        .iter()
+        .map(|name| (*name, true))
+        .chain(PROFILE_SWITCHES.iter().map(|name| (*name, false)))
+}
+
 impl RuleCapability for Clash {
     fn id(&self) -> &'static str {
         "axioval:capability.clash"
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("counterparts", ParameterType::Selector),
-            ParameterDescriptor::required("penetration_tolerance_metres", ParameterType::Number),
-            ParameterDescriptor::optional("clearance_metres", ParameterType::Number),
-            ParameterDescriptor::optional("duplicate_tolerance_metres", ParameterType::Number),
-            ParameterDescriptor::optional("horizontal_tolerance_metres", ParameterType::Number),
-            ParameterDescriptor::optional("vertical_tolerance_metres", ParameterType::Number),
-            ParameterDescriptor::optional("report_duplicates", ParameterType::Boolean),
-            ParameterDescriptor::optional("report_containment", ParameterType::Boolean),
-            ParameterDescriptor::optional("report_intersections", ParameterType::Boolean),
+        let mut parameters = vec![ParameterDescriptor::required(
+            "counterparts",
+            ParameterType::Selector,
+        )];
+        for (name, number) in profile_columns() {
+            parameters.push(match (name, number) {
+                ("penetration_tolerance_metres", _) => {
+                    ParameterDescriptor::required(name, ParameterType::Number)
+                }
+                (_, true) => ParameterDescriptor::optional(name, ParameterType::Number),
+                (_, false) => ParameterDescriptor::optional(name, ParameterType::Boolean),
+            });
+        }
+        parameters.extend([
             ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
-        ]
+        ]);
+        parameters
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -515,83 +695,51 @@ impl RuleCapability for Clash {
         let prepared = match prepare(
             context,
             rule,
-            Some(declared.clearance.unwrap_or(0.0)),
+            Some(declared.profile.margin()),
             ProximityProjection::Minimum3d,
         ) {
             Ok(prepared) => prepared,
             Err(refused) => return refused,
         };
-        let mut exclusions = match Exclusions::new(context, &declared) {
+        let mut exclusions = match Exclusions::new(
+            context,
+            &declared.exclude_paths,
+            declared.exclude_same_layer,
+        ) {
             Ok(exclusions) => exclusions,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
-        let mut evaluation = CapabilityEvaluation::default();
-        let mut unevaluated = prepared.unevaluated;
-
+        let mut recorder = Recorder {
+            rule,
+            evaluation: CapabilityEvaluation::default(),
+            unevaluated: prepared.unevaluated,
+        };
         for pair in &prepared.pairs {
             let (subject, counterpart) = (pair.subject(), pair.counterpart());
             let exclusion = exclusions.excluded(subject, counterpart);
             if matches!(exclusion, Ok(Some(_))) {
                 continue;
             }
-            let measured = ProximityRequest::try_new(subject.clone(), counterpart.clone())
-                .and_then(|request| prepared.service.measure_proximity(&request))
-                .and_then(|measured| {
-                    // A measurement of another pair answers a different question.
-                    if measured.request().subject() == subject
-                        && measured.request().counterpart() == counterpart
-                    {
-                        Ok(measured)
-                    } else {
-                        Err(axioval_engine::ProximityError::InvalidMeasurement)
-                    }
-                });
-            let measured = match measured {
+            let measured = match measure(prepared.service, subject, counterpart) {
                 Ok(measured) => measured,
-                Err(error) => {
-                    unevaluated.push(
-                        subject.clone(),
-                        reason(error),
-                        format!("proximity to {counterpart} could not be measured: {error}"),
-                    );
+                Err((reason, message)) => {
+                    recorder.unevaluated.push(subject.clone(), reason, message);
                     continue;
                 }
             };
-            let outcome = declared.judge(&measured, counterpart);
-            let outcome = match (outcome, exclusion) {
-                (Outcome::Pass, _) => continue,
-                // A fact the source records for nothing is about the source,
-                // not the pair: keep its message free of object names, so the
-                // runtime reports it once per source.
-                (_, Err((NotEvaluatedReason::NotRecorded, message))) => Outcome::Open(
-                    NotEvaluatedReason::NotRecorded,
-                    format!("a clash may be excluded: {message}"),
-                ),
-                (_, Err((reason, message))) => Outcome::Open(
-                    reason,
-                    format!("the pair with {counterpart} may be excluded: {message}"),
-                ),
-                (outcome, _) => outcome,
-            };
-            match outcome {
-                Outcome::Finding(message) => evaluation.push_finding(
-                    Finding {
-                        rule_id: rule.id.clone(),
-                        scope: axioval_ir::Scope::Object(subject.clone()),
-                        severity: severity(rule),
-                        message,
-                        related: Vec::new(),
-                        evidence: vec![measured.evidence().clone()],
-                    }
-                    .with_related([counterpart.clone()]),
-                ),
-                Outcome::Open(reason, message) => {
-                    unevaluated.push(subject.clone(), reason, message);
-                }
-                Outcome::Pass => {}
-            }
+            let outcome = unless_excluded(
+                declared.profile.judge(&measured, counterpart),
+                exclusion,
+                counterpart,
+            );
+            recorder.record(
+                subject,
+                counterpart,
+                outcome,
+                severity(rule),
+                vec![measured.evidence().clone()],
+            );
         }
-        unevaluated.drain_into(&mut evaluation);
-        evaluation
+        recorder.finish()
     }
 }

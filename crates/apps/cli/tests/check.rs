@@ -9785,3 +9785,49 @@ fn with_geometry_space_validation_selects_its_bounding_elements() {
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert!(sorted_findings(&result).is_empty(), "{result:#}");
 }
+
+/// Every wall of the envelope model declared internal, #56 included.
+fn envelope_model_all_internal() -> String {
+    envelope_model()
+        .replace("IFCBOOLEAN(.T.)", "IFCBOOLEAN(.F.)")
+        .replace(
+            "#90=IFCZONE",
+            "#100=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.F.),$);\n\
+             #101=IFCPROPERTYSET('0000000000000000000101',$,'Pset_WallCommon',$,(#100));\n\
+             #102=IFCRELDEFINESBYPROPERTIES('0000000000000000000102',$,$,$,(#56),#101);\n\
+             #90=IFCZONE",
+        )
+}
+
+/// A model declaring no wall external is one major finding against the
+/// model, never one per wall on the envelope.
+#[test]
+fn with_geometry_a_model_declaring_nothing_external_is_one_source_finding() {
+    let case = Case::new("geometry-envelope-all-internal");
+    let (output, result) = case.geometry_rule(
+        &envelope_model_all_internal(),
+        &[("space", "IfcSpace"), ("zone", "IfcZone")],
+        "axioval:capability.external-wall-validation",
+        &registry_signature("axioval:capability.external-wall-validation"),
+        entity("wall"),
+        json!({
+            "derivations": {"type": "stringList", "value": ["all-spaces", "gross-area-groups"]},
+            "bounding_selector": {"type": "selector", "value": entity("space")},
+            "gross_area_group_selector": {"type": "selector", "value": entity("zone")},
+            "gross_area_group_path": {"type": "stringList",
+                                      "value": ["IfcRelAssignsToGroup:forward"]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(findings[0]["object_id"].is_null(), "{result:#}");
+    assert_eq!(findings[0]["severity"], "error", "{result:#}");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("no selected object is declared external"),
+        "{result:#}"
+    );
+}

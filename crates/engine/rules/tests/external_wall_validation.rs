@@ -26,6 +26,8 @@ const ID: &str = "axioval:capability.external-wall-validation";
 struct Stub {
     answer: Result<(Vec<ObjectId>, Vec<ObjectId>), EnvelopeMembershipError>,
     undeclared: Vec<ObjectId>,
+    /// The derived set of the gross-area-groups derivation, when it differs.
+    groups_derived: Option<Vec<ObjectId>>,
     asked: Mutex<Vec<EnvelopeMembershipRequest>>,
 }
 
@@ -34,6 +36,7 @@ impl Stub {
         Arc::new(Self {
             answer,
             undeclared: Vec::new(),
+            groups_derived: None,
             asked: Mutex::new(Vec::new()),
         })
     }
@@ -68,7 +71,12 @@ impl EnvelopeMembershipService for Stub {
         request: &EnvelopeMembershipRequest,
     ) -> Result<EnvelopeMembershipEvidence, EnvelopeMembershipError> {
         self.asked.lock().unwrap().push(request.clone());
-        let (declared, derived) = self.answer.clone()?;
+        let (declared, mut derived) = self.answer.clone()?;
+        if request.derivation() == EnvelopeDerivation::GrossAreaGroups
+            && let Some(groups) = &self.groups_derived
+        {
+            derived.clone_from(groups);
+        }
         Ok(EnvelopeMembershipEvidence::try_new(
             request.clone(),
             declared,
@@ -375,11 +383,111 @@ fn disagreement_is_reported_per_element_in_both_directions() {
 }
 
 /// A model declaring nothing external while geometry finds walls is a real
-/// discrepancy, not a vacuous pass.
+/// discrepancy, not a vacuous pass: one major finding against the source,
+/// never one per wall on the envelope.
 #[test]
-fn nothing_declared_against_derived_walls_is_a_finding() {
+fn nothing_declared_external_is_one_source_finding() {
     let outcome = run(model(), &Stub::sets(&[], &["w1", "w2"]), &all_spaces());
-    assert_eq!(outcome.findings().len(), 2);
+    assert_eq!(outcome.findings().len(), 1, "{:?}", outcome.findings());
+    let finding = &outcome.findings()[0];
+    assert_eq!(finding.scope, axioval_ir::Scope::Source(source()));
+    assert_eq!(finding.severity, axioval_ir::Severity::Error);
+    assert!(
+        finding
+            .message
+            .contains("no selected object is declared external")
+    );
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+
+    // Both derivations measured: still one finding for the source.
+    let outcome = run(
+        model(),
+        &Stub::sets(&[], &["w1"]),
+        &walls(gross_area(vec![
+            ("derivations", strings(&["all-spaces", "gross-area-groups"])),
+            ("bounding_selector", selector(kind("space"))),
+        ])),
+    );
+    assert_eq!(findings(&outcome).len(), 1, "{:?}", findings(&outcome));
+}
+
+/// A selected wall stating neither might be the external one, so the
+/// source is not evaluated rather than found.
+#[test]
+fn nothing_declared_external_with_an_undeclared_wall_is_not_evaluated() {
+    let stub = Arc::new(Stub {
+        answer: Ok((Vec::new(), vec![id("w1")])),
+        undeclared: vec![id("w2")],
+        groups_derived: None,
+        asked: Mutex::new(Vec::new()),
+    });
+    let outcome = run(model(), &stub, &all_spaces());
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "w1".to_owned(),
+            "on the all-spaces envelope but not declared external".to_owned()
+        )]
+    );
+    let sources: Vec<_> = outcome
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| matches!(outcome.scope(), axioval_ir::Scope::Source(_)))
+        .collect();
+    assert_eq!(sources.len(), 1);
+    assert!(sources[0].message().contains("1 state neither"));
+}
+
+/// With both derivations, an object on one envelope and not the other is
+/// reported against itself, whatever it declares.
+#[test]
+fn an_object_on_only_one_derived_envelope_is_a_disagreement() {
+    let stub = Arc::new(Stub {
+        answer: Ok((vec![id("w1"), id("w2")], vec![id("w1"), id("w2")])),
+        undeclared: vec![id("w3")],
+
+        // w2 is on the all-spaces envelope only; w3 (declaring nothing) on
+        // the gross-area-groups envelope only.
+        groups_derived: Some(vec![id("w1"), id("w3")]),
+        asked: Mutex::new(Vec::new()),
+    });
+    let outcome = run(
+        model(),
+        &stub,
+        &walls(gross_area(vec![
+            ("derivations", strings(&["all-spaces", "gross-area-groups"])),
+            ("bounding_selector", selector(kind("space"))),
+        ])),
+    );
+    let mut reported = findings(&outcome);
+    reported.sort();
+    assert_eq!(
+        reported,
+        [
+            (
+                "w2".to_owned(),
+                "declared external but not on the gross-area-groups envelope".to_owned()
+            ),
+            (
+                "w2".to_owned(),
+                "on the all-spaces envelope but not on the gross-area-groups envelope".to_owned()
+            ),
+            (
+                "w3".to_owned(),
+                "on the gross-area-groups envelope but not on the all-spaces envelope".to_owned()
+            ),
+        ]
+    );
+    // One derivation alone has nothing to disagree with.
+    let outcome = run(
+        model(),
+        &Stub::sets(&["w1"], &["w1"]),
+        &walls(gross_area(vec![(
+            "derivations",
+            strings(&["gross-area-groups"]),
+        )])),
+    );
+    assert!(outcome.findings().is_empty());
 }
 
 #[test]
@@ -424,6 +532,7 @@ fn undeclared_walls_are_not_evaluated_and_unselected_objects_are_ignored() {
     let stub = Arc::new(Stub {
         answer: Ok((vec![id("w1")], vec![id("w1"), id("w2"), id("slab")])),
         undeclared: vec![id("w2")],
+        groups_derived: None,
         asked: Mutex::new(Vec::new()),
     });
     let outcome = run(model(), &stub, &all_spaces());

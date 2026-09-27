@@ -14,7 +14,10 @@
 //!   `gross_area_group_path`.
 //!
 //! `derivations` lists one or both, and each is reported on its own: every
-//! finding and not-evaluated outcome names its derivation. An object a
+//! finding and not-evaluated outcome names its derivation. With both, an
+//! object on one envelope and not the other is reported too, whatever it
+//! declares, and a source in which no selected object is declared external
+//! is one finding against the source rather than one per object. An object a
 //! selector cannot decide might be a bounding space, so that derivation is not
 //! evaluated rather than derived around a guessed region.
 //!
@@ -25,12 +28,12 @@
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, EnvelopeDerivation, EnvelopeMembershipError,
-    EnvelopeMembershipRequest, EnvelopeMembershipServiceHandle, NotEvaluatedReason,
-    ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
+    EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipServiceHandle,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Finding, Object, ObjectId, Severity};
-use std::collections::BTreeSet;
+use axioval_ir::{Evidence, Finding, Object, ObjectId, Severity, SourceId};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::counts::Population;
 use crate::selection::select_objects;
@@ -88,6 +91,7 @@ impl RuleCapability for ExternalWallValidation {
         };
 
         let selected: BTreeSet<&ObjectId> = selected.iter().map(|o| &o.id).collect();
+        let mut measured = Vec::new();
         for derivation in &declaration.derivations {
             let name = derivation.as_str();
             let bounding = match declaration.bounding(context, *derivation) {
@@ -99,48 +103,7 @@ impl RuleCapability for ExternalWallValidation {
             };
             let request = EnvelopeMembershipRequest::new(*derivation, bounding);
             match service.measure_envelope_membership(&request) {
-                Ok(measured) => {
-                    for object_id in measured.undeclared() {
-                        if selected.contains(object_id) {
-                            evaluation.push_object_not_evaluated(
-                                object_id.clone(),
-                                NotEvaluatedReason::IncompleteEvidence,
-                                format!(
-                                    "not compared with the {name} envelope: the model states neither external nor internal, or its body could not be measured"
-                                ),
-                            );
-                        }
-                    }
-                    // Report each disagreeing wall against itself, so a
-                    // reviewer opens the element rather than a whole-model
-                    // message.
-                    let declared_only = measured.declared_only().into_iter().map(|id| {
-                        (
-                            id,
-                            format!("declared external but not on the {name} envelope"),
-                        )
-                    });
-                    let derived_only = measured.derived_only().into_iter().map(|id| {
-                        (
-                            id,
-                            format!("on the {name} envelope but not declared external"),
-                        )
-                    });
-                    for (object_id, message) in declared_only.chain(derived_only) {
-                        if selected.contains(&object_id) {
-                            evaluation.push_finding(Finding {
-                                rule_id: rule.id.clone(),
-                                scope: axioval_ir::Scope::Object(object_id),
-                                severity: Severity::Warning,
-                                related: Vec::new(),
-                                message,
-                                evidence: vec![measured.evidence().clone()],
-                                location: None,
-                                categories: Vec::new(),
-                            });
-                        }
-                    }
-                }
+                Ok(evidence) => measured.push(evidence),
                 Err(error) => evaluation.push_not_evaluated(
                     match error {
                         EnvelopeMembershipError::Unavailable
@@ -155,7 +118,197 @@ impl RuleCapability for ExternalWallValidation {
                 ),
             }
         }
+
+        let undeclaring = judge_declarations(rule, &selected, &measured, &mut evaluation);
+        for evidence in &measured {
+            compare_declaration(rule, &selected, &undeclaring, evidence, &mut evaluation);
+        }
+        if let [first, second] = measured.as_slice() {
+            compare_derivations(rule, &selected, first, second, &mut evaluation);
+        }
         evaluation
+    }
+}
+
+fn finding(
+    rule: &CompiledRule,
+    scope: axioval_ir::Scope,
+    severity: Severity,
+    message: String,
+    evidence: Vec<Evidence>,
+) -> Finding {
+    Finding {
+        rule_id: rule.id.clone(),
+        scope,
+        severity,
+        related: Vec::new(),
+        message,
+        evidence,
+        location: None,
+        categories: Vec::new(),
+    }
+}
+
+/// The sources in which no selected object is declared external, each found
+/// once as a whole rather than once per object on the envelope.
+///
+/// The declarations are the model's, the same in every derivation, so they
+/// are read from every measurement together. A selected object whose
+/// declaration is unstated, or whose body could not be measured, might be
+/// the external one, so its source is not evaluated instead.
+fn judge_declarations(
+    rule: &CompiledRule,
+    selected: &BTreeSet<&ObjectId>,
+    measured: &[EnvelopeMembershipEvidence],
+    evaluation: &mut CapabilityEvaluation,
+) -> BTreeSet<SourceId> {
+    let mut sources: BTreeMap<&SourceId, (bool, usize)> = BTreeMap::new();
+    if measured.is_empty() {
+        return BTreeSet::new();
+    }
+    for object in selected {
+        sources.entry(&object.source).or_default();
+    }
+    for evidence in measured {
+        for object in evidence.declared().iter().filter(|o| selected.contains(o)) {
+            if let Some((declared, _)) = sources.get_mut(&object.source) {
+                *declared = true;
+            }
+        }
+    }
+    let unknown: BTreeSet<&ObjectId> = measured
+        .iter()
+        .flat_map(EnvelopeMembershipEvidence::undeclared)
+        .filter(|object| selected.contains(object))
+        .collect();
+    for object in unknown {
+        if let Some((_, count)) = sources.get_mut(&object.source) {
+            *count += 1;
+        }
+    }
+    let evidence: Vec<Evidence> = measured
+        .iter()
+        .map(|measurement| measurement.evidence().clone())
+        .collect();
+    let mut undeclaring = BTreeSet::new();
+    for (source, (declared, unknown)) in sources {
+        if declared {
+            continue;
+        }
+        if unknown > 0 {
+            evaluation.push_source_not_evaluated(
+                source.clone(),
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "no selected object is declared external, but {unknown} state neither external nor internal or could not be measured"
+                ),
+            );
+            continue;
+        }
+        evaluation.push_finding(finding(
+            rule,
+            axioval_ir::Scope::Source(source.clone()),
+            Severity::Error,
+            "no selected object is declared external: the model declares no envelope".to_owned(),
+            evidence.clone(),
+        ));
+        undeclaring.insert(source.clone());
+    }
+    undeclaring
+}
+
+/// Reports each selected object whose declaration disagrees with one
+/// derivation against itself, so a reviewer opens the element rather than a
+/// whole-model message. In a source declaring nothing external, the source
+/// finding stands for every object on the envelope.
+fn compare_declaration(
+    rule: &CompiledRule,
+    selected: &BTreeSet<&ObjectId>,
+    undeclaring: &BTreeSet<SourceId>,
+    measured: &EnvelopeMembershipEvidence,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let name = measured.request().derivation().as_str();
+    for object_id in measured.undeclared() {
+        if selected.contains(object_id) {
+            evaluation.push_object_not_evaluated(
+                object_id.clone(),
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "not compared with the {name} envelope: the model states neither external nor internal, or its body could not be measured"
+                ),
+            );
+        }
+    }
+    let declared_only = measured.declared_only().into_iter().map(|id| {
+        (
+            id,
+            format!("declared external but not on the {name} envelope"),
+        )
+    });
+    let derived_only = measured
+        .derived_only()
+        .into_iter()
+        .filter(|id| !undeclaring.contains(&id.source))
+        .map(|id| {
+            (
+                id,
+                format!("on the {name} envelope but not declared external"),
+            )
+        });
+    for (object_id, message) in declared_only.chain(derived_only) {
+        if selected.contains(&object_id) {
+            evaluation.push_finding(finding(
+                rule,
+                axioval_ir::Scope::Object(object_id),
+                Severity::Warning,
+                message,
+                vec![measured.evidence().clone()],
+            ));
+        }
+    }
+}
+
+/// Reports each selected object one derivation places on the envelope and
+/// the other does not, whatever the model declares about it. An object
+/// bounding either derivation is that envelope's inside and is not compared.
+fn compare_derivations(
+    rule: &CompiledRule,
+    selected: &BTreeSet<&ObjectId>,
+    first: &EnvelopeMembershipEvidence,
+    second: &EnvelopeMembershipEvidence,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    let bounding: BTreeSet<&ObjectId> = first
+        .request()
+        .bounding()
+        .iter()
+        .chain(second.request().bounding())
+        .collect();
+    let on = |evidence: &EnvelopeMembershipEvidence| -> BTreeSet<ObjectId> {
+        evidence.on_envelope().iter().cloned().collect()
+    };
+    let (on_first, on_second) = (on(first), on(second));
+    for (only, on, off) in [
+        (&on_first - &on_second, first, second),
+        (&on_second - &on_first, second, first),
+    ] {
+        for object_id in only {
+            if !selected.contains(&object_id) || bounding.contains(&object_id) {
+                continue;
+            }
+            evaluation.push_finding(finding(
+                rule,
+                axioval_ir::Scope::Object(object_id),
+                Severity::Warning,
+                format!(
+                    "on the {} envelope but not on the {} envelope",
+                    on.request().derivation().as_str(),
+                    off.request().derivation().as_str()
+                ),
+                vec![on.evidence().clone(), off.evidence().clone()],
+            ));
+        }
     }
 }
 

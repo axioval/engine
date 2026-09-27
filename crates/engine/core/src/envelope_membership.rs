@@ -95,6 +95,7 @@ pub struct EnvelopeMembershipEvidence {
     request: EnvelopeMembershipRequest,
     declared: Vec<ObjectId>,
     derived: Vec<ObjectId>,
+    on_envelope: Vec<ObjectId>,
     undeclared: Vec<ObjectId>,
     evaluated_objects: usize,
     evidence: Evidence,
@@ -120,6 +121,7 @@ impl EnvelopeMembershipEvidence {
         Ok(Self {
             request,
             declared,
+            on_envelope: derived.clone(),
             derived,
             undeclared: Vec::new(),
             evaluated_objects,
@@ -150,9 +152,16 @@ impl EnvelopeMembershipEvidence {
     pub fn declared(&self) -> &[ObjectId] {
         &self.declared
     }
-    /// Objects geometry places on the envelope.
+    /// Objects geometry places on the envelope, less the undeclared ones:
+    /// the set compared with [`Self::declared`].
     pub fn derived(&self) -> &[ObjectId] {
         &self.derived
+    }
+    /// Objects geometry places on the envelope, whatever the model declares
+    /// about them: what two derivations are compared by. An object whose body
+    /// could not be measured is never in it.
+    pub fn on_envelope(&self) -> &[ObjectId] {
+        &self.on_envelope
     }
     /// Objects that cannot be compared, excluded from both sets.
     pub fn undeclared(&self) -> &[ObjectId] {
@@ -289,6 +298,8 @@ mod tests {
         let measured = build(&["w1"], &["w1", "w2"]).with_undeclared(vec![oid("w2")]);
         assert!(measured.agrees());
         assert_eq!(measured.undeclared(), &[oid("w2")]);
+        // Geometry still places it on the envelope, whatever it declares.
+        assert_eq!(measured.on_envelope(), &[oid("w1"), oid("w2")]);
         let measured = build(&["w3"], &[]).with_undeclared(vec![oid("w3")]);
         assert!(measured.agrees());
         assert!(measured.declared().is_empty());

@@ -18,6 +18,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   in folders, then its tags. `check --bcf` labels every topic this way,
   qualified by package with several rulesets; GUIDs are unchanged.
   **Breaking:** `Options` gains a field.
+- **External-wall validation finds a model declaring no envelope, and
+  disagreeing derivations.** (#138) When no selected object of a source is
+  declared external, `external-wall-validation` reports one `error` finding
+  against the source instead of one finding per object on the envelope; a
+  selected object of unknown declaration leaves the source not evaluated.
+  With both derivations measured, an object on one derived envelope and
+  not the other is reported against itself, whatever it declares, read
+  from the new `EnvelopeMembershipEvidence::on_envelope`.
 - **Space validation chooses its bounding and intersecting elements, and
   judges each unallocated region.** (#137) `space-validation` takes
   `boundary_elements` and `intersection_elements` selectors, carried in the

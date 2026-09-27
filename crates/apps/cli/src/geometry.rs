@@ -47,6 +47,7 @@ use axioval::axiolid::{
     AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
 };
+use axioval::bcf;
 use axioval::engine::{
     BoundaryCoverageServiceHandle, ContactServiceHandle, DerivedRelationshipServiceHandle,
     EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
@@ -58,7 +59,7 @@ use axioval::engine::{
     TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
     WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
-use axioval::ir::{ObjectId, PropertyValue, SourceId};
+use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_connection_surface, lower_product_net};
 use ifc_geometry::{RepresentationPurpose, Transform};
 use ifc_model::{Codec, EntityId, Model};
@@ -908,6 +909,37 @@ fn space_service(
         }
     }
     service
+}
+
+/// The measured extent of every object `report` names, for fitting BCF
+/// cameras: each session's proximity service answers for its own objects.
+///
+/// An object no session measured is left out, so its viewpoint gets no
+/// camera rather than a guessed one. The extent is the box that encloses the
+/// true body (the mesh box grown by its chord deviation).
+pub fn bounds(sessions: &[&EvidenceSession], report: &Report) -> BTreeMap<ObjectId, bcf::Bounds> {
+    let mut named: BTreeSet<&ObjectId> = BTreeSet::new();
+    for finding in report.findings() {
+        named.extend(finding.object_id());
+        named.extend(&finding.related);
+    }
+    for outcome in report.not_evaluated() {
+        named.extend(outcome.object_id());
+    }
+    let mut bounds = BTreeMap::new();
+    for object in named {
+        let measured = sessions
+            .iter()
+            .filter(|session| session.project().object(object).is_some())
+            .filter_map(|session| session.service::<ProximityServiceHandle>())
+            .find_map(|service| service.bounds(object).ok())
+            .map(|measured| measured.enclosing())
+            .and_then(|extent| bcf::Bounds::new(extent.min(), extent.max()));
+        if let Some(measured) = measured {
+            bounds.insert(object.clone(), measured);
+        }
+    }
+    bounds
 }
 
 #[cfg(test)]

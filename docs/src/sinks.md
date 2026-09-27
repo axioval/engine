@@ -67,7 +67,9 @@ checked against the buildingSMART 2.1 schemas.
 
 A report carries no geometry, so the host passes what it measured:
 `Options::bounds` maps objects to their axis-aligned `Bounds` in model
-coordinates (metres).
+coordinates (metres). The CLI fills it with `--geometry`, from the proximity
+service's extent of each object named by the report (the mesh box grown by
+its chord deviation, so it encloses the true body).
 
 ```rust,ignore
 let options = axioval_bcf::Options {

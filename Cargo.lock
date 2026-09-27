@@ -617,6 +617,7 @@ dependencies = [
  "openbim-bcf",
  "serde",
  "serde_json",
+ "zip",
 ]
 
 [[package]]

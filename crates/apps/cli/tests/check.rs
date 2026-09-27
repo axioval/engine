@@ -8513,3 +8513,108 @@ fn with_geometry_a_turning_circle_needs_the_floor_a_door_swings_over() {
         "{result:#}"
     );
 }
+
+/// Text of every viewpoint file in a written archive.
+fn bcf_viewpoints(path: &Path) -> Vec<String> {
+    use std::io::Read as _;
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut texts = Vec::new();
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index).unwrap();
+        if Path::new(entry.name())
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("bcfv"))
+        {
+            let mut text = String::new();
+            entry.read_to_string(&mut text).unwrap();
+            texts.push(text);
+        }
+    }
+    texts
+}
+
+#[test]
+fn with_geometry_bcf_viewpoints_frame_the_clashing_pair() {
+    for (version, expected) in [
+        ("2.1", openbim_bcf::BcfVersion::V2_1),
+        ("3.0", openbim_bcf::BcfVersion::V3_0),
+    ] {
+        let case = Case::new(&format!("geometry-bcf-{version}"));
+        let bcf = case.path("issues.bcfzip");
+        let output = case.clash_check(&[
+            "--geometry",
+            "--summary",
+            "--bcf",
+            bcf.to_str().unwrap(),
+            "--bcf-date",
+            "2026-09-26T10:00:00Z",
+            "--bcf-version",
+            version,
+        ]);
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+        let archive = openbim_bcf::read_path(&bcf).unwrap();
+        assert_eq!(archive.version().resolved(), Some(expected));
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        let topic = &archive.topics().next().unwrap().topic;
+        assert_eq!(topic.priority.as_deref(), Some("High"));
+
+        // A perspective and an orthogonal view of both walls, looking down
+        // at the centre of the pair: x 0..4, y -2..2, z 0..3.
+        let views = bcf_viewpoints(&bcf);
+        assert_eq!(views.len(), 2, "{views:?}");
+        for view in &views {
+            assert!(
+                view.contains("0000000000000000000016") && view.contains("0000000000000000000026"),
+                "{view}"
+            );
+        }
+        let perspective = views
+            .iter()
+            .find(|view| view.contains("<PerspectiveCamera>"))
+            .unwrap();
+        assert!(
+            views.iter().any(|view| view.contains("<OrthogonalCamera>")),
+            "{views:?}"
+        );
+        let number = |element: &str| -> f64 {
+            let start = perspective.find(&format!("<{element}>")).unwrap() + element.len() + 2;
+            let end = start + perspective[start..].find('<').unwrap();
+            perspective[start..end].parse().unwrap()
+        };
+        let viewpoint = perspective.find("<CameraViewPoint>").unwrap();
+        let (x, z) = {
+            let tail = &perspective[viewpoint..];
+            let read = |axis: &str| -> f64 {
+                let start = tail.find(&format!("<{axis}>")).unwrap() + 3;
+                let end = start + tail[start..].find('<').unwrap();
+                tail[start..end].parse().unwrap()
+            };
+            (read("X"), read("Z"))
+        };
+        assert!(x > 2.0 && z > 1.5, "{perspective}");
+        assert!((number("FieldOfView") - 60.0).abs() < 1e-9, "{perspective}");
+    }
+}
+
+#[test]
+fn bcf_3_without_geometry_writes_nothing_and_fails_with_status_1() {
+    let case = Case::new("bcf-3-without-bounds");
+    let bcf = case.path("issues.bcfzip");
+    let output = case.check(
+        &ifc("0000000000000000000002", false),
+        true,
+        &["--bcf", bcf.to_str().unwrap(), "--bcf-version", "3.0"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("BCF 3.0 needs a camera"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!bcf.exists(), "nothing is written when 3.0 is refused");
+}

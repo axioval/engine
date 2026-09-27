@@ -121,7 +121,10 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
         tolerance,
     );
     let output = CheckOutput::new(report, records, meshed, &project).with_comparison(record);
-    emit(&output, &project, args.output)?;
+    let bounds = args
+        .geometry
+        .then(|| geometry::bounds(&[&base, &revised], &output.report));
+    emit(&output, &project, bounds, args.output)?;
     Ok(Outcome::of(&output.report))
 }
 

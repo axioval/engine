@@ -31,7 +31,7 @@ use axioval::{
     },
     ifc::import_ifc_session,
     ir::{
-        DefinitionPackage, Discipline, Project, Report, RuleSetPackage, SourceId,
+        DefinitionPackage, Discipline, ObjectId, Project, Report, RuleSetPackage, SourceId,
         contract::SourceField,
     },
 };
@@ -116,9 +116,14 @@ struct OutputArgs {
     /// Write the JSON result here instead of stdout.
     #[arg(long)]
     report: Option<PathBuf>,
-    /// Also write the report as a BCF 2.1 archive.
+    /// Also write the report as a BCF archive.
     #[arg(long)]
     bcf: Option<PathBuf>,
+    /// BCF version. 3.0 needs a camera on every viewpoint, so it needs
+    /// `--geometry` and bounds for every selected object; otherwise nothing
+    /// is written and the run fails.
+    #[arg(long, value_enum, default_value = "2.1", requires = "bcf")]
+    bcf_version: BcfVersion,
     /// BCF topic author.
     #[arg(long, default_value = "axioval", requires = "bcf")]
     bcf_author: String,
@@ -133,6 +138,24 @@ struct OutputArgs {
     /// Groups per section in the summary.
     #[arg(long, default_value_t = 10, requires = "summary")]
     top: usize,
+}
+
+/// The `--bcf-version` values.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum BcfVersion {
+    #[value(name = "2.1")]
+    V2_1,
+    #[value(name = "3.0")]
+    V3_0,
+}
+
+impl From<BcfVersion> for bcf::Version {
+    fn from(version: BcfVersion) -> Self {
+        match version {
+            BcfVersion::V2_1 => Self::V2_1,
+            BcfVersion::V3_0 => Self::V3_0,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -375,18 +398,23 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     });
     let output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session));
-    emit(&output, session.project(), args.output)?;
+    let bounds = args
+        .geometry
+        .then(|| geometry::bounds(&[&session], &output.report));
+    emit(&output, session.project(), bounds, args.output)?;
     Ok(Outcome::of(&output.report))
 }
 
 /// Writes a result as `args` asks: JSON to stdout or `--report`, a summary,
-/// a BCF archive, and diagnostics to stderr.
+/// a BCF archive, and diagnostics to stderr. `bounds` are the measured
+/// objects' extents with `--geometry`, which fit the BCF cameras.
 ///
 /// Everything is built before anything is written, so a run that fails
 /// leaves no partial output behind.
 pub(crate) fn emit(
     output: &CheckOutput,
     project: &Project,
+    bounds: Option<BTreeMap<ObjectId, bcf::Bounds>>,
     args: OutputArgs,
 ) -> Result<(), Box<dyn Error>> {
     let json = serde_json::to_string_pretty(output)? + "\n";
@@ -396,12 +424,13 @@ pub(crate) fn emit(
                 Some(date) => date,
                 None => timestamp()?,
             };
-            let export = bcf::export(
-                &output.report,
-                project,
-                &bcf::Options::new(args.bcf_author, date),
-            )?;
-            Some((path, export.to_bytes()?, export.unanchored))
+            let options = bcf::Options {
+                version: args.bcf_version.into(),
+                bounds,
+                ..bcf::Options::new(args.bcf_author, date)
+            };
+            let export = bcf::export(&output.report, project, &options)?;
+            Some((path, export.to_bytes()?, export.unanchored, export.unframed))
         }
         None => None,
     };
@@ -421,14 +450,18 @@ pub(crate) fn emit(
         None if args.report.is_none() => print!("{json}"),
         None => {}
     }
-    if let Some((path, bytes, _)) = &archive {
+    if let Some((path, bytes, _, _)) = &archive {
         write(path, bytes)?;
     }
     let unanchored: Vec<_> = archive
         .iter()
-        .flat_map(|(_, _, unanchored)| unanchored)
+        .flat_map(|(_, _, unanchored, _)| unanchored)
         .collect();
-    warn(output, summary.is_some(), &unanchored);
+    let unframed: Vec<_> = archive
+        .iter()
+        .flat_map(|(_, _, _, unframed)| unframed)
+        .collect();
+    warn(output, summary.is_some(), &unanchored, &unframed);
     Ok(())
 }
 
@@ -474,7 +507,7 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
 
 /// Diagnostics for stderr. A summary already groups integrity issues and
 /// states the counts, so with one only what it cannot show is repeated.
-fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&axioval::ir::ObjectId]) {
+fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unframed: &[&ObjectId]) {
     if summarized {
         // The summary already groups integrity issues and states the counts;
         // one line each would repeat it at the size it exists to avoid.
@@ -482,6 +515,12 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&axioval::ir::Obje
             eprintln!(
                 "warning: {} object(s) have no valid unique GlobalId; their BCF topics select no component",
                 unanchored.len()
+            );
+        }
+        if !unframed.is_empty() {
+            eprintln!(
+                "warning: {} object(s) have no measured bounds; their BCF viewpoints have no camera",
+                unframed.len()
             );
         }
     } else {
@@ -492,6 +531,9 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&axioval::ir::Obje
             eprintln!(
                 "warning: {object} has no valid unique GlobalId; its BCF topic selects no component"
             );
+        }
+        for object in unframed {
+            eprintln!("warning: {object} has no measured bounds; its BCF viewpoint has no camera");
         }
         if let Some(geometry) = &output.geometry {
             eprintln!(

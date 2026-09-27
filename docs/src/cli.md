@@ -21,7 +21,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
   --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
   [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
-  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
+  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
 ```
 
 Runs the ruleset over one or more IFC2X3 or IFC4 STEP models. Each model is
@@ -158,11 +158,20 @@ Integrity issues and a one-line count also go to stderr.
 saved, and per-issue stderr lines are left out, because the summary already
 groups them.
 
-`--bcf` also writes a BCF 2.1 archive (see [Report sinks](./sinks.md)). The
+`--bcf` also writes a BCF archive (see [Report sinks](./sinks.md)). The
 topic date is `--bcf-date`, else `SOURCE_DATE_EPOCH` when set, else the current
 time, all in UTC. With `SOURCE_DATE_EPOCH` set, the same inputs write
 byte-identical archives. Objects the archive cannot select, because they have
 no valid unique GlobalId, are named on stderr.
+
+With `--geometry`, each viewpoint gets a perspective and an orthogonal camera
+fitted to the measured bounds of the topic's objects. An object that was not
+measured leaves its viewpoint without a camera and is named on stderr.
+Without `--geometry` the archive is the same as before cameras existed.
+
+`--bcf-version` is `2.1` (default) or `3.0`. BCF 3.0 requires a camera on
+every viewpoint, so it needs `--geometry` and bounds for every selected
+object; otherwise the run fails with status 1 and nothing is written.
 
 Everything is built before anything is written: a failing run leaves no
 partial report or archive behind.
@@ -188,7 +197,7 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--property SET.NAME ...] [--geometry] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
-  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
+  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
 ```
 
 Compares two revisions of one IFC2X3 or IFC4 model object by object (see

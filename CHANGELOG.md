@@ -15,6 +15,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   written when every viewpoint has a camera and refused with
   `ExportError::MissingCamera` otherwise. Without bounds the archive is
   byte-identical. Visibility and colouring are not written yet.
+  `check` and `compare` pass bounds with `--geometry` and take
+  `--bcf-version 2.1|3.0`; unmeasured objects are named on stderr.
   **Breaking:** `Options` and `Export` gain fields, `Options` is no longer
   `Eq`, and `ExportError` gains `MissingCamera`.
 - **BCF priority from severity.** (#109) A finding's topic carries

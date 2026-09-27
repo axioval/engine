@@ -27,6 +27,30 @@ All notable changes are documented here. This project follows Semantic Versionin
   `empty_numerator_finding`, `overall_width`, `overall_height`,
   `light_area_table`, `light_type`, `light_type_path`,
   `light_size_tolerance` and `frame_width`. (#54)
+- **Envelope bounding spaces come from the rule.** `external-wall-validation`
+  takes `derivations`, a list of `all-spaces` and `gross-area-groups`, and
+  runs each on its own in one rule; every finding and not-evaluated outcome
+  names its derivation. `all-spaces` is bounded by the objects
+  `bounding_selector` selects, `gross-area-groups` by the members of the
+  groups `gross_area_group_selector` selects, reached along
+  `gross_area_group_path` (with IFC, `IfcRelAssignsToGroup:forward`). The
+  resolved set travels in the `EnvelopeMembershipRequest` and the Axiolid
+  adapter derives around exactly those objects. A derivation without its
+  bounding input is an invalid declaration; an undecided selection, an empty
+  one, groups with no member or a refused relationship answer leave that
+  derivation not evaluated while the other still runs. A bounding object
+  without a mesh (bodiless, unmeasured or undescribed) makes the derivation
+  unavailable instead of being skipped, and a bounding object's own
+  declaration no longer takes part in the comparison. The CLI registers the
+  envelope service with `--geometry` alone. **Breaking:** the
+  `envelope_derivation` parameter is replaced by `derivations`, and
+  definitions must declare the three new optional parameters;
+  `EnvelopeMembershipRequest::new` takes the bounding objects, the request is
+  no longer `Copy` and `EnvelopeMembershipEvidence::request` returns a
+  reference; `AxiolidEnvelopeMembershipService::with_space` and
+  `with_gross_area_space` are removed; the CLI's `--envelope-zone` is
+  removed (a usage error, status 2), since a rule states the same zone with
+  `gross_area_group_selector` and `gross_area_group_path`.
 - **Date and date-time values.** `PropertyValue::Date` is a calendar day
   (`{"type": "date", "value": "2026-09-27"}`) and `PropertyValue::DateTime`
   an instant with the UTC offset it was stated in

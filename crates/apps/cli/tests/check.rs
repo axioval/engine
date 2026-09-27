@@ -762,61 +762,22 @@ fn envelope_model() -> String {
 }
 
 impl Case {
-    fn envelope_check(&self, extra: &[&str]) -> Output {
-        let definitions = self.definitions(true);
-        let mut definitions: Value =
-            serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
-        definitions["definitions"]["axioval:example.envelope"] = json!({
-            "id": "axioval:example.envelope",
-            "name": {"default": "External walls", "translations": {}},
-            "description": {"default": "Declared external walls form the envelope.",
-                            "translations": {}},
-            "capability": "axioval:capability.external-wall-validation",
-            "parameters": {"envelope_derivation": {
-                "id": "envelope_derivation",
-                "name": {"default": "envelope_derivation", "translations": {}},
-                "kind": "string", "required": true, "allowedValues": [], "citations": []}},
-            "citations": [],
-            "tags": [],
-        });
-        let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
-        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
-        let rule = &mut ruleset["root"]["rules"][0];
-        rule["id"] = json!("external-walls");
-        rule["definitionId"] = json!("axioval:example.envelope");
-        rule["parameters"] = json!({
-            "envelope_derivation": {"type": "string", "value": "gross-area-groups"},
-        });
-        let model = self.write("model.ifc", &envelope_model());
-        let definitions = self.write("definitions.json", &definitions.to_string());
-        let ruleset = self.write("ruleset.json", &ruleset.to_string());
-        Command::new(env!("CARGO_BIN_EXE_axioval"))
-            .arg("check")
-            .arg("--model")
-            .arg(model)
-            .arg("--definitions")
-            .arg(definitions)
-            .arg("--ruleset")
-            .arg(ruleset)
-            .args(extra)
-            .output()
-            .unwrap()
+    /// Runs `external-wall-validation` over the envelope model with
+    /// `parameters`, its definition built from the registry's signature.
+    fn envelope_check(&self, parameters: Value) -> (Output, Value) {
+        self.geometry_rule(
+            &envelope_model(),
+            &[("space", "IfcSpace"), ("zone", "IfcZone")],
+            "axioval:capability.external-wall-validation",
+            &registry_signature("axioval:capability.external-wall-validation"),
+            entity("wall"),
+            parameters,
+        )
     }
 }
 
-#[test]
-fn with_an_envelope_zone_declared_external_walls_are_checked_against_it() {
-    let case = Case::new("geometry-envelope");
-    let saved = case.path("result.json");
-    let output = case.envelope_check(&[
-        "--geometry",
-        "--envelope-zone",
-        "Envelope",
-        "--report",
-        saved.to_str().unwrap(),
-    ]);
-    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
-    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+/// `(object, message)` of every finding, sorted.
+fn sorted_findings(result: &Value) -> Vec<(String, String)> {
     let mut findings: Vec<(String, String)> = result["report"]["findings"]
         .as_array()
         .unwrap()
@@ -832,42 +793,91 @@ fn with_an_envelope_zone_declared_external_walls_are_checked_against_it() {
         })
         .collect();
     findings.sort();
-    assert_eq!(
-        findings,
-        [
-            (
-                "#26".to_owned(),
-                "on the gross-area-groups envelope but not declared external".to_owned()
-            ),
-            (
-                "#36".to_owned(),
-                "declared external but not on the gross-area-groups envelope".to_owned()
-            ),
-        ],
-        "{result:#}"
-    );
-    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
-    assert_eq!(not_evaluated.len(), 1, "{result:#}");
-    assert_eq!(not_evaluated[0]["object_id"]["local_id"], "#56");
+    findings
 }
 
+/// The rule selects its bounding spaces and its gross-area groups; no flag
+/// names them. Both derivations run in one rule, each reported on its own.
 #[test]
-fn without_an_envelope_zone_envelope_rules_are_not_evaluated() {
-    let case = Case::new("geometry-envelope-off");
-    let output = case.envelope_check(&["--geometry", "--summary"]);
+fn with_geometry_an_envelope_rule_selects_its_bounding_spaces() {
+    let case = Case::new("geometry-envelope");
+    let (output, result) = case.envelope_check(json!({
+        "derivations": {"type": "stringList", "value": ["all-spaces", "gross-area-groups"]},
+        "bounding_selector": {"type": "selector", "value": entity("space")},
+        "gross_area_group_selector": {"type": "selector", "value": entity("zone")},
+        "gross_area_group_path": {"type": "stringList",
+                                  "value": ["IfcRelAssignsToGroup:forward"]},
+    }));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let mut expected: Vec<(String, String)> = ["all-spaces", "gross-area-groups"]
+        .iter()
+        .flat_map(|derivation| {
+            [
+                (
+                    "#26".to_owned(),
+                    format!("on the {derivation} envelope but not declared external"),
+                ),
+                (
+                    "#36".to_owned(),
+                    format!("declared external but not on the {derivation} envelope"),
+                ),
+            ]
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(sorted_findings(&result), expected, "{result:#}");
+    // The undeclared wall #56 is not evaluated once per derivation.
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 2, "{result:#}");
+    for outcome in not_evaluated {
+        assert_eq!(outcome["object_id"]["local_id"], "#56", "{result:#}");
+    }
+}
+
+/// A selection that bounds nothing leaves the derivation not evaluated, and a
+/// derivation without its bounding input is an invalid declaration; neither
+/// falls back to a host default.
+#[test]
+fn with_geometry_an_envelope_rule_without_bounding_spaces_is_not_evaluated() {
+    let case = Case::new("geometry-envelope-unbounded");
+    let (output, result) = case.envelope_check(json!({
+        "derivations": {"type": "stringList", "value": ["all-spaces"]},
+        "bounding_selector": {"type": "selector", "value": entity("zone")},
+    }));
+    // The zone has no body, so its region is unknown.
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+
+    let (output, result) = case.envelope_check(json!({
+        "derivations": {"type": "stringList", "value": ["gross-area-groups"]},
+        "bounding_selector": {"type": "selector", "value": entity("space")},
+    }));
     assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
     assert!(
-        stdout(&output).contains("missing-service"),
-        "{}",
-        stdout(&output)
+        result
+            .to_string()
+            .contains("needs `gross_area_group_selector`"),
+        "{result:#}"
     );
-    let unknown = case.envelope_check(&["--geometry", "--envelope-zone", "Nowhere"]);
-    assert_eq!(unknown.status.code(), Some(1), "{}", stderr(&unknown));
-    assert!(
-        stderr(&unknown).contains("`Nowhere`"),
-        "{}",
-        stderr(&unknown)
-    );
+}
+
+/// The zone flag is gone: the rule states its bounding spaces.
+#[test]
+fn the_envelope_zone_flag_is_rejected() {
+    let case = Case::new("geometry-envelope-flag");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .args(["check", "--model", "m.ifc", "--definitions", "d.json"])
+        .args([
+            "--ruleset",
+            "r.json",
+            "--geometry",
+            "--envelope-zone",
+            "Envelope",
+        ])
+        .current_dir(case.path(""))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
 }
 
 /// Slab #16 (4 m × 4 m, 0.2 m thick) walled in on every side by 3 m walls,

@@ -18,7 +18,7 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise.
 ```bash
 axioval check --model building.ifc \
   --definitions definitions.json --ruleset ruleset.json \
-  [--geometry [--envelope-zone NAME]] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
+  [--geometry] [--report result.json] [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z]
 ```
 
@@ -238,22 +238,27 @@ refuses a derived identity, so its rule is not evaluated.
 
 External-wall validation compares the objects a model declares external with
 the objects on the envelope of a set of bounding spaces. IFC does not say which
-spaces make up the conditioned volume, so `--envelope-zone NAME` names the
-`IfcZone` whose grouped spaces (`IfcRelAssignsToGroup`) do. Without it, the
-envelope service is not registered and envelope rules report
-`missing-service`. A name that matches no zone, or several, or a zone that
-groups no space, is an error (status 1).
+spaces make up the conditioned volume, and the CLI does not guess: the rule
+selects them. `--geometry` alone registers the envelope service. The
+`all-spaces` derivation is bounded by the rule's `bounding_selector` (for
+example every `IfcSpace`), and `gross-area-groups` by the members of the groups
+its `gross_area_group_selector` selects, reached along `gross_area_group_path`
+(for example `IfcZone`s by name, then `IfcRelAssignsToGroup:forward`). One rule
+may run both; see [Capability model](./capabilities.md).
 
-- The zone's spaces bound both derivations, `all-spaces` and
-  `gross-area-groups`. They must reach the envelope's outer faces, as
-  gross-area spaces do. An object is on the envelope when its plan footprint
-  overlaps them and reaches their outline, so a wall wholly inside is internal.
+- Bounding spaces must reach the envelope's outer faces, as gross-area spaces
+  do. An object is on the envelope when its plan footprint overlaps them and
+  reaches their outline, so a wall wholly inside is internal.
 - An object's declaration is its `IsExternal`, from whichever property set
   states it: `true` is external, `false` internal. An object with no
   `IsExternal`, or with conflicting ones, is undeclared: its rule reports not
   evaluated, never "internal". So is an object whose body could not be
-  meshed, since its membership is unknown. A zone space without a body makes
-  the whole envelope unavailable.
+  meshed, since its membership is unknown. A bounding space without a body
+  makes that derivation's envelope unavailable.
+- `--envelope-zone NAME` is gone. It named one zone whose spaces bounded both
+  derivations; a rule now states the same with `gross_area_group_selector` and
+  `gross_area_group_path`, or with a `related` bounding selector. Passing it is
+  a usage error (status 2).
 
 Guard checks need to know which surfaces are walkable, and IFC has no single
 concept for it: floor, landing and roof slabs, stair and ramp flights, space

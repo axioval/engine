@@ -30,11 +30,13 @@ const HULL_TOLERANCE_METRES: f64 = 1.0e-6;
 
 /// Derives envelope membership from supplied geometry and declarations.
 ///
-/// The host registers which objects are spaces, which spaces belong to
-/// gross-area groups, and which objects the model declares external or
-/// internal. An object declared neither way is undeclared: its declaration is
-/// unknown, never taken as internal. Geometry then decides, per derivation,
-/// which objects actually bound that envelope.
+/// The host registers which objects the model declares external or internal.
+/// An object declared neither way is undeclared: its declaration is unknown,
+/// never taken as internal. The bounding objects are not the host's: each
+/// request names them ([`EnvelopeMembershipRequest::bounding`]), and the
+/// service derives around exactly those, whichever derivation the request
+/// names. Every one must have a mesh, or the derivation is unavailable.
+/// Geometry then decides which objects actually bound that envelope.
 ///
 /// An object is on the envelope when its plan footprint overlaps the region
 /// the bounding spaces cover and also reaches that region's outline, by
@@ -46,8 +48,6 @@ const HULL_TOLERANCE_METRES: f64 = 1.0e-6;
 pub struct AxiolidEnvelopeMembershipService {
     geometry: AxiolidGeometry,
     source: SourceId,
-    spaces: BTreeSet<ObjectId>,
-    gross_area_spaces: BTreeSet<ObjectId>,
     declared_external: BTreeSet<ObjectId>,
     declared_internal: BTreeSet<ObjectId>,
 }
@@ -59,30 +59,9 @@ impl AxiolidEnvelopeMembershipService {
         Self {
             geometry,
             source,
-            spaces: BTreeSet::new(),
-            gross_area_spaces: BTreeSet::new(),
             declared_external: BTreeSet::new(),
             declared_internal: BTreeSet::new(),
         }
-    }
-
-    /// Marks an object as a space bounding the envelope.
-    #[must_use]
-    pub fn with_space(mut self, space: ObjectId) -> Self {
-        self.spaces.insert(space);
-        self
-    }
-
-    /// Marks a space as belonging to a gross-area group.
-    ///
-    /// A gross-area space is also a space: registering it in both sets here
-    /// stops a host silently producing an empty `AllSpaces` envelope by
-    /// declaring only gross-area membership.
-    #[must_use]
-    pub fn with_gross_area_space(mut self, space: ObjectId) -> Self {
-        self.spaces.insert(space.clone());
-        self.gross_area_spaces.insert(space);
-        self
     }
 
     /// Records that the model declares this object to be on the envelope.
@@ -181,25 +160,33 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
         &self,
         request: &EnvelopeMembershipRequest,
     ) -> Result<EnvelopeMembershipEvidence, EnvelopeMembershipError> {
-        // Each derivation names its own bounding set. An unknown derivation is
-        // an error, never a silently empty envelope.
-        let bounding: &BTreeSet<ObjectId> = match request.derivation() {
-            EnvelopeDerivation::AllSpaces => &self.spaces,
-            EnvelopeDerivation::GrossAreaGroups => &self.gross_area_spaces,
+        // Both derivations measure the same way; they differ in which objects
+        // the rule chose to bound them. An unknown derivation is an error,
+        // never a silently empty envelope.
+        match request.derivation() {
+            EnvelopeDerivation::AllSpaces | EnvelopeDerivation::GrossAreaGroups => {}
             _ => return Err(EnvelopeMembershipError::UnsupportedDerivation),
-        };
+        }
+        let bounding: BTreeSet<ObjectId> = request.bounding().iter().cloned().collect();
         let tolerance = axiolid_core::Tolerance::new(1.0e-9, 1.0e-9)
             .map_err(|_| EnvelopeMembershipError::Unavailable)?;
 
+        // No bounding object means there is no envelope to compare against,
+        // and one without a mesh (bodiless, unmeasured or never described)
+        // leaves the region unknown. Reporting an empty or partial derived
+        // set instead would call declared walls discrepancies nobody measured.
+        if bounding.is_empty()
+            || bounding
+                .iter()
+                .any(|space| self.geometry.mesh(space).is_none())
+        {
+            return Err(EnvelopeMembershipError::Unavailable);
+        }
         let space_triangles: Vec<crate::geometry::Triangle> = bounding
             .iter()
             .filter_map(|space| self.geometry.mesh(space).map(crate::geometry::triangles))
             .flatten()
             .collect();
-        // No measurable bounding geometry means there is no envelope to compare
-        // against -- whether because no space was declared, or because the
-        // declared spaces carry no mesh. Reporting an empty derived set instead
-        // would call every declared wall a discrepancy.
         if space_triangles.is_empty() {
             return Err(EnvelopeMembershipError::Unavailable);
         }
@@ -207,7 +194,7 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
         // Membership is plan overlap with a bounding space. A tessellated space,
         // or a tessellated object whose true footprint could reach one, makes
         // that overlap an estimate, and this evidence is exact.
-        for space in bounding {
+        for space in &bounding {
             let Some(extent) = self.geometry.enclosing_extent(space) else {
                 continue;
             };
@@ -222,13 +209,6 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
         }
 
         let (region, outline) = covered_region(&space_triangles, tolerance)?;
-        // A bounding space without a body leaves the region unknown.
-        if bounding
-            .iter()
-            .any(|space| self.geometry.is_unmeasured(space))
-        {
-            return Err(EnvelopeMembershipError::Unavailable);
-        }
         let mut derived = Vec::new();
         // An object whose body could not be measured has no known membership,
         // so it cannot be compared either way, whatever it declares.
@@ -271,9 +251,14 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
             }
         }
 
+        // A bounding object is the envelope's inside, never on it, whatever
+        // it declares.
         EnvelopeMembershipEvidence::try_new(
-            *request,
-            self.declared_external.iter().cloned().collect(),
+            request.clone(),
+            self.declared_external
+                .difference(&bounding)
+                .cloned()
+                .collect(),
             derived,
             evaluated,
             Evidence::exact(

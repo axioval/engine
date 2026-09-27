@@ -41,9 +41,9 @@ pub enum EnvelopeMembershipError {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum EnvelopeDerivation {
-    /// Every space in the model bounds the envelope.
+    /// The spaces a rule selects bound the envelope.
     AllSpaces,
-    /// Only spaces belonging to gross-area groups bound the envelope.
+    /// The members of the gross-area groups a rule selects bound the envelope.
     GrossAreaGroups,
 }
 
@@ -57,17 +57,35 @@ impl EnvelopeDerivation {
 }
 
 /// A request for one envelope derivation over one model.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// The bounding objects are the rule's choice, carried in the request like the
+/// guard rule's walking surfaces: the request names exactly the objects whose
+/// plan region the envelope is derived around, and the service uses those and
+/// no others. The host declares no bounding set of its own.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnvelopeMembershipRequest {
     derivation: EnvelopeDerivation,
+    bounding: Vec<ObjectId>,
 }
 
 impl EnvelopeMembershipRequest {
-    pub fn new(derivation: EnvelopeDerivation) -> Self {
-        Self { derivation }
+    /// Asks for `derivation` around exactly `bounding`, kept in canonical
+    /// order. An empty set is kept as stated; a service reports it
+    /// unavailable, never an empty envelope.
+    pub fn new(derivation: EnvelopeDerivation, mut bounding: Vec<ObjectId>) -> Self {
+        bounding.sort();
+        bounding.dedup();
+        Self {
+            derivation,
+            bounding,
+        }
     }
     pub fn derivation(&self) -> EnvelopeDerivation {
         self.derivation
+    }
+    /// The objects the envelope is derived around.
+    pub fn bounding(&self) -> &[ObjectId] {
+        &self.bounding
     }
 }
 
@@ -125,8 +143,8 @@ impl EnvelopeMembershipEvidence {
         self
     }
 
-    pub fn request(&self) -> EnvelopeMembershipRequest {
-        self.request
+    pub fn request(&self) -> &EnvelopeMembershipRequest {
+        &self.request
     }
     /// Objects the model states are on the envelope.
     pub fn declared(&self) -> &[ObjectId] {
@@ -223,7 +241,7 @@ mod tests {
     }
     fn build(declared: &[&str], derived: &[&str]) -> EnvelopeMembershipEvidence {
         EnvelopeMembershipEvidence::try_new(
-            EnvelopeMembershipRequest::new(EnvelopeDerivation::AllSpaces),
+            EnvelopeMembershipRequest::new(EnvelopeDerivation::AllSpaces, vec![oid("s")]),
             declared.iter().map(|s| oid(s)).collect(),
             derived.iter().map(|s| oid(s)).collect(),
             3,
@@ -276,10 +294,27 @@ mod tests {
         assert!(measured.declared().is_empty());
     }
 
+    /// Bounding sets compare by content, never by the order a rule found them.
+    #[test]
+    fn bounding_objects_are_canonical() {
+        let request = EnvelopeMembershipRequest::new(
+            EnvelopeDerivation::AllSpaces,
+            vec![oid("s2"), oid("s1"), oid("s2")],
+        );
+        assert_eq!(request.bounding(), &[oid("s1"), oid("s2")]);
+        assert_eq!(
+            request,
+            EnvelopeMembershipRequest::new(
+                EnvelopeDerivation::AllSpaces,
+                vec![oid("s1"), oid("s2")]
+            )
+        );
+    }
+
     #[test]
     fn inexact_evidence_is_refused() {
         let result = EnvelopeMembershipEvidence::try_new(
-            EnvelopeMembershipRequest::new(EnvelopeDerivation::AllSpaces),
+            EnvelopeMembershipRequest::new(EnvelopeDerivation::AllSpaces, vec![oid("s")]),
             Vec::new(),
             Vec::new(),
             0,

@@ -129,10 +129,10 @@ fn envelope(column_x: f64) -> Result<usize, EnvelopeMembershipError> {
             CHORD,
         );
     AxiolidEnvelopeMembershipService::new(geometry, source())
-        .with_space(id("space"))
         .with_declared_internal(id("wall"))
         .measure_envelope_membership(&EnvelopeMembershipRequest::new(
             EnvelopeDerivation::AllSpaces,
+            vec![id("space")],
         ))
         .map(|evidence| evidence.derived().len())
 }

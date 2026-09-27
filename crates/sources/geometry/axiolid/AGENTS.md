@@ -14,8 +14,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/space.rs` implements `SpaceService`: seven independent space
   measurements over storey-assigned, role-tagged geometry.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
-  the envelope when its plan footprint meets a declared bounding space. The
-  declared set is plain `ObjectId` data, so this stays a geometry adapter.
+  the envelope when its plan footprint meets a bounding space. The bounding
+  spaces are the request's (the rule's selection), never host-declared; a
+  bounding object without a mesh refuses the derivation. Declarations are
+  plain `ObjectId` data, so this stays a geometry adapter.
 - `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point. A declared group (`with_group`) measures the union of its members; a member without a body, an unmeasured member or undecided membership refuses, never zero.
 - `src/derived_relationships.rs` implements `DerivedRelationshipService`:
   element to containing (or nearest) space, opening to the spaces a probe

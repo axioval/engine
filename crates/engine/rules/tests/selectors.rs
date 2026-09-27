@@ -6,7 +6,7 @@ mod common;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
 use axioval_rules::ManualIssue;
-use common::{Model, boolean, flagged, integer, number, rule, string, strings, unevaluated};
+use common::{Model, boolean, integer, number, rule, string, strings, unevaluated};
 
 const SET: &str = "Pset";
 const NAME: &str = "P";
@@ -21,7 +21,17 @@ fn select(model: Model, selector: Selector) -> (Vec<String>, Vec<(String, NotEva
             vec![("title", string("selected"))],
         ),
     );
-    (flagged(&evaluation), unevaluated(&evaluation))
+    // A manual issue is one finding per rule, raised against the first
+    // selected object and relating the others, so both name the selection.
+    let mut chosen: Vec<String> = evaluation
+        .findings()
+        .iter()
+        .flat_map(|finding| std::iter::once(&finding.object_id).chain(&finding.related))
+        .map(|id| id.local_id.clone())
+        .collect();
+    chosen.sort();
+    chosen.dedup();
+    (chosen, unevaluated(&evaluation))
 }
 
 fn property(operator: ComparisonOperator, value: ParameterValue) -> Selector {

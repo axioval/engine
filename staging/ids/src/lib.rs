@@ -30,7 +30,18 @@
 //!   `property-data-type` or `property-value`; an attribute requirement the
 //!   same in the reserved attribute set. A prohibited property or attribute
 //!   without a value becomes an excluded `not-empty` row of
-//!   `property-requirements`.
+//!   `property-requirements`. A property value is judged under `quantifier`
+//!   `any` (one value of a list, bounded, table or enumerated value), or
+//!   `all` for a range restriction, with `si_units`, as IDS states measures
+//!   in SI.
+//! - A property set or property named by pattern, or by an enumeration of
+//!   several names, is enumerated: every matching property must satisfy the
+//!   facet and one must match in each matching set. Its value becomes
+//!   `property-value` with `property_set_pattern` and `property_pattern`
+//!   (an enumeration as an escaped alternation), its presence a
+//!   `property-requirements` row with the pattern columns, required, or
+//!   excluded `not-empty` when prohibited. An enumeration narrowed by
+//!   patterns is the names that match them.
 //! - Entity, material, part-of and name-restricted attribute requirements
 //!   become `selector-conformance` with the facet's selector, negated when
 //!   prohibited. A material value is tested against the material set's
@@ -273,14 +284,6 @@ pub enum Reason {
         /// Why it cannot be translated.
         why: String,
     },
-    /// A property set or property name given as a pattern: checking it needs
-    /// the property service to enumerate an object's properties
-    /// (openbimrs/ifc#78).
-    NamePattern,
-    /// A property set or property name given as an enumeration of which any
-    /// one may satisfy the facet; only a prohibited facet without a value
-    /// (none may) translates.
-    NameEnumeration,
     /// A property facet in the applicability. IDS casts its value to each
     /// property's own type; a property selector compares one declared type,
     /// and without it cannot tell a null or blank value from a present one.
@@ -361,12 +364,6 @@ impl fmt::Display for Reason {
             Reason::Pattern { pattern, why } => {
                 write!(f, "pattern {pattern:?} cannot be translated exactly: {why}")
             }
-            Reason::NamePattern => f.write_str(
-                "a property set or property name pattern needs the property service to enumerate properties (openbimrs/ifc#78)",
-            ),
-            Reason::NameEnumeration => f.write_str(
-                "a property set or property name enumeration asks for any of the names; only a prohibited facet without a value translates",
-            ),
             Reason::PropertyApplicability => f.write_str(
                 "an applicability property facet casts its value to each property's own type, which a property selector cannot",
             ),
@@ -769,63 +766,110 @@ impl<'o> Writer<'o> {
         occurrence: Occurrence,
         scope: &Scope<'_>,
     ) -> Result<Option<Check>, Reason> {
-        let sets = name_list(&property.property_set)?;
-        let names = name_list(&property.base_name)?;
+        let sets = Names::of(&property.property_set)?;
+        let names = Names::of(&property.base_name)?;
+        let shown = format!("{}.{}", sets.shown(), names.shown());
         if occurrence == Occurrence::Prohibited {
             if property.value.is_some() || property.data_type.is_some() {
                 return Err(Reason::ProhibitedValue);
             }
-            // None of the named properties may hold a value.
-            let mut rows = Vec::new();
-            for set in &sets {
-                for name in &names {
-                    rows.push((
-                        self.property_set(set, scope.releases),
-                        self.property(set, name, scope.releases),
-                    ));
-                }
-            }
-            return Ok(Some(Check::Forbidden {
-                rows,
-                title: format!("{} must not hold a value", shown_names(&sets, &names)),
-            }));
+            return Ok(Some(self.prohibited_property(&sets, &names, &shown, scope)));
         }
-        let ([set], [name]) = (sets.as_slice(), names.as_slice()) else {
-            return Err(Reason::NameEnumeration);
-        };
         let optional = occurrence == Occurrence::Optional;
+        let single = match (&sets, &names) {
+            (Names::Literals(sets), Names::Literals(names))
+                if sets.len() == 1 && names.len() == 1 =>
+            {
+                Some((sets[0].clone(), names[0].clone()))
+            }
+            _ => None,
+        };
         let mut parameters = BTreeMap::new();
         if let Some(data_type) = &property.data_type {
             parameters.insert("data_type".to_owned(), string(data_type));
         }
         let kind = match (&property.value, optional, &property.data_type) {
+            // Every matching property holds a value, and one matches.
+            (None, false, None) if single.is_none() => {
+                return Ok(Some(Check::Rows {
+                    kind: Kind::Present,
+                    rows: vec![pattern_row(&sets, &names, &[("requirement", "required")])],
+                    title: format!("{shown} is required"),
+                }));
+            }
             (None, false, None) => Kind::Required,
-            (None, false, Some(_)) => Kind::DataType,
+            (None, false, Some(_)) if single.is_some() => Kind::DataType,
             // Without a value or type, an optional property is satisfied
             // whether or not it is there.
             (None, true, None) => return Ok(None),
-            (None, true, Some(_)) => Kind::Value,
+            (None, _, Some(_)) => Kind::Value,
             (Some(value), ..) => {
                 value_parameters(value, &mut parameters)?;
                 Kind::Value
             }
         };
+        if matches!(kind, Kind::Value) {
+            value_options(property.value.as_ref(), &mut parameters);
+        }
         if optional {
             parameters.insert(
                 "optional".to_owned(),
                 ParameterValue::Boolean { value: true },
             );
         }
-        let reference = ParameterValue::PropertyReference {
-            property: self.property(set, name, scope.releases),
-            property_set: Some(self.property_set(set, scope.releases)),
-        };
-        parameters.insert("property".to_owned(), reference);
+        if let Some((set, name)) = single {
+            let reference = ParameterValue::PropertyReference {
+                property: self.property(&set, &name, scope.releases),
+                property_set: Some(self.property_set(&set, scope.releases)),
+            };
+            parameters.insert("property".to_owned(), reference);
+        } else {
+            {
+                parameters.insert("property_set_pattern".to_owned(), string(&sets.pattern()));
+                parameters.insert("property_pattern".to_owned(), string(&names.pattern()));
+            }
+        }
         Ok(Some(Check::Capability {
             kind,
-            title: kind.title(&format!("{set}.{name}"), optional),
+            title: kind.title(&shown, optional),
             parameters,
         }))
+    }
+
+    /// A prohibited property facet without a value: none of the named
+    /// properties may hold a value.
+    fn prohibited_property(
+        &mut self,
+        sets: &Names,
+        names: &Names,
+        shown: &str,
+        scope: &Scope<'_>,
+    ) -> Check {
+        let rows = match (sets, names) {
+            (Names::Literals(sets), Names::Literals(names)) => {
+                let mut rows = Vec::new();
+                for set in sets {
+                    for name in names {
+                        rows.push(forbidden_row(
+                            self.property_set(set, scope.releases),
+                            self.property(set, name, scope.releases),
+                        ));
+                    }
+                }
+                rows
+            }
+            // Every matching property, enumerated.
+            _ => vec![pattern_row(
+                sets,
+                names,
+                &[("state", "exclude"), ("presence", "not-empty")],
+            )],
+        };
+        Check::Rows {
+            kind: Kind::Forbidden,
+            rows,
+            title: format!("{shown} must not hold a value"),
+        }
     }
 
     fn attribute_check(
@@ -857,11 +901,12 @@ impl<'o> Writer<'o> {
             (None, Occurrence::Optional) => return Ok(None),
             (None, Occurrence::Required) => Kind::Required,
             (None, Occurrence::Prohibited) => {
-                let row = (
+                let row = forbidden_row(
                     ATTRIBUTE_SET.to_owned(),
                     self.attribute(name, scope.releases),
                 );
-                return Ok(Some(Check::Forbidden {
+                return Ok(Some(Check::Rows {
+                    kind: Kind::Forbidden,
                     rows: vec![row],
                     title: format!("{subject} must not hold a value"),
                 }));
@@ -1323,9 +1368,11 @@ enum Check {
         title: String,
         message: String,
     },
-    /// `property-requirements` rows forbidding a value: `(set, property)`.
-    Forbidden {
-        rows: Vec<(String, String)>,
+    /// `property-requirements` rows: forbidding a value, or requiring
+    /// every property a pattern matches.
+    Rows {
+        kind: Kind,
+        rows: Vec<TableRow>,
         title: String,
     },
     /// `object-count`.
@@ -1361,17 +1408,12 @@ impl Check {
                     ("message".to_owned(), string(&message)),
                 ]),
             ),
-            Check::Forbidden { rows, title } => (
-                Kind::Forbidden,
+            Check::Rows { kind, rows, title } => (
+                kind,
                 title,
                 BTreeMap::from([(
                     "requirements".to_owned(),
-                    ParameterValue::Table {
-                        value: rows
-                            .into_iter()
-                            .map(|(set, name)| forbidden_row(set, name))
-                            .collect(),
-                    },
+                    ParameterValue::Table { value: rows },
                 )]),
             ),
             Check::Count { minimum, maximum } => {
@@ -1431,6 +1473,9 @@ enum Kind {
     Conformance,
     /// `property-requirements` with rows forbidding a value.
     Forbidden,
+    /// `property-requirements` with rows requiring every property a
+    /// pattern or enumeration matches to hold a value.
+    Present,
     /// `object-count`.
     Count,
     /// `classification`.
@@ -1491,6 +1536,12 @@ impl Kind {
                 "prohibited-property",
                 "Property is prohibited",
                 "A prohibited IDS property or attribute facet without a value: none of the named properties may hold a value.",
+                PROPERTY_REQUIREMENTS,
+            ),
+            Kind::Present => (
+                "required-properties",
+                "Properties are required",
+                "An IDS property facet naming its set or property by pattern or enumeration, without a value: one property must match, and every matching one must hold a value.",
                 PROPERTY_REQUIREMENTS,
             ),
             Kind::Count => (
@@ -1557,7 +1608,7 @@ impl Kind {
                 parameter("requirement", ParameterKind::Selector, true),
                 parameter("message", ParameterKind::String, false),
             ],
-            Kind::Forbidden => {
+            Kind::Forbidden | Kind::Present => {
                 let mut table = parameter("requirements", ParameterKind::Table, true);
                 table.columns = REQUIREMENT_COLUMNS
                     .iter()
@@ -1878,20 +1929,119 @@ fn compiled(patterns: &[String]) -> Result<Vec<Regex>, Reason> {
         .collect()
 }
 
-/// A property set or property name as the literals it stands for: a
-/// literal, or an enumeration. A pattern needs property enumeration.
-fn name_list(value: &Value) -> Result<Vec<String>, Reason> {
-    match value {
-        Value::Simple(name) => Ok(vec![name.clone()]),
-        Value::Restriction(restriction) => {
-            only_names(restriction)?;
-            if restriction.patterns.is_empty() {
-                Ok(restriction.enumeration.clone())
-            } else {
-                Err(Reason::NamePattern)
+/// The property sets or properties a facet names.
+#[derive(Clone, Debug)]
+enum Names {
+    /// Exact names: a literal, an enumeration, or an enumeration narrowed by
+    /// patterns.
+    Literals(Vec<String>),
+    /// XML Schema patterns, any of which a name may match.
+    Patterns(Vec<String>),
+}
+
+impl Names {
+    /// The names a set or property facet stands for.
+    ///
+    /// A restriction's enumeration and patterns must both hold, as its
+    /// facets do in XML Schema, so patterns next to an enumeration only
+    /// narrow it. Every pattern must translate exactly.
+    fn of(value: &Value) -> Result<Self, Reason> {
+        match value {
+            Value::Simple(name) => Ok(Self::Literals(vec![name.clone()])),
+            Value::Restriction(restriction) => {
+                only_names(restriction)?;
+                let compiled = compiled(&restriction.patterns)?;
+                if restriction.patterns.is_empty() {
+                    Ok(Self::Literals(restriction.enumeration.clone()))
+                } else if restriction.enumeration.is_empty() {
+                    Ok(Self::Patterns(restriction.patterns.clone()))
+                } else {
+                    let listed: Vec<String> = restriction
+                        .enumeration
+                        .iter()
+                        .filter(|name| compiled.iter().any(|pattern| pattern.is_match(name)))
+                        .cloned()
+                        .collect();
+                    if listed.is_empty() {
+                        // No name meets both facets.
+                        return Err(Reason::EmptyRestriction);
+                    }
+                    Ok(Self::Literals(listed))
+                }
             }
         }
     }
+
+    /// One XML Schema pattern matching exactly these names.
+    fn pattern(&self) -> String {
+        let alternatives: Vec<String> = match self {
+            Self::Literals(names) => names.iter().map(|name| escape_xsd(name)).collect(),
+            Self::Patterns(patterns) => patterns.clone(),
+        };
+        if alternatives.len() == 1 {
+            alternatives[0].clone()
+        } else {
+            alternatives
+                .iter()
+                .map(|alternative| format!("({alternative})"))
+                .collect::<Vec<_>>()
+                .join("|")
+        }
+    }
+
+    fn shown(&self) -> String {
+        match self {
+            Self::Literals(names) if names.len() == 1 => names[0].clone(),
+            Self::Literals(names) => format!("({})", names.join("|")),
+            Self::Patterns(patterns) => format!("/{}/", patterns.join("|")),
+        }
+    }
+}
+
+/// The options every `property-value` rule of a property facet takes: a
+/// list, bounded, table or enumerated value holds when one of its values
+/// does, and within a range only when all do; IDS states measures in SI.
+fn value_options(value: Option<&Value>, parameters: &mut BTreeMap<String, ParameterValue>) {
+    let bounded = matches!(
+        value,
+        Some(Value::Restriction(restriction)) if restriction.min_inclusive.is_some()
+            || restriction.max_inclusive.is_some()
+            || restriction.min_exclusive.is_some()
+            || restriction.max_exclusive.is_some()
+    );
+    parameters.insert(
+        "quantifier".to_owned(),
+        string(if bounded { "all" } else { "any" }),
+    );
+    parameters.insert(
+        "si_units".to_owned(),
+        ParameterValue::Boolean { value: true },
+    );
+}
+
+/// `name` as an XML Schema pattern matching it alone.
+fn escape_xsd(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if "\\|.?*+(){}[]^-".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// A `property-requirements` row naming its set and property by pattern,
+/// with further cells.
+fn pattern_row(sets: &Names, names: &Names, cells: &[(&str, &str)]) -> TableRow {
+    let mut row = TableRow::from([
+        ("property_set_pattern".to_owned(), string(&sets.pattern())),
+        ("property_pattern".to_owned(), string(&names.pattern())),
+    ]);
+    for (column, cell) in cells {
+        row.insert((*column).to_owned(), string(cell));
+    }
+    row
 }
 
 /// The declared type of an attribute, as far as a selector compares it.
@@ -2456,17 +2606,6 @@ fn shown_classification(classification: &Classification) -> String {
         ),
         None => format!("in {}", shown_value(&classification.system)),
     }
-}
-
-fn shown_names(sets: &[String], names: &[String]) -> String {
-    let join = |items: &[String]| {
-        if items.len() == 1 {
-            items[0].clone()
-        } else {
-            format!("({})", items.join("|"))
-        }
-    };
-    format!("{}.{}", join(sets), join(names))
 }
 
 /// `scheme:rest` with a lower-case scheme, as MCS qualified ids are.

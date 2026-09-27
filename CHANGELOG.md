@@ -52,6 +52,27 @@ All notable changes are documented here. This project follows Semantic Versionin
   describe exactly is refused for every name, never answered in part; an
   object without a body, an unset optional attribute and another family's
   parameter are exact absences.
+- **IDS property facets named by pattern, and composite values.** (Closes
+  #44) A rule naming its sets by pattern needs a match in every set the
+  pattern matches that holds a property, as IDS requires:
+  `property-value` with `property_set_pattern` reports each such set
+  without a match, and an included `property-requirements` row naming its
+  set reports the first one as a `missing property`. The staging IDS
+  translator enumerates property facets whose set or name is an
+  `xs:pattern` or an enumeration of several names (an escaped alternation;
+  an enumeration narrowed by patterns is its matching names): a value
+  becomes `property-value` with the pattern parameters, a required
+  presence a `property-requirements` row with the pattern columns, and a
+  prohibited one an excluded `not-empty` pattern row. Every property value
+  is judged under `quantifier` `any`, or `all` for a range restriction,
+  with `si_units`. Its corpus moves from ExactPass 127, SoundPass 42,
+  CaughtFail 81, UnjudgedFail 26, NotEvaluated 31 to ExactPass 141,
+  SoundPass 37, CaughtFail 88, UnjudgedFail 23, NotEvaluated 18, with 0
+  mismatches. The name-pattern and name-enumeration gaps are gone;
+  applicability property facets and prohibited facets with a value stay
+  gaps. A matching set holding no property is invisible to enumeration, so
+  a required facet does not fail on it where IDS would.
+
 - **Property sets and properties named by pattern.** (Refs #44) The
   property service enumerates an object's properties:
   `PropertyResolutionService::enumerate` answers a

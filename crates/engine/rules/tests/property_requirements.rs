@@ -1390,3 +1390,26 @@ fn a_bounded_value_must_lie_within_the_range_as_a_whole() {
     );
     assert!(unevaluated(&evaluation).is_empty());
 }
+
+#[test]
+fn a_required_pattern_needs_a_match_in_every_named_set() {
+    let model = Model::default()
+        .object("w1", "wall")
+        .text("w1", "Pset_WallCommon", "Reference", "W-01")
+        .text("w1", "Pset_ConcreteCommon", "Grade", "C30");
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set", string("Pset_*Common")),
+            ("property", string("Reference")),
+            ("requirement", string("required")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "missing property: Pset_ConcreteCommon.Reference is absent (requirement row 0)".into()
+        )]
+    );
+}

@@ -13,7 +13,8 @@ use axioval_ir::{Evidence, Object, ObjectId, Property, PropertyValue, QuantityDi
 
 use crate::plan_area::{Verdict, footprint, judge, shown};
 use crate::selection::{
-    NameSpec, Selection, enumerate, select_objects, selector_matches, xsd_name_pattern,
+    NameSpec, Selection, enumerate, select_objects, selector_matches, sets_without_match,
+    xsd_name_pattern,
 };
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
@@ -78,7 +79,9 @@ const COLUMNS: &[TableColumn] = &[
 /// pattern is checked against every matching property, enumerated exactly
 /// through the property service: an included statement must hold for each
 /// and needs one to match, an excluded one must hold for none, and the
-/// first failing property (by set and name) is reported. A row naming a set
+/// first failing property (by set and name) is reported. A row naming its
+/// set as well needs a match in every set it names that holds a property,
+/// as IDS requires. A row naming a set
 /// without a property asks whether the set holds a property. A required
 /// property whose named set holds none is a `missing property set`. A
 /// source that cannot enumerate leaves a pattern or set row not evaluated,
@@ -1397,6 +1400,21 @@ fn check_matched_row(
     };
     let include = row.state == State::Include;
     let set_only = matches!(property, NameSel::Any);
+    // A statement that needs a match needs one in every set the row names.
+    let needs_match = include
+        && match row.statement {
+            Statement::Presence(presence) => presence != Presence::Undefined,
+            Statement::Value { optional } => !optional,
+        };
+    if needs_match && !set_only && !matches!(set, NameSel::Any) && !matched.properties().is_empty()
+    {
+        let (missing, evidence) = sets_without_match(context, subject, set.spec(), &enumeration)?;
+        if let Some(missing) = missing.first() {
+            let (_, mut failure) = matched.failure(MISSING_PROPERTY, None, "");
+            failure.evidence.push(evidence);
+            return Ok(Some((format!("{missing}.{}", property.shown()), failure)));
+        }
+    }
     match row.statement {
         Statement::Presence(presence) if set_only => Ok(set_presence(&matched, include, presence)),
         Statement::Presence(presence) => Ok(matched_presence(&matched, include, presence)),

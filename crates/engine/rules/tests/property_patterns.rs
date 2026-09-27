@@ -189,3 +189,46 @@ fn a_pattern_selector_quantifies_over_the_matched_properties() {
             .all(|(_, reason)| *reason == NotEvaluatedReason::InvalidDeclaration)
     );
 }
+
+#[test]
+fn a_set_pattern_needs_a_match_in_every_set_it_matches() {
+    // `w1` holds `Foo` in `Foo_Bar` only; `Foo_Baz` holds another property.
+    let model = || {
+        Model::default()
+            .object("w1", "wall")
+            .text("w1", "Foo_Bar", "Foo", "x")
+            .text("w1", "Foo_Baz", "Another", "x")
+    };
+    let evaluation = model().evaluate(
+        &PropertyValueConstraint,
+        &rule(
+            VALUE,
+            kind("wall"),
+            values_x(vec![
+                ("property_set_pattern", string("Foo_.*")),
+                ("property_pattern", string("Foo")),
+            ]),
+        ),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "missing required property /Foo_.*/./Foo/ in set Foo_Baz".into()
+        )]
+    );
+    // Optional, it holds wherever it is stated.
+    let evaluation = model().evaluate(
+        &PropertyValueConstraint,
+        &rule(
+            VALUE,
+            kind("wall"),
+            values_x(vec![
+                ("property_set_pattern", string("Foo_.*")),
+                ("property_pattern", string("Foo")),
+                ("optional", ParameterValue::Boolean { value: true }),
+            ]),
+        ),
+    );
+    assert!(findings(&evaluation).is_empty());
+}

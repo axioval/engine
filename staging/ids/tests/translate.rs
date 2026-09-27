@@ -338,7 +338,6 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
         [
             (requirement(1), Reason::ProhibitedValue),
             (requirement(2), Reason::EmptyRestriction),
-            (requirement(10), Reason::NamePattern),
             (
                 requirement(12),
                 Reason::PartOfRelation(Some(Relation::VoidsElementFillsElement))
@@ -354,6 +353,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
             "spec1.facet6",
             "spec1.facet8",
             "spec1.facet9",
+            "spec1.facet10",
             "spec1.facet11",
             "spec1.facet13"
         ]
@@ -383,6 +383,11 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     assert_eq!(
         capability("spec1.facet9"),
         "axioval:capability.classification"
+    );
+    // A name pattern is enumerated: every matching property is required.
+    assert_eq!(
+        capability("spec1.facet10"),
+        "axioval:capability.property-requirements"
     );
     assert_eq!(
         capability("spec1.facet11"),
@@ -1085,4 +1090,150 @@ fn digit_restrictions_check_numbers() {
     assert_eq!(digits("<xs:totalDigits value=\"3\"/>"), ["#10"]);
     assert!(digits("<xs:totalDigits value=\"4\"/>").is_empty());
     assert!(digits("<xs:fractionDigits value=\"0\"/>").is_empty());
+}
+
+/// A name restriction of enumerated values and patterns.
+fn restricted(values: &[&str], patterns: &[&str]) -> String {
+    let values: String = values
+        .iter()
+        .map(|value| format!("<xs:enumeration value=\"{value}\"/>"))
+        .chain(
+            patterns
+                .iter()
+                .map(|pattern| format!("<xs:pattern value=\"{pattern}\"/>")),
+        )
+        .collect();
+    format!("<xs:restriction base=\"xs:string\">{values}</xs:restriction>")
+}
+
+fn named_property(set: &str, name: &str, attributes: &str, value: Option<&str>) -> String {
+    let wrap = |value: &str| {
+        if value.starts_with('<') {
+            value.to_owned()
+        } else {
+            format!("<simpleValue>{value}</simpleValue>")
+        }
+    };
+    format!(
+        "<property {attributes}><propertySet>{}</propertySet><baseName>{}</baseName>{}</property>",
+        wrap(set),
+        wrap(name),
+        value.map_or_else(String::new, |value| format!(
+            "<value>{}</value>",
+            wrap(value)
+        ))
+    )
+}
+
+fn rule_parameters(
+    translation: &Translation,
+) -> Vec<(String, std::collections::BTreeMap<String, ParameterValue>)> {
+    translation.ruleset.root.folders[0]
+        .rules
+        .iter()
+        .map(|rule| {
+            (
+                translation.definitions.definitions[&rule.definition_id]
+                    .capability
+                    .clone(),
+                rule.parameters.clone(),
+            )
+        })
+        .collect()
+}
+
+fn text(value: &str) -> ParameterValue {
+    ParameterValue::String {
+        value: value.into(),
+    }
+}
+
+#[test]
+fn name_patterns_and_enumerations_are_enumerated() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        WALL,
+        &[
+            // Any matching property holds `x`, one in each matching set.
+            named_property(
+                &restricted(&[], &["Pset_.*"]),
+                &restricted(&[], &["Foo.*"]),
+                "",
+                Some("x"),
+            ),
+            // Either name, both in `P`: an escaped alternation.
+            named_property("P", &restricted(&["A.B", "C"], &[]), "", None),
+            // An enumeration narrowed by a pattern is its matching names.
+            named_property(
+                "P",
+                &restricted(&["Ab", "Cd"], &["A.*"]),
+                "cardinality=\"prohibited\"",
+                None,
+            ),
+            // A prohibited pattern: no matching property holds a value.
+            named_property(
+                &restricted(&[], &["Pset_Draft.*"]),
+                "Note",
+                "cardinality=\"prohibited\"",
+                None,
+            ),
+        ]
+        .concat(),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let rules = rule_parameters(&translation);
+    assert_eq!(rules[0].0, "axioval:capability.property-value");
+    assert_eq!(rules[0].1["property_set_pattern"], text("Pset_.*"));
+    assert_eq!(rules[0].1["property_pattern"], text("Foo.*"));
+    assert_eq!(rules[0].1["quantifier"], text("any"));
+    assert!(!rules[0].1.contains_key("property"));
+    assert_eq!(rules[1].0, "axioval:capability.property-requirements");
+    let ParameterValue::Table { value: rows } = &rules[1].1["requirements"] else {
+        panic!("{:?}", rules[1].1)
+    };
+    assert_eq!(rows[0]["property_set_pattern"], text("P"));
+    assert_eq!(rows[0]["property_pattern"], text(r"(A\.B)|(C)"));
+    assert_eq!(rows[0]["requirement"], text("required"));
+    // The narrowed enumeration is one literal name: an exact row.
+    let ParameterValue::Table { value: rows } = &rules[2].1["requirements"] else {
+        panic!("{:?}", rules[2].1)
+    };
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].contains_key("property"));
+    let ParameterValue::Table { value: rows } = &rules[3].1["requirements"] else {
+        panic!("{:?}", rules[3].1)
+    };
+    assert_eq!(rows[0]["property_set_pattern"], text("Pset_Draft.*"));
+    assert_eq!(rows[0]["property_pattern"], text("Note"));
+    assert_eq!(rows[0]["state"], text("exclude"));
+    compile(
+        &default_registry().unwrap(),
+        &[translation.definitions.clone()],
+        &translation.ruleset,
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_range_on_a_property_holds_for_all_its_values_and_measures_read_in_si() {
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        WALL,
+        &named_property(
+            "P",
+            "Span",
+            "",
+            Some(
+                "<xs:restriction base=\"xs:double\"><xs:minInclusive value=\"1\"/></xs:restriction>",
+            ),
+        ),
+    );
+    let rules = rule_parameters(&translation);
+    assert_eq!(rules[0].1["quantifier"], text("all"));
+    assert_eq!(
+        rules[0].1["si_units"],
+        ParameterValue::Boolean { value: true }
+    );
 }

@@ -686,6 +686,31 @@ pub(crate) fn enumerate(
     service.enumerate(&request).map_err(property_error)
 }
 
+/// The sets `set` names that hold a property but none `matched` found, by
+/// name, with the evidence of their enumeration: a rule naming its sets
+/// requires a match in each of them, as IDS does.
+pub(crate) fn sets_without_match(
+    context: &RuleContext<'_>,
+    object: &Object,
+    set: NameSpec<'_>,
+    matched: &PropertyEnumeration,
+) -> Result<(Vec<String>, Evidence), (NotEvaluatedReason, String)> {
+    let every = enumerate(context, object, set, NameSpec::Any)?;
+    let mut missing: Vec<String> = every
+        .properties()
+        .iter()
+        .map(|property| property.property_set.clone())
+        .filter(|name| {
+            !matched
+                .properties()
+                .iter()
+                .any(|found| found.property_set == *name)
+        })
+        .collect();
+    missing.dedup();
+    Ok((missing, every.evidence().clone()))
+}
+
 pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedReason, String) {
     match error {
         PropertyResolutionError::Unavailable(message) => {

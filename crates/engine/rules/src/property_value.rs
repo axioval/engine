@@ -35,7 +35,8 @@ use axioval_ir::{
 use crate::support::temporal_order;
 
 use crate::selection::{
-    NameSpec, bound_property_request, enumerate, property_error, select_objects, xsd_name_pattern,
+    NameSpec, bound_property_request, enumerate, property_error, select_objects,
+    sets_without_match, xsd_name_pattern,
 };
 use crate::xsd_pattern;
 
@@ -201,7 +202,9 @@ enum Verdict {
 ///
 /// With patterns, every matching property, enumerated exactly through the
 /// property service, must meet the constraints, and one must match unless
-/// the rule is optional; each failing property is its own finding.
+/// the rule is optional; with `property_set_pattern`, one must match in
+/// every set the pattern matches, as IDS requires. Each failing property
+/// and each set without a match is its own finding.
 ///
 /// A list, a bounded value or a table is judged by its stated values (see
 /// `PropertyValue::stated_values`) under `quantifier`: `any` holds when one
@@ -448,6 +451,23 @@ fn check_matched(
             ));
         }
         return;
+    }
+    if !constraints.optional && !matches!(set, NameSpec::Any) {
+        match sets_without_match(context, object, set, &enumeration) {
+            Ok((missing, evidence)) => {
+                for set in missing {
+                    evaluation.push_finding(finding(
+                        rule,
+                        object,
+                        format!("missing required property {shown} in set {set}"),
+                        vec![evidence.clone()],
+                    ));
+                }
+            }
+            Err((reason, message)) => {
+                evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+            }
+        }
     }
     for property in enumeration.properties() {
         let label = format!("{}.{}", property.property_set, property.name);

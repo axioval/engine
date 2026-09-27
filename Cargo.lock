@@ -571,6 +571,7 @@ dependencies = [
  "axioval-engine",
  "axioval-ir",
  "ifc-classification",
+ "ifc-material",
  "ifc-model",
  "ifc-properties",
  "ifc-schema",
@@ -1009,6 +1010,16 @@ dependencies = [
  "ifc-alignment",
  "ifc-model",
  "ifc-schema",
+ "thiserror",
+]
+
+[[package]]
+name = "ifc-material"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8813d289f7cdab4bf220d074270ea173c257b4880d0bd0abb2401145f5413ae9"
+dependencies = [
+ "ifc-model",
  "thiserror",
 ]
 

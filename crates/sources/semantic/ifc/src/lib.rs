@@ -12,6 +12,7 @@ mod identity;
 mod ifc;
 mod integrity;
 mod layers;
+mod materials;
 mod measure;
 mod relationships;
 mod release;

@@ -287,10 +287,61 @@ pub const PRESENTATION_SET: &str = "axioval:presentation";
 /// The layer property in [`PRESENTATION_SET`].
 pub const PRESENTATION_LAYER: &str = "Layer";
 
+/// Property set that names the material an object is made of.
+///
+/// The material is the object's own, or else the one its type object
+/// carries. An object with no material has none of these properties (an exact
+/// absence); an object with several material assignments is a conflict.
+/// Reserved like [`ATTRIBUTE_SET`]. Property names are matched ignoring ASCII
+/// case:
+///
+/// - [`MATERIAL_KIND`]: how the material is composed, one of
+///   [`MATERIAL_KIND_SINGLE`], [`MATERIAL_KIND_LAYER_SET`],
+///   [`MATERIAL_KIND_CONSTITUENT_SET`], [`MATERIAL_KIND_PROFILE_SET`] or
+///   [`MATERIAL_KIND_LIST`].
+/// - [`MATERIAL_NAME`]: the name of a single material, or of the set.
+/// - [`MATERIAL_CATEGORY`]: the category of a single material.
+/// - [`MATERIAL_TOTAL_THICKNESS`]: the summed layer thickness of a layer set,
+///   a length.
+/// - [`MATERIAL_COUNT`]: the number of layers, constituents, profiles or
+///   listed materials.
+/// - Members, numbered from 1 in the source's order: `Layer<n>.Material`,
+///   `Layer<n>.Thickness` (a length), `Layer<n>.Name` and `Layer<n>.Category`;
+///   `Constituent<n>.Material`, `Constituent<n>.Name`,
+///   `Constituent<n>.Category` and `Constituent<n>.Fraction` (a decimal);
+///   `Profile<n>.Material`, `Profile<n>.Name` and `Profile<n>.Category`;
+///   `Material<n>.Name` and `Material<n>.Category` for a list. `.Material` is
+///   the name of the member's material.
+pub const MATERIAL_SET: &str = "axioval:material";
+
+/// The composition property in [`MATERIAL_SET`].
+pub const MATERIAL_KIND: &str = "Kind";
+/// The name property in [`MATERIAL_SET`].
+pub const MATERIAL_NAME: &str = "Name";
+/// The category property in [`MATERIAL_SET`].
+pub const MATERIAL_CATEGORY: &str = "Category";
+/// The total layer thickness property in [`MATERIAL_SET`].
+pub const MATERIAL_TOTAL_THICKNESS: &str = "TotalThickness";
+/// The member count property in [`MATERIAL_SET`].
+pub const MATERIAL_COUNT: &str = "Count";
+/// [`MATERIAL_KIND`] of one homogeneous material.
+pub const MATERIAL_KIND_SINGLE: &str = "material";
+/// [`MATERIAL_KIND`] of a set of layers with thicknesses.
+pub const MATERIAL_KIND_LAYER_SET: &str = "layer-set";
+/// [`MATERIAL_KIND`] of a set of named constituents.
+pub const MATERIAL_KIND_CONSTITUENT_SET: &str = "constituent-set";
+/// [`MATERIAL_KIND`] of a set of materials with cross-section profiles.
+pub const MATERIAL_KIND_PROFILE_SET: &str = "profile-set";
+/// [`MATERIAL_KIND`] of an unstructured list of materials.
+pub const MATERIAL_KIND_LIST: &str = "list";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
-    set == ATTRIBUTE_SET || set == TYPE_ATTRIBUTE_SET || set == PRESENTATION_SET
+    set == ATTRIBUTE_SET
+        || set == TYPE_ATTRIBUTE_SET
+        || set == PRESENTATION_SET
+        || set == MATERIAL_SET
 }
 
 /// A named semantic property.

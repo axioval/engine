@@ -34,6 +34,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   undecided membership make the footprint unavailable, never zero; a
   tessellated member makes it approximate. `axioval check --geometry` reads
   every `IfcGroup`'s members from `IfcRelAssignsToGroup` and declares them.
+- **Materials.** The reserved `axioval:material` set (`MATERIAL_SET`) names
+  the material an object is made of: its `Kind`, `Name` and `Category`, a
+  layer set's `TotalThickness`, the member `Count`, and numbered members
+  such as `Layer1.Material` and `Layer1.Thickness`. Every property
+  capability and selector reads them. The IFC adapter answers them from
+  `IfcRelAssociatesMaterial` through `ifc-material` 0.2.0, on the object or
+  else its type object: single materials, layer sets (directly or through
+  a usage), constituent sets, profile sets and material lists, thicknesses
+  in metres with exact provenance. An object without material is an exact
+  absence; two assignments conflict. IFC2X3 materials are refused until
+  `ifc-material` binds to the file's release (openbimrs/ifc#77).
 - **Property selectors on par with `property-predicate`.** Selectors take
   the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,
   `oneOf` and `noneOf` (a string list), and the options `caseSensitive`

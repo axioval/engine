@@ -20,12 +20,14 @@ use std::sync::OnceLock;
 
 use axioval_engine::PropertyResolutionError;
 use axioval_ir::{
-    ATTRIBUTE_SET, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, TYPE_ATTRIBUTE_SET,
+    ATTRIBUTE_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue,
+    TYPE_ATTRIBUTE_SET,
 };
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
 
 use crate::layers::{self, LayerIndex};
+use crate::materials::Materials;
 use crate::measure::si_value;
 use crate::release::Release;
 
@@ -43,6 +45,7 @@ pub(crate) struct Attributes {
     release: Release,
     types: OnceLock<Result<TypeIndex, String>>,
     layers: OnceLock<Result<LayerIndex, String>>,
+    materials: Materials,
 }
 
 impl Attributes {
@@ -51,6 +54,7 @@ impl Attributes {
             release,
             types: OnceLock::new(),
             layers: OnceLock::new(),
+            materials: Materials::new(release),
         }
     }
 
@@ -73,6 +77,9 @@ impl Attributes {
         }
         if set == PRESENTATION_SET {
             return self.layer(model, object, name);
+        }
+        if set == MATERIAL_SET {
+            return self.materials.resolve(model, object, name);
         }
         debug_assert_eq!(set, TYPE_ATTRIBUTE_SET);
         let types = self

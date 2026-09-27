@@ -33,13 +33,22 @@ Quantities compare only when their dimensions are equal. A dimensionless measure
 
 ### Attribute sets
 
-Some facts about an object are not in any property set but in fields of the object itself, such as a space's number and name, or the name of its construction type. Two reserved property-set names reach them through the same property resolver:
+Some facts about an object are not in any property set but in fields of the object itself, such as a space's number and name, or the name of its construction type. Reserved property-set names reach them through the same property resolver, and so do the object's presentation layer and material:
 
 - `ATTRIBUTE_SET` (`axioval:attributes`) names the object's own attributes, by the source's attribute name.
 - `TYPE_ATTRIBUTE_SET` (`axioval:type-attributes`) names the attributes of the type object the source assigns to the object. An object with no type has none (an exact absence). An object with several types is a conflict, not a choice.
 - `PRESENTATION_SET` (`axioval:presentation`) names how the object is presented. Its property `Layer` (`PRESENTATION_LAYER`) is the presentation (CAD) layer of the object's shape. An object on no layer has none; one on several distinct layers is a conflict.
 
-Both are engine vocabulary. They name no property set of any source, a package cannot redeclare them, and concept binding passes them through unchanged, while the property name inside them is still bound per source. A request without a set never searches attributes.
+- `MATERIAL_SET` (`axioval:material`) names the material the object is made of: its own, or else its type object's. Its properties, matched ignoring ASCII case:
+  - `Kind`: `material`, `layer-set`, `constituent-set`, `profile-set` or `list`.
+  - `Name`: the name of a single material, or of the set. `Category`: the category of a single material.
+  - `TotalThickness`: the summed layer thickness of a layer set, a length in metres.
+  - `Count`: the number of layers, constituents, profiles or listed materials.
+  - Members numbered from 1 in the source's order: `Layer<n>.Material`, `.Thickness` (a length), `.Name` and `.Category`; `Constituent<n>.Material`, `.Name`, `.Category` and `.Fraction` (a decimal); `Profile<n>.Material`, `.Name` and `.Category`; `Material<n>.Name` and `.Category` for a list. `.Material` is the name of the member's material.
+
+  An object without material has none of them (an exact absence), and neither does a member that does not exist or states no value. Two material assignments on the object, or on its type, are a conflict.
+
+These sets are engine vocabulary. They name no property set of any source, a package cannot redeclare them, and concept binding passes them through unchanged, while the property name inside them is still bound per source. A request without a set never searches attributes.
 
 ## Views and layers
 

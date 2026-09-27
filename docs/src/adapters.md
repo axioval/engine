@@ -128,6 +128,39 @@ The adapter looks for layer assignments on:
 Several distinct layers are a conflict. An object without a shape, or with no assigned layer, has none. The locator names the object and the assignment
 (`layer:#1:#80`).
 
+### Materials
+
+`axioval:material` is read from `IfcRelAssociatesMaterial` through
+`ifc-material` (0.2.0). An association on the object wins; without one, the
+association of its `IfcRelDefinesByType` type object applies, so a wall
+without its own material takes the layer set of its wall type. The adapter
+reads:
+- an `IfcMaterial`: its name and category;
+- an `IfcMaterialLayerSet`, directly or through an
+  `IfcMaterialLayerSetUsage`: its name, each layer's material, thickness,
+  name and category, and the total thickness (`IfcMlsTotalThickness`);
+- an `IfcMaterialConstituentSet`: each constituent's material, name,
+  category and fraction;
+- an `IfcMaterialProfileSet`, directly or through an
+  `IfcMaterialProfileSetUsage`: each profile's material, name and category;
+- an `IfcMaterialList`: each material's name and category.
+
+Thicknesses are converted from the project's length unit to metres as
+described under *Measures*, or refused. The locator names the object, where
+the association came from, the association and the entity that holds the
+value: `material:#1:type:#40:#41:#32/#20` is layer `#32`'s material `#20`,
+associated by `#41` with type `#40`; a usage adds `usage:#36`. An object
+with no association, directly or through its type, has no material.
+
+- Two associations on the object, or on its type, and two type objects are
+  conflicts.
+- A malformed material, a lone layer, constituent or profile associated
+  directly, and an `IfcMaterialProfileSetUsageTapering` (two profile sets)
+  are refused.
+- IFC2X3 materials are refused. `ifc-material` 0.2 reads IFC4 attribute
+  positions whatever release a file declares; IFC2X3 support waits for it to
+  bind to the file's release (openbimrs/ifc#77).
+
 ### Integrity warnings
 
 Besides relationship ends, the integrity scan reports two schema cardinality

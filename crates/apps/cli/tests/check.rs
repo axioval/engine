@@ -1906,9 +1906,10 @@ fn with_geometry_a_malformed_derived_relationship_is_not_evaluated() {
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
 
-/// Declares a definition's parameters as `(id, kind, required)`.
 /// A capability's full parameter signature as the registry declares it, so a
 /// definition keeps compiling when the capability gains optional parameters.
+/// A table's columns are declared too; a quantity column still needs its
+/// `unitDimension`.
 fn registry_signature(capability: &str) -> Value {
     let registry = axioval::default_registry().unwrap();
     registry
@@ -1918,12 +1919,20 @@ fn registry_signature(capability: &str) -> Value {
         .into_iter()
         .map(|parameter| {
             let id = parameter.name.clone();
-            (
-                id.clone(),
-                json!({"id": id, "name": {"default": id, "translations": {}},
+            let mut declared = json!({"id": id, "name": {"default": id, "translations": {}},
                        "kind": parameter.parameter_type.package_kind(),
-                       "required": parameter.required, "allowedValues": [], "citations": []}),
-            )
+                       "required": parameter.required, "allowedValues": [], "citations": []});
+            if let axioval::engine::ParameterType::Table(columns) = parameter.parameter_type {
+                declared["columns"] = columns
+                    .iter()
+                    .map(|column| {
+                        json!({"id": column.id,
+                               "name": {"default": column.id, "translations": {}},
+                               "kind": column.kind.as_str(), "required": column.required})
+                    })
+                    .collect();
+            }
+            (id, declared)
         })
         .collect::<serde_json::Map<_, _>>()
         .into()
@@ -1967,6 +1976,12 @@ impl Case {
                 "citations": [],
             });
         }
+        definitions["propertySets"]["axioval:example.ifc.pset-space-common"] = json!({
+            "id": "axioval:example.ifc.pset-space-common",
+            "name": {"default": "Pset_SpaceCommon", "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Pset_SpaceCommon"}],
+            "citations": [],
+        });
         definitions["properties"]["axioval:example.ifc.is-external"] = json!({
             "id": "axioval:example.ifc.is-external",
             "name": {"default": "IsExternal", "translations": {}},
@@ -2163,6 +2178,81 @@ fn with_geometry_doors_and_windows_connect_the_spaces_their_wall_calls_for() {
     assert_eq!(not_evaluated.len(), 1, "{result:#}");
     assert_eq!(
         not_evaluated[0]["object_id"]["local_id"], "#116",
+        "{result:#}"
+    );
+}
+
+/// Offices #19 (x 0..4, floor at 0 m) and #29 (x 4.2..8.2, floor raised to
+/// 0.5 m), both 3 m high and 4 m deep. Window #39 between them has its
+/// bottom at 1.2 m, window #49 in the west facade of #19 at 0.8 m; both are
+/// 1.2 m high and 0.1 m thick. `Pset_SpaceCommon.Reference` gives each
+/// room's use.
+fn offices_with_windows() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let window = "IFCWINDOW('GID',$,$,$,$,PL,REP,$,1.2,1.,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Office'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19,#29),#201);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [6.2, 2.0, 0.5], [4.0, 4.0, 3.0], space),
+        placed_box(30, [4.1, 2.0, 1.2], [0.1, 1.0, 1.2], window),
+        placed_box(40, [-0.1, 2.0, 0.8], [0.1, 1.0, 1.2], window),
+    )
+}
+
+#[test]
+fn with_geometry_a_window_too_high_above_one_rooms_floor_is_found() {
+    let case = Case::new("geometry-sill-height");
+    let reference = json!({"type": "propertyReference",
+                           "property": "axioval:example.ifc.reference",
+                           "propertySet": "axioval:example.ifc.pset-space-common"});
+    let (output, result) = case.geometry_rule(
+        &offices_with_windows(),
+        &[("window", "IfcWindow"), ("space", "IfcSpace")],
+        "axioval:capability.keyed-limit",
+        &registry_signature("axioval:capability.keyed-limit"),
+        entity("window"),
+        json!({
+            "limits": {"type": "table", "value": [
+                {"key_1": {"type": "string", "value": "Office"},
+                 "maximum": {"type": "number", "value": 1.0}},
+            ]},
+            "quantity": {"type": "string", "value": "sill-height"},
+            "floor_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+            "key_1": reference,
+            "key_1_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #39 is 1.2 m above #19's floor but only 0.7 m above raised #29's; #49
+    // is 0.8 m above #19's.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0].1.starts_with("sill height above the floor of ")
+            && findings[0]
+                .1
+                .contains("#19 is 1.2 m; required at most 1 m (limit row 0: ")
+            && !findings[0].1.contains("#29"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
         "{result:#}"
     );
 }

@@ -6,6 +6,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Sill heights in `keyed-limit`.** The new `quantity` `sill-height`
+  limits each object's bottom elevation above the floor of every object the
+  new parameter `floor_path` reaches from it, through the vertical-extent
+  service: with `floor_path` and `key_1_path` set to
+  `axioval:derived.adjacent-space`, one table bounds window sills per space
+  type. Each reached floor is judged on its own, so a window between spaces
+  with different floor elevations is found when it is too high above either;
+  the finding names and relates that space. Sill heights are intervals that
+  always hold the exact difference; one straddling a bound, an unmeasurable
+  floor (unless another floor fails) or window, and a path reaching nothing
+  are not evaluated. Windows at corridor ends are not decided yet: that needs
+  a corridor axis no service provides. **Breaking:** definitions bound to
+  `keyed-limit` must declare the new optional parameter `floor_path`. (#86)
 - **Manual checks on an empty selection.** `manual-issue` raises its check
   once for the project when the selection decidedly picks nothing, instead
   of raising nothing.

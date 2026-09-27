@@ -278,7 +278,9 @@ fn shown(lower: f64, upper: f64) -> String {
     }
 }
 
-fn extents<'a>(context: &RuleContext<'a>) -> Result<&'a VerticalExtentServiceHandle, Unavailable> {
+pub(crate) fn extents<'a>(
+    context: &RuleContext<'a>,
+) -> Result<&'a VerticalExtentServiceHandle, Unavailable> {
     context
         .services
         .get::<VerticalExtentServiceHandle>()
@@ -288,7 +290,7 @@ fn extents<'a>(context: &RuleContext<'a>) -> Result<&'a VerticalExtentServiceHan
         ))
 }
 
-fn extent(
+pub(crate) fn extent(
     service: &VerticalExtentServiceHandle,
     object: &ObjectId,
 ) -> Result<VerticalExtent, Unavailable> {

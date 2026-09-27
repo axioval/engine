@@ -433,6 +433,15 @@ The `limits` table has the optional columns `key_1` … `key_4` (text patterns, 
 
 `quantity` names what the row limits. `plan-area` is the object's measured footprint in square metres through `PlanAreaService` (a zone's is the union of its members); like `plan-area`, a footprint straddling a bound, or an empty one, is not evaluated. `property` is the number or quantity `quantity_property` states, compared in canonical SI units; an absent or non-numeric value is not evaluated. Bounds are inclusive. Key patterns are case-sensitive unless `case_sensitive` is `false`. A finding names the row (zero-based) and the key values, relates the objects the keys were read from, and cites the key, relationship and measurement evidence.
 
+`sill-height` limits a window's sill per space type: the object's bottom elevation above the floor of each object `floor_path` reaches from it, in metres, through `VerticalExtentService`. A floor is the reached object's own bottom, so `floor_path: ["axioval:derived.adjacent-space"]` measures a window against the spaces on each side of it, and `key_1_path` along the same path keys the table on those spaces' use. `floor_path` is required with `sill-height` and refused with any other quantity, as `quantity_property` is outside `property`.
+
+- Each reached floor is judged on its own against the one row the keys select. A window between two spaces whose floors lie at different elevations is too high when it is too high above either: one failing floor is a finding naming that floor, relating its space and citing the window's and that floor's extents.
+- Elevations are intervals, and a tessellated body's are never points. The sill height runs from the window's lowest possible bottom less the floor's highest possible bottom to the reverse, widened by one rounding step wherever the subtraction rounded, so it always holds the exact difference. A sill height straddling a bound is not evaluated.
+- A floor that cannot be measured, or straddles a bound, leaves the window not evaluated unless another floor already fails it. A window that cannot be measured, or whose `floor_path` reaches nothing, is not evaluated.
+- The keys must agree across the reached spaces, as for any key: a window between an office and a corridor, whose rows differ, is not evaluated rather than judged against either.
+
+Whether a window sits at the end of a corridor is not decided: it needs the corridor's axis (a medial axis of its footprint), which no service provides yet.
+
 ### Slab stacks
 
 `slab-stack-spacing` judges `VerticalExtentService` elevations together with `PlanAreaService` footprints, so it needs a geometry adapter. Unlike `level-spacing`, which reads storey elevations, it measures the slabs' own surfaces.

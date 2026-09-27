@@ -3,10 +3,11 @@
 
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn,
+    ParameterType, RuleCapability, RuleContext, TableColumn, VerticalExtent,
 };
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
+use crate::level_spacing::{extent, extents};
 use crate::plan_area::{Verdict, footprint, judge, shown};
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
@@ -57,6 +58,9 @@ struct Limit {
 enum Quantity<'a> {
     PlanArea,
     Property(PropertyRef<'a>),
+    /// The object's bottom above the bottom of each object `floor_path`
+    /// reaches from it.
+    SillHeight(Traversal<'a>),
 }
 
 /// A key value as rows match it, or why it is unknown.
@@ -78,8 +82,18 @@ enum Key {
 /// applies; a row without bounds applies no limit.
 ///
 /// `quantity` names what is limited: `plan-area`, the object's measured
-/// footprint in square metres, or `property`, the number or quantity stated
-/// by `quantity_property`, in canonical SI units.
+/// footprint in square metres, `property`, the number or quantity stated
+/// by `quantity_property`, in canonical SI units, or `sill-height`, the
+/// object's bottom elevation above the bottom of each object `floor_path`
+/// reaches from it (a window's spaces), in metres.
+///
+/// A sill height is judged per reached floor, each against the one row the
+/// keys select: a window too high above any one of its spaces' floors is a
+/// finding naming that space, and a window between spaces whose floors lie
+/// at different elevations is judged against each. Elevations are
+/// intervals; a sill height straddling a bound, or a floor that cannot be
+/// measured, leaves the window not evaluated unless another floor already
+/// fails it.
 ///
 /// No matching row is a "no limit defined" finding. A key that is absent,
 /// null, blank, of another type, reached on no object or on objects that
@@ -98,6 +112,7 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)),
             ParameterDescriptor::required("quantity", ParameterType::String),
             ParameterDescriptor::optional("quantity_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("floor_path", ParameterType::StringList),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ];
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -188,16 +203,28 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
         });
     }
     let property = parameters.property("quantity_property")?;
-    let quantity = match (parameters.required_string("quantity")?, property) {
-        ("plan-area", None) => Quantity::PlanArea,
-        ("property", Some(property)) => Quantity::Property(property),
-        ("property", None) => {
+    let floor = parameters.strings("floor_path")?;
+    let quantity = match (parameters.required_string("quantity")?, property, floor) {
+        ("plan-area", None, None) => Quantity::PlanArea,
+        ("property", Some(property), None) => Quantity::Property(property),
+        ("sill-height", None, Some(path)) => Quantity::SillHeight(Traversal::path(path)?),
+        ("property", None, _) => {
             return Err(invalid("`quantity` `property` needs `quantity_property`"));
         }
-        ("plan-area", Some(_)) => {
-            return Err(invalid("`quantity_property` applies only to `property`"));
+        ("sill-height", _, None) => {
+            return Err(invalid("`quantity` `sill-height` needs `floor_path`"));
         }
-        (other, _) => return Err(invalid(format!("quantity `{other}` is unsupported"))),
+        (other @ ("plan-area" | "sill-height"), Some(_), _) => {
+            return Err(invalid(format!(
+                "`quantity_property` applies only to `property`, not `{other}`"
+            )));
+        }
+        (other @ ("plan-area" | "property"), _, Some(_)) => {
+            return Err(invalid(format!(
+                "`floor_path` applies only to `sill-height`, not `{other}`"
+            )));
+        }
+        (other, _, _) => return Err(invalid(format!("quantity `{other}` is unsupported"))),
     };
     Ok((keys, limits, quantity))
 }
@@ -357,6 +384,7 @@ fn measure(
     object: &Object,
 ) -> Result<Measured, Unavailable> {
     match quantity {
+        Quantity::SillHeight(_) => Err(invalid("a sill height is judged per floor")),
         Quantity::PlanArea => {
             let area = footprint(context, &object.id)?;
             Ok(Measured {
@@ -450,6 +478,10 @@ fn check(
     if limit.minimum.is_none() && limit.maximum.is_none() {
         return Ok(None);
     }
+    if let Quantity::SillHeight(floor) = quantity {
+        let described = format!("limit row {index}: {}", keys.describe(declared));
+        return sill_height(context, rule, floor, subject, limit, &described, keys);
+    }
     let measured = measure(context, quantity, subject)?;
     let unit = &measured.unit;
     match judge(measured.lower, measured.upper, limit.minimum, limit.maximum) {
@@ -478,5 +510,123 @@ fn check(
                 shown(measured.lower, measured.upper),
             ),
         )),
+    }
+}
+
+/// `minuend - subtrahend` as an interval sure to hold the exact difference: the
+/// rounded difference, widened by one step where rounding moved it.
+fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
+    let rounded = minuend - subtrahend;
+    // Two-sum: the exact difference is `rounded + error`.
+    let back = rounded - minuend;
+    let error = (minuend - (rounded - back)) + (-subtrahend - back);
+    if error > 0.0 {
+        (rounded, rounded.next_up())
+    } else if error < 0.0 {
+        (rounded.next_down(), rounded)
+    } else {
+        (rounded, rounded)
+    }
+}
+
+/// The sill height of `window` above the bottom of `floor`, as an interval.
+fn sill_interval(window: &VerticalExtent, floor: &VerticalExtent) -> (f64, f64) {
+    let (lower, _) = difference(
+        window.bottom().lower_metres(),
+        floor.bottom().upper_metres(),
+    );
+    let (_, upper) = difference(
+        window.bottom().upper_metres(),
+        floor.bottom().lower_metres(),
+    );
+    (lower, upper)
+}
+
+/// Judges the sill height of `subject` above each floor `path` reaches from
+/// it against `limit`. One failing floor is a finding; otherwise a floor that
+/// cannot be measured or straddles a bound leaves the subject not evaluated.
+fn sill_height(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    path: &Traversal<'_>,
+    subject: &Object,
+    limit: &Limit,
+    described: &str,
+    keys: Keys,
+) -> Result<Option<axioval_ir::Finding>, Unavailable> {
+    let service = extents(context)?;
+    let window = extent(service, &subject.id)?;
+    let everything: Vec<&Object> = context.project.objects().collect();
+    let (floors, cited) = path.related(context, &subject.id, &everything)?;
+    if floors.is_empty() {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("{} reaches no floor to measure from", path.relationship),
+        ));
+    }
+    let mut failed = Vec::new();
+    let mut undecided = Vec::new();
+    let mut evidence = keys.evidence;
+    let mut related = keys.sources;
+    for floor in floors {
+        let measured = match extent(service, &floor) {
+            Ok(measured) => measured,
+            Err((_, why)) => {
+                undecided.push(format!("the floor of {floor} cannot be measured: {why}"));
+                continue;
+            }
+        };
+        let (lower, upper) = sill_interval(&window, &measured);
+        let height = shown(lower, upper);
+        match judge(lower, upper, limit.minimum, limit.maximum) {
+            Verdict::Pass => {}
+            Verdict::Fail(bound) => {
+                failed.push(format!(
+                    "sill height above the floor of {floor} is {height} m; required {bound} m"
+                ));
+                evidence.push(measured.evidence().clone());
+                related.push(floor);
+            }
+            Verdict::Undecided(bound) => undecided.push(format!(
+                "sill height above the floor of {floor} is {height} m, which straddles the \
+                 bound {bound} m"
+            )),
+        }
+    }
+    if failed.is_empty() {
+        return if undecided.is_empty() {
+            Ok(None)
+        } else {
+            Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("{} ({described})", undecided.join("; ")),
+            ))
+        };
+    }
+    evidence.push(window.evidence().clone());
+    evidence.extend(cited);
+    related.sort();
+    related.dedup();
+    Ok(Some(finding(
+        rule,
+        &subject.id,
+        format!("{} ({described})", failed.join("; ")),
+        evidence,
+        related,
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::difference;
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn a_rounded_difference_is_widened_to_hold_the_exact_one() {
+        // 1.0 - 0.1 rounds up to the nearest double to 0.9.
+        let (lower, upper) = difference(1.0, 0.1);
+        assert!(lower < upper);
+        assert_eq!(upper, 1.0 - 0.1);
+        assert_eq!(difference(1.5, 0.5), (1.0, 1.0));
     }
 }

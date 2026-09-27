@@ -8,13 +8,16 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle,
+    CapabilityEvaluation, ElevationInterval, PlanArea, PlanAreaError, PlanAreaService,
+    PlanAreaServiceHandle, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
 use axioval_rules::KeyedLimit;
 use common::{
-    Model, findings, id, kind, number, property, rule, source, string, strings, unevaluated,
+    Model, findings, flagged, id, kind, number, property, rule, source, string, strings,
+    unevaluated,
 };
 
 const ID: &str = "axioval:capability.keyed-limit";
@@ -510,6 +513,7 @@ fn a_package_binds_the_limit_table() {
         parameter("propertyReference", false),
     );
     parameters.insert("case_sensitive".into(), parameter("boolean", false));
+    parameters.insert("floor_path".into(), parameter("stringList", false));
     for index in 1..=4 {
         parameters.insert(
             format!("key_{index}"),
@@ -557,4 +561,242 @@ fn a_package_binds_the_limit_table() {
         compile(&registry, &[definitions], &ruleset(json!([wrong]))),
         Err(EngineError::InvalidTableRow { .. })
     ));
+}
+
+/// Bottom elevations per object, with an optional uncertainty around each;
+/// every body is 1 m tall.
+#[derive(Default)]
+struct Bottoms(BTreeMap<ObjectId, (f64, f64)>);
+
+impl Bottoms {
+    fn with(mut self, local: &str, bottom: f64, slack: f64) -> Self {
+        self.0.insert(id(local), (bottom, slack));
+        self
+    }
+}
+
+impl VerticalExtentService for Bottoms {
+    fn measure_vertical_extent(
+        &self,
+        object: &ObjectId,
+    ) -> Result<VerticalExtent, VerticalExtentError> {
+        let (bottom, slack) = self
+            .0
+            .get(object)
+            .copied()
+            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?;
+        let mut evidence = Evidence::exact(source(), format!("extent:{}", object.local_id));
+        evidence.exact = slack == 0.0;
+        VerticalExtent::try_new(
+            object.clone(),
+            ElevationInterval::try_new(bottom - slack, bottom + slack)?,
+            ElevationInterval::try_new(bottom + 1.0 - slack, bottom + 1.0 + slack)?,
+            evidence,
+        )
+    }
+}
+
+/// Offices allow a sill of at most 1 m, corridors any sill.
+fn sill_limits() -> Vec<TableRow> {
+    vec![
+        row([Some("Office"), None, None], None, Some(1.0)),
+        row([Some("Corridor"), None, None], None, None),
+    ]
+}
+
+/// Keyed on the use of the spaces each window adjoins; sill heights from
+/// those spaces' floors.
+fn sill_keys(limits: Vec<TableRow>) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        ("limits", table(limits)),
+        ("quantity", string("sill-height")),
+        ("floor_path", strings(&["adjacent"])),
+        ("key_1", property(Some("Pset"), "Use")),
+        ("key_1_path", strings(&["adjacent"])),
+    ]
+}
+
+/// Offices `o1` (floor 0 m) and `o2` (floor 0.5 m), corridor `k` (0 m) and
+/// office `o3`, which cannot be measured; each window `(name, spaces)`.
+fn rooms(windows: &[(&str, &[&str])]) -> Model {
+    let mut model = Model::default();
+    for (space, use_class) in [
+        ("o1", "Office"),
+        ("o2", "Office"),
+        ("k", "Corridor"),
+        ("o3", "Office"),
+    ] {
+        model = model
+            .object(space, "space")
+            .text(space, "Pset", "Use", use_class);
+    }
+    for (window, spaces) in windows {
+        model = model.object(window, "window");
+        for space in *spaces {
+            model = model.edge("adjacent", window, space);
+        }
+    }
+    model
+}
+
+fn floors() -> Bottoms {
+    Bottoms::default()
+        .with("o1", 0.0, 0.0)
+        .with("o2", 0.5, 0.0)
+        .with("k", 0.0, 0.0)
+}
+
+fn sill(
+    model: Model,
+    bottoms: Bottoms,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model.evaluate_with(
+        &KeyedLimit,
+        &rule(ID, kind("window"), parameters),
+        |services| {
+            services
+                .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
+                .unwrap();
+        },
+    )
+}
+
+#[test]
+fn a_window_too_high_above_one_of_its_spaces_floors_is_found() {
+    // w1 lies between two offices whose floors differ: 1.2 m above o1's,
+    // 0.7 m above o2's. w2 sits 0.9 m above o1, w3 2 m above a corridor.
+    let model = rooms(&[("w1", &["o1", "o2"]), ("w2", &["o1"]), ("w3", &["k"])]);
+    let bottoms = floors()
+        .with("w1", 1.2, 0.0)
+        .with("w2", 0.9, 0.0)
+        .with("w3", 2.0, 0.0);
+    let evaluation = sill(model, bottoms, sill_keys(sill_limits()));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            format!(
+                "sill height above the floor of {} is 1.2 m; required at most 1 m \
+                 (limit row 0: Pset.Use (via adjacent) `Office`)",
+                id("o1")
+            )
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    let finding = &evaluation.findings()[0];
+    let related: Vec<_> = finding
+        .related
+        .iter()
+        .map(|object| object.local_id.as_str())
+        .collect();
+    assert_eq!(related, ["o1", "o2"]);
+    let cited: Vec<_> = finding
+        .evidence
+        .iter()
+        .map(|evidence| evidence.locator.as_str())
+        .collect();
+    assert!(
+        cited.contains(&"extent:w1") && cited.contains(&"extent:o1"),
+        "{cited:?}"
+    );
+    assert!(!cited.contains(&"extent:o2"), "{cited:?}");
+}
+
+#[test]
+fn a_sill_height_straddling_the_limit_is_not_evaluated() {
+    // A tessellated window whose bottom lies within 1 cm of 1 m.
+    let model = rooms(&[("w1", &["o1"]), ("w2", &["o1"])]);
+    let bottoms = floors().with("w1", 1.0, 0.01).with("w2", 1.1, 0.01);
+    let evaluation = sill(model, bottoms, sill_keys(sill_limits()));
+    assert_eq!(flagged(&evaluation), ["w2"]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w1".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("straddles the bound at most 1 m")
+    );
+}
+
+#[test]
+fn an_unmeasured_floor_is_not_evaluated_unless_another_floor_fails() {
+    let model = rooms(&[("w1", &["o1", "o3"]), ("w2", &["o1", "o3"])]);
+    let bottoms = floors().with("w1", 0.5, 0.0).with("w2", 1.5, 0.0);
+    let evaluation = sill(model, bottoms, sill_keys(sill_limits()));
+    assert_eq!(flagged(&evaluation), ["w2"]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w1".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("cannot be measured")
+    );
+}
+
+#[test]
+fn a_window_between_spaces_of_different_uses_or_none_is_not_evaluated() {
+    // w1 adjoins an office and a corridor, whose limits differ; w2 adjoins
+    // nothing; w3 cannot itself be measured.
+    let model = rooms(&[("w1", &["o1", "k"]), ("w2", &[]), ("w3", &["o1"])]);
+    let bottoms = floors().with("w1", 3.0, 0.0).with("w2", 3.0, 0.0);
+    let evaluation = sill(model, bottoms, sill_keys(sill_limits()));
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            ("w1".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ("w2".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ("w3".to_owned(), NotEvaluatedReason::BackendUnavailable),
+        ]
+    );
+}
+
+#[test]
+fn a_sill_below_a_minimum_is_found_and_without_geometry_nothing_is_judged() {
+    let model = || rooms(&[("w1", &["o2"])]);
+    let limits = vec![row([Some("Office"), None, None], Some(0.8), None)];
+    let evaluation = sill(
+        model(),
+        floors().with("w1", 1.0, 0.0),
+        sill_keys(limits.clone()),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            format!(
+                "sill height above the floor of {} is 0.5 m; required at least 0.8 m \
+                 (limit row 0: Pset.Use (via adjacent) `Office`)",
+                id("o2")
+            )
+        )]
+    );
+    let evaluation = model().evaluate(&KeyedLimit, &rule(ID, kind("window"), sill_keys(limits)));
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w1".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+}
+
+#[test]
+fn a_sill_height_needs_its_floor_path_and_nothing_else_takes_one() {
+    let model = || rooms(&[("w1", &["o1"])]);
+    let mut missing = sill_keys(sill_limits());
+    missing.retain(|(name, _)| *name != "floor_path");
+    let mut stray = fire_keys(fire_limits());
+    stray.push(("floor_path", strings(&["adjacent"])));
+    let mut both = sill_keys(sill_limits());
+    both.push(("quantity_property", property(None, "Sill")));
+    for parameters in [missing, stray, both] {
+        let evaluation = sill(model(), floors(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
 }

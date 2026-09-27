@@ -6,6 +6,27 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Derived light-opening area in `area-ratio`.** With
+  `numerator_derivation` `light-area`, each numerator member's area is its
+  light-transmitting area from the first step that produces one: the area
+  `numerator_property` states, else the most specific `light_area_table` row
+  keyed on a `type` name pattern (`light_type`, optionally via
+  `light_type_path`) and the member's `overall_width` × `overall_height`
+  (within `light_size_tolerance`), else width × height less the frame
+  allowance 2·(W+H)·`frame_width`. A step is skipped only when its input is
+  exactly absent, never on a wrong-typed value, an unknown type name or tied
+  rows; a member no step gives an area leaves its anchor not evaluated. Each
+  area carries an `axioval:derived.light-area:<member>:step=<step>` evidence
+  entry and findings count the areas per step. A stated light area larger
+  than the member's overall area is a finding against the member (its anchor
+  is not evaluated), and `empty_numerator_finding` reports an anchor that
+  reaches no numerator object, such as a space with no window, instead of a
+  ratio of 0. `measure: facade` with `light-area` is an invalid
+  declaration. **Breaking:** definitions bound to `area-ratio` must declare
+  the new optional parameters `numerator_derivation`,
+  `empty_numerator_finding`, `overall_width`, `overall_height`,
+  `light_area_table`, `light_type`, `light_type_path`,
+  `light_size_tolerance` and `frame_width`. (#54)
 - **Date and date-time values.** `PropertyValue::Date` is a calendar day
   (`{"type": "date", "value": "2026-09-27"}`) and `PropertyValue::DateTime`
   an instant with the UTC offset it was stated in

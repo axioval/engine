@@ -2378,8 +2378,32 @@ fn storey_metric_definitions(case: &Case) -> PathBuf {
             ("numerator_property", "propertyReference", false),
             ("denominator_property", "propertyReference", false),
             ("measure", "string", false),
+            ("numerator_derivation", "string", false),
+            ("empty_numerator_finding", "boolean", false),
+            ("overall_width", "propertyReference", false),
+            ("overall_height", "propertyReference", false),
+            ("light_area_table", "table", false),
+            ("light_type", "propertyReference", false),
+            ("light_type_path", "stringList", false),
+            ("light_size_tolerance", "quantity", false),
+            ("frame_width", "quantity", false),
         ]),
     );
+    let column = |id: &str, required: bool, dimension: Option<&str>| {
+        let mut column = json!({"id": id, "name": text(id), "required": required,
+                                "kind": if dimension.is_some() { "quantity" } else { "textPattern" }});
+        if let Some(dimension) = dimension {
+            column["unitDimension"] = json!(dimension);
+        }
+        column
+    };
+    definitions["definitions"]["axioval:example.window-to-wall"]["parameters"]["light_area_table"]
+        ["columns"] = json!([
+        column("type", false, None),
+        column("width", true, Some("length")),
+        column("height", true, Some("length")),
+        column("light_area", true, Some("area")),
+    ]);
     case.write("definitions.json", &definitions.to_string())
 }
 

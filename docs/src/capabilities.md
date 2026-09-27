@@ -242,7 +242,7 @@ These judge `PlanAreaService` measurements, so they need a geometry adapter.
 
 | Capability | Checks |
 |---|---|
-| `area-ratio` | At each anchor, the summed footprints of `numerator_selector` over those of `denominator_selector` (or the anchor's own footprint) lie within `minimum` and `maximum`. `numerator_property` / `denominator_property` take a population's areas from an area-quantity property instead, e.g. glazing areas. |
+| `area-ratio` | At each anchor, the summed footprints of `numerator_selector` over those of `denominator_selector` (or the anchor's own footprint) lie within `minimum` and `maximum`. `numerator_property` / `denominator_property` take a population's areas from an area-quantity property instead, e.g. glazing areas. `numerator_derivation` `light-area` derives each numerator member's light-transmitting area by a fallback (below). |
 | `plan-coverage` | Each subject's footprint lies within one `candidate_selector` object by at least `minimum_ratio`, e.g. a space within a fire compartment. |
 | `plan-area` | Each selected object's footprint lies within `minimum` and `maximum` square metres, e.g. a space of at least 8 m² or a fire compartment (a zone, measured as the union of its members) of at most 400 m². With `member_selector`, the summed footprints of the members each anchor reaches lie within the range instead, e.g. the space area of each storey. |
 
@@ -251,6 +251,37 @@ All bounds are inclusive, and `area-ratio` and `plan-area` need at least one of 
 `area-ratio` and `plan-area` take `measure`: `footprint` (the default) or `facade`. `facade` measures each object's outward-facing surface through `FacadeAreaService` instead of its footprint (see [typed host services](./services.md)); a population with a declared area property still reads the property. A facade area may be zero, so `plan-area` does not treat an empty facade as a missing body.
 
 `plan-area` reaches members as `related-count` does: through the declared traversal (`relationship` or `path`, as above; with IFC, `IfcRelAssignsToGroup` from a zone or `IfcRelAggregates` from a storey), or everywhere in the anchor's source without one; a traversal without `member_selector` is an invalid declaration. Footprints are summed, so members that overlap count twice; select members that tile the floor, such as spaces. An object with an empty footprint has no body and is not evaluated, and so is an anchor with such a member, since its sum is unknown. A member whose selection is undecided can only add area: a sum already above the maximum is still a finding, anything else is not evaluated. A finding relates the members summed. A definition bound to `plan-area` declares `minimum`, `maximum`, `member_selector` and the traversal parameters, all optional.
+
+#### Light-opening area
+
+A floor-to-window ratio sums the light-transmitting area of windows, doors or curtain walls per space, and a model rarely states that area for every opening. With `numerator_derivation` `light-area`, `area-ratio` takes each numerator member's area from the first of these steps that produces one:
+
+1. the area-quantity property `numerator_property` states;
+2. else the `light_area` of the most specific `light_area_table` row whose `width` and `height` equal the member's `overall_width` and `overall_height` (within `light_size_tolerance`, default exact) and whose `type` pattern matches the member's type name;
+3. else overall width × height less the frame allowance 2·(W+H)·`frame_width`.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `overall_width`, `overall_height` | `propertyReference` (required in this mode) | The member's overall size, a length each. With IFC, `axioval:attributes.OverallWidth` and `OverallHeight`. |
+| `light_area_table` | `table` | Rows of `type` (`textPattern`, blank matches any type), `width`, `height` (length `quantity`) and `light_area` (area `quantity`), all but `type` required. |
+| `light_type` | `propertyReference` | The type name rows match, required when a row has a `type`. |
+| `light_type_path` | `stringList` | A relationship path to the objects `light_type` is read from, such as the type object; they must agree. |
+| `light_size_tolerance` | `quantity` | A length within which a row's size matches; only with a table. |
+| `frame_width` | `quantity` | The frame allowance's width, a length of at least zero. |
+| `empty_numerator_finding` | `boolean` | Report an anchor that reaches no numerator object; any numerator mode. |
+
+At least one of `light_area_table` and `frame_width` is required, and the mode's parameters without it are an invalid declaration. The step order is fixed, so a rule without a stated property or without a table simply leaves that step out.
+
+A step is skipped only when its input is exactly absent: no stated property, or no row of the right size and type. A stated value that is not an area (null, text, a length), a size that is not a positive length, a type name that is absent, blank or not text when a row of the right size tests it, or rows that tie for most specific stop the chain, and the anchor is not evaluated rather than fall back. So is an anchor with a member for which no declared step produces an area, and one whose frame allowance leaves no light area. Every summed area carries an evidence entry `axioval:derived.light-area:<member>:step=<step>` naming its step (`stated`, `table;row=<n>` or `frame-allowance;frame_width=<metres>`), and a finding's message counts the areas each step produced.
+
+Two further results:
+
+- **Light area larger than the element**: a stated light area above the member's overall width × height is a finding against the member, relating the anchor, reported once however many anchors reach it; its anchor is not evaluated, since the value cannot be trusted. A stated area whose overall size is unknown is used, and the member is not evaluated for the comparison. Table rows are checked for this when the rule is read, and the frame allowance cannot exceed the element.
+- **No opening**: with `empty_numerator_finding`, an anchor that reaches no numerator object at all (a space with no window) is the finding "no numerator object is reached …; the ratio is 0" instead of a ratio. Without it, such an anchor is judged as a ratio of 0.
+
+The denominator is measured as `measure` says, but `measure: facade` together with `light-area` is an invalid declaration: a light area over facade areas is no defined ratio, and a window-to-wall ratio relates the windows' facade areas, not their light areas.
+
+This is a numerator mode of `area-ratio` rather than a capability of its own: the traversal, the undecided-member rule, the denominator and the interval judgement are all `area-ratio`'s, and only where each numerator member's area comes from differs. A separate capability would have to repeat all of them, and capabilities cannot feed one another. A definition bound to `area-ratio` declares `numerator_selector` (required), `denominator_selector`, `minimum`, `maximum`, `numerator_property`, `denominator_property`, `measure`, `numerator_derivation`, `empty_numerator_finding`, the light-area parameters above and the traversal parameters.
 
 ### Property requirements
 

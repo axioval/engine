@@ -243,6 +243,399 @@ mod window_ratio {
     }
 }
 
+mod light_area {
+    use super::*;
+    use axioval_ir::contract::TableRow;
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    use common::{boolean, property, strings};
+
+    const ID: &str = "axioval:capability.area-ratio";
+    const ATTRIBUTES: &str = "axioval:attributes";
+
+    fn metres(value: f64) -> PropertyValue {
+        PropertyValue::Quantity {
+            value,
+            dimension: QuantityDimension::Length,
+        }
+    }
+
+    fn square_metres(value: f64) -> PropertyValue {
+        PropertyValue::Quantity {
+            value,
+            dimension: QuantityDimension::Area,
+        }
+    }
+
+    fn quantity(value: f64, unit: &str) -> ParameterValue {
+        ParameterValue::Quantity {
+            value,
+            unit: unit.into(),
+        }
+    }
+
+    /// A light-area row: type pattern, width and height in mm, area in m².
+    fn row(kind: Option<&str>, width: f64, height: f64, light: f64) -> TableRow {
+        let mut cells = TableRow::new();
+        if let Some(kind) = kind {
+            cells.insert("type".into(), string(kind));
+        }
+        cells.insert("width".into(), quantity(width, "mm"));
+        cells.insert("height".into(), quantity(height, "mm"));
+        cells.insert("light_area".into(), quantity(light, "m2"));
+        cells
+    }
+
+    /// Room `room` (20 m²) with the windows `windows` in it. Each window's
+    /// type name is on its type object `<id>-type`.
+    fn rooms(windows: &[&str]) -> (Model, Rectangles) {
+        let mut model = Model::default().object("room", "space");
+        for window in windows {
+            let kind = format!("{window}-type");
+            model = model
+                .object(window, "window")
+                .object(&kind, "windowType")
+                .edge("opens", "room", window)
+                .edge("typed", window, &kind);
+        }
+        let rectangles = Rectangles::default().with("room", [0.0, 0.0, 4.0, 5.0], 0.0);
+        (model, rectangles)
+    }
+
+    /// `rooms(&["w1"])` with a second room, `bare` (20 m²), without a window.
+    fn with_bare_room() -> (Model, Rectangles) {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model.object("bare", "space"), "w1", 2.0, 2.0).value(
+            "w1",
+            "Pset",
+            "LightArea",
+            square_metres(3.0),
+        );
+        (model, rectangles.with("bare", [0.0, 0.0, 4.0, 5.0], 0.0))
+    }
+
+    fn sized(model: Model, window: &str, width: f64, height: f64) -> Model {
+        model
+            .value(window, ATTRIBUTES, "OverallWidth", metres(width))
+            .value(window, ATTRIBUTES, "OverallHeight", metres(height))
+    }
+
+    /// Light-area mode over `opens`, one eighth of the floor required.
+    fn parameters(
+        extra: Vec<(&'static str, ParameterValue)>,
+    ) -> Vec<(&'static str, ParameterValue)> {
+        let mut parameters = vec![
+            ("numerator_selector", selector(kind("window"))),
+            ("numerator_derivation", string("light-area")),
+            ("numerator_property", property(Some("Pset"), "LightArea")),
+            ("overall_width", property(Some(ATTRIBUTES), "OverallWidth")),
+            (
+                "overall_height",
+                property(Some(ATTRIBUTES), "OverallHeight"),
+            ),
+            ("light_type", property(Some(ATTRIBUTES), "Name")),
+            ("light_type_path", strings(&["typed"])),
+            (
+                "light_area_table",
+                ParameterValue::Table {
+                    value: vec![
+                        row(Some("Case*"), 1500.0, 1500.0, 1.8),
+                        row(None, 1500.0, 1500.0, 1.6),
+                    ],
+                },
+            ),
+            ("frame_width", quantity(50.0, "mm")),
+            ("minimum", number(0.125)),
+            ("relationship", string("opens")),
+        ];
+        for (name, value) in extra {
+            parameters.retain(|(held, _)| *held != name);
+            parameters.push((name, value));
+        }
+        parameters
+    }
+
+    fn evaluate(
+        model: Model,
+        rectangles: Rectangles,
+        parameters: Vec<(&'static str, ParameterValue)>,
+    ) -> axioval_engine::CapabilityEvaluation {
+        run(
+            model,
+            rectangles,
+            &AreaRatio,
+            &rule(ID, kind("space"), parameters),
+        )
+    }
+
+    fn room_finding(evaluation: &axioval_engine::CapabilityEvaluation) -> &axioval_ir::Finding {
+        evaluation
+            .findings()
+            .iter()
+            .find(|finding| finding.object_id().unwrap().local_id == "room")
+            .expect("a finding against the room")
+    }
+
+    fn records(finding: &axioval_ir::Finding) -> Vec<String> {
+        finding
+            .evidence
+            .iter()
+            .filter(|evidence| evidence.locator.starts_with("axioval:derived.light-area"))
+            .map(|evidence| evidence.locator.clone())
+            .collect()
+    }
+
+    fn step(window: &str, step: &str) -> String {
+        format!("axioval:derived.light-area:{}:step={step}", id(window))
+    }
+
+    #[test]
+    fn a_stated_light_area_comes_first() {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.5, 1.5)
+            .value("w1", "Pset", "LightArea", square_metres(2.0))
+            .text("w1-type", ATTRIBUTES, "Name", "Casement");
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        let finding = room_finding(&evaluation);
+        assert_eq!(
+            finding.message,
+            "plan area ratio is 0.1 (2 m² of 20 m²); required at least 0.125; light areas: 1 stated"
+        );
+        assert_eq!(records(finding), [step("w1", "stated")]);
+    }
+
+    #[test]
+    fn without_a_stated_area_the_most_specific_table_row_applies() {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.5, 1.5).text("w1-type", ATTRIBUTES, "Name", "Casement");
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        let finding = room_finding(&evaluation);
+        assert_eq!(
+            finding.message,
+            "plan area ratio is 0.09 (1.8 m² of 20 m²); required at least 0.125; \
+             light areas: 1 from the light-area table"
+        );
+        assert_eq!(records(finding), [step("w1", "table;row=0")]);
+    }
+
+    #[test]
+    fn without_a_matching_row_the_frame_allowance_applies() {
+        // 1.2 m × 1.0 m less 2 · 2.2 m · 0.05 m = 0.98 m².
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.2, 1.0).text("w1-type", ATTRIBUTES, "Name", "Casement");
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        let finding = room_finding(&evaluation);
+        assert_eq!(
+            finding.message,
+            "plan area ratio is 0.049 (0.98 m² of 20 m²); required at least 0.125; \
+             light areas: 1 by frame allowance"
+        );
+        assert_eq!(
+            records(finding),
+            [step("w1", "frame-allowance;frame_width=0.05")]
+        );
+    }
+
+    #[test]
+    fn each_member_records_the_step_that_produced_its_area() {
+        // 2.0 stated + 1.6 from the untyped row + 0.98 by frame allowance.
+        let (model, rectangles) = rooms(&["w1", "w2", "w3"]);
+        let model =
+            sized(model, "w1", 1.5, 1.5).value("w1", "Pset", "LightArea", square_metres(2.0));
+        let model = sized(model, "w2", 1.5, 1.5).text("w2-type", ATTRIBUTES, "Name", "Fixed");
+        let model = sized(model, "w3", 1.2, 1.0).text("w3-type", ATTRIBUTES, "Name", "Fixed");
+        let evaluation = evaluate(
+            model,
+            rectangles,
+            parameters(vec![("minimum", number(0.25))]),
+        );
+        let finding = room_finding(&evaluation);
+        assert_eq!(
+            finding.message,
+            "plan area ratio is 0.229 (4.58 m² of 20 m²); required at least 0.25; \
+             light areas: 1 stated, 1 from the light-area table, 1 by frame allowance"
+        );
+        assert_eq!(
+            records(finding),
+            [
+                step("w1", "stated"),
+                step("w2", "table;row=1"),
+                step("w3", "frame-allowance;frame_width=0.05"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_stated_area_that_is_not_an_area_does_not_fall_back() {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.2, 1.0)
+            .value("w1", "Pset", "LightArea", PropertyValue::Null)
+            .text("w1-type", ATTRIBUTES, "Name", "Casement");
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("room".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+
+    #[test]
+    fn an_unknown_type_name_does_not_fall_back_to_the_frame_allowance() {
+        // A typed row fits the size, so the missing name decides nothing.
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.5, 1.5);
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("room".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+        assert!(
+            evaluation.not_evaluated_outcomes()[0]
+                .message()
+                .contains("cannot be decided"),
+            "{:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+    }
+
+    #[test]
+    fn a_value_the_chain_cannot_produce_is_not_evaluated() {
+        // No stated area and no overall width: neither fallback applies.
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = model
+            .value("w1", ATTRIBUTES, "OverallHeight", metres(1.0))
+            .text("w1-type", ATTRIBUTES, "Name", "Casement");
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("room".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+        // Without a frame allowance, a size no row lists has no light area.
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.2, 1.0).text("w1-type", ATTRIBUTES, "Name", "Casement");
+        let mut without_frame = parameters(vec![]);
+        without_frame.retain(|(name, _)| *name != "frame_width");
+        let evaluation = evaluate(model, rectangles, without_frame);
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("room".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+
+    #[test]
+    fn a_light_area_larger_than_the_element_is_found() {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model =
+            sized(model, "w1", 1.0, 1.0).value("w1", "Pset", "LightArea", square_metres(3.0));
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "w1".into(),
+                "light area 3 m² (Pset.LightArea) is larger than the overall area 1 m² \
+                 (axioval:attributes.OverallWidth 1 m × axioval:attributes.OverallHeight 1 m)"
+                    .into()
+            )]
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("room".to_owned(), NotEvaluatedReason::InvalidEvidence)]
+        );
+    }
+
+    #[test]
+    fn a_stated_area_without_an_overall_size_is_used_but_not_compared() {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = model.value("w1", "Pset", "LightArea", square_metres(2.0));
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        assert_eq!(flagged(&evaluation), ["room"]);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("w1".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+
+    #[test]
+    fn a_space_with_no_window_is_found_when_asked() {
+        let (model, rectangles) = with_bare_room();
+        let evaluation = evaluate(
+            model,
+            rectangles,
+            parameters(vec![("empty_numerator_finding", boolean(true))]),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "bare".into(),
+                "no numerator object is reached via opens; the ratio is 0".into()
+            )]
+        );
+        // Without it, the empty space fails as a ratio of 0.
+        let (model, rectangles) = with_bare_room();
+        let evaluation = evaluate(model, rectangles, parameters(vec![]));
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "bare".into(),
+                "plan area ratio is 0 (0 m² of 20 m²); required at least 0.125".into()
+            )]
+        );
+    }
+
+    #[test]
+    fn facade_measurement_does_not_combine_with_light_areas() {
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.2, 1.0);
+        let evaluation = evaluate(
+            model,
+            rectangles,
+            parameters(vec![("measure", string("facade"))]),
+        );
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        // `footprint`, the default, stated explicitly, combines.
+        let (model, rectangles) = rooms(&["w1"]);
+        let model = sized(model, "w1", 1.2, 1.0);
+        let evaluation = evaluate(
+            model,
+            rectangles,
+            parameters(vec![("measure", string("footprint"))]),
+        );
+        assert_eq!(flagged(&evaluation), ["room"]);
+    }
+
+    #[test]
+    fn light_area_parameters_need_the_mode_and_a_fallback() {
+        let (model, rectangles) = rooms(&[]);
+        let evaluation = evaluate(
+            model,
+            rectangles,
+            vec![
+                ("numerator_selector", selector(kind("window"))),
+                ("frame_width", quantity(50.0, "mm")),
+                ("minimum", number(0.125)),
+            ],
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        let (model, rectangles) = rooms(&[]);
+        let mut no_fallback = parameters(vec![]);
+        no_fallback.retain(|(name, _)| !matches!(*name, "frame_width" | "light_area_table"));
+        let evaluation = evaluate(model, rectangles, no_fallback);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
 mod plan_coverage {
     use super::*;
 

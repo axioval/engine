@@ -17,6 +17,7 @@ mod guard_diagnosis;
 mod horizontal_guard;
 mod keyed_limit;
 mod level_spacing;
+mod light_area;
 mod manual_issue;
 mod name_sequence;
 mod numbering_consistency;

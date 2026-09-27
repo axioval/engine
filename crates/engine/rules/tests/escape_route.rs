@@ -57,6 +57,8 @@ struct Geometry {
     /// A backend that cannot walk around objects.
     plain: bool,
     overlaps: BTreeMap<(String, String), f64>,
+    /// The points a walk from a start passes, instead of out and back.
+    vias: BTreeMap<String, Vec<[f64; 3]>>,
 }
 
 impl Geometry {
@@ -73,6 +75,11 @@ impl Geometry {
     fn rectangle(mut self, local: &str, width: f64, length: f64, unique: bool) -> Self {
         self.rectangles
             .insert(local.into(), (width, length, unique));
+        self
+    }
+
+    fn via(mut self, from: &str, points: &[[f64; 3]]) -> Self {
+        self.vias.insert(from.into(), points.to_vec());
         self
     }
 
@@ -297,14 +304,27 @@ impl MetricRoutingService for Geometry {
         match self.lookup(from, request.targets(), request.avoided()) {
             Walk::Between(lower, upper) => {
                 // Every point stands at the same centre, so the walk goes
-                // half its length out and back.
+                // half its length out and back, unless it passes declared
+                // points.
                 let [x, y, z] = request.origin().coordinates_metres();
-                let turn = MetricPoint::try_new(from.clone(), [x + upper / 2.0, y, z])?;
+                let mut waypoints = vec![request.origin().clone()];
+                match self.vias.get(&from.local_id) {
+                    Some(points) => {
+                        for point in points {
+                            waypoints.push(MetricPoint::try_new(from.clone(), *point)?);
+                        }
+                    }
+                    None => {
+                        waypoints
+                            .push(MetricPoint::try_new(from.clone(), [x + upper / 2.0, y, z])?);
+                    }
+                }
+                waypoints.push(request.targets()[0].clone());
                 Ok(NearestTargetOutcome::Reached(
                     NearestTargetEvidence::try_new(
                         0,
                         LengthInterval::try_new(lower, upper)?,
-                        vec![request.origin().clone(), turn, request.targets()[0].clone()],
+                        waypoints,
                         exact(format!("nearest:{}", from.local_id)),
                     )?,
                 ))
@@ -2171,6 +2191,193 @@ fn two_exits_through_one_dead_end_corridor_count_as_one_route() {
     let message = evaluation.not_evaluated_outcomes()[0].message();
     assert!(
         message.contains("it has at least 1 and at most 2 independent route(s)"),
+        "{message}"
+    );
+}
+
+/// Hall `hall` is left by its door `d1` towards exit `x1` through corridor
+/// door `cd`: the walk from `d1` runs east through `cd`, whose leaf closes
+/// along x = 3, and comes back far north of it.
+fn through_a_corridor_door() -> Model {
+    Model::default()
+        .object("hall", "space")
+        .object("d1", "door")
+        .object("cd", "door")
+        .object("x1", "exit")
+        .edge("bounds", "d1", "hall")
+        .edge("serves", "x1", "hall")
+        .value("hall", "Access", "ClearHeight", metres(3.0))
+        .value("d1", "Access", "ClearHeight", metres(2.1))
+}
+
+fn along_the_route(
+    model: Model,
+    geometry: Geometry,
+    corridor_door_opens: [f64; 3],
+    maximum: f64,
+    extra: Vec<(&'static str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    use common::doors::{Doors, Rooms, hinged};
+    let doors = Doors::default()
+        .door(
+            "d1",
+            vec![hinged(
+                [3.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+                0.9,
+                false,
+            )],
+            1.0,
+            None,
+        )
+        .door(
+            "cd",
+            vec![hinged(
+                [3.0, 1.5, 0.0],
+                [0.0, 1.0, 0.0],
+                corridor_door_opens,
+                1.0,
+                false,
+            )],
+            1.0,
+            None,
+        );
+    let rooms = Rooms::default().room("hall", [-5.0, 0.0], [10.0, 4.0]);
+    let mut parameters = with(
+        doors_and_exits(),
+        vec![from_the_door(&[("maximum_travel", number(maximum))])],
+    );
+    parameters.extend(extra);
+    model.evaluate_with(
+        &EscapeRoute,
+        &rule(CAPABILITY, kind("space"), parameters),
+        |services| {
+            geometry
+                .via("d1", &[[5.0, 2.0, 0.0], [5.0, 10.0, 0.0], [1.0, 10.0, 0.0]])
+                .register(services);
+            services.register(doors.handle()).unwrap();
+            services.register(rooms.handle()).unwrap();
+        },
+    )
+}
+
+fn walk_through_the_corridor_door(around: Walk) -> Geometry {
+    Geometry::default()
+        .walk("d1", "x1", Walk::Between(10.0, 10.0))
+        .trace("d1", "cd", 1.0)
+        .detour("d1", "x1", "cd", around)
+}
+
+#[test]
+fn a_corridor_door_swinging_against_the_route_is_found() {
+    let east = [1.0, 0.0, 0.0];
+    let west = [-1.0, 0.0, 0.0];
+    let direction = || vec![("route_door_direction", common::boolean(true))];
+    let evaluation = along_the_route(
+        through_a_corridor_door(),
+        walk_through_the_corridor_door(Walk::Unreachable),
+        east,
+        20.0,
+        direction(),
+    );
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    let evaluation = along_the_route(
+        through_a_corridor_door(),
+        walk_through_the_corridor_door(Walk::Unreachable),
+        west,
+        20.0,
+        direction(),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "hall".into(),
+            format!(
+                "door {} on its route opens against the direction of escape",
+                id("cd")
+            )
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    // A walk round the door as short as the named one: another shortest
+    // walk may not cross it, so nothing is found.
+    let evaluation = along_the_route(
+        through_a_corridor_door(),
+        walk_through_the_corridor_door(Walk::Between(10.0, 10.0)),
+        west,
+        20.0,
+        direction(),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("not every shortest walk is proven to cross it"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_door_lower_than_the_minimum_is_found_while_the_travel_is_judged() {
+    let heights = || {
+        vec![
+            ("minimum_clear_height", number(2.1)),
+            (
+                "clear_height_property",
+                property(Some("Access"), "ClearHeight"),
+            ),
+        ]
+    };
+    // The 10 m walk exceeds 8 m, and the corridor door is 1.9 m high.
+    let evaluation = along_the_route(
+        through_a_corridor_door().value("cd", "Access", "ClearHeight", metres(1.9)),
+        walk_through_the_corridor_door(Walk::Unreachable),
+        [1.0, 0.0, 0.0],
+        8.0,
+        heights(),
+    );
+    let found = findings(&evaluation);
+    assert_eq!(found.len(), 2, "{evaluation:?}");
+    assert_eq!(
+        found[0],
+        (
+            "hall".into(),
+            format!(
+                "door {} lies 10 m from the nearest exit walking; use 0 allows at most 8 m of \
+                 travel",
+                id("d1")
+            )
+        )
+    );
+    assert!(
+        found[1].1.starts_with(&format!(
+            "{} on its route is 1.9 m high (clear height (",
+            id("cd")
+        )) && found[1]
+            .1
+            .ends_with("); its route needs at least 2.1 m of clear height"),
+        "{found:?}"
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    // Without a stated height, the door's 2.1 m vertical extent decides
+    // nothing.
+    let evaluation = along_the_route(
+        through_a_corridor_door(),
+        walk_through_the_corridor_door(Walk::Unreachable),
+        [1.0, 0.0, 0.0],
+        20.0,
+        heights(),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains(&format!(
+            "the clear height of {} on its route is not stated",
+            id("cd")
+        )),
         "{message}"
     );
 }

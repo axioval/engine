@@ -491,6 +491,31 @@ impl ClearHeight<'_> {
     }
 }
 
+/// A door's clear height as the `clear-height` quantity measures it: its
+/// bounds, how it was read, and the evidence. Shared with `escape-route`.
+pub(crate) fn door_clear_height<'a>(
+    context: &RuleContext<'_>,
+    object: &Object,
+    stated: Option<PropertyRef<'a>>,
+    overall: Option<PropertyRef<'a>>,
+    lining: Option<PropertyRef<'a>>,
+    threshold: Option<PropertyRef<'a>>,
+) -> Result<(f64, f64, String, Vec<Evidence>), Unavailable> {
+    let measured = ClearHeight {
+        stated,
+        overall,
+        lining,
+        threshold,
+    }
+    .measure(context, object)?;
+    Ok((
+        measured.lower,
+        measured.upper,
+        measured.what,
+        measured.evidence,
+    ))
+}
+
 /// The evidence entry recording which step produced a clear height; the
 /// derivation takes the lining to run across the head, so it is never
 /// exact.

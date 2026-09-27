@@ -97,6 +97,14 @@
 //! target, one where a passage cuts every walk; at least the sure targets
 //! whose traced walks share no passage.
 //!
+//! **Along the route.** With `route_door_direction` and
+//! `minimum_clear_height`, the walk named from each door is traced over
+//! the doors and passages: every single-swing door it crosses must open
+//! along it (read from where the walk crosses the closed leaf's line), and
+//! every door, opening and space on it, the start door and space included,
+//! must be as high as the minimum. A failure is a finding only when every
+//! shortest walk crosses the object.
+//!
 //! **Zones.** Each object takes the rank of the first row of `zones`
 //! picking it, the start its space's or compartment's; every walk keeps out
 //! of what ranks above the start, as it keeps out of what is not usable for
@@ -109,18 +117,20 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeavesError, FarthestPointOutcome,
-    FarthestPointRequest, FreeSpaceServiceHandle, LengthInterval, MetricPoint,
-    MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
-    NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor, ParameterType,
-    PathTraceRequest, PlanArea, PlanAreaServiceHandle, PlanSpanServiceHandle, ProximityProjection,
-    ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeaves, DoorLeavesError,
+    FarthestPointOutcome, FarthestPointRequest, FreeSpaceServiceHandle, LengthInterval,
+    MetricPoint, MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome,
+    NearestTargetRequest, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
+    ParameterType, PathTraceRequest, PlanArea, PlanAreaServiceHandle, PlanSpanServiceHandle,
+    ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
+    SpaceServiceHandle, TableColumn, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension, Scope};
 
 use crate::door_swing::{self, Relation};
 use crate::exit_separation::Candidates;
+use crate::keyed_limit::door_clear_height;
 use crate::plan_area::{footprint, shown};
 use crate::selection::{Selection, select_objects, selector_matches};
 use crate::space_distance::representative_point;
@@ -253,6 +263,13 @@ struct Declaration<'a> {
     no_escape: Option<&'a Selector>,
     /// Whether `exits` counts independent routes rather than exits.
     count_routes: bool,
+    /// Whether every single-swing door a walk crosses must open along it.
+    route_door_direction: bool,
+    /// The least clear height of what a walk crosses, in metres.
+    minimum_height: Option<f64>,
+    /// A door's clear height, as `keyed-limit`'s `clear-height` reads it:
+    /// stated, else overall less lining and threshold.
+    clear_height: [Option<PropertyRef<'a>>; 4],
     compartments: Option<Compartments<'a>>,
     /// By row; the first row picking an object ranks it.
     zones: Vec<Zone<'a>>,
@@ -427,6 +444,37 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         ));
     }
     let zones = zones(&parameters)?;
+    let route_door_direction = parameters.boolean("route_door_direction")?.unwrap_or(false);
+    let minimum_height = positive(
+        "`minimum_clear_height`",
+        "minimum_clear_height",
+        parameters.number("minimum_clear_height")?,
+    )?;
+    let clear_height = [
+        parameters.property("clear_height_property")?,
+        parameters.property("overall_height")?,
+        parameters.property("lining_thickness")?,
+        parameters.property("threshold_thickness")?,
+    ];
+    if clear_height.iter().any(Option::is_some) && minimum_height.is_none() {
+        return Err(invalid(
+            "`clear_height_property`, `overall_height`, `lining_thickness` and \
+             `threshold_thickness` need `minimum_clear_height`",
+        ));
+    }
+    if clear_height[1].is_none() && (clear_height[2].is_some() || clear_height[3].is_some()) {
+        return Err(invalid(
+            "`lining_thickness` and `threshold_thickness` are deducted from `overall_height`, \
+             which is not declared",
+        ));
+    }
+    if (route_door_direction || minimum_height.is_some()) && (doors.is_none() || profile.is_none())
+    {
+        return Err(invalid(
+            "`route_door_direction` and `minimum_clear_height` need `door_path`, \
+             `door_selector`, `walking_height` and `walking_step`",
+        ));
+    }
     if (compartments.is_some() || !zones.is_empty())
         && uses.iter().all(|use_| use_.maximum_travel.is_none())
     {
@@ -452,6 +500,9 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
         no_escape: parameters.selector("no_escape_selector")?,
         count_routes,
+        route_door_direction,
+        minimum_height,
+        clear_height,
         compartments,
         zones,
     })
@@ -649,6 +700,15 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
             ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
             ParameterDescriptor::optional("exit_count", ParameterType::String),
+            ParameterDescriptor::optional("route_door_direction", ParameterType::Boolean),
+            ParameterDescriptor::optional("minimum_clear_height", ParameterType::Number),
+            ParameterDescriptor::optional(
+                "clear_height_property",
+                ParameterType::PropertyReference,
+            ),
+            ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
         ]
     }
 
@@ -1099,6 +1159,70 @@ struct Boundary {
     /// Whether no door out may be missing.
     known: bool,
     doubts: Vec<Unavailable>,
+}
+
+/// How one thing on a route stands against a requirement.
+enum Verdict {
+    Good,
+    /// Fails, with what the finding says and cites.
+    Bad(String, Vec<Evidence>),
+    /// Undecided, and why.
+    Open(String),
+}
+
+/// A clear height: bracketed (as a door states it), measured exactly,
+/// bounded from above, or unknown.
+enum Height {
+    Stated(f64, f64, String, Vec<Evidence>),
+    Measured(f64, Evidence),
+    AtMost(f64, Evidence),
+    Unknown(String),
+}
+
+/// Which way `path` crosses the closed hinged leaves of `leaves` in plan:
+/// along their opening direction (`Some(true)`), against it
+/// (`Some(false)`), or undecided (no crossing, or crossings both ways).
+///
+/// A crossing is where a segment passes from behind a leaf's closed line
+/// to its swing side or back, within a leaf's width of the leaf, beyond
+/// which another wall's door would stand.
+fn crossing(leaves: &DoorLeaves, path: &[MetricPoint]) -> Option<bool> {
+    let (mut along, mut against) = (false, false);
+    for leaf in leaves.hinged() {
+        let (a, b) = leaf.closed_edge();
+        let [ox, oy, _] = leaf.opening().components();
+        let norm = ox.hypot(oy);
+        let (ex, ey) = (b[0] - a[0], b[1] - a[1]);
+        let length = ex.hypot(ey);
+        if norm < 0.5 || length <= 0.0 {
+            return None;
+        }
+        let (nx, ny, ux, uy) = (ox / norm, oy / norm, ex / length, ey / length);
+        let margin = leaf.width_metres();
+        let side = |point: [f64; 3]| (point[0] - a[0]) * nx + (point[1] - a[1]) * ny;
+        for pair in path.windows(2) {
+            let (p, q) = (pair[0].coordinates_metres(), pair[1].coordinates_metres());
+            let (sp, sq) = (side(p), side(q));
+            if (sp < 0.0) == (sq < 0.0) {
+                continue;
+            }
+            let share = sp / (sp - sq);
+            let at = [p[0] + share * (q[0] - p[0]), p[1] + share * (q[1] - p[1])];
+            let offset = (at[0] - a[0]) * ux + (at[1] - a[1]) * uy;
+            if offset >= -margin && offset <= length + margin {
+                if sq > sp {
+                    along = true;
+                } else {
+                    against = true;
+                }
+            }
+        }
+    }
+    match (along, against) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    }
 }
 
 /// Where the walks out of one space end, and what they keep out of.
@@ -1687,6 +1811,9 @@ impl Judge<'_, '_> {
         if self.declared.door_direction {
             self.door_direction(space, &exits, checked);
         }
+        if self.declared.route_door_direction || self.declared.minimum_height.is_some() {
+            self.route(space, checked);
+        }
         load
     }
 
@@ -2206,6 +2333,275 @@ impl Judge<'_, '_> {
             evidence,
             reliance.spaces.clone(),
         ));
+    }
+
+    /// Judges what the walks from `space`'s doors cross: each single-swing
+    /// door's direction, and the clear height of each door, opening or
+    /// space, the space itself included.
+    ///
+    /// The walk judged from each door is the one the routing answer names,
+    /// among perhaps several shortest ones. What it crosses is judged; a
+    /// failure is a finding only when every shortest walk crosses the
+    /// object too (`on_every_walk`), else the space is not evaluated. The
+    /// door a walk starts from is judged against the space, as exit doors
+    /// are.
+    #[allow(clippy::too_many_lines)]
+    fn route(&self, space: &Object, checked: &mut Checked) {
+        let (Some(routes), Some(profile), Some(doors)) = (
+            self.context.services.get::<MetricRoutingServiceHandle>(),
+            self.declared.profile,
+            self.doors.as_ref(),
+        ) else {
+            checked.doubts.push(missing("metric-routing"));
+            return;
+        };
+        let escape = match self.escape(&space.id) {
+            Ok(escape) => escape,
+            Err(unavailable) => {
+                checked.doubts.push(unavailable);
+                return;
+            }
+        };
+        let starts = match self.start_doors(&space.id) {
+            Ok(starts) if !starts.sure.is_empty() || !starts.maybe.is_empty() => starts,
+            Ok(_) => {
+                checked.doubts.push(incomplete(format!(
+                    "{} reaches no door usable for escape to start from",
+                    space.id
+                )));
+                return;
+            }
+            Err(unavailable) => {
+                checked.doubts.push(unavailable);
+                return;
+            }
+        };
+        let door_ids: BTreeSet<ObjectId> = doors
+            .universe
+            .iter()
+            .map(|object| object.id.clone())
+            .collect();
+        let mut among = door_ids.clone();
+        if let Some(passages) = &self.passages {
+            among.extend(passages.universe.iter().map(|object| object.id.clone()));
+        }
+        let mut reported: BTreeMap<String, Finding> = BTreeMap::new();
+        let mut report =
+            |verdict: Verdict, sure: bool, proof: &[Evidence], checked: &mut Checked| match verdict
+            {
+                Verdict::Good => {}
+                Verdict::Bad(message, cited) if sure => {
+                    let mut evidence = proof.to_vec();
+                    evidence.extend(cited);
+                    reported.entry(message.clone()).or_insert_with(|| {
+                        finding(self.rule, &space.id, message, evidence, Vec::new())
+                    });
+                }
+                Verdict::Bad(message, _) => checked.doubts.push(incomplete(format!(
+                    "{message}, and not every shortest walk is proven to cross it"
+                ))),
+                Verdict::Open(why) => checked.doubts.push(incomplete(why)),
+            };
+        if let Some(minimum) = self.declared.minimum_height {
+            report(self.height(&space.id, minimum), true, &[], checked);
+        }
+        let undecided = |object: &ObjectId| {
+            doors.undecided.contains_key(object)
+                || self
+                    .passages
+                    .as_ref()
+                    .is_some_and(|passages| passages.undecided.contains_key(object))
+        };
+        for (start, sure_start) in starts
+            .sure
+            .iter()
+            .map(|door| (door, true))
+            .chain(starts.maybe.iter().map(|door| (door, false)))
+        {
+            if self.declared.route_door_direction {
+                report(self.start_way(start, &space.id), sure_start, &[], checked);
+            }
+            if let Some(minimum) = self.declared.minimum_height {
+                report(self.height(start, minimum), sure_start, &[], checked);
+            }
+            let Some(walk) = self.witness(routes, profile, start, &escape) else {
+                checked.doubts.push(incomplete(format!(
+                    "no walk from door {start} to an exit is known to judge its route by"
+                )));
+                continue;
+            };
+            let (Some(crossed), Some(path)) = (Self::crossed(routes, &walk, &among), &walk.path)
+            else {
+                checked.doubts.push(incomplete(format!(
+                    "the walk from door {start} cannot be traced over its route"
+                )));
+                continue;
+            };
+            for object in crossed.keys() {
+                if object == start || *object == space.id {
+                    continue;
+                }
+                let proof = self.on_every_walk(routes, profile, start, &escape, &walk, object);
+                let sure = sure_start && proof.is_some() && !undecided(object);
+                let proof = proof.unwrap_or_default();
+                if self.declared.route_door_direction && door_ids.contains(object) {
+                    report(self.door_way(object, path), sure, &proof, checked);
+                }
+                if let Some(minimum) = self.declared.minimum_height {
+                    report(self.height(object, minimum), sure, &proof, checked);
+                }
+            }
+        }
+        checked.findings.extend(reported.into_values());
+    }
+
+    /// Which way a door on a route opens along the walk `path`.
+    fn door_way(&self, door: &ObjectId, path: &[MetricPoint]) -> Verdict {
+        let leaves = match self.route_leaves(door) {
+            Ok(Some(leaves)) => leaves,
+            Ok(None) => return Verdict::Good,
+            Err(verdict) => return verdict,
+        };
+        match crossing(&leaves, path) {
+            Some(true) => Verdict::Good,
+            Some(false) => Verdict::Bad(
+                format!("door {door} on its route opens against the direction of escape"),
+                vec![leaves.evidence().clone()],
+            ),
+            None => Verdict::Open(format!(
+                "which way the walk crosses door {door} on its route is not decided"
+            )),
+        }
+    }
+
+    /// Which way the door a walk starts from opens, against the space.
+    fn start_way(&self, door: &ObjectId, space: &ObjectId) -> Verdict {
+        let leaves = match self.route_leaves(door) {
+            Ok(Some(leaves)) => leaves,
+            Ok(None) => return Verdict::Good,
+            Err(verdict) => return verdict,
+        };
+        let Some(free) = self.context.services.get::<FreeSpaceServiceHandle>() else {
+            return Verdict::Open("free-space service is not registered".to_owned());
+        };
+        match door_swing::relation(free, &leaves, space) {
+            Ok((Relation::Into, evidence)) => Verdict::Bad(
+                format!(
+                    "door {door} it is left by opens into the space, against the direction of \
+                     escape"
+                ),
+                evidence,
+            ),
+            Ok((Relation::Away | Relation::BothWays, _)) => Verdict::Good,
+            Ok((Relation::Apart, _)) => Verdict::Open(format!(
+                "neither side of door {door} lies in the space at its probes"
+            )),
+            Err((_, message)) => Verdict::Open(message),
+        }
+    }
+
+    /// The leaves of a single-swing door on a route: `None` for anything
+    /// that swings in no one direction (no door, a sliding door, a
+    /// double-acting one); a door whose operation is not stated fails, as
+    /// its direction is undefined.
+    fn route_leaves(&self, door: &ObjectId) -> Result<Option<DoorLeaves>, Verdict> {
+        let Some(frames) = self.context.services.get::<ObjectFrameServiceHandle>() else {
+            return Err(Verdict::Open(
+                "object-frame service is not registered".to_owned(),
+            ));
+        };
+        match frames.leaves(door) {
+            Ok(leaves) => {
+                let single = leaves.hinged().any(|leaf| {
+                    leaf.swing()
+                        .is_some_and(|sector| !sector.is_double_acting())
+                });
+                Ok(single.then_some(leaves))
+            }
+            Err(DoorLeavesError::NotADoor(_)) => Ok(None),
+            Err(DoorLeavesError::NotStated(what)) => Err(Verdict::Bad(
+                format!("door {door} on its route opens in an undefined direction ({what})"),
+                Vec::new(),
+            )),
+            Err(error) => Err(Verdict::Open(format!(
+                "the leaves of door {door} are unknown: {error}"
+            ))),
+        }
+    }
+
+    /// How the clear height of `object` stands against `minimum`.
+    fn height(&self, object: &ObjectId, minimum: f64) -> Verdict {
+        let low = |what: String, cited| {
+            Verdict::Bad(
+                format!("{what}; its route needs at least {minimum} m of clear height"),
+                cited,
+            )
+        };
+        match self.clear_height(object) {
+            Height::Stated(lower, upper, what, cited) if upper < minimum => low(
+                format!(
+                    "{object} on its route is {} m high ({what})",
+                    shown(lower, upper)
+                ),
+                cited,
+            ),
+            Height::Stated(lower, upper, what, _) if lower < minimum => Verdict::Open(format!(
+                "{object} on its route is {} m high ({what}), and its route needs at least \
+                 {minimum} m",
+                shown(lower, upper)
+            )),
+            Height::Measured(height, cited) if height < minimum => low(
+                format!(
+                    "{object} on its route is {} m high (its measured clear height)",
+                    shown(height, height)
+                ),
+                vec![cited],
+            ),
+            Height::AtMost(height, cited) if height < minimum => low(
+                format!(
+                    "{object} on its route is at most {} m high (its vertical extent)",
+                    shown(height, height)
+                ),
+                vec![cited],
+            ),
+            Height::Stated(..) | Height::Measured(..) => Verdict::Good,
+            Height::AtMost(..) => Verdict::Open(format!(
+                "the clear height of {object} on its route is not stated"
+            )),
+            Height::Unknown(why) => Verdict::Open(format!(
+                "the clear height of {object} on its route is unknown: {why}"
+            )),
+        }
+    }
+
+    /// A clear height: as `keyed-limit`'s `clear-height` reads a door's
+    /// (stated, else overall less lining and threshold), else a space's
+    /// measured clear height, else no more than the vertical extent.
+    fn clear_height(&self, object: &ObjectId) -> Height {
+        let [stated, overall, lining, threshold] = self.declared.clear_height;
+        if (stated.is_some() || overall.is_some())
+            && let Some(found) = self.context.project.object(object)
+            && let Ok((lower, upper, what, cited)) =
+                door_clear_height(self.context, found, stated, overall, lining, threshold)
+        {
+            return Height::Stated(lower, upper, what, cited);
+        }
+        if let Some(spaces) = self.context.services.get::<SpaceServiceHandle>()
+            && let Ok(measured) = spaces.get().measure_clear_height(object)
+            && measured.space() == object
+        {
+            return Height::Measured(measured.metres(), measured.evidence().clone());
+        }
+        let Some(extents) = self.context.services.get::<VerticalExtentServiceHandle>() else {
+            return Height::Unknown("the vertical-extent service is not registered".to_owned());
+        };
+        match extents.measure_vertical_extent(object) {
+            Ok(extent) => Height::AtMost(
+                extent.top().upper_metres() - extent.bottom().lower_metres(),
+                extent.evidence().clone(),
+            ),
+            Err(error) => Height::Unknown(error.to_string()),
+        }
     }
 
     /// Counts the independent routes out of `space`: routes to distinct

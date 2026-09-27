@@ -688,6 +688,9 @@ occupants.
 | `compartment_path` | string list | from a space to the compartments it lies in (a group membership, say) |
 | `compartment_overlap` | number | a space lies in each compartment covering at least this share (above 0, at most 1) of its footprint, 0.8 say |
 | `exit_count` | string | `exits` (default): `exits` counts exits; `routes`: it counts independent routes. `routes` needs `passage_selector` and a walking profile |
+| `route_door_direction` | boolean | every single-swing door the walks from the space's doors cross must open along them |
+| `minimum_clear_height` | number | the least clear height, in metres, of every door, opening and space the walks cross, and of the space itself |
+| `clear_height_property`, `overall_height`, `lining_thickness`, `threshold_thickness` | property reference | a door's clear height as `keyed-limit`'s `clear-height` quantity reads it; need `minimum_clear_height` |
 | `zones` | table | ranks of zones (`objects`, a selector; `rank`, an integer; `label`); every walk keeps out of what ranks above the start |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
@@ -843,6 +846,37 @@ is undecided matters only when it swings into the space. Exits are the ones
 `exit_path` reaches, so the direction is judged from each checked space
 towards its own exits; a door further along the route is judged from the
 space it leaves.
+
+**Along the route** (`route_door_direction`, `minimum_clear_height`;
+both need `door_path`, `door_selector` and a walking profile): from each
+door of the space the walk the routing answer names, to the nearest sure
+target around everything possibly avoided, is traced over every
+`door_selector` object and passage (`trace_path`). What it may cross is
+judged, and so are the door it starts from and the space itself. The walk
+is one shortest walk among perhaps several, so a failure is a finding
+only when every shortest walk crosses the object too: the walk to every
+possible target around it (and around only what is surely avoided) is
+longer than the named walk, or reaches none. A failure on the named walk
+alone leaves the space not evaluated.
+
+- **Door direction**: a single-swing door must open along the walk. Where
+  the walk crosses the line of a closed leaf (within a leaf's width of it)
+  says which way it passes; crossing it towards the side the leaf opens to
+  is along. A door crossed both ways or not at all is undecided. A
+  double-acting, sliding or other door that swings in no one direction,
+  and anything that is no door, is not judged; a door whose leaves the
+  source does not state (`NotStated`, an unset operation type) opens in an
+  undefined direction, a failure. The door a walk starts from is judged
+  against the space with the containment probes, as exit doors are: one
+  opening into the space opens against the escape.
+- **Clear height**: a door's clear height is read as `keyed-limit`'s
+  `clear-height` quantity reads it (the stated `clear_height_property`,
+  else `overall_height` less the lining and threshold), an interval that
+  decides where it lies wholly on one side; a space's measured clear height
+  (`SpaceService`) decides both ways; otherwise the
+  vertical extent bounds the clear height from above and decides only a
+  failure. A door lower than `minimum_clear_height` is reported by name in
+  a finding of its own, while the travel is still judged.
 
 Not checked yet: the passages walked from the farthest point of a space
 rather than from its doors, and the width of the route between passages.

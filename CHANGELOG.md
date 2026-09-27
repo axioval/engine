@@ -168,6 +168,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   along a coordinate axis, cutting cover bodies to the element's depth
   with their cross-sections. **Breaking:** definitions bound to
   `counterpart-coverage` must declare the three new optional parameters.
+- **Escape routes judge the doors and heights along the way.** (#119)
+  `escape-route` takes `route_door_direction` (every single-swing door the
+  walk from a space's doors crosses must open along it, read from where
+  the walk crosses the closed leaf; a door whose leaves the source does not
+  state opens in an undefined direction) and `minimum_clear_height` with the
+  `clear-height` quantity's properties (`clear_height_property`,
+  `overall_height`, `lining_thickness`, `threshold_thickness`; every door, opening and space on the walk lower
+  than the minimum is a finding of its own, while the travel is still
+  judged). A failure is a finding only when the walk around the object is
+  longer than the named walk, so tied shortest walks leave it not
+  evaluated. **Breaking:** definitions bound to `escape-route` must
+  declare the six new optional parameters.
+
 - **Escape routes count independent routes.** (#119) `escape-route`
   takes `exit_count: routes`: `exits` then counts routes to distinct
   exits (and doors out of the compartment), walked from the space, two

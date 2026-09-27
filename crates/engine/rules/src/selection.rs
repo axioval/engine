@@ -671,7 +671,7 @@ fn operator_name(operator: &ComparisonOperator) -> &'static str {
 /// `*` is any run of characters (none included), `?` exactly one, and a
 /// backslash makes the next character literal (`\*`, `\?`, `\\`). Every
 /// other character is literal.
-fn wildcard(pattern: &str) -> Result<String, String> {
+pub(crate) fn wildcard(pattern: &str) -> Result<String, String> {
     let mut out = String::from("(?s)^");
     let mut chars = pattern.chars();
     while let Some(c) = chars.next() {

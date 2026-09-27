@@ -286,6 +286,45 @@ pub(crate) fn traversal_parameters() -> Vec<ParameterDescriptor> {
 }
 
 impl Traversal<'_> {
+    /// Whether the declaration asks to follow chains of one relationship.
+    pub(crate) fn follows_chain(&self) -> bool {
+        self.follow_chain
+    }
+
+    /// Objects of `scope` one `step` away from `from`, with the service's evidence.
+    fn step(
+        &self,
+        service: &RelationshipSelectionServiceHandle,
+        step: &Step<'_>,
+        from: &ObjectId,
+        scope: &[&Object],
+        follow_chain: bool,
+    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
+        let relationship = SemanticRelationship::try_new(step.relationship)
+            .map_err(|error| invalid(error.to_string()))?;
+        let request = RelationshipSelectionRequest::try_new(
+            from.clone(),
+            scope.iter().map(|object| object.id.clone()).collect(),
+            RelationshipQuery::Related {
+                relationship,
+                direction: step.direction,
+                follow_chain,
+            },
+        )
+        .map_err(|error| invalid(error.to_string()))?
+        .with_absent_ends(self.absent_ends);
+        let selection = service.select(&request).map_err(|error| match error {
+            RelationshipSelectionError::Unavailable(message) => {
+                (NotEvaluatedReason::BackendUnavailable, message)
+            }
+            other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
+        })?;
+        Ok((
+            selection.candidates().to_vec(),
+            selection.evidence().to_vec(),
+        ))
+    }
+
     /// Objects of `universe` related to `anchor`, with the completeness evidence.
     pub(crate) fn related(
         &self,
@@ -293,50 +332,81 @@ impl Traversal<'_> {
         anchor: &ObjectId,
         universe: &[&Object],
     ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
-        let Some(service) = context.services.get::<RelationshipSelectionServiceHandle>() else {
-            return Err((
-                NotEvaluatedReason::MissingService,
-                "relationship-selection service is not registered".into(),
-            ));
-        };
+        let service = relationship_service(context)?;
         let everything: Vec<&Object> = context.project.objects().collect();
         let mut frontier = vec![anchor.clone()];
         let mut evidence = Vec::new();
         for (index, step) in self.steps.iter().enumerate() {
             let last = index + 1 == self.steps.len();
             let scope = if last { universe } else { &everything[..] };
-            let relationship = SemanticRelationship::try_new(step.relationship)
-                .map_err(|error| invalid(error.to_string()))?;
             let mut reached = std::collections::BTreeSet::new();
             for from in &frontier {
-                let request = RelationshipSelectionRequest::try_new(
-                    from.clone(),
-                    scope.iter().map(|object| object.id.clone()).collect(),
-                    RelationshipQuery::Related {
-                        relationship: relationship.clone(),
-                        direction: step.direction,
-                        follow_chain: self.follow_chain,
-                    },
-                )
-                .map_err(|error| invalid(error.to_string()))?
-                .with_absent_ends(self.absent_ends);
-                let selection = service.select(&request).map_err(|error| match error {
-                    RelationshipSelectionError::Unavailable(message) => {
-                        (NotEvaluatedReason::BackendUnavailable, message)
-                    }
-                    other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
-                })?;
-                reached.extend(selection.candidates().iter().cloned());
-                evidence.extend(selection.evidence().iter().cloned());
+                let (found, cited) = self.step(service, step, from, scope, self.follow_chain)?;
+                reached.extend(found);
+                evidence.extend(cited);
             }
             // The anchor is never its own relative, even through a round trip.
             reached.remove(anchor);
             frontier = reached.into_iter().collect();
         }
-        evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
-        evidence.dedup();
+        sort_evidence(&mut evidence);
         Ok((frontier, evidence))
     }
+
+    /// The nearest `containers` above `anchor`: the steps are climbed in any
+    /// order and any number of times, and the climb stops at each container
+    /// it reaches, so a space nested in another space is the nearer one.
+    ///
+    /// An object that reaches no container is in none, exactly: every step
+    /// was answered completely.
+    pub(crate) fn nearest_containers(
+        &self,
+        context: &RuleContext<'_>,
+        anchor: &ObjectId,
+        containers: &std::collections::BTreeSet<ObjectId>,
+    ) -> Result<(std::collections::BTreeSet<ObjectId>, Vec<Evidence>), Unavailable> {
+        let service = relationship_service(context)?;
+        let everything: Vec<&Object> = context.project.objects().collect();
+        let mut found = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::from([anchor.clone()]);
+        let mut frontier = vec![anchor.clone()];
+        let mut evidence = Vec::new();
+        while let Some(current) = frontier.pop() {
+            for step in &self.steps {
+                let (reached, cited) = self.step(service, step, &current, &everything, false)?;
+                evidence.extend(cited);
+                for object in reached {
+                    if containers.contains(&object) {
+                        found.insert(object);
+                    } else if seen.insert(object.clone()) {
+                        frontier.push(object);
+                    }
+                }
+            }
+        }
+        found.remove(anchor);
+        sort_evidence(&mut evidence);
+        Ok((found, evidence))
+    }
+}
+
+fn relationship_service<'a>(
+    context: &RuleContext<'a>,
+) -> Result<&'a RelationshipSelectionServiceHandle, Unavailable> {
+    context
+        .services
+        .get::<RelationshipSelectionServiceHandle>()
+        .ok_or_else(|| {
+            (
+                NotEvaluatedReason::MissingService,
+                "relationship-selection service is not registered".into(),
+            )
+        })
+}
+
+fn sort_evidence(evidence: &mut Vec<Evidence>) {
+    evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
+    evidence.dedup();
 }
 
 /// A finding of `rule` against `object`, evidence sorted and deduplicated.

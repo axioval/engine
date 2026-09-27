@@ -6,6 +6,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Property comparison along paths, within spaces and buildings.**
+  `property-comparison` takes a relationship `path` in `related` mode, and
+  new `same_space` and `same_building` modes compare with the objects that
+  share a nearest `container_selector` object, climbed to through the
+  relationship service along the declared steps. New operators, named as in
+  property selectors: `like` (whole-value wildcards `*` and `?`, `\`
+  escapes), `matches` (a regular expression anchored to the whole value),
+  `contains` over a text list, `is_defined` and `is_undefined`, and
+  `between` for an inclusive range, which gives `count` and `sum` a minimum
+  and maximum in one rule. `case_sensitive` relaxes text comparison, and
+  `category_property` prefixes each finding with a property value of the
+  checked object. The geometric same-space variant is not included. Invalid
+  declarations now say what is wrong. **Breaking:** a definition bound to
+  `property-comparison` must declare the new optional parameters `path`,
+  `container_selector`, `case_sensitive`, `minimum_number`,
+  `maximum_number`, `minimum_quantity`, `maximum_quantity` and
+  `category_property`.
 - **Property selectors on par with `property-predicate`.** Selectors take
   the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,
   `oneOf` and `noneOf` (a string list), and the options `caseSensitive`

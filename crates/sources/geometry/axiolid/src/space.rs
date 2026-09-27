@@ -6,13 +6,15 @@
 //!
 //! Roles (which object is a space, a slab, a roof, a storey) are semantic
 //! facts a mesh does not carry, so the host declares them. Inferring a role
-//! from geometry alone would present a guess as a measurement.
+//! from geometry alone would present a guess as a measurement. A cap request
+//! that names its own elements replaces the declared slabs and roofs: the rule
+//! then says what bounds a space.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    Cap, CapCoverage, ClearHeightEvidence, Containment, SpaceError, SpaceOverlap, SpaceService,
-    StoreyResidual, SupportCounts,
+    Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError, SpaceOverlap,
+    SpaceService, StoreyResidual, SupportCounts,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -127,6 +129,33 @@ impl AxiolidSpaceService {
             return Err(SpaceError::Unavailable);
         }
         Ok(())
+    }
+
+    /// Refuses as [`Self::complete`] does, and also while an element a
+    /// request names could not be measured: it may be the one that caps.
+    fn complete_with(&self, requested: &[ObjectId]) -> Result<(), SpaceError> {
+        self.complete()?;
+        if requested
+            .iter()
+            .any(|object| self.geometry.is_unmeasured(object))
+        {
+            return Err(SpaceError::Unavailable);
+        }
+        Ok(())
+    }
+
+    /// Whether `candidate` may form `request`'s cap: one of the requested
+    /// elements when the request names them, otherwise a declared slab (or,
+    /// for the top cap, roof).
+    fn caps(&self, request: &CapRequest, candidate: &ObjectId) -> bool {
+        if let Some(elements) = request.elements() {
+            return elements.binary_search(candidate).is_ok();
+        }
+        let role = self.role(candidate);
+        match request.cap() {
+            Cap::Top => matches!(role, Some(Role::Slab | Role::Roof)),
+            Cap::Bottom => role == Some(Role::Slab),
+        }
     }
 
     fn role(&self, object: &ObjectId) -> Option<Role> {
@@ -387,11 +416,16 @@ impl SpaceService for AxiolidSpaceService {
         Ok(overlaps)
     }
 
-    fn measure_cap_coverage(&self, space: &ObjectId, cap: Cap) -> Result<CapCoverage, SpaceError> {
-        self.complete()?;
+    fn measure_cap_coverage(
+        &self,
+        space: &ObjectId,
+        request: &CapRequest,
+    ) -> Result<CapCoverage, SpaceError> {
+        self.complete_with(request.elements().unwrap_or_default())?;
+        let cap = request.cap();
         let subject = self.triangles_of(space)?;
         self.require_exact(space, CAP_PLANE_TOLERANCE_M, false, |candidate| {
-            matches!(self.role(candidate), Some(Role::Slab | Role::Roof))
+            self.caps(request, candidate)
         })?;
         let tolerance = tolerance()?;
         let whole = plan_area(&subject, tolerance);
@@ -403,14 +437,9 @@ impl SpaceService for AxiolidSpaceService {
         let mut covering = Vec::new();
         let mut covered_polygons = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
-            // Only slabs and roofs cap a space; a wall crossing the ceiling
-            // plane is not a cap.
-            let role = self.role(candidate);
-            let caps = match cap {
-                Cap::Top => matches!(role, Some(Role::Slab | Role::Roof)),
-                Cap::Bottom => role == Some(Role::Slab),
-            };
-            if !caps {
+            // Only cap elements cap a space; a wall crossing the ceiling
+            // plane is not a cap. The space never caps itself.
+            if candidate == space || !self.caps(request, candidate) {
                 continue;
             }
             let other = triangles(mesh);

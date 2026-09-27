@@ -419,8 +419,8 @@ pub use relationships::{
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceSnapshot};
 pub use space::{
-    BoundaryGap, Cap, CapCoverage, ClearHeightEvidence, Containment, SpaceError, SpaceOverlap,
-    SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
+    BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,
+    SpaceOverlap, SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
 };
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,

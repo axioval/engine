@@ -3,7 +3,7 @@
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidSpaceService};
-use axioval_engine::{Cap, Containment, SpaceError, SpaceService};
+use axioval_engine::{Cap, CapRequest, Containment, SpaceError, SpaceService};
 use axioval_ir::{ObjectId, SourceId};
 
 fn source() -> SourceId {
@@ -139,7 +139,7 @@ fn cap_coverage_is_measured_as_a_fraction() {
         .with_space(id("space"))
         .with_slab(id("slab"));
     let coverage = service
-        .measure_cap_coverage(&id("space"), Cap::Top)
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measurable");
     assert!(
         (coverage.covered_ratio() - 0.5).abs() < 1e-6,
@@ -161,7 +161,7 @@ fn overlapping_cap_elements_do_not_exceed_the_cap() {
         .with_slab(id("slab-a"))
         .with_slab(id("slab-b"));
     let coverage = service
-        .measure_cap_coverage(&id("space"), Cap::Top)
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measurable");
     assert!(
         coverage.covered_ratio() <= 1.0,
@@ -179,7 +179,7 @@ fn only_declared_cap_elements_cover_a_cap() {
     // The wall is not declared a slab or roof.
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
     let coverage = service
-        .measure_cap_coverage(&id("space"), Cap::Top)
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measurable");
     assert!(
         coverage.elements().is_empty(),
@@ -245,7 +245,11 @@ fn an_unavailable_aspect_does_not_suppress_the_rest() {
     assert!(service.measure_clear_height(&id("space")).is_ok());
     assert!(service.measure_duplicates(&id("space")).is_ok());
     assert!(service.measure_overlaps(&id("space")).is_ok());
-    assert!(service.measure_cap_coverage(&id("space"), Cap::Top).is_ok());
+    assert!(
+        service
+            .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+            .is_ok()
+    );
 }
 
 /// A space with no geometry is unavailable rather than silently zero.
@@ -315,7 +319,7 @@ fn a_slab_away_from_the_cap_plane_does_not_cover_it() {
         .with_space(id("space"))
         .with_slab(id("slab-above"));
     let coverage = service
-        .measure_cap_coverage(&id("space"), Cap::Top)
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measurable");
     assert!(
         coverage.elements().is_empty(),
@@ -339,7 +343,7 @@ fn an_overhanging_slab_covers_only_the_cap() {
         .with_space(id("space"))
         .with_slab(id("slab"));
     let coverage = service
-        .measure_cap_coverage(&id("space"), Cap::Top)
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measurable");
     assert!(
         (coverage.covered_ratio() - 1.0).abs() < 1e-9,
@@ -457,4 +461,66 @@ fn an_unmeasured_declared_object_makes_space_measurements_unavailable() {
         .with_unmeasured(id("railing"), "unsupported representation");
     let service = AxiolidSpaceService::new(unrelated, source()).with_space(id("space"));
     assert!(service.measure_clear_height(&id("space")).is_ok());
+}
+
+/// A request naming its cap elements replaces the host's declared slabs and
+/// roofs: an undeclared element the rule selects covers the cap, and a
+/// declared slab the rule leaves out does not.
+#[test]
+fn a_request_naming_cap_elements_replaces_the_declared_ones() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        // A covering the host did not declare, over the west half.
+        .with_mesh(id("ceiling"), body(0.0, 2.0, 0.0, 4.0, 3.0, 3.1))
+        // A declared slab over the east half.
+        .with_mesh(id("slab"), body(2.0, 4.0, 0.0, 4.0, 3.0, 3.2));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_slab(id("slab"));
+
+    let declared = service
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+        .expect("measurable");
+    assert_eq!(declared.elements(), &[id("slab")]);
+
+    let chosen = service
+        .measure_cap_coverage(
+            &id("space"),
+            &CapRequest::new(Cap::Top).with_elements(vec![id("ceiling")]),
+        )
+        .expect("measurable");
+    assert_eq!(chosen.elements(), &[id("ceiling")]);
+    assert!((chosen.covered_ratio() - 0.5).abs() < 1e-6);
+
+    // An empty choice covers nothing, even where slabs are declared.
+    let none = service
+        .measure_cap_coverage(
+            &id("space"),
+            &CapRequest::new(Cap::Top).with_elements(Vec::new()),
+        )
+        .expect("measurable");
+    assert!(none.elements().is_empty());
+}
+
+/// A requested cap element that could not be measured may be the one that
+/// covers the cap, so the coverage refuses rather than under-report.
+#[test]
+fn an_unmeasured_requested_cap_element_makes_the_cap_unavailable() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_unmeasured(id("ceiling"), "unsupported representation");
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    assert_eq!(
+        service.measure_cap_coverage(
+            &id("space"),
+            &CapRequest::new(Cap::Top).with_elements(vec![id("ceiling")]),
+        ),
+        Err(SpaceError::Unavailable)
+    );
+    // Not requested, it concerns no space measurement.
+    assert!(
+        service
+            .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+            .is_ok()
+    );
 }

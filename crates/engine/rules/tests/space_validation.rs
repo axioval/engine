@@ -5,16 +5,19 @@
 //! sink the others, which is the defect the bundled source fact struct had.
 #![allow(missing_docs)]
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 use axioval_engine::{
-    BoundaryGap, Cap, CapCoverage, ClearHeightEvidence, CompiledRule, Containment,
+    BoundaryGap, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule, Containment,
     NotEvaluatedReason, RuleCapability, RuleContext, ServiceRegistry, SpaceError, SpaceOverlap,
     SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, Severity, SourceId};
-use axioval_rules::SpaceValidation;
+use axioval_rules::{SpaceCategory, SpaceValidation};
 
 fn source() -> SourceId {
     SourceId::new("cad", "model").unwrap()
@@ -84,6 +87,10 @@ struct Stub {
     cap: Answer<(f64, f64)>,
     residuals: Answer<ResidualRows>,
     support: Answer<(usize, usize)>,
+    /// Every cap request the capability made, in order.
+    cap_requests: Mutex<Vec<CapRequest>>,
+    /// How often the support counts were asked for.
+    support_calls: Mutex<usize>,
 }
 
 fn evidence() -> Evidence {
@@ -119,8 +126,9 @@ impl SpaceService for Stub {
     fn measure_cap_coverage(
         &self,
         _space: &ObjectId,
-        _cap: Cap,
+        request: &CapRequest,
     ) -> Result<CapCoverage, SpaceError> {
+        self.cap_requests.lock().unwrap().push(request.clone());
         let (whole, covered) = self.cap.unwrap_or(Ok((10.0, 10.0)))?;
         CapCoverage::try_new(whole, covered, Vec::new())
     }
@@ -133,6 +141,7 @@ impl SpaceService for Stub {
             .collect()
     }
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
+        *self.support_calls.lock().unwrap() += 1;
         let (slabs, roofs) = self.support.unwrap_or(Ok((2, 1)))?;
         Ok(SupportCounts::new(slabs, roofs, vec![oid("bldg")]))
     }
@@ -142,10 +151,21 @@ impl SpaceService for Stub {
 }
 
 fn evaluate(stub: Stub, rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
-    let project = Project::new(vec![Object::new(oid("space-1"), "space")]).unwrap();
+    evaluate_shared(&Arc::new(stub), rule)
+}
+
+/// Evaluates over one space, a ceiling covering and a slab, keeping the stub
+/// so a test can read back what the capability asked for.
+fn evaluate_shared(stub: &Arc<Stub>, rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
+    let project = Project::new(vec![
+        Object::new(oid("space-1"), "space"),
+        Object::new(oid("ceiling"), "covering"),
+        Object::new(oid("slab"), "slab"),
+    ])
+    .unwrap();
     let mut services = ServiceRegistry::new();
     services
-        .register(SpaceServiceHandle::new(Arc::new(stub)))
+        .register(SpaceServiceHandle::new(stub.clone()))
         .unwrap();
     SpaceValidation.evaluate(
         &RuleContext {
@@ -425,4 +445,267 @@ fn findings_name_the_objects_a_reviewer_must_open() {
         &rule(),
     );
     assert_eq!(boundary.findings()[0].related, vec![oid("wall-1")]);
+}
+
+fn of_type(object_type: &str) -> ParameterValue {
+    ParameterValue::Selector {
+        value: Box::new(Selector::EntityType {
+            object_type: object_type.into(),
+            include_subtypes: false,
+        }),
+    }
+}
+
+/// The height tolerance is the rule's, not a constant: 10 cm short passes a
+/// rule that allows 20 cm, and fails the default 5 mm.
+#[test]
+fn the_rule_sets_the_height_tolerance() {
+    let low = || Stub {
+        height: Some(Ok(2.4)),
+        ..Stub::default()
+    };
+    assert_eq!(evaluate(low(), &rule()).findings().len(), 1);
+    let lenient = rule_with(&[("tolerance_metres", ParameterValue::Number { value: 0.2 })]);
+    assert!(evaluate(low(), &lenient).findings().is_empty());
+}
+
+/// The same tolerance separates contact from intersection: a 1 cm overlap
+/// intersects under the default 5 mm and is contact under 2 cm.
+#[test]
+fn the_rule_sets_the_overlap_thickness_tolerance() {
+    let thin = || Stub {
+        overlaps: Some(Ok(vec![(false, 2.0, 0.01, Containment::Partial)])),
+        ..Stub::default()
+    };
+    assert_eq!(evaluate(thin(), &rule()).findings().len(), 1);
+    let lenient = rule_with(&[("tolerance_metres", ParameterValue::Number { value: 0.02 })]);
+    assert!(evaluate(thin(), &lenient).findings().is_empty());
+}
+
+#[test]
+fn a_negative_or_mistyped_tolerance_is_an_invalid_declaration() {
+    for value in [
+        ParameterValue::Number { value: -0.1 },
+        ParameterValue::String {
+            value: "5 mm".into(),
+        },
+    ] {
+        let outcome = evaluate(Stub::default(), &rule_with(&[("tolerance_metres", value)]));
+        assert!(outcome.findings().is_empty());
+        assert_eq!(
+            outcome.not_evaluated_outcomes()[0].reason(),
+            &NotEvaluatedReason::InvalidDeclaration
+        );
+    }
+}
+
+/// Without cap selectors the host's declared slabs and roofs bound the caps:
+/// the requests carry no elements and the support counts decide availability.
+#[test]
+fn without_cap_selectors_the_host_declared_elements_are_used() {
+    let stub = Arc::new(Stub::default());
+    evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("check_top_cap", ParameterValue::Boolean { value: true }),
+            ("check_bottom_cap", ParameterValue::Boolean { value: true }),
+        ]),
+    );
+    let requests = stub.cap_requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests.iter().all(|request| request.elements().is_none()));
+    assert_eq!(*stub.support_calls.lock().unwrap(), 1);
+}
+
+/// A cap selector states the bounding elements: the request carries exactly
+/// the selection, and a model with no host-declared slab or roof is still
+/// checked, since the rule named what caps a space.
+#[test]
+fn a_cap_selector_chooses_the_bounding_elements() {
+    let stub = Arc::new(Stub {
+        support: Some(Ok((0, 0))),
+        cap: Some(Ok((10.0, 0.0))),
+        ..Stub::default()
+    });
+    let outcome = evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("check_top_cap", ParameterValue::Boolean { value: true }),
+            ("top_cap_elements", of_type("covering")),
+        ]),
+    );
+    let requests = stub.cap_requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].elements(), Some(&[oid("ceiling")][..]));
+    assert_eq!(outcome.findings().len(), 1);
+    assert!(
+        outcome.findings()[0]
+            .message
+            .starts_with(SpaceCategory::UncoveredTopCap.code())
+    );
+    // Both caps selected: the host's counts are never consulted.
+    assert_eq!(*stub.support_calls.lock().unwrap(), 0);
+}
+
+/// Each cap has its own selector; the other keeps the host's declaration.
+#[test]
+fn cap_selectors_are_independent() {
+    let stub = Arc::new(Stub::default());
+    evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("check_top_cap", ParameterValue::Boolean { value: true }),
+            ("check_bottom_cap", ParameterValue::Boolean { value: true }),
+            ("bottom_cap_elements", of_type("slab")),
+        ]),
+    );
+    let requests = stub.cap_requests.lock().unwrap();
+    let elements: Vec<_> = requests.iter().map(CapRequest::elements).collect();
+    assert_eq!(elements, vec![None, Some(&[oid("slab")][..])]);
+}
+
+/// A selector that selects nothing leaves nothing that could form the cap,
+/// so the cap is not checked, whatever the host declared.
+#[test]
+fn a_cap_selector_selecting_nothing_skips_the_cap() {
+    let stub = Arc::new(Stub {
+        cap: Some(Ok((10.0, 0.0))),
+        ..Stub::default()
+    });
+    let outcome = evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("check_top_cap", ParameterValue::Boolean { value: true }),
+            ("top_cap_elements", of_type("roof")),
+        ]),
+    );
+    assert!(stub.cap_requests.lock().unwrap().is_empty());
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// An undecided cap selection may hide the covering element: the cap is not
+/// evaluated for each space, and the other aspects still run.
+#[test]
+fn an_undecided_cap_selection_leaves_only_the_cap_unevaluated() {
+    let stub = Arc::new(Stub {
+        duplicates: Some(Ok(vec![oid("space-2")])),
+        ..Stub::default()
+    });
+    let classified = ParameterValue::Selector {
+        value: Box::new(Selector::Classification {
+            system: "uniclass".into(),
+            code: "Ss_30".into(),
+            include_descendants: false,
+        }),
+    };
+    let outcome = evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("check_top_cap", ParameterValue::Boolean { value: true }),
+            ("top_cap_elements", classified),
+        ]),
+    );
+    assert!(stub.cap_requests.lock().unwrap().is_empty());
+    assert_eq!(outcome.findings().len(), 1, "the duplicate still reports");
+    let unevaluated = outcome.not_evaluated_outcomes();
+    assert_eq!(unevaluated.len(), 1);
+    assert_eq!(unevaluated[0].object_id(), Some(&oid("space-1")));
+    assert_eq!(unevaluated[0].reason(), &NotEvaluatedReason::MissingService);
+}
+
+#[test]
+fn a_mistyped_cap_selector_is_an_invalid_declaration() {
+    let outcome = evaluate(
+        Stub::default(),
+        &rule_with(&[(
+            "top_cap_elements",
+            ParameterValue::String {
+                value: "IfcSlab".into(),
+            },
+        )]),
+    );
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+/// Every sub-check writes its own category code first, so results can be
+/// grouped by problem as well as by space.
+#[test]
+fn each_sub_check_reports_its_category() {
+    let on = |key: &'static str| (key, ParameterValue::Boolean { value: true });
+    let top = rule_with(&[on("check_top_cap")]);
+    let bottom = rule_with(&[on("check_bottom_cap")]);
+    let residual = rule_with(&[on("check_unallocated_area")]);
+    let overlap = |is_space, containment| Stub {
+        overlaps: Some(Ok(vec![(is_space, 2.0, 1.0, containment)])),
+        ..Stub::default()
+    };
+    let half_cap = || Stub {
+        cap: Some(Ok((10.0, 5.0))),
+        ..Stub::default()
+    };
+    let cases = [
+        (
+            Stub {
+                duplicates: Some(Ok(vec![oid("space-2")])),
+                ..Stub::default()
+            },
+            rule(),
+            SpaceCategory::DuplicateSpace,
+        ),
+        (
+            Stub {
+                height: Some(Ok(2.0)),
+                ..Stub::default()
+            },
+            rule(),
+            SpaceCategory::InsufficientHeight,
+        ),
+        (
+            Stub {
+                gaps: Some(Ok(vec![(2.0, Vec::new())])),
+                ..Stub::default()
+            },
+            rule(),
+            SpaceCategory::UncoveredBoundary,
+        ),
+        (
+            overlap(false, Containment::OtherInsideSubject),
+            rule(),
+            SpaceCategory::ContainedBody,
+        ),
+        (
+            overlap(true, Containment::Partial),
+            rule(),
+            SpaceCategory::IntersectingSpace,
+        ),
+        (
+            overlap(false, Containment::Partial),
+            rule(),
+            SpaceCategory::IntersectingComponent,
+        ),
+        (half_cap(), top, SpaceCategory::UncoveredTopCap),
+        (half_cap(), bottom, SpaceCategory::UncoveredBottomCap),
+        (
+            Stub {
+                residuals: Some(Ok(vec![(oid("storey-1"), 5.0)])),
+                ..Stub::default()
+            },
+            residual,
+            SpaceCategory::UnallocatedArea,
+        ),
+    ];
+    for (stub, rule, category) in cases {
+        let outcome = evaluate(stub, &rule);
+        assert_eq!(outcome.findings().len(), 1, "{category:?}");
+        let message = &outcome.findings()[0].message;
+        assert!(
+            message.starts_with(&format!("{}: ", category.code())),
+            "{message:?} should start with {}",
+            category.code()
+        );
+    }
 }

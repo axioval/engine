@@ -59,7 +59,7 @@ pub use property_rules::{
 pub use property_value::PropertyValueConstraint;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
-pub use space_validation::SpaceValidation;
+pub use space_validation::{SpaceCategory, SpaceValidation};
 pub use unique_value::UniqueValue;
 
 /// Registers all maintained built-in capabilities into a host registry.

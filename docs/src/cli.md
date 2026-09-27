@@ -165,7 +165,9 @@ exact.
 Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
 and `IfcBuilding` give roles, and the spatial tree gives each object's storey.
 An element the file places twice, or anything under a structure aggregated
-twice, gets no storey rather than a guessed one.
+twice, gets no storey rather than a guessed one. The slab and roof roles are
+only the default cap elements: a rule's `top_cap_elements` or
+`bottom_cap_elements` selector replaces them for that cap.
 
 The result's `geometry` field records the counts and every unmeasured object
 with its reason. The summary prints a `geometry:` line and groups unmeasured

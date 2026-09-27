@@ -1,9 +1,10 @@
-//! The checks at a ramp's ends: a free space of given size in front of the
-//! lowest and above the highest run, and no door standing on a landing.
-//! Both place a box and ask the free-space service whether a selected
-//! object reaches into it. With `landing_door_swing`, no door may swing
-//! over a landing either: its swing footprint (`door_swing::Footprint`)
-//! against the landing's rectangle in plan, at the landing's level.
+//! The checks at the ends of a ramp or a flight: a free space of given size
+//! in front of a ramp's lowest and above its highest run, and no door
+//! standing on a landing at the end of a ramp's run or of a flight. Both
+//! place a box and ask the free-space service whether a selected object
+//! reaches into it. With `landing_door_swing`, no door may swing over a
+//! landing either: its swing footprint (`door_swing::Footprint`) against
+//! the landing's rectangle in plan, at the landing's level.
 
 use axioval_engine::{
     BoxClearance, ClearanceOutcome, ClearanceRequest, ClearanceShape, ConvexPlanRegion,
@@ -27,20 +28,27 @@ pub(super) struct EndSpaceCheck<'a> {
     height: f64,
 }
 
-/// Doors must not stand on a ramp's landings, nor, with `swing`, swing
-/// over them.
+/// Doors must not stand on the landings of a ramp or a flight, nor, with
+/// `swing`, swing over them.
 pub(super) struct DoorCheck<'a> {
     pub(super) doors: &'a Selector,
     height: f64,
     pub(super) swing: bool,
 }
 
-pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
+/// The ramp's end-space parameters.
+pub(super) fn end_space_descriptors() -> Vec<ParameterDescriptor> {
     vec![
         ParameterDescriptor::optional("end_space_depth", ParameterType::Quantity),
         ParameterDescriptor::optional("end_space_width", ParameterType::Quantity),
         ParameterDescriptor::optional("end_space_height", ParameterType::Quantity),
         ParameterDescriptor::optional("end_space_obstacles", ParameterType::Selector),
+    ]
+}
+
+/// The landing-door parameters a ramp and a flight share.
+pub(super) fn door_descriptors() -> Vec<ParameterDescriptor> {
+    vec![
         ParameterDescriptor::optional("landing_doors", ParameterType::Selector),
         ParameterDescriptor::optional("landing_door_height", ParameterType::Quantity),
         ParameterDescriptor::optional("landing_door_swing", ParameterType::Boolean),
@@ -265,8 +273,9 @@ pub(super) fn end_space(
     })
 }
 
-/// Whether a selected door stands on the landing at one end: reaches into
-/// the column `check.height` high over the landing's rectangle.
+/// Whether a selected door stands on the landing at one end of a run or a
+/// flight: reaches into the column `check.height` high over the landing's
+/// rectangle.
 pub(super) fn doors(
     free: Option<&FreeSpaceServiceHandle>,
     check: &DoorCheck<'_>,
@@ -275,7 +284,7 @@ pub(super) fn doors(
     elevation: ElevationInterval,
     label: &str,
 ) -> (Check, Vec<Evidence>, Vec<ObjectId>) {
-    let ramp = measured.request().subject();
+    let subject = measured.request().subject();
     let Some(landing) = measured.landing() else {
         // No landing there, so no door on one.
         return (Check::Pass, vec![], vec![]);
@@ -314,7 +323,7 @@ pub(super) fn doors(
         height: check.height,
     };
     let what = format!("the landing at {label}");
-    let (check, mut evidence, related) = assess(free, &placed, ramp, selected, &what, |names| {
+    let (check, mut evidence, related) = assess(free, &placed, subject, selected, &what, |names| {
         format!("door {names} stands on the landing at {label}")
     });
     evidence.insert(0, measured.evidence().clone());

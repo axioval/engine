@@ -65,6 +65,9 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 ///   `landing_at_least_walking_width` bound the landing at each end, the
 ///   level surface of a `landing_objects` object meeting it, and
 ///   `landings_required` requires one at both ends;
+/// - `landing_doors` forbids a door standing in the column
+///   `landing_door_height` high over a landing at either end, and with
+///   `landing_door_swing` a door swinging over one;
 /// - `minimum_headroom_below` bounds the clearance under the flight over
 ///   the floors of the `headroom_below_spaces` the rule selects;
 /// - `handrail_height_minimum`/`handrail_height_maximum` bound the height of
@@ -256,11 +259,12 @@ fn walking_descriptors() -> Vec<ParameterDescriptor> {
         ParameterDescriptor::optional("headroom_below_spaces", ParameterType::Selector),
     ]);
     parameters.extend(handrails::descriptors());
+    parameters.extend(ramp_ends::door_descriptors());
     parameters
 }
 
-/// The width, landing, clearance-below and handrail checks both
-/// capabilities share, and the ramp's end spaces and landing doors.
+/// The width, landing, landing-door, clearance-below and handrail checks
+/// both capabilities share, and the ramp's end spaces.
 struct WalkingConfig<'a> {
     width: Range,
     landing: Option<LandingCheck<'a>>,
@@ -272,14 +276,12 @@ struct WalkingConfig<'a> {
 
 impl<'a> WalkingConfig<'a> {
     fn parse(parameters: &Parameters<'a>, ramp: bool) -> Result<Self, Unavailable> {
-        let (end_space, doors) = if ramp {
-            (
-                ramp_ends::parse_end_space(parameters)?,
-                ramp_ends::parse_doors(parameters)?,
-            )
+        let end_space = if ramp {
+            ramp_ends::parse_end_space(parameters)?
         } else {
-            (None, None)
+            None
         };
+        let doors = ramp_ends::parse_doors(parameters)?;
         Ok(Self {
             width: range(parameters, "width")?,
             landing: landing_check(parameters, doors.is_some())?,
@@ -1078,6 +1080,7 @@ impl RuleCapability for StairGeometryCheck {
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
+        let free = context.services.get::<FreeSpaceServiceHandle>();
         for object in selected {
             let request = match config.walking_line_offset {
                 None => Ok(TreadFlightRequest::new(object.id.clone())),
@@ -1117,22 +1120,12 @@ impl RuleCapability for StairGeometryCheck {
                     ),
                 });
             }
-            if let (Some(check), Some(candidates)) = (&config.walking.landing, &selections.landings)
-            {
-                for (end, label) in [
-                    (WalkingEnd::FlightBottom, "the bottom of the flight"),
-                    (WalkingEnd::FlightTop, "the top of the flight"),
-                ] {
-                    let at = End {
-                        object: &object.id,
-                        which: end,
-                        label,
-                        width,
-                        noun: "flight",
-                    };
-                    checks.extend(landing(stairs, check, candidates, &at).0);
-                }
-            }
+            let door = LandingDoors {
+                free,
+                walking: &config.walking,
+                selections: &selections,
+            };
+            checks.extend(flight_landings(stairs, &door, &flight));
             if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
                 checks.push(below(stairs, check, spaces, &object.id, "flight"));
             }
@@ -1155,6 +1148,48 @@ impl RuleCapability for StairGeometryCheck {
             report(&mut evaluation, rule, &object.id, checks);
         }
         evaluation
+    }
+}
+
+/// The landing at each end of a flight against the rule's landing checks,
+/// and the doors on it; nothing without a landing check.
+fn flight_landings(
+    stairs: &WalkingSurfaceServiceHandle,
+    door: &LandingDoors<'_, '_>,
+    flight: &TreadFlight,
+) -> Checks {
+    let (Some(check), Some(candidates)) = (&door.walking.landing, &door.selections.landings) else {
+        return Vec::new();
+    };
+    let mut checks = Vec::new();
+    for (end, label) in [
+        (WalkingEnd::FlightBottom, "the bottom of the flight"),
+        (WalkingEnd::FlightTop, "the top of the flight"),
+    ] {
+        let at = End {
+            object: flight.object(),
+            which: end,
+            label,
+            width: flight.width(),
+            noun: "flight",
+        };
+        let (found, measured) = landing(stairs, check, candidates, &at);
+        checks.extend(found);
+        if let Some(measured) = &measured {
+            checks.extend(door.check(measured, landing_level(flight, end), label));
+        }
+    }
+    checks
+}
+
+/// The elevation of the landing at one end of a flight: the level it stands
+/// on at its bottom, its top at its top (the upper floor a final riser
+/// arrives at, or the last tread itself).
+fn landing_level(flight: &TreadFlight, end: WalkingEnd) -> ElevationInterval {
+    match (end, flight.treads().last()) {
+        (WalkingEnd::FlightBottom, _) => flight.base(),
+        (_, Some(last)) if !flight.ends_in_riser() => last.elevation(),
+        _ => flight.top(),
     }
 }
 
@@ -1382,7 +1417,7 @@ impl RuleCapability for RampGeometryCheck {
         ];
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
-        parameters.extend(ramp_ends::descriptors());
+        parameters.extend(ramp_ends::end_space_descriptors());
         parameters
     }
 
@@ -1481,30 +1516,19 @@ fn ramp(
                     width: run.width(),
                     noun: "run",
                 };
-                let (found, measured) = landing(stairs, check, candidates, &at);
-                let mut found = found;
-                if let (Some(doors), Some(selected), Some(measured)) =
-                    (&config.walking.doors, &selections.doors, &measured)
-                {
+                let (mut found, measured) = landing(stairs, check, candidates, &at);
+                if let Some(measured) = &measured {
                     let elevation = if place == "top" {
                         run.top()
                     } else {
                         run.bottom()
                     };
-                    found.push(ramp_ends::doors(
-                        free, doors, selected, measured, elevation, &label,
-                    ));
-                    if doors.swing {
-                        found.push(match (selected, &selections.swings) {
-                            (Ok((_, undecided)), Some(swings)) => ramp_ends::door_swings_over(
-                                doors, swings, *undecided, measured, elevation, &label,
-                            ),
-                            (Err((_, message)), _) => {
-                                (Check::Undecided(message.clone()), vec![], vec![])
-                            }
-                            (Ok(_), None) => unreachable!("swings are read with the selection"),
-                        });
-                    }
+                    let door = LandingDoors {
+                        free,
+                        walking: &config.walking,
+                        selections,
+                    };
+                    found.extend(door.check(measured, elevation, &label));
                 }
                 for (check, mut cited, related) in found {
                     cited.insert(0, evidence.clone());
@@ -1525,6 +1549,42 @@ fn ramp(
         checks.push((check, cited, related));
     }
     Ok(checks)
+}
+
+/// The landing-door checks of one rule, asked at each measured landing.
+struct LandingDoors<'s, 'a> {
+    free: Option<&'s FreeSpaceServiceHandle>,
+    walking: &'s WalkingConfig<'a>,
+    selections: &'s Selections,
+}
+
+impl LandingDoors<'_, '_> {
+    /// No selected door standing on the landing `measured` at `elevation`,
+    /// and with `landing_door_swing` none swinging over it; nothing when
+    /// the rule declares no landing doors.
+    fn check(
+        &self,
+        measured: &LandingEvidence,
+        elevation: ElevationInterval,
+        label: &str,
+    ) -> Checks {
+        let (Some(doors), Some(selected)) = (&self.walking.doors, &self.selections.doors) else {
+            return Vec::new();
+        };
+        let mut checks = vec![ramp_ends::doors(
+            self.free, doors, selected, measured, elevation, label,
+        )];
+        if doors.swing {
+            checks.push(match (selected, &self.selections.swings) {
+                (Ok((_, undecided)), Some(swings)) => ramp_ends::door_swings_over(
+                    doors, swings, *undecided, measured, elevation, label,
+                ),
+                (Err((_, message)), _) => (Check::Undecided(message.clone()), vec![], vec![]),
+                (Ok(_), None) => unreachable!("swings are read with the selection"),
+            });
+        }
+        checks
+    }
 }
 
 /// The handrails along each run of a ramp and the free space at its ends.

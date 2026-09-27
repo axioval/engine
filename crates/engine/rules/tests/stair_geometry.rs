@@ -1383,7 +1383,7 @@ fn handrail_and_ramp_end_declarations_are_checked() {
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
-    // End spaces and landing doors are the ramp's only.
+    // A flight's landing doors are declared as a ramp's.
     let evaluation = check_stairs(
         model(),
         stairs(),
@@ -1894,4 +1894,79 @@ fn a_door_swinging_over_a_ramp_landing_is_found() {
     // Swinging away, it passes, height or not.
     let evaluation = run([0.0, 1.0, 0.0], false);
     assert!(findings(&evaluation).is_empty() && unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_door_on_or_swinging_over_a_stair_landing_is_found() {
+    use common::doors::{Doors, hinged};
+    // The landing at the top of `regular` runs from x 0 to 2 and y 0 to
+    // 1.2, 0.68 m up. `door`, hinged at (1, 1.7), swings south over it;
+    // turned to swing north, it sweeps y 1.7 .. 2.6 and misses it.
+    let landing = || stairs().landing("regular", WalkingEnd::FlightTop, "slab", Some((2.0, 1.2)));
+    let run = |open: [f64; 3], swing: bool, floor: Floor| {
+        let doors = Doors::default().door(
+            "door",
+            vec![hinged([1.0, 1.7, 0.0], [-1.0, 0.0, 0.0], open, 0.9, false)],
+            1.0,
+            None,
+        );
+        let mut parameters = vec![
+            ("landing_objects", slabs()),
+            ("landing_doors", selector(kind("door"))),
+            ("landing_door_height", metres(2.0)),
+        ];
+        if swing {
+            parameters.push(("landing_door_swing", boolean(true)));
+        }
+        model().evaluate_with(
+            &StairGeometryCheck,
+            &rule(STAIR, kind("flight"), parameters),
+            |services| {
+                services
+                    .register(WalkingSurfaceServiceHandle::new(Arc::new(landing())))
+                    .unwrap();
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(floor)))
+                    .unwrap();
+                services.register(doors.handle()).unwrap();
+                services
+                    .register(axioval_engine::VerticalExtentServiceHandle::new(Arc::new(
+                        DoorHeights,
+                    )))
+                    .unwrap();
+            },
+        )
+    };
+    let door = id("door");
+    // Standing on the landing.
+    let evaluation = run(
+        [0.0, 1.0, 0.0],
+        false,
+        Floor::default().blocker("door", [0.5, 0.2], [1.0, 0.4]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            format!("door {door} stands on the landing at the top of the flight")
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [door.clone()]);
+    // Swinging over it from beside it.
+    let evaluation = run([0.0, -1.0, 0.0], true, Floor::default());
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            format!("door {door} swings over the landing at the top of the flight")
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [door]);
+    // Swinging away, it passes; the flight in pieces is not measured.
+    let evaluation = run([0.0, 1.0, 0.0], true, Floor::default());
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
 }

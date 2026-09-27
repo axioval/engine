@@ -168,6 +168,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Doors on and over stair landings.** (Refs #85) `stair-geometry` gains
+  `landing_doors`, `landing_door_height` and `landing_door_swing`, as
+  ramps have them: no selected door may stand in the column over the
+  landing at either end of a flight (its base at the bottom, its top at
+  the top), nor with `landing_door_swing` swing over it, judged as for a
+  ramp's landings. **Breaking:** definitions bound to `stair-geometry` must
+  declare the three new optional parameters.
 - **Doors swinging over ramp landings.** (Refs #85) `ramp-geometry` gains
   `landing_door_swing`: no `landing_doors` door may swing over a landing at
   a run's end. A hinged leaf's sector overlapping the landing's rectangle

@@ -261,6 +261,18 @@ bounded centre and is refused.
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even
 for a declared zero deviation. Bodiless and unmeasured objects are refused.
+The same service projects the used positions onto any direction for a
+directional extent. Along a coordinate axis a planar mesh measures exactly;
+along any other direction each projection is a rounded dot product, widened
+by a bound on its rounding and reported as approximate. A tessellation
+widens further by its chord deviation.
+
+`AxiolidTriangleCountService` counts the triangles of the registered mesh,
+which is the host's tessellation: exact evidence for a planar mesh,
+approximate for a tessellated one, zero for a bodiless object, refused for an
+unmeasured one or a mesh whose indices or positions cannot be read. Like the
+directional extent, each count cites the counted object's own source, so one
+geometry set can hold several files.
 
 `AxiolidFacadeAreaService` measures facade areas. The host declares the
 spaces (`with_space`); the CLI declares every `IfcSpace`. A triangle counts

@@ -1955,8 +1955,8 @@ fn signature(parameters: &[(&str, &str, bool)]) -> Value {
 impl Case {
     /// Runs one rule of `capability` with geometry over `model`: the
     /// fixture packages with the rule swapped for it. `types` binds object
-    /// types by `(id suffix, IFC name)`; `IsExternal` and
-    /// `SprinklerProtection` are always bound.
+    /// types by `(id suffix, IFC name)`; `IsExternal`,
+    /// `SprinklerProtection` and `TotalThickness` are always bound.
     fn geometry_rule(
         &self,
         model: &str,
@@ -2002,6 +2002,13 @@ impl Case {
             "name": {"default": "IsExternal", "translations": {}},
             "valueKind": "boolean",
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IsExternal"}],
+            "citations": [],
+        });
+        definitions["properties"]["axioval:example.ifc.total-thickness"] = json!({
+            "id": "axioval:example.ifc.total-thickness",
+            "name": {"default": "TotalThickness", "translations": {}},
+            "valueKind": "quantity",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "TotalThickness"}],
             "citations": [],
         });
         definitions["definitions"]["axioval:example.under-test"] = json!({
@@ -2878,5 +2885,109 @@ fn two_models_with_one_file_name_or_a_bad_discipline_are_refused() {
         stderr(&output).contains("invalid discipline"),
         "{}",
         stderr(&output)
+    );
+}
+
+/// Walls in metres, each 4 m long and 3 m high. #19 is 0.3 m thick and #29
+/// 0.25 m, both across world y and both stating a 0.3 m layer set. #49 is
+/// placed a quarter turn round, so it runs along world y and is 0.24 m thick
+/// across world x; its layer set states 0.24 m.
+fn walls_with_layers() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,.STANDARD.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}\
+         #40=IFCCARTESIANPOINT((10.,0.,0.));\n\
+         #41=IFCDIRECTION((0.,1.,0.));\n\
+         #42=IFCAXIS2PLACEMENT3D(#40,#4,#41);\n\
+         #43=IFCLOCALPLACEMENT($,#42);\n\
+         #44=IFCCARTESIANPOINT((2.,0.));\n\
+         #45=IFCAXIS2PLACEMENT2D(#44,$);\n\
+         #46=IFCRECTANGLEPROFILEDEF(.AREA.,$,#45,4.,0.24);\n\
+         #47=IFCEXTRUDEDAREASOLID(#46,#2,#4,3.);\n\
+         #48=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#47));\n\
+         #50=IFCPRODUCTDEFINITIONSHAPE($,$,(#48));\n\
+         #49=IFCWALL('0000000000000000000049',$,$,$,$,#43,#50,$,.STANDARD.);\n\
+         #300=IFCMATERIAL('Concrete',$,$);\n\
+         #301=IFCMATERIALLAYER(#300,0.3,$,$,$,$,$);\n\
+         #302=IFCMATERIALLAYERSET((#301),'W300',$);\n\
+         #303=IFCMATERIALLAYERSETUSAGE(#302,.AXIS2.,.POSITIVE.,0.,$);\n\
+         #304=IFCRELASSOCIATESMATERIAL('0000000000000000000304',$,$,$,(#19,#29),#303);\n\
+         #311=IFCMATERIALLAYER(#300,0.24,$,$,$,$,$);\n\
+         #312=IFCMATERIALLAYERSET((#311),'W240',$);\n\
+         #313=IFCMATERIALLAYERSETUSAGE(#312,.AXIS2.,.POSITIVE.,0.,$);\n\
+         #314=IFCRELASSOCIATESMATERIAL('0000000000000000000314',$,$,$,(#49),#313);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 0.0, 0.0], [4.0, 0.3, 3.0], wall),
+        placed_box(20, [2.0, 5.0, 0.0], [4.0, 0.25, 3.0], wall),
+    )
+}
+
+#[test]
+fn with_geometry_a_wall_body_is_measured_against_its_layer_thickness() {
+    let case = Case::new("geometry-layer-thickness");
+    let (output, result) = case.geometry_rule(
+        &walls_with_layers(),
+        &[("wall", "IfcWall")],
+        "axioval:capability.body-extent",
+        &registry_signature("axioval:capability.body-extent"),
+        entity("wall"),
+        json!({
+            "axis": {"type": "string", "value": "forward"},
+            "target_property": {"type": "propertyReference",
+                                "property": "axioval:example.ifc.total-thickness",
+                                "propertySet": "axioval:material"},
+            "tolerance": {"type": "quantity", "value": 1.0, "unit": "mm"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Only #29's body departs from its layers; #49 is measured across its
+    // own placement, not along world y where it is 4 m long.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#29", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .starts_with("body extent along `forward` is 0.25 m; ")
+            && findings[0].1.ends_with(" states 0.3 m within 0.001 m"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_meshes_with_too_many_triangles_are_found() {
+    let case = Case::new("geometry-triangle-count");
+    let (output, result) = case.geometry_rule(
+        &walls_with_layers(),
+        &[("wall", "IfcWall")],
+        "axioval:capability.triangle-count",
+        &registry_signature("axioval:capability.triangle-count"),
+        entity("wall"),
+        json!({"maximum": {"type": "integer", "value": 11}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // A box meshes to twelve triangles, planar and so counted exactly.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 3, "{result:#}");
+    assert!(
+        findings
+            .iter()
+            .all(|(_, message)| message == "mesh has 12 triangles; at most 11 allowed"),
+        "{result:#}"
     );
 }

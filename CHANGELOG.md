@@ -27,6 +27,34 @@ All notable changes are documented here. This project follows Semantic Versionin
   and the overlay centroid of the plan-area footprints, exactly for planar
   meshes and within a derived bound for tessellated ones; the CLI registers
   it with `--geometry`.
+- **Model quality checks.** (#74) Three capabilities, mapped per sub-check
+  in the capability docs' "Model quality" section:
+  - `body-extent` measures each object's body along one of its own
+    placement axes (`axis` `right`, `forward` or `up`) and compares it with a
+    stated length (`target_property`, within a `tolerance`) or a
+    `minimum`/`maximum`. With `forward` and the material set's
+    `TotalThickness` it checks a wall's layer thickness against its body.
+    The extent is the whole body's depth along the axis, so it is the
+    thickness only of a straight wall; intervals straddling the target are
+    not evaluated, an absent target is a finding.
+  - `triangle-count` limits the triangles of each object's mesh. The count
+    is of the mesh the host produced, not a source fact; a tessellation of
+    curved faces is counted with approximate evidence and its finding says
+    the count depends on the tessellation.
+  - `same-container` requires an object to lie in the same nearest
+    containers as every counterpart a path reaches from it: a door or window
+    on another storey than its host wall. Undecided containers or
+    counterparts are not evaluated.
+
+  The vertical-extent seam gains `DirectionalExtent`
+  (`measure_directional_extent`, refused by default), which the Axiolid
+  service answers exactly along coordinate axes and as a rounding-widened
+  interval along any other direction. A new `TriangleCountService`
+  (`TriangleCountServiceHandle`) is implemented by
+  `AxiolidTriangleCountService` and registered by the CLI with
+  `--geometry`. Space-boundary coverage stays open: no service measures the
+  boundaries' connection geometry. Door swing direction waits on door
+  leaves (openbimrs/ifc#148).
 - **Sill heights in `keyed-limit`.** The new `quantity` `sill-height`
   limits each object's bottom elevation above the floor of every object the
   new parameter `floor_path` reaches from it, through the vertical-extent

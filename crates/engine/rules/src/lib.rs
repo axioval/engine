@@ -3,6 +3,7 @@
 
 use axioval_engine::{CapabilityRegistry, EngineError};
 
+mod body_extent;
 mod clash;
 mod comparison;
 mod conformance;
@@ -32,6 +33,7 @@ mod property_requirements;
 mod property_rules;
 mod property_value;
 mod relative_count;
+mod same_container;
 mod selection;
 mod shelf_capacity;
 mod slab_contact;
@@ -39,9 +41,11 @@ mod slab_stack;
 mod space_validation;
 mod support;
 mod table_allocation;
+mod triangle_count;
 mod unique_value;
 mod xsd_pattern;
 
+pub use body_extent::BodyExtent;
 pub use clash::Clash;
 pub use comparison::{
     AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
@@ -74,11 +78,13 @@ pub use property_rules::{
 };
 pub use property_value::PropertyValueConstraint;
 pub use relative_count::RelativeCount;
+pub use same_container::SameContainer;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
 pub use slab_stack::SlabStackSpacing;
 pub use space_validation::{SpaceCategory, SpaceValidation};
 pub use table_allocation::TableAllocation;
+pub use triangle_count::TriangleCountLimit;
 pub use unique_value::UniqueValue;
 
 /// Registers all maintained built-in capabilities into a host registry.
@@ -124,4 +130,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(OpeningSpaces))
         .and_then(|registry| registry.register(GroupComposition))
         .and_then(|registry| registry.register(ExitSeparation))
+        .and_then(|registry| registry.register(BodyExtent))
+        .and_then(|registry| registry.register(TriangleCountLimit))
+        .and_then(|registry| registry.register(SameContainer))
 }

@@ -19,6 +19,7 @@ pub mod plan_span;
 pub(crate) mod planar;
 pub mod proximity;
 pub mod space;
+pub mod triangle_count;
 pub mod vertical_extent;
 
 pub use contact::AxiolidContactService;
@@ -33,6 +34,7 @@ pub use plan_area::AxiolidPlanAreaService;
 pub use plan_span::AxiolidPlanSpanService;
 pub use proximity::AxiolidProximityService;
 pub use space::AxiolidSpaceService;
+pub use triangle_count::AxiolidTriangleCountService;
 pub use vertical_extent::AxiolidVerticalExtentService;
 
 use std::collections::BTreeMap;

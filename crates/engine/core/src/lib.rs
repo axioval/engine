@@ -453,6 +453,7 @@ mod relationships;
 mod services;
 mod space;
 mod topology;
+mod triangle_count;
 mod vertical_extent;
 mod walkability;
 pub use classifications::{
@@ -535,9 +536,12 @@ pub use space::{
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
 };
+pub use triangle_count::{
+    TriangleCount, TriangleCountError, TriangleCountService, TriangleCountServiceHandle,
+};
 pub use vertical_extent::{
-    ElevationInterval, VerticalExtent, VerticalExtentError, VerticalExtentService,
-    VerticalExtentServiceHandle,
+    DirectionalExtent, ElevationInterval, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
 };
 pub use walkability::{
     VerifiedWalkablePassage, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,

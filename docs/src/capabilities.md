@@ -497,6 +497,44 @@ A finding names the pair (with `any`, the pair farthest apart), its separation, 
 
 Elevations and footprints are intervals, and a tessellated slab's are never points. A slab is judged only on the whole interval: a distance straddling a bound, an overlap ratio straddling the minimum, or two tops the intervals cannot order are not evaluated. An object whose selection is undecided still counts as a possible next slab up, and one whose extent cannot be measured leaves every slab not evaluated, since it could sit in any stack. A slab with nothing stacked above it has nothing to check. When a proximity service is registered, its enclosing boxes skip overlap measurements between slabs that cannot meet in plan.
 
+### Model quality
+
+Checks on how a model is built rather than on what it designs. Each sub-check maps to one rule:
+
+| Sub-check | Rule |
+|---|---|
+| Material-layer thickness against the body's thickness | `body-extent` with `axis` `forward` and `target_property` the material set's `TotalThickness`, within a `tolerance`. |
+| Polygon count per element | `triangle-count` with a `maximum`. |
+| A door or window on another storey than its host | `same-container` from each door or window along `IfcRelFillsElement:backward`, `IfcRelVoidsElement:backward` to its host, climbing `IfcRelContainedInSpatialStructure` `backward` to the storeys. |
+| Space-boundary coverage of a space's surface | Not decided yet (below). |
+| Door swing direction | Not decided yet: it needs door leaves (hinge side and swing), which the object-frame contract does not carry yet (upstream openbimrs/ifc#148). |
+
+`axioval:capability.body-extent` measures each selected object's body along one of its own placement axes, through `ObjectFrameService` (the frame) and `VerticalExtentService` (the extent along the frame's axis), so it needs both a semantic adapter that states placements and a geometry adapter.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `axis` | `string` | Required. `right`, `forward` or `up`: the placement's first, second or third axis. |
+| `target_property` | `propertyReference` | A length the object states, which the extent must equal within `tolerance`. |
+| `tolerance` | `quantity` | A length, with `target_property` only; exact (up to binary rounding) without it. |
+| `minimum`, `maximum` | `quantity` | Inclusive length bounds, instead of `target_property`. |
+
+Exactly one of `target_property` and the range is declared. With IFC, a wall's layer set runs across the wall along its placement's second axis (`IfcMaterialLayerSetUsage` `AXIS2`), so a layer thickness check is:
+
+```json
+{"axis": {"type": "string", "value": "forward"},
+ "target_property": {"type": "propertyReference", "propertySet": "axioval:material",
+                     "property": "…total-thickness"},
+ "tolerance": {"type": "quantity", "value": 1, "unit": "mm"}}
+```
+
+The extent is the whole body's depth along the axis: the highest less the lowest point projected onto it. It is the thickness only where the body is a slab of constant thickness across the axis; a curved wall, or one with a projecting part, measures deeper, so select the straight walls the measure fits (for example by `axioval:material.Kind` `layer-set`). Extents are intervals: a tessellated body measures within its chord deviation, and an axis off the coordinate axes within the rounding of the projection. A verdict needs the whole interval on one side of the bound, widened by a few units in the last place for the binary rounding of decimal coordinates; one straddling it is not evaluated. An absent target property is a finding that names it; a target that is not a length, an unplaced object (IFC `NotPlaced`) and an unmeasurable body are not evaluated. A finding cites the placement, the measurement and the stated length.
+
+`axioval:capability.triangle-count` requires each selected object's mesh to hold at most `maximum` triangles, through `TriangleCountService`. The count is of the mesh the host produced, not of anything the model states: a box extruded from a rectangle counts twelve triangles, and a curved face as many as the host's chord budget made of it, so another host or budget may count differently. A finding on a tessellation of curved faces carries approximate evidence and says that the count depends on the tessellation. A bodiless object counts none; an unmeasured one is not evaluated.
+
+`axioval:capability.same-container` requires each selected object to lie in the same nearest containers as every counterpart `counterpart_path` (steps as in `path`) reaches from it. `counterpart_selector` restricts which reached objects count; `container_selector` names the containers, climbed to along the traversal parameters (`relationship` and `direction`, or `path`) exactly as `property-comparison`'s container modes climb, so `follow_chain` does not apply. The two sets must be equal: an object in no container while its counterpart is in one differs too. An object reaching no counterpart has nothing to agree with and passes. A container selector that cannot decide an object leaves every selected object not evaluated; an undecided counterpart leaves the object not evaluated unless a decided one already differs; a refused relationship answer leaves it not evaluated. A finding names each differing counterpart and its containers, and relates them together with the object's own. `property-comparison` cannot express this check: its candidates and targets are compared by property value, and a counterpart's container is no property of either object.
+
+Space-boundary coverage, the share of a space's surface its `IfcRelSpaceBoundary` connection geometry covers, is left open. The relationship service answers which elements bound a space, not the boundaries' surfaces: the connection geometry is neither an object nor meshed by the geometry bridge, so no service measures the covered area, and a rule over the bounding elements' bodies would decide something else.
+
 ## Adding a capability
 
 1. Define or reuse canonical schema concepts and parameters.

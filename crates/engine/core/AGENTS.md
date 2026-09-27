@@ -31,6 +31,8 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `facade_area.rs` owns the outward-facing surface area per object as an interval, exact exactly when a point; the handle refuses an area naming another object. Which objects are external is never this seam's.
 
-`vertical_extent.rs` owns bottom and top elevation intervals per object. Evidence is exact exactly when both are points, and the handle refuses an extent naming another object. No stacking or spacing verdict crosses this seam.
+`vertical_extent.rs` owns bottom and top elevation intervals per object. Evidence is exact exactly when both are points, and the handle refuses an extent naming another object. No stacking or spacing verdict crosses this seam. It also owns `DirectionalExtent`, the extent along any direction; the handle refuses one naming another object or direction, and the trait's default refuses rather than answering with the vertical extent.
+
+`triangle_count.rs` owns the triangle count of the mesh a host produced per object. The count is the host's tessellation, never a source fact: evidence is exact only for a mesh that is the exact shape. No polygon-limit verdict crosses this seam.
 
 `pairwise.rs` owns the broad-phase candidate search. It must stay complete: discard only by the gap between enclosing boxes (mesh extent grown by chord deviation), and keep it proven against the exhaustive search in its tests. `projected_candidate_pairs` prunes each projection by the box gap that bounds that projection (plan gap in plan, footprint offset plus vertical gap for `Vertical`); never prune a projection by the gap in space.

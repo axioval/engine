@@ -269,7 +269,7 @@ pub(crate) fn metres(value: f64) -> String {
 }
 
 /// A length interval as a reviewer reads it.
-fn shown(lower: f64, upper: f64) -> String {
+pub(crate) fn shown(lower: f64, upper: f64) -> String {
     let (low, high) = (metres(lower), metres(upper));
     if low == high {
         low

@@ -43,7 +43,8 @@ use axioval::axiolid::{
     AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
     AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
     AxiolidLinearQuantityService, AxiolidPlanAreaService, AxiolidPlanSpanService,
-    AxiolidProximityService, AxiolidSpaceService, AxiolidVerticalExtentService,
+    AxiolidProximityService, AxiolidSpaceService, AxiolidTriangleCountService,
+    AxiolidVerticalExtentService,
 };
 use axioval::engine::{
     ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
@@ -51,8 +52,8 @@ use axioval::engine::{
     LinearQuantityServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
     PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
     RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
-    VerticalExtentServiceHandle,
+    SourceSnapshot, SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle,
+    TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -301,6 +302,14 @@ fn register(
             PlanSpanServiceHandle::new(Arc::new(AxiolidPlanSpanService::new(
                 geometry.clone(),
                 source.clone(),
+            ))),
+            bound,
+        )?
+        // Counts the triangles of the meshes this bridge produced, so a
+        // count follows its chord budget for curved bodies.
+        .with_host_service(
+            TriangleCountServiceHandle::new(Arc::new(AxiolidTriangleCountService::new(
+                geometry.clone(),
             ))),
             bound,
         )?

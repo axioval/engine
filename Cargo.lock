@@ -410,9 +410,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-overlay"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ccfb02f9bb4fd01e14345ee8c08438e8067234ac63790ed61cea65ae191b332"
+checksum = "d39f99eb95fa0e3e41bef1dff5ea03c417c996bfae175e26aac4a957e3f65c7b"
 dependencies = [
  "axiolid-core",
  "axiolid-exact",

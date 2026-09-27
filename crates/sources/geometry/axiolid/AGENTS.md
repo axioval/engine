@@ -47,7 +47,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   plain `ObjectId` data, so this stays a geometry adapter.
 - `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point. A declared group (`with_group`) measures the union of its members; a member without a body, an unmeasured member or undecided membership refuses, never zero. An uncovered area brackets the grown cover between an inscribed and a circumscribed 16-gon (growth by `r − d` and `r + d` for a tessellated cover), handed to the overlay as fan triangles: its ring check refuses a vertex on the line through a non-adjacent edge. Never use the 0.3.0 overlay's `Region::dilate`, whose side of the true offset is unstated.
 - `src/plan_span.rs` also answers `measure_rectangle` with the overlay's exact calipers (`minimum_area_rectangle`, axiolid-overlay ≥ 0.3.2): a tessellated footprint is `Unproven`, several least-area orientations `Tied`; the kernel's `error` widens centre and half extents and turns the axes by `asin(e / (L − e))`, except along the coordinate axes, where the extremes are recomputed exactly. That computation is `least_area_rectangle`, the crate's one rectangle: sections and the shelf layout call it too, never `minimum_area_rectangle` directly. `src/plan_area.rs` measures `measure_outside_bands` as the overlay of the subject with band hulls clipped to their shared stretch, the clip moved by `CUT_MARGIN` inwards (sure) and outwards (possible); a tessellated band member refuses.
-- `src/coverage.rs` answers `measure_coverage` for the plan-area service: each effect bracketed between inner and outer regions (`Region::dilate_inner`/`dilate_outer` for grown effects; the exact visibility polygon cut to inscribed and circumscribed 64-gons; convex cells of the free region judged by the distance map with the 1-Lipschitz bound `D(g) ± ρ`, split up to `MAX_DEPTH`, undecided cells outer only). Regions go to the overlay as convex pieces (`walkable::trapezoids`). Tessellated subjects and blockers refuse; a tessellated, unmeasured or centreless source is an unmeasured effect, never an empty one.
+- `src/coverage.rs` answers `measure_coverage` for the plan-area service: each effect bracketed between inner and outer regions (`Region::dilate_inner`/`dilate_outer` for grown effects; the exact visibility polygon cut to inscribed and circumscribed 64-gons; convex cells of the free region judged by the distance map with the 1-Lipschitz bound `D(g) ± ρ`, split up to `MAX_DEPTH`, undecided cells outer only; the reached cells are united by `union_soup` into a region). Effects are `Region`s, united and clipped with region operations; the trapezoids only cut the free region into convex cells. Tessellated subjects and blockers refuse; a tessellated, unmeasured or centreless source is an unmeasured effect, never an empty one.
 - `src/sight.rs` implements `SightService` with the kernel's `line_of_sight`. Blockers apart from the box of the eye and the target are not handed over; tessellated targets in range and tessellated blockers that may matter refuse; an unmeasured blocker refuses. Never merge blockers into one mesh to decide more: occluders must stay attributable.
 - `src/plan_span.rs` implements `PlanSpanService` over the plan-area service's footprints: longest diagonal and farthest span from convex-hull vertices (exact because distance is convex), centres from the overlay centroid. Tessellation widens a diagonal by `2d`, a farthest span by both deviations, a centre by `b·(R + d)/(A − b)`; a footprint no larger than its band has no bounded centre and refuses. A located centre is `Inside`/`Outside` only when farther from every footprint edge than its radius plus the chord deviation; otherwise `Undecided`. Recesses are the pockets between the outer ring and its convex hull, walked between consecutive ring vertices on the hull's boundary (vertices on a hull edge count, or a niche's mouth would be the whole wall); pockets under `RECESS_RESOLUTION` are grid rounding. Sections intersect the footprints and take their sides from `least_area_rectangle` (`Enclosing::sides`), which answers only for a unique orientation: a tied section refuses. Both refuse tessellated footprints: never bound a least-area rectangle's short side by a chord band, it is not monotone.
 - `src/derived_relationships.rs` implements `DerivedRelationshipService`:
@@ -70,11 +70,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   only proposes paths; `sweep_inside` proves them with an outer enclosure
   grown by `MARGIN`, which must stay above the overlay's grid snapping.
   Width upper bounds come only from chords of a portal's mid-line.
-  Plans are `Plan`, never `Region`: overlay 0.3.0 rejects its own output as
-  an operand (collinear non-adjacent edges count as self-intersection), so
-  every operation cuts its operands into trapezoids first and validates
-  with a tight tolerance. Test against the published 0.3.0, not a local
-  kernel checkout.
+  Plans are `Plan`: overlay output, handed back to the overlay as it is
+  (settled output is a valid operand from axiolid-overlay 0.3.3) and
+  validated and settled with a tight tolerance, since thin slivers fail at
+  `ON_SURFACE`. `trapezoids` remains for convex pieces (an inner point,
+  placement obstacles as rings). Test against the published crates, not a
+  local kernel checkout.
 - `src/walkability.rs` implements `WalkabilityService`: a region per surface
   (a hub) and per portal face (a landing). Every definite passage must end
   where the next begins, or a definite route could transit a surface without
@@ -206,8 +207,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-overlay` 0.3.2 (`minimum_area_rectangle`, the
-Minkowski and dilation family), `axiolid-route` 0.3.2 (`distance_map`,
+0.3.0, except `axiolid-overlay` 0.3.3 (`minimum_area_rectangle`, the
+Minkowski and dilation family, settled `union_soup` output), `axiolid-route` 0.3.2 (`distance_map`,
 `farthest_point`) and `axiolid-inspect` 0.3.1 (volumes,
 `line_of_sight`). `mesh_distance` is published there, but certified exact-B-rep distance
 (`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
@@ -225,12 +226,6 @@ an API.
   With it, walkability could erode free regions by half the width and prove
   gaps inside surfaces blocking, and metric routing could report such routes
   blocked instead of refusing them.
-- axiolid-overlay 0.3.2 accepts its settled outputs as operands, but
-  `Region::new` still refuses some unions of its own output
-  (`SelfIntersection`, and `HoleOutsideOuter` from pairwise `union`), as
-  coverage's travel cells show. `walkable.rs` still re-cuts overlay output
-  into trapezoids and `coverage.rs` hands the overlay convex pieces; drop
-  both only once that is fixed and the tests pass without them.
 - The single-route service still treats the kernel path as a lower bound or
   proposal only; the many-target queries of `axiolid-route` 0.3.2 use a point
   path as a witness only.

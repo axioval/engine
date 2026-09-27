@@ -32,7 +32,7 @@
 //! so areas carry that rounding, as every plan area here does.
 
 use axiolid_core::{Point2, Tolerance};
-use axiolid_overlay::{Polygon, Region, Ring};
+use axiolid_overlay::{Polygon, Region, Ring, union_soup};
 use axiolid_route::{Unreachable, distance_map};
 use axioval_engine::{
     CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, PlanArea, PlanAreaError,
@@ -40,7 +40,7 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::plan_area::{AxiolidPlanAreaService, tolerance};
-use crate::planar::{footprint_polygons, polygon_moments, polygons_overlap_area, ring_area};
+use crate::planar::{footprint_polygons, polygon_moments, ring_area};
 use crate::walkable::{Plan, trapezoids};
 
 /// Sides of the regular polygons bracketing the range's disc.
@@ -63,7 +63,7 @@ const MAX_DEPTH: u32 = 7;
 const DISTANCE_SLACK: f64 = 1e-9;
 
 /// An effect's inner and outer regions, or why it was not measured.
-type Effect = Result<(Vec<Polygon>, Vec<Polygon>), String>;
+type Effect = Result<(Region, Region), String>;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn measure(
@@ -115,13 +115,14 @@ pub(crate) fn measure(
         }
     };
     let range = request.range_metres();
-    let whole = pieces(&footprint);
-    let clipped = |soup: &[Polygon]| {
-        polygons_overlap_area(soup.to_vec(), whole.clone(), tolerance)
-            .ok_or_else(|| "the overlay could not clip it to the footprint".to_owned())
+    let clipped = |effect: &Region| {
+        effect
+            .intersection(&footprint, tolerance)
+            .map(|within| within.area())
+            .map_err(|error| format!("the overlay could not clip it to the footprint: {error:?}"))
     };
-    let mut inner_union: Vec<Polygon> = Vec::new();
-    let mut outer_union: Vec<Polygon> = Vec::new();
+    let mut inner_union = Region::empty();
+    let mut outer_union = Region::empty();
     let mut unmeasured = false;
     let mut effects = Vec::with_capacity(request.sources().len());
     for source in request.sources() {
@@ -130,7 +131,7 @@ pub(crate) fn measure(
             EffectReach::Grown => grown(service, object, range, tolerance),
             reach => centre(service, object, tolerance).and_then(|centre| {
                 let one = |free: &Region, inner: bool| match reach {
-                    EffectReach::Travel => travel(free, centre, range, inner),
+                    EffectReach::Travel => travel(free, centre, range, inner, tolerance),
                     _ => visible(free, centre, range, inner, tolerance),
                 };
                 Ok((one(&free_inner, true)?, one(&free_outer, false)?))
@@ -149,10 +150,14 @@ pub(crate) fn measure(
                 } else {
                     EffectMeets::Possibly
                 };
-                if source.is_certain() {
-                    inner_union.extend(inner);
-                }
-                outer_union.extend(outer);
+                let joined = (|| {
+                    if source.is_certain() {
+                        inner_union = inner_union.union(&inner, tolerance)?;
+                    }
+                    outer_union = outer_union.union(&outer, tolerance)?;
+                    Ok(())
+                })();
+                joined.map_err(overlay)?;
                 meets
             }
             Err(reason) => {
@@ -162,15 +167,15 @@ pub(crate) fn measure(
         };
         effects.push((object.clone(), meets));
     }
-    let union_area = |soup: Vec<Polygon>| {
-        polygons_overlap_area(soup, whole.clone(), tolerance)
-            .ok_or_else(|| unavailable(format!("the coverage of {subject} cannot be computed")))
+    let union_area = |union: &Region| {
+        clipped(union)
+            .map_err(|_| unavailable(format!("the coverage of {subject} cannot be computed")))
     };
-    let lower = union_area(inner_union)?.clamp(0.0, area);
+    let lower = union_area(&inner_union)?.clamp(0.0, area);
     let upper = if unmeasured {
         area
     } else {
-        union_area(outer_union)?.clamp(lower, area)
+        union_area(&outer_union)?.clamp(lower, area)
     };
     let locator = format!(
         "coverage:{subject}:{}:{range}:{}",
@@ -232,12 +237,12 @@ fn grown(
     tolerance: Tolerance,
 ) -> Effect {
     let Some(region) = source_region(service, object, tolerance)? else {
-        return Ok((Vec::new(), Vec::new()));
+        return Ok((Region::empty(), Region::empty()));
     };
     let failed = |error| format!("{object} grown by {range} m: {error:?}");
     Ok((
-        pieces(&region.dilate_inner(range, tolerance).map_err(failed)?),
-        pieces(&region.dilate_outer(range, tolerance).map_err(failed)?),
+        region.dilate_inner(range, tolerance).map_err(failed)?,
+        region.dilate_outer(range, tolerance).map_err(failed)?,
     ))
 }
 
@@ -349,24 +354,28 @@ fn visible(
     range: f64,
     inner: bool,
     tolerance: Tolerance,
-) -> Result<Vec<Polygon>, String> {
+) -> Result<Region, String> {
     if range <= 0.0 || !inside(free, centre)? {
-        return Ok(Vec::new());
+        return Ok(Region::empty());
     }
     let seen = free
         .visibility_polygon(centre, tolerance)
         .map_err(|error| format!("the view from the centre: {error:?}"))?;
-    let within = seen
-        .intersection(&disc(centre, range, inner, tolerance)?, tolerance)
-        .map_err(|error| format!("the view within range: {error:?}"))?;
-    Ok(pieces(&within))
+    seen.intersection(&disc(centre, range, inner, tolerance)?, tolerance)
+        .map_err(|error| format!("the view within range: {error:?}"))
 }
 
 /// The part of the free region within `range` of travel from the centre:
 /// surely (`inner`) or possibly.
-fn travel(free: &Region, centre: Point2, range: f64, inner: bool) -> Result<Vec<Polygon>, String> {
+fn travel(
+    free: &Region,
+    centre: Point2,
+    range: f64,
+    inner: bool,
+    tolerance: Tolerance,
+) -> Result<Region, String> {
     if !inside(free, centre)? {
-        return Ok(Vec::new());
+        return Ok(Region::empty());
     }
     let map = distance_map(free.polygons(), &[], &[centre])
         .map_err(|error| format!("the travel distances from the centre: {error:?}"))?;
@@ -430,24 +439,9 @@ fn travel(free: &Region, centre: Point2, range: f64, inner: bool) -> Result<Vec<
             }
         }
     }
-    Ok(reached
-        .into_iter()
-        .filter(|ring| ring_area(ring).abs() > 0.0)
-        .map(|outer| Polygon {
-            outer,
-            holes: Vec::new(),
-        })
-        .collect())
-}
-
-/// A region as convex counter-clockwise pieces whose union it is: the form
-/// the overlay accepts as an operand whatever the region's own rings.
-fn pieces(region: &Region) -> Vec<Polygon> {
-    region
-        .polygons()
-        .iter()
-        .flat_map(|polygon| trapezoids(&Plan::piece(polygon.clone())))
-        .collect()
+    reached.retain(|ring| ring_area(ring).abs() > 0.0);
+    let cells = |error| format!("the travel cells within range: {error:?}");
+    Region::new(union_soup(&reached, tolerance).map_err(cells)?, tolerance).map_err(cells)
 }
 
 /// A cell as a counter-clockwise ring.

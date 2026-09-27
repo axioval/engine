@@ -282,7 +282,7 @@ does not state on which side of the true offset its polygon lies.
 Coverage (`measure_coverage`) brackets every source's effect area between an
 inner region, inside the true one, and an outer region holding it. A grown
 effect is the source's footprint dilated by the range with a stated side
-(`Region::dilate_inner` and `dilate_outer`, axiolid-overlay 0.3.2). A visible
+(`Region::dilate_inner` and `dilate_outer`, axiolid-overlay 0.3.2 or later). A visible
 effect is the exact visibility polygon of the source's footprint centre in
 the free region (`Region::visibility_polygon`), cut to a regular 64-gon
 inscribed in the range's disc or circumscribing it. A travel effect cuts the
@@ -296,8 +296,9 @@ times and 4096 queries per effect, and the rest count towards the outer
 bound only. The free region is the subject's footprint less the blockers'
 footprints: all of them for inner bounds, the certain ones for outer bounds.
 A centre outside the free region reaches none of it; one on its boundary is
-unmeasured. Effects are handed to the overlay as convex pieces, clipped to
-the footprint and united. Only exact meshes are measured: a tessellated
+unmeasured. A travel effect is the union of the cells in range. Effects are
+regions, united and clipped to the footprint by region operations; the
+overlay takes its own output as an operand from axiolid-overlay 0.3.3 on. Only exact meshes are measured: a tessellated
 subject or blocker refuses the request, while a tessellated or unmeasured
 source, or a bodiless one that has no centre to travel or look from, leaves
 its own effect unmeasured, which keeps the upper bound at the whole

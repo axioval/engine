@@ -81,11 +81,11 @@ pub(crate) fn tolerance() -> Result<Tolerance, String> {
     Tolerance::new(ON_SURFACE, ON_SURFACE).map_err(|_| "invalid tolerance".to_owned())
 }
 
-/// The tolerance handed to the overlay, which uses it only to validate its
-/// operands. The published validator (0.3.0) compares a cross product, an
-/// area, with it, so a thin but valid trapezoid of a millimetre by a tenth of
-/// a micrometre fails at [`ON_SURFACE`]. Operands here are convex pieces and
-/// fresh convex polygons, never self-intersecting, so the check can be tight.
+/// The tolerance handed to the overlay, which validates its operands and
+/// settles its output with it. The validator compares a cross product, an
+/// area, with it, so a thin but valid sliver of a millimetre by a tenth of a
+/// micrometre fails at [`ON_SURFACE`]. Operands here are fresh convex
+/// polygons and the overlay's own settled output, so the check can be tight.
 fn overlay_tolerance() -> Result<Tolerance, String> {
     Tolerance::new(1e-15, 1e-15).map_err(|_| "invalid tolerance".to_owned())
 }
@@ -95,12 +95,9 @@ pub(crate) type Bounds2 = ([f64; 2], [f64; 2]);
 
 /// A plan region: the polygons an overlay produced.
 ///
-/// It is never handed back to the overlay as it is. The published overlay
-/// (0.3.0) rejects its own output as input when a ring has collinear
-/// non-adjacent edges, which every union of rooms and corridors has. Every
-/// operation therefore cuts its operands into trapezoids first
-/// ([`trapezoids`]), which are convex and always valid, and whose union is
-/// the region.
+/// The overlay settles its output (axiolid-overlay 0.3.3), so every plan goes
+/// back to it as an operand as it is, at the same tight tolerance it was
+/// settled with.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Plan {
     polygons: Vec<Polygon>,
@@ -239,7 +236,11 @@ pub(crate) fn join(a: &Plan, b: &Plan) -> Result<Plan, String> {
     match (a.is_empty(), b.is_empty()) {
         (true, _) => Ok(b.clone()),
         (_, true) => Ok(a.clone()),
-        _ => overlay_soups(trapezoids(a), trapezoids(b), OverlayOperation::Union),
+        _ => overlay_soups(
+            a.polygons.clone(),
+            b.polygons.clone(),
+            OverlayOperation::Union,
+        ),
     }
 }
 
@@ -247,14 +248,22 @@ pub(crate) fn subtract(a: &Plan, b: &Plan) -> Result<Plan, String> {
     if a.is_empty() || b.is_empty() {
         return Ok(a.clone());
     }
-    overlay_soups(trapezoids(a), trapezoids(b), OverlayOperation::Difference)
+    overlay_soups(
+        a.polygons.clone(),
+        b.polygons.clone(),
+        OverlayOperation::Difference,
+    )
 }
 
 pub(crate) fn intersect(a: &Plan, b: &Plan) -> Result<Plan, String> {
     if a.is_empty() || b.is_empty() {
         return Ok(Plan::empty());
     }
-    overlay_soups(trapezoids(a), trapezoids(b), OverlayOperation::Intersection)
+    overlay_soups(
+        a.polygons.clone(),
+        b.polygons.clone(),
+        OverlayOperation::Intersection,
+    )
 }
 
 /// A ring from `points` without repeated consecutive points; `None` when it

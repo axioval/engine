@@ -1538,6 +1538,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- The workspace requires `axiolid-overlay` 0.3.3, which settles
+  `union_soup` output and accepts holes touching their outer ring, so
+  every overlay output is a valid operand again (axiolid/kernel#191).
+  Coverage now builds its effects as regions (a travel effect is the
+  union of its reached cells) and unites and clips them with region
+  operations instead of handing the overlay convex pieces, and the
+  walkable plans of walkability and metric routing go back to the overlay
+  as they are instead of re-cut into trapezoids. Measurements, bounds and
+  refusals are unchanged.
 - **Breaking.** Semantic capability results are closer to what a reviewer
   acts on. `manual-issue` raises one finding per rule, against the first
   selected object and relating the others, instead of one per object.

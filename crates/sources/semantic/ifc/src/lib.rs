@@ -7,6 +7,7 @@
 //! available for host-defined OpenBIM sources.
 
 mod attributes;
+mod bodies;
 mod classifications;
 mod coordinates;
 mod frames;

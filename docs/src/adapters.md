@@ -206,6 +206,39 @@ with no association, directly or through its type, has no material.
   `IfcMaterialLayer` no name or category. IFC2X3 has no constituent or
   profile sets.
 
+### Bodies
+
+`axioval:body` is read from the product's body representation (`Body`,
+else `Facetation`, else one without an identifier, never an `Axis` or
+`FootPrint`) through `ifc-geometry`'s `body_description` (0.4.0,
+openbimrs/ifc#147), the same reader the geometry lowering is built from, so
+the facts and the meshed body cannot disagree. Each geometric item is one
+entry, `IfcMappedItem`s resolved: a column placed from its type's shared
+geometry reads as if its extrusion were authored in place, and `Mapped`
+says it was not. For every swept-area solid the adapter states its profile
+(`IfcProfileDef` families from rectangle to Z shape, with the IFC attribute
+names as dimension names), the solid's placement in world coordinates, and
+for an `IfcExtrudedAreaSolid` its depth and world direction.
+
+Lengths go through the project's exact length unit and angles through its
+plane-angle unit (`ifc_properties::exact_unit`), never through
+`ifc_geometry::units::resolve`, which assumes metres and radians when a
+file states none. A length unit that does not resolve refuses the whole
+body; a plane-angle unit that does not resolve refuses only the angles
+the file states in it (profile slopes, a revolution's angle). `PositionAngle`
+and `Extrusion.Inclination` come from direction vectors and need no unit. The locator names the object, the representation, the mapped
+items followed and the item (`body:#30:#37:#35>#33`), and for a profile
+fact the profile entity (`body:#10:#19:#18:profile:#14`).
+
+- An object that is no `IfcProduct`, or has no body representation, has
+  no body: every name is absent.
+- An item family or profile family the reader does not describe, an open
+  profile swept as a solid, a dangling reference, a mapping that scales or
+  mirrors a swept solid, and a placement it cannot compose refuse the whole
+  body.
+- An optional attribute the file leaves unset is absent even where the
+  schema defines a default; the adapter reports what the file states.
+
 ### Object frames
 
 The IFC session registers an object-frame service (`ObjectFrameServiceHandle`; see [typed host services](./services.md)) without geometry. An `IfcProduct`'s frame is its `ObjectPlacement`: the `IfcLocalPlacement` chain is composed by `ifc-geometry`'s placement resolver, the same composition that places meshed bodies, so frames and geometry agree. The slot is read from the file's release, so IFC2X3 and IFC4 are both covered.

@@ -47,12 +47,16 @@ findings and no not-evaluated outcomes. A caller reads that as a pass.
 ## Attribute sets
 
 The reserved sets `axioval:attributes`, `axioval:type-attributes`,
-`axioval:presentation` and `axioval:material` (see
+`axioval:presentation`, `axioval:material` and `axioval:body` (see
 [IR](./ir.md#attribute-sets)) are not package concepts and bind to
 themselves in every source. The property inside them is an ordinary
 property concept: a package declares `space-number` with the IFC4 name
-`Name` and references it in `axioval:attributes`, or `layer-thickness` with
-the IFC4 name `TotalThickness` and references it in `axioval:material`.
+`Name` and references it in `axioval:attributes`, `layer-thickness` with
+the IFC4 name `TotalThickness` and references it in `axioval:material`, or
+`section-depth` with the IFC4 name `Profile.OverallDepth` and references it
+in `axioval:body`. Capabilities that read these sets themselves (the
+presentation layer in `clash`) ask by the engine's own names, never through
+binding.
 
 ## Subtypes
 

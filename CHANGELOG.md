@@ -6,6 +6,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **How a body is modelled.** (#40) The reserved `axioval:body` set
+  (`BODY_SET`) states, from the body representation a source authors and
+  never from a mesh, the number of geometric items (`Count`), their kinds
+  (`Kinds`, and `Item<n>.Kind`: `extrusion`, `brep`, `csg`,
+  `tessellation` and so on) and whether they are mapped (`Mapped`), and
+  for each swept-area item its profile (`Profile.Type`, `Profile.Name`,
+  the family's dimensions such as `Profile.OverallDepth` in metres, and
+  its position), its placement (`Placement.Origin…`, `Placement.XAxis…`)
+  and its path (`Extrusion.Depth`, `Extrusion.Direction…`,
+  `Extrusion.Inclination`; `Revolution.…`). Names without `Item<n>.` read
+  the only item and are a conflict on a body of several. Every property
+  capability and selector reads them, so a column's section depth or a
+  wall's extrusion direction is an ordinary property rule. The IFC adapter
+  answers the set through `ifc-geometry`'s `body_description`
+  (openbimrs/ifc#147), mapped items resolved, in the project's exact units
+  and world coordinates, with a locator naming the representation, the
+  mapped items followed, the item and the profile. A body it cannot
+  describe exactly is refused for every name, never answered in part; an
+  object without a body, an unset optional attribute and another family's
+  parameter are exact absences.
 - **Winders, turning flights, open risers and tessellated flights.**
   (Refs #85) `WalkingSurfaceService::measure_tread_flight` takes a
   `TreadFlightRequest` saying where a turning flight's walking line runs

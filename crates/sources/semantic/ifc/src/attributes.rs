@@ -20,12 +20,13 @@ use std::sync::OnceLock;
 
 use axioval_engine::PropertyResolutionError;
 use axioval_ir::{
-    ATTRIBUTE_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET, PRESENTATION_TRANSPARENCY,
-    PropertyValue, TYPE_ATTRIBUTE_SET,
+    ATTRIBUTE_SET, BODY_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET,
+    PRESENTATION_TRANSPARENCY, PropertyValue, TYPE_ATTRIBUTE_SET,
 };
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
 
+use crate::bodies::Bodies;
 use crate::layers::{self, LayerIndex};
 use crate::materials::Materials;
 use crate::measure::si_value;
@@ -48,6 +49,7 @@ pub(crate) struct Attributes {
     layers: OnceLock<Result<LayerIndex, String>>,
     styles: OnceLock<Result<StyleIndex, String>>,
     materials: Materials,
+    bodies: Bodies,
 }
 
 impl Attributes {
@@ -58,6 +60,7 @@ impl Attributes {
             layers: OnceLock::new(),
             styles: OnceLock::new(),
             materials: Materials::new(release),
+            bodies: Bodies::new(release),
         }
     }
 
@@ -86,6 +89,9 @@ impl Attributes {
         }
         if set == MATERIAL_SET {
             return self.materials.resolve(model, object, name);
+        }
+        if set == BODY_SET {
+            return self.bodies.resolve(model, object, name);
         }
         debug_assert_eq!(set, TYPE_ATTRIBUTE_SET);
         let types = self

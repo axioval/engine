@@ -438,6 +438,72 @@ pub const MATERIAL_KIND_PROFILE_SET: &str = "profile-set";
 /// [`MATERIAL_KIND`] of an unstructured list of materials.
 pub const MATERIAL_KIND_LIST: &str = "list";
 
+/// Property set that states how an object's body is modelled.
+///
+/// Read from the body representation the source authors, never from a mesh:
+/// the kind of each geometric item (an extrusion, a boundary representation,
+/// a tessellation), and for a swept solid its profile, where it sits and the
+/// path it is swept along. Lengths are in metres, angles in radians, and
+/// positions and directions in the source's model coordinates. Reserved like
+/// [`ATTRIBUTE_SET`]. Property names are matched ignoring ASCII case:
+///
+/// - [`BODY_COUNT`]: the number of geometric items, mapped items resolved.
+/// - [`BODY_KINDS`]: every distinct item kind, as a [`PropertyValue::List`]
+///   of strings, sorted. Kinds are `extrusion`, `tapered-extrusion`,
+///   `revolution`, `tapered-revolution`, `directrix-sweep`, `swept-disk`,
+///   `sectioned-spine`, `brep`, `csg`, `csg-primitive`, `half-space`,
+///   `bounding-box`, `tessellation`, `surface-model`, `face`,
+///   `geometric-set`, `curve`, `surface` and `point`.
+/// - [`BODY_MAPPED`]: whether any item is reached through a mapping (a type's
+///   shared geometry placed at the occurrence).
+/// - Items numbered from 1 in the source's order, `Item<n>.` followed by:
+///   `Kind` ([`BODY_KIND`]), `Mapped`, and for a swept-area item the
+///   `Profile.` facts (below), `EndProfile.` for a tapered sweep,
+///   `Placement.OriginX`, `.OriginY`, `.OriginZ` (lengths) and
+///   `Placement.XAxisX` … `Placement.ZAxisZ` (decimals: the solid's axes;
+///   the profile lies in its X-Y plane). An extrusion adds
+///   `Extrusion.Depth` (a length), `Extrusion.DirectionX`, `.DirectionY`,
+///   `.DirectionZ` (a unit vector) and `Extrusion.Inclination` (the angle
+///   between the extrusion's line and the vertical, 0 to π/2); a revolution
+///   adds `Revolution.Angle`, `Revolution.OriginX` … `.OriginZ` and
+///   `Revolution.AxisX` … `.AxisZ`.
+/// - Profile facts: [`BODY_PROFILE_TYPE`] (`rectangle`,
+///   `rounded-rectangle`, `rectangle-hollow`, `circle`, `circle-hollow`,
+///   `ellipse`, `i-shape`, `asymmetric-i-shape`, `l-shape`, `t-shape`,
+///   `u-shape`, `c-shape`, `z-shape`, `trapezium`, `arbitrary-closed`,
+///   `arbitrary-with-voids`, `center-line`, `composite`, `derived`,
+///   `mirrored`), `Name` ([`BODY_PROFILE_NAME`], a catalogue designation),
+///   `PositionX`, `PositionY` and `PositionAngle` where the profile states a
+///   position, and the family's parameters under their dimension names
+///   (`XDim`, `YDim`, `OverallWidth`, `OverallDepth`, `WebThickness`,
+///   `FlangeThickness`, `FilletRadius`, `Radius`, `WallThickness`, …).
+///   A composite profile states `Count`, `Label` and `Member<n>.` facts; a
+///   derived or mirrored one `Label` and `Parent.` facts.
+/// - Without the `Item<n>.` prefix, a name reads the body's only item. A
+///   body of several items is a conflict for such a name, never a choice.
+///
+/// An object without a body has none of them (an exact absence), and
+/// neither has an item of another kind, a parameter its family does not
+/// have, or one the source leaves unset (even where the schema defines a
+/// default). A body the source states but that cannot be read exactly is
+/// refused, never absent.
+pub const BODY_SET: &str = "axioval:body";
+
+/// The item count in [`BODY_SET`].
+pub const BODY_COUNT: &str = "Count";
+/// The list of distinct item kinds in [`BODY_SET`].
+pub const BODY_KINDS: &str = "Kinds";
+/// The kind of the only item, or of `Item<n>.`, in [`BODY_SET`].
+pub const BODY_KIND: &str = "Kind";
+/// Whether items are reached through a mapping, in [`BODY_SET`].
+pub const BODY_MAPPED: &str = "Mapped";
+/// The profile family of a swept item in [`BODY_SET`].
+pub const BODY_PROFILE_TYPE: &str = "Profile.Type";
+/// The profile's name (catalogue designation) in [`BODY_SET`].
+pub const BODY_PROFILE_NAME: &str = "Profile.Name";
+/// [`BODY_KIND`] of a straight extrusion.
+pub const BODY_KIND_EXTRUSION: &str = "extrusion";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
@@ -445,6 +511,7 @@ pub fn is_reserved_set(set: &str) -> bool {
         || set == TYPE_ATTRIBUTE_SET
         || set == PRESENTATION_SET
         || set == MATERIAL_SET
+        || set == BODY_SET
 }
 
 /// A named semantic property.

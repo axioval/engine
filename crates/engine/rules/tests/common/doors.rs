@@ -5,9 +5,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    DoorLeaf, DoorLeaves, DoorLeavesError, HingeSide, LeafMotion, LeafPosition, MetricDirection,
-    ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, SourceSnapshot,
-    SwingSector,
+    ClearanceOutcome, ClearanceRequest, ContainmentEvidence, ContainmentOutcome,
+    ContainmentRequest, DoorLeaf, DoorLeaves, DoorLeavesError, FreeAreaEvidence, FreeAreaRequest,
+    FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, HingeSide, LeafMotion, LeafPosition,
+    MetricDirection, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
+    PlacementOutcome, PlacementRequest, SourceSnapshot, SwingSector,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -136,5 +138,60 @@ impl ObjectFrameService for Doors {
             .get(door)
             .cloned()
             .unwrap_or_else(|| Err(DoorLeavesError::NotADoor(door.clone())))
+    }
+}
+
+/// Spaces as plan rectangles, answering only whether a footprint's centre
+/// lies in one: enough for the probes a door's swing is judged by.
+#[derive(Default)]
+pub struct Rooms(BTreeMap<ObjectId, ([f64; 2], [f64; 2])>);
+
+impl Rooms {
+    pub fn room(mut self, local: &str, low: [f64; 2], high: [f64; 2]) -> Self {
+        self.0.insert(id(local), (low, high));
+        self
+    }
+
+    pub fn handle(self) -> FreeSpaceServiceHandle {
+        FreeSpaceServiceHandle::new(Arc::new(self))
+    }
+}
+
+impl FreeSpaceService for Rooms {
+    fn assess_clearance(&self, _: &ClearanceRequest) -> Result<ClearanceOutcome, FreeSpaceError> {
+        Err(FreeSpaceError::Unavailable(
+            "rooms answer containment only".into(),
+        ))
+    }
+    fn find_placement(&self, _: &PlacementRequest) -> Result<PlacementOutcome, FreeSpaceError> {
+        Err(FreeSpaceError::Unavailable(
+            "rooms answer containment only".into(),
+        ))
+    }
+    fn measure_free_area(&self, _: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
+        Err(FreeSpaceError::Unavailable(
+            "rooms answer containment only".into(),
+        ))
+    }
+    fn assess_containment(
+        &self,
+        request: &ContainmentRequest,
+    ) -> Result<ContainmentOutcome, FreeSpaceError> {
+        let [x, y, _] = request.frame().origin().coordinates_metres();
+        let mut inside = false;
+        for scope in request.scopes() {
+            let (low, high) = self
+                .0
+                .get(scope)
+                .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(scope.clone())))?;
+            inside |= low[0] < x && x < high[0] && low[1] < y && y < high[1];
+        }
+        let proof =
+            ContainmentEvidence::try_new(request.clone(), Evidence::exact(source(), "rooms"))?;
+        Ok(if inside {
+            ContainmentOutcome::Inside(proof)
+        } else {
+            ContainmentOutcome::Outside(proof)
+        })
     }
 }

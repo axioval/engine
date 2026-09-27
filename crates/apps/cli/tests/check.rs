@@ -6643,3 +6643,84 @@ fn with_geometry_door_clearances_follow_the_swing_side_and_the_handle() {
         );
     }
 }
+
+/// Office #19 (x -1..4, y 0..4) north of corridor #29 (y -2..0), both
+/// 3 m high, bounding doors #50 and #80 in the line between them: #50,
+/// hinged at the origin, swings north into the office; #80, hinged at
+/// x 2.9 and turned half round, swings south into the corridor.
+fn office_and_corridor_doors() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let boundary = |id: u32, space: u32, door: u32| {
+        format!(
+            "#{id}=IFCRELSPACEBOUNDARY('{id:022}',$,$,$,#{space},#{door},$,.PHYSICAL.,.INTERNAL.);\n"
+        )
+    };
+    model_with(&format!(
+        "{}{}{}{}{}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Corridor'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#29),#201);\n",
+        placed_box(10, [1.5, 2.0, 0.0], [5.0, 4.0, 3.0], space),
+        placed_box(20, [1.5, -1.0, 0.0], [5.0, 2.0, 3.0], space),
+        swinging_door(
+            40,
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+        swinging_door(
+            70,
+            [2.9, 0.0, 0.0],
+            [-1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+        boundary(300, 19, 50),
+        boundary(301, 29, 50),
+        boundary(302, 19, 80),
+        boundary(303, 29, 80),
+    ))
+}
+
+fn corridor() -> Value {
+    json!({"kind": "allOf", "operands": [
+        entity("space"),
+        {"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+         "property": "axioval:example.ifc.reference", "operator": "equals",
+         "value": {"type": "string", "value": "Corridor"}},
+    ]})
+}
+
+#[test]
+fn with_geometry_a_door_swinging_into_the_corridor_is_found() {
+    let case = Case::new("geometry-door-swing");
+    let (output, result) = case.geometry_rule(
+        &office_and_corridor_doors(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.door-swing",
+        &registry_signature("axioval:capability.door-swing"),
+        entity("door"),
+        json!({
+            "space_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:backward"]},
+            "swing_not_into": {"type": "selector", "value": corridor()},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#80".to_owned(),
+            "swings into ifc-step:model.ifc/#29, which `swing_not_into` forbids".to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

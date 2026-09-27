@@ -913,7 +913,7 @@ The circulation map erodes the space's free area (its floor less what the obstac
 - **Path ends.** The ends of the skeleton of every piece a sure entrance reaches must each offer a free box `end_width_metres` across by `end_length_metres` along the path, found by a placement search with a frame-offset domain anchored on the end, its forward axis the direction the path runs into the end (taken over at least the end's half width, so nodes a rounding apart do not set it), within `end_reach_metres` both ways. A proof that none fits is one finding per space listing the ends: `no free area 1.5 m by 1.5 m lies within 0.75 m of the path end at (…, …)`. An end is exempt when its free width (twice its half width) is surely below `narrow_end_metres` or its branch surely shorter than `short_end_metres`; the branch runs along the skeleton from the end to the first junction or other end, plus the half width to the wall it ends at, widened by two sample spacings each way because node positions are approximate. An exemption that may or may not apply leaves an end without a free area not evaluated. A piece whose skeleton could not be built leaves its ends not evaluated.
 - **Passing spaces.** The path from each sure entrance to each component it reaches is traced along the skeleton (fewest nodes from the node nearest the entrance to the node nearest the component), simplified to within a quarter of the width, and judged as in [passing spaces](#passing-spaces), its two ends counting as passing spaces. A missing stretch is a finding on the component relating the space and the entrance.
 
-Door swings are not subtracted from the free area: sources do not state which way a door opens or how far its leaf sweeps, so only what the obstacles occupy counts, and a leaf standing open into the path is not seen. Door widths are not judged here either; `accessible-route` judges them.
+Door swings are not subtracted from the free area: only what the obstacles occupy counts, and a leaf standing open into the path is not seen. Keeping a door's swing clear is `distance` with `subject_extent` `door_swing`. Door widths are not judged here either; `accessible-route` judges them.
 
 Every verdict is three-valued. An obstacle the selection cannot decide leaves every space not evaluated; a component whose selection or spaces cannot be read is not evaluated itself; a map the service refuses leaves the space and its components not evaluated. A space with no component and no end area to check has nothing to judge and is not mapped.
 
@@ -1101,9 +1101,21 @@ A turning flight is measured along its walking line: the goings of its winders s
 
 A flight or ramp the service cannot measure is not evaluated, never passed: an open or inward-facing mesh, a flight in several pieces (separate treads), a flight with a sloped walking face, a walking line from the inner side of a flight whose winders turn both ways or that runs outside a tread, a tessellated ramp, a ramp whose slopes meet without a landing, or a body with no tread or run. Door swing over a landing stays open (openbimrs/ifc#148).
 
+### Door swing
+
+`axioval:capability.door-swing` requires each selected door to swing into, or not into, the spaces it opens onto: a WC door must open outward, a corridor must not be swung into, an office door opens into the office. The door's spaces are what `space_path` reaches from it (with IFC, `IfcRelSpaceBoundary:backward`, or `axioval:derived.adjacent-space`). Its swing is its leaves as the object-frame service states them (`ObjectFrameService::leaves`; with IFC, the operation type, the panel properties and the placement), and which side of the door a space lies on is asked of the free-space service (`assess_containment`) at two small probes per hinged leaf: halfway through its sweep and three quarters of its width out from the hinge, one on the side it opens into and one behind it. It needs both services, so the CLI runs it with `--geometry`.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `space_path` | `stringList` | Required. Steps from a door to the spaces it opens onto. |
+| `swing_into` | `selector` | Among the reached spaces this picks, the door must swing into at least one. |
+| `swing_not_into` | `selector` | The door must swing into none of the reached spaces this picks. |
+
+At least one of the two is declared. A door swings into a space when a swing-side probe of a leaf lies in it; a double-acting leaf swings into the spaces on both sides. `swing_not_into` finds each picked space swung into (`swings into …, which `swing_not_into` forbids`); `swing_into` is a finding only when every picked space surely lies behind the door and none on its swing side (`swings away from …, which `swing_into` requires it to swing into`). A space neither probe lies in (the probes stand in a wall, or the space is not beside the door) decides nothing: it leaves `swing_into` open and cannot break `swing_not_into`. A door without a hinged leaf (sliding, rolling up) swings into no space and is not evaluated, like a door whose leaves cannot be read; a space whose selection is undecided or a probe the service refuses decides only what it cannot change. Findings relate the spaces and cite the leaves and the containment proofs.
+
 ### Doors
 
-Door accessibility checks are compositions of the capabilities above; no capability is specific to doors. The door type is a key: with IFC, the door's `OperationType` (`axioval:attributes.OperationType`, such as `SINGLE_SWING_LEFT` or `DOUBLE_DOOR_SINGLE_SWING`) or its type object's name (`axioval:type-attributes.Name`). Each sub-check maps to one rule:
+Door accessibility checks are compositions of the capabilities above; `door-swing` is the one specific to doors. The door type is a key: with IFC, the door's `OperationType` (`axioval:attributes.OperationType`, such as `SINGLE_SWING_LEFT` or `DOUBLE_DOOR_SINGLE_SWING`) or its type object's name (`axioval:type-attributes.Name`). Each sub-check maps to one rule:
 
 | Sub-check | Rule |
 |---|---|
@@ -1115,7 +1127,7 @@ Door accessibility checks are compositions of the capabilities above; no capabil
 | Which spaces a door connects, and their types | `opening-spaces`, or a key read along `axioval:derived.adjacent-space` (as for sill heights); the side facing `outside` is recorded in the adjacency evidence. |
 | Door width on an accessible route | Walkability (#76) with the clear widths the host states per portal; the CLI states none, since `OverallWidth` includes the lining. |
 | Clear areas in front of, behind and beside the leaf (handle side), with a floor under them | `component-clearance` with `front_axis` `swing` (the side the leaf opens into) or `-swing`, one rule per side and size; `align` `handle` puts the area flush with the handle edge, and `lateral_offset` moves it beyond; `within_space` asks for the floor under it. A double-acting, sliding or multi-leaf door leaves what it cannot place not evaluated. |
-| Opening direction relative to the space type | Not decided yet: it needs the swing direction (upstream openbimrs/ifc#148). The spaces on each side are known; which way the leaf opens is not. |
+| Opening direction relative to the space type | `door-swing` with `swing_into` or `swing_not_into` selecting spaces by type: a WC door `swing_not_into` the WC (it opens outward), a corridor door `swing_not_into` the corridor. See [Door swing](#door-swing). |
 
 A clear width per door type, stated where the model records it and otherwise approximated with a 10 cm deduction:
 
@@ -1269,7 +1281,7 @@ Checks on how a model is built rather than on what it designs. Each sub-check ma
 | Polygon count per element | `triangle-count` with a `maximum`. |
 | A door or window on another storey than its host | `same-container` from each door or window along `IfcRelFillsElement:backward`, `IfcRelVoidsElement:backward` to its host, climbing `IfcRelContainedInSpatialStructure` `backward` to the storeys. |
 | Space-boundary coverage of a space's surface | `space-boundary-coverage` with `minimum_covered_share`, `maximum_uncovered_area` and/or `maximum_overlap_area`. |
-| Door swing direction | Not decided yet: it needs door leaves (hinge side and swing), which the object-frame contract does not carry yet (upstream openbimrs/ifc#148). |
+| Door swing direction | `door-swing`: the swing the declared operation type and placement give, against the spaces the model relates to the door, such as `swing_not_into` corridors or `swing_into` the rooms a corridor serves. |
 
 `axioval:capability.body-extent` measures each selected object's body along one of its own placement axes, through `ObjectFrameService` (the frame) and `VerticalExtentService` (the extent along the frame's axis), so it needs both a semantic adapter that states placements and a geometry adapter.
 

@@ -21,6 +21,7 @@ mod counterpart_coverage;
 mod counts;
 mod distance;
 mod door_swing;
+mod door_swing_direction;
 mod effective_coverage;
 mod escape_route;
 mod exit_separation;
@@ -92,6 +93,7 @@ pub use corridor_end_openings::CorridorEndOpenings;
 pub use counterpart_coverage::CounterpartCoverage;
 pub use counts::RelatedCount;
 pub use distance::Distance;
+pub use door_swing_direction::DoorSwing;
 pub use effective_coverage::EffectiveCoverage;
 pub use escape_route::EscapeRoute;
 pub use exit_separation::ExitSeparation;
@@ -167,6 +169,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(ClashMatrix))
         .and_then(|registry| registry.register(Containment))
         .and_then(|registry| registry.register(Distance))
+        .and_then(|registry| registry.register(DoorSwing))
         .and_then(|registry| registry.register(SelectorConformance))
         .and_then(|registry| registry.register(ClassificationRequirement))
         .and_then(|registry| registry.register(UniqueValue))

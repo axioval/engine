@@ -147,6 +147,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Door swing.** (Closes #82, Closes #74) `door-swing` requires each
+  selected door to swing into (`swing_into`) or not into
+  (`swing_not_into`) the spaces `space_path` reaches from it, from its
+  leaves as the object-frame service states them. Which side of the door a
+  space lies on is asked of the free-space service at two small probes per
+  hinged leaf, on its swing side and behind it; a double-acting leaf swings
+  into both sides, a space neither probe lies in decides nothing, and a
+  door without a hinged leaf is not evaluated. It maps the opening
+  direction relative to the space type (a WC door opens outward) and the
+  door swing model check. No breaking change: the capability is new.
 - **Door clear widths from the lining and leaves, and door clearances by
   swing side.** (Refs #82) `keyed-limit`'s `clear-width` gains a step
   between the stated width and the rule's deduction:

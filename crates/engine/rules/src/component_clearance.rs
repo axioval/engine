@@ -1130,7 +1130,7 @@ impl Volume {
     }
 }
 
-fn free_space_error(error: &FreeSpaceError) -> Unavailable {
+pub(crate) fn free_space_error(error: &FreeSpaceError) -> Unavailable {
     let reason = match error {
         FreeSpaceError::MissingGeometry(_) | FreeSpaceError::Unavailable(_) => {
             NotEvaluatedReason::BackendUnavailable

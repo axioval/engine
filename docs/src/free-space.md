@@ -116,7 +116,7 @@ The Axiolid adapter builds the free area as the placement search's scene does. T
 
 A piece whose skeleton the kernel refuses is unmapped, never guessed.
 
-Door swings are not subtracted: no source states a door's swing, so the map counts only what the obstacles occupy.
+Door swings are not subtracted: the map counts only what the obstacles occupy, although a source may state door leaves (`ObjectFrameService::leaves`).
 
 ## Free-area bounds
 

@@ -1240,8 +1240,8 @@ Rules on how structural members and walls are built read the reserved body set (
 | Empty element (no body) | `property-required` on `axioval:body.Count`. |
 | Profile from a table | `allowed-profile`. |
 | Openings within their host, clear of its ends, edges, flanges and each other | `opening-zone`. |
-| Gross area equal to net area plus openings | Not decided yet: the opening areas are known only for openings `opening-zone` can place, and no capability sums them against stated quantities. |
-| Openings clear of supports, and components penetrating a beam clear of connecting beams | Not decided yet: spans from supports need the structural connections of a member, which no contract states. |
+| Gross area equal to net area plus openings | `opening-area` on the stated gross and net side areas (with IFC, `Qto_WallBaseQuantities` `GrossSideArea` and `NetSideArea`). |
+| Openings clear of supports, and components penetrating a beam clear of connecting beams | `opening-zone` with `support_distance` and `support_clearance`, the supports found by `support_path` (with IFC, `IfcRelConnectsElements:either`) or by contact (`support_gap`). |
 
 `axioval:capability.allowed-profile` requires each selected object's body to be one swept solid whose profile is a row of the `profiles` table. A row fits when its `type` pattern matches the profile family (`i-shape`, `rectangle`, …), its `name` pattern (if any) the profile's name (a catalogue designation such as `HEA300`), and every dimension it states lies within the tolerance of the profile's.
 
@@ -1277,6 +1277,11 @@ A row stating a dimension the family does not have, or one the source leaves uns
 | `edge_distance` | `quantity` | A length the opening must keep from both edges along `height_axis`, or from both flanges with `zone` `web`. |
 | `zone` | `string` | `section` (default: the host's whole height) or `web`: between the flanges of an I, T, U, C or Z section, across `profile-y`. |
 | `opening_spacing` | `quantity` | The clear distance the opening must keep from every other opening of the same host, in the face. |
+| `support_path` | `stringList` | Relationship steps from the host to its supports and connecting members. With IFC, `IfcRelConnectsElements:either`, which takes in its subtype `IfcRelConnectsPathElements`. |
+| `support_gap` | `quantity` | A length: the `support_selector` objects that come this close to the host in space (through the proximity service) are its supports too. |
+| `support_selector` | `selector` | The objects that may be supports (every object by default). |
+| `support_distance` | `quantity` | A length the opening must keep from each support along `length_axis`. |
+| `support_clearance` | `quantity` | A clear distance the opening must keep from each support's footprint in the face; `0 m` requires only that it not overlap one. |
 
 Every opening is checked to lie within its host's face along both axes (`opening lies partly outside its host #10: along its length it spans 1.7 m to 2.7 m, the host -2.5 m to 2.5 m`); each declared zone is its own finding. Findings relate the host, and a spacing finding the openings too close.
 
@@ -1285,7 +1290,26 @@ Both bodies are read from the reserved body set, never from a mesh, and are judg
 - the host must be one straight extrusion, perpendicular to its profile, of a family whose outline the set bounds (rectangles, circles, ellipses and the I, asymmetric I, T, U, C, Z and L sections, centred on their position); an arbitrary outline is not evaluated;
 - the opening must be one straight extrusion of a rectangle, rounded rectangle, circle or ellipse. Its extent along each face axis is exact: the reach of its outline in that direction, swept along its extrusion, even when it is tilted.
 
+A host's supports are the members it rests on or that connect to it (columns, walls, other beams): what `support_path` reaches from the host and, with `support_gap`, what the proximity service measures within that gap of it, both among the `support_selector` objects. Declaring either without `support_distance` or `support_clearance`, or those without a way to find the supports, is an invalid declaration. Each support is read from the body set too: one straight extrusion of any section the set bounds. Its extent along a face axis is an interval sure to hold the true one and one sure to lie within it: the same where its outline is exact (a rectangle, circle or ellipse, or a flanged section across whose width or depth the axis runs) and otherwise the section's box both ways. Its footprint in the face is its extents, and a rectangle within its projection is known only when it is extruded along a face axis from a section across it (a column under a beam) or through the host from a rectangle whose sides run along the face axes (a secondary beam framing into a web).
+
+- **Distance from supports.** A support whose inner extent along the length lies closer to the opening than `support_distance` is a finding (`opening is 0.1 m from support #700 along its host #50; 0.5 m required`, or `at most` where the extent is known only within bounds); one whose outer extent keeps the distance passes.
+- **Clear of connecting members.** An exact opening (an axis-aligned rectangle through the host) overlapping a known rectangle of a footprint, or closer to it than `support_clearance`, is a finding (`opening overlaps connecting member #20 by 0.08 m in the face of its host #50`); an opening whose extents keep the clearance from a footprint's extents passes.
+
+Anything in between is not evaluated, naming each member it could not decide: a support whose body cannot be read, one whose position straddles the limit, and one whose contact, relationship answer or selection is undecided and which may come too close. A support surely too close is found even beside undecided ones. Findings relate the host and every support surely too close, and cite the relationship or contact evidence and their bodies.
+
 Distances between openings are clear distances in the face. They are exact between two rectangles whose sides run along the face axes and which are extruded through the host (the third axis); for any other pair only the distance of their extents is known, a lower bound that can pass a pair but never find one, so a pair it cannot pass leaves the opening not evaluated. An opening whose host cannot be read, or whose own selection is undecided, may be a neighbour of any opening and is treated as one. Positions are composed from placements in binary arithmetic, so every bound is widened by a nanometre.
+
+`axioval:capability.opening-area` requires the openings of each selected host (a wall) to account for the difference between its stated gross and net side areas.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `opening_path` | `stringList` | Required. Relationship steps from the host to its openings; with IFC, `IfcRelVoidsElement:forward`. |
+| `opening_selector` | `selector` | The openings counted (every object by default). |
+| `length_axis`, `height_axis` | `string` | Required. The host's face, as for `opening-zone`. |
+| `gross_area`, `net_area` | `propertyReference` | Required. The host's stated gross and net side areas, such as `Qto_WallBaseQuantities.GrossSideArea` and `NetSideArea`. |
+| `area_tolerance` | `quantity` | The area the sum may differ from gross less net by (0 m² by default). |
+
+A side area is measured on the host's middle plane, so each opening counts with the exact area of its section when it crosses that plane and not at all when it stops short of it (a recess). Its area is known only when it is one straight extrusion through the host of a rectangle, rounded rectangle, circle or ellipse lying in the face (not a hollow one), wholly within the host's face and clear of the other openings' extents; the host is read as `opening-zone` reads it. A mismatch is a finding on the host relating its openings (`its openings (#1130) cover 1.2 m² of its face, but its gross side area 15 m² less its net side area 15 m² is 0 m²; they must agree within 0.01 m²`). A host stating neither area is not checked; one stating only one, an opening it cannot place, openings that may overlap and an opening whose selection is undecided leave it not evaluated. Openings of free outlines are not placed yet.
 
 ### Model quality
 

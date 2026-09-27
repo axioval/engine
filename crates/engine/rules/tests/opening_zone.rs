@@ -4,11 +4,19 @@
 
 mod common;
 
-use axioval_engine::CapabilityEvaluation;
-use axioval_ir::contract::ParameterValue;
-use axioval_ir::{BODY_SET, NotEvaluatedReason, PropertyValue, QuantityDimension};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use axioval_engine::{
+    CapabilityEvaluation, GeometryFidelity, ObjectBounds, ProjectedDistanceEvidence,
+    ProximityError, ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
+};
+use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::{
+    BODY_SET, Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension,
+};
 use axioval_rules::OpeningZone;
-use common::{Model, findings, kind, rule, selector, string, strings, unevaluated};
+use common::{Model, findings, kind, rule, selector, source, string, strings, unevaluated};
 
 const ID: &str = "axioval:capability.opening-zone";
 
@@ -338,5 +346,337 @@ fn a_web_zone_needs_the_height_across_the_profile() {
     assert_eq!(
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+/// A column under the beam `b` at `x`: `family` extruded up from 3 m below
+/// to the beam's underside, its section's X axis along `x_axis`.
+fn column(
+    model: Model,
+    local: &str,
+    x: f64,
+    x_axis: Vector,
+    family: &str,
+    dimensions: &[(&str, f64)],
+) -> Model {
+    let y_axis = [-x_axis[1], x_axis[0], 0.0];
+    extrusion(
+        model,
+        local,
+        "column",
+        [x, 0.0, -3.0],
+        [x_axis, y_axis, [0.0, 0.0, 1.0]],
+        2.85,
+        family,
+        dimensions,
+    )
+}
+
+fn square(model: Model, local: &str, x: f64) -> Model {
+    column(
+        model,
+        local,
+        x,
+        [1.0, 0.0, 0.0],
+        "rectangle",
+        &[("XDim", 0.3), ("YDim", 0.3)],
+    )
+}
+
+fn heb(model: Model, local: &str, x: f64, x_axis: Vector) -> Model {
+    column(
+        model,
+        local,
+        x,
+        x_axis,
+        "i-shape",
+        &[
+            ("OverallWidth", 0.3),
+            ("OverallDepth", 0.3),
+            ("WebThickness", 0.01),
+            ("FlangeThickness", 0.02),
+        ],
+    )
+}
+
+fn circle(model: Model, local: &str, x: f64) -> Model {
+    hole(model, local, x, 0.0, "circle", &[("Radius", 0.05)])
+}
+
+fn supported(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> CapabilityEvaluation {
+    let mut parameters = vec![
+        ("support_path", strings(&["connects:either"])),
+        ("support_selector", selector(kind("column"))),
+        ("support_distance", metres(0.5)),
+    ];
+    parameters.extend(extra);
+    check(model, parameters)
+}
+
+#[test]
+fn a_hole_inside_a_support_zone_is_found_and_one_outside_passes() {
+    // A square column under the start (x 0.35 to 0.65) and an HEB column,
+    // its flanges' width along the beam (x 5.35 to 5.65), under the end.
+    let model = square(beam(), "c1", 0.5)
+        .edge("connects", "b", "c1")
+        .edge("connects", "c2", "b");
+    let model = heb(model, "c2", 5.5, [1.0, 0.0, 0.0]);
+    let model = circle(model, "near-start", 0.9);
+    let model = circle(model, "mid-span", 3.0);
+    let model = circle(model, "near-end", 4.9);
+    let evaluation = supported(model, vec![]);
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "near-end".into(),
+                "opening is 0.4 m from support c2 along its host b; 0.5 m required".into()
+            ),
+            (
+                "near-start".into(),
+                "opening is 0.2 m from support c1 along its host b; 0.5 m required".into()
+            ),
+        ]
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    // The finding relates the support and the host.
+    let related: Vec<&str> = evaluation
+        .findings()
+        .iter()
+        .find(|finding| finding.message.contains("c1"))
+        .unwrap()
+        .related
+        .iter()
+        .map(|id| id.local_id.as_str())
+        .collect();
+    assert_eq!(related, ["b", "c1"]);
+}
+
+#[test]
+fn a_column_unconnected_or_unselected_is_no_support() {
+    // c1 is not connected to the beam; the connected slab is not a column.
+    let model = square(beam(), "c1", 0.5)
+        .object("slab", "slab")
+        .edge("connects", "b", "slab");
+    let model = circle(model, "near-start", 0.9);
+    let evaluation = supported(model, vec![]);
+    assert!(findings(&evaluation).is_empty());
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_support_known_only_by_its_box_finds_near_holes_and_leaves_straddling_ones() {
+    // An HEB column turned 45°: along the beam it reaches at least its
+    // centre (x 3) and at most 0.212 m either side.
+    let diagonal = std::f64::consts::FRAC_1_SQRT_2;
+    let model = heb(beam(), "c", 3.0, [diagonal, diagonal, 0.0]).edge("connects", "b", "c");
+    let model = circle(model, "near", 3.35);
+    let model = circle(model, "between", 3.7);
+    let model = circle(model, "far", 4.0);
+    let evaluation = supported(model, vec![]);
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "near".into(),
+            "opening is at most 0.3 m from support c along its host b; 0.5 m required".into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("between".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_support_whose_body_cannot_be_read_leaves_the_holes_not_evaluated() {
+    let model = beam()
+        .object("c", "column")
+        .value("c", BODY_SET, "Count", PropertyValue::Integer(1))
+        .text("c", BODY_SET, "Kind", "brep")
+        .edge("connects", "b", "c");
+    let model = circle(model, "o", 3.0);
+    let evaluation = supported(model, vec![]);
+    assert!(findings(&evaluation).is_empty());
+    let outcomes = evaluation.not_evaluated_outcomes();
+    assert_eq!(outcomes.len(), 1);
+    assert!(
+        outcomes[0]
+            .message()
+            .contains("(the support's body is a `brep`"),
+        "{}",
+        outcomes[0].message()
+    );
+}
+
+#[test]
+fn a_hole_overlapping_a_connecting_beams_footprint_is_found() {
+    // A secondary beam of a 0.1 x 0.2 m rectangle frames into the web at
+    // x 2 (x 1.95 to 2.05, z -0.1 to 0.1), extruded along y.
+    let model = extrusion(
+        beam(),
+        "s",
+        "beam",
+        [2.0, 0.005, 0.0],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]],
+        3.0,
+        "rectangle",
+        &[("XDim", 0.1), ("YDim", 0.2)],
+    )
+    .edge("connects", "s", "b");
+    let rectangle = |model, local, x| {
+        hole(
+            model,
+            local,
+            x,
+            0.0,
+            "rectangle",
+            &[("XDim", 0.1), ("YDim", 0.1)],
+        )
+    };
+    let model = rectangle(model, "overlapping", 2.02);
+    let model = rectangle(model, "beside", 2.5);
+    // The column under the start is connected too; its footprint lies
+    // below the web.
+    let model = square(model, "c1", 0.5).edge("connects", "b", "c1");
+    let model = rectangle(model, "above-column", 0.5);
+    let evaluation = check(
+        model,
+        vec![
+            ("support_path", strings(&["connects:either"])),
+            (
+                "support_selector",
+                selector(Selector::AnyOf {
+                    operands: vec![kind("column"), kind("beam")],
+                }),
+            ),
+            ("support_clearance", metres(0.0)),
+        ],
+    );
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "overlapping".into(),
+            "opening overlaps connecting member s by 0.08 m in the face of its host b".into()
+        )]
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+}
+
+#[test]
+fn supports_need_a_way_to_be_found_and_a_requirement() {
+    for parameters in [
+        vec![("support_distance", metres(0.5))],
+        vec![("support_path", strings(&["connects:either"]))],
+        vec![("support_selector", selector(kind("column")))],
+    ] {
+        assert_eq!(
+            unevaluated(&check(beam(), parameters)),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+/// Answers the distance between the beam and each column from a table;
+/// a column not in it is far away.
+struct Touching(BTreeMap<String, (f64, f64)>);
+
+impl ProximityService for Touching {
+    fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        panic!("contact is measured through measure_distance")
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let counterpart = &request.counterpart().local_id;
+        let (lower, upper) = self.0.get(counterpart).copied().unwrap_or((5.0, 5.0));
+        let fidelity = if lower < upper {
+            GeometryFidelity::tessellated(upper - lower)?
+        } else {
+            GeometryFidelity::Exact
+        };
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            lower,
+            upper,
+            fidelity,
+            Evidence {
+                source: source(),
+                locator: format!("contact:{counterpart}"),
+                exact: fidelity.is_exact(),
+            },
+        )
+    }
+}
+
+#[test]
+fn supports_are_found_by_contact_and_an_undecided_contact_is_not_ignored() {
+    // c1 touches the beam; c3 is close along it but apart (another frame);
+    // whether c4 touches is undecided.
+    let model = square(beam(), "c1", 0.5);
+    let model = square(model, "c3", 1.2);
+    let model = square(model, "c4", 3.3);
+    let model = circle(model, "near-start", 0.9);
+    let model = circle(model, "near-c4", 3.0);
+    let model = circle(model, "clear", 2.2);
+    let touching = Touching(BTreeMap::from([
+        ("c1".to_owned(), (0.0, 0.0)),
+        ("c3".to_owned(), (1.0, 1.0)),
+        ("c4".to_owned(), (0.0, 0.01)),
+    ]));
+    let rule = rule(
+        ID,
+        kind("opening"),
+        vec![
+            ("host_path", strings(&["voids:backward"])),
+            ("host_selector", selector(kind("beam"))),
+            ("length_axis", string("extrusion")),
+            ("height_axis", string("profile-y")),
+            ("support_selector", selector(kind("column"))),
+            ("support_gap", metres(0.001)),
+            ("support_distance", metres(0.5)),
+        ],
+    );
+    let evaluation = model.evaluate_with(&OpeningZone, &rule, |services| {
+        services
+            .register(ProximityServiceHandle::new(Arc::new(touching)))
+            .unwrap();
+    });
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "near-start".into(),
+            "opening is 0.2 m from support c1 along its host b; 0.5 m required".into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("near-c4".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // The contact is cited.
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "contact:c1")
+    );
+    // Without a proximity service contact cannot be measured.
+    let model = circle(square(beam(), "c1", 0.5), "o", 3.0);
+    assert_eq!(
+        unevaluated(&model.evaluate(&OpeningZone, &rule)),
+        [("o".into(), NotEvaluatedReason::MissingService)]
     );
 }

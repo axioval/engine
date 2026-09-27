@@ -2091,6 +2091,7 @@ impl Case {
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "TotalThickness"}],
             "citations": [],
         });
+        declare_wall_quantities(&mut definitions);
         definitions["definitions"]["axioval:example.under-test"] = json!({
             "id": "axioval:example.under-test",
             "name": {"default": "Under test", "translations": {}},
@@ -6837,6 +6838,300 @@ fn with_geometry_a_door_swinging_over_a_ramp_landing_is_found() {
         findings[0].1.ends_with(
             "door ifc-step:model.ifc/#610 swings over the landing at the top of run 1 of 1"
         ),
+        "{result:#}"
+    );
+}
+
+/// Declares `Qto_WallBaseQuantities` with its `GrossSideArea` and
+/// `NetSideArea`.
+fn declare_wall_quantities(definitions: &mut Value) {
+    definitions["propertySets"]["axioval:example.ifc.qto-wall"] = json!({
+        "id": "axioval:example.ifc.qto-wall",
+        "name": {"default": "Qto_WallBaseQuantities", "translations": {}},
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Qto_WallBaseQuantities"}],
+        "citations": [],
+    });
+    for (id, name) in [
+        ("gross-side-area", "GrossSideArea"),
+        ("net-side-area", "NetSideArea"),
+    ] {
+        definitions["properties"][format!("axioval:example.ifc.{id}")] = json!({
+            "id": format!("axioval:example.ifc.{id}"),
+            "name": {"default": name, "translations": {}},
+            "valueKind": "quantity",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        });
+    }
+}
+
+/// One product with a single extruded body: `profile` placed at `at` with
+/// the placement axes `axes` (`$,$` for the world's), extruded `depth`
+/// along the placement's Z. Entities `#id` to `#id + 6`.
+fn extruded(id: u32, entity: &str, profile: &str, at: [f64; 3], axes: &str, depth: f64) -> String {
+    format!(
+        "#{a}={profile};\n#{b}=IFCCARTESIANPOINT(({},{},{}));\n\
+         #{c}=IFCAXIS2PLACEMENT3D(#{b},{axes});\n\
+         #{d}=IFCEXTRUDEDAREASOLID(#{a},#{c},#4,{depth});\n\
+         #{e}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{d}));\n\
+         #{f}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{e}));\n\
+         #{id}={};\n",
+        at[0],
+        at[1],
+        at[2],
+        entity
+            .replace("GID", &format!("{id:022}"))
+            .replace("REP", &format!("#{}", id + 6)),
+        a = id + 1,
+        b = id + 2,
+        c = id + 3,
+        d = id + 4,
+        e = id + 5,
+        f = id + 6,
+    )
+}
+
+/// Wall `wall`'s stated gross and net side areas, entities `#id` to
+/// `#id + 3`.
+fn wall_areas(id: u32, wall: u32, gross: f64, net: f64) -> String {
+    format!(
+        "#{a}=IFCQUANTITYAREA('GrossSideArea',$,$,{gross:?},$);\n\
+         #{b}=IFCQUANTITYAREA('NetSideArea',$,$,{net:?},$);\n\
+         #{c}=IFCELEMENTQUANTITY('{c:022}',$,'Qto_WallBaseQuantities',$,$,(#{a},#{b}));\n\
+         #{id}=IFCRELDEFINESBYPROPERTIES('{id:022}',$,$,$,(#{wall}),#{c});\n",
+        a = id + 1,
+        b = id + 2,
+        c = id + 3,
+    )
+}
+
+/// [`hosts_with_openings`] with the beam #50 resting on a 300 mm square
+/// column #700 at x 0.5 (connected by `IfcRelConnectsElements`) and an HEB
+/// column #800 at x 5.5 (by `IfcRelConnectsPathElements`), and a further
+/// round hole #900 at x 5 through its web. Walls #1000 and #1100, 5 m long
+/// at y 5 and y 10, state their gross and net side areas: #1000 holds two
+/// 1 m x 1.2 m windows (#1030, #1060) and states net = gross - 2.4 m²;
+/// #1100 holds one (#1130) and states net = gross. Wall #10 states areas
+/// too, but its window #300 reaches past its end.
+fn supported_beam_and_walls_with_areas() -> String {
+    let column = |id: u32, x: f64, profile: &str| {
+        extruded(
+            id,
+            "IFCCOLUMN('GID',$,$,$,$,#3,REP,$,.COLUMN.)",
+            profile,
+            [x, 0.0, 0.0],
+            "$,$",
+            2.85,
+        )
+    };
+    let wall = |id: u32, y: f64| {
+        format!(
+            "#{p}=IFCCARTESIANPOINT((2.5,0.));\n#{q}=IFCAXIS2PLACEMENT2D(#{p},$);\n{}",
+            extruded(
+                id,
+                "IFCWALL('GID',$,$,$,$,#3,REP,$,.STANDARD.)",
+                &format!("IFCRECTANGLEPROFILEDEF(.AREA.,$,#{},5.,0.2)", id + 9),
+                [0.0, y, 0.0],
+                "$,$",
+                3.0,
+            ),
+            p = id + 8,
+            q = id + 9,
+        )
+    };
+    let voids = |id: u32, host: u32, opening: u32| {
+        format!("#{id}=IFCRELVOIDSELEMENT('{id:022}',$,$,$,#{host},#{opening});\n")
+    };
+    let window = |id: u32, host: u32, x: f64, y: f64| {
+        format!(
+            "{}{}",
+            extruded(
+                id,
+                "IFCOPENINGELEMENT('GID',$,$,$,$,#3,REP,$,.OPENING.)",
+                "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,1.,1.2)",
+                [x, y + 0.1, 1.5],
+                "#6,#7",
+                0.2,
+            ),
+            voids(id + 7, host, id),
+        )
+    };
+    let extra = [
+        "#24=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);\n".to_owned(),
+        column(700, 0.5, "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,0.3,0.3)"),
+        "#710=IFCRELCONNECTSELEMENTS('0000000000000000000710',$,$,$,$,#50,#700);\n".to_owned(),
+        column(
+            800,
+            5.5,
+            "IFCISHAPEPROFILEDEF(.AREA.,'HEB300',$,0.3,0.3,0.011,0.019,$,$,$)",
+        ),
+        "#810=IFCRELCONNECTSPATHELEMENTS('0000000000000000000810',$,$,$,$,#800,#50,(),(),\
+         .ATSTART.,.ATEND.);\n"
+            .to_owned(),
+        extruded(
+            900,
+            "IFCOPENINGELEMENT('GID',$,$,$,$,#3,REP,$,.OPENING.)",
+            "IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.05)",
+            [5.0, -0.2, 3.0],
+            "#8,#7",
+            0.4,
+        ),
+        voids(907, 50, 900),
+        wall(1000, 5.0),
+        window(1030, 1000, 1.0, 5.0),
+        window(1060, 1000, 3.0, 5.0),
+        wall_areas(1090, 1000, 15.0, 12.6),
+        wall(1100, 10.0),
+        window(1130, 1100, 2.0, 10.0),
+        wall_areas(1190, 1100, 15.0, 15.0),
+        wall_areas(1200, 10, 15.0, 11.4),
+    ]
+    .concat();
+    hosts_with_openings()
+        .replace(
+            "#22=IFCUNITASSIGNMENT((#20,#21));",
+            "#22=IFCUNITASSIGNMENT((#20,#21,#24));",
+        )
+        .replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"))
+}
+
+#[test]
+fn beam_holes_are_checked_against_the_beams_supports() {
+    let case = Case::new("opening-zone-supports");
+    let (output, result) = case.geometry_rule(
+        &supported_beam_and_walls_with_areas(),
+        &[
+            ("opening", "IfcOpeningElement"),
+            ("beam", "IfcBeam"),
+            ("column", "IfcColumn"),
+        ],
+        "axioval:capability.opening-zone",
+        &registry_signature("axioval:capability.opening-zone"),
+        entity("opening"),
+        json!({
+            "host_path": {"type": "stringList", "value": ["IfcRelVoidsElement:backward"]},
+            "host_selector": {"type": "selector", "value": entity("beam")},
+            "length_axis": {"type": "string", "value": "extrusion"},
+            "height_axis": {"type": "string", "value": "profile-y"},
+            "support_path": {"type": "stringList", "value": ["IfcRelConnectsElements:either"]},
+            "support_selector": {"type": "selector", "value": entity("column")},
+            "support_distance": {"type": "quantity", "value": 500.0, "unit": "mm"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#500".to_owned(),
+                "opening is 0.1 m from support #700 along its host #50; 0.5 m required".to_owned()
+            ),
+            (
+                "#900".to_owned(),
+                "opening is 0.3 m from support #800 along its host #50; 0.5 m required".to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn wall_openings_are_summed_against_gross_less_net_side_area() {
+    let case = Case::new("opening-area-walls");
+    let (output, result) = case.geometry_rule(
+        &supported_beam_and_walls_with_areas(),
+        &[("opening", "IfcOpeningElement"), ("wall", "IfcWall")],
+        "axioval:capability.opening-area",
+        &registry_signature("axioval:capability.opening-area"),
+        entity("wall"),
+        json!({
+            "opening_path": {"type": "stringList", "value": ["IfcRelVoidsElement:forward"]},
+            "opening_selector": {"type": "selector", "value": entity("opening")},
+            "length_axis": {"type": "string", "value": "profile-x"},
+            "height_axis": {"type": "string", "value": "extrusion"},
+            "gross_area": {"type": "propertyReference",
+                           "property": "axioval:example.ifc.gross-side-area",
+                           "propertySet": "axioval:example.ifc.qto-wall"},
+            "net_area": {"type": "propertyReference",
+                         "property": "axioval:example.ifc.net-side-area",
+                         "propertySet": "axioval:example.ifc.qto-wall"},
+            "area_tolerance": {"type": "quantity", "value": 0.01, "unit": "m2"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#1100".to_owned(),
+            "its openings (#1130) cover 1.2 m² of its face, but its gross side area 15 m² \
+             less its net side area 15 m² is 0 m²; they must agree within 0.01 m²"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(
+        not_evaluated[0]["object_id"]["local_id"],
+        json!("#10"),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn beam_supports_are_found_by_contact_with_geometry() {
+    // The beam is a 300 mm square section here, so it meshes; the HEB
+    // column #800 does not, so whether it touches the beam is undecided.
+    // Hole #600 moves to mid-height, clear of the section's top face.
+    let model = supported_beam_and_walls_with_areas()
+        .replace(
+            "#51=IFCISHAPEPROFILEDEF(.AREA.,'I300',$,0.3,0.3,0.01,0.02,$,$,$);",
+            "#51=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,0.3,0.3);",
+        )
+        .replace(
+            "#602=IFCCARTESIANPOINT((4.5,-0.2,3.1));",
+            "#602=IFCCARTESIANPOINT((4.5,-0.2,3.));",
+        );
+    let case = Case::new("opening-zone-contact");
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[
+            ("opening", "IfcOpeningElement"),
+            ("beam", "IfcBeam"),
+            ("column", "IfcColumn"),
+        ],
+        "axioval:capability.opening-zone",
+        &registry_signature("axioval:capability.opening-zone"),
+        entity("opening"),
+        json!({
+            "host_path": {"type": "stringList", "value": ["IfcRelVoidsElement:backward"]},
+            "host_selector": {"type": "selector", "value": entity("beam")},
+            "length_axis": {"type": "string", "value": "extrusion"},
+            "height_axis": {"type": "string", "value": "profile-y"},
+            "support_selector": {"type": "selector", "value": entity("column")},
+            "support_gap": {"type": "quantity", "value": 1.0, "unit": "mm"},
+            "support_distance": {"type": "quantity", "value": 500.0, "unit": "mm"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#500".to_owned(),
+            "opening is 0.1 m from support #700 along its host #50; 0.5 m required".to_owned()
+        )],
+        "{result:#}"
+    );
+    // #900 lies within 0.5 m of #800, which may touch the beam.
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(not_evaluated[0]["object_id"]["local_id"], json!("#900"));
+    assert!(
+        not_evaluated[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("#800 (whether it is a selected support of the host is undecided)"),
         "{result:#}"
     );
 }

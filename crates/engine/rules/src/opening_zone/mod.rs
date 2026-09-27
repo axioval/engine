@@ -2,6 +2,7 @@
 //! the host allows openings in.
 
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
@@ -10,17 +11,23 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, QuantityDimension};
 
-use crate::body_facts::BodyFacts;
 use crate::counts::Population;
 use crate::level_spacing::metres;
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
+pub(crate) mod face;
+mod supports;
+
+use face::{Axis, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
+use supports::{Opening, SupportConfig, Supports};
+
 /// Requires each selected opening to lie within its host's face and inside
 /// the zone the rule allows: clear of the host's ends by `end_distance`,
 /// clear of its edges (or of its flanges, with `zone` `web`) by
-/// `edge_distance`, and `opening_spacing` clear of every other opening in
-/// the same host.
+/// `edge_distance`, `opening_spacing` clear of every other opening in the
+/// same host, `support_distance` along the host from each of its supports
+/// and `support_clearance` clear of their footprints in the face.
 ///
 /// The host is what `host_path` reaches from the opening among the
 /// `host_selector` objects (with IFC, `IfcRelVoidsElement` backward). An
@@ -46,71 +53,37 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 /// the distance of their extents is known, a lower bound, which can pass a
 /// pair but never find one.
 ///
+/// A host's supports are the members it rests on or that connect to it:
+/// what `support_path` reaches from the host (with IFC,
+/// `IfcRelConnectsElements:either`, which takes in
+/// `IfcRelConnectsPathElements`), and the objects that come within
+/// `support_gap` of the host in space, both among the `support_selector`
+/// objects. Each support must be one straight extrusion the body set bounds;
+/// its extent along a face axis is an interval sure to hold the true one,
+/// and one sure to lie within it, the same where the outline is exact. A
+/// finding needs the inner interval, a pass the outer one; in between, or
+/// with a support whose relation or selection is undecided and which may
+/// come too close, the opening is not evaluated.
+///
 /// Positions are composed from placements in binary arithmetic, so every
 /// bound is widened by a nanometre, far below any modelling tolerance.
 pub struct OpeningZone;
 
-/// How far composed placements may be off in binary arithmetic.
-const ROUNDING: f64 = 1e-9;
-
-/// How nearly two unit vectors must agree to be taken as parallel.
-const PARALLEL: f64 = 1e-9;
-
-type Vector = [f64; 3];
-
-fn dot(a: Vector, b: Vector) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn along(origin: Vector, a: Vector, s: f64, b: Vector, t: f64) -> Vector {
-    [
-        origin[0] + a[0] * s + b[0] * t,
-        origin[1] + a[1] * s + b[1] * t,
-        origin[2] + a[2] * s + b[2] * t,
-    ]
-}
-
-fn minus(a: Vector, b: Vector) -> Vector {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-fn parallel(a: Vector, b: Vector) -> bool {
-    dot(a, b).abs() >= 1.0 - PARALLEL
-}
-
-/// One of the host's three axes.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Axis {
-    Extrusion,
-    ProfileX,
-    ProfileY,
-}
-
-impl Axis {
-    fn parse(name: &str, value: &str) -> Result<Self, Unavailable> {
-        match value {
-            "extrusion" => Ok(Self::Extrusion),
-            "profile-x" => Ok(Self::ProfileX),
-            "profile-y" => Ok(Self::ProfileY),
-            other => Err(invalid(format!(
-                "`{name}` `{other}` is unsupported; use `extrusion`, `profile-x` or `profile-y`"
-            ))),
-        }
-    }
-}
-
 struct Config<'a> {
     hosts: Traversal<'a>,
     host_selector: &'a Selector,
-    length: Axis,
-    height: Axis,
+    axes: FaceAxes,
     end_distance: Option<f64>,
     edge_distance: Option<f64>,
     web: bool,
     spacing: Option<f64>,
+    supports: Option<SupportConfig<'a>>,
 }
 
-fn distance(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
+pub(crate) fn distance(
+    parameters: &Parameters<'_>,
+    name: &str,
+) -> Result<Option<f64>, Unavailable> {
     match parameters.quantity(name)? {
         None => Ok(None),
         Some((value, QuantityDimension::Length)) if value >= 0.0 => Ok(Some(value)),
@@ -124,14 +97,13 @@ impl<'a> Config<'a> {
         let host_path = parameters
             .strings("host_path")?
             .ok_or_else(|| invalid("parameter `host_path` is required"))?;
-        let length = Axis::parse("length_axis", parameters.required_string("length_axis")?)?;
-        let height = Axis::parse("height_axis", parameters.required_string("height_axis")?)?;
-        if length == height {
-            return Err(invalid("`length_axis` and `height_axis` must differ"));
-        }
+        let axes = FaceAxes::parse(
+            parameters.required_string("length_axis")?,
+            parameters.required_string("height_axis")?,
+        )?;
         let web = match parameters.string("zone")? {
             None | Some("section") => false,
-            Some("web") if height == Axis::ProfileY => true,
+            Some("web") if axes.height == Axis::ProfileY => true,
             Some("web") => {
                 return Err(invalid(
                     "`zone` `web` lies between the flanges, across `profile-y`: it needs \
@@ -149,12 +121,12 @@ impl<'a> Config<'a> {
             host_selector: parameters
                 .selector("host_selector")?
                 .unwrap_or(&Selector::All),
-            length,
-            height,
+            axes,
             end_distance: distance(&parameters, "end_distance")?,
             edge_distance: distance(&parameters, "edge_distance")?,
             web,
             spacing: distance(&parameters, "opening_spacing")?,
+            supports: SupportConfig::parse(&parameters)?,
         })
     }
 }
@@ -165,7 +137,7 @@ impl RuleCapability for OpeningZone {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
+        let mut parameters = vec![
             ParameterDescriptor::required("host_path", ParameterType::StringList),
             ParameterDescriptor::optional("host_selector", ParameterType::Selector),
             ParameterDescriptor::required("length_axis", ParameterType::String),
@@ -174,7 +146,9 @@ impl RuleCapability for OpeningZone {
             ParameterDescriptor::optional("edge_distance", ParameterType::Quantity),
             ParameterDescriptor::optional("zone", ParameterType::String),
             ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
-        ]
+        ];
+        parameters.extend(SupportConfig::parameters());
+        parameters
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -190,6 +164,10 @@ impl RuleCapability for OpeningZone {
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let openings = Population::of(context, &rule.selector);
         let hosts = Population::of(context, config.host_selector);
+        let support_population = config
+            .supports
+            .as_ref()
+            .map(|supports| Population::of(context, supports.selector));
         let mut judge = Judge {
             context,
             rule,
@@ -197,6 +175,10 @@ impl RuleCapability for OpeningZone {
             hosts: &hosts,
             bodies: BTreeMap::new(),
             placed: BTreeMap::new(),
+            supports: support_population
+                .as_ref()
+                .zip(config.supports.as_ref())
+                .map(|(population, config)| Supports::new(context, config, population)),
         };
         // Every opening that may be selected is placed, so spacing sees the
         // undecided ones too.
@@ -216,84 +198,13 @@ impl RuleCapability for OpeningZone {
     }
 }
 
-/// A host's face: its section frame, extrusion and bounds.
-struct Host {
-    origin: Vector,
-    axes: [Vector; 3],
-    /// Bounds along `Extrusion`, `ProfileX`, `ProfileY`.
-    bounds: [(f64, f64); 3],
-    /// The part of `ProfileY` between the flanges, where the family has one.
-    web: Option<(f64, f64)>,
-    family: String,
-    evidence: Vec<Evidence>,
-}
-
-impl Host {
-    fn axis(&self, axis: Axis) -> (Vector, (f64, f64)) {
-        let index = match axis {
-            Axis::Extrusion => 0,
-            Axis::ProfileX => 1,
-            Axis::ProfileY => 2,
-        };
-        (self.axes[index], self.bounds[index])
-    }
-}
-
-/// An opening's section outline, centred on its position.
-#[derive(Clone, Copy)]
-enum Shape {
-    Rectangle {
-        half_x: f64,
-        half_y: f64,
-    },
-    Rounded {
-        half_x: f64,
-        half_y: f64,
-        radius: f64,
-    },
-    Circle {
-        radius: f64,
-    },
-    Ellipse {
-        semi_x: f64,
-        semi_y: f64,
-    },
-}
-
-impl Shape {
-    /// The furthest the outline reaches along `(p, q)` in its own frame.
-    fn support(self, p: f64, q: f64) -> f64 {
-        match self {
-            Self::Rectangle { half_x, half_y } => half_x * p.abs() + half_y * q.abs(),
-            Self::Rounded {
-                half_x,
-                half_y,
-                radius,
-            } => (half_x - radius) * p.abs() + (half_y - radius) * q.abs() + radius * p.hypot(q),
-            Self::Circle { radius } => radius * p.hypot(q),
-            Self::Ellipse { semi_x, semi_y } => (semi_x * p).hypot(semi_y * q),
-        }
-    }
-}
-
-/// A section frame in world coordinates and the straight extrusion from it.
-struct Swept {
-    origin: Vector,
-    x: Vector,
-    y: Vector,
-    /// The placement's Z axis, normal to the profile plane.
-    normal: Vector,
-    direction: Vector,
-    depth: f64,
-}
-
 /// An opening placed in its host's face.
 struct Placed {
     host: ObjectId,
     /// Extents along the length and height axes, from the host's section
     /// origin.
-    length: (f64, f64),
-    height: (f64, f64),
+    length: Span,
+    height: Span,
     /// Whether the face projection is exactly the extents' rectangle.
     exact: bool,
     evidence: Vec<Evidence>,
@@ -307,273 +218,82 @@ struct Judge<'r, 'c> {
     rule: &'r CompiledRule,
     config: &'r Config<'r>,
     hosts: &'r Population,
-    bodies: BTreeMap<ObjectId, Result<std::rc::Rc<Host>, Unavailable>>,
+    bodies: BTreeMap<ObjectId, Result<Rc<Host>, Unavailable>>,
     placed: BTreeMap<ObjectId, Placement>,
+    supports: Option<Supports<'r, 'c>>,
 }
 
-/// Reads a straight extrusion of one item and its section frame.
-fn swept(body: &mut BodyFacts<'_>, role: &str) -> Result<Swept, Unavailable> {
-    let incomplete = |message: String| (NotEvaluatedReason::IncompleteEvidence, message);
-    match body.integer("Count")? {
-        None => return Err(incomplete(format!("the {role} has no body"))),
-        Some(1) => {}
-        Some(count) => {
-            return Err(incomplete(format!(
-                "the {role}'s body has {count} items; one straight extrusion is needed"
-            )));
-        }
+/// The one host `traversal` reaches from `object` among `hosts`, `None`
+/// when it reaches none.
+pub(crate) fn host_of(
+    context: &RuleContext<'_>,
+    traversal: &Traversal<'_>,
+    hosts: &Population,
+    object: &Object,
+) -> Result<(Option<ObjectId>, Vec<Evidence>), Unavailable> {
+    let universe: Vec<&Object> = context
+        .project
+        .objects()
+        .filter(|candidate| hosts.contains(&candidate.id))
+        .collect();
+    let (reached, evidence) = traversal.related(context, &object.id, &universe)?;
+    if let Some(undecided) = reached.iter().find(|id| !hosts.matched.contains(*id)) {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("whether {undecided} is a checked host is undecided"),
+        ));
     }
-    let kind = body.text("Kind")?.unwrap_or_else(|| "unstated".to_owned());
-    if kind != "extrusion" {
-        return Err(incomplete(format!(
-            "the {role}'s body is a `{kind}`, not a straight extrusion"
-        )));
-    }
-    let origin = body.point("Placement.Origin")?;
-    let x = body.vector("Placement.XAxis")?;
-    let y = body.vector("Placement.YAxis")?;
-    let normal = body.vector("Placement.ZAxis")?;
-    let offset_x = body.length("Profile.PositionX")?.unwrap_or(0.0);
-    let offset_y = body.length("Profile.PositionY")?.unwrap_or(0.0);
-    let angle = body.angle("Profile.PositionAngle")?.unwrap_or(0.0);
-    let (sin, cos) = angle.sin_cos();
-    Ok(Swept {
-        origin: along(origin, x, offset_x, y, offset_y),
-        x: along([0.0; 3], x, cos, y, sin),
-        y: along([0.0; 3], x, -sin, y, cos),
-        normal,
-        direction: body.vector("Extrusion.Direction")?,
-        depth: body.required_length("Extrusion.Depth")?,
-    })
-}
-
-fn required(body: &mut BodyFacts<'_>, name: &str) -> Result<f64, Unavailable> {
-    body.required_length(&format!("Profile.{name}"))
-}
-
-/// Half extents of a host section and the part of its height between the
-/// flanges.
-type Section = ((f64, f64), Option<(f64, f64)>);
-
-/// Half extents and the web of a host section, centred on its position.
-fn host_section(body: &mut BodyFacts<'_>, family: &str) -> Result<Section, Unavailable> {
-    let flanged = |body: &mut BodyFacts<'_>, width: &str, thickness: &str| {
-        let half_depth = required(body, "OverallDepth").or_else(|_| required(body, "Depth"))? / 2.0;
-        let flange = required(body, thickness)?;
-        Ok::<_, Unavailable>((
-            (required(body, width)? / 2.0, half_depth),
-            Some((-half_depth + flange, half_depth - flange)),
-        ))
-    };
-    Ok(match family {
-        "rectangle" | "rounded-rectangle" | "rectangle-hollow" => (
-            (required(body, "XDim")? / 2.0, required(body, "YDim")? / 2.0),
-            None,
-        ),
-        "circle" | "circle-hollow" => {
-            let radius = required(body, "Radius")?;
-            ((radius, radius), None)
-        }
-        "ellipse" => (
-            (required(body, "SemiAxis1")?, required(body, "SemiAxis2")?),
-            None,
-        ),
-        "i-shape" => flanged(body, "OverallWidth", "FlangeThickness")?,
-        "u-shape" => flanged(body, "FlangeWidth", "FlangeThickness")?,
-        "c-shape" => flanged(body, "Width", "WallThickness")?,
-        "z-shape" => {
-            let half_depth = required(body, "Depth")? / 2.0;
-            let flange = required(body, "FlangeThickness")?;
-            let width = 2.0 * required(body, "FlangeWidth")? - required(body, "WebThickness")?;
-            (
-                (width / 2.0, half_depth),
-                Some((-half_depth + flange, half_depth - flange)),
-            )
-        }
-        "t-shape" => {
-            let half_depth = required(body, "Depth")? / 2.0;
-            let flange = required(body, "FlangeThickness")?;
-            (
-                (required(body, "FlangeWidth")? / 2.0, half_depth),
-                Some((-half_depth, half_depth - flange)),
-            )
-        }
-        "l-shape" => (
-            (
-                required(body, "Width")? / 2.0,
-                required(body, "Depth")? / 2.0,
+    match reached.as_slice() {
+        [] => Ok((None, evidence)),
+        [host] => Ok((Some(host.clone()), evidence)),
+        several => Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "it has {} hosts ({}); an opening belongs to one",
+                several.len(),
+                list(several)
             ),
-            None,
-        ),
-        "asymmetric-i-shape" => {
-            let half_depth = required(body, "OverallDepth")? / 2.0;
-            let width = required(body, "BottomFlangeWidth")?.max(required(body, "TopFlangeWidth")?);
-            let bottom = required(body, "BottomFlangeThickness")?;
-            let top = required(body, "TopFlangeThickness")?;
-            (
-                (width / 2.0, half_depth),
-                Some((-half_depth + bottom, half_depth - top)),
-            )
-        }
-        other => {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("the host's `{other}` profile states no outline to bound it by"),
-            ));
-        }
-    })
+        )),
+    }
 }
 
-fn opening_shape(body: &mut BodyFacts<'_>, family: &str) -> Result<Shape, Unavailable> {
-    Ok(match family {
-        "rectangle" | "rectangle-hollow" => Shape::Rectangle {
-            half_x: required(body, "XDim")? / 2.0,
-            half_y: required(body, "YDim")? / 2.0,
-        },
-        "rounded-rectangle" => Shape::Rounded {
-            half_x: required(body, "XDim")? / 2.0,
-            half_y: required(body, "YDim")? / 2.0,
-            radius: required(body, "RoundingRadius")?,
-        },
-        "circle" | "circle-hollow" => Shape::Circle {
-            radius: required(body, "Radius")?,
-        },
-        "ellipse" => Shape::Ellipse {
-            semi_x: required(body, "SemiAxis1")?,
-            semi_y: required(body, "SemiAxis2")?,
-        },
-        other => {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("the opening's `{other}` profile has no outline its extent is known for"),
-            ));
-        }
-    })
+pub(crate) fn list(ids: &[ObjectId]) -> String {
+    ids.iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl Judge<'_, '_> {
-    fn host_body(&mut self, host: &ObjectId) -> Result<std::rc::Rc<Host>, Unavailable> {
+    fn host_body(&mut self, host: &ObjectId) -> Result<Rc<Host>, Unavailable> {
         if let Some(known) = self.bodies.get(host) {
             return known.clone();
         }
-        let read = self.read_host(host).map(std::rc::Rc::new);
+        let read = read_host(self.context, host).map(Rc::new);
         self.bodies.insert(host.clone(), read.clone());
         read
     }
 
-    fn read_host(&self, id: &ObjectId) -> Result<Host, Unavailable> {
-        let object = self
-            .context
-            .project
-            .object(id)
-            .ok_or_else(|| invalid(format!("host {id} is not in the project")))?;
-        let mut body = BodyFacts::of(self.context, object)?;
-        let host = (|| {
-            let swept = swept(&mut body, "host")?;
-            if !parallel(swept.direction, swept.normal) {
-                return Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    "the host is extruded obliquely to its profile".to_owned(),
-                ));
-            }
-            let family = body
-                .text("Profile.Type")?
-                .unwrap_or_else(|| "unstated".to_owned());
-            let ((half_x, half_y), web) = host_section(&mut body, &family)?;
-            Ok(Host {
-                origin: swept.origin,
-                axes: [swept.direction, swept.x, swept.y],
-                bounds: [(0.0, swept.depth), (-half_x, half_x), (-half_y, half_y)],
-                web,
-                family,
-                evidence: Vec::new(),
-            })
-        })();
-        match host {
-            Ok(mut host) => {
-                host.evidence = body.into_evidence();
-                Ok(host)
-            }
-            Err((reason, message)) => Err((reason, format!("host {id}: {message}"))),
-        }
-    }
-
-    /// The opening's checked host, `None` when it has none.
-    fn host_of(&self, opening: &Object) -> Result<(Option<ObjectId>, Vec<Evidence>), Unavailable> {
-        let universe: Vec<&Object> = self
-            .context
-            .project
-            .objects()
-            .filter(|object| self.hosts.contains(&object.id))
-            .collect();
-        let (reached, evidence) =
-            self.config
-                .hosts
-                .related(self.context, &opening.id, &universe)?;
-        if let Some(undecided) = reached.iter().find(|id| !self.hosts.matched.contains(*id)) {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("whether {undecided} is a checked host is undecided"),
-            ));
-        }
-        match reached.as_slice() {
-            [] => Ok((None, evidence)),
-            [host] => Ok((Some(host.clone()), evidence)),
-            several => Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "it has {} hosts ({}); an opening belongs to one",
-                    several.len(),
-                    several
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            )),
-        }
-    }
-
     fn place(&mut self, opening: &Object) -> Placement {
-        let (host, mut evidence) = self.host_of(opening)?;
+        let (host, mut evidence) = host_of(self.context, &self.config.hosts, self.hosts, opening)?;
         let Some(host) = host else {
             return Ok(None);
         };
         let face = self.host_body(&host)?;
-        let mut body = BodyFacts::of(self.context, opening)?;
-        let swept = swept(&mut body, "opening")?;
-        let family = body
-            .text("Profile.Type")?
-            .unwrap_or_else(|| "unstated".to_owned());
-        let shape = opening_shape(&mut body, &family)?;
-        let extent = |axis: Axis| {
-            let (w, _) = face.axis(axis);
-            let centre = dot(w, minus(swept.origin, face.origin));
-            let reach = shape.support(dot(w, swept.x), dot(w, swept.y));
-            let sweep = swept.depth * dot(w, swept.direction);
-            (
-                centre - reach + sweep.min(0.0),
-                centre + reach + sweep.max(0.0),
-            )
-        };
-        let (length_axis, _) = face.axis(self.config.length);
-        let (height_axis, _) = face.axis(self.config.height);
-        let through = [Axis::Extrusion, Axis::ProfileX, Axis::ProfileY]
-            .into_iter()
-            .find(|axis| *axis != self.config.length && *axis != self.config.height)
-            .map(|axis| face.axis(axis).0)
-            .unwrap_or_default();
-        let aligned = |a: Vector| parallel(a, length_axis) || parallel(a, height_axis);
-        let exact = matches!(shape, Shape::Rectangle { .. })
-            && aligned(swept.x)
-            && aligned(swept.y)
-            && parallel(swept.direction, through);
-        evidence.extend(body.into_evidence());
+        let solid = Solid::opening(self.context, opening)?;
+        let (length_axis, _) = face.axis(self.config.axes.length);
+        let (height_axis, _) = face.axis(self.config.axes.height);
+        let (through, _) = face.axis(self.config.axes.through());
+        let exact =
+            solid.aligned_rectangle(length_axis, height_axis) && solid.direction_along(through);
+        let length = solid.extent(face.origin, length_axis).outer;
+        let height = solid.extent(face.origin, height_axis).outer;
+        evidence.extend(solid.evidence);
         evidence.extend(face.evidence.iter().cloned());
         Ok(Some(Placed {
             host,
-            length: extent(self.config.length),
-            height: extent(self.config.height),
+            length,
+            height,
             exact,
             evidence,
         }))
@@ -606,13 +326,13 @@ impl Judge<'_, '_> {
             }
         };
         // Placing the opening read its host.
-        let Some(Ok(host)) = self.bodies.get(&placed.host) else {
+        let Some(Ok(host)) = self.bodies.get(&placed.host).cloned() else {
             return;
         };
         let mut findings = Vec::new();
-        let (_, length_bounds) = host.axis(self.config.length);
-        let (_, height_bounds) = host.axis(self.config.height);
-        let beyond = |extent: (f64, f64), bounds: (f64, f64)| {
+        let (_, length_bounds) = host.axis(self.config.axes.length);
+        let (_, height_bounds) = host.axis(self.config.axes.height);
+        let beyond = |extent: Span, bounds: Span| {
             extent.0 < bounds.0 - ROUNDING || extent.1 > bounds.1 + ROUNDING
         };
         let outside_length = beyond(placed.length, length_bounds);
@@ -653,8 +373,24 @@ impl Judge<'_, '_> {
                 ));
             }
         }
-        if !outside_height && let Err((reason, message)) = self.edges(host, placed, &mut findings) {
+        if !outside_height && let Err((reason, message)) = self.edges(&host, placed, &mut findings)
+        {
             evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
+        }
+        if let Some(supports) = &self.supports {
+            let face = Opening {
+                host: &placed.host,
+                length: placed.length,
+                height: placed.height,
+                exact: placed.exact,
+            };
+            for (message, evidence, related) in
+                supports.judge(&opening.id, &face, &host, self.config.axes, evaluation)
+            {
+                let mut cited = placed.evidence.clone();
+                cited.extend(evidence);
+                evaluation.push_finding(self.finding(opening, placed, message, &cited, &related));
+            }
         }
         self.spacing(opening, placed, openings, findings, evaluation);
     }
@@ -682,7 +418,7 @@ impl Judge<'_, '_> {
             })?;
             (web, "the flanges")
         } else {
-            (host.axis(self.config.height).1, "an edge")
+            (host.axis(self.config.axes.height).1, "an edge")
         };
         let clear = (placed.height.0 - zone.0).min(zone.1 - placed.height.1);
         if clear < required - ROUNDING {
@@ -728,7 +464,6 @@ impl Judge<'_, '_> {
                         continue;
                     }
                 };
-                let gap = |a: (f64, f64), b: (f64, f64)| (b.0 - a.1).max(a.0 - b.1).max(0.0);
                 let clear = gap(placed.length, neighbour.length)
                     .hypot(gap(placed.height, neighbour.height));
                 if clear >= required - ROUNDING {
@@ -748,11 +483,7 @@ impl Judge<'_, '_> {
                         format!(
                             "its clear distance to {} may be under {}: their outlines or \
                              hosts are not known exactly",
-                            unknown
-                                .iter()
-                                .map(ToString::to_string)
-                                .collect::<Vec<_>>()
-                                .join(", "),
+                            list(&unknown),
                             metres(required)
                         ),
                     );

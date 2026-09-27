@@ -6,6 +6,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Openings beside supports, and gross against net wall area.** (#65)
+  `opening-zone` finds each host's supports and connecting members by
+  `support_path` (with IFC, `IfcRelConnectsElements:either`, which takes
+  in `IfcRelConnectsPathElements`) and by contact through the proximity
+  service (`support_gap`), among the `support_selector` objects, and
+  requires each opening to keep `support_distance` from every support
+  along the host and `support_clearance` from every footprint in its
+  face. Supports are read from the body set: a straight extrusion of any
+  bounded section, its extent along a face axis an inner and an outer
+  interval, the same where its outline is exact. A finding needs the
+  inner one, a pass the outer; a position in between, an unreadable
+  support, or an undecided contact, relationship or selection that may
+  come too close leaves the opening not evaluated. The new
+  `opening-area` requires the openings a wall hosts to cover its stated
+  gross side area less its net side area (`gross_area`, `net_area`, such
+  as `Qto_WallBaseQuantities`) within `area_tolerance`, each counting the
+  exact area of its section where it crosses the wall's middle plane. A
+  wall with an opening it cannot place, openings that may overlap, or
+  only one area stated is not evaluated; one stating neither is not
+  checked. Openings of free outlines are not placed yet. **Breaking:**
+  definitions bound to `opening-zone` must declare the new optional
+  parameters `support_path`, `support_selector`, `support_gap`,
+  `support_distance` and `support_clearance`.
 - **Openings in members and walls.** (#65) `opening-zone` places each
   opening in its host's face (`host_path`, `host_selector`; the face
   spanned by `length_axis` and `height_axis`, two of `extrusion`,
@@ -17,9 +40,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   rounded rectangle, circle or ellipse swept along its extrusion; a host
   must be a straight extrusion of a bounded section. Spacing is exact
   between axis-aligned rectangles extruded through the host and otherwise
-  only passes. Anything it cannot place soundly is not evaluated. Distances
-  from supports and connecting beams, and gross against net wall area, are
-  not decided yet.
+  only passes. Anything it cannot place soundly is not evaluated.
 - **Allowed profiles.** (#64) `allowed-profile` requires each member's
   body to be one swept solid whose profile is a row of a `profiles` table:
   its family (`type`), its name where the row states one (`HEA*`), and

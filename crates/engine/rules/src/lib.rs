@@ -41,6 +41,7 @@ mod manual_issue;
 mod name_sequence;
 mod numbering_consistency;
 mod object_count;
+mod opening_area;
 mod opening_spaces;
 mod opening_zone;
 mod orientation;
@@ -111,6 +112,7 @@ pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
 pub use numbering_consistency::NumberingConsistency;
 pub use object_count::ObjectCount;
+pub use opening_area::OpeningArea;
 pub use opening_spaces::OpeningSpaces;
 pub use opening_zone::OpeningZone;
 pub use parking_bay::ParkingBay;
@@ -210,4 +212,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(SpaceBoundaryCoverage))
         .and_then(|registry| registry.register(AllowedProfile))
         .and_then(|registry| registry.register(OpeningZone))
+        .and_then(|registry| registry.register(OpeningArea))
 }

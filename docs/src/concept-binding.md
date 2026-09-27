@@ -55,8 +55,9 @@ property concept: a package declares `space-number` with the IFC4 name
 the IFC4 name `TotalThickness` and references it in `axioval:material`, or
 `section-depth` with the IFC4 name `Profile.OverallDepth` and references it
 in `axioval:body`. Capabilities that read these sets themselves (the
-presentation layer in `clash`, the body in `allowed-profile` and
-`opening-zone`) ask by the engine's own names, never through binding.
+presentation layer in `clash`, the body in `allowed-profile`,
+`opening-zone` and `opening-area`) ask by the engine's own names, never
+through binding.
 
 ## Name patterns
 

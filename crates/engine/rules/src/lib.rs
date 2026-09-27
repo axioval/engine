@@ -27,6 +27,7 @@ mod horizontal_guard;
 mod keyed_limit;
 mod level_spacing;
 mod light_area;
+mod light_well;
 mod manual_issue;
 mod name_sequence;
 mod numbering_consistency;
@@ -42,6 +43,7 @@ mod property_predicate;
 mod property_requirements;
 mod property_rules;
 mod property_value;
+mod recess_width;
 mod relative_count;
 mod same_container;
 mod selection;
@@ -86,6 +88,7 @@ pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
 pub use horizontal_guard::HorizontalGuard;
 pub use keyed_limit::KeyedLimit;
 pub use level_spacing::LevelSpacing;
+pub use light_well::LightWell;
 pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
 pub use numbering_consistency::NumberingConsistency;
@@ -100,6 +103,7 @@ pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyRequired,
 };
 pub use property_value::PropertyValueConstraint;
+pub use recess_width::RecessWidth;
 pub use relative_count::RelativeCount;
 pub use same_container::SameContainer;
 pub use shelf_capacity::ShelfCapacity;
@@ -133,6 +137,8 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PropertyComparison))
         .and_then(|registry| registry.register(PropertyRequirements))
         .and_then(|registry| registry.register(ShelfCapacity))
+        .and_then(|registry| registry.register(RecessWidth))
+        .and_then(|registry| registry.register(LightWell))
         .and_then(|registry| registry.register(SlabContact))
         .and_then(|registry| registry.register(ExternalWallValidation))
         .and_then(|registry| registry.register(SpaceValidation))

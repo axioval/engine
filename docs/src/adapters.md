@@ -312,7 +312,21 @@ which fixes each axis within `asin(e / (L − e))` for a longer half extent
 `L`. A rectangle along the coordinate axes turns nothing and is taken from
 the extreme coordinates, exact whenever their differences and sums are. A
 tessellated footprint widens every half extent and the centre by its chord
-deviation and has an unproven orientation.
+deviation and has an unproven orientation. This is the adapter's one
+rectangle: sections and the shelf layout below use the same computation.
+
+Recesses are the pockets between a footprint's outer boundary and its convex
+hull. On a simple counter-clockwise ring the ring vertices on the hull's
+boundary follow the hull in order, and between two consecutive ones any
+further vertices bound a pocket; its mouth joins the two, its depth is the
+farthest pocket vertex from the mouth's line. Pockets shallower than 1e-6 m
+are the overlay's grid rounding (axiolid/kernel#173), not recesses; holes are
+not walked, and a tessellated footprint refuses. A section is the overlay
+intersection of the footprints, its sides those of its least-area rectangle,
+bounded as above and stated only when the orientation is unique: a section
+whose least-area orientation is tied may have other sides and is refused. A
+tessellated member refuses too, since the short side of a least-area
+rectangle does not grow monotonically with the shape.
 
 `AxiolidPlanAreaService` measures the area outside bands with the same
 overlay: each band is the convex hull of its two footprints' vertices,
@@ -322,6 +336,25 @@ coordinates) inwards for the surely covered part and outwards for the
 possibly covered one, which also keeps a cut clear of the overlay's
 tolerance around hull vertices; the area outside lies between the two. A
 band bounded by a tessellated footprint is refused.
+
+`AxiolidLinearQuantityService` lays shelving bands on a space's footprint
+less the clearance of each requested door or opening: its footprint grown by
+the rule's clearance plus its plan gap to the space, bracketed between a
+circumscribed 16-gon (for the lower bound) and an inscribed one (for the
+upper). A bodiless opening is placed through the void the host gives
+(`with_opening_void`); without one, or with a door more than 1 m from the
+space, the measurement refuses. Bands run along both axes of the footprint's
+and every door's least-area rectangle, anchored at either wall, and the
+longest layout counts; an axis only proposes a layout, so a tied or unproven
+orientation proposes its axes too. Each band is found exactly between
+breakpoints (a boundary vertex in its strip, an edge crossing its long
+sides); the lower bound tests cross-sections grown by a margin (1e-6 m plus
+the chord deviation) and shrinks the runs, the upper bound the reverse, so
+the interval holds the layout's length on the true geometry. 1 mm of each
+cross-section may touch the boundary: without that construction tolerance a
+band against a wall rounded a hair off the layout's axis would be one point
+long. The clear height is the mesh's vertical span, widened by twice the
+chord deviation.
 
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation

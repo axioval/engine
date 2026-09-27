@@ -7,6 +7,7 @@ use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidPlanSpanService};
 use axioval_engine::{
     CentrePlacement, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
+    RectangleOrientation,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -239,4 +240,189 @@ fn the_handle_refuses_one_object_twice() {
             .measure_span(&id("west"), &id("east"), PlanSpan::Centres)
             .is_ok()
     );
+}
+
+/// A closed, outward-oriented prism over a convex counter-clockwise plan
+/// polygon, from `z0` to `z1`.
+fn prism(corners: &[(f64, f64)], z0: f64, z1: f64) -> TriMesh {
+    let n = u32::try_from(corners.len()).unwrap();
+    let mut points: Vec<Point3> = corners
+        .iter()
+        .map(|(x, y)| Point3::new(*x, *y, z0))
+        .collect();
+    points.extend(corners.iter().map(|(x, y)| Point3::new(*x, *y, z1)));
+    let mut indices = Vec::new();
+    for i in 1..n - 1 {
+        indices.extend([0, i + 1, i]);
+        indices.extend([n, n + i, n + i + 1]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, n + j, i, n + j, n + i]);
+    }
+    TriMesh::new(points, indices)
+}
+
+/// A 10 × 6 m space with a niche 2 m wide and 1.5 m deep in its south side.
+fn niche() -> TriMesh {
+    axiolid_mesh::compose(&[
+        cuboid(0.0, 0.0, 4.0, 6.0, 3.0),
+        cuboid(6.0, 0.0, 10.0, 6.0, 3.0),
+        cuboid(4.0, 1.5, 6.0, 6.0, 3.0),
+    ])
+}
+
+#[test]
+fn a_niche_is_a_recess_as_wide_as_its_mouth_and_as_deep_as_its_back() {
+    let spans = service(AxiolidGeometry::new().with_mesh(id("room"), niche()));
+    let found = spans.measure_recesses(&id("room")).unwrap();
+    assert_eq!(found.object(), &id("room"));
+    assert_eq!(found.recesses().len(), 1, "{found:?}");
+    let recess = &found.recesses()[0];
+    assert!(recess.width().is_exact() && recess.depth().is_exact());
+    assert!((recess.width().lower_metres() - 2.0).abs() < LENGTH);
+    assert!((recess.depth().lower_metres() - 1.5).abs() < LENGTH);
+    let mut mouth = recess.mouth();
+    mouth.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    assert!((mouth[0][0] - 4.0).abs() < LENGTH && mouth[0][1].abs() < LENGTH);
+    assert!((mouth[1][0] - 6.0).abs() < LENGTH && mouth[1][1].abs() < LENGTH);
+}
+
+#[test]
+fn a_convex_space_has_no_recess_and_an_l_shape_one_across_its_corner() {
+    let spans = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), cuboid(0.0, 0.0, 4.0, 3.0, 3.0))
+            .with_mesh(
+                id("ell"),
+                axiolid_mesh::compose(&[
+                    cuboid(0.0, 0.0, 6.0, 2.0, 3.0),
+                    cuboid(0.0, 2.0, 2.0, 5.0, 3.0),
+                ]),
+            ),
+    );
+    assert!(
+        spans
+            .measure_recesses(&id("room"))
+            .unwrap()
+            .recesses()
+            .is_empty()
+    );
+    let ell = spans.measure_recesses(&id("ell")).unwrap();
+    assert_eq!(ell.recesses().len(), 1);
+    // The mouth joins (6, 2) and (2, 5): 5 m; the inner corner (2, 2) lies
+    // 12 / 5 m behind it.
+    let recess = &ell.recesses()[0];
+    assert!((recess.width().lower_metres() - 5.0).abs() < LENGTH);
+    assert!((recess.depth().lower_metres() - 2.4).abs() < LENGTH);
+}
+
+#[test]
+fn a_tessellated_or_bodiless_space_has_no_measured_recesses() {
+    let spans = service(
+        AxiolidGeometry::new()
+            .with_tessellated_mesh(id("curved"), niche(), 0.01)
+            .with_no_body(id("zone")),
+    );
+    assert!(matches!(
+        spans.measure_recesses(&id("curved")),
+        Err(PlanSpanError::Unavailable(_))
+    ));
+    assert!(matches!(
+        spans.measure_recesses(&id("zone")),
+        Err(PlanSpanError::Unavailable(_))
+    ));
+}
+
+/// Three spaces stacked into a shaft: the clear section is what all three
+/// share.
+#[test]
+fn a_stack_shares_the_intersection_of_its_footprints() {
+    let spans = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("ground"), cuboid(0.0, 0.0, 4.0, 3.0, 3.0))
+            .with_mesh(id("first"), cuboid(1.0, 0.0, 5.0, 3.0, 3.0))
+            .with_mesh(id("second"), cuboid(1.0, 0.5, 4.0, 3.5, 3.0))
+            .with_mesh(id("apart"), cuboid(10.0, 0.0, 12.0, 2.0, 3.0)),
+    );
+    let section = spans
+        .measure_section(&[id("ground"), id("first"), id("second")])
+        .unwrap();
+    assert!(section.evidence().exact);
+    assert!((section.area_lower() - 7.5).abs() < 1e-6);
+    let width = section.width().unwrap();
+    let length = section.length().unwrap();
+    assert!((width.lower_metres() - 2.5).abs() < LENGTH, "{width:?}");
+    assert!((length.upper_metres() - 3.0).abs() < LENGTH, "{length:?}");
+
+    let empty = spans.measure_section(&[id("ground"), id("apart")]).unwrap();
+    assert!(empty.area_upper() == 0.0 && empty.width().is_none());
+}
+
+/// The width is the short side of the minimum-area rectangle, whatever the
+/// section's orientation.
+#[test]
+fn a_rotated_section_is_as_wide_as_its_short_side() {
+    let (c, s) = (30.0_f64.to_radians().cos(), 30.0_f64.to_radians().sin());
+    let corner = |x: f64, y: f64| (x * c - y * s, x * s + y * c);
+    let rotated = prism(
+        &[
+            corner(0.0, 0.0),
+            corner(4.0, 0.0),
+            corner(4.0, 2.0),
+            corner(0.0, 2.0),
+        ],
+        0.0,
+        3.0,
+    );
+    let spans = service(AxiolidGeometry::new().with_mesh(id("shaft"), rotated));
+    let section = spans.measure_section(&[id("shaft")]).unwrap();
+    let width = section.width().unwrap();
+    assert!(width.lower_metres() <= 2.0 + LENGTH && width.upper_metres() >= 2.0 - LENGTH);
+    assert!(width.upper_metres() - width.lower_metres() < 1e-9);
+    assert!((section.area_lower() - 8.0).abs() < 1e-6);
+}
+
+/// A hexagon whose least-area rectangles tie: 4 × 4 along the axes and
+/// `8/√2 × 4/√2` along the diagonals. The widths differ, so the section has
+/// no known width and is refused, as its footprint's rectangle is tied.
+#[test]
+fn a_section_whose_least_area_rectangles_tie_is_refused() {
+    let hexagon = prism(
+        &[
+            (2.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (-2.0, 0.0),
+            (-2.0, -2.0),
+            (0.0, -2.0),
+        ],
+        0.0,
+        3.0,
+    );
+    let spans = service(AxiolidGeometry::new().with_mesh(id("shaft"), hexagon));
+    assert_eq!(
+        spans.measure_rectangle(&id("shaft")).unwrap().orientation(),
+        RectangleOrientation::Tied
+    );
+    assert!(matches!(
+        spans.measure_section(&[id("shaft")]),
+        Err(PlanSpanError::Unavailable(_))
+    ));
+}
+
+#[test]
+fn a_section_through_a_curved_or_bodiless_space_is_refused() {
+    let spans = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("ground"), cuboid(0.0, 0.0, 4.0, 3.0, 3.0))
+            .with_tessellated_mesh(id("curved"), cuboid(0.0, 0.0, 4.0, 3.0, 3.0), 0.01)
+            .with_no_body(id("zone")),
+    );
+    for other in ["curved", "zone"] {
+        assert!(matches!(
+            spans.measure_section(&[id("ground"), id(other)]),
+            Err(PlanSpanError::Unavailable(_))
+        ));
+    }
 }

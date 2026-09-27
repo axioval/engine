@@ -16,6 +16,8 @@ use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
 use axioval_rules::ShelfCapacity;
 
+mod common;
+
 fn source() -> SourceId {
     SourceId::new("cad", "model").unwrap()
 }
@@ -59,6 +61,22 @@ fn rule_with(minimum: ParameterValue) -> CompiledRule {
                 "door_clearance_metres".into(),
                 ParameterValue::Number { value: 0.9 },
             ),
+            // Doors reach their spaces through `bounds`, forward.
+            (
+                "access_path".into(),
+                ParameterValue::StringList {
+                    value: vec!["bounds:forward".into()],
+                },
+            ),
+            (
+                "door_selector".into(),
+                ParameterValue::Selector {
+                    value: Box::new(Selector::EntityType {
+                        object_type: "door".into(),
+                        include_subtypes: false,
+                    }),
+                },
+            ),
         ]),
     }
 }
@@ -82,11 +100,13 @@ impl LinearQuantityService for StubQuantities {
     ) -> Result<LinearQuantityEvidence, LinearQuantityError> {
         match &self.0 {
             Answer::Failed(error) => Err(*error),
+            // A room tall enough for the 2 m shelving.
             Answer::Measured(interval) => LinearQuantityEvidence::try_new(
                 request.clone(),
                 *interval,
                 Evidence::exact(source(), "shelf:run"),
-            ),
+            )
+            .map(|evidence| evidence.with_clear_height(LinearInterval::exact(3.0).unwrap())),
             Answer::Inexact(interval) => LinearQuantityEvidence::try_new(
                 request.clone(),
                 *interval,
@@ -247,6 +267,155 @@ fn impossible_shelf_geometry_is_an_invalid_declaration() {
         &rule,
     );
     assert!(outcome.findings().is_empty());
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+/// Answers every request with a length that falls by 10 m per door, a
+/// clear height, and records the doors it was asked about.
+struct Doors {
+    height: LinearInterval,
+    asked: std::sync::Mutex<Vec<Vec<ObjectId>>>,
+}
+
+impl LinearQuantityService for Doors {
+    fn measure_linear_quantity(
+        &self,
+        request: &LinearQuantityRequest,
+    ) -> Result<LinearQuantityEvidence, LinearQuantityError> {
+        self.asked.lock().unwrap().push(request.doors().to_vec());
+        let count = f64::from(u32::try_from(request.doors().len()).unwrap());
+        LinearQuantityEvidence::try_new(
+            request.clone(),
+            LinearInterval::exact(20.0 - 10.0 * count)?,
+            Evidence::exact(source(), "shelf:run"),
+        )
+        .map(|evidence| evidence.with_clear_height(self.height))
+    }
+}
+
+/// Space `store` with door `d1` on its boundary and door `d2` elsewhere.
+fn store() -> common::Model {
+    common::Model::default()
+        .object("store", "space")
+        .object("other", "space")
+        .object("d1", "door")
+        .object("d2", "door")
+        .edge("bounds", "d1", "store")
+        .edge("bounds", "d2", "other")
+}
+
+fn with_doors(
+    model: common::Model,
+    height: LinearInterval,
+) -> (axioval_engine::CapabilityEvaluation, Arc<Doors>) {
+    let service = Arc::new(Doors {
+        height,
+        asked: std::sync::Mutex::new(Vec::new()),
+    });
+    let registered = service.clone();
+    let mut rule = rule();
+    rule.selector = Selector::EntityType {
+        object_type: "space".into(),
+        include_subtypes: false,
+    };
+    let outcome = model.evaluate_with(&ShelfCapacity, &rule, move |services| {
+        services
+            .register(LinearQuantityServiceHandle::new(registered))
+            .unwrap();
+    });
+    (outcome, service)
+}
+
+/// The doors `access_path` reaches a space from travel in its request; a
+/// door of another space does not.
+#[test]
+fn the_doors_of_each_space_are_sent_with_its_request() {
+    let (outcome, service) = with_doors(store(), LinearInterval::exact(3.0).unwrap());
+    let asked = service.asked.lock().unwrap().clone();
+    assert_eq!(asked, vec![vec![common::id("d2")], vec![common::id("d1")]]);
+    assert!(outcome.findings().is_empty(), "{:?}", outcome.findings());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// A shortfall relates the doors whose clearances were taken out.
+#[test]
+fn a_shortfall_relates_the_doors_of_the_space() {
+    let model = store().edge("bounds", "d2", "store");
+    let (outcome, _) = with_doors(model, LinearInterval::exact(3.0).unwrap());
+    assert_eq!(outcome.findings().len(), 1, "{:?}", outcome.findings());
+    let finding = &outcome.findings()[0];
+    assert!(finding.message.contains("0.000 below required 10.000"));
+    assert_eq!(finding.related, vec![common::id("d1"), common::id("d2")]);
+}
+
+/// A space under the shelving's top elevation is too low for it, whatever
+/// length fits.
+#[test]
+fn a_space_lower_than_the_shelving_is_too_low() {
+    let (outcome, _) = with_doors(store(), LinearInterval::exact(1.5).unwrap());
+    let too_low: Vec<_> = outcome
+        .findings()
+        .iter()
+        .filter(|finding| {
+            finding
+                .message
+                .starts_with("space too low for the shelving")
+        })
+        .collect();
+    assert_eq!(too_low.len(), 2, "{:?}", outcome.findings());
+    assert!(too_low[0].message.contains("clear height 1.5 m"));
+
+    // A height that may or may not reach 2 m decides nothing.
+    let (outcome, _) = with_doors(store(), LinearInterval::try_new(1.9, 2.1).unwrap());
+    assert!(outcome.findings().is_empty());
+    assert_eq!(outcome.not_evaluated_outcomes().len(), 2);
+}
+
+/// A door whose spaces cannot be read might open into any space, so no
+/// space's shelving is measured without it.
+#[test]
+fn a_door_with_unreadable_spaces_leaves_every_space_not_evaluated() {
+    let mut rule = rule();
+    rule.selector = Selector::EntityType {
+        object_type: "space".into(),
+        include_subtypes: false,
+    };
+    rule.parameters.insert(
+        "access_path".into(),
+        ParameterValue::StringList {
+            value: vec!["unknown:forward".into()],
+        },
+    );
+    let outcome = store().evaluate_with(&ShelfCapacity, &rule, |services| {
+        services
+            .register(LinearQuantityServiceHandle::new(Arc::new(Doors {
+                height: LinearInterval::exact(3.0).unwrap(),
+                asked: std::sync::Mutex::new(Vec::new()),
+            })))
+            .unwrap();
+    });
+    assert!(outcome.findings().is_empty());
+    assert_eq!(common::unevaluated(&outcome).len(), 2);
+    assert!(
+        outcome
+            .not_evaluated_outcomes()
+            .iter()
+            .all(|outcome| outcome.reason() == &NotEvaluatedReason::IncompleteEvidence)
+    );
+}
+
+/// Without `access_path` nothing says where the doors are.
+#[test]
+fn a_rule_without_an_access_path_is_an_invalid_declaration() {
+    let mut rule = rule();
+    rule.parameters.remove("access_path");
+    let outcome = evaluate_with(
+        Answer::Measured(LinearInterval::exact(12.0).unwrap()),
+        &rule,
+    );
     assert_eq!(
         outcome.not_evaluated_outcomes()[0].reason(),
         &NotEvaluatedReason::InvalidDeclaration

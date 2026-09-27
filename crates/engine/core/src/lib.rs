@@ -541,8 +541,8 @@ pub use pairwise::{
 };
 pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand};
 pub use plan_span::{
-    CentrePlacement, PlanCentre, PlanLength, PlanRectangle, PlanSpan, PlanSpanError,
-    PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
+    CentrePlacement, PlanCentre, PlanLength, PlanRecess, PlanRecesses, PlanRectangle, PlanSection,
+    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
 };
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,

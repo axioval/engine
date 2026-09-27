@@ -341,6 +341,36 @@ impl AccessIndex {
         (elements, evidence)
     }
 
+    /// Every door and opening that reaches `space`, with its relationship
+    /// evidence; `Err` when an element whose spaces cannot be read, or whose
+    /// type is undecided and that reaches the space, might be one more.
+    pub(crate) fn reaching(
+        &self,
+        space: &ObjectId,
+    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), String> {
+        let mut elements = Vec::new();
+        let mut evidence = Vec::new();
+        for element in &self.elements {
+            let member = element.member(AccessType::Any);
+            if member == Member::No {
+                continue;
+            }
+            let reach = element.reach.as_ref().map_err(Clone::clone)?;
+            if !reach.spaces.iter().any(|(reached, _)| reached == space) {
+                continue;
+            }
+            if member == Member::Undecided {
+                return Err(format!(
+                    "whether {} is a door or opening is undecided",
+                    element.id
+                ));
+            }
+            elements.push(element.id.clone());
+            evidence.extend(reach.evidence.iter().cloned());
+        }
+        Ok((elements, evidence))
+    }
+
     /// The spaces `space` has direct access to through an element of the
     /// `access` type.
     pub(crate) fn partners(&self, space: &ObjectId, access: AccessType) -> Partners {

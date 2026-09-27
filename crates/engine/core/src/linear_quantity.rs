@@ -96,6 +96,15 @@ impl LinearInterval {
 /// measured, so they belong to the measurement request. The minimum a space
 /// must provide is policy and stays with the capability. Keeping the two apart
 /// is what stops a threshold drifting back behind the evidence seam.
+///
+/// The arrangement is a layout of parallel bands: each band is
+/// `depth_metres` deep and served by an aisle `horizontal_spacing_metres`
+/// wide along one of its long sides. Shelves are stacked in tiers every
+/// `vertical_spacing_metres` from `bottom_elevation_metres` up to
+/// `top_elevation_metres`. In front of every door or opening of the space a
+/// clearance `door_clearance_metres` deep carries no shelving; a door's swing
+/// is not known, so the clearance reaches that far from the opening in
+/// every direction.
 #[derive(Clone, Copy, Debug, PartialEq)]
 // The shared `_metres` suffix is the point: every field is a length in the
 // same unit, and naming it on each one is what stops a millimetre value being
@@ -179,21 +188,45 @@ impl LinearQuantityKind {
 }
 
 /// A request for one linear measurement of one object.
+///
+/// The doors and openings of the scope are the rule's selection, carried in
+/// the request: which elements give access to a space is semantic, so the
+/// capability reads it and the adapter only places each one's clearance.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LinearQuantityRequest {
     scope: ObjectId,
     kind: LinearQuantityKind,
+    doors: Vec<ObjectId>,
 }
 
 impl LinearQuantityRequest {
+    /// A request for a scope without doors or openings.
     pub fn new(scope: ObjectId, kind: LinearQuantityKind) -> Self {
-        Self { scope, kind }
+        Self {
+            scope,
+            kind,
+            doors: Vec::new(),
+        }
+    }
+    /// The doors and openings whose clearances carry no shelving, kept
+    /// sorted and once each.
+    #[must_use]
+    pub fn with_doors(mut self, doors: impl IntoIterator<Item = ObjectId>) -> Self {
+        let mut doors: Vec<ObjectId> = doors.into_iter().collect();
+        doors.sort();
+        doors.dedup();
+        self.doors = doors;
+        self
     }
     pub fn scope(&self) -> &ObjectId {
         &self.scope
     }
     pub fn kind(&self) -> LinearQuantityKind {
         self.kind
+    }
+    /// The doors and openings of the scope, in identity order.
+    pub fn doors(&self) -> &[ObjectId] {
+        &self.doors
     }
 }
 
@@ -202,6 +235,7 @@ impl LinearQuantityRequest {
 pub struct LinearQuantityEvidence {
     request: LinearQuantityRequest,
     measured: LinearInterval,
+    clear_height: Option<LinearInterval>,
     evidence: Evidence,
 }
 
@@ -219,8 +253,20 @@ impl LinearQuantityEvidence {
         Ok(Self {
             request,
             measured,
+            clear_height: None,
             evidence,
         })
+    }
+    /// The clear height of the scope the shelving stands in, so a rule can
+    /// tell a room too low for the arrangement from one too small.
+    #[must_use]
+    pub fn with_clear_height(mut self, clear_height: LinearInterval) -> Self {
+        self.clear_height = Some(clear_height);
+        self
+    }
+    /// The measured clear height, when the adapter reports one.
+    pub fn clear_height(&self) -> Option<LinearInterval> {
+        self.clear_height
     }
     pub fn request(&self) -> &LinearQuantityRequest {
         &self.request
@@ -262,6 +308,17 @@ impl LinearQuantityServiceHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn doors_are_carried_sorted_and_once() {
+        let source = axioval_ir::SourceId::new("cad", "m").unwrap();
+        let id = |local: &str| ObjectId::new(source.clone(), local).unwrap();
+        let shelf = ShelfGeometry::try_new(0.3, 1.0, 0.4, 0.0, 2.0, 0.9).unwrap();
+        let request =
+            LinearQuantityRequest::new(id("room"), LinearQuantityKind::ShelfRunningLength(shelf))
+                .with_doors([id("d2"), id("d1"), id("d2")]);
+        assert_eq!(request.doors(), [id("d1"), id("d2")]);
+    }
 
     #[test]
     fn interval_rejects_inverted_negative_and_non_finite_bounds() {

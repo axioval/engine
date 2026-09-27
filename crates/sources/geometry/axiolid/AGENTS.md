@@ -3,8 +3,7 @@
 Geometry evidence for any source, measured with the Axiolid kernel.
 
 - `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
-  by every service here. Doorway counts live here too: a mesh does not say which
-  wall segments are openings, so the host declares them.
+  by every service here.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
@@ -47,8 +46,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   bounding object without a mesh refuses the derivation. Declarations are
   plain `ObjectId` data, so this stays a geometry adapter.
 - `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point. A declared group (`with_group`) measures the union of its members; a member without a body, an unmeasured member or undecided membership refuses, never zero. An uncovered area brackets the grown cover between an inscribed and a circumscribed 16-gon (growth by `r − d` and `r + d` for a tessellated cover), handed to the overlay as fan triangles: its ring check refuses a vertex on the line through a non-adjacent edge. Never use the 0.3.0 overlay's `Region::dilate`, whose side of the true offset is unstated.
-- `src/plan_span.rs` also answers `measure_rectangle` with the overlay's exact calipers (`minimum_area_rectangle`, axiolid-overlay ≥ 0.3.2): a tessellated footprint is `Unproven`, several least-area orientations `Tied`; the kernel's `error` widens centre and half extents and turns the axes by `asin(e / (L − e))`, except along the coordinate axes, where the extremes are recomputed exactly. `src/plan_area.rs` measures `measure_outside_bands` as the overlay of the subject with band hulls clipped to their shared stretch, the clip moved by `CUT_MARGIN` inwards (sure) and outwards (possible); a tessellated band member refuses.
-- `src/plan_span.rs` implements `PlanSpanService` over the plan-area service's footprints: longest diagonal and farthest span from convex-hull vertices (exact because distance is convex), centres from the overlay centroid. Tessellation widens a diagonal by `2d`, a farthest span by both deviations, a centre by `b·(R + d)/(A − b)`; a footprint no larger than its band has no bounded centre and refuses. A located centre is `Inside`/`Outside` only when farther from every footprint edge than its radius plus the chord deviation; otherwise `Undecided`.
+- `src/plan_span.rs` also answers `measure_rectangle` with the overlay's exact calipers (`minimum_area_rectangle`, axiolid-overlay ≥ 0.3.2): a tessellated footprint is `Unproven`, several least-area orientations `Tied`; the kernel's `error` widens centre and half extents and turns the axes by `asin(e / (L − e))`, except along the coordinate axes, where the extremes are recomputed exactly. That computation is `least_area_rectangle`, the crate's one rectangle: sections and the shelf layout call it too, never `minimum_area_rectangle` directly. `src/plan_area.rs` measures `measure_outside_bands` as the overlay of the subject with band hulls clipped to their shared stretch, the clip moved by `CUT_MARGIN` inwards (sure) and outwards (possible); a tessellated band member refuses.
+- `src/plan_span.rs` implements `PlanSpanService` over the plan-area service's footprints: longest diagonal and farthest span from convex-hull vertices (exact because distance is convex), centres from the overlay centroid. Tessellation widens a diagonal by `2d`, a farthest span by both deviations, a centre by `b·(R + d)/(A − b)`; a footprint no larger than its band has no bounded centre and refuses. A located centre is `Inside`/`Outside` only when farther from every footprint edge than its radius plus the chord deviation; otherwise `Undecided`. Recesses are the pockets between the outer ring and its convex hull, walked between consecutive ring vertices on the hull's boundary (vertices on a hull edge count, or a niche's mouth would be the whole wall); pockets under `RECESS_RESOLUTION` are grid rounding. Sections intersect the footprints and take their sides from `least_area_rectangle` (`Enclosing::sides`), which answers only for a unique orientation: a tied section refuses. Both refuse tessellated footprints: never bound a least-area rectangle's short side by a chord band, it is not monotone.
 - `src/derived_relationships.rs` implements `DerivedRelationshipService`:
   element to containing (or nearest) space, opening to the spaces a probe
   first enters on each side, space to larger covering spaces. Spaces and
@@ -99,10 +98,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   report the bracket for a body with a radius.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
-- `src/linear_quantity.rs` implements `LinearQuantityService`, measuring shelf
-  running length from footprint, real ceiling height and doorways. It reports an
-  upper bound, never an exact value, because the footprint bounds a
-  non-rectangular room rather than describing it.
+- `src/linear_quantity.rs` implements `LinearQuantityService`: parallel shelf
+  bands on the footprint less each requested door's clearance (its footprint
+  grown by clearance plus plan gap, circumscribed for the lower bound, inscribed
+  for the upper), along the footprint's and every door's least-area
+  rectangle (`least_area_rectangle`; any orientation, tied or unproven, only
+  proposes a layout), anchored at either wall; the longest layout counts. Doors are the
+  request's (the rule's selection), never host-declared; a bodiless opening
+  needs its void. Bands are measured exactly between breakpoints; keep the
+  lower bound's grown cross-sections and shrunk runs, and the upper bound's
+  reverse, or the interval stops holding the true length. Keep the 1 mm
+  `CONSTRUCTION_TOLERANCE` above twice the margin: without it a band against a
+  wall starts on the boundary and the lower bound loses every wall band.
 - `src/contact.rs` implements the engine's `ContactService` over `axiolid-mesh`,
   `axiolid-measure` and `axiolid-overlay`. Hosts register a `TriMesh` per
   `ObjectId`; no IFC types appear anywhere in this crate.
@@ -154,8 +161,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   error when a tessellation could change the answer: the subject itself, or a
   part whose enclosing extent (mesh box grown by its chord deviation) comes
   within the measurement's reach (`AxiolidGeometry::tessellated_near`). A
-  curved part elsewhere in the model blocks nothing. Shelf length is an upper
-  bound that only grows with the room, so it widens by the deviation instead.
+  curved part elsewhere in the model blocks nothing. Shelf length is an
+  interval, so a curved space widens it by its chord deviation instead.
   `tests/fidelity.rs` pins each case and fails without the guards.
 - Proximity queries go through an `axiolid-spatial` BVH per body; skips are
   exact (box gap never exceeds triangle gap), and the unit tests compare the
@@ -197,9 +204,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-route` 0.3.2 (`distance_map`, `farthest_point`),
-which is not published yet: build against the kernel sources with a local,
-untracked `[patch.crates-io]` until it is. `mesh_distance` is published there, but certified exact-B-rep distance
+0.3.0, except `axiolid-overlay` 0.3.2 (`minimum_area_rectangle`, the
+Minkowski and dilation family), `axiolid-route` 0.3.2 (`distance_map`,
+`farthest_point`) and `axiolid-inspect` 0.3.1 (volumes). `mesh_distance` is published there, but certified exact-B-rep distance
 (`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
 branch. Check the registry source, not the kernel checkout, before relying on
 an API.

@@ -26,7 +26,6 @@ use axioval_ir::ObjectId;
 #[derive(Clone, Debug, Default)]
 pub struct AxiolidGeometry {
     meshes: BTreeMap<ObjectId, TriMesh>,
-    doorways: BTreeMap<ObjectId, usize>,
     chord_deviations: BTreeMap<ObjectId, f64>,
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
@@ -203,26 +202,6 @@ impl AxiolidGeometry {
                     .enclosing_extent(object)
                     .is_none_or(|extent| extent_gap(probe, &extent, plan) <= reach)
         })
-    }
-
-    /// Records how many doorways interrupt an object's perimeter.
-    ///
-    /// Openings are a semantic fact: a mesh of a room does not say which of
-    /// its wall segments are doors. The host supplies the count rather than
-    /// this adapter guessing at it from geometry alone.
-    #[must_use]
-    pub fn with_doorways(mut self, object: ObjectId, count: usize) -> Self {
-        self.doorways.insert(object, count);
-        self
-    }
-
-    /// Doorways recorded for an object, or `None` when the host declared none.
-    ///
-    /// An undeclared count is unknown, not zero: reading it as zero would
-    /// credit wall that a door interrupts.
-    #[must_use]
-    pub fn doorway_count(&self, object: &ObjectId) -> Option<usize> {
-        self.doorways.get(object).copied()
     }
 
     /// Every registered object and its mesh, in identity order.

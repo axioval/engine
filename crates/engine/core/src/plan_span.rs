@@ -12,6 +12,12 @@
 //! wall's direction. The rectangle says how well its orientation is known;
 //! a square has no long axis, and a tessellated footprint no proven one.
 //!
+//! It measures the recesses of a footprint (the pockets between it and its
+//! convex hull) and the section several footprints share, such as the
+//! clear shaft of a light well. A section's width and length are the sides
+//! of the same least-area rectangle, and only when its orientation is
+//! unique: another rectangle of least area may have other sides.
+//!
 //! A length is an interval. A mesh that is the object's exact shape measures
 //! exactly; one that approximates curved faces measures within a bound the
 //! adapter derives from its declared chord deviation, and a rule must decide
@@ -442,6 +448,191 @@ impl PlanRectangle {
     }
 }
 
+/// One recess of a footprint: a pocket between the footprint and its convex
+/// hull, closed by one hull edge, its mouth.
+///
+/// The width is the mouth's length; the depth the farthest the pocket
+/// reaches from the mouth's line. Both are [`PlanLength`]s, so a rule judges
+/// them as intervals.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanRecess {
+    mouth: [[f64; 2]; 2],
+    width: PlanLength,
+    depth: PlanLength,
+}
+
+impl PlanRecess {
+    /// A recess whose mouth runs from `mouth[0]` to `mouth[1]`.
+    pub fn try_new(
+        mouth: [[f64; 2]; 2],
+        width: PlanLength,
+        depth: PlanLength,
+    ) -> Result<Self, PlanSpanError> {
+        if !mouth.iter().flatten().all(|value| value.is_finite()) {
+            return Err(PlanSpanError::InvalidMeasurement);
+        }
+        Ok(Self {
+            mouth,
+            width,
+            depth,
+        })
+    }
+
+    /// The mouth's ends, in canonical metres, as a reviewer locates the
+    /// recess.
+    #[must_use]
+    pub fn mouth(&self) -> [[f64; 2]; 2] {
+        self.mouth
+    }
+
+    /// The width of the mouth.
+    #[must_use]
+    pub fn width(&self) -> &PlanLength {
+        &self.width
+    }
+
+    /// How deep the recess reaches behind its mouth.
+    #[must_use]
+    pub fn depth(&self) -> &PlanLength {
+        &self.depth
+    }
+}
+
+/// Every recess of one object's footprint.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanRecesses {
+    object: ObjectId,
+    recesses: Vec<PlanRecess>,
+    evidence: Evidence,
+}
+
+impl PlanRecesses {
+    /// The recesses of `object`, in the order the adapter walks its
+    /// boundary; none for a convex footprint.
+    pub fn try_new(
+        object: ObjectId,
+        recesses: Vec<PlanRecess>,
+        evidence: Evidence,
+    ) -> Result<Self, PlanSpanError> {
+        if evidence.locator.trim().is_empty() {
+            return Err(PlanSpanError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            recesses,
+            evidence,
+        })
+    }
+
+    /// The object whose footprint was measured.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The recesses found.
+    #[must_use]
+    pub fn recesses(&self) -> &[PlanRecess] {
+        &self.recesses
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// The plan section several objects share: the intersection of their
+/// footprints, such as the clear shaft of spaces stacked into a light well.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanSection {
+    objects: Vec<ObjectId>,
+    area: (f64, f64),
+    sides: Option<(PlanLength, PlanLength)>,
+    evidence: Evidence,
+}
+
+impl PlanSection {
+    /// The section of `objects`, with an area in `[lower, upper]` square
+    /// metres and, unless it is empty, the short and long sides of its
+    /// least-area enclosing rectangle, the one [`PlanRectangle`] describes
+    /// for a footprint. A service states sides only for a unique
+    /// orientation ([`RectangleOrientation::Unique`]) and refuses a section
+    /// whose least-area rectangles may have other sides.
+    ///
+    /// The evidence is exact exactly when the area is a point. An empty
+    /// section (upper bound zero) has no rectangle, and any other has one.
+    pub fn try_new(
+        objects: Vec<ObjectId>,
+        area: (f64, f64),
+        sides: Option<(PlanLength, PlanLength)>,
+        evidence: Evidence,
+    ) -> Result<Self, PlanSpanError> {
+        let (lower, upper) = area;
+        if !lower.is_finite() || !upper.is_finite() || lower < 0.0 || lower > upper {
+            return Err(PlanSpanError::InvalidMeasurement);
+        }
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(PlanSpanError::InexactEvidence);
+        }
+        if (upper == 0.0) != sides.is_none() {
+            return Err(PlanSpanError::InvalidMeasurement);
+        }
+        if let Some((short, long)) = &sides
+            && short.lower_metres() > long.upper_metres()
+        {
+            return Err(PlanSpanError::InvalidMeasurement);
+        }
+        Ok(Self {
+            objects,
+            area,
+            sides,
+            evidence,
+        })
+    }
+
+    /// The objects whose footprints were intersected.
+    #[must_use]
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.objects
+    }
+
+    /// Smallest the section's area can be, in square metres.
+    #[must_use]
+    pub fn area_lower(&self) -> f64 {
+        self.area.0
+    }
+
+    /// Largest the section's area can be, in square metres.
+    #[must_use]
+    pub fn area_upper(&self) -> f64 {
+        self.area.1
+    }
+
+    /// The short side of the section's minimum-area enclosing rectangle,
+    /// its width; `None` for an empty section.
+    #[must_use]
+    pub fn width(&self) -> Option<&PlanLength> {
+        self.sides.as_ref().map(|(short, _)| short)
+    }
+
+    /// The long side of the section's minimum-area enclosing rectangle;
+    /// `None` for an empty section.
+    #[must_use]
+    pub fn length(&self) -> Option<&PlanLength> {
+        self.sides.as_ref().map(|(_, long)| long)
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures plan spans of model objects.
 pub trait PlanSpanService: Send + Sync + 'static {
     /// The longest distance between two points of `object`'s footprint: its
@@ -471,6 +662,23 @@ pub trait PlanSpanService: Send + Sync + 'static {
     fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
         Err(PlanSpanError::Unavailable(format!(
             "this plan-span service does not orient the footprint of {object}"
+        )))
+    }
+    /// The recesses of `object`'s footprint: the pockets between its outer
+    /// boundary and its convex hull. A service that does not find recesses
+    /// refuses by default, never answering that there are none.
+    fn measure_recesses(&self, object: &ObjectId) -> Result<PlanRecesses, PlanSpanError> {
+        Err(PlanSpanError::Unavailable(format!(
+            "this plan-span service does not measure the recesses of {object}"
+        )))
+    }
+    /// The plan section `objects` share: the intersection of their
+    /// footprints, its area and its minimum-area rectangle. A service that
+    /// does not intersect footprints refuses by default.
+    fn measure_section(&self, objects: &[ObjectId]) -> Result<PlanSection, PlanSpanError> {
+        Err(PlanSpanError::Unavailable(format!(
+            "this plan-span service does not measure the section of {} objects",
+            objects.len()
         )))
     }
 }
@@ -532,6 +740,42 @@ impl PlanSpanServiceHandle {
         }
         Ok(rectangle)
     }
+
+    /// The recesses of `object`'s footprint; recesses naming another object
+    /// are refused.
+    pub fn measure_recesses(&self, object: &ObjectId) -> Result<PlanRecesses, PlanSpanError> {
+        let recesses = self.0.measure_recesses(object)?;
+        if recesses.object() != object {
+            return Err(PlanSpanError::Unavailable(format!(
+                "the recesses of {} were returned for {object}",
+                recesses.object()
+            )));
+        }
+        Ok(recesses)
+    }
+
+    /// The section `objects` share. No object is refused, and so is a
+    /// section naming other objects than those asked for.
+    pub fn measure_section(&self, objects: &[ObjectId]) -> Result<PlanSection, PlanSpanError> {
+        let mut asked = objects.to_vec();
+        asked.sort();
+        asked.dedup();
+        if asked.is_empty() {
+            return Err(PlanSpanError::Unavailable(
+                "a section needs at least one object".into(),
+            ));
+        }
+        let section = self.0.measure_section(&asked)?;
+        let mut answered = section.objects().to_vec();
+        answered.sort();
+        answered.dedup();
+        if answered != asked {
+            return Err(PlanSpanError::Unavailable(
+                "a section of other objects was returned".into(),
+            ));
+        }
+        Ok(section)
+    }
 }
 
 #[cfg(test)]
@@ -539,8 +783,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        CentrePlacement, PlanCentre, PlanLength, PlanRectangle, PlanSpan, PlanSpanError,
-        PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
+        CentrePlacement, PlanCentre, PlanLength, PlanRecess, PlanRecesses, PlanRectangle,
+        PlanSection, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
+        RectangleOrientation,
     };
     use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -685,6 +930,77 @@ mod tests {
             handle.measure_rectangle(&id("a")),
             Err(PlanSpanError::Unavailable(_))
         ));
+    }
+
+    #[test]
+    fn recesses_and_sections_are_bound_to_their_request_and_refused_by_default() {
+        struct Wrong;
+        impl PlanSpanService for Wrong {
+            fn measure_diameter(&self, _: &ObjectId) -> Result<PlanLength, PlanSpanError> {
+                Err(PlanSpanError::Unavailable("unused".into()))
+            }
+            fn measure_span(
+                &self,
+                _: &ObjectId,
+                _: &ObjectId,
+                _: PlanSpan,
+            ) -> Result<PlanLength, PlanSpanError> {
+                Err(PlanSpanError::Unavailable("unused".into()))
+            }
+            fn measure_recesses(&self, _: &ObjectId) -> Result<PlanRecesses, PlanSpanError> {
+                PlanRecesses::try_new(id("a"), Vec::new(), exact())
+            }
+            fn measure_section(&self, _: &[ObjectId]) -> Result<PlanSection, PlanSpanError> {
+                PlanSection::try_new(vec![id("a")], (0.0, 0.0), None, exact())
+            }
+        }
+        let handle = PlanSpanServiceHandle::new(Arc::new(Wrong));
+        assert!(handle.measure_recesses(&id("a")).is_ok());
+        assert!(handle.measure_recesses(&id("b")).is_err());
+        assert!(handle.measure_section(&[id("a"), id("a")]).is_ok());
+        assert!(handle.measure_section(&[id("a"), id("b")]).is_err());
+        assert!(handle.measure_section(&[]).is_err());
+        let silent = PlanSpanServiceHandle::new(Arc::new(Silent));
+        assert!(silent.measure_recesses(&id("a")).is_err());
+        assert!(silent.measure_section(&[id("a")]).is_err());
+    }
+
+    #[test]
+    fn a_section_has_a_rectangle_exactly_when_it_is_not_empty() {
+        let side = |value| PlanLength::try_new(value, value, exact()).unwrap();
+        let section = |area: (f64, f64), sides| {
+            PlanSection::try_new(vec![id("a")], area, sides, {
+                let mut evidence = exact();
+                #[allow(clippy::float_cmp)]
+                {
+                    evidence.exact = area.0 == area.1;
+                }
+                evidence
+            })
+        };
+        assert!(section((0.0, 0.0), None).is_ok());
+        assert!(section((4.0, 4.0), Some((side(2.0), side(2.0)))).is_ok());
+        assert!(section((1.0, 2.0), Some((side(1.0), side(2.0)))).is_ok());
+        assert_eq!(
+            section((4.0, 4.0), None),
+            Err(PlanSpanError::InvalidMeasurement)
+        );
+        assert_eq!(
+            section((0.0, 0.0), Some((side(1.0), side(1.0)))),
+            Err(PlanSpanError::InvalidMeasurement)
+        );
+        assert_eq!(
+            section((4.0, 4.0), Some((side(3.0), side(2.0)))),
+            Err(PlanSpanError::InvalidMeasurement)
+        );
+        assert_eq!(
+            PlanSection::try_new(vec![id("a")], (1.0, 2.0), None, exact()),
+            Err(PlanSpanError::InexactEvidence)
+        );
+        assert_eq!(
+            PlanRecess::try_new([[f64::NAN, 0.0], [1.0, 0.0]], side(1.0), side(1.0)),
+            Err(PlanSpanError::InvalidMeasurement)
+        );
     }
 
     #[test]

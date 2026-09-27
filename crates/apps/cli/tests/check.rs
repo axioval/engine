@@ -738,136 +738,6 @@ fn without_geometry_geometric_rules_are_not_evaluated_and_say_why() {
     assert!(result.get("geometry").is_none());
 }
 
-/// Two 4 m × 4 m × 3 m rooms. Room A (#40) is bounded by door #50 directly
-/// and by opening #51, which door #52 fills. Room B (#41) states no space
-/// boundary at all.
-fn rooms_with_doors() -> String {
-    let room = |first: u32, x: f64, global: &str| {
-        let [p, pos, profile, solid, shape, product, space] =
-            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
-        format!(
-            "#{p}=IFCCARTESIANPOINT(({x},0.));\n\
-             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
-             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},4.,4.);\n\
-             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
-             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
-             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
-             #{space}=IFCSPACE('{global}',$,$,$,$,#3,#{product},$,.ELEMENT.,$,$);\n"
-        )
-    };
-    format!(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
-         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
-         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
-         #3=IFCLOCALPLACEMENT($,#2);\n\
-         #4=IFCDIRECTION((0.,0.,1.));\n\
-         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
-         {}{}\
-         #50=IFCDOOR('0000000000000000000050',$,$,$,$,#3,$,$,2.,0.9,$,$,$);\n\
-         #51=IFCOPENINGELEMENT('0000000000000000000051',$,$,$,$,#3,$,$,.OPENING.);\n\
-         #52=IFCDOOR('0000000000000000000052',$,$,$,$,#3,$,$,2.,0.9,$,$,$);\n\
-         #53=IFCRELFILLSELEMENT('0000000000000000000053',$,$,$,#51,#52);\n\
-         #54=IFCRELSPACEBOUNDARY('0000000000000000000054',$,$,$,#16,#50,$,.PHYSICAL.,.INTERNAL.);\n\
-         #55=IFCRELSPACEBOUNDARY('0000000000000000000055',$,$,$,#16,#51,$,.PHYSICAL.,.INTERNAL.);\n\
-         ENDSEC;\nEND-ISO-10303-21;\n",
-        room(10, 2.0, "0000000000000000000016"),
-        room(20, 8.0, "0000000000000000000026"),
-    )
-}
-
-#[test]
-fn with_geometry_shelf_capacity_counts_doorways_from_space_boundaries() {
-    let case = Case::new("geometry-doorways");
-    let definitions = case.definitions(true);
-    let mut definitions: Value =
-        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
-    definitions["objectTypes"]["axioval:example.ifc.space"] = json!({
-        "id": "axioval:example.ifc.space",
-        "name": {"default": "Space", "translations": {}},
-        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IfcSpace"}],
-        "citations": [],
-    });
-    let names = [
-        "minimum_running_metres",
-        "shelf_depth_metres",
-        "horizontal_spacing_metres",
-        "vertical_spacing_metres",
-        "bottom_elevation_metres",
-        "top_elevation_metres",
-        "door_clearance_metres",
-    ];
-    let parameters: serde_json::Map<String, Value> = names
-        .iter()
-        .map(|id| {
-            (
-                (*id).to_owned(),
-                json!({"id": id, "name": {"default": id, "translations": {}},
-                       "kind": "number", "required": true, "allowedValues": [],
-                       "citations": []}),
-            )
-        })
-        .collect();
-    definitions["definitions"]["axioval:example.shelf"] = json!({
-        "id": "axioval:example.shelf",
-        "name": {"default": "Shelf capacity", "translations": {}},
-        "description": {"default": "Rooms hold enough shelving.", "translations": {}},
-        "capability": "axioval:capability.shelf-capacity",
-        "parameters": parameters,
-        "citations": [],
-        "tags": [],
-    });
-    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
-    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
-    let rule = &mut ruleset["root"]["rules"][0];
-    rule["id"] = json!("rooms-hold-shelving");
-    rule["definitionId"] = json!("axioval:example.shelf");
-    // 16 m of perimeter in five 0.4 m tiers holds 80 m. Each doorway takes
-    // 0.9 m of wall, so exactly two doorways leave 14 whole pitches (70 m);
-    // none or one would leave at least 75 m, which is not below the minimum.
-    let values = [75.0, 0.3, 1.0, 0.4, 0.0, 2.0, 0.9];
-    rule["parameters"] = names
-        .iter()
-        .zip(values)
-        .map(|(id, value)| ((*id).to_owned(), json!({"type": "number", "value": value})))
-        .collect::<serde_json::Map<_, _>>()
-        .into();
-    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
-        json!("axioval:example.ifc.space");
-    let model = case.write("model.ifc", &rooms_with_doors());
-    let definitions = case.write("definitions.json", &definitions.to_string());
-    let ruleset = case.write("ruleset.json", &ruleset.to_string());
-    let saved = case.path("result.json");
-    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
-        .arg("check")
-        .arg("--model")
-        .arg(model)
-        .arg("--definitions")
-        .arg(definitions)
-        .arg("--ruleset")
-        .arg(ruleset)
-        .args(["--geometry", "--report", saved.to_str().unwrap()])
-        .output()
-        .unwrap();
-    // A finding decides the exit status even though room B stays unmeasured.
-    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
-
-    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
-    let findings = result["report"]["findings"].as_array().unwrap();
-    assert_eq!(findings.len(), 1, "{result:#}");
-    assert_eq!(findings[0]["object_id"]["local_id"], "#16", "{result:#}");
-    let message = findings[0]["message"].as_str().unwrap();
-    assert!(
-        message.contains("70.000 below required 75.000"),
-        "{message}"
-    );
-    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
-    assert_eq!(not_evaluated.len(), 1, "{result:#}");
-    assert_eq!(
-        not_evaluated[0]["object_id"]["local_id"], "#26",
-        "{result:#}"
-    );
-}
-
 /// A 10 m × 10 m gross-area space #16 in zone #90 `Envelope`, with walls:
 /// #26 along the south edge declared internal, #36 across the middle declared
 /// external, #46 along the north edge declared external, and #56 along the
@@ -4707,4 +4577,328 @@ fn with_geometry_escape_routes_too_long_and_too_few_exits_are_found() {
             .is_none_or(Vec::is_empty),
         "{result:#}"
     );
+}
+
+/// An IFC4 file in metres around `body`, instances `#1` to `#8` taken.
+fn metre_model(body: &str) -> String {
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {body}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// A prism over the plan polygon `points` (counter-clockwise), from `z` up
+/// `height`, as instances `#first` to `#first + 8` and its corners from
+/// `#first + 10`. `GID`, `PL` and `REP` in `product` become its `GlobalId`,
+/// placement and shape; the product is `#first + 8`.
+fn plan_prism(first: u32, points: &[[f64; 2]], z: f64, height: f64, product: &str) -> String {
+    let [
+        origin,
+        frame,
+        placement,
+        polyline,
+        profile,
+        solid,
+        shape,
+        definition,
+        object,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(|offset| first + offset);
+    let mut text = String::new();
+    let mut corners = Vec::new();
+    for (index, [x, y]) in points.iter().chain(points.first()).enumerate() {
+        let corner = first + 10 + u32::try_from(index).unwrap();
+        writeln!(text, "#{corner}=IFCCARTESIANPOINT(({x:.3},{y:.3}));").unwrap();
+        corners.push(format!("#{corner}"));
+    }
+    write!(
+        text,
+        "#{origin}=IFCCARTESIANPOINT((0.,0.,{z:.3}));\n\
+         #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+         #{polyline}=IFCPOLYLINE(({}));\n\
+         #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{polyline});\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{height:.3});\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        corners.join(","),
+        product
+            .replace("GID", &format!("{object:022}"))
+            .replace("PL", &format!("#{placement}"))
+            .replace("REP", &format!("#{definition}")),
+    )
+    .unwrap();
+    text
+}
+
+/// A plan rectangle from `(x0, y0)` to `(x1, y1)`.
+fn rectangle(x0: f64, y0: f64, x1: f64, y1: f64) -> [[f64; 2]; 4] {
+    [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+}
+
+const SPACE: &str = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+
+/// Store room #18 (6 × 4 m, 3 m high) with door #78 (1 m wide) in its
+/// south wall, and store room #48 (6 × 4 m, 1.5 m high) without a door.
+fn store_rooms() -> String {
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    metre_model(&format!(
+        "{}{}{}",
+        plan_prism(10, &rectangle(0.0, 0.0, 6.0, 4.0), 0.0, 3.0, SPACE),
+        plan_prism(40, &rectangle(10.0, 0.0, 16.0, 4.0), 0.0, 1.5, SPACE),
+        plan_prism(70, &rectangle(2.5, -0.2, 3.5, 0.0), 0.0, 2.1, door),
+    ))
+}
+
+#[test]
+fn with_geometry_shelf_capacity_lays_bands_around_the_door_clearance() {
+    let case = Case::new("geometry-shelf-capacity");
+    let number = |value: f64| json!({"type": "number", "value": value});
+    let (output, result) = case.geometry_rule(
+        &store_rooms(),
+        &[("space", "IfcSpace"), ("door", "IfcDoor")],
+        "axioval:capability.shelf-capacity",
+        &registry_signature("axioval:capability.shelf-capacity"),
+        entity("space"),
+        json!({
+            "minimum_running_metres": number(80.0),
+            "shelf_depth_metres": number(0.5),
+            "horizontal_spacing_metres": number(1.0),
+            "vertical_spacing_metres": number(0.5),
+            "bottom_elevation_metres": number(0.0),
+            "top_elevation_metres": number(2.0),
+            "door_clearance_metres": number(1.0),
+            "access_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+            "door_selector": {"type": "selector", "value": entity("door")},
+            "space_selector": {"type": "selector", "value": entity("space")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #18: four 6 m bands less 3 m beside the door, in four tiers: 84 m.
+    // #48: four tiers do not fit under 1.5 m, and three hold 72 m.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert!(
+        findings.iter().all(|(space, _)| space == "#48"),
+        "{result:#}"
+    );
+    assert!(
+        findings.iter().any(|(_, message)| message
+            == "space too low for the shelving: clear height 1.5 m below the shelving's top \
+                elevation 2 m"),
+        "{result:#}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|(_, message)| message == "shelf running metres 72.000 below required 80.000"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// Space #18 (10 × 6 m) with a niche 2 m wide and 1.5 m deep in its south
+/// side; space #48 with one 1.5 m wide and 0.5 m deep.
+fn spaces_with_niches() -> String {
+    let niche = |x: f64, width: f64, depth: f64| {
+        vec![
+            [x, 0.0],
+            [x + 4.0, 0.0],
+            [x + 4.0, depth],
+            [x + 4.0 + width, depth],
+            [x + 4.0 + width, 0.0],
+            [x + 10.0, 0.0],
+            [x + 10.0, 6.0],
+            [x, 6.0],
+        ]
+    };
+    metre_model(&format!(
+        "{}{}",
+        plan_prism(10, &niche(0.0, 2.0, 1.5), 0.0, 3.0, SPACE),
+        plan_prism(40, &niche(20.0, 1.5, 0.5), 0.0, 3.0, SPACE),
+    ))
+}
+
+#[test]
+fn with_geometry_a_recess_too_narrow_for_its_depth_is_found() {
+    let case = Case::new("geometry-recess-width");
+    let number = |value: f64| json!({"type": "number", "value": value});
+    let (output, result) = case.geometry_rule(
+        &spaces_with_niches(),
+        &[("space", "IfcSpace")],
+        "axioval:capability.recess-width",
+        &registry_signature("axioval:capability.recess-width"),
+        entity("space"),
+        json!({
+            "requirements": {"type": "table", "value": [
+                {"maximum_depth_metres": number(1.0), "minimum_width_metres": number(1.0)},
+                {"minimum_depth_metres": number(1.0), "minimum_width_per_depth": number(1.5)},
+            ]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#18", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .ends_with("is 2 m wide and 1.5 m deep; row 1 requires at least 2.25 m"),
+        "{result:#}"
+    );
+}
+
+/// Light wells as zones of stacked 3 m storeys: #300 groups #18, #48 and
+/// #78 (3 × 3 m, the middle one shifted 0.5 m east), #310 groups #108 and
+/// #138 with a 1 m gap between them, and #320 groups #168 and #198, only
+/// 1.5 m wide.
+fn light_wells() -> String {
+    let space = |first: u32, x: f64, width: f64, z: f64| {
+        plan_prism(first, &rectangle(x, 0.0, x + width, 3.0), z, 3.0, SPACE)
+    };
+    let zone = |id: u32, name: &str, members: &[u32]| {
+        let members: Vec<String> = members.iter().map(|member| format!("#{member}")).collect();
+        format!(
+            "#{id}=IFCZONE('{id:022}',$,'{name}',$,$,$);\n\
+             #{}=IFCRELASSIGNSTOGROUP('{:022}',$,$,$,({}),$,#{id});\n",
+            id + 1,
+            id + 1,
+            members.join(",")
+        )
+    };
+    metre_model(&format!(
+        "{}{}{}{}{}{}{}{}{}{}{}",
+        space(10, 0.0, 3.0, 0.0),
+        space(40, 0.5, 3.0, 3.0),
+        space(70, 0.0, 3.0, 6.0),
+        space(100, 10.0, 3.0, 0.0),
+        space(130, 10.0, 3.0, 4.0),
+        space(160, 20.0, 1.5, 0.0),
+        space(190, 20.0, 1.5, 3.0),
+        zone(300, "W1", &[18, 48, 78]),
+        zone(310, "W2", &[108, 138]),
+        zone(320, "W3", &[168, 198]),
+        "",
+    ))
+}
+
+#[test]
+fn with_geometry_light_wells_are_checked_for_contiguity_area_and_width() {
+    let case = Case::new("geometry-light-well");
+    let number = |value: f64| json!({"type": "number", "value": value});
+    let (output, result) = case.geometry_rule(
+        &light_wells(),
+        &[("space", "IfcSpace"), ("zone", "IfcZone")],
+        "axioval:capability.light-well",
+        &registry_signature("axioval:capability.light-well"),
+        entity("zone"),
+        json!({
+            "member_path": {"type": "stringList", "value": ["IfcRelAssignsToGroup:forward"]},
+            "requirements": {"type": "table", "value": [
+                {"maximum_height_metres": number(10.0),
+                 "minimum_area_square_metres": number(6.0),
+                 "minimum_width_metres": number(2.0)},
+            ]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    let of = |zone: &str| -> Vec<&str> {
+        findings
+            .iter()
+            .filter(|(object, _)| object == zone)
+            .map(|(_, message)| message.as_str())
+            .collect()
+    };
+    // #300 shares a 2.5 × 3 m section over 9 m: 7.5 m², 2.5 m wide.
+    assert!(of("#300").is_empty(), "{result:#}");
+    let gap = of("#310");
+    assert_eq!(gap.len(), 1, "{result:#}");
+    assert!(
+        gap[0].contains("starts 1 m above the top of") && gap[0].ends_with("not contiguous"),
+        "{result:#}"
+    );
+    let narrow = of("#320");
+    assert_eq!(narrow.len(), 2, "{result:#}");
+    assert!(
+        narrow[0].starts_with("the well's section area is 4.5 m²; row 0 requires at least 6"),
+        "{result:#}"
+    );
+    assert!(
+        narrow[1].starts_with("the well's width is 1.5 m; row 0 requires at least 2"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// External wall #18 along the south edge and internal wall #48 along the
+/// north, each declaring `IsExternal`; component #78 stands against the
+/// external wall, component #108 against the internal one only.
+fn components_along_walls() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let proxy = "IFCBUILDINGELEMENTPROXY('GID',$,$,$,$,PL,REP,$,$)";
+    let external = |wall: u32, value: &str| {
+        let [single, set, rel] = [0, 1, 2].map(|offset| 400 + wall + offset);
+        format!(
+            "#{single}=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({value}),$);\n\
+             #{set}=IFCPROPERTYSET('{set:022}',$,'Pset_WallCommon',$,(#{single}));\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('{rel:022}',$,$,$,(#{wall}),#{set});\n"
+        )
+    };
+    metre_model(&format!(
+        "{}{}{}{}{}{}",
+        plan_prism(10, &rectangle(0.0, -0.3, 10.0, 0.0), 0.0, 3.0, wall),
+        plan_prism(40, &rectangle(0.0, 5.0, 10.0, 5.2), 0.0, 3.0, wall),
+        plan_prism(70, &rectangle(1.0, 0.0, 2.0, 0.6), 0.0, 1.0, proxy),
+        plan_prism(100, &rectangle(4.0, 4.4, 5.0, 5.0), 0.0, 1.0, proxy),
+        external(18, ".T."),
+        external(48, ".F."),
+    ))
+}
+
+/// Envelope adjacency is a `distance` rule: each selected component has a
+/// wall the model declares external within a tolerance in plan.
+#[test]
+fn with_geometry_a_component_away_from_every_external_wall_is_found() {
+    let case = Case::new("geometry-envelope-adjacency");
+    let external_walls = json!({"kind": "allOf", "operands": [
+        entity("wall"),
+        {"kind": "property", "propertySet": "axioval:example.ifc.pset-wall-common",
+         "property": "axioval:example.ifc.is-external", "operator": "equals",
+         "value": {"type": "boolean", "value": true}},
+    ]});
+    let (output, result) = case.geometry_rule(
+        &components_along_walls(),
+        &[("wall", "IfcWall"), ("proxy", "IfcBuildingElementProxy")],
+        "axioval:capability.distance",
+        &registry_signature("axioval:capability.distance"),
+        entity("proxy"),
+        json!({
+            "counterparts": {"type": "selector", "value": external_walls},
+            "mode": {"type": "string", "value": "nearest"},
+            "maximum_metres": {"type": "number", "value": 0.05},
+            "projection": {"type": "string", "value": "horizontal"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#108"], "{result:#}");
 }

@@ -41,22 +41,36 @@
 //! known: its orientation is unproven. Several orientations of least area
 //! (up to quarter turns) are tied.
 //!
+//! A section, the intersection of several exact footprints, takes its width
+//! and length from the same rectangle over its outer vertices, and only
+//! when its orientation is unique: another rectangle of least area may have
+//! other sides. A tessellated member refuses, since the short side of a
+//! least-area rectangle does not grow monotonically with the shape, so no
+//! chord band bounds it. Recesses are the pockets between a footprint's
+//! outer boundary and its convex hull, and a tessellated footprint refuses:
+//! its chords make and hide recesses.
+//!
 //! A centre lies inside its footprint when it lies inside the measured one
 //! farther from every boundary edge than the centre's own uncertainty plus
 //! the chord deviation, outside likewise, and undecided otherwise: a centre
 //! on the boundary of an exact footprint is undecided too.
 
 use axiolid_core::Point2;
-use axiolid_overlay::{Polygon, RectangleError, Ring, minimum_area_rectangle};
+use axiolid_overlay::{
+    FillRule, OverlayInput, OverlayOperation, Polygon, RectangleError, Ring,
+    minimum_area_rectangle, overlay,
+};
 use axioval_engine::{
-    CentrePlacement, PlanAreaError, PlanCentre, PlanLength, PlanRectangle, PlanSpan, PlanSpanError,
-    PlanSpanService, RectangleOrientation,
+    CentrePlacement, PlanAreaError, PlanCentre, PlanLength, PlanRecess, PlanRecesses,
+    PlanRectangle, PlanSection, PlanSpan, PlanSpanError, PlanSpanService, RectangleOrientation,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::plan_area::{AxiolidPlanAreaService, Footprint, band, tolerance};
-use crate::planar::{footprint_polygons, hull_of, polygon_moments, ring_segments};
+use crate::planar::{
+    footprint_polygons, hull_of, plan_frame, polygon_area, polygon_moments, ring_segments,
+};
 
 /// A point in plan.
 type Point = (f64, f64);
@@ -178,6 +192,25 @@ impl AxiolidPlanSpanService {
             },
         )
     }
+
+    /// A length in `[lower, upper]` metres, exact exactly when a point.
+    fn interval(
+        &self,
+        (lower, upper): (f64, f64),
+        locator: String,
+    ) -> Result<PlanLength, PlanSpanError> {
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        PlanLength::try_new(
+            lower,
+            upper,
+            Evidence {
+                source: self.source.clone(),
+                locator,
+                exact,
+            },
+        )
+    }
 }
 
 /// How far, in radians, an axis fixed by two corners `2 * long` apart can
@@ -235,6 +268,96 @@ fn midpoint((low, high): (f64, f64)) -> (f64, f64) {
         0.5 * (sum.next_up() - sum)
     };
     (0.5 * sum, radius)
+}
+
+/// The least-area rectangle enclosing a set of plan points, every value
+/// bounded: the one rectangle `measure_rectangle`, sections and the shelf
+/// layout all use.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Enclosing {
+    /// The measured centre.
+    pub(crate) centre: [f64; 2],
+    /// How far the true centre can lie from [`Self::centre`].
+    pub(crate) radius: f64,
+    /// Two unit axes, the second the first turned a quarter
+    /// counter-clockwise.
+    pub(crate) axes: [[f64; 2]; 2],
+    /// How far, in radians, each true axis can be turned.
+    pub(crate) turn: f64,
+    /// `(lower, upper)` half extents along the axes.
+    pub(crate) halves: [(f64, f64); 2],
+    /// How well the orientation is known.
+    pub(crate) orientation: RectangleOrientation,
+}
+
+impl Enclosing {
+    /// The short and the long side, each `(lower, upper)`: only for a
+    /// unique orientation, since another rectangle of least area may have
+    /// other sides.
+    pub(crate) fn sides(&self) -> Option<[(f64, f64); 2]> {
+        if self.orientation != RectangleOrientation::Unique {
+            return None;
+        }
+        let [(a0, a1), (b0, b1)] = self.halves;
+        Some([
+            (2.0 * a0.min(b0), 2.0 * a1.min(b1)),
+            (2.0 * a0.max(b0), 2.0 * a1.max(b1)),
+        ])
+    }
+}
+
+/// The least-area rectangle around `points`, lying within `deviation` of
+/// the true shape's vertices: a positive deviation widens the centre and
+/// the half extents and leaves the orientation unproven, and several
+/// orientations of least area are tied.
+pub(crate) fn least_area_rectangle(
+    points: &[Point2],
+    deviation: f64,
+) -> Result<Enclosing, RectangleError> {
+    let measured = minimum_area_rectangle(points)?;
+    let rectangle = measured.rectangle;
+    let orientation = if deviation > 0.0 {
+        RectangleOrientation::Unproven
+    } else if measured.evidence.minimal_orientations > 1 {
+        RectangleOrientation::Tied
+    } else {
+        RectangleOrientation::Unique
+    };
+    let axes = rectangle.axes.map(|axis| [axis.x, axis.y]);
+    // Along the coordinate axes nothing is turned: the extremes are input
+    // coordinates, and only their differences and sums round.
+    #[allow(clippy::float_cmp)]
+    let (centre, radius, halves, turn) = if axes[0] == [1.0, 0.0] {
+        let extremes = |coordinate: fn(&Point2) -> f64| {
+            points
+                .iter()
+                .map(coordinate)
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), value| {
+                    (low.min(value), high.max(value))
+                })
+        };
+        let (x, y) = (extremes(|p| p.x), extremes(|p| p.y));
+        let (cx, rx) = midpoint(x);
+        let (cy, ry) = midpoint(y);
+        ([cx, cy], rx + ry, [half_width(x), half_width(y)], 0.0)
+    } else {
+        let error = measured.evidence.error;
+        let [a, b] = rectangle.half_extents;
+        (
+            [rectangle.centre.x, rectangle.centre.y],
+            error,
+            [(a, a).widened(error), (b, b).widened(error)],
+            axis_error(a.max(b), error),
+        )
+    };
+    Ok(Enclosing {
+        centre,
+        radius: radius + deviation,
+        axes,
+        turn,
+        halves: halves.map(|half| half.widened(deviation)),
+        orientation,
+    })
 }
 
 /// Whether `point` lies inside the polygons, outside them, or too close to
@@ -299,6 +422,74 @@ fn convex_hull(triangles: &[Triangle]) -> Vec<Point> {
             .map(|point| (point.x, point.y))
             .collect(),
     )
+}
+
+/// Pockets shallower than this are not reported as recesses: the overlay
+/// rounds its output to a grid (axiolid/kernel#173), which can bend a
+/// straight wall by about `1.5e-8` of the plan's extent.
+const RECESS_RESOLUTION: f64 = 1e-6;
+
+/// A recess: its mouth's ends, its width and its depth.
+type Pocket = (Point, Point, f64, f64);
+
+/// The recesses of polygons' outer boundaries against their convex hulls.
+///
+/// On a simple counter-clockwise outer ring, the ring vertices on the hull's
+/// boundary (its vertices, and ring vertices lying on its edges) follow the
+/// hull in order. Between two consecutive ones, any further ring vertices
+/// bound a pocket; its mouth joins the two, which lie on one hull edge, since
+/// a hull vertex between them would be a boundary vertex between them. The
+/// depth is the farthest pocket vertex from the mouth's line: distance to a
+/// line is linear on each side of it, so a vertex attains it. Holes are
+/// enclosed courtyards, not recesses, and are not walked.
+fn pockets(polygons: &[Polygon]) -> Vec<Pocket> {
+    let mut found = Vec::new();
+    for polygon in polygons {
+        let mut ring: Vec<Point> = polygon.outer.points.iter().map(|p| (p.x, p.y)).collect();
+        let signed: f64 = (0..ring.len())
+            .map(|i| {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                a.0 * b.1 - b.0 * a.1
+            })
+            .sum();
+        if signed < 0.0 {
+            ring.reverse();
+        }
+        let hull = hull_of(ring.clone());
+        if hull.len() < 3 {
+            continue;
+        }
+        let on_hull: Vec<usize> = (0..ring.len())
+            .filter(|index| {
+                let point = ring[*index];
+                hull.contains(&point)
+                    || (0..hull.len()).any(|edge| {
+                        segment_distance(point, hull[edge], hull[(edge + 1) % hull.len()])
+                            <= RECESS_RESOLUTION
+                    })
+            })
+            .collect();
+        for (position, &start) in on_hull.iter().enumerate() {
+            let end = on_hull[(position + 1) % on_hull.len()];
+            let (a, b) = (ring[start], ring[end]);
+            let width = distance(a, b);
+            if width <= 0.0 {
+                continue;
+            }
+            let mut index = (start + 1) % ring.len();
+            let mut depth = 0.0_f64;
+            while index != end {
+                let p = ring[index];
+                let cross = (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0);
+                depth = depth.max(cross.abs() / width);
+                index = (index + 1) % ring.len();
+            }
+            if depth > RECESS_RESOLUTION {
+                found.push((a, b, width, depth));
+            }
+        }
+    }
+    found
 }
 
 /// The largest distance between a point of `first` and a point of `second`.
@@ -382,50 +573,19 @@ impl PlanSpanService for AxiolidPlanSpanService {
             .flatten()
             .map(|point| Point2::new(point.x, point.y))
             .collect();
-        let measured = minimum_area_rectangle(&points).map_err(|error| match error {
+        let Enclosing {
+            centre,
+            radius: slack,
+            axes,
+            turn,
+            halves,
+            orientation,
+        } = least_area_rectangle(&points, footprint.deviation).map_err(|error| match error {
             RectangleError::Empty => {
                 PlanSpanError::Unavailable(format!("{object} has no footprint (no body)"))
             }
             _ => PlanSpanError::InvalidMeasurement,
         })?;
-        let rectangle = measured.rectangle;
-        let deviation = footprint.deviation;
-        let orientation = if deviation > 0.0 {
-            RectangleOrientation::Unproven
-        } else if measured.evidence.minimal_orientations > 1 {
-            RectangleOrientation::Tied
-        } else {
-            RectangleOrientation::Unique
-        };
-        let axes = rectangle.axes.map(|axis| [axis.x, axis.y]);
-        // Along the coordinate axes nothing is turned: the extremes are
-        // input coordinates, and only their differences and sums round.
-        #[allow(clippy::float_cmp)]
-        let (centre, radius, halves, turn) = if axes[0] == [1.0, 0.0] {
-            let extremes = |coordinate: fn(&Point2) -> f64| {
-                points
-                    .iter()
-                    .map(coordinate)
-                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), value| {
-                        (low.min(value), high.max(value))
-                    })
-            };
-            let (x, y) = (extremes(|p| p.x), extremes(|p| p.y));
-            let (cx, rx) = midpoint(x);
-            let (cy, ry) = midpoint(y);
-            ([cx, cy], rx + ry, [half_width(x), half_width(y)], 0.0)
-        } else {
-            let error = measured.evidence.error;
-            let [a, b] = rectangle.half_extents;
-            (
-                [rectangle.centre.x, rectangle.centre.y],
-                error,
-                [(a, a).widened(error), (b, b).widened(error)],
-                axis_error(a.max(b), error),
-            )
-        };
-        let slack = radius + deviation;
-        let halves = halves.map(|half| half.widened(deviation));
         #[allow(clippy::float_cmp)]
         let exact = slack == 0.0
             && turn == 0.0
@@ -453,6 +613,139 @@ impl PlanSpanService for AxiolidPlanSpanService {
             evidence,
         )
     }
+    fn measure_recesses(&self, object: &ObjectId) -> Result<PlanRecesses, PlanSpanError> {
+        let footprint = self.footprint(object)?;
+        if footprint.deviation > 0.0 {
+            return Err(PlanSpanError::Unavailable(format!(
+                "{object} is tessellated: its chords make and hide recesses, so none are measured"
+            )));
+        }
+        let polygons = Self::polygons(object, &footprint.soup)?;
+        if polygons.is_empty() {
+            return Err(PlanSpanError::Unavailable(format!(
+                "{object} has no footprint (no body)"
+            )));
+        }
+        let mut recesses = Vec::new();
+        for (a, b, width, depth) in pockets(&polygons) {
+            let locator = format!(
+                "plan-recess:{object}:({:.6},{:.6})-({:.6},{:.6})",
+                a.0, a.1, b.0, b.1
+            );
+            recesses.push(PlanRecess::try_new(
+                [[a.0, a.1], [b.0, b.1]],
+                self.length(width, 0.0, format!("{locator}:width"))?,
+                self.length(depth, 0.0, format!("{locator}:depth"))?,
+            )?);
+        }
+        let locator = format!("plan-recesses:{object}:{}", recesses.len());
+        PlanRecesses::try_new(
+            object.clone(),
+            recesses,
+            Evidence::exact(object.source.clone(), locator),
+        )
+    }
+
+    fn measure_section(&self, objects: &[ObjectId]) -> Result<PlanSection, PlanSpanError> {
+        let tolerance = tolerance()
+            .map_err(|_| PlanSpanError::Unavailable("invalid overlay tolerance".into()))?;
+        let mut section: Option<Vec<Polygon>> = None;
+        for object in objects {
+            let footprint = self.footprint(object)?;
+            // The short side of a minimum-area rectangle does not grow
+            // monotonically with the set, so a chord band cannot bound it.
+            if footprint.deviation > 0.0 {
+                return Err(PlanSpanError::Unavailable(format!(
+                    "{object} is tessellated, so the width of a section through it is not bounded"
+                )));
+            }
+            let own = Self::polygons(object, &footprint.soup)?;
+            if own.is_empty() {
+                return Err(PlanSpanError::Unavailable(format!(
+                    "{object} has no footprint (no body)"
+                )));
+            }
+            section = Some(match section {
+                None => own,
+                Some(current) if current.is_empty() => current,
+                Some(current) => intersect(current, own, tolerance).ok_or_else(|| {
+                    PlanSpanError::Unavailable(format!(
+                        "the section through {object} cannot be computed"
+                    ))
+                })?,
+            });
+        }
+        let polygons = section.unwrap_or_default();
+        let area: f64 = polygons.iter().map(polygon_area).sum();
+        let names: Vec<String> = objects.iter().map(ToString::to_string).collect();
+        let locator = format!("plan-section:{}", names.join(","));
+        let sides = if polygons.is_empty() || area <= 0.0 {
+            None
+        } else {
+            let points: Vec<Point2> = polygons
+                .iter()
+                .flat_map(|polygon| polygon.outer.points.iter().copied())
+                .collect();
+            // The same rectangle `measure_rectangle` answers: its sides are
+            // the section's only for a unique orientation.
+            let rectangle = least_area_rectangle(&points, 0.0).map_err(|_| {
+                PlanSpanError::Unavailable(format!("the section {locator} has no rectangle"))
+            })?;
+            let [short, long] = rectangle.sides().ok_or_else(|| {
+                PlanSpanError::Unavailable(format!(
+                    "several orientations enclose the section {locator} with the least area, so \
+                     its width is not known"
+                ))
+            })?;
+            Some((
+                self.interval(short, format!("{locator}:width"))?,
+                self.interval(long, format!("{locator}:length"))?,
+            ))
+        };
+        let area = if sides.is_some() { area } else { 0.0 };
+        PlanSection::try_new(
+            objects.to_vec(),
+            (area, area),
+            sides,
+            Evidence::exact(self.source.clone(), format!("{locator}:area")),
+        )
+    }
+}
+
+impl AxiolidPlanSpanService {
+    /// The plan union of `object`'s triangles.
+    fn polygons(object: &ObjectId, soup: &[Triangle]) -> Result<Vec<Polygon>, PlanSpanError> {
+        let tolerance = tolerance()
+            .map_err(|_| PlanSpanError::Unavailable("invalid overlay tolerance".into()))?;
+        footprint_polygons(soup, tolerance).ok_or_else(|| {
+            PlanSpanError::Unavailable(format!("the footprint of {object} cannot be computed"))
+        })
+    }
+}
+
+/// The intersection of two polygon sets, each filled as its non-zero union.
+fn intersect(
+    first: Vec<Polygon>,
+    second: Vec<Polygon>,
+    tolerance: axiolid_core::Tolerance,
+) -> Option<Vec<Polygon>> {
+    let first = OverlayInput {
+        frame: plan_frame(),
+        polygons: first,
+    };
+    let second = OverlayInput {
+        frame: plan_frame(),
+        polygons: second,
+    };
+    overlay(
+        &first,
+        &second,
+        OverlayOperation::Intersection,
+        FillRule::NonZero,
+        tolerance,
+    )
+    .ok()
+    .map(|result| result.polygons)
 }
 
 #[cfg(test)]

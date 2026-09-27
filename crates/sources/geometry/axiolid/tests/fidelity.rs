@@ -264,24 +264,40 @@ fn a_curved_space_is_not_measured_exactly() {
     );
 }
 
-/// The shelf bound is an upper bound, and it only grows with the room. A
-/// curved room's true surface may lie beyond its chords, so the bound is
-/// measured on the room grown by the deviation -- still a true upper bound.
+/// Shelf length is an interval, so a curved room widens it rather than
+/// refusing: its true boundary may lie up to the chord deviation either side
+/// of the mesh, and every cross-section keeps that much more margin. The
+/// wider interval still holds the exact room's length.
 #[test]
 fn shelf_length_widens_rather_than_refuses() {
     let shelf = ShelfGeometry::try_new(0.3, 1.0, 0.4, 0.0, 2.0, 0.9).unwrap();
     let measure = |geometry: AxiolidGeometry| {
-        AxiolidLinearQuantityService::new(geometry.with_doorways(id("room"), 0))
+        let evidence = AxiolidLinearQuantityService::new(geometry)
             .measure_linear_quantity(&LinearQuantityRequest::new(
                 id("room"),
                 LinearQuantityKind::ShelfRunningLength(shelf),
             ))
-            .map(|evidence| evidence.measured().upper_metres())
-            .unwrap()
+            .unwrap();
+        (
+            evidence.measured().lower_metres(),
+            evidence.measured().upper_metres(),
+            evidence.clear_height().unwrap(),
+        )
     };
-    // 3.99 m walls fit three 1 m pitches; the curved room may be 4.01 m.
     let room = || cuboid([0.0, 3.99], [0.0, 3.99], [0.0, 3.0]);
-    let exact = measure(AxiolidGeometry::new().with_mesh(id("room"), room()));
-    let curved = measure(AxiolidGeometry::new().with_tessellated_mesh(id("room"), room(), 0.01));
-    assert!(curved > exact, "{curved} must exceed {exact}");
+    let (exact_low, exact_high, exact_height) =
+        measure(AxiolidGeometry::new().with_mesh(id("room"), room()));
+    let (curved_low, curved_high, curved_height) =
+        measure(AxiolidGeometry::new().with_tessellated_mesh(id("room"), room(), 0.01));
+    assert!(exact_low > 0.0);
+    assert!(
+        curved_low < exact_low,
+        "{curved_low} must be below {exact_low}"
+    );
+    assert!(
+        curved_high >= exact_high,
+        "{curved_high} must reach {exact_high}"
+    );
+    assert!(exact_height.is_exact());
+    assert!(!curved_height.is_exact());
 }

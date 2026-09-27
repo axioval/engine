@@ -190,6 +190,59 @@ All notable changes are documented here. This project follows Semantic Versionin
   `InvalidElevationBand` and `MergedScopeConflict`; a frame-offset anchor
   grounded on another object is no longer refused as
   `PlacementScopeMismatch`. (#84)
+- **Shelf capacity measures a real layout.** `shelf-capacity` no longer
+  bounds shelving by the footprint's bounding box with a lower bound of zero,
+  which no room could pass. The Axiolid adapter lays parallel bands
+  `shelf_depth_metres` deep across the footprint, a band against a wall, an
+  aisle `horizontal_spacing_metres` wide, two bands back to back, and so on,
+  each band served by the aisle along one side; a band carries shelving where
+  its whole depth lies on the floor outside every door clearance and its
+  aisle on the floor. A door's swing is unknown, so its clearance is every
+  point within `door_clearance_metres` of its footprint, measured from the
+  room's side of the wall. Bands run along both axes of the footprint's and
+  every door's least-area rectangle, anchored at either wall, and the
+  longest layout counts, stacked in whole tiers up to the lower of the top
+  elevation and the clear height. The interval holds the layout's length on
+  the true geometry, so a compliant room passes: a 6 × 4 m room with one 1 m
+  door holds 84 m in the documented arrangement. A space whose clear height
+  lies below `top_elevation_metres` is a new finding, `space too low for the
+  shelving`. Doors and openings are the rule's selection: `access_path`
+  (required), `door_selector`, `opening_selector` and `space_selector` read
+  them as `space-connection` does (`axioval:derived.adjacent-space`, or a
+  stated relationship), and they travel in the request. Findings take the
+  rule's severity and relate the doors. **Breaking:** definitions bound to
+  `shelf-capacity` must declare the four new parameters, `access_path`
+  required; `horizontal_spacing_metres` is now the aisle between bands, not
+  the pitch of uprights, and `door_clearance_metres` the clearance's reach,
+  not wall length per doorway. `AxiolidGeometry::with_doorways` and
+  `doorway_count` are removed, and the CLI no longer counts doorways from
+  space boundaries; `LinearQuantityRequest` gains `with_doors` and `doors`,
+  `LinearQuantityEvidence` `with_clear_height` and `clear_height`, and
+  `AxiolidLinearQuantityService` takes opening voids. The bands follow the
+  same least-area rectangles `measure_rectangle` answers; any orientation,
+  tied or unproven, only proposes a layout. (#55)
+- **Building envelope: recesses and light wells.** `recess-width` requires
+  every recess of a footprint, a pocket between its outer boundary and its
+  convex hull, to be as wide at its mouth as the first row of a
+  `requirements` table keyed by depth demands (`minimum_depth_metres`,
+  `maximum_depth_metres`, `minimum_width_metres`,
+  `minimum_width_per_depth`). The convex hull is the reference because it is
+  orientation-free and each of its pockets is a genuine indentation; a
+  minimum-area rectangle would also report the corners of a trapezoidal room.
+  `light-well` judges the spaces `member_path` reaches from each well: no
+  vertical gap above `gap_tolerance_metres`, a shared plan section (the
+  intersection of their footprints) that is not empty, and that section's
+  area and width, the short side of its least-area rectangle, against the
+  first row of `requirements` whose `maximum_height_metres` the well's
+  height does not exceed. `PlanSpanService` gains `measure_recesses`
+  (`PlanRecesses`, `PlanRecess`) and `measure_section` (`PlanSection`), both
+  refused by default; the Axiolid adapter measures them on exact footprints
+  and refuses tessellated ones. A section's sides come from the same
+  least-area rectangle as `PlanRectangle` and only for a unique orientation:
+  a tied section is refused and its well not evaluated. Adjacency to a wall declared external is a
+  `distance` rule (`counterparts` the walls with `IsExternal` true,
+  `nearest`, `horizontal`, `maximum_metres`), documented with an end-to-end
+  test; it needs no capability of its own. (#67)
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m

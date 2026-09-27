@@ -953,6 +953,60 @@ A threshold of at most 2 cm is the same table with a `maximum` of `0.02`, `quant
 
 Every door closer than the minimum to another is its own finding naming the nearest one, so a pair too close is reported from both sides. A door type no row matches is a "no limit defined" finding; a row keyed `*` catches the types without a limit of their own (`NOTDEFINED` is a type like any other). A door whose `OperationType` is unset is not evaluated, never judged by a general row, since any row keyed on the type might be the one that applies.
 
+### Shelf capacity
+
+`shelf-capacity` requires each selected space to hold at least `minimum_running_metres` of shelving, measured through `LinearQuantityServiceHandle` as a layout of the declared arrangement:
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `minimum_running_metres` | number | the running metres the space must hold, all tiers counted |
+| `shelf_depth_metres` | number | how deep a band of shelving is |
+| `horizontal_spacing_metres` | number | the aisle serving the bands, between band faces |
+| `vertical_spacing_metres` | number | the height of one tier |
+| `bottom_elevation_metres`, `top_elevation_metres` | number | where the lowest tier starts and the shelving ends, above the floor |
+| `door_clearance_metres` | number | how far the clearance at a door or opening reaches, in every direction |
+| `access_path` | `stringList` | required: steps from each door or opening to its spaces, as for `space-connection` (`axioval:derived.adjacent-space`, or with IFC `IfcRelSpaceBoundary:backward`) |
+| `door_selector`, `opening_selector`, `space_selector` | selector, optional | as for `space-connection` |
+
+The layout lays parallel bands across the footprint as a store room is set out: a band against a wall, an aisle, two bands back to back, an aisle, and so on, each band served by the aisle along one side. A band carries shelving where its whole depth lies on the floor outside every door clearance and its aisle's whole width lies on the floor; an aisle may cross a clearance, a shelf may not (1 mm of each may touch the boundary, the construction tolerance). The swing of a door is not known, so its clearance is every point within `door_clearance_metres` of the door's footprint, measured from the room's side of a thick wall (the gap between door and space is added). The bands run along either side of the footprint's minimum-area rectangle or of any door's, anchored at either wall; the longest layout counts. Tiers are whole multiples of `vertical_spacing_metres` between the bottom elevation and the lower of the top elevation and the space's clear height.
+
+The length is an interval that holds the layout's length on the true geometry, and its lower bound is positive for a room that holds shelving, so a compliant room passes. A 6 × 4 m room with one 1 m door in a long wall holds 84 m with 0.5 m bands, 1 m aisles, 0.5 m tiers up to 2 m and a 1 m clearance: four 6 m bands, less 3 m of the band against the door's wall, in four tiers. A space whose clear height lies below `top_elevation_metres` is a separate finding, `space too low for the shelving`; a shortfall relates the doors whose clearances were taken out. A door or opening whose spaces cannot be read, or whose type is undecided and that reaches the space, leaves the space not evaluated, since its clearance could take shelving away.
+
+### Building envelope
+
+Three envelope checks, each a rule of its own.
+
+**Adjacency to an external wall** is a `distance` rule: the selection is the components, `counterparts` the walls the model declares external (with IFC, `IsExternal` in `Pset_WallCommon` equal to `true`), `mode: nearest`, `projection: horizontal` and a `maximum_metres` tolerance. A wall whose declaration cannot be read is undecided, never taken as internal, and a component is found only when no undecided wall could lie within the tolerance:
+
+```json
+{"counterparts": {"type": "selector", "value": {"kind": "allOf", "operands": [
+   {"kind": "entityType", "objectType": "…wall", "includeSubtypes": true},
+   {"kind": "property", "propertySet": "…pset-wall-common", "property": "…is-external",
+    "operator": "equals", "value": {"type": "boolean", "value": true}}]}},
+ "mode": {"type": "string", "value": "nearest"},
+ "projection": {"type": "string", "value": "horizontal"},
+ "maximum_metres": {"type": "number", "value": 0.05}}
+```
+
+**`recess-width`** requires every recess of each selected object's footprint to be wide enough for its depth. A recess is a pocket between the footprint's outer boundary and its convex hull, through `PlanSpanServiceHandle::measure_recesses`: its width is its mouth, the hull edge closing it, and its depth the farthest the pocket reaches behind the mouth. The convex hull is the reference, not the minimum-area rectangle, because it is orientation-free and each of its pockets is a genuine indentation; a rectangle would also report the corners of a trapezoidal or rounded room. An L-shaped footprint has one recess across its inner corner. Holes (enclosed courtyards) are not recesses. The one parameter, `requirements`, is a table:
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `minimum_depth_metres` | number, optional | the row holds recesses deeper than this |
+| `maximum_depth_metres` | number, optional | and no deeper than this |
+| `minimum_width_metres` | number, optional | the width required |
+| `minimum_width_per_depth` | number, optional | the width required per metre of depth; with both, the larger applies |
+
+The first row holding a recess's depth applies; a recess no row holds has no requirement. A depth straddling a row's bound, or a width straddling the requirement, is not evaluated. A tessellated footprint is not measured: chords make and hide pockets.
+
+**`light-well`** checks vertically stacked light-well spaces. Each selected object is a well whose spaces `member_path` reaches (with IFC, a zone's spaces through `IfcRelAssignsToGroup:forward`):
+
+- contiguity: ordered by their bottoms, no space starts more than `gap_tolerance_metres` (optional, default 0) above the top of the one below, and the spaces share a plan section, the intersection of their footprints through `PlanSpanServiceHandle::measure_section`;
+- the section's area against `minimum_area_square_metres`;
+- the section's width, the short side of its least-area rectangle (the rectangle `measure_rectangle` answers for a footprint), against `minimum_width_metres`. A section whose least-area orientation is tied has no known width; the service refuses it and the well is not evaluated.
+
+The well's height runs from its lowest bottom to its highest top, and selects the first row of `requirements` whose `maximum_height_metres` it does not exceed (a row without one holds any height); no row means no requirement. Every value is an interval, and one straddling a bound is not evaluated. Findings relate the well's spaces. A tessellated space leaves its well not evaluated: the short side of a minimum-area rectangle does not grow monotonically with the shape, so a chord band cannot bound it.
+
 ### Model quality
 
 Checks on how a model is built rather than on what it designs. Each sub-check maps to one rule:

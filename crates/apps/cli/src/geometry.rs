@@ -227,11 +227,6 @@ pub fn attach(
     }
 
     let relationships = session.service::<RelationshipSelectionServiceHandle>();
-    if let Some(relationships) = relationships {
-        for (space, count) in doorways(relationships, &kinds, &is_a) {
-            geometry = geometry.with_doorways(space, count);
-        }
-    }
     for (group, members) in groups(relationships, &kinds, &is_a) {
         geometry = match members {
             Ok(members) => geometry.with_group(group, members),
@@ -239,7 +234,10 @@ pub fn attach(
         };
     }
     let envelope = envelope_service(&session, &geometry, &source, &kinds)?;
-    let space = space_service(&parsed, &geometry, &source, &kinds, &is_a);
+    let space = (
+        space_service(&parsed, &geometry, &source, &kinds, &is_a),
+        linear_service(&geometry, &voids),
+    );
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
     let derived = derived_service(&geometry, &kinds, &is_a, voids);
     let facade = facade_service(&geometry, &kinds, &is_a);
@@ -257,7 +255,7 @@ fn register(
     session: EvidenceSession,
     snapshots: &[SourceSnapshot],
     geometry: AxiolidGeometry,
-    space: AxiolidSpaceService,
+    (space, shelves): (AxiolidSpaceService, AxiolidLinearQuantityService),
     envelope: AxiolidEnvelopeMembershipService,
     (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
 ) -> Result<EvidenceSession, Box<dyn Error>> {
@@ -289,12 +287,9 @@ fn register(
             ))),
             bound,
         )?
-        .with_host_service(
-            LinearQuantityServiceHandle::new(Arc::new(AxiolidLinearQuantityService::new(
-                geometry.clone(),
-            ))),
-            bound,
-        )?
+        // Doors and openings are the shelf rule's selection, carried in each
+        // request; the bridge hands over the voids of bodiless openings.
+        .with_host_service(LinearQuantityServiceHandle::new(Arc::new(shelves)), bound)?
         .with_host_service(
             PlanAreaServiceHandle::new(Arc::new(AxiolidPlanAreaService::new(
                 geometry.clone(),
@@ -346,73 +341,6 @@ fn register(
         .with_host_service(WalkabilityServiceHandle::new(Arc::new(walkability)), bound)?
         .with_host_service(MetricRoutingServiceHandle::new(Arc::new(routing)), bound)?;
     Ok(session)
-}
-
-/// Doorways per space, from the space boundaries the model states.
-///
-/// A doorway is a door that bounds the space, directly or through an opening
-/// it fills (`IfcRelFillsElement`). Only spaces whose count is known are
-/// returned; the linear-quantity service refuses the rest rather than count
-/// zero, which would credit wall a door interrupts. A space is left out when:
-///
-/// - it has no space boundary at all, so the model says nothing about its doors;
-/// - a bounding opening is filled by nothing, since it may be a doorless
-///   passage or a niche and the model does not say which;
-/// - any relationship answer is refused, including for a boundary instance
-///   that omits a required end anywhere in the model.
-fn doorways(
-    relationships: &RelationshipSelectionServiceHandle,
-    kinds: &BTreeMap<ObjectId, String>,
-    is_a: &impl Fn(&ObjectId, &str) -> bool,
-) -> Vec<(ObjectId, usize)> {
-    let of_kind = |ancestor: &str| -> Vec<ObjectId> {
-        kinds
-            .keys()
-            .filter(|id| is_a(id, ancestor))
-            .cloned()
-            .collect()
-    };
-    let doors = of_kind("IfcDoor");
-    let openings = of_kind("IfcOpeningElement");
-    let everything: Vec<ObjectId> = kinds.keys().cloned().collect();
-    let related = |anchor: &ObjectId, relationship: &str, universe: &[ObjectId]| {
-        let query = RelationshipQuery::Related {
-            relationship: SemanticRelationship::try_new(relationship).ok()?,
-            direction: TraversalDirection::Forward,
-            follow_chain: false,
-        };
-        let request =
-            RelationshipSelectionRequest::try_new(anchor.clone(), universe.to_vec(), query).ok()?;
-        let selection = relationships.select(&request).ok()?;
-        Some(selection.candidates().to_vec())
-    };
-    let count = |space: &ObjectId| -> Option<usize> {
-        let bounding = related(space, "IfcRelSpaceBoundary", &everything)?;
-        if bounding.is_empty() {
-            return None;
-        }
-        let mut found: BTreeSet<ObjectId> = BTreeSet::new();
-        for element in &bounding {
-            if doors.binary_search(element).is_ok() {
-                found.insert(element.clone());
-            } else if openings.binary_search(element).is_ok() {
-                let fillings = related(element, "IfcRelFillsElement", &everything)?;
-                if fillings.is_empty() {
-                    return None;
-                }
-                found.extend(
-                    fillings
-                        .into_iter()
-                        .filter(|filling| doors.binary_search(filling).is_ok()),
-                );
-            }
-        }
-        Some(found.len())
-    };
-    of_kind("IfcSpace")
-        .into_iter()
-        .filter_map(|space| count(&space).map(|n| (space, n)))
-        .collect()
 }
 
 /// Members of every group (`IfcGroup`: zones, systems), so a bodiless zone
@@ -529,6 +457,26 @@ fn derived_service(
         };
     }
     service
+}
+
+/// Shelf lengths over `geometry`, with the voids of bodiless openings so a
+/// shelf rule can place their clearances.
+fn linear_service(
+    geometry: &AxiolidGeometry,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidLinearQuantityService {
+    voids.iter().fold(
+        AxiolidLinearQuantityService::new(geometry.clone()),
+        |service, (id, void)| match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, false)) => service.with_tessellated_opening_void(
+                id.clone(),
+                mesh.clone(),
+                CHORD_DEVIATION_METRES,
+            ),
+            Err(_) => service.with_unmeasured_opening_void(id.clone()),
+        },
+    )
 }
 
 /// The walkability and metric-routing services over `geometry`.

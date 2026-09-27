@@ -109,8 +109,8 @@ impl SourceSnapshot {
 
 /// The disciplines a run's sources play, as the session declared them.
 ///
-/// Only the engine constructs this, from the evidence session, and registers
-/// it for the duration of one run, replacing any host-registered copy.
+/// The engine constructs this from the evidence session and registers it for
+/// the duration of one run, replacing any host-registered copy.
 /// Capabilities find it in the service registry. A source without an entry
 /// declares no discipline; that is unknown, never "no discipline matches".
 #[derive(Clone, Debug, Default)]
@@ -120,7 +120,17 @@ pub struct SourceDisciplines {
 }
 
 impl SourceDisciplines {
-    pub(crate) fn new(
+    /// Declares `disciplines`, by source.
+    ///
+    /// Capability tests construct it; a run always uses the runtime's own.
+    pub fn new(disciplines: impl IntoIterator<Item = (SourceId, Discipline)>) -> Self {
+        Self {
+            disciplines: disciplines.into_iter().collect(),
+            origins: BTreeMap::new(),
+        }
+    }
+
+    pub(crate) fn with_origins(
         disciplines: BTreeMap<SourceId, Discipline>,
         origins: BTreeMap<SourceId, DisciplineOrigin>,
     ) -> Self {
@@ -505,7 +515,7 @@ impl EvidenceSession {
 
     /// Every source's discipline and its origin, as a run reads them.
     pub(crate) fn source_disciplines(&self) -> SourceDisciplines {
-        SourceDisciplines::new(self.disciplines.clone(), self.origins.clone())
+        SourceDisciplines::with_origins(self.disciplines.clone(), self.origins.clone())
     }
 
     /// Every source's metadata as a run reads it: the schema comes from the

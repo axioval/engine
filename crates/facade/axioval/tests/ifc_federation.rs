@@ -276,6 +276,7 @@ fn definitions(registry: &CapabilityRegistry) -> DefinitionPackage {
         "objectTypes": {
             "axioval:test.wall": concept("axioval:test.wall", "IfcWall"),
             "axioval:test.door": concept("axioval:test.door", "IfcDoor"),
+            "axioval:test.duct": concept("axioval:test.duct", "IfcDuctSegment"),
         },
         "properties": {
             "axioval:test.reference": reference,
@@ -667,4 +668,41 @@ fn a_discipline_map_assigns_undeclared_sources_and_is_cited() {
         session.unmapped(&source("struct.ifc")),
         Some(&UnmappedReason::Unread("fileName:struct*=structure".into()))
     );
+}
+
+/// An MEP model holding one duct segment.
+const DUCTS: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#10=IFCDUCTSEGMENT('0000000000000000000M10',$,'M-D1',$,$,$,$,$,.RIGIDSEGMENT.);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+#[test]
+fn a_duct_count_limited_to_mep_judges_only_the_mep_models() {
+    let session = EvidenceSession::federate([
+        member("arch.ifc", ARCHITECTURE, Some("architecture")),
+        member("mep-1.ifc", DUCTS, Some("mep")),
+        member("mep-2.ifc", STRUCTURE, Some("mep")),
+    ])
+    .unwrap();
+    let report = run_count(
+        &session,
+        &entity("axioval:test.duct"),
+        &json!({ "disciplines": { "type": "stringList", "value": ["mep"] } }),
+    );
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let [finding] = report.findings() else {
+        panic!("{:?}", report.findings());
+    };
+    assert_eq!(finding.scope, Scope::Source(source("mep-2.ifc")));
 }

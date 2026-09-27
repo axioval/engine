@@ -6,9 +6,9 @@ mod common;
 
 use axioval_engine::SessionSources;
 use axioval_ir::contract::{ComparisonOperator, Selector};
-use axioval_ir::{NotEvaluatedReason, Scope, SourceId};
+use axioval_ir::{Discipline, NotEvaluatedReason, Scope, SourceId};
 use axioval_rules::{ObjectCount, register_builtins};
-use common::{Model, boolean, findings, integer, kind, rule, source};
+use common::{Model, boolean, findings, integer, kind, rule, source, strings};
 
 const ID: &str = "axioval:capability.object-count";
 
@@ -276,6 +276,144 @@ fn contradictory_bounds_are_a_declaration_error() {
             &NotEvaluatedReason::InvalidDeclaration
         );
     }
+}
+
+fn document(name: &str) -> SourceId {
+    SourceId::new("test", name).unwrap()
+}
+
+/// An architecture model without ducts, an MEP model with one and one
+/// without, and `loose`, a model declaring no discipline, with a duct.
+fn disciplined() -> Model {
+    Model::default()
+        .object_in("arch", "w1", "wall")
+        .object_in("mep-1", "d1", "duct")
+        .object_in("mep-2", "p1", "pipe")
+        .object_in("loose", "d2", "duct")
+}
+
+fn declared(with_loose: bool) -> axioval_engine::SourceDisciplines {
+    let mut disciplines = vec![
+        (document("arch"), Discipline::new("architecture").unwrap()),
+        (document("mep-1"), Discipline::new("mep").unwrap()),
+        (document("mep-2"), Discipline::new("mep").unwrap()),
+    ];
+    if with_loose {
+        disciplines.push((document("loose"), Discipline::new("mep").unwrap()));
+    }
+    axioval_engine::SourceDisciplines::new(disciplines)
+}
+
+fn count_ducts(
+    parameters: Vec<(&str, axioval_ir::contract::ParameterValue)>,
+    disciplines: Option<axioval_engine::SourceDisciplines>,
+) -> axioval_engine::CapabilityEvaluation {
+    disciplined().evaluate_with(
+        &ObjectCount,
+        &rule(ID, kind("duct"), parameters),
+        |services| {
+            if let Some(disciplines) = disciplines {
+                services.register(disciplines).unwrap();
+            }
+        },
+    )
+}
+
+#[test]
+fn disciplines_limit_the_counted_sources() {
+    let evaluation = count_ducts(
+        vec![("disciplines", strings(&["mep"]))],
+        Some(declared(true)),
+    );
+    // Only the MEP model without ducts: the architecture model is not
+    // counted at all.
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "source".into(),
+            "no object matches the selection in source `test:mep-2`; required at least 1".into()
+        )]
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+
+    // Several disciplines count their sources together.
+    let evaluation = count_ducts(
+        vec![("disciplines", strings(&["mep", "architecture"]))],
+        Some(declared(true)),
+    );
+    assert_eq!(evaluation.findings().len(), 2);
+}
+
+#[test]
+fn a_source_without_a_discipline_is_not_evaluated_never_skipped() {
+    let evaluation = count_ducts(
+        vec![("disciplines", strings(&["mep"]))],
+        Some(declared(false)),
+    );
+    assert_eq!(evaluation.findings().len(), 1);
+    let [outcome] = evaluation.not_evaluated_outcomes() else {
+        panic!("{:?}", evaluation.not_evaluated_outcomes());
+    };
+    assert_eq!(outcome.reason(), &NotEvaluatedReason::NotRecorded);
+    assert!(
+        outcome.message().contains("test:loose"),
+        "{}",
+        outcome.message()
+    );
+
+    // Across sources, "at least one duct in an MEP model" holds by mep-1,
+    // whatever the loose duct is.
+    let evaluation = count_ducts(
+        vec![
+            ("disciplines", strings(&["mep"])),
+            ("across_sources", boolean(true)),
+        ],
+        Some(declared(false)),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+    let evaluation = count_ducts(
+        vec![
+            ("disciplines", strings(&["mep"])),
+            ("across_sources", boolean(true)),
+            ("minimum", integer(2)),
+        ],
+        Some(declared(false)),
+    );
+    // One sure duct and one that may count: undecided.
+    assert!(evaluation.findings().is_empty());
+    assert!(
+        evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .any(|outcome| outcome.reason() == &NotEvaluatedReason::NotRecorded)
+    );
+}
+
+#[test]
+fn a_discipline_list_needs_valid_names_and_session_disciplines() {
+    for disciplines in [strings(&[]), strings(&["MEP"])] {
+        let evaluation = count_ducts(vec![("disciplines", disciplines)], Some(declared(true)));
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].reason(),
+            &NotEvaluatedReason::InvalidDeclaration
+        );
+    }
+    let evaluation = count_ducts(vec![("disciplines", strings(&["mep"]))], None);
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::MissingService
+    );
+    // No source plays the discipline: nothing to count in, never a pass.
+    let evaluation = count_ducts(
+        vec![("disciplines", strings(&["structure"]))],
+        Some(declared(true)),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::IncompleteEvidence
+    );
 }
 
 #[test]

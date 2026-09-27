@@ -78,6 +78,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   `severity_bands` (omitted when empty, so packages are unchanged),
   `EngineError` gains `InvalidRefinement`, and
   `ExecutionPlan::refinement` exposes what a rule declares.
+- **Object counts among the sources of a discipline.** (#104)
+  `object-count` takes `disciplines`, a string list: only the sources
+  playing one of them are counted, so a per-source duct count limited to
+  `mep` over an architecture model and two MEP models reports only the MEP
+  model without ducts. A source declaring no discipline is not evaluated
+  per source, and its matching objects are undecided across sources; no
+  source playing a listed discipline leaves the rule not evaluated.
+  `SourceDisciplines::new` is public for capability tests. **Breaking:**
+  definitions bound to `object-count` must declare the optional
+  `disciplines` (`stringList`).
 - **Several rulesets in one check.** (#103) `compile_rulesets` compiles
   several rulesets into one plan, each against its own definition packages
   exactly as `compile` compiles it, and qualifies every rule id by its

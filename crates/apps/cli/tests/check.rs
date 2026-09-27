@@ -1979,6 +1979,7 @@ impl Case {
                 "minimum": parameter("minimum", "integer"),
                 "maximum": parameter("maximum", "integer"),
                 "across_sources": parameter("across_sources", "boolean"),
+                "disciplines": parameter("disciplines", "stringList"),
             },
             "citations": [],
             "tags": [],
@@ -1996,6 +1997,51 @@ impl Case {
             self.write("ruleset.json", &ruleset.to_string()),
         )
     }
+}
+
+#[test]
+fn an_object_count_limited_to_a_discipline_judges_only_its_models() {
+    let case = Case::new("object-count-disciplines");
+    let (definitions, ruleset) = case.count_packages();
+    let mut rules: Value =
+        serde_json::from_str(&std::fs::read_to_string(&ruleset).unwrap()).unwrap();
+    rules["root"]["rules"][0]["parameters"] =
+        json!({"disciplines": {"type": "stringList", "value": ["mep"]}});
+    let ruleset = case.write("ruleset.json", &rules.to_string());
+    for name in ["arch.ifc", "mep.ifc", "loose.ifc"] {
+        case.write(name, &ifc("0000000000000000000002", true));
+    }
+    let run = |models: &[&str]| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+        command.current_dir(&case.dir).arg("check");
+        for model in models {
+            command.arg("--model").arg(model);
+        }
+        command
+            .arg("--definitions")
+            .arg(&definitions)
+            .arg("--ruleset")
+            .arg(&ruleset)
+            .output()
+            .unwrap()
+    };
+    // Neither has a space; only the MEP model is judged.
+    let output = run(&["arch.ifc:architecture", "mep.ifc:mep"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["source"]["document"], "mep.ifc");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+
+    // A model without a discipline may or may not count: never a pass.
+    let output = run(&["arch.ifc:architecture", "loose.ifc"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        result["report"]["not_evaluated"][0]["source"]["document"], "loose.ifc",
+        "{result:#}"
+    );
 }
 
 /// Rooms #16 (x 0..4) and #26 (x 4.2..8.2) behind a 0.2 m wall, with no

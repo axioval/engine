@@ -26,7 +26,10 @@ use supports::{Opening, SupportConfig, Supports};
 /// Requires each selected opening to lie within its host's face and inside
 /// the zone the rule allows: clear of the host's ends by `end_distance`,
 /// clear of its edges (or of its flanges, with `zone` `web`) by
-/// `edge_distance`, `opening_spacing` clear of every other opening in the
+/// `edge_distance` and at most `edge_distance_maximum` from the edges
+/// `maximum_edges` names (`top`, `bottom` or `both`, the high and low ends
+/// of `height_axis`; `both` by default), `opening_spacing` clear of every
+/// other opening in the
 /// same host, `support_distance` along the host from each of its supports
 /// and `support_clearance` clear of their footprints in the face.
 ///
@@ -86,6 +89,8 @@ struct Config<'a> {
     axes: FaceAxes,
     end_distance: Option<f64>,
     edge_distance: Option<f64>,
+    /// The largest distance allowed from the low and the high edge.
+    edge_maximum: Option<(f64, bool, bool)>,
     web: bool,
     spacing: Option<f64>,
     supports: Option<SupportConfig<'a>>,
@@ -135,6 +140,23 @@ impl<'a> Config<'a> {
             axes,
             end_distance: distance(&parameters, "end_distance")?,
             edge_distance: distance(&parameters, "edge_distance")?,
+            edge_maximum: match (
+                distance(&parameters, "edge_distance_maximum")?,
+                parameters.string("maximum_edges")?,
+            ) {
+                (None, None) => None,
+                (None, Some(_)) => {
+                    return Err(invalid("`maximum_edges` needs `edge_distance_maximum`"));
+                }
+                (Some(maximum), None | Some("both")) => Some((maximum, true, true)),
+                (Some(maximum), Some("bottom")) => Some((maximum, true, false)),
+                (Some(maximum), Some("top")) => Some((maximum, false, true)),
+                (Some(_), Some(other)) => {
+                    return Err(invalid(format!(
+                        "`maximum_edges` `{other}` is unsupported; use `top`, `bottom` or `both`"
+                    )));
+                }
+            },
             web,
             spacing: distance(&parameters, "opening_spacing")?,
             supports: SupportConfig::parse(&parameters)?,
@@ -155,6 +177,8 @@ impl RuleCapability for OpeningZone {
             ParameterDescriptor::required("height_axis", ParameterType::String),
             ParameterDescriptor::optional("end_distance", ParameterType::Quantity),
             ParameterDescriptor::optional("edge_distance", ParameterType::Quantity),
+            ParameterDescriptor::optional("edge_distance_maximum", ParameterType::Quantity),
+            ParameterDescriptor::optional("maximum_edges", ParameterType::String),
             ParameterDescriptor::optional("zone", ParameterType::String),
             ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
         ];
@@ -411,6 +435,12 @@ impl Judge<'_, '_> {
         {
             evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
         }
+        if !outside_height
+            && !crosses_outline
+            && let Err((reason, message)) = self.far_edges(&host, placed, rect, &mut findings)
+        {
+            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
+        }
         if let Some(supports) = &self.supports {
             let face = Opening {
                 host: &placed.host,
@@ -570,6 +600,78 @@ impl Judge<'_, '_> {
             ));
         }
         Ok(())
+    }
+
+    /// Judges the largest distance allowed from the host's low and high
+    /// edges (or flanges, with `zone` `web`). A distance measured to a free
+    /// outline from the box the opening may lie in is a lower bound, which can
+    /// find an opening too far but never pass one.
+    fn far_edges(
+        &self,
+        host: &Host,
+        placed: &Placed,
+        rect: [Span; 2],
+        findings: &mut Vec<String>,
+    ) -> Result<(), Unavailable> {
+        let Some((maximum, low, high)) = self.config.edge_maximum else {
+            return Ok(());
+        };
+        let height = self.config.axes.height;
+        let (clear, exact, what) = if self.config.web {
+            let web = host.web.ok_or_else(|| {
+                (
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "its host {}'s `{}` profile has no web between flanges",
+                        placed.host.local_id, host.family
+                    ),
+                )
+            })?;
+            (
+                (placed.height.0 - web.0, web.1 - placed.height.1),
+                true,
+                ["the lower flange", "the upper flange"],
+            )
+        } else {
+            let Some(clear) = host.clearance(height, placed.height, rect) else {
+                return Ok(());
+            };
+            (
+                clear,
+                placed.section_exact || !host.outlined(height),
+                ["the bottom edge", "the top edge"],
+            )
+        };
+        let mut open = Vec::new();
+        for (checked, distance, edge) in [(low, clear.0, what[0]), (high, clear.1, what[1])] {
+            if !checked {
+                continue;
+            }
+            // The distance is exact, or a lower bound of the true one.
+            if distance > maximum + ROUNDING {
+                findings.push(format!(
+                    "opening is {} from {edge} of its host {}; at most {} allowed",
+                    metres(distance),
+                    placed.host.local_id,
+                    metres(maximum)
+                ));
+            } else if !exact {
+                open.push(edge);
+            }
+        }
+        if open.is_empty() {
+            return Ok(());
+        }
+        Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "its distance from {} of its host {}'s outline may exceed {}: where it lies \
+                 in the host's section is known only within bounds",
+                open.join(" and "),
+                placed.host.local_id,
+                metres(maximum)
+            ),
+        ))
     }
 
     /// Judges the clear distance to the other openings of the same host and

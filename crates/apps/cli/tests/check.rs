@@ -3423,6 +3423,8 @@ fn storey_metric_definitions(case: &Case) -> PathBuf {
             ("space_selector", "selector", false),
             ("space_path", "stringList", false),
             ("space_tolerance", "quantity", false),
+            ("space_height", "boolean", false),
+            ("space_elevation", "string", false),
         ]),
     );
     definitions["definitions"]["axioval:example.window-to-wall"] = definition(
@@ -9828,6 +9830,45 @@ fn with_geometry_a_model_declaring_nothing_external_is_one_source_finding() {
             .as_str()
             .unwrap()
             .contains("no selected object is declared external"),
+        "{result:#}"
+    );
+}
+
+/// Every wall opening's head is 0.9 m below the wall top: a 0.5 m maximum
+/// from the top edge finds each, a 1 m one none.
+#[test]
+fn wall_opening_heads_too_far_below_the_wall_top_are_found() {
+    let metres = |value: f64| json!({"type": "quantity", "value": value, "unit": "m"});
+    let run = |name: &str, maximum: f64| {
+        opening_zone(
+            name,
+            "wall",
+            json!({
+                "length_axis": {"type": "string", "value": "profile-x"},
+                "height_axis": {"type": "string", "value": "extrusion"},
+                "edge_distance_maximum": metres(maximum),
+                "maximum_edges": {"type": "string", "value": "top"},
+            }),
+        )
+    };
+    let (output, result) = run("opening-zone-head", 0.5);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let messages = finding_messages(&result);
+    for opening in ["#100", "#200", "#300"] {
+        assert!(
+            messages.contains(&(
+                opening.to_owned(),
+                "opening is 0.9 m from the top edge of its host #10; at most 0.5 m allowed"
+                    .to_owned()
+            )),
+            "{result:#}"
+        );
+    }
+    let (_, result) = run("opening-zone-head-lenient", 1.0);
+    assert!(
+        finding_messages(&result)
+            .iter()
+            .all(|(_, message)| !message.contains("top edge")),
         "{result:#}"
     );
 }

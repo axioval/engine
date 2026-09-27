@@ -334,3 +334,78 @@ fn space_and_content_parameters_are_declared_together() {
         [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
     );
 }
+
+/// The ground storey with three more spaces: one level with the others, one
+/// sunk 0.3 m and one raised 0.02 m.
+fn stepped_floors() -> (Model, Extents) {
+    let mut model = model();
+    for local in ["space-level", "space-sunk", "space-raised"] {
+        model = model.object(local, "space").edge("aggregates", "eg", local);
+    }
+    let extents = extents()
+        .with("space-level", 0.0, 3.0, 0.0)
+        .with("space-sunk", -0.3, 3.0, 0.0)
+        .with("space-raised", 0.02, 3.0, 0.0);
+    (model, extents)
+}
+
+/// `space_elevation` requires the spaces of one storey to share their
+/// bottom (or top) elevation within `space_tolerance`.
+#[test]
+fn spaces_of_a_storey_share_their_floor_elevation() {
+    let (model, extents) = stepped_floors();
+    let mut extra = spaces(0.05);
+    extra.push(("space_elevation", string("bottom")));
+    extra.push(("space_height", boolean(false)));
+    let evaluation = run(model, extents, extra);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "space-sunk".into(),
+            "space bottom elevation is -0.3 m, and the prevailing bottom elevation of the \
+             spaces of level test:model/eg is 0 m; they may differ by at most 0.05 m"
+                .into()
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related[0].local_id, "eg");
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+
+    // Their tops all meet at 3 m.
+    let (model, extents) = stepped_floors();
+    let mut extra = spaces(0.05);
+    extra.push(("space_elevation", string("top")));
+    extra.push(("space_height", boolean(false)));
+    let evaluation = run(model, extents, extra);
+    assert!(evaluation.findings().is_empty());
+}
+
+/// A space whose elevation straddles the tolerance is not evaluated, and
+/// the new options need the space parameters and something to check.
+#[test]
+fn space_elevations_are_judged_three_valued_and_declared_with_the_spaces() {
+    let (model, extents) = stepped_floors();
+    let mut extra = spaces(0.05);
+    extra.push(("space_elevation", string("both")));
+    extra.push(("space_height", boolean(false)));
+    let evaluation = run(model, extents.with("space-level", 0.04, 3.0, 0.02), extra);
+    assert_eq!(flagged(&evaluation), ["space-sunk"]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [(
+            "space-level".to_owned(),
+            NotEvaluatedReason::IncompleteEvidence
+        )]
+    );
+    for extra in [
+        vec![("space_elevation", string("bottom"))],
+        [spaces(0.05), vec![("space_height", boolean(false))]].concat(),
+        [spaces(0.05), vec![("space_elevation", string("floor"))]].concat(),
+    ] {
+        let (model, extents) = stepped_floors();
+        let evaluation = run(model, extents, extra);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}

@@ -44,7 +44,15 @@ use crate::support::{
 /// With `space_selector`, the spaces `space_path` reaches from each checked
 /// member (a storey's spaces, say) must each be as high as the member,
 /// within `space_tolerance`: a space's height is the rise from its bottom to
-/// its top, through the vertical-extent service.
+/// its top, through the vertical-extent service. `space_height: false`
+/// leaves that comparison out.
+///
+/// With `space_elevation` (`bottom`, `top` or `both`), the spaces of each
+/// member must share their bottom (or top) elevation within
+/// `space_tolerance`: a space whose elevation lies surely beyond the
+/// tolerance of the prevailing one (the one most of the member's spaces
+/// share, the lowest among equally common ones) is found. Only exact
+/// elevations decide the prevailing one.
 ///
 /// A height measured from geometry is an interval; a verdict needs the whole
 /// interval on one side of a bound, and one straddling it is not evaluated.
@@ -130,6 +138,31 @@ struct Config<'a> {
     traversal: Option<Traversal<'a>>,
     contents: Option<Reach<'a>>,
     spaces: Option<(Reach<'a>, f64)>,
+    space_checks: SpaceChecks,
+}
+
+/// What the spaces a level reaches are checked for.
+struct SpaceChecks {
+    /// Whether each space is compared with its level's height.
+    height: bool,
+    /// Which elevations the spaces of one level must share.
+    elevation: Vec<Side>,
+}
+
+/// A space's bottom or top.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Bottom,
+    Top,
+}
+
+impl Side {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Bottom => "bottom",
+            Self::Top => "top",
+        }
+    }
 }
 
 impl RuleCapability for LevelSpacing {
@@ -152,6 +185,8 @@ impl RuleCapability for LevelSpacing {
             ParameterDescriptor::optional("space_selector", ParameterType::Selector),
             ParameterDescriptor::optional("space_path", ParameterType::StringList),
             ParameterDescriptor::optional("space_tolerance", ParameterType::Quantity),
+            ParameterDescriptor::optional("space_height", ParameterType::Boolean),
+            ParameterDescriptor::optional("space_elevation", ParameterType::String),
         ]
         .into_iter()
         .chain(traversal_parameters())
@@ -229,6 +264,30 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
             ));
         }
     };
+    let space_height = parameters.boolean("space_height")?;
+    let space_elevation = match parameters.string("space_elevation")? {
+        None => Vec::new(),
+        Some("bottom") => vec![Side::Bottom],
+        Some("top") => vec![Side::Top],
+        Some("both") => vec![Side::Bottom, Side::Top],
+        Some(other) => {
+            return Err(invalid(format!(
+                "`space_elevation` is `{other}`, not `bottom`, `top` or `both`"
+            )));
+        }
+    };
+    if spaces.is_none() && (space_height.is_some() || !space_elevation.is_empty()) {
+        return Err(invalid(
+            "`space_height` and `space_elevation` need `space_selector`, `space_path` and \
+             `space_tolerance`",
+        ));
+    }
+    let space_height = space_height.unwrap_or(true);
+    if spaces.is_some() && !space_height && space_elevation.is_empty() {
+        return Err(invalid(
+            "with `space_height` false, the spaces need a `space_elevation` to check",
+        ));
+    }
     if minimum.is_none() && maximum.is_none() && !consistent && spaces.is_none() {
         return Err(invalid(
             "declare a minimum, a maximum, consistent or a space_selector",
@@ -249,6 +308,10 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
         traversal: parameters.traversal()?,
         contents,
         spaces,
+        space_checks: SpaceChecks {
+            height: space_height,
+            elevation: space_elevation,
+        },
     })
 }
 
@@ -463,7 +526,16 @@ fn check(
     evaluation: &mut CapabilityEvaluation,
     tables: &mut Tables,
 ) {
-    let heights = heights(context, config, levels, evaluation);
+    // Only the spaces' shared elevations need no level height.
+    let needs_heights = config.minimum.is_some()
+        || config.maximum.is_some()
+        || config.consistent
+        || (config.spaces.is_some() && config.space_checks.height);
+    let heights = if needs_heights {
+        heights(context, config, levels, evaluation)
+    } else {
+        Vec::new()
+    };
     for level in levels {
         let height = heights
             .iter()
@@ -515,7 +587,25 @@ fn check(
     if config.consistent {
         consistency(rule, config, &heights, evaluation);
     }
-    if let Some((spaces, tolerance)) = &config.spaces {
+    if let Some((spaces, tolerance)) = &config.spaces
+        && !config.space_checks.elevation.is_empty()
+    {
+        for level in levels {
+            if let Err((reason, message)) = space_elevations(
+                context,
+                rule,
+                (spaces, *tolerance),
+                &config.space_checks.elevation,
+                level,
+                evaluation,
+            ) {
+                evaluation.push_object_not_evaluated(level.object.id.clone(), reason, message);
+            }
+        }
+    }
+    if let Some((spaces, tolerance)) = &config.spaces
+        && config.space_checks.height
+    {
         for height in &heights {
             match space_heights(
                 context,
@@ -586,6 +676,100 @@ fn consistency(
             );
         }
     }
+}
+
+/// Requires the spaces of a level to share their bottom (or top) elevation:
+/// each is judged against the prevailing exact elevation among them.
+fn space_elevations(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    (spaces, tolerance): (&Reach<'_>, f64),
+    sides: &[Side],
+    level: &Level<'_>,
+    evaluation: &mut CapabilityEvaluation,
+) -> Result<(), Unavailable> {
+    let (members, relation) = reached(context, spaces, level.object, "space(s)")?;
+    if members.len() < 2 {
+        return Ok(());
+    }
+    let service = extents(context)?;
+    let mut measured = Vec::new();
+    for space in members {
+        match extent(service, &space) {
+            Ok(extent) => measured.push((space, extent)),
+            Err((reason, message)) => {
+                evaluation.push_object_not_evaluated(space, reason, message);
+            }
+        }
+    }
+    for &side in sides {
+        let interval = |extent: &VerticalExtent| {
+            let elevation = match side {
+                Side::Bottom => extent.bottom(),
+                Side::Top => extent.top(),
+            };
+            (elevation.lower_metres(), elevation.upper_metres())
+        };
+        #[allow(clippy::float_cmp)]
+        let exact: Vec<f64> = measured
+            .iter()
+            .map(|(_, extent)| interval(extent))
+            .filter(|(lower, upper)| lower == upper)
+            .map(|(lower, _)| lower)
+            .collect();
+        let Some(reference) = prevailing(&exact, tolerance).map(|index| exact[index]) else {
+            for (space, _) in &measured {
+                evaluation.push_object_not_evaluated(
+                    space.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "no space of level {} has an exact {} elevation to compare with",
+                        level.object.id,
+                        side.name()
+                    ),
+                );
+            }
+            continue;
+        };
+        for (space, extent) in &measured {
+            let (lower, upper) = interval(extent);
+            let (below, above) = (reference - upper, lower - reference);
+            let differs = format!(
+                "space {} elevation is {}, and the prevailing {} elevation of the spaces of \
+                 level {} is {}",
+                side.name(),
+                shown(lower, upper),
+                side.name(),
+                level.object.id,
+                metres(reference)
+            );
+            if below > tolerance || above > tolerance {
+                let mut evidence = level.evidence.clone();
+                evidence.extend(relation.iter().cloned());
+                evidence.push(extent.evidence().clone());
+                evaluation.push_finding(finding(
+                    rule,
+                    space,
+                    format!(
+                        "{differs}; they may differ by at most {}",
+                        metres(tolerance)
+                    ),
+                    evidence,
+                    vec![level.object.id.clone()],
+                ));
+            } else if reference - lower > tolerance || upper - reference > tolerance {
+                evaluation.push_object_not_evaluated(
+                    space.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "{differs}, which straddles the tolerance of {}",
+                        metres(tolerance)
+                    ),
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Requires each space of a level to be as high as the level.

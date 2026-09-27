@@ -18,6 +18,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   in folders, then its tags. `check --bcf` labels every topic this way,
   qualified by package with several rulesets; GUIDs are unchanged.
   **Breaking:** `Options` gains a field.
+- **Spaces of a storey share their elevation; openings stay near an
+  edge.** (#141) `level-spacing` takes `space_elevation` (`bottom`, `top`
+  or `both`): the spaces a level reaches must share that elevation within
+  `space_tolerance`, each judged against the prevailing exact one, so a
+  floor 0.3 m below the others is found and one within the tolerance is
+  not; `space_height: false` leaves the space-height comparison out.
+  `opening-zone` takes `edge_distance_maximum` and `maximum_edges`
+  (`top`, `bottom`, `both`): a window whose head is 0.6 m below the wall
+  top fails a 0.5 m maximum. **Breaking:** definitions bound to
+  `level-spacing` or `opening-zone` must declare the new optional
+  parameters.
 - **Allowed profiles read every profile dimension, and list values per
   dimension.** (#139) `allowed-profile` gains columns for ellipse
   semi-axes (`semi_axis_1`, `semi_axis_2`), a trapezium's top

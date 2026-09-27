@@ -1017,3 +1017,82 @@ fn a_shaft_through_a_notched_slab_keeps_clear_of_the_notch() {
     );
     assert!(unevaluated(&evaluation).is_empty());
 }
+
+/// A 5 m x 0.2 m wall 3 m high holding 1 m x 1.2 m windows centred at
+/// `(x, z)`: `(1, 1.8)` has its head 0.6 m below the wall top, `(3.5, 2)`
+/// 0.4 m.
+fn windows_below_the_top() -> Model {
+    let model = extrusion(
+        Model::default(),
+        "w",
+        "wall",
+        [0.0; 3],
+        UPRIGHT,
+        3.0,
+        "rectangle",
+        &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+    );
+    let window = |model: Model, local: &str, x: f64, z: f64| {
+        extrusion(
+            model,
+            local,
+            "opening",
+            [x, 0.1, z],
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+            0.2,
+            "rectangle",
+            &[("XDim", 1.0), ("YDim", 1.2)],
+        )
+        .edge("voids", "w", local)
+    };
+    let model = window(model, "low", 1.0, 1.8);
+    window(model, "high", 3.5, 2.0)
+}
+
+fn wall_edges(extra: Vec<(&'static str, ParameterValue)>) -> CapabilityEvaluation {
+    let mut parameters = vec![
+        ("host_path", strings(&["voids:backward"])),
+        ("length_axis", string("profile-x")),
+        ("height_axis", string("extrusion")),
+    ];
+    parameters.extend(extra);
+    windows_below_the_top().evaluate(&OpeningZone, &rule(ID, kind("opening"), parameters))
+}
+
+/// `edge_distance_maximum` bounds the distance to the edges `maximum_edges`
+/// names: a head 0.6 m below the wall top fails a 0.5 m maximum, one 0.4 m
+/// below passes, and the sills far above the bottom are not judged.
+#[test]
+fn a_window_head_too_far_below_the_wall_top_is_found() {
+    let evaluation = wall_edges(vec![
+        ("edge_distance_maximum", metres(0.5)),
+        ("maximum_edges", string("top")),
+    ]);
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "low".into(),
+            "opening is 0.6 m from the top edge of its host w; at most 0.5 m allowed".into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+
+    // Both edges by default: every sill is far above the bottom too.
+    let evaluation = wall_edges(vec![("edge_distance_maximum", metres(0.5))]);
+    assert_eq!(sorted(&evaluation).len(), 3);
+
+    // An unknown edge, or edges without a maximum, are invalid declarations.
+    for extra in [
+        vec![
+            ("edge_distance_maximum", metres(0.5)),
+            ("maximum_edges", string("left")),
+        ],
+        vec![("maximum_edges", string("top"))],
+    ] {
+        let evaluation = wall_edges(extra);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}

@@ -411,3 +411,102 @@ fn tessellated_duplicates_widen_by_the_deviations() {
     // boxes grown by each deviation bound it above.
     assert_interval(extents.z(), 3.0 - 0.006, 3.002);
 }
+
+fn assert_volume(interval: axioval_engine::VolumeInterval, expected: f64) {
+    assert!(
+        interval.lower_cubic_metres() <= expected + 1e-12
+            && interval.upper_cubic_metres() >= expected - 1e-12
+            && interval.upper_cubic_metres() - interval.lower_cubic_metres() < 1e-9,
+        "{interval:?}, expected {expected}"
+    );
+}
+
+/// A 0.1 m square pipe 2.2 m long through a 0.2 m wall shares 0.002 m³.
+#[test]
+fn a_pipe_through_a_wall_shares_its_section_times_the_wall_thickness() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_mesh(id("pipe"), cuboid([1.0, -1.0, 1.0], [1.1, 1.2, 1.1]));
+    let volume = measure(geometry, "pipe", "wall")
+        .intersection_volume()
+        .expect("two closed solids");
+    assert_volume(volume.shared(), 0.002);
+    assert_volume(volume.subject(), 0.022);
+    assert_volume(volume.counterpart(), 2.4);
+    let (lower, upper) = volume.ratio_of_smaller();
+    assert!(lower <= 1.0 / 11.0 && upper >= 1.0 / 11.0 && upper - lower < 1e-9);
+}
+
+/// A body inside another shares all of itself; bodies apart share nothing,
+/// exactly.
+#[test]
+fn a_contained_body_shares_its_whole_volume_and_apart_bodies_none() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 3.0]))
+        .with_mesh(id("box"), cuboid([1.0, 1.0, 1.0], [2.0, 2.0, 2.0]))
+        .with_mesh(id("far"), cuboid([10.0, 0.0, 0.0], [11.0, 1.0, 1.0]));
+    let service = AxiolidProximityService::new(geometry);
+    let inside = service
+        .measure_proximity(&ProximityRequest::try_new(id("box"), id("room")).unwrap())
+        .unwrap()
+        .intersection_volume()
+        .unwrap();
+    assert_volume(inside.shared(), 1.0);
+    let (lower, upper) = inside.ratio_of_smaller();
+    assert!(upper >= 1.0 && lower > 0.999_999, "{lower} {upper}");
+    let apart = service
+        .measure_proximity(&ProximityRequest::try_new(id("far"), id("room")).unwrap())
+        .unwrap()
+        .intersection_volume()
+        .unwrap();
+    assert!(apart.shared().is_exact());
+    assert!(apart.shared().upper_cubic_metres().abs() < f64::EPSILON);
+}
+
+/// Walls butted end to end touch: they share no volume, within rounding.
+#[test]
+fn touching_bodies_share_no_volume() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), wall())
+        .with_mesh(id("b"), cuboid([4.0, 0.0, 0.0], [8.0, 0.2, 3.0]));
+    let volume = measure(geometry, "a", "b").intersection_volume().unwrap();
+    assert_volume(volume.shared(), 0.0);
+}
+
+/// An open surface encloses no volume, so none is reported.
+#[test]
+fn an_open_surface_has_no_intersection_volume() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]))
+        .with_mesh(id("sheet"), quad(0.5));
+    assert!(
+        measure(geometry, "sheet", "slab")
+            .intersection_volume()
+            .is_none()
+    );
+}
+
+/// A tessellated column's volumes widen by the band within its chord
+/// deviation, so the true cylinder's volumes lie inside.
+#[test]
+fn a_tessellated_column_widens_its_volumes() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), cuboid([0.0, 0.0, 3.0], [4.0, 4.0, 3.2]))
+        .with_tessellated_mesh(id("column"), column([2.0, 2.0], 0.2, [0.0, 4.0], 24), 0.002);
+    let volume = measure(geometry, "column", "slab")
+        .intersection_volume()
+        .unwrap();
+    let cylinder = std::f64::consts::PI * 0.2 * 0.2;
+    let shared = volume.shared();
+    assert!(
+        shared.lower_cubic_metres() <= cylinder * 0.2
+            && shared.upper_cubic_metres() >= cylinder * 0.2,
+        "{shared:?}"
+    );
+    assert!(!shared.is_exact());
+    let own = volume.subject();
+    assert!(
+        own.lower_cubic_metres() <= cylinder * 4.0 && own.upper_cubic_metres() >= cylinder * 4.0,
+        "{own:?}"
+    );
+}

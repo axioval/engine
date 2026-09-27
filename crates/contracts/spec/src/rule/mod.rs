@@ -14,7 +14,6 @@ pub mod assertion;
 pub mod basic_checks;
 pub mod clash_matrix;
 pub mod component_clearance;
-pub mod containment;
 pub mod coverage;
 pub mod daylight;
 pub mod definition;

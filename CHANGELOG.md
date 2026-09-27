@@ -63,6 +63,38 @@ All notable changes are documented here. This project follows Semantic Versionin
   left out, and one whose angle or axes are undecided is a possible cover
   only. **Breaking:** definitions bound to `counterpart-coverage` must
   declare the new optional parameter `axis_tolerance`. (#63)
+- **Containment and cover.** The new capability `containment` checks that
+  the selected inner elements (columns, reinforcement) lie in
+  `counterparts` (walls, concrete bodies): their certified shared volume is
+  at least `minimum_volume_ratio` of the smaller body's, judged on the
+  interval, and with `combine_adjacent` outer elements whose surfaces meet
+  count together, the combined volume bounded by inclusion and exclusion. A
+  `cover` table bounds the signed distance from the inner body to one class
+  of the outer element's faces (`top`, `side`, `bottom`, `any`) from
+  `inside` (a cover) or `outside` (a protrusion) between a minimum and a
+  maximum; `minimum_count` and `maximum_count` bound the inner elements per
+  outer element, and `report_orphans` reports one lying in none. Undecided
+  containments, straddling intervals and counts the undecided elements
+  could change are not evaluated. The proximity contract gains
+  `measure_face_distance` (`FaceDistanceRequest`, `FaceClass`,
+  `FaceDistanceEvidence`, `FaceDistanceError`), a signed distance positive
+  inside the host and negative outside, refused by default; the Axiolid
+  adapter answers it exactly for a body wholly inside an exact planar host
+  and with sound bounds otherwise, refusing a tessellated or open host. (#59)
+- **Intersection volume and a volume tolerance.** `ProximityEvidence`
+  carries an optional `IntersectionVolume`: the certified volume two closed
+  bodies share and each body's own, as `VolumeInterval`s
+  (`with_intersection_volume`, `intersection_volume`,
+  `ratio_of_smaller`). The Axiolid adapter measures it with
+  `axiolid-inspect`'s certified volume integrals, exactly zero for bodies
+  apart, unmeasured for open or refused meshes, and widened for a
+  tessellation by the volume within its chord deviation. `clash` and the
+  `clash-matrix` cells take `volume_tolerance_cubic_metres`: an
+  intersection counts only when its shared volume exceeds it, a straddling
+  or unmeasured volume leaving the pair not evaluated. **Breaking:**
+  definitions bound to `clash` must declare the new optional parameter, and
+  `clash-matrix` definitions the new optional `cells` column. (#57)
+
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m
@@ -1256,6 +1288,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   types. Nothing in the engine consumed them. `ModelSelectionSpec` remains.
   The "Retired rule plans" table on the capability migration page maps each
   plan's fields to capability parameters. (#41)
+- **Breaking.** `axioval-spec` drops `ComponentContainmentPlanSpec` (the
+  `rule::containment` module with `HostSurface`, `SurfaceSide` and
+  `DimensionBandSpec`) and its `CheckSemantics::ComponentContainment`
+  variant, now expressed by `containment`; the migration page maps its
+  fields. (#59)
 
 ## [0.2.0] - 2026-09-24
 

@@ -11,6 +11,7 @@ pub(crate) mod containment;
 pub mod derived_relationships;
 pub mod envelope_membership;
 pub mod facade_area;
+mod face_distance;
 pub mod free_space;
 pub mod geometry;
 pub mod guard;

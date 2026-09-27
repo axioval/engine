@@ -61,7 +61,9 @@ A `ProximityService` answers two questions:
     `vertical()` the z extent;
   - the **Hausdorff distance** between the two surfaces: the farthest any
     point of either surface lies from the other, zero exactly when they
-    coincide.
+    coincide;
+  - the **intersection volume** (`IntersectionVolume`): the volume the two
+    closed bodies share, with each body's own volume.
 
 The service measures and never decides. Two limits of the measurement are
 explicit in the contract:
@@ -89,9 +91,39 @@ explicit in the contract:
   refused. Both are optional: a service that does not measure them leaves
   the questions they answer open.
 
-The intersection's **volume** is not measured. A sound volume bound needs a
-certified mesh boolean, which waits on axiolid/kernel#183; there is no
-volume tolerance until then.
+- **Volumes are certified.** The shared volume and both bodies' volumes
+  are `VolumeInterval`s in cubic metres, sure to contain the true values,
+  attached with `with_intersection_volume`. The shared volume never
+  exceeds either body's; open surfaces enclose none, so a pair without a
+  penetration measurement cannot carry one; bodies apart at the surface
+  and not holding one another share none; and a body said to lie inside
+  the other shares its whole volume with it. `ratio_of_smaller()` bounds
+  the shared volume's share of the smaller body, rounded outward. A
+  service that does not measure volumes leaves them `None`.
+
+### Distance to a class of faces
+
+`measure_face_distance(request)` answers what cover and protrusion checks
+ask: how far a body lies from one class of another body's (the host's)
+faces. A `FaceDistanceRequest` names the body, the host and a `FaceClass`:
+
+| Class | Host faces whose outward normal |
+|---|---|
+| `top` | points upwards within 45° of vertical (z component at least √½) |
+| `bottom` | points downwards within 45° of vertical |
+| `side` | lies between: walls' faces and ends |
+| `any` | every face |
+
+The answer is a signed distance. With `F` the selected faces, each point of
+the body counts `+d(p, F)` when it lies in the host (boundary included) and
+`-d(p, F)` when it lies outside; the body's distance is the least of them.
+Positive is a cover (the whole body inside, that far from the faces),
+negative a protrusion (part of the body outside, the farthest of it that far
+from the faces), zero a body reaching the faces. It is a
+`SignedDistanceInterval` sure to hold the true value, a point only when the
+measurement proves one. The default method refuses with
+`FaceDistanceError::Unsupported`, so a service that does not measure face
+distances fails closed.
 
 ### Distances in a projection
 
@@ -174,6 +206,36 @@ primitives:
   Identical meshes come out exactly zero; a tessellation widens both bounds
   by the combined deviation.
 
+- **Intersection volume** comes from `axiolid-inspect`'s certified volume
+  integrals (`intersection_volume`, `enclosed_volume`): no boolean mesh is
+  built, and every value is an interval sure to hold the true one. Only two
+  closed solids have one. Bodies apart at the surface and not holding one
+  another share exactly nothing without integrating. A mesh the kernel
+  refuses (open, self-intersecting, enclosing no volume) leaves the volume
+  unmeasured, not the whole measurement. A tessellated body's true surface
+  lies within its chord deviation of the mesh, so its volumes widen by an
+  upper bound on the volume within that band: per triangle
+  `2·d·A + (π/2)·P·d² + (4/3)·π·d³` (Steiner's formula for a flat convex set
+  of area `A` and perimeter `P`).
+- **Face distance** reads each host triangle's class from its outward
+  normal, the outward side taken from the host's signed volume so either
+  winding reads alike. A body wholly inside the host (every vertex inside
+  by winding number, its surface clear of the host's) has its distance
+  exactly: the least triangle-to-triangle distance to the selected faces,
+  exact for planar meshes. Otherwise the distance is bounded: above by each
+  vertex clear of the host surface, signed by its side, by zero where the
+  body reaches the faces and by the body's distance to them; below by minus
+  the farthest the part outside the host can lie from the faces. That part
+  lies in the hull of the body's vertices not proven inside, the points
+  where the two surfaces cross and the host's vertices near the body, and
+  the distance to one face is convex, so its farthest vertex bounds it; the
+  least of those over the faces bounds every point. The bound is exact when
+  the outside part lies over one face triangle and may be wider over
+  several. The host must be an exact closed solid (a tessellation's chords
+  do not state its faces' normals); a triangle within rounding of 45°
+  refuses a class it might or might not belong to; a tessellated body
+  widens both bounds by its chord deviation.
+
 Both bodies are indexed with an `axiolid-spatial` bounding-volume hierarchy,
 so each query touches only nearby triangles. Samples are ranked by their
 distance to the other surface and tested deepest first; the first one inside is
@@ -227,6 +289,7 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 | `duplicate_tolerance_metres` | number, optional | surfaces this close are duplicates; default zero |
 | `horizontal_tolerance_metres` | number, optional | an intersection must reach further along both plan axes; default zero |
 | `vertical_tolerance_metres` | number, optional | an intersection must reach further in height; default zero |
+| `volume_tolerance_cubic_metres` | number, optional | an intersection must share more volume; default zero |
 | `report_duplicates` | boolean, optional | report duplicates; default true |
 | `report_containment` | boolean, optional | report bodies inside others; default true |
 | `report_intersections` | boolean, optional | report intersections; default true |
@@ -241,9 +304,11 @@ Each pair falls into the first class that holds:
 3. **Intersection**: a witnessed penetration deeper than the penetration
    tolerance, whose intersection reaches further than the horizontal
    tolerance along both x and y (the narrower plan axis decides) and further
-   than the vertical tolerance in z. A zero axis tolerance asks nothing of
-   that axis. A duct sunk 5 mm into a slab is wide in plan but 5 mm high, so
-   a 10 mm vertical tolerance lets it pass.
+   than the vertical tolerance in z, and whose certified volume exceeds the
+   volume tolerance. A zero tolerance asks nothing of its axis or of the
+   volume. A duct sunk 5 mm into a slab is wide in plan but 5 mm high, so a
+   10 mm vertical tolerance lets it pass; a volume tolerance lets small
+   overlaps at joints pass however they are shaped.
 4. **Clearance**: a separation below the clearance, when no class above
    holds.
 
@@ -255,12 +320,13 @@ angle reaches further along x and y than its depth into the wall; the
 penetration tolerance still bounds that depth.
 
 **Judging intervals.** A class holds when the whole measured interval says
-so and fails when none of it does. When a Hausdorff distance or an extent
-straddles its tolerance, the pair is judged both ways: it is reported when
+so and fails when none of it does. When a Hausdorff distance, an extent or
+the shared volume straddles its tolerance, the pair is judged both ways: it is reported when
 both readings are findings (with the finding that holds either way) and
 passes when both pass; otherwise it is not evaluated. A service that
 measures no Hausdorff distance therefore leaves touching pairs open while
-duplicates are reported.
+duplicates are reported, and an unmeasured volume (an open surface, a mesh
+the kernel refuses) leaves an intersection open under a volume tolerance.
 
 **Exclusions.** Each `exclude_paths` entry is a relationship path, its
 steps separated by spaces and written like the `path` of the distance
@@ -282,8 +348,8 @@ be decided (a relationship the source refuses, a source recording no layers)
 never hides a pair and never reports one: a pair that would be reported is
 not evaluated instead, and one that passes stays passed.
 
-The intersection volume and a volume tolerance wait on
-axiolid/kernel#183.
+Axis extents along an element's own axes, rather than the world's, are
+still open.
 
 ### Clash matrix
 
@@ -317,7 +383,7 @@ Each cell keys both sides of the pair: `subject_*` and `counterpart_*`.
 | `*_selector` | selector | a selector the object must match, such as an entity type |
 | `*_key_1` … `*_key_3` | pattern | the value of the property `key_<n>` names |
 | `penetration_tolerance_metres` | number, required | as for `clash` |
-| `clearance_metres`, `duplicate_tolerance_metres`, `horizontal_tolerance_metres`, `vertical_tolerance_metres` | number | as for `clash` |
+| `clearance_metres`, `duplicate_tolerance_metres`, `horizontal_tolerance_metres`, `vertical_tolerance_metres`, `volume_tolerance_cubic_metres` | number | as for `clash` |
 | `report_duplicates`, `report_containment`, `report_intersections` | boolean | as for `clash`; default true |
 | `severity` | string | `error`, `warning` or `info`; default the rule's |
 | `label` | string | names the cell in findings |
@@ -372,6 +438,73 @@ exclusion is off unless switched on.
 A finding carries its cell's severity, ends with the cell it was judged by
 (``(clash matrix cell 0 `architecture x structure`)``), and carries the
 evidence of the category values read to choose it.
+
+### Containment and cover
+
+`axioval:capability.containment` checks that the rule's selected inner
+elements (columns, reinforcement, fixings) lie in `counterparts` (walls,
+slabs, concrete bodies), keep their cover to the outer element's faces, and
+are held in the declared numbers.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `counterparts` | selector | the outer elements |
+| `minimum_volume_ratio` | number, required | the share of the smaller body the two must share; above zero, at most one |
+| `combine_adjacent` | boolean, optional | also take outer elements whose surfaces meet together; default false |
+| `cover` | table, optional | bands on the distance to a class of faces, columns below |
+| `minimum_count`, `maximum_count` | integer, optional | how many inner elements each outer element holds |
+| `report_orphans` | boolean, optional | report an inner element that lies in no outer element; default false |
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `faces` | string, required | `top`, `side`, `bottom` or `any` |
+| `side` | string | `inside` (the default): the cover the body keeps inside the faces; `outside`: how far it reaches past them |
+| `minimum_metres`, `maximum_metres` | number | the band; at least one |
+
+A rule must declare a cover band, a count or `report_orphans`; one
+`(faces, side)` pair per row.
+
+**Contained.** An inner element lies in an outer one when their certified
+shared volume is at least `minimum_volume_ratio` of the smaller body's
+volume. The ratio is an interval: contained when its lower bound reaches
+the ratio, not contained when its upper bound falls short, undecided
+otherwise. Certified intervals rarely prove an exact ratio of one, so ask
+for slightly less (0.99) where "wholly inside" is meant. With
+`combine_adjacent`, an inner element in no single outer element may lie in
+several whose surfaces meet, taken together: the column at a wall junction.
+The combined shared volume is bounded by the sum of the shares less what
+the outer elements share with one another (never below the largest share),
+and the combined body likewise. An adjacency the measurement cannot decide
+is read both ways: a combination holds when it holds of surely adjacent
+members and fails only when it fails however the undecided ones are read.
+
+**Cover.** For each outer element an inner one surely lies in, each band
+judges the face distance of the inner body to that class of the outer
+element's faces: an `inside` band the signed distance itself, an `outside`
+band its negation. A finding needs the whole interval beyond a bound; one
+straddling a bound is not evaluated. The faces of a combination are not one
+body's (their junction would count as a face), so an inner element held only
+by a combination has its cover reported not evaluated; so does its cover to
+an outer element it may or may not lie in.
+
+**Counts.** Each outer element counts the inner elements that surely lie
+in it (alone, or as a member of a combination it shares volume with) and
+those that may: an undecided containment, and every inner element whose
+extent could not be read. A minimum fails when even the possible ones fall
+short, a maximum when the sure ones exceed it; anything between is not
+evaluated. The finding is the outer element's and names the inner elements
+it surely holds.
+
+**Orphans.** With `report_orphans`, an inner element lying in no outer
+element, alone or combined, is a finding, but only when every containment
+was decided and every outer element measured; otherwise it is not
+evaluated.
+
+In IFC, "columns inside walls with at least 40 mm side cover" is a rule
+over `IfcColumn` with `counterparts` selecting `IfcWall`,
+`minimum_volume_ratio` 0.99 and one `cover` row `side`, minimum 0.04.
+
+### Distance
 
 `axioval:capability.distance` requires each subject's counterparts to keep a
 declared distance. It takes these parameters:

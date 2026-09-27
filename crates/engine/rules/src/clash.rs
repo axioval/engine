@@ -10,10 +10,11 @@
 //!   of each other (their Hausdorff distance), whatever else is true of them.
 //! - **Containment**: one body lies wholly inside the other.
 //! - **Intersection**: one body reaches into the other deeper than the
-//!   penetration tolerance, and the intersection reaches further than the
+//!   penetration tolerance, the intersection reaches further than the
 //!   horizontal tolerance along both plan axes and further than the vertical
-//!   tolerance in height. Zero separation alone is not a clash: a slab
-//!   resting on a wall has its surfaces meeting and nothing interpenetrating.
+//!   tolerance in height, and the volume the bodies share exceeds the volume
+//!   tolerance. Zero separation alone is not a clash: a slab resting on a
+//!   wall has its surfaces meeting and nothing interpenetrating.
 //! - **Clearance**: two bodies coming closer than the declared clearance
 //!   without falling into a class above.
 //!
@@ -72,6 +73,7 @@ pub(crate) struct Profile {
     duplicate_tolerance: f64,
     horizontal_tolerance: f64,
     vertical_tolerance: f64,
+    volume_tolerance: f64,
     report: Report,
 }
 
@@ -107,6 +109,7 @@ impl Profile {
             duplicate_tolerance: length("duplicate_tolerance_metres")?.unwrap_or(0.0),
             horizontal_tolerance: length("horizontal_tolerance_metres")?.unwrap_or(0.0),
             vertical_tolerance: length("vertical_tolerance_metres")?.unwrap_or(0.0),
+            volume_tolerance: length("volume_tolerance_cubic_metres")?.unwrap_or(0.0),
             report: Report {
                 duplicate: switch("report_duplicates")?,
                 containment: switch("report_containment")?,
@@ -131,12 +134,13 @@ impl Profile {
 
 /// The profile's value names, shared by the `clash` parameters and the
 /// `clash-matrix` cell columns.
-pub(crate) const PROFILE_NUMBERS: [&str; 5] = [
+pub(crate) const PROFILE_NUMBERS: [&str; 6] = [
     "penetration_tolerance_metres",
     "clearance_metres",
     "duplicate_tolerance_metres",
     "horizontal_tolerance_metres",
     "vertical_tolerance_metres",
+    "volume_tolerance_cubic_metres",
 ];
 pub(crate) const PROFILE_SWITCHES: [&str; 3] = [
     "report_duplicates",
@@ -307,7 +311,8 @@ impl Profile {
     }
 
     /// A penetration past the tolerance: an intersection when it also
-    /// reaches past the axis tolerances.
+    /// reaches past the axis tolerances and shares more than the volume
+    /// tolerance.
     fn intersection(
         &self,
         measured: &ProximityEvidence,
@@ -334,6 +339,16 @@ impl Profile {
             self.vertical_tolerance,
             extents.map(|extents| extents.vertical()),
         ));
+        let shared = measured.intersection_volume().map(|volume| volume.shared());
+        let holds = holds.and(if self.volume_tolerance == 0.0 {
+            Holds::Yes
+        } else {
+            match shared {
+                Some(shared) if shared.lower_cubic_metres() > self.volume_tolerance => Holds::Yes,
+                Some(shared) if shared.upper_cubic_metres() <= self.volume_tolerance => Holds::No,
+                _ => Holds::Unknown,
+            }
+        });
         let axes = self.horizontal_tolerance > 0.0 || self.vertical_tolerance > 0.0;
         let described = |interval: Option<axioval_engine::LengthInterval>| {
             interval.map_or_else(
@@ -360,6 +375,25 @@ impl Profile {
         } else {
             String::new()
         };
+        let reach = if self.volume_tolerance > 0.0 {
+            let volume = shared.map_or_else(
+                || "an unmeasured volume".to_owned(),
+                |shared| {
+                    if shared.is_exact() {
+                        format!("{:.6} m³", shared.lower_cubic_metres())
+                    } else {
+                        format!(
+                            "{:.6} to {:.6} m³",
+                            shared.lower_cubic_metres(),
+                            shared.upper_cubic_metres()
+                        )
+                    }
+                },
+            );
+            format!("{reach}, sharing {volume}")
+        } else {
+            reach
+        };
         let reported = || {
             if self.report.intersection {
                 Outcome::Finding(format!(
@@ -377,8 +411,8 @@ impl Profile {
                 reported(),
                 self.clearance(measured, counterpart, note),
                 format!(
-                    "whether the intersection with {counterpart} exceeds the horizontal tolerance {:.4} m and the vertical tolerance {:.4} m cannot be decided{reach}{note}",
-                    self.horizontal_tolerance, self.vertical_tolerance
+                    "whether the intersection with {counterpart} exceeds the horizontal tolerance {:.4} m, the vertical tolerance {:.4} m and the volume tolerance {:.6} m³ cannot be decided{reach}{note}",
+                    self.horizontal_tolerance, self.vertical_tolerance, self.volume_tolerance
                 ),
             ),
         }

@@ -42,7 +42,6 @@ use super::spatial::{
 };
 use super::stair::StairPlanSpec;
 use super::structure_architecture_conformity::StructureArchitectureConformityPlanSpec;
-use crate::rule::containment::ComponentContainmentPlanSpec;
 use crate::rule::coverage::CoverageComparisonPlanSpec;
 use crate::rule::envelope::BuildingEnvelopePlanSpec;
 use crate::rule::external_wall::ExternalWallValidationPlanSpec;
@@ -237,10 +236,6 @@ pub enum CheckSemantics {
     /// Opening placement within an extruded parametric host profile.
     ElementHolePlacement {
         plan: ElementHolePlanSpec,
-    },
-    /// Exact component-inside-component classification, cardinality, and surface clearances.
-    ComponentContainment {
-        plan: ComponentContainmentPlanSpec,
     },
     /// Exact provider-resolved panoramic visibility and occlusion checking.
     ComponentVisibility {

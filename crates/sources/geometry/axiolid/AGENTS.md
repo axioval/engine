@@ -111,10 +111,21 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   outermost first) below and the boxes' overlap above; the Hausdorff
   distance is bounded per triangle by the farthest vertex from one other
   triangle, split twice at most. Never report either as a point you did
-  not bound, and never measure a volume without a certified boolean
-  (axiolid/kernel#183). A tessellated overlap is asserted
+  not bound. Intersection volumes come only from `axiolid-inspect`'s
+  certified integrals (`intersection_volume`, `enclosed_volume`), for two
+  closed solids; a kernel refusal leaves the volume `None`, never zero, and
+  a tessellation widens it by `tube_volume`, never by nothing. A tessellated overlap is asserted
   only from a witness deeper than the deviations and denied only beyond the
   combined deviation; otherwise it stays open. Never decide it on the mesh.
+- `src/face_distance.rs` answers `measure_face_distance` for the proximity
+  service. Face classes come from outward normals (outward by the host's
+  signed volume); a triangle within `CLASS_TOLERANCE` of 45° refuses the
+  classes it might belong to. Only a body proven wholly inside (every vertex
+  inside, surface clear of the host's) gets the exact triangle distance;
+  otherwise the interval's lower bound spans the outside part (vertices not
+  proven inside, surface crossings, nearby host vertices) face by face. The
+  host must be an exact closed solid; a tessellated body widens both bounds
+  and decides a vertex's side only beyond its deviation.
 - **Every service honours fidelity.** Proximity reports approximate evidence.
   The services whose contracts only accept exact evidence -- contact,
   envelope, free space, guard, space -- refuse with their inexact-evidence
@@ -170,6 +181,10 @@ branch. Check the registry source, not the kernel checkout, before relying on
 an API.
 
 ## Waiting on upstream
+
+- `axiolid-inspect` 0.3.1 (certified `intersection_volume`,
+  `enclosed_volume`, axiolid/kernel#183) is on the kernel's main branch; the
+  workspace requires `0.3` and builds against it once it is published.
 
 - axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
   plan areas here are off by ~1.5e-8 of the extent while reported exact.

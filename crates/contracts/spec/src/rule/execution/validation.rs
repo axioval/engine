@@ -82,9 +82,6 @@ impl CheckRuleSpec {
         if let CheckSemantics::ElementHolePlacement { plan } = &self.semantics {
             return plan.validate();
         }
-        if let CheckSemantics::ComponentContainment { plan } = &self.semantics {
-            return plan.validate();
-        }
         if let CheckSemantics::ComponentVisibility { plan } = &self.semantics {
             return plan.validate();
         }

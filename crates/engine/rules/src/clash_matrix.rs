@@ -56,6 +56,7 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("duplicate_tolerance_metres", ColumnKind::Number),
     TableColumn::optional("horizontal_tolerance_metres", ColumnKind::Number),
     TableColumn::optional("vertical_tolerance_metres", ColumnKind::Number),
+    TableColumn::optional("volume_tolerance_cubic_metres", ColumnKind::Number),
     TableColumn::optional("report_duplicates", ColumnKind::Boolean),
     TableColumn::optional("report_containment", ColumnKind::Boolean),
     TableColumn::optional("report_intersections", ColumnKind::Boolean),

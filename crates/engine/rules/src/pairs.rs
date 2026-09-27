@@ -37,6 +37,8 @@ impl Unevaluated {
 pub(crate) struct Prepared<'a> {
     pub(crate) service: &'a ProximityServiceHandle,
     pub(crate) subjects: Vec<ObjectId>,
+    /// Selected subjects whose extent could not be read.
+    pub(crate) unmeasurable_subjects: BTreeSet<ObjectId>,
     /// Counterparts with a readable extent, in identity order.
     pub(crate) counterparts: BTreeSet<ObjectId>,
     /// Selected counterparts whose extent could not be read.
@@ -202,6 +204,11 @@ pub(crate) fn prepare<'a>(
         subjects: subjects
             .iter()
             .filter(|object| bounds.contains_key(&object.id))
+            .map(|object| object.id.clone())
+            .collect(),
+        unmeasurable_subjects: subjects
+            .iter()
+            .filter(|object| unmeasurable.contains(&object.id))
             .map(|object| object.id.clone())
             .collect(),
         counterparts: counterparts

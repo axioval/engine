@@ -547,9 +547,10 @@ pub use properties::{
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use proximity::{
-    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, OverlapExtents,
+    BodyContainment, Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence,
+    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds, OverlapExtents,
     ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, ProximityServiceHandle, VerticalDirection,
+    ProximityRequest, ProximityService, ProximityServiceHandle, VerticalDirection, VolumeInterval,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,

@@ -11,6 +11,7 @@ mod comparison;
 mod component_clearance;
 mod conformance;
 mod consistent_value;
+mod containment;
 mod counterpart_coverage;
 mod counts;
 mod distance;
@@ -68,6 +69,7 @@ pub use comparison::{
 pub use component_clearance::ComponentClearance;
 pub use conformance::SelectorConformance;
 pub use consistent_value::ConsistentValue;
+pub use containment::Containment;
 pub use counterpart_coverage::CounterpartCoverage;
 pub use counts::RelatedCount;
 pub use distance::Distance;
@@ -135,6 +137,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(FreeFloorRectangle))
         .and_then(|registry| registry.register(Clash))
         .and_then(|registry| registry.register(ClashMatrix))
+        .and_then(|registry| registry.register(Containment))
         .and_then(|registry| registry.register(Distance))
         .and_then(|registry| registry.register(SelectorConformance))
         .and_then(|registry| registry.register(UniqueValue))

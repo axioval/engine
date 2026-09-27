@@ -234,6 +234,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "725e20ec6cb607c3e9cf125759123c1ede040c5e3e2685089ba8eff3de719dca"
 
 [[package]]
+name = "axiolid-heal"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed6df8feac2ffa28eeb28ac52d1bd7a923b3faa7f433bce445db92a52a79f226"
+dependencies = [
+ "axiolid-core",
+ "axiolid-guarantees",
+ "axiolid-measure",
+ "axiolid-mesh",
+ "axiolid-predicates",
+ "axiolid-spatial",
+ "thiserror",
+]
+
+[[package]]
+name = "axiolid-inspect"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c320d1a84b3c91df05c072a803c7f64f827fe1c00c8bb64d1cf2edee0ded92"
+dependencies = [
+ "axiolid-core",
+ "axiolid-exact",
+ "axiolid-guarantees",
+ "axiolid-heal",
+ "axiolid-mesh",
+ "axiolid-predicates",
+ "axiolid-spatial",
+ "thiserror",
+]
+
+[[package]]
 name = "axiolid-linear"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -527,6 +558,7 @@ name = "axioval-axiolid"
 version = "0.2.0"
 dependencies = [
  "axiolid-core",
+ "axiolid-inspect",
  "axiolid-measure",
  "axiolid-mesh",
  "axiolid-overlay",

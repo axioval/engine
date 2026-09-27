@@ -4492,3 +4492,153 @@ fn with_geometry_close_parallel_walls_and_an_uncovered_strip_are_found() {
         "{result:#}"
     );
 }
+
+/// The crossing walls share 0.2 m × 0.2 m × 3 m = 0.12 m³. A volume
+/// tolerance below that keeps the clash; one above it hides it.
+#[test]
+fn with_geometry_clash_volume_tolerance_is_read_from_the_ifc_bodies() {
+    let case = Case::new("clash-volume-tolerance");
+    let (output, result) = case.wall_clash(
+        &crossing_walls(),
+        &json!({"volume_tolerance_cubic_metres": {"type": "number", "value": 0.1}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = sorted_findings(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(findings[0].1.contains("sharing 0.120000"), "{findings:?}");
+
+    let (output, result) = case.wall_clash(
+        &crossing_walls(),
+        &json!({"volume_tolerance_cubic_metres": {"type": "number", "value": 0.13}}),
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// A 4 m wall #19, 0.3 m thick and 3 m high, holding column #29 0.02 m from
+/// its front face and column #39 0.05 m from both faces; column #49 stands
+/// free beside it.
+fn columns_in_a_wall() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 0.15, 0.0], [4.0, 0.3, 3.0], wall),
+        placed_box(20, [1.0, 0.12, 0.4], [0.2, 0.2, 2.1], column),
+        placed_box(30, [3.0, 0.15, 0.5], [0.2, 0.2, 2.0], column),
+        placed_box(40, [6.0, 2.0, 0.0], [0.3, 0.3, 3.0], column),
+    )
+}
+
+impl Case {
+    /// Runs a containment rule of columns in walls with `parameters` added.
+    fn containment(&self, parameters: &Value) -> (Output, Value) {
+        let mut bound = json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "minimum_volume_ratio": {"type": "number", "value": 0.99},
+        });
+        for (name, value) in parameters.as_object().unwrap() {
+            bound[name] = value.clone();
+        }
+        self.geometry_rule(
+            &columns_in_a_wall(),
+            &[("column", "IfcColumn")],
+            "axioval:capability.containment",
+            &registry_signature("axioval:capability.containment"),
+            entity("column"),
+            bound,
+        )
+    }
+}
+
+fn cover_row(faces: &str, minimum: f64) -> Value {
+    json!({"faces": {"type": "string", "value": faces},
+           "minimum_metres": {"type": "number", "value": minimum}})
+}
+
+/// The column 0.02 m from the wall face has too little side cover; the
+/// other keeps 0.05 m. Both keep 0.5 m under the top, and only the first
+/// sits 0.4 m over the bottom where 0.45 m is asked.
+#[test]
+fn with_geometry_a_column_with_too_little_side_cover_is_found() {
+    let case = Case::new("containment-cover");
+    let (output, result) = case.containment(&json!({
+        "cover": {"type": "table", "value": [
+            cover_row("side", 0.04),
+            cover_row("top", 0.4),
+            cover_row("bottom", 0.45),
+        ]},
+    }));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    let findings = sorted_findings(&result);
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert!(findings.iter().all(|(id, _)| id == "#29"), "{findings:?}");
+    assert!(
+        findings.iter().any(
+            |(_, message)| message.starts_with("side cover") && message.contains("is 0.0200 m")
+        ),
+        "{findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|(_, message)| message.starts_with("bottom cover")
+                && message.contains("is 0.4000 m")),
+        "{findings:?}"
+    );
+}
+
+/// The free-standing column is an orphan, and the wall holds two columns
+/// where one is allowed.
+#[test]
+fn with_geometry_orphans_and_counts_are_found() {
+    let case = Case::new("containment-counts");
+    let (output, result) = case.containment(&json!({
+        "report_orphans": {"type": "boolean", "value": true},
+        "maximum_count": {"type": "integer", "value": 1},
+    }));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = sorted_findings(&result);
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert_eq!(findings[0].0, "#19", "{findings:?}");
+    assert_eq!(
+        findings[0].1,
+        "holds 2 inner elements, more than the maximum 1"
+    );
+    assert_eq!(findings[1].0, "#49", "{findings:?}");
+    assert!(
+        findings[1].1.starts_with("lies in no outer element"),
+        "{findings:?}"
+    );
+
+    let (output, result) = case.containment(&json!({
+        "maximum_count": {"type": "integer", "value": 2},
+    }));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+}

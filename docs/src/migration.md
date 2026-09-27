@@ -70,6 +70,7 @@ model](./capabilities.md) that shows the composition.
 | `SpaceGroupContainmentPlanSpec` (`SpaceGroupContainment`) | `group-composition`, a `requirements` table of member patterns and counts, with `group_key` for per-group rows. |
 | `FireCompartmentAreaPlanSpec` (`FireCompartmentArea`) | `keyed-limit` with `quantity: plan-area`, keyed on the building's fire rating, the compartment's use class and the sprinkler flag. |
 | `StoreyNameSequencePlanSpec` (`StoreyNameSequence`) | `name-sequence` from each building, `order` the storey `Elevation`, with `first` and `increment`. |
+| `ComponentContainmentPlanSpec` (`ComponentContainment`) | `containment`: the inner components as the rule's selection, the outer ones as `counterparts`, `minimum_volume_ratio` for the classification, `combine_adjacent` for `combine_outer_components`, one `cover` row per dimension band (`faces` the host surface, `side` inside or outside, `minimum_metres`, `maximum_metres`), `minimum_count` and `maximum_count` for the counts per outer component, `report_orphans` for `forbid_orphans`. See [Containment and cover](./clash.md#containment-and-cover). |
 
 `ModelSelectionSpec` stays in `axioval_spec::rule::model`, because
 `HorizontalGuardPlanSpec` still uses it. The remaining plans in

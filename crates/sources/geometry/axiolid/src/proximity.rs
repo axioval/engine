@@ -25,8 +25,15 @@
 //!   either crosses the other's surface, and vertices of either inside the
 //!   other. For polyhedra those are the intersection's vertices, so the bound
 //!   is tight wherever the crossings are found. The upper bound is the
-//!   overlap of the two bodies' boxes. The intersection's volume is not
-//!   measured: that needs a certified mesh boolean (axiolid/kernel#183).
+//!   overlap of the two bodies' boxes.
+//! - **Intersection volume** between two closed solids, with each body's
+//!   own volume, from `axiolid-inspect`'s certified volume integrals: every
+//!   value an interval sure to hold the true one. Bodies apart at the
+//!   surface and not holding one another share exactly nothing. A mesh the
+//!   kernel refuses (open, self-intersecting, no volume) leaves the volume
+//!   unmeasured rather than failing the measurement. A tessellation widens
+//!   each volume by the volume within its chord deviation of the mesh
+//!   ([`tube_volume`]).
 //! - **Hausdorff distance** between the surfaces. Its lower bound is the
 //!   farthest any vertex lies from the other surface. Its upper bound holds
 //!   per triangle: a distance to one convex triangle is convex, so the
@@ -64,6 +71,7 @@
 //! nearer each other than the combined deviation leave the side open.
 
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
+use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
     WindingMesh, closest_point_on_triangle, closest_points_on_segments, closest_points_on_triangles,
 };
@@ -71,9 +79,10 @@ use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
-    BodyContainment, Bounds3, GeometryFidelity, LengthInterval, ObjectBounds, OverlapExtents,
+    BodyContainment, Bounds3, FaceDistanceError, FaceDistanceEvidence, FaceDistanceRequest,
+    GeometryFidelity, IntersectionVolume, LengthInterval, ObjectBounds, OverlapExtents,
     ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, VerticalDirection,
+    ProximityRequest, ProximityService, VerticalDirection, VolumeInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -84,7 +93,7 @@ use crate::planar::{plan_overlap_area, plan_overlap_polygons};
 ///
 /// Also the distance below which surfaces are taken to meet: floating-point
 /// closest points of two touching faces rarely come out exactly zero.
-const LINEAR_TOLERANCE: f64 = 1e-9;
+pub(crate) const LINEAR_TOLERANCE: f64 = 1e-9;
 const ANGULAR_TOLERANCE: f64 = 1e-9;
 
 /// Plan overlap area below which exact footprints only touch.
@@ -112,7 +121,7 @@ impl AxiolidProximityService {
         Self { geometry }
     }
 
-    fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
+    pub(crate) fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
         if self.geometry.has_no_body(object) {
             return Err(ProximityError::NoBody);
         }
@@ -195,15 +204,15 @@ impl AxiolidProximityService {
 
 /// Items with their boxes and a bounding-volume hierarchy over them, so a
 /// query touches only the items near it instead of scanning them all.
-struct Indexed<T> {
-    items: Vec<T>,
-    boxes: Vec<Bounds3>,
+pub(crate) struct Indexed<T> {
+    pub(crate) items: Vec<T>,
+    pub(crate) boxes: Vec<Bounds3>,
     index: Bvh<usize>,
-    bounds: Bounds3,
+    pub(crate) bounds: Bounds3,
 }
 
 impl<T> Indexed<T> {
-    fn build(items: Vec<T>, boxes: Vec<Bounds3>) -> Result<Self, ProximityError> {
+    pub(crate) fn build(items: Vec<T>, boxes: Vec<Bounds3>) -> Result<Self, ProximityError> {
         let mut all = boxes.iter();
         let first = *all.next().ok_or(ProximityError::Unavailable)?;
         let (mut min, mut max) = (first.min(), first.max());
@@ -234,7 +243,7 @@ impl<T> Indexed<T> {
     }
 
     /// Indices of the items whose boxes meet `probe`, in index order.
-    fn near(&self, probe: &Bounds3) -> Vec<usize> {
+    pub(crate) fn near(&self, probe: &Bounds3) -> Vec<usize> {
         let mut hits = Vec::new();
         self.index.query_aabb(&aabb(probe), &mut hits);
         let mut items: Vec<usize> = hits
@@ -246,10 +255,10 @@ impl<T> Indexed<T> {
     }
 }
 
-struct Body<'a> {
-    mesh: &'a TriMesh,
-    soup: Indexed<Triangle>,
-    solid: bool,
+pub(crate) struct Body<'a> {
+    pub(crate) mesh: &'a TriMesh,
+    pub(crate) soup: Indexed<Triangle>,
+    pub(crate) solid: bool,
 }
 
 fn aabb(bounds: &Bounds3) -> Aabb {
@@ -259,11 +268,11 @@ fn aabb(bounds: &Bounds3) -> Aabb {
     }
 }
 
-fn tolerance() -> Result<Tolerance, ProximityError> {
+pub(crate) fn tolerance() -> Result<Tolerance, ProximityError> {
     Tolerance::new(LINEAR_TOLERANCE, ANGULAR_TOLERANCE).map_err(|_| ProximityError::Unavailable)
 }
 
-fn triangle_box(triangle: &Triangle) -> Bounds3 {
+pub(crate) fn triangle_box(triangle: &Triangle) -> Bounds3 {
     let [a, b, c] = *triangle;
     let min = a.min(b).min(c);
     let max = a.max(b).max(c);
@@ -277,7 +286,7 @@ fn triangle_box(triangle: &Triangle) -> Bounds3 {
 /// Each item of `first` is measured only against the items of `second`
 /// inside its box grown by the best distance so far. Anything outside that box
 /// is farther than the best already found, so the skip loses nothing.
-fn nearest<T>(
+pub(crate) fn nearest<T>(
     first: &Indexed<T>,
     second: &Indexed<T>,
     distance: impl Fn(&T, &T) -> Result<f64, ProximityError>,
@@ -315,7 +324,7 @@ fn nearest<T>(
 }
 
 /// Shortest distance between two triangle sets.
-fn separation(
+pub(crate) fn separation(
     first: &Indexed<Triangle>,
     second: &Indexed<Triangle>,
 ) -> Result<f64, ProximityError> {
@@ -586,24 +595,23 @@ fn ring_distance(ring: &[axiolid_core::Point2], point: axiolid_core::Point2) -> 
 ///
 /// The triangle whose box is nearest bounds the answer from above; only
 /// triangles within that bound can improve on it.
-fn surface_distance(point: Point3, body: &Body<'_>) -> Result<f64, ProximityError> {
-    surface_distance_above(point, body, 0.0)
+pub(crate) fn surface_distance(point: Point3, body: &Body<'_>) -> Result<f64, ProximityError> {
+    soup_distance_above(point, &body.soup, 0.0)
 }
 
 /// [`surface_distance`] when it exceeds `floor`; otherwise some distance no
 /// greater than `floor`, found without the full search.
-fn surface_distance_above(
+pub(crate) fn soup_distance_above(
     point: Point3,
-    body: &Body<'_>,
+    soup: &Indexed<Triangle>,
     floor: f64,
 ) -> Result<f64, ProximityError> {
     let to = |index: usize| -> Result<f64, ProximityError> {
-        closest_point_on_triangle(point, body.soup.items[index])
+        closest_point_on_triangle(point, soup.items[index])
             .map(|closest| closest.distance(point))
             .map_err(|_| ProximityError::Unavailable)
     };
-    let nearest = body
-        .soup
+    let nearest = soup
         .index
         .nearest_to(&Aabb::from_point(point), |_| true)
         .ok_or(ProximityError::Unavailable)?;
@@ -612,7 +620,7 @@ fn surface_distance_above(
         return Ok(best);
     }
     let probe = Bounds3::try_new(point.to_array(), point.to_array())?.expanded(best);
-    for index in body.soup.near(&probe) {
+    for index in soup.near(&probe) {
         best = best.min(to(index)?);
     }
     Ok(best)
@@ -716,7 +724,10 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
     Ok(0.0)
 }
 
-fn inside(winding: &WindingMesh<'_, TriMesh>, point: Point3) -> Result<bool, ProximityError> {
+pub(crate) fn inside(
+    winding: &WindingMesh<'_, TriMesh>,
+    point: Point3,
+) -> Result<bool, ProximityError> {
     let number = winding
         .winding_number(point)
         .map_err(|_| ProximityError::Unavailable)?;
@@ -778,8 +789,77 @@ fn penetration(
     Ok((Some(into_counterpart.max(into_subject)), None))
 }
 
+/// The certified volume two closed bodies share, with their own volumes,
+/// widened for tessellation; `None` when either is not a closed solid or the
+/// kernel refuses a mesh.
+///
+/// `disjoint` bodies (apart at the surface, neither inside the other) share
+/// nothing, so their intersection is not integrated.
+fn intersection(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    disjoint: bool,
+    subject_deviation: f64,
+    counterpart_deviation: f64,
+) -> Option<IntersectionVolume> {
+    if !subject.solid || !counterpart.solid {
+        return None;
+    }
+    let own = |body: &Body<'_>| enclosed_volume(body.mesh).ok();
+    let (subject_volume, counterpart_volume) = (own(subject)?, own(counterpart)?);
+    let shared = if disjoint {
+        axiolid_inspect::VolumeInterval {
+            lower: 0.0,
+            upper: 0.0,
+        }
+    } else {
+        intersection_volume(subject.mesh, counterpart.mesh).ok()?
+    };
+    let (subject_band, counterpart_band) = (
+        tube_volume(subject, subject_deviation),
+        tube_volume(counterpart, counterpart_deviation),
+    );
+    let widened = |volume: axiolid_inspect::VolumeInterval, band: f64| {
+        VolumeInterval::try_new((volume.lower - band).max(0.0), volume.upper + band).ok()
+    };
+    IntersectionVolume::try_new(
+        widened(shared, subject_band + counterpart_band)?,
+        widened(subject_volume, subject_band)?,
+        widened(counterpart_volume, counterpart_band)?,
+    )
+    .ok()
+}
+
+/// An upper bound on the volume within `deviation` of the body's mesh.
+///
+/// A tessellated body's true surface lies within its chord deviation of the
+/// mesh, so the true body differs from the mesh's only inside that band,
+/// and a volume measured on the mesh is off by no more than the band holds.
+/// The band is covered by the neighbourhoods of the triangles, each of
+/// volume `2·d·A + (π/2)·P·d² + (4/3)·π·d³` (Steiner's formula for a flat
+/// convex set of area `A` and perimeter `P`).
+fn tube_volume(body: &Body<'_>, deviation: f64) -> f64 {
+    if deviation == 0.0 {
+        return 0.0;
+    }
+    let band: f64 = body
+        .soup
+        .items
+        .iter()
+        .map(|[a, b, c]| {
+            let area = (*b - *a).cross(*c - *a).length() / 2.0;
+            let perimeter = (*b - *a).length() + (*c - *b).length() + (*a - *c).length();
+            2.0 * deviation * area
+                + std::f64::consts::FRAC_PI_2 * perimeter * deviation * deviation
+                + 4.0 / 3.0 * std::f64::consts::PI * deviation.powi(3)
+        })
+        .sum();
+    // The sum is rounded; a relative margin keeps it an upper bound.
+    band * (1.0 + 1e-9)
+}
+
 /// Every distinct vertex the body's triangles use.
-fn vertices(body: &Body<'_>) -> Vec<Point3> {
+pub(crate) fn vertices(body: &Body<'_>) -> Vec<Point3> {
     let mut points: Vec<Point3> = body.soup.items.iter().flatten().copied().collect();
     points.sort_by(|a, b| {
         a.to_array()
@@ -791,7 +871,7 @@ fn vertices(body: &Body<'_>) -> Vec<Point3> {
 }
 
 /// Points where the edges of `body` cross the surface of `other`.
-fn crossings(body: &Body<'_>, other: &Body<'_>) -> Result<Vec<Point3>, ProximityError> {
+pub(crate) fn crossings(body: &Body<'_>, other: &Body<'_>) -> Result<Vec<Point3>, ProximityError> {
     let tolerance = tolerance()?;
     let mut points = Vec::new();
     for [a, b, c] in &body.soup.items {
@@ -1040,7 +1120,7 @@ fn hausdorff(first: &Body<'_>, second: &Body<'_>) -> Result<(f64, f64), Proximit
     let mut lower = 0.0_f64;
     for (from, to) in [(first, second), (second, first)] {
         for vertex in vertices(from) {
-            lower = lower.max(surface_distance_above(vertex, to, lower)?);
+            lower = lower.max(soup_distance_above(vertex, &to.soup, lower)?);
         }
     }
     let mut upper = lower;
@@ -1102,6 +1182,13 @@ impl ProximityService for AxiolidProximityService {
             )?),
             None => None,
         };
+        let volume = intersection(
+            &subject,
+            &counterpart,
+            separation > 0.0 && containment.is_none(),
+            subject_fidelity.deviation_metres(),
+            counterpart_fidelity.deviation_metres(),
+        );
         let deviation = fidelity.deviation_metres();
         let (lower, upper) = hausdorff(&subject, &counterpart)?;
         let hausdorff = LengthInterval::try_new((lower - deviation).max(0.0), upper + deviation)
@@ -1125,10 +1212,21 @@ impl ProximityService for AxiolidProximityService {
             },
         )?
         .with_hausdorff(hausdorff)?;
-        match extents {
-            Some(extents) => measured.with_overlap_extents(extents),
-            None => Ok(measured),
+        let measured = match extents {
+            Some(extents) => measured.with_overlap_extents(extents)?,
+            None => measured,
+        };
+        match volume {
+            Some(volume) if penetration.is_some() => measured.with_intersection_volume(volume),
+            _ => Ok(measured),
         }
+    }
+
+    fn measure_face_distance(
+        &self,
+        request: &FaceDistanceRequest,
+    ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
+        crate::face_distance::measure(self, &self.geometry, request)
     }
 
     fn measure_distance(

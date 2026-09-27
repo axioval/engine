@@ -8,10 +8,10 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    BodyContainment, Bounds3, CapabilityEvaluation, CompiledRule, GeometryFidelity, LengthInterval,
-    NotEvaluatedReason, ObjectBounds, OverlapExtents, ProximityError, ProximityEvidence,
-    ProximityRequest, ProximityService, ProximityServiceHandle, RuleCapability, RuleContext,
-    ServiceRegistry,
+    BodyContainment, Bounds3, CapabilityEvaluation, CompiledRule, GeometryFidelity,
+    IntersectionVolume, LengthInterval, NotEvaluatedReason, ObjectBounds, OverlapExtents,
+    ProximityError, ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
+    RuleCapability, RuleContext, ServiceRegistry, VolumeInterval,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -33,6 +33,8 @@ struct Pair {
     hausdorff: Option<(f64, f64)>,
     /// `(lower, upper)` of the x, y and z extents of the intersection.
     extents: Option<[(f64, f64); 3]>,
+    /// `(lower, upper)` of the shared volume, the bodies 1 m³ each.
+    volume: Option<(f64, f64)>,
 }
 fn apart(separation: f64) -> Pair {
     Pair {
@@ -41,6 +43,7 @@ fn apart(separation: f64) -> Pair {
         containment: None,
         hausdorff: Some((separation.max(1.0), separation.max(1.0))),
         extents: None,
+        volume: None,
     }
 }
 fn overlapping(depth: f64) -> Pair {
@@ -50,6 +53,7 @@ fn overlapping(depth: f64) -> Pair {
         containment: None,
         hausdorff: Some((1.0, 1.0)),
         extents: None,
+        volume: None,
     }
 }
 impl Pair {
@@ -62,6 +66,12 @@ impl Pair {
     fn unmeasured_hausdorff(self) -> Self {
         Self {
             hausdorff: None,
+            ..self
+        }
+    }
+    fn volume(self, lower: f64, upper: f64) -> Self {
+        Self {
+            volume: Some((lower, upper)),
             ..self
         }
     }
@@ -160,11 +170,22 @@ impl ProximityService for Stub {
             }
             None => measured,
         };
-        match pair.extents {
+        let measured = match pair.extents {
             Some(axes) => {
                 let [along_x, along_y, along_z] =
                     axes.map(|(lower, upper)| LengthInterval::try_new(lower, upper).unwrap());
-                measured.with_overlap_extents(OverlapExtents::new(along_x, along_y, along_z))
+                measured.with_overlap_extents(OverlapExtents::new(along_x, along_y, along_z))?
+            }
+            None => measured,
+        };
+        match pair.volume {
+            Some((lower, upper)) => {
+                let body = VolumeInterval::exact(1.0).unwrap();
+                measured.with_intersection_volume(IntersectionVolume::try_new(
+                    VolumeInterval::try_new(lower, upper).unwrap(),
+                    body,
+                    body,
+                )?)
             }
             None => Ok(measured),
         }
@@ -301,6 +322,7 @@ fn a_body_inside_another_clashes_although_the_surfaces_are_apart() {
                 containment: Some(BodyContainment::SubjectInsideCounterpart),
                 hausdorff: Some((0.2, 1.0)),
                 extents: None,
+                volume: None,
             },
         );
     let outcome = run(
@@ -350,6 +372,7 @@ fn meeting_surfaces_without_a_penetration_measurement_are_not_evaluated() {
                 containment: None,
                 hausdorff: Some((0.5, 0.5)),
                 extents: None,
+                volume: None,
             },
         );
     let outcome = run(
@@ -758,6 +781,64 @@ fn an_intersection_counts_only_past_both_axis_tolerances() {
     assert!(outcome.findings().is_empty());
 }
 
+/// A pipe sunk into a wall sharing 0.2 m³ is a clash only past a volume
+/// tolerance below that; an unmeasured or straddling volume is undecided.
+#[test]
+fn an_intersection_counts_only_past_the_volume_tolerance() {
+    let volume_rule = |tolerance: f64| {
+        clash(&[
+            ("penetration_tolerance_metres", 0.0),
+            ("volume_tolerance_cubic_metres", tolerance),
+        ])
+    };
+    let sunk = overlapping(0.1).volume(0.2, 0.2);
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(sunk),
+        &volume_rule(0.1),
+    );
+    let message = one_message(&outcome);
+    assert!(message.starts_with("hard clash"), "{message}");
+    assert!(message.contains("sharing 0.200000 m³"), "{message}");
+
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(sunk),
+        &volume_rule(0.3),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+
+    for pair in [overlapping(0.1).volume(0.05, 0.15), overlapping(0.1)] {
+        let outcome = run(
+            &Clash,
+            &pipes_and_walls(),
+            walls_touching(pair),
+            &volume_rule(0.1),
+        );
+        assert!(outcome.findings().is_empty());
+        let [open] = outcome.not_evaluated_outcomes() else {
+            panic!("one open pair expected");
+        };
+        assert!(
+            open.message().contains("volume tolerance"),
+            "{}",
+            open.message()
+        );
+    }
+
+    // No volume tolerance asks nothing of the volume.
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        walls_touching(overlapping(0.1)),
+        &volume_rule(0.0),
+    );
+    assert!(one_message(&outcome).starts_with("hard clash"));
+}
+
 #[test]
 fn a_straddling_or_unmeasured_extent_is_not_evaluated() {
     for pair in [
@@ -799,6 +880,7 @@ fn containment_has_its_own_switch() {
         containment: Some(BodyContainment::SubjectInsideCounterpart),
         hausdorff: Some((0.2, 1.0)),
         extents: None,
+        volume: None,
     };
     let outcome = run(
         &Clash,

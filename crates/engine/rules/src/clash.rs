@@ -46,10 +46,10 @@ use axioval_engine::{
     ProximityServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::{
-    Evidence, Finding, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue,
-    Severity,
+    Evidence, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, Severity,
 };
 
+use crate::clash_groups::{Context, Grouping, Groups, Reported, grouping, grouping_parameters};
 use crate::pairs::{Unevaluated, fidelity_note, prepare, reason, refuse_declaration, severity};
 use crate::selection::property_error;
 use crate::support::{
@@ -157,6 +157,7 @@ struct Declaration<'a> {
     exclude_paths: Vec<Vec<String>>,
     exclude_target_property: Option<PropertyRef<'a>>,
     exclude_same_layer: bool,
+    grouping: Option<Grouping<'a>>,
 }
 
 /// The `exclude_paths` parameter, each entry split into its steps.
@@ -193,6 +194,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         exclude_paths: exclusion_paths(&parameters)?,
         exclude_target_property: exclusion_property(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
+        grouping: grouping(&parameters)?,
     })
 }
 
@@ -222,10 +224,33 @@ impl Holds {
     }
 }
 
+/// The class a reported pair falls into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Class {
+    Duplicate,
+    Containment,
+    Intersection,
+    Clearance,
+    /// A pair no clash matrix cell covers.
+    Unmatched,
+}
+
+impl Class {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Duplicate => "duplicate",
+            Self::Containment => "containment",
+            Self::Intersection => "intersection",
+            Self::Clearance => "clearance",
+            Self::Unmatched => "unmatched",
+        }
+    }
+}
+
 /// What a pair amounts to.
 pub(crate) enum Outcome {
     Pass,
-    Finding(String),
+    Finding(Class, String),
     Open(NotEvaluatedReason, String),
 }
 
@@ -236,7 +261,7 @@ impl Outcome {
     fn either(yes: Self, no: Self, undecided: String) -> Self {
         match (yes, no) {
             (Self::Pass, Self::Pass) => Self::Pass,
-            (Self::Finding(_), Self::Finding(message)) => Self::Finding(message),
+            (Self::Finding(..), Self::Finding(class, message)) => Self::Finding(class, message),
             (_, Self::Open(reason, message)) | (Self::Open(reason, message), _) => {
                 Self::Open(reason, message)
             }
@@ -264,9 +289,12 @@ impl Profile {
         };
         let reported = || {
             if self.report.duplicate {
-                Outcome::Finding(format!(
-                    "duplicate of {counterpart}: the surfaces lie within {upper:.4} m of each other, tolerance {tolerance:.4} m{note}"
-                ))
+                Outcome::Finding(
+                    Class::Duplicate,
+                    format!(
+                        "duplicate of {counterpart}: the surfaces lie within {upper:.4} m of each other, tolerance {tolerance:.4} m{note}"
+                    ),
+                )
             } else {
                 Outcome::Pass
             }
@@ -298,7 +326,7 @@ impl Profile {
     ) -> Outcome {
         let containment = |message: String| {
             if self.report.containment {
-                Outcome::Finding(message)
+                Outcome::Finding(Class::Containment, message)
             } else {
                 Outcome::Pass
             }
@@ -409,10 +437,13 @@ impl Profile {
         };
         let reported = || {
             if self.report.intersection {
-                Outcome::Finding(format!(
-                    "hard clash with {counterpart}: penetration {depth:.4} m exceeds tolerance {:.4} m{reach}{note}",
-                    self.penetration_tolerance
-                ))
+                Outcome::Finding(
+                    Class::Intersection,
+                    format!(
+                        "hard clash with {counterpart}: penetration {depth:.4} m exceeds tolerance {:.4} m{reach}{note}",
+                        self.penetration_tolerance
+                    ),
+                )
             } else {
                 Outcome::Pass
             }
@@ -438,12 +469,13 @@ impl Profile {
         note: &str,
     ) -> Outcome {
         match self.clearance {
-            Some(clearance) if measured.separation_metres() < clearance => {
-                Outcome::Finding(format!(
+            Some(clearance) if measured.separation_metres() < clearance => Outcome::Finding(
+                Class::Clearance,
+                format!(
                     "clearance clash with {counterpart}: separation {:.4} m below required {clearance:.4} m{note}",
                     measured.separation_metres()
-                ))
-            }
+                ),
+            ),
             _ => Outcome::Pass,
         }
     }
@@ -763,34 +795,38 @@ pub(crate) fn unless_excluded(
     }
 }
 
-/// Records a pair's outcome against its subject.
+/// Records a pair's outcome against its subject, or into its group.
 pub(crate) struct Recorder<'r> {
     pub(crate) rule: &'r CompiledRule,
     pub(crate) evaluation: CapabilityEvaluation,
     pub(crate) unevaluated: Unevaluated,
+    pub(crate) groups: Option<Groups<'r>>,
 }
 
 impl Recorder<'_> {
     pub(crate) fn record(
         &mut self,
-        subject: &ObjectId,
-        counterpart: &ObjectId,
+        (subject, counterpart): (&ObjectId, &ObjectId),
+        pair: &Context<'_>,
         outcome: Outcome,
         severity: Severity,
         evidence: Vec<Evidence>,
     ) {
         match outcome {
-            Outcome::Finding(message) => self.evaluation.push_finding(
-                Finding {
-                    rule_id: self.rule.id.clone(),
-                    scope: axioval_ir::Scope::Object(subject.clone()),
-                    severity,
+            Outcome::Finding(class, message) => {
+                let reported = Reported {
+                    subject: subject.clone(),
+                    counterpart: counterpart.clone(),
+                    class,
                     message,
-                    related: Vec::new(),
+                    severity,
                     evidence,
+                };
+                match &mut self.groups {
+                    Some(groups) => groups.add(pair, reported),
+                    None => self.evaluation.push_finding(reported.finding(self.rule)),
                 }
-                .with_related([counterpart.clone()]),
-            ),
+            }
             Outcome::Open(reason, message) => {
                 self.unevaluated.push(subject.clone(), reason, message);
             }
@@ -800,10 +836,14 @@ impl Recorder<'_> {
 
     pub(crate) fn finish(self) -> CapabilityEvaluation {
         let Self {
+            rule,
             mut evaluation,
             unevaluated,
-            ..
+            groups,
         } = self;
+        for finding in groups.map(|groups| groups.finish(rule)).unwrap_or_default() {
+            evaluation.push_finding(finding);
+        }
         unevaluated.drain_into(&mut evaluation);
         evaluation
     }
@@ -844,6 +884,7 @@ impl RuleCapability for Clash {
             ),
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]);
+        parameters.extend(grouping_parameters());
         parameters
     }
 
@@ -870,10 +911,20 @@ impl RuleCapability for Clash {
             Ok(exclusions) => exclusions,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
+        let groups = match declared
+            .grouping
+            .as_ref()
+            .map(|grouping| Groups::new(context, grouping))
+            .transpose()
+        {
+            Ok(groups) => groups,
+            Err((_, message)) => return refuse_declaration(context, rule, &message),
+        };
         let mut recorder = Recorder {
             rule,
             evaluation: CapabilityEvaluation::default(),
             unevaluated: prepared.unevaluated,
+            groups,
         };
         for pair in &prepared.pairs {
             let (subject, counterpart) = (pair.subject(), pair.counterpart());
@@ -894,8 +945,11 @@ impl RuleCapability for Clash {
                 counterpart,
             );
             recorder.record(
-                subject,
-                counterpart,
+                (subject, counterpart),
+                &Context {
+                    measured: Some(&measured),
+                    cell: None,
+                },
                 outcome,
                 severity(rule),
                 vec![measured.evidence().clone()],

@@ -310,6 +310,7 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 | `exclude_paths` | string list, optional | relationship paths; pairs reaching a shared target are skipped |
 | `exclude_target_property` | property, optional | reached targets also meet when they state the same value of it |
 | `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
+| `group_by`, `per_storey`, `storey_path`, `group_property`, `group_tolerance_metres` | optional | group reported pairs into issues, see [Grouping findings](#grouping-findings) |
 
 Each pair falls into the first class that holds:
 
@@ -404,6 +405,7 @@ classes, switches, interval handling and exclusions included.
 | `exclude_paths` | string list, optional | further exclusion paths, as for `clash` |
 | `exclude_target_property` | property, optional | as for `clash`, over `system_path` and `exclude_paths` |
 | `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
+| `group_by`, `per_storey`, `storey_path`, `group_property`, `group_tolerance_metres` | optional | as for `clash`; a group never spans two cells |
 
 Each cell keys both sides of the pair: `subject_*` and `counterpart_*`.
 
@@ -468,6 +470,48 @@ exclusion is off unless switched on.
 A finding carries its cell's severity, ends with the cell it was judged by
 (``(clash matrix cell 0 `architecture x structure`)``), and carries the
 evidence of the category values read to choose it.
+
+### Grouping findings
+
+`clash` and `clash-matrix` report one finding per pair, so a duct through
+forty identical walls is forty findings about one problem. `group_by` turns
+the pairs sharing a key into one finding:
+
+| `group_by` | Pairs grouped together |
+|---|---|
+| `subject` | every pair of one subject |
+| `type_pair` | every pair between the same two object types, either way round |
+| `similar` | pairs of one class (duplicate, containment, intersection, clearance) between the same two object types, whose intersection extents round to the same multiples of `group_tolerance_metres` |
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `group_by` | string, optional | `subject`, `type_pair` or `similar`; without it every pair is its own finding |
+| `group_tolerance_metres` | number | the rounding step of `similar` extents; required for `similar`, refused otherwise |
+| `group_property` | property, optional | `similar` pairs must also agree on its value on both sides |
+| `per_storey` | boolean, optional | also key groups by storey; default false |
+| `storey_path` | string | the relationship path from an object to its storey; required with `per_storey` |
+
+`similar` compares the narrower and the wider plan extent and the height of
+the intersection, so a wall along x and one along y alike are similar. With
+`per_storey`, a pair's storeys are those `storey_path` reaches from its two
+members together (in IFC, `IfcRelContainedInSpatialStructure:backward`), so
+the same duct through walls on two storeys is two issues. A clash matrix
+never groups pairs judged by different cells. Any grouping parameter without
+`group_by`, or `per_storey` without a path, is an invalid declaration.
+
+A group of several pairs is one finding on the object most of them involve
+(the first in identity order on a tie), relating every other object, at the
+most severe severity among its pairs, carrying each pair's evidence in turn.
+Its message counts the pairs, names the types and storeys, and lists each
+pair's own message after its subject, such as `5 similar intersection
+clashes of duct with wall on storey-1: [duct] hard clash with wall-1: …; …`.
+A group of one pair is that pair's own finding.
+
+Grouping arranges findings and never decides one. A pair whose key cannot be
+read is reported on its own and says why (`(not grouped: …)`): a storey walk
+the source refuses, an unreadable `group_property`, intersection extents that
+were not measured or straddle a rounding step. Not-evaluated pairs are
+reported per subject, as without grouping.
 
 ### Containment and cover
 

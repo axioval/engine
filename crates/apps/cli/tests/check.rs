@@ -725,6 +725,40 @@ fn with_geometry_clash_exclusions_read_ifc_systems_and_layers() {
     assert_eq!(finding_ids(&result), vec!["#16"], "{result:#}");
 }
 
+/// A long wall #16 crossed by three short walls: grouped by type pair, the
+/// three clashes are one issue on the long wall.
+#[test]
+fn with_geometry_clashes_of_one_type_pair_are_one_issue() {
+    let case = Case::new("clash-groups");
+    let model = walls_file(&[
+        (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000016"),
+        (20, 1.0, 0.0, 0.2, 2.0, "0000000000000000000026"),
+        (30, 2.0, 0.0, 0.2, 2.0, "0000000000000000000036"),
+        (40, 3.0, 0.0, 0.2, 2.0, "0000000000000000000046"),
+    ]);
+    let (output, result) = case.wall_clash(
+        &model,
+        &json!({"group_by": {"type": "string", "value": "type_pair"}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#16");
+    let related: Vec<&str> = findings[0]["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|object| object["local_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(related, vec!["#26", "#36", "#46"]);
+    assert_eq!(findings[0]["evidence"].as_array().unwrap().len(), 3);
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("3 clashes of IFCWALL with IFCWALL: "),
+        "{message}"
+    );
+}
+
 /// The two crossing walls, one per file, each in a system of its own file
 /// named `systems.0` and `systems.1`, and on a layer named `A-WALL`.
 fn walls_in_two_files(case: &Case, systems: [&str; 2]) {

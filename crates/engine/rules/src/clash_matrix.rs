@@ -18,9 +18,10 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, Severity};
 
 use crate::clash::{
-    Exclusions, Outcome, PROFILE_NUMBERS, PROFILE_SWITCHES, Profile, Recorder, exclusion_paths,
-    exclusion_property, measure, unless_excluded,
+    Class, Exclusions, Outcome, PROFILE_NUMBERS, PROFILE_SWITCHES, Profile, Recorder,
+    exclusion_paths, exclusion_property, measure, unless_excluded,
 };
+use crate::clash_groups::{Context, Grouping, Groups, grouping, grouping_parameters};
 use crate::pairs::{prepare, refuse_declaration, severity};
 use crate::selection::{Selection, discipline_of, selector_matches};
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
@@ -141,6 +142,7 @@ struct Declaration<'a> {
     exclude_paths: Vec<Vec<String>>,
     exclude_target_property: Option<PropertyRef<'a>>,
     exclude_same_layer: bool,
+    grouping: Option<Grouping<'a>>,
 }
 
 fn row_severity(row: Row<'_>) -> Result<Option<Severity>, Unavailable> {
@@ -207,6 +209,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         exclude_paths,
         exclude_target_property: exclusion_property(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
+        grouping: grouping(&parameters)?,
     })
 }
 
@@ -440,6 +443,7 @@ impl RuleCapability for ClashMatrix {
             ),
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]);
+        parameters.extend(grouping_parameters());
         parameters
     }
 
@@ -467,11 +471,21 @@ impl RuleCapability for ClashMatrix {
             Ok(exclusions) => exclusions,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
+        let groups = match declared
+            .grouping
+            .as_ref()
+            .map(|grouping| Groups::new(context, grouping))
+            .transpose()
+        {
+            Ok(groups) => groups,
+            Err((_, message)) => return refuse_declaration(context, rule, &message),
+        };
         let mut categories = Categories::new(context, &declared);
         let mut recorder = Recorder {
             rule,
             evaluation: CapabilityEvaluation::default(),
             unevaluated: prepared.unevaluated,
+            groups,
         };
         let indices: Vec<usize> = (0..declared.cells.len()).collect();
 
@@ -507,14 +521,20 @@ impl RuleCapability for ClashMatrix {
                                 .iter()
                                 .cloned(),
                         );
-                        let outcome = Outcome::Finding(format!(
-                            "no clash matrix cell covers {} against {}",
-                            categories.describe(subject_object),
-                            categories.describe(counterpart_object),
-                        ));
+                        let outcome = Outcome::Finding(
+                            Class::Unmatched,
+                            format!(
+                                "no clash matrix cell covers {} against {}",
+                                categories.describe(subject_object),
+                                categories.describe(counterpart_object),
+                            ),
+                        );
                         recorder.record(
-                            subject,
-                            counterpart,
+                            (subject, counterpart),
+                            &Context {
+                                measured: None,
+                                cell: None,
+                            },
                             unless_excluded(outcome, exclusion, counterpart),
                             severity(rule),
                             evidence,
@@ -571,9 +591,10 @@ impl RuleCapability for ClashMatrix {
                 }
             };
             let outcome = match cell.profile.judge(&measured, counterpart) {
-                Outcome::Finding(message) => {
-                    Outcome::Finding(format!("{message} (clash matrix {})", cell.name(index)))
-                }
+                Outcome::Finding(class, message) => Outcome::Finding(
+                    class,
+                    format!("{message} (clash matrix {})", cell.name(index)),
+                ),
                 other => other,
             };
             let mut evidence = vec![measured.evidence().clone()];
@@ -588,8 +609,11 @@ impl RuleCapability for ClashMatrix {
             evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
             evidence.dedup();
             recorder.record(
-                subject,
-                counterpart,
+                (subject, counterpart),
+                &Context {
+                    measured: Some(&measured),
+                    cell: Some(index),
+                },
                 unless_excluded(outcome, exclusion, counterpart),
                 cell.severity.clone().unwrap_or_else(|| severity(rule)),
                 evidence,

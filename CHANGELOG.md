@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Grouped clash findings.** (#96) `clash` and `clash-matrix` take
+  `group_by`: `subject` (every pair of one subject), `type_pair` (every
+  pair of the same two object types) or `similar` (pairs of one class and
+  the same two types, and values of `group_property`, whose intersection
+  extents round alike to `group_tolerance_metres`), with `per_storey` and
+  `storey_path` keeping storeys apart. Each group is one finding on the
+  object most of its pairs involve, relating every other object, at its
+  most severe severity, carrying each pair's evidence: a duct through
+  five identical walls on one storey is one finding relating six objects
+  with five evidence entries. A pair whose key cannot be read is reported
+  on its own with the reason; a matrix never groups across cells. Without
+  `group_by` the output is unchanged. **Breaking:** definitions bound to
+  `clash` or `clash-matrix` must declare the five new optional
+  parameters.
 - **Clash exclusions across federated models.** (#136) `clash` and
   `clash-matrix` take `exclude_target_property`: the targets an exclusion
   path (or the matrix's `system_path`) reaches from the two members also

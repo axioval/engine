@@ -8,6 +8,7 @@ mod allowed_profile;
 mod body_extent;
 mod body_facts;
 mod clash;
+mod clash_groups;
 mod clash_matrix;
 mod classification_requirement;
 mod comparison;

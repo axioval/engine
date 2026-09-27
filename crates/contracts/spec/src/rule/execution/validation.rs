@@ -46,24 +46,6 @@ impl CheckRuleSpec {
         if let CheckSemantics::FloorOpeningRatio { plan } = &self.semantics {
             return plan.validate();
         }
-        if let CheckSemantics::RelativeCount { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::RequiredComponents { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::SpacesInDerivedGroups { plan } = &self.semantics {
-            plan.validate()?;
-        }
-        if let CheckSemantics::SpaceGroupContainment { plan } = &self.semantics {
-            plan.validate()?;
-        }
-        if let CheckSemantics::FireCompartmentArea { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::StoreyNameSequence { plan } = &self.semantics {
-            return plan.validate();
-        }
         if let CheckSemantics::PairwiseGeometry { plan } = &self.semantics {
             return plan.validate();
         }
@@ -112,9 +94,6 @@ impl CheckRuleSpec {
         if let CheckSemantics::FireWallComponents { plan } = &self.semantics {
             return plan.validate();
         }
-        if let CheckSemantics::LayerAgreement { plan } = &self.semantics {
-            return plan.validate();
-        }
         if let CheckSemantics::ExternalWallValidation { plan } = &self.semantics {
             return plan.validate();
         }
@@ -149,12 +128,6 @@ impl CheckRuleSpec {
             return plan.validate();
         }
         if let CheckSemantics::ModelComparison { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::ModelArchitecture { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::BuildingStorey { plan } = &self.semantics {
             return plan.validate();
         }
         if let CheckSemantics::ConditionalPresence { plan } = &self.semantics {
@@ -198,12 +171,6 @@ impl CheckRuleSpec {
             return plan.validate();
         }
         if let CheckSemantics::HorizontalGuard { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::ManualIssues { plan } = &self.semantics {
-            return plan.validate();
-        }
-        if let CheckSemantics::PropertyComparison { plan } = &self.semantics {
             return plan.validate();
         }
         if let CheckSemantics::ShelfCapacity { plan } = &self.semantics {

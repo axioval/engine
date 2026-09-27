@@ -860,6 +860,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   so a compiled package's concepts bind to nothing there; run an
   `EvidenceSession` to evaluate packages.
 
+### Removed
+
+- **Breaking.** `axioval-spec` drops the rule plans that registered
+  capabilities now express, together with their `CheckSemantics` variants:
+  `RelativeCountPlanSpec` (`rule::aggregate`, now `relative-count`),
+  `PropertyComparisonPlanSpec` (`rule::comparison`, now
+  `property-comparison`), `ManualIssuePlanSpec` (`rule::manual_issue`, now
+  `manual-issue`), `LayerAgreementPlanSpec` (`rule::layer_agreement`, now
+  `selector-conformance` over presentation layers),
+  `ModelArchitecturePlanSpec` (`rule::model_architecture`, now one rule per
+  sub-check), `BuildingStoreyPlanSpec` (`rule::building_storey`, now the
+  storey-metric compositions), and from `rule::model`
+  `RequiredComponentsPlanSpec` (`object-count`),
+  `SpacesInDerivedGroupsPlanSpec` and `SpaceGroupContainmentPlanSpec`
+  (`group-composition`), `FireCompartmentAreaPlanSpec` (`keyed-limit`) and
+  `StoreyNameSequencePlanSpec` (`name-sequence`), with their row and enum
+  types. Nothing in the engine consumed them. `ModelSelectionSpec` remains.
+  The "Retired rule plans" table on the capability migration page maps each
+  plan's fields to capability parameters. (#41)
+
 ## [0.2.0] - 2026-09-24
 
 A minor release rather than 0.1.19: the dependency upgrade changes a public

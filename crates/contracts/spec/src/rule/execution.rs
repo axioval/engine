@@ -12,9 +12,7 @@ use super::basic_checks::{
     ConditionalPresencePlanSpec, ElementDimensionPlanSpec, ElementValidationPlanSpec,
     TypeGroupSizeOutlierPlanSpec, WindowFloorRatioPlanSpec,
 };
-use super::building_storey::BuildingStoreyPlanSpec;
 use super::clash_matrix::ClashMatrixPlanSpec;
-use super::comparison::PropertyComparisonPlanSpec;
 use super::component_clearance::ComponentClearancePlanSpec;
 use super::daylight::FloorOpeningRatioPlanSpec;
 use super::door_accessibility::DoorAccessibilityPlanSpec;
@@ -26,12 +24,6 @@ use super::free_floor_space::FreeFloorSpacePlanSpec;
 use super::front_clearance::FrontClearancePlanSpec;
 use super::horizontal_guard::HorizontalGuardPlanSpec;
 use super::local_circulation::LocalCirculationPlanSpec;
-use super::manual_issue::ManualIssuePlanSpec;
-use super::model::{
-    FireCompartmentAreaPlanSpec, RequiredComponentsPlanSpec, SpaceGroupContainmentPlanSpec,
-    SpacesInDerivedGroupsPlanSpec, StoreyNameSequencePlanSpec,
-};
-use super::model_architecture::ModelArchitecturePlanSpec;
 use super::model_comparison::ModelComparisonPlanSpec;
 use super::opening_sill::OpeningSillPlanSpec;
 use super::parking::ParkingPlanSpec;
@@ -55,7 +47,6 @@ use crate::rule::coverage::CoverageComparisonPlanSpec;
 use crate::rule::envelope::BuildingEnvelopePlanSpec;
 use crate::rule::external_wall::ExternalWallValidationPlanSpec;
 use crate::rule::fire_wall_components::FireWallComponentsPlanSpec;
-use crate::rule::layer_agreement::LayerAgreementPlanSpec;
 use crate::rule::opening::ElementHolePlanSpec;
 use crate::rule::slab_contact::SlabContactPlanSpec;
 use crate::rule::space_validation::SpaceValidationPlanSpec;
@@ -130,29 +121,6 @@ pub enum CheckSemantics {
     /// Ratio of provider-resolved effective light-opening area to space area.
     FloorOpeningRatio {
         plan: FloorOpeningRatioPlanSpec,
-    },
-    /// Compare counts from two independently selected component sets.
-    RelativeCount {
-        plan: super::aggregate::RelativeCountPlanSpec,
-    },
-    /// Required component rows evaluated across selected federation members.
-    RequiredComponents {
-        plan: RequiredComponentsPlanSpec,
-    },
-    /// Ordinary spaces must belong to an accepted derived space-group overlay.
-    SpacesInDerivedGroups {
-        plan: SpacesInDerivedGroupsPlanSpec,
-    },
-    SpaceGroupContainment {
-        plan: SpaceGroupContainmentPlanSpec,
-    },
-    /// Maximum area of provider-derived fire compartments.
-    FireCompartmentArea {
-        plan: FireCompartmentAreaPlanSpec,
-    },
-    /// Numeric storey names must form a sequence in ascending elevation order.
-    StoreyNameSequence {
-        plan: StoreyNameSequencePlanSpec,
     },
     /// Require each selected component's native TYPE designation to match one
     /// of the source-ordered patterns configured for its native component class.
@@ -286,10 +254,6 @@ pub enum CheckSemantics {
     FireWallComponents {
         plan: FireWallComponentsPlanSpec,
     },
-    /// Typed agreed component/construction/layer associations.
-    LayerAgreement {
-        plan: LayerAgreementPlanSpec,
-    },
     /// Exact compartmentation-derived exterior-wall assignment validation.
     ExternalWallValidation {
         plan: ExternalWallValidationPlanSpec,
@@ -335,13 +299,6 @@ pub enum CheckSemantics {
     ModelComparison {
         plan: ModelComparisonPlanSpec,
     },
-    /// Exact provider-backed architectural model integrity checks.
-    ModelArchitecture {
-        plan: ModelArchitecturePlanSpec,
-    },
-    BuildingStorey {
-        plan: BuildingStoreyPlanSpec,
-    },
 
     ClashMatrix {
         plan: ClashMatrixPlanSpec,
@@ -377,14 +334,6 @@ pub enum CheckSemantics {
     /// Horizontal walking surfaces with native-equivalent fall-risk guard findings.
     HorizontalGuard {
         plan: HorizontalGuardPlanSpec,
-    },
-    /// Authored model-level findings from a manual checking table.
-    ManualIssues {
-        plan: ManualIssuePlanSpec,
-    },
-    /// Exact selected-component property to typed constant comparison.
-    PropertyComparison {
-        plan: PropertyComparisonPlanSpec,
     },
     /// Exact per-space shelf running-length requirements. Geometry-derived
     /// capacity is supplied by a neutral resolved-fact provider.

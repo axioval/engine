@@ -15,7 +15,7 @@ use crate::plan_area::{Sum, footprint, shown};
 use crate::selection::select_objects;
 use crate::support::table::{self, Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
-    Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve,
+    Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve, sources,
     traversal_parameters,
 };
 
@@ -199,7 +199,8 @@ const COLUMNS: &[TableColumn] = &[
 /// Rows are then judged per group: per anchor that `anchor_selector` picks,
 /// counting the objects it reaches through the traversal parameters (or
 /// every object of its source without one), such as per storey; otherwise
-/// per source, or across the whole project with `across_sources`. In each
+/// per source, including a source that holds no objects, or across the whole
+/// project with `across_sources`. In each
 /// group, a row's `count` must equal the number of objects assigned to it,
 /// and their summed plan area must lie within `area` ± `area_tolerance`
 /// square metres. Areas are measured footprints, or an area quantity stated
@@ -473,6 +474,22 @@ impl<'a> Declaration<'a> {
     ) -> Result<Vec<Group>, Unavailable> {
         let Some(anchors) = self.anchors else {
             let mut groups: BTreeMap<Scope, Group> = BTreeMap::new();
+            // Every source is a group even when it holds no objects, so a
+            // row an empty source cannot meet is reported, not skipped.
+            if !self.across_sources {
+                for source in sources(context) {
+                    let scope = Scope::Source(source);
+                    groups.insert(
+                        scope.clone(),
+                        Group {
+                            scope,
+                            members: Vec::new(),
+                            undecided: 0,
+                            evidence: Vec::new(),
+                        },
+                    );
+                }
+            }
             for object in context.project.objects() {
                 let scope = if self.across_sources {
                     Scope::Project

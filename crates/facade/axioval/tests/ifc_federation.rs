@@ -237,9 +237,9 @@ fn concept(id: &str, ifc_name: &str) -> Value {
     })
 }
 
-fn definitions(registry: &CapabilityRegistry) -> DefinitionPackage {
-    let capability = "axioval:capability.property-required";
-    let parameters: serde_json::Map<String, Value> = registry
+/// A definition's parameters, as the registry declares `capability`'s.
+fn signature(registry: &CapabilityRegistry, capability: &str) -> serde_json::Map<String, Value> {
+    registry
         .get(capability)
         .unwrap()
         .parameters()
@@ -255,7 +255,12 @@ fn definitions(registry: &CapabilityRegistry) -> DefinitionPackage {
                 }),
             )
         })
-        .collect();
+        .collect()
+}
+
+fn definitions(registry: &CapabilityRegistry) -> DefinitionPackage {
+    let capability = "axioval:capability.property-required";
+    let parameters = signature(registry, capability);
     let mut reference = concept("axioval:test.reference", "Reference");
     reference["valueKind"] = json!("string");
     let mut fire_rating = concept("axioval:test.fire-rating", "FireRating");
@@ -439,4 +444,111 @@ fn a_discipline_selector_round_trips_and_refuses_invalid_names() {
             "{invalid:?}"
         );
     }
+}
+
+/// A model with no objects: a presentation layer holding one point.
+const EMPTY: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCPRESENTATIONLAYERWITHSTYLE('Foo',$,(#1),$,.T.,.F.,.F.,());
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// "Every model contains a wall", per source.
+fn run_wall_count(session: &EvidenceSession) -> Report {
+    let registry = register_builtins(CapabilityRegistry::new()).unwrap();
+    let capability = "axioval:capability.object-count";
+    let mut definitions = serde_json::to_value(definitions(&registry)).unwrap();
+    definitions["definitions"]["axioval:test.object-count"] = json!({
+        "id": "axioval:test.object-count",
+        "name": text("object-count"),
+        "capability": capability,
+        "parameters": signature(&registry, capability),
+    });
+    let definitions: DefinitionPackage = serde_json::from_value(definitions).unwrap();
+    let ruleset: RuleSetPackage = serde_json::from_value(json!({
+        "schemaVersion": "0.1.0",
+        "package": {
+            "id": "axioval:test.ruleset",
+            "name": text("test"),
+            "version": "0.1.0",
+            "authors": [],
+        },
+        "definitionPackages": ["axioval:test.definitions"],
+        "root": { "id": "root", "name": text("root"), "folders": [], "rules": [{
+            "id": "a-wall-exists",
+            "definitionId": "axioval:test.object-count",
+            "name": text("a-wall-exists"),
+            "severity": "error",
+            "applicability": entity("axioval:test.wall"),
+            "parameters": {},
+        }]},
+    }))
+    .unwrap();
+    let plan = compile(&registry, &[definitions], &ruleset).unwrap();
+    Runtime::new(registry).run_session(session, plan).unwrap()
+}
+
+#[test]
+fn a_member_without_objects_stays_in_the_federation_as_an_empty_source() {
+    let session = EvidenceSession::federate([
+        member("arch.ifc", ARCHITECTURE, Some("architecture")),
+        member("empty.ifc", EMPTY, Some("structure")),
+    ])
+    .unwrap();
+    let sources: Vec<&SourceId> = session.snapshots().map(SourceSnapshot::source).collect();
+    assert_eq!(sources, [&source("arch.ifc"), &source("empty.ifc")]);
+    assert!(
+        session
+            .project()
+            .objects()
+            .all(|object| object.id.source == source("arch.ifc"))
+    );
+    assert_eq!(
+        session.discipline(&source("empty.ifc")),
+        Some(&discipline("structure"))
+    );
+    // Its services still answer for it rather than refusing it as uncovered.
+    let integrity = session.service::<SourceIntegrityServiceHandle>().unwrap();
+    integrity.issues(&source("empty.ifc")).unwrap();
+    let systems = session.service::<CoordinateSystemServiceHandle>().unwrap();
+    let system = systems.coordinate_system(&source("empty.ifc")).unwrap();
+    assert!(system.world().is_none());
+
+    // Object rules find nothing to check in it, and nothing is left undecided.
+    let report = run(&session);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    assert_eq!(
+        flagged(&report),
+        [(
+            "doors-in-walls-are-rated".to_owned(),
+            "ifc-step:arch.ifc/#30".to_owned()
+        )]
+    );
+
+    // A count per source reports that it holds no wall.
+    let report = run_wall_count(&session);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let [finding] = report.findings() else {
+        panic!("{:?}", report.findings());
+    };
+    assert_eq!(finding.scope, Scope::Source(source("empty.ifc")));
+    assert_eq!(
+        finding.message,
+        "no object matches the selection in source `ifc-step:empty.ifc`; required at least 1"
+    );
 }

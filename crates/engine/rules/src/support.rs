@@ -5,14 +5,16 @@ use axioval_engine::{
     AbsentEndPolicy, CompiledRule, DERIVED_RELATIONSHIP_PREFIX, NotEvaluatedReason,
     ParameterDescriptor, ParameterType, PropertyResolution, PropertyResolutionServiceHandle,
     RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, RuleContext, SemanticRelationship, TraversalDirection,
+    RelationshipSelectionServiceHandle, RuleContext, SemanticRelationship, SessionSources,
+    TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, ObjectId, Property, PropertyValue,
-    QuantityDimension, Severity, TemporalPrecision,
+    QuantityDimension, Severity, SourceId, TemporalPrecision,
 };
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
 use crate::selection::{bound_property_request, property_error};
 
@@ -21,6 +23,28 @@ pub(crate) type Unavailable = (NotEvaluatedReason, String);
 
 pub(crate) fn invalid(message: impl Into<String>) -> Unavailable {
     (NotEvaluatedReason::InvalidDeclaration, message.into())
+}
+
+/// Every source the run checks, sorted.
+///
+/// The runtime's [`SessionSources`] lists every source of the session,
+/// including one that contributes no object; a capability forming one scope
+/// per source must start from these, or an empty source is never judged and
+/// its silence reads as a pass. Sources the project's objects name are
+/// added, so a capability evaluated without the runtime still sees them.
+pub(crate) fn sources(context: &RuleContext<'_>) -> BTreeSet<SourceId> {
+    let mut sources: BTreeSet<SourceId> = context
+        .services
+        .get::<SessionSources>()
+        .map(|sources| sources.iter().cloned().collect())
+        .unwrap_or_default();
+    sources.extend(
+        context
+            .project
+            .objects()
+            .map(|object| object.id.source.clone()),
+    );
+    sources
 }
 
 /// Typed read access to a compiled rule's parameters.

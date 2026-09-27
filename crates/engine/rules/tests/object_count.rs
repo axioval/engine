@@ -4,6 +4,7 @@
 
 mod common;
 
+use axioval_engine::SessionSources;
 use axioval_ir::contract::{ComparisonOperator, Selector};
 use axioval_ir::{NotEvaluatedReason, Scope, SourceId};
 use axioval_rules::{ObjectCount, register_builtins};
@@ -214,6 +215,52 @@ fn per_source_over_an_empty_project_is_not_evaluated() {
     let outcome = &evaluation.not_evaluated_outcomes()[0];
     assert_eq!(outcome.scope(), &Scope::Project);
     assert_eq!(outcome.reason(), &NotEvaluatedReason::IncompleteEvidence);
+}
+
+#[test]
+fn a_source_without_objects_is_counted_and_reported() {
+    // `other` is in the session but contributes no object: an empty model.
+    let sources = SessionSources::new([source(), other()]);
+    let evaluation = Model::default().object("w1", "wall").evaluate_with(
+        &ObjectCount,
+        &rule(ID, kind("wall"), vec![]),
+        |services| services.register(sources.clone()).unwrap(),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "source".into(),
+            "no object matches the selection in source `test:other`; required at least 1".into()
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].scope, Scope::Source(other()));
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+
+    // A maximum alone holds in the empty source too.
+    let evaluation = Model::default().object("w1", "wall").evaluate_with(
+        &ObjectCount,
+        &rule(ID, kind("wall"), vec![("maximum", integer(1))]),
+        |services| services.register(sources).unwrap(),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn a_project_of_only_empty_sources_is_judged_per_source() {
+    let evaluation = Model::default().evaluate_with(
+        &ObjectCount,
+        &rule(ID, kind("building"), vec![]),
+        |services| services.register(SessionSources::new([other()])).unwrap(),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "source".into(),
+            "no object matches the selection in source `test:other`; required at least 1".into()
+        )]
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
 }
 
 #[test]

@@ -536,7 +536,8 @@ pub use relationships::{
 };
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{
-    EvidenceSession, EvidenceSessionError, SnapshotBoundService, SourceDisciplines, SourceSnapshot,
+    EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
+    SourceSnapshot,
 };
 pub use space::{
     BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,
@@ -655,6 +656,7 @@ impl Runtime {
             project,
             &self.services,
             BTreeMap::new(),
+            SessionSources::new(project.objects().map(|object| object.id.source.clone())),
             SourceDisciplines::default(),
             plan,
         )
@@ -674,6 +676,11 @@ impl Runtime {
             session.project(),
             session.services(),
             type_systems,
+            SessionSources::new(
+                session
+                    .snapshots()
+                    .map(|snapshot| snapshot.source().clone()),
+            ),
             SourceDisciplines::new(session.disciplines().clone()),
             plan,
         )
@@ -684,6 +691,7 @@ impl Runtime {
         project: &Project,
         services: &ServiceRegistry,
         type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
+        sources: SessionSources,
         disciplines: SourceDisciplines,
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
@@ -696,6 +704,8 @@ impl Runtime {
         // Disciplines are the session's declarations; a host-registered copy
         // could claim roles the session never declared.
         services.replace(disciplines);
+        // So are the sources: a host copy could hide an empty source.
+        services.replace(sources);
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();

@@ -170,6 +170,88 @@ fn an_incomplete_check_never_exits_0() {
     );
 }
 
+/// A model with no objects: a presentation layer holding one point.
+const EMPTY_MODEL: &str = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+     #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+     #2=IFCPRESENTATIONLAYERWITHSTYLE('Foo',$,(#1),$,.T.,.F.,.F.,());\n\
+     ENDSEC;\nEND-ISO-10303-21;\n";
+
+impl Case {
+    /// The fixture packages with the rule swapped for "the model contains
+    /// at least one wall".
+    fn wall_count_packages(&self) -> (PathBuf, PathBuf) {
+        let definitions = self.definitions(true);
+        let mut definitions: Value =
+            serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+        definitions["definitions"]["axioval:example.object-count"] = json!({
+            "id": "axioval:example.object-count",
+            "name": {"default": "Object count", "translations": {}},
+            "description": {"default": "The model contains the selection.", "translations": {}},
+            "capability": "axioval:capability.object-count",
+            "parameters": registry_signature("axioval:capability.object-count"),
+            "citations": [],
+            "tags": [],
+        });
+        let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let rule = &mut ruleset["root"]["rules"][0];
+        rule["id"] = json!("a-wall-exists");
+        rule["definitionId"] = json!("axioval:example.object-count");
+        rule["parameters"] = json!({});
+        (
+            self.write("definitions.json", &definitions.to_string()),
+            self.write("ruleset.json", &ruleset.to_string()),
+        )
+    }
+}
+
+#[test]
+fn a_model_without_objects_is_checked_and_an_existence_rule_fails_on_it() {
+    let case = Case::new("empty-model");
+
+    // An object rule has nothing to check in it: a complete, clean check.
+    let output = case.check(EMPTY_MODEL, true, &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let result = json(&output);
+    assert!(result["report"]["findings"].as_array().unwrap().is_empty());
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    // "The model contains a wall" is reported against the empty source,
+    // never passed because no object was there to be counted.
+    let model = case.write("model.ifc", EMPTY_MODEL);
+    let (definitions, ruleset) = case.wall_count_packages();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["rule_id"], "a-wall-exists", "{result:#}");
+    assert_eq!(
+        findings[0]["message"],
+        "no object matches the selection in source `ifc-step:model.ifc`; required at least 1"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
 #[test]
 fn integrity_issues_and_unselectable_objects_are_reported() {
     let case = Case::new("integrity");

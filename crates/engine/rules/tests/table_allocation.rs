@@ -6,9 +6,13 @@ mod common;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axioval_engine::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
+use axioval_engine::{
+    PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, SessionSources,
+};
 use axioval_ir::contract::{ParameterValue, TableRow};
-use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension, Scope, SourceId,
+};
 use axioval_rules::TableAllocation;
 use common::{
     Model, findings, id, integer, kind, property, rule, selector, source, string, unevaluated,
@@ -234,6 +238,47 @@ fn an_empty_row_without_a_count_is_found_against_the_source_and_a_zero_count_row
             "row 2 `archive` matched no object in source `test:model`".into()
         )]
     );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn a_source_without_objects_is_a_group_whose_rows_are_reported() {
+    // `other` is in the session but contributes no object.
+    let other = SourceId::new("test", "other").unwrap();
+    let model = Model::default()
+        .object("s1", "space")
+        .text("s1", "Pset", "Type", "Office");
+    let parameters = vec![
+        (
+            "rows",
+            table(vec![
+                row(&[
+                    ("key_1", string("Office")),
+                    ("label", string("office")),
+                    ("count", integer(1)),
+                ]),
+                row(&[("key_1", string("Storage")), ("count", integer(0))]),
+            ]),
+        ),
+        ("key_1", property(Some("Pset"), "Type")),
+    ];
+    let evaluation = model.evaluate_with(
+        &TableAllocation,
+        &rule(ID, kind("space"), parameters),
+        |services| {
+            services
+                .register(SessionSources::new([source(), other.clone()]))
+                .unwrap();
+        },
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "source".into(),
+            "row 1 `office` matched no object in source `test:other`; required exactly 1".into()
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].scope, Scope::Source(other));
     assert!(evaluation.not_evaluated_outcomes().is_empty());
 }
 

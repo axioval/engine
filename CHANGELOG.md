@@ -963,6 +963,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Breaking. A model with no objects could not be checked, and would have
+  passed an existence rule.** `EvidenceSession::try_new` refused a snapshot
+  whose source contributes no object, so an IFC file holding only
+  presentation data failed with "snapshot source is not present in the
+  project". Such a snapshot is now an empty source of the session, also as a
+  federation member. `EvidenceSessionError::UnexpectedSource` is removed:
+  an empty source is legitimate input, and a snapshot without objects cannot
+  be told apart from one. `MissingSource` and `DuplicateSource` are kept.
+  The runtime installs the run's sources per run as `SessionSources`
+  (replacing any host copy, like `SourceDisciplines`), listing every
+  snapshot's source, or the sources a bare project's objects name.
+  `object-count` and `table-allocation` (without `anchor_selector`) form one
+  scope per listed source, so an empty source reports "no object matches the
+  selection in source …" and each row it cannot meet, instead of never
+  being judged. Other capabilities judge only sources holding a selected
+  object, so an empty source is to them what a source without a match is.
 - **A derived relationship was unusable as a `path` step.** A step was split
   at its first colon, so `axioval:derived.adjacent-space` read as the
   relationship `axioval` with the direction `derived.adjacent-space` and was

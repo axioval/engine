@@ -126,6 +126,38 @@ impl SourceDisciplines {
     }
 }
 
+/// Every source a run checks.
+///
+/// The runtime registers it for the duration of one run, replacing any
+/// host-registered copy: from the session's snapshots in
+/// [`crate::Runtime::run_session`], from the sources the project's objects
+/// name in [`crate::Runtime::run`]. It lists a source even when that source
+/// contributes no object, so a capability judging each source as a whole
+/// ("the model contains a building") reports an empty source instead of
+/// never seeing it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SessionSources(BTreeSet<SourceId>);
+
+impl SessionSources {
+    /// Lists `sources`; order and repetition do not matter.
+    ///
+    /// Capability tests construct it; a run always uses the runtime's own.
+    pub fn new(sources: impl IntoIterator<Item = SourceId>) -> Self {
+        Self(sources.into_iter().collect())
+    }
+
+    /// Every source, sorted.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &SourceId> {
+        self.0.iter()
+    }
+
+    /// Whether the run checks `source`.
+    #[must_use]
+    pub fn contains(&self, source: &SourceId) -> bool {
+        self.0.contains(source)
+    }
+}
+
 /// Invalid project/source snapshot binding.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum EvidenceSessionError {
@@ -138,9 +170,6 @@ pub enum EvidenceSessionError {
     /// A project source has no immutable snapshot declaration.
     #[error("project source has no snapshot declaration: {0}")]
     MissingSource(SourceId),
-    /// A snapshot does not correspond to any project object.
-    #[error("snapshot source is not present in the project: {0}")]
-    UnexpectedSource(SourceId),
     /// A service declared no immutable source binding.
     #[error("evidence service has no source snapshot binding")]
     UnboundService,
@@ -183,6 +212,17 @@ pub struct EvidenceSession {
 
 impl EvidenceSession {
     /// Starts a session after proving every project source has exactly one snapshot.
+    ///
+    /// A snapshot need not contribute an object: a model holding no objects
+    /// (only presentation data, or nothing at all) is an empty source and
+    /// still part of the session. Capabilities that judge each source as a
+    /// whole find it through [`SessionSources`], so an empty source is
+    /// reported rather than skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when two snapshots name the same source, or an
+    /// object's source has no snapshot.
     pub fn try_new(
         project: Project,
         snapshots: impl IntoIterator<Item = SourceSnapshot>,
@@ -204,12 +244,6 @@ impl EvidenceSession {
         {
             return Err(EvidenceSessionError::MissingSource(source.clone()));
         }
-        if let Some(source) = indexed
-            .keys()
-            .find(|source| !project_sources.contains(*source))
-        {
-            return Err(EvidenceSessionError::UnexpectedSource((*source).clone()));
-        }
         Ok(Self {
             project: Arc::new(project),
             snapshots: indexed,
@@ -222,7 +256,8 @@ impl EvidenceSession {
     ///
     /// The project holds every member's objects under their own
     /// source-qualified identities, and every snapshot and declared
-    /// discipline is kept. Each semantic service the members registered
+    /// discipline is kept, including a member whose source holds no objects,
+    /// which stays in the session as an empty source. Each semantic service the members registered
     /// (property resolution, relationship selection, type hierarchy, object
     /// frames, classifications, integrity) becomes one service bound to the
     /// snapshots of the members that had it, answering each request from

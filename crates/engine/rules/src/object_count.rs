@@ -10,7 +10,7 @@ use axioval_ir::{Evidence, Finding, ObjectId, Scope};
 
 use crate::pairs::severity;
 use crate::selection::{Selection, selector_matches};
-use crate::support::{Parameters, Unavailable, invalid};
+use crate::support::{Parameters, Unavailable, invalid, sources};
 
 /// Requires the rule's selection to hold a bounded number of objects in each
 /// source, or in the whole project with `across_sources`.
@@ -20,6 +20,9 @@ use crate::support::{Parameters, Unavailable, invalid};
 /// An object rule over an empty selection reports nothing, which reads as
 /// compliance; this one reports the empty selection itself, against the
 /// source or the project rather than an object.
+///
+/// Every source of the session is counted, including one that holds no
+/// objects at all: an empty model does not contain a building, and says so.
 ///
 /// `minimum` and `maximum` bound the count, inclusive. With neither, the
 /// rule is an existence check: at least one object must match. An object
@@ -76,9 +79,15 @@ impl RuleCapability for ObjectCount {
 
         // Every scope is counted, including one where nothing matches: that
         // is the case this capability exists to report.
+        // A source with no objects at all still gets its tally, so an empty
+        // model is reported as holding nothing instead of never being judged.
         let mut tallies: BTreeMap<Scope, Tally> = BTreeMap::new();
         if across_sources {
             tallies.insert(Scope::Project, Tally::default());
+        } else {
+            for source in sources(context) {
+                tallies.insert(Scope::Source(source), Tally::default());
+            }
         }
         for object in context.project.objects() {
             let scope = if across_sources {
@@ -102,8 +111,8 @@ impl RuleCapability for ObjectCount {
 
         let mut evaluation = CapabilityEvaluation::default();
         if tallies.is_empty() {
-            // Per source, and no source contributes an object: there is no
-            // scope to judge, and saying nothing would read as a pass.
+            // Per source, and the run has no source: there is no scope to
+            // judge, and saying nothing would read as a pass.
             evaluation.push_not_evaluated(
                 NotEvaluatedReason::IncompleteEvidence,
                 "object-count: the project has no source to count in",

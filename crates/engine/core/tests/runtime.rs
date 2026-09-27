@@ -4,7 +4,7 @@
 use axioval_engine::{
     CapabilityEvaluation, CapabilityRegistry, CompiledRule, EngineError, EvidenceSession,
     NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime,
-    ServiceRegistry, SnapshotBoundService, SourceSnapshot, compile,
+    ServiceRegistry, SessionSources, SnapshotBoundService, SourceSnapshot, compile,
 };
 use axioval_ir::{
     DefinitionPackage, Finding, Object, ObjectId, Project, RuleSetPackage, Scope, Severity,
@@ -259,4 +259,57 @@ fn session_services_are_authoritative_for_session_runs() {
         .unwrap();
 
     assert_eq!(report.not_evaluated()[0].message, "session");
+}
+
+/// Reports the run's sources as one project outcome.
+struct ListsSources;
+impl RuleCapability for ListsSources {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-exists"
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![ParameterDescriptor::required(
+            "property",
+            ParameterType::PropertyReference,
+        )]
+    }
+    fn evaluate(&self, context: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        let sources = context.services.get::<SessionSources>().unwrap();
+        let listed: Vec<String> = sources.iter().map(ToString::to_string).collect();
+        let mut evaluation = CapabilityEvaluation::default();
+        evaluation.push_not_evaluated(NotEvaluatedReason::MissingService, listed.join(" "));
+        evaluation
+    }
+}
+
+#[test]
+fn the_runtime_lists_every_session_source_including_an_empty_one() {
+    let (definitions, rules) = packages();
+    let registry = CapabilityRegistry::new().register(ListsSources).unwrap();
+    let session_plan = compile(&registry, &[definitions.clone()], &rules).unwrap();
+    let bare_plan = compile(&registry, &[definitions], &rules).unwrap();
+    let source = |document: &str| SourceId::new("test", document).unwrap();
+    let snapshot =
+        |document: &str| SourceSnapshot::try_new(source(document), "r1", "sha256:0").unwrap();
+    let project = || {
+        Project::new(vec![Object::new(
+            ObjectId::new(source("full"), "1").unwrap(),
+            "wall",
+        )])
+        .unwrap()
+    };
+    // A host copy naming only one source is replaced, never trusted.
+    let mut host = ServiceRegistry::new();
+    host.register(SessionSources::new([source("full")]))
+        .unwrap();
+    let runtime = Runtime::new(registry).with_services(host);
+
+    let session =
+        EvidenceSession::try_new(project(), [snapshot("full"), snapshot("empty")]).unwrap();
+    let report = runtime.run_session(&session, session_plan).unwrap();
+    assert_eq!(report.not_evaluated()[0].message, "test:empty test:full");
+
+    // A bare project knows only the sources its objects name.
+    let report = runtime.run(&project(), bare_plan).unwrap();
+    assert_eq!(report.not_evaluated()[0].message, "test:full");
 }

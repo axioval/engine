@@ -172,6 +172,17 @@ mesh with chord deviation `d` and footprint perimeter `P` measures within
 `2·P·d + π·d²`, the area of the band where the true and meshed boundaries can
 differ.
 
+A bodiless group, such as a zone that makes up a fire compartment, has no
+mesh of its own. Membership is a semantic fact, so the host declares it:
+`with_group(group, members)`, or `with_undecided_group(group, reason)` when it
+could not decide it. Both also declare the group bodiless. The group's
+footprint is the union of its members' footprints, with overlapping members
+counted once; a member may itself be a group. A tessellated member makes the
+footprint approximate, measured with the largest member deviation. The
+footprint is unavailable, never zero, when a member has no body, is
+unmeasured or undescribed, when the membership is undecided, when the group
+groups nothing, or when it contains itself.
+
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even

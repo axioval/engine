@@ -114,3 +114,117 @@ fn an_object_without_geometry_is_unknown_not_zero() {
         Err(PlanAreaError::UnknownObject(id("ghost")))
     );
 }
+
+// The overlay snaps to a grid (axiolid/kernel#173), so group areas compare
+// within 1e-6 m².
+const AREA: f64 = 1e-6;
+
+#[test]
+fn a_group_covers_the_union_of_its_members() {
+    // Two rooms sharing a 1 m strip: 12 + 12 - 3, the strip counted once.
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("a"), cuboid(0.0, 0.0, 4.0, 3.0, 2.5))
+            .with_mesh(id("b"), cuboid(3.0, 0.0, 7.0, 3.0, 2.5))
+            .with_mesh(id("space"), cuboid(2.0, 0.0, 6.0, 3.0, 2.5))
+            .with_group(id("zone"), [id("a"), id("b")]),
+    );
+    let footprint = areas.measure_footprint(&id("zone")).unwrap();
+    assert!(footprint.is_exact());
+    assert!((footprint.lower_square_metres() - 21.0).abs() < AREA);
+    assert!((footprint.upper_square_metres() - 21.0).abs() < AREA);
+    // The space straddles both members and lies wholly within the zone,
+    // though neither member alone holds it.
+    let overlap = areas
+        .measure_plan_overlap(&id("space"), &id("zone"))
+        .unwrap();
+    assert!(overlap.is_exact());
+    assert!((overlap.lower_square_metres() - 12.0).abs() < AREA);
+    // A group is bodiless for every other purpose.
+    assert!(
+        AxiolidGeometry::new()
+            .with_group(id("zone"), [id("a")])
+            .has_no_body(&id("zone"))
+    );
+}
+
+#[test]
+fn a_group_of_groups_unions_every_member() {
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("a"), cuboid(0.0, 0.0, 4.0, 3.0, 2.5))
+            .with_mesh(id("b"), cuboid(10.0, 0.0, 12.0, 3.0, 2.5))
+            .with_group(id("inner"), [id("b")])
+            .with_group(id("outer"), [id("a"), id("inner")]),
+    );
+    let footprint = areas.measure_footprint(&id("outer")).unwrap();
+    assert!((footprint.lower_square_metres() - 18.0).abs() < AREA);
+}
+
+#[test]
+fn a_tessellated_member_makes_the_group_inexact() {
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("a"), cuboid(0.0, 0.0, 4.0, 3.0, 2.5))
+            .with_tessellated_mesh(id("b"), cuboid(4.0, 0.0, 8.0, 3.0, 2.5), 0.01)
+            .with_group(id("zone"), [id("a"), id("b")]),
+    );
+    let footprint = areas.measure_footprint(&id("zone")).unwrap();
+    assert!(!footprint.is_exact());
+    // The union is 8 x 3 with perimeter 22 m; the largest deviation is 1 cm.
+    let band = 2.0 * 22.0 * 0.01 + std::f64::consts::PI * 1e-4;
+    assert!((footprint.lower_square_metres() - (24.0 - band)).abs() < AREA);
+    assert!((footprint.upper_square_metres() - (24.0 + band)).abs() < AREA);
+}
+
+#[test]
+fn a_group_refuses_when_a_member_cannot_give_it_a_footprint() {
+    let room = || cuboid(0.0, 0.0, 4.0, 3.0, 2.5);
+    let unavailable = |geometry: AxiolidGeometry, needle: &str| {
+        let areas = service(geometry.with_mesh(id("space"), room()));
+        for result in [
+            areas.measure_footprint(&id("zone")),
+            areas.measure_plan_overlap(&id("space"), &id("zone")),
+        ] {
+            assert!(
+                matches!(&result, Err(PlanAreaError::Unavailable(message)) if message.contains(needle)),
+                "{needle}: {result:?}"
+            );
+        }
+    };
+    let base = || AxiolidGeometry::new().with_mesh(id("a"), room());
+    unavailable(
+        base()
+            .with_no_body(id("void"))
+            .with_group(id("zone"), [id("a"), id("void")]),
+        "has no body",
+    );
+    unavailable(
+        base()
+            .with_unmeasured(id("slab"), "meshing failed")
+            .with_group(id("zone"), [id("a"), id("slab")]),
+        "meshing failed",
+    );
+    unavailable(
+        base().with_group(id("zone"), [id("a"), id("ghost")]),
+        "no described geometry",
+    );
+    unavailable(
+        base().with_undecided_group(id("zone"), "a relationship end is missing"),
+        "a relationship end is missing",
+    );
+    unavailable(base().with_group(id("zone"), Vec::new()), "groups nothing");
+    unavailable(
+        base()
+            .with_group(id("zone"), [id("a"), id("loop")])
+            .with_group(id("loop"), [id("zone")]),
+        "member of itself",
+    );
+    unavailable(
+        base()
+            .with_no_body(id("void"))
+            .with_group(id("inner"), [id("void")])
+            .with_group(id("zone"), [id("a"), id("inner")]),
+        "has no body",
+    );
+}

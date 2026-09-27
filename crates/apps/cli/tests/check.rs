@@ -1027,22 +1027,64 @@ fn with_geometry_an_unguarded_landing_edge_is_found() {
     );
 }
 
-/// Space #16 lies wholly on slab #36; space #26 only half.
-fn spaces_on_a_slab() -> String {
-    let body = |first: u32, x: f64, length: f64, depth: f64, product: &str| {
-        let [p, pos, profile, solid, shape, definition, object] =
-            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
-        format!(
-            "#{p}=IFCCARTESIANPOINT(({x},2.));\n\
-             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
-             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},4.);\n\
-             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth});\n\
-             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
-             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
-             #{object}={};\n",
-            product.replace("REP", &format!("#{definition}")),
+/// A 4 m deep box centred at `x`, as instances `#first` to `#first + 6`;
+/// `REP` in `product` becomes its shape.
+fn body(first: u32, x: f64, length: f64, depth: f64, product: &str) -> String {
+    let [p, pos, profile, solid, shape, definition, object] =
+        [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+    format!(
+        "#{p}=IFCCARTESIANPOINT(({x},2.));\n\
+         #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+         #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length},4.);\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth});\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        product.replace("REP", &format!("#{definition}")),
+    )
+}
+
+/// Spaces #16 (x 0..4) and #26 (x 3..7) in zone #90, and space #46
+/// (x 20..24) outside it. With `bodiless_member`, the zone also groups
+/// space #50, which has no body.
+fn spaces_in_a_zone(bodiless_member: bool) -> String {
+    let space = |first: u32, x: f64| {
+        body(
+            first,
+            x,
+            4.0,
+            3.0,
+            &format!(
+                "IFCSPACE('00000000000000000000{:02}',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)",
+                first + 6
+            ),
         )
     };
+    let members = if bodiless_member {
+        "(#16,#26,#50)"
+    } else {
+        "(#16,#26)"
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}\
+         #50=IFCSPACE('0000000000000000000050',$,$,$,$,#3,$,$,.ELEMENT.,$,$);\n\
+         #90=IFCZONE('0000000000000000000090',$,'Compartment',$,$,$);\n\
+         #91=IFCRELASSIGNSTOGROUP('0000000000000000000091',$,$,$,{members},$,#90);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        space(10, 2.0),
+        space(20, 5.0),
+        space(40, 22.0),
+    )
+}
+
+/// Space #16 lies wholly on slab #36; space #26 only half.
+fn spaces_on_a_slab() -> String {
     format!(
         "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
          #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
@@ -1076,13 +1118,14 @@ fn spaces_on_a_slab() -> String {
     )
 }
 
-#[test]
-fn with_geometry_plan_coverage_measures_real_footprints() {
-    let case = Case::new("geometry-plan-coverage");
+/// Runs `plan-coverage` of spaces against `candidate` objects over `model`
+/// with geometry, returning the output and the saved result.
+fn plan_coverage(name: &str, model: &str, candidate: (&str, &str)) -> (Output, Value) {
+    let case = Case::new(name);
     let definitions = case.definitions(true);
     let mut definitions: Value =
         serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
-    for (id, name) in [("space", "IfcSpace"), ("slab", "IfcSlab")] {
+    for (id, name) in [("space", "IfcSpace"), candidate] {
         definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
             "id": format!("axioval:example.ifc.{id}"),
             "name": {"default": name, "translations": {}},
@@ -1097,7 +1140,7 @@ fn with_geometry_plan_coverage_measures_real_footprints() {
     definitions["definitions"]["axioval:example.coverage"] = json!({
         "id": "axioval:example.coverage",
         "name": {"default": "Coverage", "translations": {}},
-        "description": {"default": "Spaces lie on a slab.", "translations": {}},
+        "description": {"default": "Spaces lie within a candidate.", "translations": {}},
         "capability": "axioval:capability.plan-coverage",
         "parameters": {
             "candidate_selector": declare("candidate_selector", "selector", true),
@@ -1115,17 +1158,17 @@ fn with_geometry_plan_coverage_measures_real_footprints() {
     let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
     let mut ruleset: Value = serde_json::from_str(&text).unwrap();
     let rule = &mut ruleset["root"]["rules"][0];
-    rule["id"] = json!("spaces-on-slabs");
+    rule["id"] = json!("spaces-covered");
     rule["definitionId"] = json!("axioval:example.coverage");
     rule["parameters"] = json!({
         "candidate_selector": {"type": "selector", "value": {
-            "kind": "entityType", "objectType": "axioval:example.ifc.slab",
+            "kind": "entityType", "objectType": format!("axioval:example.ifc.{}", candidate.0),
             "includeSubtypes": true}},
         "minimum_ratio": {"type": "number", "value": 0.9},
     });
     rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
         json!("axioval:example.ifc.space");
-    let model = case.write("model.ifc", &spaces_on_a_slab());
+    let model = case.write("model.ifc", model);
     let definitions = case.write("definitions.json", &definitions.to_string());
     let ruleset = case.write("ruleset.json", &ruleset.to_string());
     let saved = case.path("result.json");
@@ -1140,11 +1183,73 @@ fn with_geometry_plan_coverage_measures_real_footprints() {
         .args(["--geometry", "--report", saved.to_str().unwrap()])
         .output()
         .unwrap();
+    let result = std::fs::read_to_string(&saved)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Value::Null);
+    (output, result)
+}
+
+#[test]
+fn with_geometry_plan_coverage_measures_real_footprints() {
+    let (output, result) = plan_coverage(
+        "geometry-plan-coverage",
+        &spaces_on_a_slab(),
+        ("slab", "IfcSlab"),
+    );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
-    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
     let findings = result["report"]["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 1, "{result:#}");
     assert_eq!(findings[0]["object_id"]["local_id"], "#26", "{result:#}");
+}
+
+#[test]
+fn with_geometry_plan_coverage_measures_a_zone_as_the_union_of_its_spaces() {
+    let (output, result) = plan_coverage(
+        "geometry-plan-coverage-zone",
+        &spaces_in_a_zone(false),
+        ("zone", "IfcZone"),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #16 and #26 lie within the zone they make up; #46 lies outside it.
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#46", "{result:#}");
+    let not_evaluated: Vec<&Value> = result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| &entry["object_id"]["local_id"])
+        .collect();
+    // Only the bodiless space #50, which has no footprint of its own.
+    assert_eq!(not_evaluated, [&json!("#50")], "{result:#}");
+}
+
+#[test]
+fn with_geometry_a_zone_with_a_bodiless_member_has_no_footprint() {
+    let (output, result) = plan_coverage(
+        "geometry-plan-coverage-zone-bodiless",
+        &spaces_in_a_zone(true),
+        ("zone", "IfcZone"),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(
+        result["report"]["findings"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 4, "{result:#}");
+    assert!(
+        not_evaluated
+            .iter()
+            .filter(|entry| entry["object_id"]["local_id"] != "#50")
+            .all(|entry| entry["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("has no body"))),
+        "{result:#}"
+    );
 }
 
 /// Slabs #16, #26 and #36, 0.2 m thick, stacked at 0, 3 and 6.5 m.

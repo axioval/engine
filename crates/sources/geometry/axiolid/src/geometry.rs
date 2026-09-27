@@ -30,6 +30,7 @@ pub struct AxiolidGeometry {
     chord_deviations: BTreeMap<ObjectId, f64>,
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
+    groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
 }
 
 impl AxiolidGeometry {
@@ -57,6 +58,47 @@ impl AxiolidGeometry {
     pub fn with_unmeasured(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
         self.unmeasured.insert(object, reason.into());
         self
+    }
+
+    /// Declares a bodiless group (a zone, say) and the objects it groups.
+    ///
+    /// Membership is a semantic fact a mesh cannot show, so the host states
+    /// it. A group has no body of its own, so it is also declared bodiless:
+    /// it obstructs nothing. Its plan footprint is the union of its members'
+    /// footprints; a member may itself be a declared group.
+    #[must_use]
+    pub fn with_group(
+        mut self,
+        group: ObjectId,
+        members: impl IntoIterator<Item = ObjectId>,
+    ) -> Self {
+        let mut members: Vec<ObjectId> = members.into_iter().collect();
+        members.sort();
+        members.dedup();
+        self.bodiless.insert(group.clone());
+        self.groups.insert(group, Ok(members));
+        self
+    }
+
+    /// Declares a bodiless group whose membership the host could not decide.
+    ///
+    /// Measurements that need its members refuse with `reason`, rather than
+    /// take the group as empty.
+    #[must_use]
+    pub fn with_undecided_group(mut self, group: ObjectId, reason: impl Into<String>) -> Self {
+        self.bodiless.insert(group.clone());
+        self.groups.insert(group, Err(reason.into()));
+        self
+    }
+
+    /// A declared group's members in identity order, or the reason its
+    /// membership is undecided; `None` when the object is no declared group.
+    #[must_use]
+    pub fn group_members(&self, group: &ObjectId) -> Option<Result<&[ObjectId], &str>> {
+        self.groups.get(group).map(|members| match members {
+            Ok(members) => Ok(members.as_slice()),
+            Err(reason) => Err(reason.as_str()),
+        })
     }
 
     /// Whether the host declared the object bodiless.

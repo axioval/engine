@@ -205,6 +205,15 @@ assuming zero doorways, when:
 - the model has a space boundary without a required end, which makes every
   boundary answer refuse.
 
+A group (`IfcGroup`: a zone, a system) has no body, but plan-area rules need
+its footprint, e.g. `plan-coverage` of spaces against the zones that model
+fire compartments. The CLI reads each group's members from
+`IfcRelAssignsToGroup` and declares them, so a group's footprint is the union
+of its members' footprints. A member without a body or whose body could not
+be meshed, a group that groups nothing, and a membership the relationship
+service refuses make the footprint unavailable: rules that need it report not
+evaluated, never measure the group as zero.
+
 External-wall validation compares the objects a model declares external with
 the objects on the envelope of a set of bounding spaces. IFC does not say which
 spaces make up the conditioned volume, so `--envelope-zone NAME` names the

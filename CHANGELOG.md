@@ -23,6 +23,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   `container_selector`, `case_sensitive`, `minimum_number`,
   `maximum_number`, `minimum_quantity`, `maximum_quantity` and
   `category_property`.
+- **A zone's footprint is the union of its members.** A bodiless group, such
+  as an `IfcZone` modelling a fire compartment, measured a zero plan
+  footprint, so `plan-coverage` and area limits against it could never pass.
+  `AxiolidGeometry::with_group` declares a group's members and
+  `with_undecided_group` a membership the host could not decide;
+  `AxiolidPlanAreaService` then measures the group as the union of its
+  members' footprints, nested groups included. A member without a body, an
+  unmeasured or undescribed member, an empty or self-containing group and an
+  undecided membership make the footprint unavailable, never zero; a
+  tessellated member makes it approximate. `axioval check --geometry` reads
+  every `IfcGroup`'s members from `IfcRelAssignsToGroup` and declares them.
 - **Property selectors on par with `property-predicate`.** Selectors take
   the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,
   `oneOf` and `noneOf` (a string list), and the options `caseSensitive`

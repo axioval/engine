@@ -14,6 +14,9 @@
 //! - **no body**: it occupies no material (a storey, a zone, an opening);
 //! - **unmeasured**: it is physical but could not be meshed. Measurements it
 //!   could affect refuse rather than act as if it were not there.
+//!
+//! A group (a zone) has no body, but its plan footprint is the union of its
+//! members', so the bridge also declares every group's membership.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -167,10 +170,17 @@ pub fn attach(
         }
     }
 
-    if let Some(relationships) = session.service::<RelationshipSelectionServiceHandle>() {
+    let relationships = session.service::<RelationshipSelectionServiceHandle>();
+    if let Some(relationships) = relationships {
         for (space, count) in doorways(relationships, &kinds, &is_a) {
             geometry = geometry.with_doorways(space, count);
         }
+    }
+    for (group, members) in groups(relationships, &kinds, &is_a) {
+        geometry = match members {
+            Ok(members) => geometry.with_group(group, members),
+            Err(reason) => geometry.with_undecided_group(group, reason),
+        };
     }
     let envelope = match &profiles.envelope_zone {
         Some(zone) => Some(envelope_service(
@@ -317,6 +327,43 @@ fn doorways(
     of_kind("IfcSpace")
         .into_iter()
         .filter_map(|space| count(&space).map(|n| (space, n)))
+        .collect()
+}
+
+/// Members of every group (`IfcGroup`: zones, systems), so a bodiless zone
+/// has the union of its members' footprints.
+///
+/// Membership is `IfcRelAssignsToGroup`, read through the session's
+/// relationship service over every object. A refused answer, or no service
+/// at all, leaves the membership undecided: the group's footprint is then
+/// unavailable, never the empty footprint of a group that groups nothing.
+fn groups(
+    relationships: Option<&RelationshipSelectionServiceHandle>,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&str, &str) -> bool,
+) -> Vec<(ObjectId, Result<Vec<ObjectId>, String>)> {
+    let everything: Vec<ObjectId> = kinds.keys().cloned().collect();
+    let members = |group: &ObjectId| -> Result<Vec<ObjectId>, String> {
+        let relationships =
+            relationships.ok_or("the session has no relationship service to read groups with")?;
+        let query = RelationshipQuery::Related {
+            relationship: SemanticRelationship::try_new("IfcRelAssignsToGroup")
+                .map_err(|error| error.to_string())?,
+            direction: TraversalDirection::Forward,
+            follow_chain: false,
+        };
+        let request =
+            RelationshipSelectionRequest::try_new(group.clone(), everything.clone(), query)
+                .map_err(|error| error.to_string())?;
+        let selection = relationships
+            .select(&request)
+            .map_err(|error| error.to_string())?;
+        Ok(selection.candidates().to_vec())
+    };
+    kinds
+        .iter()
+        .filter(|(_, kind)| is_a(kind, "IfcGroup"))
+        .map(|(group, _)| (group.clone(), members(group)))
         .collect()
 }
 

@@ -94,6 +94,7 @@ fn list_value_and_selector_quantifier_round_trip() {
         selector,
         Selector::Property {
             quantifier: Some(axioval_ir::contract::Quantifier::All),
+            precision: None,
             ..
         }
     ));

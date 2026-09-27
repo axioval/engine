@@ -9,11 +9,13 @@ use axioval_engine::{
 use axioval_ir::contract::{
     ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, Selector,
 };
-use axioval_ir::{Evidence, Object, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Date, DateTime, Evidence, Object, PropertyValue, QuantityDimension, TemporalPrecision,
+};
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
 
-use crate::support::{Tolerance, Traversal, exact_f64, si_quantity};
+use crate::support::{Tolerance, Traversal, exact_f64, si_quantity, temporal_order};
 
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
@@ -81,6 +83,7 @@ pub(crate) fn selector_matches(
             case_sensitive,
             trim,
             quantifier,
+            precision,
         } => property_selector_matches(
             context,
             object,
@@ -94,6 +97,7 @@ pub(crate) fn selector_matches(
                     trim: *trim,
                 },
                 *quantifier,
+                *precision,
             ),
             evidence,
         ),
@@ -389,11 +393,12 @@ fn property_selector_matches(
         Option<&ParameterValue>,
         TextOptions,
         Option<Quantifier>,
+        Option<TemporalPrecision>,
     ),
     evidence: &mut Vec<Evidence>,
 ) -> Selection {
-    let (operator, expected, options, quantifier) = test;
-    let parsed = Test::parse(operator, expected, options).and_then(|test| {
+    let (operator, expected, options, quantifier, precision) = test;
+    let parsed = Test::parse(operator, expected, options, precision).and_then(|test| {
         if quantifier.is_some() && matches!(test, Test::Exists) {
             Err("`quantifier` applies to value comparisons, not to `exists`".into())
         } else {
@@ -506,13 +511,16 @@ enum Expected {
     Quantity(f64, QuantityDimension),
     /// Folded as declared.
     Text(String),
+    Date(Date),
+    DateTime(DateTime),
 }
 
 /// A property selector's comparison, validated against its declaration.
 #[derive(Debug)]
 enum Test {
     Exists,
-    Compare(Order, Expected),
+    /// With the declared precision of a date or date-time comparison.
+    Compare(Order, Expected, Option<TemporalPrecision>),
     /// Folded as declared.
     Contains(String),
     /// `matches` or `like`, anchored to the whole value.
@@ -529,7 +537,15 @@ impl Test {
         operator: &ComparisonOperator,
         expected: Option<&ParameterValue>,
         options: TextOptions,
+        precision: Option<TemporalPrecision>,
     ) -> Result<Self, String> {
+        let temporal = matches!(
+            expected,
+            Some(ParameterValue::Date { .. } | ParameterValue::DateTime { .. })
+        );
+        if precision.is_some() && !temporal {
+            return Err("`precision` applies to a date or date-time comparison only".into());
+        }
         let Some(expected) = expected else {
             return if matches!(operator, ComparisonOperator::Exists) {
                 if options.is_default() {
@@ -587,6 +603,8 @@ impl Test {
                         Expected::Quantity(value, dimension)
                     }
                     ParameterValue::String { value } => Expected::Text(options.fold(value)),
+                    ParameterValue::Date { value } => Expected::Date(*value),
+                    ParameterValue::DateTime { value } => Expected::DateTime(*value),
                     ParameterValue::Enum { value } | ParameterValue::Reference { value }
                         if order.is_equality() =>
                     {
@@ -602,7 +620,7 @@ impl Test {
                 if !matches!(value, Expected::Text(_)) && !options.is_default() {
                     return Err("`caseSensitive` and `trim` apply to text comparisons only".into());
                 }
-                Self::Compare(order, value)
+                Self::Compare(order, value, precision)
             }
         };
         Ok(test)
@@ -673,8 +691,21 @@ impl Test {
         };
         match self {
             Self::Exists => Ok(true),
-            Self::Compare(order, expected) => {
+            Self::Compare(order, expected, precision) => {
                 let ordering = match (expected, actual) {
+                    (Expected::Date(expected), _) => {
+                        match temporal_order(actual, &PropertyValue::Date(*expected), *precision) {
+                            Some(ordering) => ordering?,
+                            None => return mismatch("a date"),
+                        }
+                    }
+                    (Expected::DateTime(expected), _) => {
+                        let expected = PropertyValue::DateTime(*expected);
+                        match temporal_order(actual, &expected, *precision) {
+                            Some(ordering) => ordering?,
+                            None => return mismatch("a date-time"),
+                        }
+                    }
                     (Expected::Boolean(expected), PropertyValue::Boolean(actual)) => {
                         actual.cmp(expected)
                     }
@@ -767,6 +798,8 @@ fn kind(value: &PropertyValue) -> String {
             format!("a quantity in {}", dimension.unit_symbol())
         }
         PropertyValue::String(_) => "text".into(),
+        PropertyValue::Date(_) => "a date".into(),
+        PropertyValue::DateTime(_) => "a date-time".into(),
         PropertyValue::List(_) => "a list".into(),
     }
 }

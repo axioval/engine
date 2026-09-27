@@ -25,6 +25,7 @@ fn matches(set: &str, name: &str, pattern: &str) -> Selector {
         case_sensitive: true,
         trim: false,
         quantifier: None,
+        precision: None,
     }
 }
 
@@ -399,6 +400,7 @@ mod related_count {
             case_sensitive: true,
             trim: false,
             quantifier: None,
+            precision: None,
         };
         let evaluation = model.evaluate(
             &RelatedCount,
@@ -432,6 +434,7 @@ mod related_count {
                             case_sensitive: true,
                             trim: false,
                             quantifier: None,
+                            precision: None,
                         }),
                     ),
                     ("relationship", string("bounds")),

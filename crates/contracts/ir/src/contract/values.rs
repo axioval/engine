@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 use super::Selector;
+use crate::{Date, DateTime};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -26,6 +27,17 @@ pub enum ParameterValue {
     },
     Enum {
         value: String,
+    },
+    /// An ISO 8601 calendar date, `YYYY-MM-DD`; any other text is refused
+    /// when the package is read.
+    Date {
+        value: Date,
+    },
+    /// An ISO 8601 date-time with an explicit UTC offset,
+    /// `YYYY-MM-DDThh:mm:ss[.f](Z|±hh:mm)`; a date-time without an offset is
+    /// refused when the package is read.
+    DateTime {
+        value: DateTime,
     },
     Reference {
         value: String,

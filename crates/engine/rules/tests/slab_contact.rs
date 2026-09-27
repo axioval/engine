@@ -564,6 +564,7 @@ mod scope {
                     case_sensitive: true,
                     trim: false,
                     quantifier: None,
+                    precision: None,
                 },
             ],
         };

@@ -210,6 +210,14 @@ fn typed(
     type_name: &str,
     value: &Value,
 ) -> Result<Option<PropertyValue>, PropertyResolutionError> {
+    let raw = match value {
+        Value::Text(text) => crate::temporal::Raw::Text(text),
+        Value::Integer(seconds) => crate::temporal::Raw::Integer(*seconds),
+        _ => crate::temporal::Raw::Other,
+    };
+    if let Some(value) = crate::temporal::read(type_name, &raw) {
+        return value.map(Some);
+    }
     if type_name.to_ascii_uppercase().ends_with("MEASURE") {
         #[allow(clippy::cast_precision_loss)]
         let number = match value {

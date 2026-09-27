@@ -203,6 +203,8 @@ fn display_value(value: Option<&PropertyValue>) -> String {
         Some(PropertyValue::Decimal(value)) => value.to_string(),
         Some(PropertyValue::Quantity { value, dimension }) => format!("{value} ({dimension:?})"),
         Some(PropertyValue::String(value)) => format!("{value:?}"),
+        Some(PropertyValue::Date(value)) => value.to_string(),
+        Some(PropertyValue::DateTime(value)) => value.to_string(),
         Some(PropertyValue::List(values)) => format!(
             "[{}]",
             values

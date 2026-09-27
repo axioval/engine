@@ -18,8 +18,10 @@ pub enum PropertyResolutionError {
     /// A conclusive answer lacks exact, reviewable provenance.
     #[error("property evidence is not exact and reviewable")]
     InexactEvidence,
-    /// A conclusive answer contains a non-finite numeric value.
-    #[error("property value is not finite")]
+    /// A conclusive answer contains a value that is not a valid value of its
+    /// kind: a non-finite number, or text that is not the date its source
+    /// type declares.
+    #[error("property value is invalid for its type")]
     InvalidValue,
     /// The source could answer only part of the request scope.
     #[error("property source coverage is incomplete: {0}")]
@@ -240,7 +242,9 @@ fn valid_value(value: &PropertyValue) -> bool {
         PropertyValue::Null
         | PropertyValue::Boolean(_)
         | PropertyValue::Integer(_)
-        | PropertyValue::String(_) => true,
+        | PropertyValue::String(_)
+        | PropertyValue::Date(_)
+        | PropertyValue::DateTime(_) => true,
         // A list holds scalar values only: no null, no nested list.
         PropertyValue::List(elements) => elements.iter().all(|element| {
             !matches!(element, PropertyValue::Null | PropertyValue::List(_)) && valid_value(element)

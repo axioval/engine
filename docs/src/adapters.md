@@ -16,10 +16,22 @@ unsupported values fail closed.
 A present property reports the IFC type its value was written with (`IFCLABEL`,
 `IFCBOOLEAN`, ...) as `Property::data_type`, upper case whatever the file used.
 A value is carried when its defined type's base in the file's release maps without
-loss: every `STRING`-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...),
-`INTEGER`- and `NUMBER`-based integers (`IfcTimeStamp`, `IfcCountMeasure`),
+loss: every `STRING`-based type (`IfcLabel`, `IfcDuration`, ...),
+`INTEGER`- and `NUMBER`-based integers (`IfcCountMeasure`),
 `IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
 measures are converted to SI through their unit (see *Measures*).
+
+Date and time types are read as dates, in property sets and attributes alike, and
+keep their declared type and the same evidence locator as any other value:
+- `IfcDate` (`YYYY-MM-DD`) is a `Date`;
+- `IfcDateTime` is a `DateTime` when it states a UTC offset (`2026-09-27T10:00:00+02:00`
+  or `...Z`). Without one its instant is unknown: the property is refused as
+  incomplete (`PropertyResolutionError::Incomplete`, naming the value), never read
+  in a guessed zone and never downgraded to text;
+- `IfcTimeStamp` (seconds since 1970-01-01, UTC; IFC2X3 and IFC4) is a UTC `DateTime`.
+
+Text that is not the type's ISO 8601 form, or a day that does not exist, is an
+invalid value (`PropertyResolutionError::InvalidValue`).
 
 Quantity sets (`IfcElementQuantity`) resolve like property sets
 (`ifc-properties` 0.4.0, openbimrs/ifc#66): `Qto_SpaceBaseQuantities.NetFloorArea`

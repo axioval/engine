@@ -6,6 +6,39 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Date and date-time values.** `PropertyValue::Date` is a calendar day
+  (`{"type": "date", "value": "2026-09-27"}`) and `PropertyValue::DateTime`
+  an instant with the UTC offset it was stated in
+  (`{"type": "dateTime", "value": "2026-09-27T10:00:00+02:00"}`), both
+  validated ISO 8601 (`axioval_ir::temporal`, no new dependency). A
+  date-time without an offset is not representable. Packages state `date`
+  and `dateTime` literals (`ParameterValue`, `ParameterKind`,
+  `PropertyValueKind` and `ParameterType` variants); one that is no real
+  day, or a date-time without an offset, is refused when the package is
+  read. Dates compare by day and date-times as instants whatever their
+  offsets; a date-time compares with a date only when the rule states
+  `precision` `day`, which reads it as the calendar day it states in its own
+  offset. `property-predicate` takes `date` and `date_time` targets and
+  `precision`, `property-comparison` `target_date`, `target_date_time` and
+  `precision`, `property-value` casts literals to dates and takes
+  `precision`, and property selectors take `date` and `dateTime` values with
+  an optional `precision: day` (lists under a `quantifier` too); `between`
+  ranges and table columns do not take dates yet. Without day precision a
+  date-time against a date is not evaluated, never guessed. `unique-value` and
+  `consistent-value` treat one instant in two offsets as one value. The IFC
+  adapter reads `IfcDate` as a date, `IfcDateTime` with an offset and
+  `IfcTimeStamp` (UTC) as date-times, in property sets and attributes; an
+  `IfcDateTime` without an offset is refused as incomplete, and text that is
+  not the type's ISO 8601 form is an invalid value. **Breaking:**
+  `PropertyValue`, `ParameterValue`, `ParameterKind`, `PropertyValueKind`
+  and `ParameterType` have new variants; `Selector::Property` has the new
+  field `precision` (omitted when unset, so existing packages read and write
+  unchanged); definitions bound to `property-predicate`,
+  `property-comparison` and `property-value` must declare the new optional
+  parameters; IFC date and time properties, previously text or integers,
+  are now dates, so a text or integer rule over them is not evaluated or
+  fails as a type mismatch; `PropertyResolutionError::InvalidValue` now
+  reads "property value is invalid for its type".
 - **Keyed limit tables.** The new capability `keyed-limit` checks a
   quantity of each selected object against the single applicable row of a
   `limits` table: a fire compartment's area limit by its building's fire

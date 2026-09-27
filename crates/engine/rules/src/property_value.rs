@@ -8,7 +8,11 @@
 //! - a boolean accepts `true`/`1` and `false`/`0`;
 //! - an integer takes integer literals, and bounds in any numeric form;
 //! - a decimal takes `xs:double` literals and equals within the tolerance
-//!   `|x - v| <= |v|·1e-6 + 1e-6`; bounds compare without tolerance.
+//!   `|x - v| <= |v|·1e-6 + 1e-6`; bounds compare without tolerance;
+//! - a date takes `xs:date` literals (`2026-09-27`) and a date-time
+//!   `xs:dateTime` literals with a UTC offset, compared chronologically.
+//!   With `precision` `day` both read as the calendar day they state, so a
+//!   date-time value takes date literals and the reverse.
 //!
 //! A literal that cannot be cast to the value's kind, or a constraint the kind
 //! does not take, makes the object not evaluated (`InvalidDeclaration`): the
@@ -20,7 +24,11 @@ use axioval_engine::{
     PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
-use axioval_ir::{Evidence, Finding, Object, Property, PropertyValue, Severity};
+use axioval_ir::{
+    Date, DateTime, Evidence, Finding, Object, Property, PropertyValue, Severity, TemporalPrecision,
+};
+
+use crate::support::temporal_order;
 
 use crate::selection::{bound_property_request, property_error, select_objects};
 use crate::xsd_pattern;
@@ -42,6 +50,7 @@ struct Constraints<'r> {
     min_length: Option<i64>,
     max_length: Option<i64>,
     optional: bool,
+    precision: Option<TemporalPrecision>,
 }
 
 impl<'r> Constraints<'r> {
@@ -73,6 +82,15 @@ impl<'r> Constraints<'r> {
                 rule.parameters.get("optional"),
                 Some(ParameterValue::Boolean { value: true })
             ),
+            precision: match text("precision") {
+                None => None,
+                Some("day") => Some(TemporalPrecision::Day),
+                Some(other) => {
+                    return Err(format!(
+                        "precision `{other}` is unsupported; the only precision is `day`"
+                    ));
+                }
+            },
         };
         if constraints
             .data_type
@@ -130,7 +148,8 @@ enum Verdict {
 /// as in `property-data-type`), `values` (any of), `patterns` (XML Schema
 /// regular expressions, any of, whole value), `min_inclusive`,
 /// `max_inclusive`, `min_exclusive`, `max_exclusive`, `length`,
-/// `min_length`, `max_length`, and `optional`. All given constraints must
+/// `min_length`, `max_length`, `optional`, and `precision` (`day`, for a date
+/// or date-time value only). All given constraints must
 /// hold. Without `optional`, absence, `null` and blank text are violations;
 /// with it, an absent or `null` property passes and any present value,
 /// empty text included, is checked.
@@ -151,6 +170,7 @@ impl RuleCapability for PropertyValueConstraint {
             "max_inclusive",
             "min_exclusive",
             "max_exclusive",
+            "precision",
         ] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::String));
         }
@@ -311,7 +331,13 @@ fn invalid(message: impl Into<String>) -> Verdict {
 }
 
 fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
+    if constraints.precision.is_some()
+        && !matches!(value, PropertyValue::Date(_) | PropertyValue::DateTime(_))
+    {
+        return invalid("precision applies to a date or date-time value only");
+    }
     match value {
+        PropertyValue::Date(_) | PropertyValue::DateTime(_) => temporal_verdict(value, constraints),
         PropertyValue::String(text) => text_verdict(text, constraints),
         PropertyValue::Boolean(actual) => {
             if !constraints.patterns.is_empty()
@@ -377,6 +403,47 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
             "the value is a list; compare its elements with a quantified property selector".into(),
         ),
     }
+}
+
+/// A date or date-time against lexical date and date-time literals.
+fn temporal_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
+    if !constraints.patterns.is_empty() || constraints.has_lengths() {
+        return invalid("a date takes no patterns or lengths");
+    }
+    let order = |literal: &str| {
+        let literal_value = literal
+            .parse::<Date>()
+            .map(PropertyValue::Date)
+            .or_else(|_| literal.parse::<DateTime>().map(PropertyValue::DateTime))
+            .map_err(|_| format!("{literal:?} is not a date or date-time literal"))?;
+        temporal_order(value, &literal_value, constraints.precision)
+            .unwrap_or_else(|| Err("not a date".into()))
+            .map_err(|message| format!("{literal:?}: {message}"))
+    };
+    let shown = crate::support::display(Some(value));
+    let equal = one_of(
+        constraints.values,
+        |literal| order(literal).map(std::cmp::Ordering::is_eq),
+        &shown,
+    );
+    if !matches!(equal, Verdict::Meets) {
+        return equal;
+    }
+    let checks: [Bound<'_>; 4] = [
+        (constraints.min_inclusive, std::cmp::Ordering::is_ge, ">="),
+        (constraints.max_inclusive, std::cmp::Ordering::is_le, "<="),
+        (constraints.min_exclusive, std::cmp::Ordering::is_gt, ">"),
+        (constraints.max_exclusive, std::cmp::Ordering::is_lt, "<"),
+    ];
+    for (bound, holds, symbol) in checks {
+        let Some(bound) = bound else { continue };
+        match order(bound) {
+            Ok(ordering) if holds(ordering) => {}
+            Ok(_) => return Verdict::Fails(format!("is {shown}, not {symbol} {bound}")),
+            Err(message) => return invalid(message),
+        }
+    }
+    Verdict::Meets
 }
 
 fn text_verdict(text: &str, constraints: &Constraints<'_>) -> Verdict {

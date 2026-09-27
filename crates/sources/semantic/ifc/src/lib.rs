@@ -16,6 +16,7 @@ mod materials;
 mod measure;
 mod relationships;
 mod release;
+mod temporal;
 pub use identity::IFC_GLOBAL_ID;
 pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{

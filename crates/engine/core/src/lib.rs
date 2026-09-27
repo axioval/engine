@@ -136,6 +136,11 @@ pub enum ParameterType {
     String,
     Quantity,
     Enum,
+    /// An ISO 8601 calendar date, validated when the package is read.
+    Date,
+    /// An ISO 8601 date-time with a UTC offset, validated when the package
+    /// is read.
+    DateTime,
     Reference,
     ObjectTypeReference,
     PropertyReference,
@@ -155,6 +160,8 @@ impl ParameterType {
                 | (Self::String, schema::ParameterValue::String { .. })
                 | (Self::Quantity, schema::ParameterValue::Quantity { .. })
                 | (Self::Enum, schema::ParameterValue::Enum { .. })
+                | (Self::Date, schema::ParameterValue::Date { .. })
+                | (Self::DateTime, schema::ParameterValue::DateTime { .. })
                 | (Self::Reference, schema::ParameterValue::Reference { .. })
                 | (
                     Self::ObjectTypeReference,

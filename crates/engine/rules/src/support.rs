@@ -9,8 +9,10 @@ use axioval_engine::{
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{
-    Evidence, Finding, Object, ObjectId, Property, PropertyValue, QuantityDimension, Severity,
+    Date, DateTime, Evidence, Finding, Object, ObjectId, Property, PropertyValue,
+    QuantityDimension, Severity, TemporalPrecision,
 };
+use std::cmp::Ordering;
 
 use crate::selection::{bound_property_request, property_error};
 
@@ -77,6 +79,31 @@ impl<'a> Parameters<'a> {
                 Err(invalid(format!("parameter `{name}` is not finite")))
             }
             other => Ok(other),
+        }
+    }
+
+    pub(crate) fn date(&self, name: &str) -> Result<Option<Date>, Unavailable> {
+        self.typed(name, |value| match value {
+            ParameterValue::Date { value } => Some(*value),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn date_time(&self, name: &str) -> Result<Option<DateTime>, Unavailable> {
+        self.typed(name, |value| match value {
+            ParameterValue::DateTime { value } => Some(*value),
+            _ => None,
+        })
+    }
+
+    /// The optional `precision` parameter: `day`, or none for exact.
+    pub(crate) fn precision(&self) -> Result<Option<TemporalPrecision>, Unavailable> {
+        match self.string("precision")? {
+            None => Ok(None),
+            Some("day") => Ok(Some(TemporalPrecision::Day)),
+            Some(other) => Err(invalid(format!(
+                "precision `{other}` is unsupported; the only precision is `day`"
+            ))),
         }
     }
 
@@ -467,6 +494,8 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
             format!("{value} {}", dimension.unit_symbol())
         }
         Some(PropertyValue::String(value)) => format!("`{value}`"),
+        Some(PropertyValue::Date(value)) => value.to_string(),
+        Some(PropertyValue::DateTime(value)) => value.to_string(),
         Some(PropertyValue::List(values)) => format!(
             "[{}]",
             values
@@ -539,8 +568,50 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
                 .collect::<Vec<_>>()
                 .join("\u{1f}")
         ),
+        PropertyValue::Date(date) => format!("date:{date}"),
+        // One instant is one value, whichever offset states it.
+        PropertyValue::DateTime(instant) => {
+            let (seconds, nanoseconds) = instant.unix_instant();
+            format!("instant:{seconds}.{nanoseconds:09}")
+        }
         other => format!("value:{}", display(Some(other))),
     }
+}
+
+/// The chronological order of two dates or date-times; `None` unless both are.
+///
+/// Dates order by day and date-times as instants, whatever their offsets. A
+/// date-time and a date compare only at `day` precision, which reads every
+/// date-time as the calendar day it states in its own offset; exactly, a
+/// date-time neither precedes nor follows the day it falls on, so the pair is
+/// an error, never a verdict.
+pub(crate) fn temporal_order(
+    left: &PropertyValue,
+    right: &PropertyValue,
+    precision: Option<TemporalPrecision>,
+) -> Option<Result<Ordering, String>> {
+    let day = |value: &PropertyValue| match value {
+        PropertyValue::Date(date) => Some(*date),
+        PropertyValue::DateTime(instant) => Some(instant.date()),
+        _ => None,
+    };
+    let (left_day, right_day) = (day(left)?, day(right)?);
+    Some(match (left, right, precision) {
+        (_, _, Some(TemporalPrecision::Day))
+        | (PropertyValue::Date(_), PropertyValue::Date(_), None) => Ok(left_day.cmp(&right_day)),
+        (PropertyValue::DateTime(left), PropertyValue::DateTime(right), None) => {
+            Ok(left.cmp_instant(*right))
+        }
+        _ => Err(
+            "a date-time compares with a date only at day precision; declare precision `day`"
+                .into(),
+        ),
+    })
+}
+
+/// Whether a value is a date or a date-time.
+pub(crate) fn temporal(value: &PropertyValue) -> bool {
+    matches!(value, PropertyValue::Date(_) | PropertyValue::DateTime(_))
 }
 
 /// `value` as a float, when the conversion is exact (magnitude up to 2^53).

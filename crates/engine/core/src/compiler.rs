@@ -534,6 +534,8 @@ fn from_kind(kind: &ParameterKind) -> ParameterType {
         ParameterKind::Number => ParameterType::Number,
         ParameterKind::Quantity => ParameterType::Quantity,
         ParameterKind::Enum => ParameterType::Enum,
+        ParameterKind::Date => ParameterType::Date,
+        ParameterKind::DateTime => ParameterType::DateTime,
         ParameterKind::Reference => ParameterType::Reference,
         ParameterKind::ObjectTypeReference => ParameterType::ObjectTypeReference,
         ParameterKind::PropertyReference => ParameterType::PropertyReference,

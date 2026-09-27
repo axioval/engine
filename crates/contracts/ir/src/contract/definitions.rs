@@ -146,6 +146,10 @@ pub enum ParameterKind {
     Number,
     Quantity,
     Enum,
+    /// An ISO 8601 calendar date.
+    Date,
+    /// An ISO 8601 date-time with a UTC offset.
+    DateTime,
     Reference,
     ObjectTypeReference,
     PropertyReference,
@@ -164,6 +168,10 @@ pub enum PropertyValueKind {
     Number,
     Quantity,
     Enum,
+    /// An ISO 8601 calendar date.
+    Date,
+    /// An ISO 8601 date-time with a UTC offset.
+    DateTime,
     Reference,
     StringList,
     ReferenceList,

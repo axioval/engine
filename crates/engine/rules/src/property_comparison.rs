@@ -10,13 +10,14 @@ use axioval_engine::{
     SemanticRelationship,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Severity};
+use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Severity, TemporalPrecision};
 
 use crate::selection::select_objects;
 use regex::{Regex, RegexBuilder};
 
 use crate::support::{
-    Parameters, PropertyRef, Tolerance, Traversal, Unavailable, invalid, resolve, undefined,
+    Parameters, PropertyRef, Tolerance, Traversal, Unavailable, invalid, resolve, temporal,
+    temporal_order, undefined,
 };
 
 /// Compares a property on relationship-selected candidates with a property on each checked object.
@@ -26,6 +27,14 @@ use crate::support::{
 /// and the target after its factor: within the tolerance they are equal, and
 /// only beyond it greater or less. A tolerance on a text, text list or
 /// boolean constant target is an invalid declaration.
+///
+/// Dates and date-times compare chronologically with the ordered operators,
+/// against another property or a `target_date` or `target_date_time`
+/// constant: dates by day, date-times as instants whatever their UTC
+/// offsets. `precision` `day` reads every date-time as the calendar day it
+/// states, so a date-time compares with a date; without it that pair is not
+/// evaluated. A factor other than 1 or a tolerance does not apply to them,
+/// and `precision` applies to nothing else.
 ///
 /// Candidates are the checked object itself (`checked`), the members of a
 /// group it shares (`shared`), the objects a relationship or `path` reaches
@@ -78,6 +87,19 @@ enum Operator {
 }
 
 impl Operator {
+    /// Whether an ordered operator holds for `ordering`; `None` for any other.
+    fn orders(self, ordering: Ordering) -> Option<bool> {
+        Some(match self {
+            Self::Equals => ordering.is_eq(),
+            Self::NotEquals => !ordering.is_eq(),
+            Self::Greater => ordering.is_gt(),
+            Self::GreaterOrEqual => ordering.is_ge(),
+            Self::Less => ordering.is_lt(),
+            Self::LessOrEqual => ordering.is_le(),
+            _ => return None,
+        })
+    }
+
     /// Whether the operator judges presence alone and takes no target.
     fn judges_presence(self) -> bool {
         matches!(self, Self::IsDefined | Self::IsUndefined)
@@ -123,6 +145,9 @@ impl RuleCapability for PropertyComparison {
             ParameterDescriptor::optional("target_text", ParameterType::String),
             ParameterDescriptor::optional("target_texts", ParameterType::StringList),
             ParameterDescriptor::optional("target_boolean", ParameterType::Boolean),
+            ParameterDescriptor::optional("target_date", ParameterType::Date),
+            ParameterDescriptor::optional("target_date_time", ParameterType::DateTime),
+            ParameterDescriptor::optional("precision", ParameterType::String),
             ParameterDescriptor::optional("minimum_number", ParameterType::Number),
             ParameterDescriptor::optional("maximum_number", ParameterType::Number),
             ParameterDescriptor::optional("minimum_quantity", ParameterType::Quantity),
@@ -215,6 +240,8 @@ struct Config<'a> {
     mode: Mode<'a>,
     quantifier: Quantifier,
     tolerance: Tolerance,
+    /// How finely dates and date-times compare.
+    precision: Option<TemporalPrecision>,
     category: Option<PropertyRef<'a>>,
 }
 
@@ -297,10 +324,27 @@ impl<'a> Config<'a> {
                 || operator.judges_presence()
                 || matches!(
                     target,
-                    Target::Value(PropertyValue::String(_) | PropertyValue::Boolean(_))
+                    Target::Value(
+                        PropertyValue::String(_)
+                            | PropertyValue::Boolean(_)
+                            | PropertyValue::Date(_)
+                            | PropertyValue::DateTime(_)
+                    )
                 ))
         {
             return Err(invalid("a tolerance applies to numbers only"));
+        }
+        let precision = parameters.precision()?;
+        if precision.is_some()
+            && (operator.textual()
+                || operator.judges_presence()
+                || matches!(quantifier, Quantifier::Count | Quantifier::Sum)
+                || matches!(&target, Target::Value(value) if !temporal(value))
+                || matches!(target, Target::Texts(_) | Target::Range(..)))
+        {
+            return Err(invalid(
+                "`precision` applies to comparing dates and date-times only",
+            ));
         }
         let traversal = parameters.traversal()?;
         let container_selector = parameters.selector("container_selector")?;
@@ -376,6 +420,7 @@ impl<'a> Config<'a> {
             mode,
             quantifier,
             tolerance,
+            precision,
             category: parameters.property("category_property")?,
         })
     }
@@ -397,6 +442,12 @@ impl<'a> Config<'a> {
         }
         if let Some(value) = parameters.boolean("target_boolean")? {
             targets.push(Target::Value(PropertyValue::Boolean(value)));
+        }
+        if let Some(value) = parameters.date("target_date")? {
+            targets.push(Target::Value(PropertyValue::Date(value)));
+        }
+        if let Some(value) = parameters.date_time("target_date_time")? {
+            targets.push(Target::Value(PropertyValue::DateTime(value)));
         }
         if let Some(texts) = parameters.strings("target_texts")? {
             if texts.is_empty() {
@@ -808,7 +859,18 @@ fn compare_side(
     side: &Side<'_>,
     config: &Config<'_>,
 ) -> Result<bool, String> {
-    let at = |right: &PropertyValue, operator| {
+    let at = |right: &PropertyValue, operator: Operator| {
+        if let Some(ordering) = temporal_order(left, right, config.precision) {
+            if !exact_one(config.factor) {
+                return Err("a factor does not apply to dates".into());
+            }
+            return operator
+                .orders(ordering?)
+                .ok_or_else(|| format!("`{}` does not compare dates", config.operator_name));
+        }
+        if config.precision.is_some() {
+            return Err("`precision` applies to comparing dates and date-times only".into());
+        }
         compare(
             left,
             right,
@@ -1112,15 +1174,7 @@ fn compare(
     tolerance: &Tolerance,
     case_sensitive: bool,
 ) -> Result<bool, String> {
-    let equal = |ord: Ordering| match operator {
-        Operator::Equals => ord.is_eq(),
-        Operator::NotEquals => !ord.is_eq(),
-        Operator::Greater => ord.is_gt(),
-        Operator::GreaterOrEqual => ord.is_ge(),
-        Operator::Less => ord.is_lt(),
-        Operator::LessOrEqual => ord.is_le(),
-        _ => false,
-    };
+    let equal = |ord: Ordering| operator.orders(ord).unwrap_or(false);
     match (left, right) {
         (PropertyValue::Boolean(a), PropertyValue::Boolean(b)) if exact_one(factor) => {
             match operator {

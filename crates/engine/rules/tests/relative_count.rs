@@ -156,6 +156,7 @@ fn the_rule_selection_bounds_the_counted_objects() {
                 case_sensitive: true,
                 trim: false,
                 quantifier: None,
+                precision: None,
             },
             by_code(vec![]),
         ),

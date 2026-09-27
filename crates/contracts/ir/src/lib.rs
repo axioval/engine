@@ -15,6 +15,10 @@ use thiserror::Error;
 pub mod contract;
 pub use contract::{DefinitionPackage, RuleSetPackage};
 
+/// Calendar dates and date-times with a UTC offset.
+pub mod temporal;
+pub use temporal::{Date, DateTime, TemporalError, TemporalPrecision};
+
 /// Validation error for source-neutral contracts.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum IrError {
@@ -219,6 +223,14 @@ pub enum PropertyValue {
         dimension: QuantityDimension,
     },
     String(String),
+    /// A calendar day without a time zone, `YYYY-MM-DD` on the wire.
+    Date(Date),
+    /// An instant with the UTC offset it was stated in,
+    /// `YYYY-MM-DDThh:mm:ss[.f]±hh:mm` (or `Z`) on the wire, tagged
+    /// `dateTime` like the camelCase package kinds. A date-time without an
+    /// offset is not representable.
+    #[serde(rename = "dateTime")]
+    DateTime(DateTime),
     /// Several values of one property, in the order the source states them
     /// (the presentation layers of an object). Elements are scalar values:
     /// never `Null` and never a nested list. A comparison against a list

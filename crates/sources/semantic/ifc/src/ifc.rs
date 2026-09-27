@@ -26,6 +26,7 @@ use crate::integrity::IfcIntegrity;
 use crate::measure::si_value;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
+use crate::temporal;
 
 /// Production IFC import/session construction failure.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -135,9 +136,24 @@ impl IfcPropertyService {
     /// measures converted to SI.
     ///
     /// A value its declared type carries exactly (see `carries_exactly`) is
-    /// read as stated and must carry no unit. Any other number must be a
+    /// read as stated and must carry no unit; a date or time type is read as
+    /// a date or date-time (see `temporal`). Any other number must be a
     /// measure whose effective unit resolves exactly.
     fn pset_value(&self, exact: &ExactProperty) -> Result<PropertyValue, PropertyResolutionError> {
+        if let Some(value_type) = exact.value_type.as_deref() {
+            let raw = match &exact.value {
+                ExactValue::Text(text) => temporal::Raw::Text(text),
+                ExactValue::Integer(seconds) => temporal::Raw::Integer(*seconds),
+                _ => temporal::Raw::Other,
+            };
+            if let Some(value) = temporal::read(value_type, &raw) {
+                return if exact.unit_id.is_some() {
+                    Err(PropertyResolutionError::InexactEvidence)
+                } else {
+                    value
+                };
+            }
+        }
         let plain = match (&exact.value, exact.value_type.as_deref()) {
             (ExactValue::Null, None) => Some(PropertyValue::Null),
             (value, Some(value_type)) if self.carries_exactly(value, value_type) => match value {

@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 use super::ParameterValue;
+use crate::TemporalPrecision;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
@@ -33,6 +34,12 @@ pub enum Selector {
         /// a whole; `exists` takes none.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         quantifier: Option<Quantifier>,
+        /// How finely dates and date-times compare. `day` reads a date-time
+        /// as the calendar day it states, so it compares with a date; without
+        /// it a date-time compared with a date is not evaluated. Applies to
+        /// a `date` or `dateTime` value only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        precision: Option<TemporalPrecision>,
     },
     Classification {
         system: String,
@@ -85,6 +92,7 @@ impl Selector {
             case_sensitive: true,
             trim: false,
             quantifier: None,
+            precision: None,
         }
     }
 }
@@ -122,7 +130,8 @@ impl RelatedQuantifier {
 ///
 /// `matches` is a regular expression and `like` a wildcard pattern (`*` any
 /// run, `?` one character, `\` escapes); both must match the whole value.
-/// `contains` takes a string, `oneOf` and `noneOf` a string list.
+/// `contains` takes a string, `oneOf` and `noneOf` a string list. The ordered
+/// operators also take a `date` or `dateTime`, compared chronologically.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ComparisonOperator {

@@ -52,6 +52,7 @@ fn options(
         case_sensitive,
         trim,
         quantifier: None,
+        precision: None,
     }
 }
 
@@ -474,6 +475,7 @@ fn a_selector_that_does_not_fit_its_operator_is_an_invalid_declaration() {
             case_sensitive: true,
             trim: true,
             quantifier: None,
+            precision: None,
         },
     ] {
         invalid_everywhere(model(), selector, &["a"]);
@@ -501,6 +503,7 @@ fn quantified(
         case_sensitive: true,
         trim: false,
         quantifier,
+        precision: None,
     }
 }
 

@@ -12,6 +12,8 @@ pub fn kind(parameter_type: ParameterType) -> &'static str {
         ParameterType::String => "string",
         ParameterType::Quantity => "quantity",
         ParameterType::Enum => "enum",
+        ParameterType::Date => "date",
+        ParameterType::DateTime => "dateTime",
         ParameterType::Reference => "reference",
         ParameterType::ObjectTypeReference => "objectTypeReference",
         ParameterType::PropertyReference => "propertyReference",

@@ -147,6 +147,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Exit doors open in the direction of escape.** (Refs #79)
+  `escape-route` gains `exit_door_direction`: every exit door `exit_path`
+  reaches must open out of the checked space. Its leaves come from the
+  object-frame service and the side the space lies on from the free-space
+  service's containment probes, as for `door-swing`. An exit door swinging
+  into the space is a finding; one opening away or double-acting passes; an
+  exit that is no door is skipped; a door without a hinged leaf, unknown
+  leaves or a space beside neither side leave the space not evaluated.
+  **Breaking:** definitions bound to `escape-route` must declare the new
+  optional parameter `exit_door_direction`.
 - **Door swing.** (Closes #82, Closes #74) `door-swing` requires each
   selected door to swing into (`swing_into`) or not into
   (`swing_not_into`) the spaces `space_path` reaches from it, from its

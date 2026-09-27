@@ -6724,3 +6724,51 @@ fn with_geometry_a_door_swinging_into_the_corridor_is_found() {
         "{result:#}"
     );
 }
+
+#[test]
+fn with_geometry_exit_doors_opening_against_the_escape_are_found() {
+    let case = Case::new("geometry-exit-door-direction");
+    let (output, result) = case.geometry_rule(
+        &office_and_corridor_doors(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        entity("space"),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"spaces": {"type": "selector", "value": entity("space")},
+                 "exits": {"type": "integer", "value": 1}},
+            ]},
+            "exit_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:forward"]},
+            "exit_selector": {"type": "selector", "value": entity("door")},
+            "exit_door_direction": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Leaving the office, #50 swings against the escape; leaving the
+    // corridor, #80 does.
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#19".to_owned(),
+                "exit door ifc-step:model.ifc/#50 opens into the space, against the direction \
+                 of escape"
+                    .to_owned()
+            ),
+            (
+                "#29".to_owned(),
+                "exit door ifc-step:model.ifc/#80 opens into the space, against the direction \
+                 of escape"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

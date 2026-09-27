@@ -595,6 +595,7 @@ occupants.
 | `passage_selector` | selector | the passages (corridors); checks their widths |
 | `passage_path` | string list | from a space to the passages it relies on; needs `passage_selector` |
 | `passage_width_property` | property reference | a passage's stated clear width, a length; needs `passage_selector` |
+| `exit_door_direction` | boolean | every exit door must open in the direction of escape, out of the space |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
 - **Travel** follows the walking line of a point through the metric-routing
@@ -647,10 +648,24 @@ that surely are exits and from below through every one that might be; with
 near enough. An exit without a representative point leaves the lower bound
 at zero. A load between two rows of `widths` requires either row's widths.
 
+With `exit_door_direction`, every exit door must open in the direction of
+escape, out of the checked space. Its leaves come from the object-frame
+service and the side the space lies on from the free-space service's
+containment probes, as for [door swing](#door-swing): an exit door swinging
+into the space is a finding (`exit door … opens into the space, against the
+direction of escape`), one opening away from it or a double-acting one
+passes. An exit that is no door (an opening) has no leaf and is skipped. A
+sure exit door without a hinged leaf (a sliding door opens in no
+direction), with leaves that cannot be read, or with neither side in the
+space at its probes leaves the space not evaluated; an exit whose selection
+is undecided matters only when it swings into the space. Exits are the ones
+`exit_path` reaches, so the direction is judged from each checked space
+towards its own exits; a door further along the route is judged from the
+space it leaves.
+
 Not checked yet: which passages a measured walk actually crosses (the
-routing answer names no traversed objects, so passages are declared), the
-width of the route between passages, and whether exit doors open in the
-direction of escape, which needs door leaves (openbimrs/ifc#148). Travel is
+routing answer names no traversed objects, so passages are declared) and
+the width of the route between passages. Travel is
 measured for a point: a body's width is checked at the exits and passages,
 not along the walk.
 ### Openings at corridor ends

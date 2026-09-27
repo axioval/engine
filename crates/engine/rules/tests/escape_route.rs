@@ -1247,3 +1247,90 @@ fn a_passage_serving_a_space_of_unknown_load_is_not_evaluated() {
         outcome.message()
     );
 }
+
+/// Exit doors must open out of the space: `d1` swings into the hall,
+/// `d2` out of it, `o1` is an opening without leaves, `d3` slides.
+#[test]
+fn an_exit_door_opening_into_the_space_is_found() {
+    use common::doors::{Doors, Rooms, hinged, sliding};
+    let east = [1.0, 0.0, 0.0];
+    let with_exits = || {
+        model()
+            .object("o1", "door")
+            .object("d3", "door")
+            .edge("bounds", "o1", "hall")
+            .edge("bounds", "d3", "hall")
+    };
+    let run = |model: Model, sliding_exit: bool| {
+        let mut doors = Doors::default()
+            .door(
+                "d1",
+                vec![hinged([0.0; 3], east, [0.0, 1.0, 0.0], 0.9, false)],
+                1.0,
+                None,
+            )
+            .door(
+                "d2",
+                vec![hinged([3.0, 0.0, 0.0], east, [0.0, -1.0, 0.0], 0.9, false)],
+                1.0,
+                None,
+            );
+        if sliding_exit {
+            doors = doors.door("d3", vec![sliding([6.0, 0.0, 0.0], east, 0.9)], 1.0, None);
+        }
+        let parameters = with(
+            exits(kind("door")),
+            vec![
+                uses(&[("exits", integer(1))]),
+                ("exit_door_direction", common::boolean(true)),
+            ],
+        );
+        model.evaluate_with(
+            &EscapeRoute,
+            &rule(CAPABILITY, kind("space"), parameters),
+            |services| {
+                services.register(doors.handle()).unwrap();
+                services
+                    .register(
+                        Rooms::default()
+                            .room("hall", [-5.0, 0.0], [10.0, 4.0])
+                            .handle(),
+                    )
+                    .unwrap();
+            },
+        )
+    };
+    let evaluation = run(with_exits(), true);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "hall".into(),
+            "exit door test:model/d1 opens into the space, against the direction of escape".into()
+        )]
+    );
+    let [(space, reason)] = &unevaluated(&evaluation)[..] else {
+        panic!("{:?}", unevaluated(&evaluation))
+    };
+    assert_eq!(
+        (space.as_str(), reason),
+        ("hall", &NotEvaluatedReason::IncompleteEvidence)
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("d3 has no hinged leaf"),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    // Without the sliding exit, only the opening is left, and it has no leaf.
+    let evaluation = run(
+        model().object("o1", "door").edge("bounds", "o1", "hall"),
+        false,
+    );
+    assert_eq!(findings(&evaluation).len(), 1);
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        unevaluated(&evaluation)
+    );
+}

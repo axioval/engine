@@ -52,22 +52,32 @@
 //! `area_per_occupant`, an undecided use or selection, an unmeasured
 //! footprint) leaves every passage it may serve not evaluated.
 //!
+//! **Exit door direction.** With `exit_door_direction`, every exit door
+//! must open in the direction of escape: out of the space. Its leaves come
+//! from the object-frame service and which side the space lies on from the
+//! free-space service's containment probes (`door_swing::relation`). An
+//! exit door swinging into the space is a finding; one opening away from
+//! it, or double-acting, passes. An exit that is no door has no leaf and is
+//! skipped; a door without a hinged leaf, unknown leaves, and a space
+//! neither probe lies in are not evaluated.
+//!
 //! Not checked: which passages a measured walk crosses (the routing answer
-//! names no traversed objects), and whether exit doors open in the direction
-//! of escape (door leaves are not read yet).
+//! names no traversed objects).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, FarthestPointOutcome, FarthestPointRequest,
-    MetricPoint, MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome,
-    NearestTargetRequest, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea,
-    PlanSpanServiceHandle, ProximityProjection, ProximityRequest, ProximityServiceHandle,
-    RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeavesError, FarthestPointOutcome,
+    FarthestPointRequest, FreeSpaceServiceHandle, MetricPoint, MetricRoutingServiceHandle,
+    MobilityProfile, NearestTargetOutcome, NearestTargetRequest, NotEvaluatedReason,
+    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, PlanArea, PlanSpanServiceHandle,
+    ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
+    TableColumn,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension};
 
+use crate::door_swing::{self, Relation};
 use crate::exit_separation::Candidates;
 use crate::plan_area::{footprint, shown};
 use crate::selection::{Selection, select_objects, selector_matches};
@@ -163,6 +173,8 @@ struct Declaration<'a> {
     doors: Option<(Traversal<'a>, &'a Selector)>,
     clear_width: Option<PropertyRef<'a>>,
     profile: Option<MobilityProfile>,
+    /// Whether exit doors must open in the direction of escape.
+    door_direction: bool,
 }
 
 fn positive(name: &str, column: &str, value: Option<f64>) -> Result<Option<f64>, Unavailable> {
@@ -316,6 +328,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         doors,
         clear_width: parameters.property("clear_width_property")?,
         profile,
+        door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
     })
 }
 
@@ -429,6 +442,7 @@ impl RuleCapability for EscapeRoute {
                 "passage_width_property",
                 ParameterType::PropertyReference,
             ),
+            ParameterDescriptor::optional("exit_door_direction", ParameterType::Boolean),
         ]
     }
 
@@ -829,7 +843,72 @@ impl Judge<'_, '_> {
         if let Some(maximum) = use_.maximum_travel {
             self.travel(space, use_, maximum, &exits, checked);
         }
+        if self.declared.door_direction {
+            self.door_direction(space, &exits, checked);
+        }
         load
+    }
+
+    /// Every exit door must open out of `space`, in the direction of
+    /// escape. An exit that may not be one decides only a doubt.
+    fn door_direction(&self, space: &Object, exits: &Reached, checked: &mut Checked) {
+        let (Some(frames), Some(free)) = (
+            self.context.services.get::<ObjectFrameServiceHandle>(),
+            self.context.services.get::<FreeSpaceServiceHandle>(),
+        ) else {
+            checked.doubts.push(missing("object-frame or free-space"));
+            return;
+        };
+        let doors = exits
+            .sure
+            .iter()
+            .map(|exit| (exit, true))
+            .chain(exits.maybe.iter().map(|exit| (exit, false)));
+        for (exit, sure) in doors {
+            let leaves = match frames.leaves(exit) {
+                Ok(leaves) => leaves,
+                // An opening or a passage has no leaf to open.
+                Err(DoorLeavesError::NotADoor(_)) => continue,
+                Err(error) => {
+                    checked.doubts.push((
+                        door_swing::reason(&error),
+                        format!("the leaves of exit {exit} are unknown: {error}"),
+                    ));
+                    continue;
+                }
+            };
+            if leaves.hinged().next().is_none() {
+                if sure {
+                    checked.doubts.push(incomplete(format!(
+                        "exit door {exit} has no hinged leaf ({}), so the direction it opens in \
+                         is not defined",
+                        leaves.operation()
+                    )));
+                }
+                continue;
+            }
+            match door_swing::relation(free, &leaves, &space.id) {
+                Ok((Relation::Into, evidence)) if sure => checked.findings.push(finding(
+                    self.rule,
+                    &space.id,
+                    format!(
+                        "exit door {exit} opens into the space, against the direction of escape"
+                    ),
+                    evidence,
+                    vec![exit.clone()],
+                )),
+                Ok((Relation::Into, _)) => checked.doubts.push(incomplete(format!(
+                    "{exit} opens into the space, and whether it is an exit is undecided: {}",
+                    self.exits.undecided[exit]
+                ))),
+                Ok((Relation::Apart, _)) if sure => checked.doubts.push(incomplete(format!(
+                    "neither side of exit door {exit} lies in the space at its probes, so the \
+                     direction it opens in is not decided"
+                ))),
+                Ok(_) => {}
+                Err(unavailable) => checked.doubts.push(unavailable),
+            }
+        }
     }
 
     /// The footprint over the area per occupant, rounded up at both ends.

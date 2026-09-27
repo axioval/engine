@@ -461,6 +461,7 @@ mod coordinate_system;
 mod corridor_end;
 mod coverage;
 mod derived_relationships;
+mod door_leaves;
 mod envelope_membership;
 mod facade_area;
 mod federation;
@@ -514,6 +515,10 @@ pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, 
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
     DerivedRelationshipServiceHandle, adjacent_side,
+};
+pub use door_leaves::{
+    DoorLeaf, DoorLeaves, DoorLeavesError, HingeSide, LeafMotion, LeafPosition, PlanRing,
+    SwingSector,
 };
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,

@@ -13,14 +13,14 @@ use axioval_ir::{ObjectId, SourceId};
 use crate::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle, CompleteRelationshipSelection, CoordinateSystemError,
-    CoordinateSystemService, CoordinateSystemServiceHandle, EvidenceSessionError, IntegrityError,
-    IntegrityIssue, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
-    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
-    RelationshipSelectionServiceHandle, ServiceRegistry, SnapshotBoundService,
-    SourceCoordinateSystem, SourceIntegrityService, SourceIntegrityServiceHandle, SourceSnapshot,
-    TypeHierarchyServiceHandle,
+    CoordinateSystemService, CoordinateSystemServiceHandle, DoorLeaves, DoorLeavesError,
+    EvidenceSessionError, IntegrityError, IntegrityIssue, ObjectFrame, ObjectFrameError,
+    ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration, PropertyEnumerationRequest,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, ServiceRegistry,
+    SnapshotBoundService, SourceCoordinateSystem, SourceIntegrityService,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyServiceHandle,
 };
 
 /// How many of `registry`'s services federation can route.
@@ -211,6 +211,12 @@ impl ObjectFrameService for Router<ObjectFrameServiceHandle> {
             .member(&object.source)
             .ok_or_else(|| ObjectFrameError::UncoveredSource(object.source.clone()))?;
         member.object_frame(object)
+    }
+    fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        let (_, member) = self
+            .member(&door.source)
+            .ok_or_else(|| DoorLeavesError::UncoveredSource(door.source.clone()))?;
+        member.leaves(door)
     }
 }
 

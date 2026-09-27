@@ -13,6 +13,10 @@
 //! states one ([`ObjectFront::Stated`]); otherwise it is
 //! [`ObjectFront::NotStated`], never guessed from the axes, the shape or the
 //! object's type.
+//!
+//! The same service supplies a door's leaves ([`ObjectFrameService::leaves`],
+//! see [`crate::DoorLeaves`]): they are placed in the door's frame, so the
+//! source that places the door states them. The method refuses by default.
 
 use std::sync::Arc;
 
@@ -20,7 +24,9 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use thiserror::Error;
 
 use crate::services::reviewable_exact_evidence;
-use crate::{MetricDirection, MetricFrame, SnapshotBoundService, SourceSnapshot};
+use crate::{
+    DoorLeaves, DoorLeavesError, MetricDirection, MetricFrame, SnapshotBoundService, SourceSnapshot,
+};
 
 /// Failure to supply an object's frame.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -134,6 +140,15 @@ pub trait ObjectFrameService: Send + Sync + 'static {
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// The placement frame of `object`, or why it has none.
     fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError>;
+    /// The leaves of `door`: each leaf's closed position, width, motion,
+    /// hinge side and swing sector.
+    ///
+    /// The default refuses with [`DoorLeavesError::Unsupported`], so a
+    /// service that reads no door operation fails closed.
+    fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        let _ = door;
+        Err(DoorLeavesError::Unsupported)
+    }
 }
 
 /// Registry handle for an [`ObjectFrameService`].
@@ -163,6 +178,24 @@ impl ObjectFrameServiceHandle {
             return Err(ObjectFrameError::ResponseRequestMismatch);
         }
         Ok(frame)
+    }
+
+    /// The leaves of `door`. Doors of an uncovered source are refused, and
+    /// so are leaves of another door.
+    pub fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        if !self
+            .0
+            .source_snapshots()
+            .iter()
+            .any(|snapshot| *snapshot.source() == door.source)
+        {
+            return Err(DoorLeavesError::UncoveredSource(door.source.clone()));
+        }
+        let leaves = self.0.leaves(door)?;
+        if leaves.door() != door {
+            return Err(DoorLeavesError::ResponseRequestMismatch);
+        }
+        Ok(leaves)
     }
 }
 
@@ -275,6 +308,17 @@ mod tests {
         assert!(matches!(
             handle.object_frame(&foreign),
             Err(ObjectFrameError::UncoveredSource(_))
+        ));
+    }
+
+    #[test]
+    fn door_leaves_are_refused_by_default() {
+        let handle = handle();
+        assert_eq!(handle.leaves(&id("b")), Err(DoorLeavesError::Unsupported));
+        let foreign = ObjectId::new(SourceId::new("cad", "other").unwrap(), "b").unwrap();
+        assert!(matches!(
+            handle.leaves(&foreign),
+            Err(DoorLeavesError::UncoveredSource(_))
         ));
     }
 }

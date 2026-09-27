@@ -655,6 +655,7 @@ dependencies = [
  "ifc-step",
  "ifc-style",
  "ifc-systems",
+ "openbim-ifc",
  "sha2",
  "thiserror",
 ]
@@ -1298,6 +1299,18 @@ name = "openbim-core"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34c684331685f7678a2766f3990cca967b3053a6e75ea1523e3e8449ec07217c"
+
+[[package]]
+name = "openbim-ifc"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "002de7950436cf8536a308887f793696e8a024ea842b839e5f9fccfb0b6c09db"
+dependencies = [
+ "ifc-geometry",
+ "ifc-model",
+ "ifc-properties",
+ "ifc-schema",
+]
 
 [[package]]
 name = "openbim-step"

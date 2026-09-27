@@ -147,6 +147,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Door leaves.** (Refs #36) `ObjectFrameService::leaves` (refusing
+  by default with `DoorLeavesError::Unsupported`, forwarded by federation)
+  answers a door's `DoorLeaves`: the operation type as the source names
+  it, the overall width, the lining thickness where stated, and per
+  `DoorLeaf` its closed position, width direction, opening direction and
+  up axis (orthonormal, possibly mirrored), thickness where stated, motion
+  (`Swing`, `DoubleSwing`, `Slide`, `RollUp`, `Fixed`), and for a hinged
+  leaf its `HingeSide` seen from above along the opening direction and its
+  `SwingSector` (a quarter disc, a half disc when double-acting;
+  `plan_bounds` brackets its footprint between two convex polygons). The
+  IFC adapter derives them with `openbim-ifc` 0.7.0's `door_operation`
+  (openbimrs/ifc#148; `geometry-select` and `properties` only, no codec or
+  geometry kernel) from the placement, `OperationType` and
+  `IfcDoorPanelProperties`, and reads `LiningThickness` and each panel's
+  `PanelDepth` in metres. A door turned over (`Axis` (0,0,-1)) hangs its
+  hinge on the other side. Missing inputs are `NotStated`, refused or
+  contradictory operations `Refused`, never defaulted. Window leaves are
+  not read: no published crate derives them. No breaking change: the
+  trait method has a default.
 - **Winders, turning flights, open risers and tessellated flights.**
   (Refs #85) `WalkingSurfaceService::measure_tread_flight` takes a
   `TreadFlightRequest` saying where a turning flight's walking line runs

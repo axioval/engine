@@ -10,6 +10,7 @@ mod attributes;
 mod bodies;
 mod classifications;
 mod coordinates;
+mod doors;
 mod frames;
 mod identity;
 mod ifc;

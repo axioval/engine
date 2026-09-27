@@ -276,7 +276,14 @@ The IFC session registers an object-frame service (`ObjectFrameServiceHandle`; s
 
 The locator names the object and its placement chain from the object upwards: `placement:#33:#32<#24<#12`.
 
-Door and window leaves (hinge side, swing sector from `OperationType` and panel definitions) are not read yet. Upstream reads them since openbimrs/ifc#148; the object-frame contract does not carry them.
+Door leaves come from `openbim-ifc`'s `door_operation` (0.7.0, openbimrs/ifc#148), which joins the door's placement, its `OperationType` (the occurrence's or its type's; both stated must agree) and its `IfcDoorPanelProperties` (the occurrence's own sets, else its type's), and cites the IFC4 documentation for each convention: leaves lie on the placement's x axis, partitioning `OverallWidth` by `PanelWidth`, and a swinging leaf opens towards local +y. The adapter depends on the facade with `geometry-select` and `properties` only, so no codec and no geometry kernel come with it; the derivation lives there because it joins two sibling crates.
+
+- `SINGLE_SWING_*`, `DOUBLE_DOOR_SINGLE_SWING`, `DOUBLE_SWING_*`, `DOUBLE_DOOR_DOUBLE_SWING`, `SWING_FIXED_*`, the sliding operations and `ROLLINGUP` are placed; the hinge side is the operation's side seen from above, and the other side for a placement turned over (`Axis` (0,0,-1)).
+- `NOTDEFINED`, `USERDEFINED`, revolving, folding and lifting operations, the two `DOUBLE_DOOR_SINGLE_SWING_OPPOSITE_*` operations (which do not say which leaf opens towards +y), panels contradicting the operation and conflicting operation types are refused (`Refused`); a missing operation type, `OverallWidth` or panel set is `NotStated`.
+- The lining thickness is `IfcDoorLiningProperties.LiningThickness` and each leaf's depth its panel set's `PanelDepth`, through the exact project length unit; the occurrence's own lining set governs, else its type's, and several are refused. The panel's offset across the wall (`LiningOffset`, `LiningToPanelOffsetX`) is not applied: IFC defines it only by figures that disagree.
+- The locator names the door, the operation and the sets: `door-operation:#20:SINGLE_SWING_LEFT:panels=#30:lining=#40`. Derivations are cached per door.
+
+Window leaves are not read: no published crate derives them.
 
 ### Coordinate system
 

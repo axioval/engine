@@ -63,6 +63,10 @@ axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"
 openbim-bcf = "0.3.0"
+# Door operation geometry (openbimrs/ifc#148) is published only in the IFC
+# facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
+# compiles no geometry kernel.
+openbim_ifc = { package = "openbim-ifc", version = "0.7.0", default-features = false, features = ["geometry-select", "properties"] }
 ifc-classification = "0.2.1"
 ifc-geometry = { version = "0.4.0", default-features = false }
 ifc-material = "0.3.0"

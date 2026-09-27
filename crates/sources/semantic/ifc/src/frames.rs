@@ -16,12 +16,16 @@
 //! authoring convention, not a statement of which side a component is used
 //! from. Every frame from this service therefore reports
 //! `ObjectFront::NotStated`.
+//!
+//! The same service answers a door's leaves (`crate::doors`), cached per
+//! door.
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use axioval_engine::{
-    MetricDirection, MetricFrame, MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService,
-    ObjectFront, SourceSnapshot,
+    DoorLeaves, DoorLeavesError, MetricDirection, MetricFrame, MetricPoint, ObjectFrame,
+    ObjectFrameError, ObjectFrameService, ObjectFront, SourceSnapshot,
 };
 use axioval_ir::{Evidence, ObjectId};
 use ifc_geometry::GeometryError;
@@ -39,6 +43,9 @@ pub(crate) struct IfcObjectFrames {
     metres_per_unit: Result<f64, String>,
     /// Placement chains shared between products (storey, building, site).
     resolver: Mutex<PlacementResolver>,
+    /// Door leaves already derived: each derivation validates the file's
+    /// property relationships.
+    doors: Mutex<BTreeMap<EntityId, Result<DoorLeaves, DoorLeavesError>>>,
 }
 
 impl IfcObjectFrames {
@@ -62,6 +69,7 @@ impl IfcObjectFrames {
             snapshots,
             metres_per_unit,
             resolver: Mutex::new(PlacementResolver::new()),
+            doors: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -195,5 +203,22 @@ impl ObjectFrameService for IfcObjectFrames {
             ),
         );
         ObjectFrame::try_new(object.clone(), frame, ObjectFront::NotStated, evidence)
+    }
+
+    fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        let id = self.entity(door).map_err(|error| match error {
+            ObjectFrameError::UnknownObject(object) => DoorLeavesError::UnknownObject(object),
+            other => DoorLeavesError::Unreadable(other.to_string()),
+        })?;
+        let mut cache = self
+            .doors
+            .lock()
+            .map_err(|_| DoorLeavesError::Unreadable("door cache lock is poisoned".into()))?;
+        cache
+            .entry(id)
+            .or_insert_with(|| {
+                crate::doors::door_leaves(&self.model, self.snapshots[0].fingerprint(), door, id)
+            })
+            .clone()
     }
 }

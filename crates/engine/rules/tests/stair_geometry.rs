@@ -19,6 +19,11 @@ use axioval_engine::{
     WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
     WalkingSurfaceServiceHandle,
 };
+use axioval_engine::{
+    PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanLength, PlanRectangle,
+    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
+    VerticalExtent, VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+};
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
 use axioval_rules::{RampGeometryCheck, StairGeometryCheck};
@@ -2730,4 +2735,239 @@ fn whole_stair_declarations_are_checked() {
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
+}
+
+/// Axis-aligned tactile strips in plan, each `(centre, half extents)`,
+/// 5 mm thick on the floor at `z`.
+#[derive(Clone, Default)]
+struct Strips(BTreeMap<ObjectId, ([f64; 2], [f64; 2], f64)>);
+
+impl Strips {
+    fn strip(mut self, object: &str, centre: [f64; 2], half: [f64; 2], z: f64) -> Self {
+        self.0.insert(id(object), (centre, half, z));
+        self
+    }
+
+    fn get(&self, object: &ObjectId) -> Option<([f64; 2], [f64; 2], f64)> {
+        self.0.get(object).copied()
+    }
+}
+
+impl PlanSpanService for Strips {
+    fn measure_diameter(&self, _: &ObjectId) -> Result<PlanLength, PlanSpanError> {
+        Err(PlanSpanError::Unavailable("not measured here".into()))
+    }
+
+    fn measure_span(
+        &self,
+        _: &ObjectId,
+        _: &ObjectId,
+        _: PlanSpan,
+    ) -> Result<PlanLength, PlanSpanError> {
+        Err(PlanSpanError::Unavailable("not measured here".into()))
+    }
+
+    fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
+        let (centre, half, _) = self
+            .get(object)
+            .ok_or_else(|| PlanSpanError::UnknownObject(object.clone()))?;
+        PlanRectangle::try_new(
+            object.clone(),
+            centre,
+            0.0,
+            [[1.0, 0.0], [0.0, 1.0]],
+            0.0,
+            [(half[0], half[0]), (half[1], half[1])],
+            RectangleOrientation::Unique,
+            Evidence::exact(source(), format!("rectangle:{}", object.local_id)),
+        )
+    }
+}
+
+impl PlanAreaService for Strips {
+    fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+        let (_, half, _) = self
+            .get(object)
+            .ok_or_else(|| PlanAreaError::UnknownObject(object.clone()))?;
+        let area = 4.0 * half[0] * half[1];
+        PlanArea::try_new(
+            area,
+            area,
+            Evidence::exact(source(), format!("footprint:{}", object.local_id)),
+        )
+    }
+
+    fn measure_plan_overlap(&self, _: &ObjectId, _: &ObjectId) -> Result<PlanArea, PlanAreaError> {
+        Err(PlanAreaError::Unavailable("not measured here".into()))
+    }
+}
+
+impl VerticalExtentService for Strips {
+    fn measure_vertical_extent(
+        &self,
+        object: &ObjectId,
+    ) -> Result<VerticalExtent, VerticalExtentError> {
+        let (_, _, z) = self
+            .get(object)
+            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?;
+        VerticalExtent::try_new(
+            object.clone(),
+            ElevationInterval::exact(z)?,
+            ElevationInterval::exact(z + 0.005)?,
+            Evidence::exact(source(), format!("extent:{}", object.local_id)),
+        )
+    }
+}
+
+fn tactile_parameters(
+    extra: Vec<(&'static str, ParameterValue)>,
+) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        ("tactile_objects", selector(kind("tactile"))),
+        ("tactile_offset", metres(0.3)),
+        ("tactile_depth", metres(0.6)),
+    ];
+    parameters.extend(extra);
+    parameters
+}
+
+fn check_tactile(
+    model: Model,
+    selected: &str,
+    stairs: Stairs,
+    strips: Strips,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model.evaluate_with(
+        &StairGeometryCheck,
+        &rule(STAIR, kind(selected), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+            services
+                .register(PlanSpanServiceHandle::new(Arc::new(strips.clone())))
+                .unwrap();
+            services
+                .register(PlanAreaServiceHandle::new(Arc::new(strips.clone())))
+                .unwrap();
+            services
+                .register(VerticalExtentServiceHandle::new(Arc::new(strips)))
+                .unwrap();
+        },
+    )
+}
+
+/// A tactile strip 0.6 m deep must start 0.3 m before the first riser and
+/// beyond the last, across the flight: a missing or a narrow one is found.
+#[test]
+fn a_missing_or_narrow_tactile_strip_is_found() {
+    // `regular`'s first riser lies at x 0, `irregular`'s at x -10, both
+    // leaving along -x at the bottom; both arrive at x 0.84 at the top.
+    // `t1` covers x -0.9 to -0.3 across `regular` (y 0 to 1.2); `t2` only
+    // x -10.6 to -10.3 before `irregular`.
+    let stairs = stairs()
+        .end("regular", WalkingEnd::FlightBottom, minus_x(), 0.0)
+        .end("regular", WalkingEnd::FlightTop, x(), 0.84)
+        .end("irregular", WalkingEnd::FlightBottom, minus_x(), 10.0)
+        .end("irregular", WalkingEnd::FlightTop, x(), 20.0);
+    let strips = Strips::default()
+        .strip("t1", [-0.6, 0.6], [0.3, 0.6], 0.0)
+        .strip("t2", [-10.45, 0.6], [0.15, 0.6], 0.0)
+        // On the top landing of `irregular`, x 20.3 to 20.9, but a storey
+        // lower.
+        .strip("t3", [20.6, 0.6], [0.3, 0.6], -3.0);
+    let model = model()
+        .object("t1", "tactile")
+        .object("t2", "tactile")
+        .object("t3", "tactile");
+    let evaluation = check_tactile(model, "flight", stairs, strips, tactile_parameters(vec![]));
+    let what = |end: &str| {
+        let (riser, place) = if end == "top" {
+            ("last", "beyond")
+        } else {
+            ("first", "before")
+        };
+        format!(
+            "the tactile strip at the {end} of the flight (0.6 m deep, 0.3 m {place} the {riser} \
+             riser, across the flight)"
+        )
+    };
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "irregular".into(),
+                format!(
+                    "{} is not covered: {} leave part of it bare",
+                    what("bottom"),
+                    id("t2")
+                )
+            ),
+            (
+                "irregular".into(),
+                format!("no selected tactile surface lies in {}", what("top"))
+            ),
+            (
+                "regular".into(),
+                format!("no selected tactile surface lies in {}", what("top"))
+            ),
+        ]
+    );
+    assert_eq!(evaluation.findings()[0].related, [id("t2")]);
+    // The flight in pieces is not measured.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// In a whole stair the landings between flights need no strip unless the
+/// rule asks for one there.
+#[test]
+fn tactile_strips_on_intermediate_landings_are_asked_for() {
+    let evaluate = |intermediate: bool| {
+        let parameters = tactile_parameters(whole_parameters(vec![(
+            "tactile_on_intermediate_landings",
+            boolean(intermediate),
+        )]));
+        check_tactile(
+            two_flights(),
+            "stair",
+            two_flight_stairs(),
+            Strips::default(),
+            parameters,
+        )
+    };
+    let ends = |evaluation: &CapabilityEvaluation| -> Vec<(String, bool)> {
+        findings(evaluation)
+            .into_iter()
+            .map(|(flight, message)| (flight, message.contains("at the top")))
+            .collect()
+    };
+    assert_eq!(
+        ends(&evaluate(false)),
+        [("lower".into(), false), ("upper".into(), true)]
+    );
+    assert_eq!(
+        ends(&evaluate(true)),
+        [
+            ("lower".into(), false),
+            ("lower".into(), true),
+            ("upper".into(), false),
+            ("upper".into(), true),
+        ]
+    );
+    // The strip's parameters are declared together.
+    let evaluation = check_tactile(
+        model(),
+        "flight",
+        stairs(),
+        Strips::default(),
+        vec![("tactile_objects", selector(kind("tactile")))],
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
 }

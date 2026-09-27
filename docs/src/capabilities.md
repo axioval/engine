@@ -1259,6 +1259,17 @@ A value of another kind (text, a negative number, a length for an area) is not a
 | `end_space_depth`, `end_space_width`, `end_space_height` | `quantity` | A free space this deep (along the walking direction), wide and high before the first riser and beyond the last, standing on the level there and centred on the end tread; declared together with `end_space_obstacles`. |
 | `end_space_obstacles` | `selector` | The objects that must not reach into the free space at either end. |
 
+**Tactile surfaces.** With `tactile_objects`, `tactile_offset` and `tactile_depth`, a tactile warning strip `tactile_depth` deep must lie `tactile_offset` before the first riser and beyond the last, across the flight's width (its end tread's sides), covered by a selected object lying on the level there (its body reaching within 5 cm of it, a floor finish):
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `tactile_objects` | `selector` | The tactile surfaces (with IFC, coverings of a tactile type). |
+| `tactile_offset` | `quantity` | How far from the riser the strip starts, zero for directly at it. |
+| `tactile_depth` | `quantity` | The strip's depth along the walking direction, positive. |
+| `tactile_on_intermediate_landings` | `boolean` | In whole-stair mode, strips on the landings between flights too; without it, only at the stair's own ends. Outside whole-stair mode every flight end needs one. |
+
+The strip is placed as the end space is. A tactile object is read through the plan-span service's least-area rectangle, which encloses its footprint, and the plan-area service's footprint area: a footprint whose area reaches the rectangle's (within rounding) fills it. The strip is covered when one object surely selected, surely on the level and filling its rectangle surely holds all four corners of the strip, a strip exactly as large as required included. It is a finding when a point surely in the strip lies surely outside every object that may lie there: none at all (`no selected tactile surface lies in the tactile strip at the bottom of the flight (0.6 m deep, 0.3 m before the first riser, across the flight)`), or one too narrow or misplaced (`… is not covered: … leave part of it bare`, relating the objects near it). An object that cannot be placed in plan, or strips of several objects that may cover it together, leave it not evaluated; so do an end tread filling no rectangle and an end the service does not place.
+
 **Whole stairs.** With `stair_path`, the rule selects whole stairs (with IFC, `IfcStair`) and reaches each one's parts along that path (`IfcRelAggregates`); the parts `stair_flights` selects are its flights. Every flight is checked once as above, its findings on the flight, and the stair as a whole, its findings on the stair:
 
 | Parameter | Kind | Meaning |

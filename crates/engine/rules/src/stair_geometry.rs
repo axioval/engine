@@ -16,6 +16,7 @@ use std::fmt::Write as _;
 
 mod handrails;
 mod ramp_ends;
+mod tactile;
 mod whole;
 
 use axioval_engine::{
@@ -89,6 +90,11 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// - `end_space_depth`, `end_space_width` and `end_space_height` place a
 ///   free space before the first riser and beyond the last, which no
 ///   `end_space_obstacles` object may reach into.
+///
+/// With `tactile_objects`, `tactile_offset` and `tactile_depth`, a tactile
+/// strip that deep must lie that far before the first riser and beyond the
+/// last, across the flight, covered by a selected object on the level
+/// there.
 ///
 /// With `stair_path`, the rule selects whole stairs: each flight
 /// `stair_flights` picks among the parts that path reaches is checked as
@@ -1095,6 +1101,7 @@ struct StairConfig<'a> {
     walking: WalkingConfig<'a>,
     /// With `stair_path`, the rule selects whole stairs.
     stair: Option<whole::StairMode<'a>>,
+    tactile: Option<tactile::TactileCheck<'a>>,
 }
 
 impl<'a> StairConfig<'a> {
@@ -1123,6 +1130,7 @@ impl<'a> StairConfig<'a> {
             headroom: headroom_check(&parameters)?,
             walking: WalkingConfig::parse(&parameters, false)?,
             stair: None,
+            tactile: tactile::parse(&parameters)?,
         };
         let stair = whole::parse(
             &parameters,
@@ -1161,6 +1169,7 @@ impl<'a> StairConfig<'a> {
                 .stair
                 .as_ref()
                 .is_some_and(whole::StairMode::declared)
+            && config.tactile.is_none()
         {
             return Err(invalid("declare at least one stair check"));
         }
@@ -1197,6 +1206,7 @@ impl RuleCapability for StairGeometryCheck {
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
         parameters.extend(whole::descriptors());
+        parameters.extend(tactile::descriptors());
         parameters
     }
 
@@ -1219,11 +1229,16 @@ impl RuleCapability for StairGeometryCheck {
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         let free = context.services.get::<FreeSpaceServiceHandle>();
+        let tactiles = config
+            .tactile
+            .as_ref()
+            .map(|check| tactile::read(context, check));
         let flights = Flights {
             stairs,
             free,
             config: &config,
             selections: &selections,
+            tactiles: tactiles.as_deref(),
         };
         if let Some(mode) = &config.stair {
             whole::evaluate(context, rule, mode, &flights, &selected, &mut evaluation);
@@ -1237,7 +1252,12 @@ impl RuleCapability for StairGeometryCheck {
                     continue;
                 }
             };
-            report(&mut evaluation, rule, &object.id, flights.checks(&flight));
+            report(
+                &mut evaluation,
+                rule,
+                &object.id,
+                flights.checks(&flight, Intermediate::default()),
+            );
         }
         evaluation
     }
@@ -1249,6 +1269,15 @@ struct Flights<'s, 'a> {
     free: Option<&'s FreeSpaceServiceHandle>,
     config: &'s StairConfig<'a>,
     selections: &'s Selections,
+    /// The objects that may be tactile surfaces, with a tactile check.
+    tactiles: Option<&'s [tactile::Tactile]>,
+}
+
+/// Which ends of a flight lie on a landing between two flights of a stair.
+#[derive(Clone, Copy, Default)]
+struct Intermediate {
+    bottom: bool,
+    top: bool,
 }
 
 impl Flights<'_, '_> {
@@ -1263,8 +1292,10 @@ impl Flights<'_, '_> {
             .map_err(|error| service_error(&error))
     }
 
-    /// Every check the rule declares on one flight, each citing it.
-    fn checks(&self, flight: &TreadFlight) -> Checks {
+    /// Every check the rule declares on one flight, each citing it; the
+    /// tactile strips on `intermediate` ends only where the rule asks for
+    /// them.
+    fn checks(&self, flight: &TreadFlight, intermediate: Intermediate) -> Checks {
         let (stairs, config, selections) = (self.stairs, self.config, self.selections);
         let object = flight.object();
         let mut checks = stair_checks(config, flight);
@@ -1309,6 +1340,24 @@ impl Flights<'_, '_> {
                     self.free,
                     check,
                     obstacles,
+                    flight,
+                    top,
+                    landing_level(flight, end),
+                ));
+            }
+        }
+        if let (Some(check), Some(tactiles)) = (&config.tactile, self.tactiles) {
+            for (end, top, between) in [
+                (WalkingEnd::FlightBottom, false, intermediate.bottom),
+                (WalkingEnd::FlightTop, true, intermediate.top),
+            ] {
+                if between && !check.intermediate {
+                    continue;
+                }
+                checks.push(tactile::strip(
+                    stairs,
+                    check,
+                    tactiles,
                     flight,
                     top,
                     landing_level(flight, end),

@@ -8840,6 +8840,79 @@ fn with_geometry_a_stairs_rail_stopping_at_its_landing_is_found() {
     );
 }
 
+/// Stair flight #108 (four 0.17 m risers from x 0 along x, 1.2 m wide in
+/// y -1.2 to 0) and tactile flooring #209 before its first riser, x -0.6 to
+/// -0.3 across its width: only half the depth a 0.6 m strip needs.
+fn a_narrow_tactile_strip_before_a_flight() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        placed_box(
+            200,
+            [-0.45, -0.6, 0.0],
+            [0.3, 1.2, 0.01],
+            "IFCCOVERING('GID',$,$,$,$,PL,REP,$,.FLOORING.)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_a_narrow_or_missing_tactile_strip_is_found() {
+    let case = Case::new("geometry-stair-tactile");
+    let (output, result) = case.geometry_rule(
+        &a_narrow_tactile_strip_before_a_flight(),
+        &[("flight", "IfcStairFlight"), ("covering", "IfcCovering")],
+        "axioval:capability.stair-geometry",
+        &registry_signature("axioval:capability.stair-geometry"),
+        entity("flight"),
+        json!({
+            "tactile_objects": {"type": "selector", "value": entity("covering")},
+            "tactile_offset": {"type": "quantity", "value": 0.3, "unit": "m"},
+            "tactile_depth": {"type": "quantity", "value": 0.6, "unit": "m"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #209 covers only half the strip before the first riser; nothing lies
+    // beyond the last.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert!(
+        findings.iter().all(|(object, _)| object == "#108"),
+        "{result:#}"
+    );
+    assert!(
+        findings.iter().any(|(_, message)| message.starts_with(
+            "the tactile strip at the bottom of the flight (0.6 m deep, 0.3 m before the first \
+             riser, across the flight) is not covered: "
+        ) && message.ends_with("#209 leave part of it bare")),
+        "{result:#}"
+    );
+    assert!(
+        findings.iter().any(|(_, message)| message
+            == "no selected tactile surface lies in the tactile strip at the top of the flight \
+                (0.6 m deep, 0.3 m beyond the last riser, across the flight)"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Metres. Wall #10, 0.2 m thick and 3 m high, is extruded up from a plan
 /// polyline mitred at its far end: 5 m long on its face y = 0, 5.2 m on
 /// y = 0.2. Windows of 1 m x 1.2 m run through it along -y at x 2 to 3

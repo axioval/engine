@@ -332,6 +332,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates' plan triangles, never exactly. **Breaking:** definitions
   bound to `component-clearance` must declare the optional parameters
   `wall_selector`, `wall_reach` and `wall_inset`.
+- **Tactile strips at stairs.** (Refs #132) `stair-geometry` takes
+  `tactile_objects`, `tactile_offset` and `tactile_depth`: a strip that
+  deep, starting that far before the first riser and beyond the last,
+  across the flight, must be covered by a selected object lying on the
+  level there, read through the plan-span service's least-area rectangle
+  and the plan-area service's footprint area. A missing or narrow strip is
+  a finding; objects that may cover it together, or cannot be placed,
+  leave it not evaluated. In whole-stair mode the landings between flights
+  need strips only with `tactile_on_intermediate_landings`. **Breaking:**
+  definitions bound to `stair-geometry` must declare the new optional
+  parameters `tactile_objects`, `tactile_offset`, `tactile_depth` and
+  `tactile_on_intermediate_landings`.
+
 - **Whole stairs.** (Refs #132) `stair-geometry` gains a whole-stair mode:
   with `stair_path` the rule selects stairs, reaches their parts, and
   checks the parts `stair_flights` picks as flights (each once) and the

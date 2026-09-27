@@ -25,7 +25,8 @@ use axioval_ir::{Evidence, Object, ObjectId};
 use super::handrails::{self, HandrailCheck};
 use super::ramp_ends;
 use super::{
-    Check, Checks, Flights, Selected, landing_level, length, report, selected, service_error, slack,
+    Check, Checks, Flights, Intermediate, Selected, landing_level, length, report, selected,
+    service_error, slack,
 };
 use crate::counts::Population;
 use crate::level_spacing::{metres, shown};
@@ -158,12 +159,28 @@ pub(super) fn evaluate(
             .filter(|part| population.matched.contains(*part))
             .collect();
         for id in &ids {
-            let flight = measured
+            measured
                 .entry((*id).clone())
                 .or_insert_with(|| flights.measure(id));
+        }
+        let measured_ok: Vec<&TreadFlight> = ids
+            .iter()
+            .filter_map(|id| measured[*id].as_ref().ok())
+            .collect();
+        let mut between: BTreeMap<&ObjectId, Intermediate> = BTreeMap::new();
+        for pair in ordered(&measured_ok).windows(2) {
+            if meets(pair[0], pair[1]) {
+                between.entry(pair[0].object()).or_default().top = true;
+                between.entry(pair[1].object()).or_default().bottom = true;
+            }
+        }
+        for id in &ids {
             if reported.insert((*id).clone()) {
-                match flight {
-                    Ok(flight) => report(evaluation, rule, id, flights.checks(flight)),
+                match &measured[*id] {
+                    Ok(flight) => {
+                        let ends = between.get(*id).copied().unwrap_or_default();
+                        report(evaluation, rule, id, flights.checks(flight, ends));
+                    }
                     Err((reason, message)) => evaluation.push_object_not_evaluated(
                         (*id).clone(),
                         reason.clone(),
@@ -289,14 +306,8 @@ impl Whole<'_, '_, '_> {
                 vec![],
             )];
         }
-        let mut order: Vec<&TreadFlight> = self.ok.to_vec();
-        order.sort_by(|a, b| {
-            middle(a.base())
-                .total_cmp(&middle(b.base()))
-                .then_with(|| a.object().cmp(b.object()))
-        });
         let mut checks = Vec::new();
-        for pair in order.windows(2) {
+        for pair in ordered(self.ok).windows(2) {
             let (lower, upper) = (pair[0], pair[1]);
             checks.extend(self.across(check, lower, upper));
         }
@@ -314,12 +325,7 @@ impl Whole<'_, '_, '_> {
         let (a, b) = (lower.object(), upper.object());
         let named = format!("the landing between {a} and {b}");
         let related = vec![a.clone(), b.clone()];
-        let arrives = lower.top();
-        let starts = upper.base();
-        if arrives.lower_metres() - MEETING > starts.upper_metres()
-            || starts.lower_metres() - MEETING > arrives.upper_metres()
-            || (upper.base().lower_metres() <= lower.base().upper_metres())
-        {
+        if !meets(lower, upper) {
             return vec![(
                 Check::Undecided(format!(
                     "{a} and {b} do not meet at one level, so the handrail across {named} is not \
@@ -642,6 +648,26 @@ fn touching(
         }
         Err(_) => Tri::Maybe,
     }
+}
+
+/// A stair's flights in the order of their bases.
+fn ordered<'f>(flights: &[&'f TreadFlight]) -> Vec<&'f TreadFlight> {
+    let mut order = flights.to_vec();
+    order.sort_by(|a, b| {
+        middle(a.base())
+            .total_cmp(&middle(b.base()))
+            .then_with(|| a.object().cmp(b.object()))
+    });
+    order
+}
+
+/// Whether `upper` starts where `lower` arrives, from a surely higher base:
+/// the landing between them is an intermediate one.
+fn meets(lower: &TreadFlight, upper: &TreadFlight) -> bool {
+    let (arrives, starts) = (lower.top(), upper.base());
+    arrives.lower_metres() - MEETING <= starts.upper_metres()
+        && starts.lower_metres() - MEETING <= arrives.upper_metres()
+        && upper.base().lower_metres() > lower.base().upper_metres()
 }
 
 fn middle(value: ElevationInterval) -> f64 {

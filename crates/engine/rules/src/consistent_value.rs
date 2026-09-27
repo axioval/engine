@@ -25,9 +25,17 @@ use crate::support::{
 /// A group whose members disagree raises one finding per member, naming the
 /// members that hold another value. An absent value is a value of its own:
 /// "some doors of this type state a rating and some do not" is a
-/// disagreement. An object with no key value cannot be grouped and gets a
-/// finding of its own.
+/// disagreement. Objects with no key value (absent, null or blank) form one
+/// group of their own in each scope, so a missing key is reported only when
+/// those objects disagree on the value.
 pub struct ConsistentValue;
+
+/// The group key of objects whose key is absent, null or blank. Real keys
+/// carry a `text:` or `value:` prefix, so this cannot collide with one.
+const NO_KEY: &str = "no key";
+
+/// A group's key as shown (`None` without a key) and its members.
+type Group<'a> = (Option<String>, Vec<Member<'a>>);
 
 struct Member<'a> {
     object: &'a Object,
@@ -77,8 +85,7 @@ impl RuleCapability for ConsistentValue {
             }
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let mut groups: BTreeMap<(String, String, String), (String, Vec<Member<'_>>)> =
-            BTreeMap::new();
+        let mut groups: BTreeMap<(String, String, String), Group<'_>> = BTreeMap::new();
         for object in selected {
             let answers = resolve(context, object, key)
                 .and_then(|found_key| Ok((found_key, resolve(context, object, value)?)));
@@ -89,16 +96,6 @@ impl RuleCapability for ConsistentValue {
                     continue;
                 }
             };
-            if undefined(found_key.value()) {
-                evaluation.push_finding(finding(
-                    rule,
-                    &object.id,
-                    format!("{key} has no value, so {value} cannot be compared"),
-                    found_key.evidence(),
-                    vec![],
-                ));
-                continue;
-            }
             let (scope, mut evidence) =
                 match scope_key(context, traversal.as_ref(), across_sources, object) {
                     Ok(scope) => scope,
@@ -114,9 +111,7 @@ impl RuleCapability for ConsistentValue {
             } else {
                 String::new()
             };
-            let key_value = found_key
-                .value()
-                .expect("an undefined key was handled above");
+            let key_value = found_key.value().filter(|held| !undefined(Some(held)));
             let shown_value = display(found_value.value());
             let member = Member {
                 object,
@@ -127,9 +122,15 @@ impl RuleCapability for ConsistentValue {
                 shown: shown_value,
                 evidence,
             };
+            // Objects without a key form one group of their own, so a missing
+            // key is reported only where their values conflict.
+            let group_key = key_value.map_or_else(
+                || NO_KEY.to_owned(),
+                |held| value_key(held, true, case_sensitive),
+            );
             groups
-                .entry((scope, kind, value_key(key_value, true, case_sensitive)))
-                .or_insert_with(|| (display(Some(key_value)), Vec::new()))
+                .entry((scope, kind, group_key))
+                .or_insert_with(|| (key_value.map(|held| display(Some(held))), Vec::new()))
                 .1
                 .push(member);
         }
@@ -158,11 +159,19 @@ impl RuleCapability for ConsistentValue {
                 evaluation.push_finding(finding(
                     rule,
                     &member.object.id,
-                    format!(
-                        "{value} is {} where other objects with {key} {shown_key} have {}",
-                        member.shown,
-                        other_values.join(", ")
-                    ),
+                    match &shown_key {
+                        Some(shown_key) => format!(
+                            "{value} is {} where other objects with {key} {shown_key} have {}",
+                            member.shown,
+                            other_values.join(", ")
+                        ),
+                        None => format!(
+                            "{key} has no value, and {value} is {} where other objects \
+                             without {key} have {}",
+                            member.shown,
+                            other_values.join(", ")
+                        ),
+                    },
                     evidence,
                     others.iter().map(|other| other.object.id.clone()).collect(),
                 ));

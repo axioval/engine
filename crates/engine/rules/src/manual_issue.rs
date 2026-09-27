@@ -1,4 +1,4 @@
-//! A reviewer's instruction, raised against every selected object.
+//! A reviewer's instruction, raised once for all selected objects.
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
@@ -8,12 +8,13 @@ use axioval_engine::{
 use crate::selection::select_objects;
 use crate::support::{Parameters, finding, invalid};
 
-/// Raises one finding per selected object, carrying a declared text.
+/// Raises one finding per rule, carrying a declared text.
 ///
 /// For requirements no capability can decide, such as "check the escape
-/// signage by hand": the rule records that the check is owed and names every
-/// object it concerns. Nothing is judged, so no evidence is attached. A
-/// selection that picks nothing raises nothing.
+/// signage by hand": the rule records once that the check is owed and names
+/// every object it concerns. The first selected object is the subject and
+/// the others are related objects. Nothing is judged, so no evidence is
+/// attached. A selection that picks nothing raises nothing.
 pub struct ManualIssue;
 
 impl RuleCapability for ManualIssue {
@@ -58,8 +59,9 @@ impl RuleCapability for ManualIssue {
             .collect::<Vec<_>>()
             .join(": ");
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        for object in selected {
-            evaluation.push_finding(finding(rule, &object.id, text.clone(), vec![], vec![]));
+        let mut objects = selected.into_iter().map(|object| object.id.clone());
+        if let Some(first) = objects.next() {
+            evaluation.push_finding(finding(rule, &first, text, vec![], objects.collect()));
         }
         evaluation
     }

@@ -306,6 +306,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking.** Semantic capability results are closer to what a reviewer
+  acts on. `manual-issue` raises one finding per rule, against the first
+  selected object and relating the others, instead of one per object.
+  `selector-conformance` separates an object with no value for any consulted
+  property from one with values the agreed list does not know, and reports
+  each unknown combination of values once, relating every object holding it;
+  `message` is now followed by those values. `consistent-value` groups
+  objects without a key together and reports a missing key only when those
+  objects disagree, instead of always. `name-sequence` reports a number
+  below `first` as "is below the start" and no longer treats it as the
+  member below the next one, so it no longer causes an order finding there.
 - **Breaking.** `RuleInstance::applicability` is `RuleApplicability`, and
   `PackageMetadata::name`/`description` are `LocalizedText`.
 - **Breaking.** `Runtime::run` over a bare `Project` declares no type systems,

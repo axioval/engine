@@ -892,9 +892,11 @@ impl Holds {
 
 /// Whether a defined value meets a row's conditions.
 ///
-/// `contains` judges the whole value. The other conditions judge a list
-/// element by element: for a row that must hold every element must meet
-/// them, for one that must not a single element meeting them is enough.
+/// `contains` judges the whole value. The other conditions judge a list, a
+/// bounded value or a table by its stated values: for a row that must hold
+/// every one must meet them, for one that must not a single one meeting
+/// them is enough. A bounded value open on a side a range limits fails a
+/// row that must hold.
 fn meets(
     condition: &Condition,
     value: &PropertyValue,
@@ -908,10 +910,16 @@ fn meets(
     if !condition.per_element() {
         return whole;
     }
-    let elements: Vec<&PropertyValue> = match value {
-        PropertyValue::List(elements) => elements.iter().collect(),
-        scalar => vec![scalar],
-    };
+    // A range holds every value between its bounds: one open on the side a
+    // bound limits has values beyond it.
+    if let (PropertyValue::Bounded { lower, upper, .. }, Some(range), true) =
+        (value, &condition.range, every)
+        && ((range.minimum.is_some() && lower.is_none())
+            || (range.maximum.is_some() && upper.is_none()))
+    {
+        return whole.and(Holds::No(None));
+    }
+    let elements: Vec<&PropertyValue> = value.stated_values().unwrap_or_else(|| vec![value]);
     let mut open = None;
     let mut quantified = if every { Holds::Yes } else { Holds::No(None) };
     for element in elements {

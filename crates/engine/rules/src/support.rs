@@ -558,6 +558,36 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
+        Some(PropertyValue::Bounded {
+            lower,
+            upper,
+            set_point,
+        }) => {
+            let shown = |part: &Option<Box<PropertyValue>>| {
+                part.as_deref().map(|value| display(Some(value)))
+            };
+            let range = match (shown(lower), shown(upper)) {
+                (Some(lower), Some(upper)) => format!("from {lower} to {upper}"),
+                (Some(lower), None) => format!("from {lower}, open above"),
+                (None, Some(upper)) => format!("up to {upper}, open below"),
+                (None, None) => "open".to_owned(),
+            };
+            match shown(set_point) {
+                Some(point) => format!("[range {range}, set point {point}]"),
+                None => format!("[range {range}]"),
+            }
+        }
+        Some(PropertyValue::Table(rows)) => format!(
+            "{{{}}}",
+            rows.iter()
+                .map(|row| format!(
+                    "{} -> {}",
+                    display(Some(&row.defining)),
+                    display(Some(&row.defined))
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 

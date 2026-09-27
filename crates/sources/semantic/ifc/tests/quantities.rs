@@ -138,12 +138,24 @@ fn what_is_not_read_is_refused_never_absent() {
     for (object, set, name) in [
         // A complex quantity of the requested name.
         ("#1", QTO, "Layer"),
-        // An attribute a predefined property set leaves unset.
-        ("#10", Some("Lining"), "LiningThickness"),
         // A property set and a quantity set of one name.
         ("#20", Some("Common"), "Width"),
     ] {
         let result = resolve(object, set, name);
         assert!(result.is_err(), "{object} {set:?}.{name}: {result:?}");
     }
+}
+
+#[test]
+fn an_unset_attribute_of_a_predefined_set_is_null_with_its_declared_type() {
+    let Ok(PropertyResolution::Present(resolved)) =
+        resolve("#10", Some("Lining"), "LiningThickness")
+    else {
+        panic!("Lining.LiningThickness is present, unset");
+    };
+    assert_eq!(resolved.property().value, PropertyValue::Null);
+    assert_eq!(
+        resolved.property().data_type(),
+        Some("IFCNONNEGATIVELENGTHMEASURE")
+    );
 }

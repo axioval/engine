@@ -623,3 +623,54 @@ fn an_element_that_cannot_be_compared_leaves_the_object_open() {
         [("a".to_owned(), NotEvaluatedReason::InvalidEvidence)]
     );
 }
+
+#[test]
+fn a_bounded_value_or_a_table_is_compared_by_its_stated_values() {
+    let metres = |value: f64| PropertyValue::Quantity {
+        value,
+        dimension: QuantityDimension::Length,
+    };
+    let model = || {
+        values(vec![
+            (
+                "a",
+                PropertyValue::Bounded {
+                    lower: Some(Box::new(metres(1.0))),
+                    upper: Some(Box::new(metres(5.0))),
+                    set_point: None,
+                },
+            ),
+            (
+                "b",
+                PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+                    defining: metres(2.0),
+                    defined: metres(6.0),
+                }]),
+            ),
+        ])
+    };
+    let at_most = |quantifier| {
+        quantified(
+            ComparisonOperator::LessThanOrEquals,
+            Some(ParameterValue::Quantity {
+                value: 5.0,
+                unit: "m".into(),
+            }),
+            quantifier,
+        )
+    };
+    assert_eq!(
+        select(model(), at_most(Some(Quantifier::All))),
+        selected(&["a"])
+    );
+    assert_eq!(
+        select(model(), at_most(Some(Quantifier::Any))),
+        selected(&["a", "b"])
+    );
+    let (chosen, undecided) = select(model(), at_most(None));
+    assert!(chosen.is_empty());
+    assert_eq!(
+        undecided,
+        ["a", "b"].map(|object| (object.to_owned(), NotEvaluatedReason::InvalidEvidence))
+    );
+}

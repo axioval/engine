@@ -153,6 +153,32 @@ fn non_finite_present_property_is_rejected() {
         PropertyValue::List(vec![text(), PropertyValue::Decimal(f64::NAN)]),
         PropertyValue::List(vec![text(), PropertyValue::Null]),
         PropertyValue::List(vec![PropertyValue::List(vec![text()])]),
+        // A range states at least one scalar, all of one kind.
+        PropertyValue::Bounded {
+            lower: None,
+            upper: None,
+            set_point: None,
+        },
+        PropertyValue::Bounded {
+            lower: Some(Box::new(PropertyValue::Decimal(1.0))),
+            upper: Some(Box::new(text())),
+            set_point: None,
+        },
+        PropertyValue::Bounded {
+            lower: Some(Box::new(PropertyValue::Null)),
+            upper: None,
+            set_point: None,
+        },
+        // A table has rows, and every cell is a finite scalar.
+        PropertyValue::Table(Vec::new()),
+        PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+            defining: text(),
+            defined: PropertyValue::List(vec![text()]),
+        }]),
+        PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+            defining: PropertyValue::Decimal(f64::NAN),
+            defined: text(),
+        }]),
     ] {
         let property = axioval_ir::Property::new("Pset_WallCommon", "Reference", value)
             .unwrap()

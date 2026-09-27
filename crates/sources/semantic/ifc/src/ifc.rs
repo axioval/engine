@@ -9,12 +9,13 @@ use axioval_engine::{
     TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
-    Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyValue, SourceId,
-    is_reserved_set,
+    Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyTableRow,
+    PropertyValue, SourceId, is_reserved_set,
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
-    ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactValue, exact_property,
+    ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactTableValue,
+    ExactTypedValue, ExactValue, exact_property,
 };
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
@@ -117,8 +118,9 @@ impl IfcPropertyService {
     /// string-based type (`IfcLabel`, `IfcDate`, `IfcDuration`, ...) and every
     /// integer-based one (`IfcTimeStamp`, `IfcCountMeasure` as written) is
     /// carried with its declared type. Real-valued measures are not carried
-    /// here: `pset_value` converts them through their unit. `IFCREAL` and
-    /// dimensionless `NUMBER` types have no unit.
+    /// here: `scalar_value` converts them through their unit. `IFCREAL` and
+    /// dimensionless `NUMBER` types have no unit. An enumeration constant of
+    /// a predefined set's attribute is carried as its text.
     fn carries_exactly(&self, value: &ExactValue, value_type: &str) -> bool {
         let base = self
             .release
@@ -131,60 +133,218 @@ impl IfcPropertyService {
             ExactValue::Integer(_) => base == "INTEGER" || base == "NUMBER",
             ExactValue::Real(_) => value_type.eq_ignore_ascii_case("IFCREAL") || base == "NUMBER",
             ExactValue::Text(_) => base == "STRING",
+            ExactValue::Enum(_) => true,
             _ => false,
         }
     }
 
-    /// The value of an `IfcPropertySingleValue` or physical quantity,
-    /// measures converted to SI.
+    /// The value of a property, a quantity or a predefined set's attribute,
+    /// measures converted to SI, with its declared type.
+    ///
+    /// A single value, a quantity and an attribute are one scalar (see
+    /// `scalar_value`). The composite kinds map onto the IR's composite
+    /// values, every scalar in them converted as a single value of its own
+    /// declared type with the unit the kind states for it:
+    ///
+    /// - an enumerated value is its selected item, a list of them when
+    ///   several are selected, and null when none is;
+    /// - a list value is a list, null when it states no element;
+    /// - a bounded value is a bounded value, null when it states neither
+    ///   bound nor set point;
+    /// - a table value is a table, null when it has no row.
+    ///
+    /// The declared type is the one type every scalar declares; a table
+    /// whose two columns declare different types has none. A reference
+    /// value names an entity the IR cannot carry and is refused.
+    fn pset_value(
+        &self,
+        exact: &ExactProperty,
+    ) -> Result<(PropertyValue, Option<String>), PropertyResolutionError> {
+        let scalars = |values: &[ExactTypedValue], unit| {
+            values
+                .iter()
+                .map(|typed| self.scalar_value(&typed.value, Some(&typed.value_type), unit))
+                .collect::<Result<Vec<_>, _>>()
+        };
+        let boxed = |typed: &Option<ExactTypedValue>| {
+            typed
+                .as_ref()
+                .map(|typed| {
+                    self.scalar_value(&typed.value, Some(&typed.value_type), exact.unit_id)
+                        .map(Box::new)
+                })
+                .transpose()
+        };
+        let (value, types): (PropertyValue, Vec<&str>) = match &exact.value {
+            ExactValue::Enumerated(enumerated) => {
+                let mut items = scalars(&enumerated.values, exact.unit_id)?;
+                let mut types: Vec<&str> = enumerated
+                    .values
+                    .iter()
+                    .map(|typed| typed.value_type.as_ref())
+                    .collect();
+                if let Some(enumeration) = &enumerated.enumeration {
+                    types.extend(
+                        enumeration
+                            .values
+                            .iter()
+                            .map(|typed| typed.value_type.as_ref()),
+                    );
+                }
+                let value = match items.len() {
+                    0 => PropertyValue::Null,
+                    1 => items.remove(0),
+                    _ => PropertyValue::List(items),
+                };
+                (value, types)
+            }
+            ExactValue::List(values) => {
+                let items = scalars(values, exact.unit_id)?;
+                let value = if items.is_empty() {
+                    PropertyValue::Null
+                } else {
+                    PropertyValue::List(items)
+                };
+                (
+                    value,
+                    values
+                        .iter()
+                        .map(|typed| typed.value_type.as_ref())
+                        .collect(),
+                )
+            }
+            ExactValue::Bounded(bounded) => {
+                let parts = [&bounded.lower, &bounded.upper, &bounded.set_point];
+                let types = parts
+                    .iter()
+                    .filter_map(|part| part.as_ref())
+                    .map(|typed| typed.value_type.as_ref())
+                    .collect();
+                let value = if parts.iter().all(|part| part.is_none()) {
+                    PropertyValue::Null
+                } else {
+                    PropertyValue::Bounded {
+                        lower: boxed(&bounded.lower)?,
+                        upper: boxed(&bounded.upper)?,
+                        set_point: boxed(&bounded.set_point)?,
+                    }
+                };
+                (value, types)
+            }
+            ExactValue::Table(table) => self.table_value(table)?,
+            ExactValue::Reference(_) | ExactValue::Entity(_) => {
+                return Err(PropertyResolutionError::InexactEvidence);
+            }
+            scalar => {
+                let value =
+                    self.scalar_value(scalar, exact.value_type.as_deref(), exact.unit_id)?;
+                return Ok((
+                    value,
+                    exact.value_type.as_deref().map(str::to_ascii_uppercase),
+                ));
+            }
+        };
+        // STEP writes type names upper case; report them that way whatever
+        // case the file used.
+        let mut types = types.into_iter().map(str::to_ascii_uppercase);
+        let first = types.next();
+        let declared = match first {
+            Some(first) if types.all(|other| other == first) => Some(first),
+            _ => None,
+        };
+        Ok((value, declared))
+    }
+
+    /// A table value's rows, each column in its own unit, and every cell's
+    /// declared type.
+    fn table_value<'t>(
+        &self,
+        table: &'t ExactTableValue,
+    ) -> Result<(PropertyValue, Vec<&'t str>), PropertyResolutionError> {
+        let mut rows = Vec::with_capacity(table.rows.len());
+        let mut types = Vec::with_capacity(2 * table.rows.len());
+        for row in &table.rows {
+            rows.push(PropertyTableRow {
+                defining: self.scalar_value(
+                    &row.defining.value,
+                    Some(&row.defining.value_type),
+                    table.defining_unit,
+                )?,
+                defined: self.scalar_value(
+                    &row.defined.value,
+                    Some(&row.defined.value_type),
+                    table.defined_unit,
+                )?,
+            });
+            types.push(row.defining.value_type.as_ref());
+            types.push(row.defined.value_type.as_ref());
+        }
+        let value = if rows.is_empty() {
+            PropertyValue::Null
+        } else {
+            PropertyValue::Table(rows)
+        };
+        Ok((value, types))
+    }
+
+    /// One scalar value of declared type `value_type` with the effective
+    /// explicit `unit`, measures converted to SI.
     ///
     /// A value its declared type carries exactly (see `carries_exactly`) is
     /// read as stated and must carry no unit; a date or time type is read as
-    /// a date or date-time (see `temporal`). Any other number must be a
-    /// measure whose effective unit resolves exactly.
-    fn pset_value(&self, exact: &ExactProperty) -> Result<PropertyValue, PropertyResolutionError> {
-        if let Some(value_type) = exact.value_type.as_deref() {
-            let raw = match &exact.value {
+    /// a date or date-time (see `temporal`); `$` of a predefined set's
+    /// optional attribute is null. Any other number must be a measure whose
+    /// effective unit resolves exactly.
+    fn scalar_value(
+        &self,
+        value: &ExactValue,
+        value_type: Option<&str>,
+        unit: Option<EntityId>,
+    ) -> Result<PropertyValue, PropertyResolutionError> {
+        if let Some(value_type) = value_type {
+            let raw = match value {
                 ExactValue::Text(text) => temporal::Raw::Text(text),
                 ExactValue::Integer(seconds) => temporal::Raw::Integer(*seconds),
                 _ => temporal::Raw::Other,
             };
             if let Some(value) = temporal::read(value_type, &raw) {
-                return if exact.unit_id.is_some() {
+                return if unit.is_some() {
                     Err(PropertyResolutionError::InexactEvidence)
                 } else {
                     value
                 };
             }
         }
-        let plain = match (&exact.value, exact.value_type.as_deref()) {
-            (ExactValue::Null, None) => Some(PropertyValue::Null),
+        let plain = match (value, value_type) {
+            (ExactValue::Null, _) => Some(PropertyValue::Null),
             (value, Some(value_type)) if self.carries_exactly(value, value_type) => match value {
                 ExactValue::Bool(value) => Some(PropertyValue::Boolean(*value)),
                 ExactValue::Integer(value) => Some(PropertyValue::Integer(*value)),
                 ExactValue::Real(value) => Some(PropertyValue::Decimal(*value)),
-                ExactValue::Text(value) => Some(PropertyValue::String(value.to_string())),
+                ExactValue::Text(value) | ExactValue::Enum(value) => {
+                    Some(PropertyValue::String(value.to_string()))
+                }
                 _ => None,
             },
             _ => None,
         };
         if let Some(value) = plain {
-            return if exact.unit_id.is_some() {
+            return if unit.is_some() {
                 Err(PropertyResolutionError::InexactEvidence)
             } else {
                 Ok(value)
             };
         }
-        let number = match exact.value {
-            ExactValue::Real(value) => value,
+        let number = match value {
+            ExactValue::Real(value) => *value,
             #[allow(clippy::cast_precision_loss)]
-            ExactValue::Integer(value) if value.unsigned_abs() <= 1 << 53 => value as f64,
+            ExactValue::Integer(value) if value.unsigned_abs() <= 1 << 53 => *value as f64,
             _ => return Err(PropertyResolutionError::InexactEvidence),
         };
-        let Some(value_type) = exact.value_type.as_deref() else {
+        let Some(value_type) = value_type else {
             return Err(PropertyResolutionError::InexactEvidence);
         };
-        si_value(&self.model, value_type, exact.unit_id, number)?
+        si_value(&self.model, value_type, unit, number)?
             .ok_or(PropertyResolutionError::InexactEvidence)
     }
 
@@ -255,15 +415,13 @@ impl PropertyResolutionService for IfcPropertyService {
                     ExactSource::Type(type_id) => format!("type:{type_id}"),
                     _ => return Err(PropertyResolutionError::InexactEvidence),
                 };
-                let value = self.pset_value(&exact)?;
+                let (value, data_type) = self.pset_value(&exact)?;
                 let mut property =
                     Property::new(exact.property_set.as_ref(), request.property(), value)
                         .map_err(|_| PropertyResolutionError::InvalidRequest)?;
-                // STEP writes type names upper case; report them that way
-                // whatever case the file used.
-                if let Some(value_type) = exact.value_type.as_deref() {
+                if let Some(data_type) = data_type {
                     property = property
-                        .with_data_type(value_type.to_ascii_uppercase())
+                        .with_data_type(data_type)
                         .map_err(|_| PropertyResolutionError::InexactEvidence)?;
                 }
                 let property = property.with_evidence(Evidence::exact(

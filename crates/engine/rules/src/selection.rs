@@ -675,8 +675,10 @@ impl Test {
 
     /// Whether `actual` satisfies the test under `quantifier`.
     ///
-    /// A list is compared only element by element, and only when the
-    /// selector states how; a scalar under a quantifier is a list of one.
+    /// A list, a bounded value or a table is compared only value by value
+    /// (its stated values, see `PropertyValue::stated_values`), and only
+    /// when the selector states how; a scalar under a quantifier is a list
+    /// of one.
     /// `all` needs at least one element, so an empty list satisfies neither
     /// quantifier. An element that cannot be compared decides the outcome
     /// only when the others leave it open.
@@ -687,25 +689,25 @@ impl Test {
         options: TextOptions,
     ) -> Result<bool, String> {
         let Some(quantifier) = quantifier else {
-            if matches!(actual, PropertyValue::List(_)) && !matches!(self, Self::Exists) {
-                return Err(
-                    "the value is a list; state `quantifier` `any` or `all` to compare its elements"
-                        .into(),
-                );
+            if actual.stated_values().is_some() && !matches!(self, Self::Exists) {
+                return Err(format!(
+                    "the value is {}; state `quantifier` `any` or `all` to compare its values",
+                    kind(actual)
+                ));
             }
             return self.holds(actual, options);
         };
-        let elements = match actual {
-            PropertyValue::List(elements) => elements.as_slice(),
-            scalar => std::slice::from_ref(scalar),
-        };
+        let elements = actual.stated_values().unwrap_or_else(|| vec![actual]);
         let (decisive, mut undecided) = match quantifier {
             Quantifier::Any => (true, None),
             Quantifier::All => (false, None),
         };
-        for element in elements {
-            if matches!(element, PropertyValue::List(_)) {
-                return Err("a list nested in a list cannot be compared".into());
+        for element in &elements {
+            if !element.is_scalar() {
+                return Err(format!(
+                    "{} nested in a value cannot be compared",
+                    kind(element)
+                ));
             }
             match self.holds(element, options) {
                 Ok(held) if held == decisive => return Ok(decisive),
@@ -848,6 +850,8 @@ fn kind(value: &PropertyValue) -> String {
         PropertyValue::Date(_) => "a date".into(),
         PropertyValue::DateTime(_) => "a date-time".into(),
         PropertyValue::List(_) => "a list".into(),
+        PropertyValue::Bounded { .. } => "a bounded value".into(),
+        PropertyValue::Table(_) => "a table".into(),
     }
 }
 

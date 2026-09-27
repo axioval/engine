@@ -358,3 +358,192 @@ fn the_capability_is_registered() {
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
     assert!(registry.get("axioval:capability.property-value").is_some());
 }
+
+fn metres(value: f64) -> PropertyValue {
+    PropertyValue::Quantity {
+        value,
+        dimension: QuantityDimension::Length,
+    }
+}
+
+fn si() -> (&'static str, ParameterValue) {
+    ("si_units", ParameterValue::Boolean { value: true })
+}
+
+fn quantifier(value: &str) -> (&'static str, ParameterValue) {
+    text("quantifier", value)
+}
+
+#[allow(clippy::unnecessary_wraps)] // feeds the `Option` argument of `check`
+fn bounded(
+    lower: Option<f64>,
+    upper: Option<f64>,
+    set_point: Option<f64>,
+) -> Option<PropertyValue> {
+    let part = |value: Option<f64>| value.map(|value| Box::new(metres(value)));
+    Some(PropertyValue::Bounded {
+        lower: part(lower),
+        upper: part(upper),
+        set_point: part(set_point),
+    })
+}
+
+#[test]
+fn quantities_compare_in_si_when_declared() {
+    let length = Some(metres(2.5));
+    assert!(meets(&check(
+        length.clone(),
+        None,
+        &[values(&["2.5"]), si()]
+    )));
+    assert!(fails(&check(
+        length.clone(),
+        None,
+        &[values(&["2500"]), si()]
+    )));
+    assert!(meets(&check(
+        length.clone(),
+        None,
+        &[text("max_inclusive", "3"), si()]
+    )));
+    assert!(fails(&check(
+        length,
+        None,
+        &[text("min_exclusive", "2.5"), si()]
+    )));
+}
+
+#[test]
+fn a_list_needs_a_quantifier_and_is_judged_value_by_value() {
+    let list = Some(PropertyValue::List(vec![
+        PropertyValue::String("X".into()),
+        PropertyValue::String("Y".into()),
+    ]));
+    assert!(matches!(
+        check(list.clone(), None, &[values(&["Y"])]),
+        Outcome::NotEvaluated(NotEvaluatedReason::InvalidEvidence)
+    ));
+    assert!(meets(&check(
+        list.clone(),
+        None,
+        &[values(&["Y"]), quantifier("any")]
+    )));
+    assert!(fails(&check(
+        list.clone(),
+        None,
+        &[values(&["Z"]), quantifier("any")]
+    )));
+    assert!(fails(&check(
+        list.clone(),
+        None,
+        &[values(&["Y"]), quantifier("all")]
+    )));
+    assert!(meets(&check(
+        list.clone(),
+        None,
+        &[values(&["X", "Y"]), quantifier("all")]
+    )));
+    // A scalar under a quantifier is judged as itself.
+    assert!(meets(&check(
+        string("Y"),
+        None,
+        &[values(&["Y"]), quantifier("all")]
+    )));
+    // An empty list states nothing.
+    assert!(fails(&check(
+        Some(PropertyValue::List(Vec::new())),
+        None,
+        &[values(&["Y"]), quantifier("any")]
+    )));
+    assert!(invalid(&check(
+        list,
+        None,
+        &[values(&["Y"]), quantifier("some")]
+    )));
+}
+
+#[test]
+fn a_bounded_value_is_judged_by_its_stated_values_and_its_open_ends() {
+    let range = bounded(Some(1.0), Some(5.0), Some(3.0));
+    for value in ["1", "3", "5"] {
+        assert!(meets(&check(
+            range.clone(),
+            None,
+            &[values(&[value]), quantifier("any"), si()]
+        )));
+    }
+    assert!(fails(&check(
+        range.clone(),
+        None,
+        &[values(&["2"]), quantifier("any"), si()]
+    )));
+    let within = [
+        text("min_exclusive", "0.5"),
+        text("max_inclusive", "5"),
+        quantifier("all"),
+        si(),
+    ];
+    assert!(meets(&check(range, None, &within)));
+    assert!(fails(&check(
+        bounded(Some(1.0), Some(6.0), None),
+        None,
+        &within
+    )));
+    // An open end has values beyond every bound on its side.
+    assert!(fails(&check(bounded(None, Some(4.0), None), None, &within)));
+    assert!(fails(&check(bounded(Some(3.0), None, None), None, &within)));
+    // Without a bound on that side, the open end does not matter.
+    assert!(meets(&check(
+        bounded(Some(3.0), None, None),
+        None,
+        &[text("min_inclusive", "2"), quantifier("all"), si()]
+    )));
+}
+
+#[test]
+fn a_table_is_judged_by_its_defining_and_defined_values() {
+    let table = Some(PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+        defining: PropertyValue::String("X".into()),
+        defined: metres(1.0),
+    }]));
+    assert!(meets(&check(
+        table.clone(),
+        None,
+        &[values(&["X"]), quantifier("any")]
+    )));
+    // A value that cannot be judged leaves `any` open when nothing meets.
+    assert!(matches!(
+        check(table.clone(), None, &[values(&["Y"]), quantifier("any")]),
+        Outcome::NotEvaluated(_)
+    ));
+    let texts = Some(PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+        defining: PropertyValue::String("X".into()),
+        defined: PropertyValue::String("Z".into()),
+    }]));
+    assert!(fails(&check(
+        texts,
+        None,
+        &[values(&["Y"]), quantifier("any")]
+    )));
+    assert!(matches!(
+        check(
+            table.clone(),
+            None,
+            &[text("min_inclusive", "0"), quantifier("any")]
+        ),
+        Outcome::NotEvaluated(_)
+    ));
+    // A table whose columns declare different types reports none.
+    assert!(matches!(
+        check(
+            table,
+            None,
+            &[
+                text("data_type", "IFCLABEL"),
+                values(&["X"]),
+                quantifier("any")
+            ]
+        ),
+        Outcome::NotEvaluated(NotEvaluatedReason::IncompleteEvidence)
+    ));
+}

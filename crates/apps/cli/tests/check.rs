@@ -6193,3 +6193,171 @@ fn beam_holes_are_checked_against_the_web_zone_and_the_beams_ends() {
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// Walls #1 and #2 with an enumerated `Status`, a bounded `Span` in
+/// millimetres and a table `Load` in `Pset_Kinds`, and a `Pset_Checks`
+/// with `CheckA`/`CheckB`; wall #2 also has a `Pset_Draft`.
+const PROPERTY_KINDS: &str = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+     #90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);\n\
+     #91=IFCUNITASSIGNMENT((#90));\n\
+     #92=IFCPROJECT('0000000000000000000092',$,'P',$,$,$,$,$,#91);\n\
+     #1=IFCWALL('0000000000000000000001',$,$,$,$,$,$,$,$);\n\
+     #2=IFCWALL('0000000000000000000002',$,$,$,$,$,$,$,$);\n\
+     #3=IFCPROPERTYENUMERATION('Status',(IFCLABEL('NEW'),IFCLABEL('EXISTING'),IFCLABEL('DEMOLISH')),$);\n\
+     #4=IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('NEW')),#3);\n\
+     #5=IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL('EXISTING'),IFCLABEL('DEMOLISH')),#3);\n\
+     #6=IFCPROPERTYBOUNDEDVALUE('Span',$,IFCLENGTHMEASURE(5000.),IFCLENGTHMEASURE(1000.),$,$);\n\
+     #7=IFCPROPERTYBOUNDEDVALUE('Span',$,$,IFCLENGTHMEASURE(1000.),$,$);\n\
+     #8=IFCPROPERTYTABLEVALUE('Load',$,(IFCREAL(1.),IFCREAL(2.)),(IFCREAL(10.),IFCREAL(20.)),$,$,$,$);\n\
+     #10=IFCPROPERTYSET('0000000000000000000010',$,'Pset_Kinds',$,(#4,#6,#8));\n\
+     #11=IFCPROPERTYSET('0000000000000000000011',$,'Pset_Kinds',$,(#5,#7));\n\
+     #12=IFCRELDEFINESBYPROPERTIES('0000000000000000000012',$,$,$,(#1),#10);\n\
+     #13=IFCRELDEFINESBYPROPERTIES('0000000000000000000013',$,$,$,(#2),#11);\n\
+     #20=IFCPROPERTYSINGLEVALUE('CheckA',$,IFCLABEL('ok'),$);\n\
+     #21=IFCPROPERTYSINGLEVALUE('CheckB',$,IFCLABEL(''),$);\n\
+     #22=IFCPROPERTYSET('0000000000000000000022',$,'Pset_Checks',$,(#20,#21));\n\
+     #23=IFCRELDEFINESBYPROPERTIES('0000000000000000000023',$,$,$,(#1,#2),#22);\n\
+     #24=IFCPROPERTYSINGLEVALUE('Note',$,IFCTEXT('temporary'),$);\n\
+     #25=IFCPROPERTYSET('0000000000000000000025',$,'Pset_Draft',$,(#24));\n\
+     #26=IFCRELDEFINESBYPROPERTIES('0000000000000000000026',$,$,$,(#2),#25);\n\
+     ENDSEC;\nEND-ISO-10303-21;\n";
+
+/// Packages with one rule per `(id, capability, parameters)`, over walls.
+/// `Status`, `Span` and `Load` in `Pset_Kinds` are concepts bound to IFC4.
+fn property_packages(case: &Case, rules: &[(&str, &str, Value)]) -> (PathBuf, PathBuf) {
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    let concept = |name: &str| {
+        json!({"id": format!("axioval:example.ifc.{name}"), "name": text(name),
+               "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+               "citations": []})
+    };
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(case.definitions(true)).unwrap()).unwrap();
+    definitions["propertySets"]["axioval:example.ifc.Pset_Kinds"] = concept("Pset_Kinds");
+    for name in ["Status", "Span", "Load"] {
+        let mut property = concept(name);
+        property["valueKind"] = json!("string");
+        definitions["properties"][format!("axioval:example.ifc.{name}")] = property;
+    }
+    for (id, capability, _) in rules {
+        let capability = format!("axioval:capability.{capability}");
+        definitions["definitions"][format!("axioval:example.{id}")] = json!({
+            "id": format!("axioval:example.{id}"), "name": text(id), "description": text(id),
+            "capability": capability, "parameters": registry_signature(&capability),
+            "citations": [], "tags": [],
+        });
+    }
+    let text_file = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text_file).unwrap();
+    let template = ruleset["root"]["rules"][0].clone();
+    ruleset["root"]["rules"] = rules
+        .iter()
+        .map(|(id, _, parameters)| {
+            let mut rule = template.clone();
+            rule["id"] = json!(id);
+            rule["definitionId"] = json!(format!("axioval:example.{id}"));
+            rule["parameters"] = parameters.clone();
+            rule
+        })
+        .collect();
+    (
+        case.write("definitions.json", &definitions.to_string()),
+        case.write("ruleset.json", &ruleset.to_string()),
+    )
+}
+
+fn check_packages(case: &Case, model: &str, packages: (PathBuf, PathBuf)) -> (Output, Value) {
+    let model = case.write("model.ifc", model);
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(packages.0)
+        .arg("--ruleset")
+        .arg(packages.1)
+        .output()
+        .unwrap();
+    let result = json(&output);
+    (output, result)
+}
+
+fn rule_findings(result: &Value) -> Vec<(String, String, String)> {
+    let mut findings: Vec<(String, String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            (
+                finding["rule_id"].as_str().unwrap().to_owned(),
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    findings.sort();
+    findings
+}
+
+#[test]
+fn enumerated_bounded_and_table_values_are_checked_value_by_value() {
+    let case = Case::new("property-kinds");
+    let reference = |name: &str| {
+        json!({"type": "propertyReference", "property": format!("axioval:example.ifc.{name}"),
+               "propertySet": "axioval:example.ifc.Pset_Kinds"})
+    };
+    let string = |value: &str| json!({"type": "string", "value": value});
+    let packages = property_packages(
+        &case,
+        &[
+            (
+                "status-new",
+                "property-value",
+                json!({"property": reference("Status"),
+                       "values": {"type": "stringList", "value": ["NEW"]},
+                       "quantifier": string("any")}),
+            ),
+            (
+                "span-within",
+                "property-value",
+                json!({"property": reference("Span"),
+                       "min_inclusive": string("0.5"), "max_inclusive": string("6"),
+                       "quantifier": string("all"),
+                       "si_units": {"type": "boolean", "value": true}}),
+            ),
+            (
+                "load-listed",
+                "property-value",
+                json!({"property": reference("Load"),
+                       "values": {"type": "stringList", "value": ["20"]},
+                       "quantifier": string("any"), "optional": {"type": "boolean", "value": true}}),
+            ),
+        ],
+    );
+    let (output, result) = check_packages(&case, PROPERTY_KINDS, packages);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        rule_findings(&result),
+        [
+            (
+                "span-within".to_owned(),
+                "#2".to_owned(),
+                "property axioval:example.ifc.Span is [range from 1 m, open above], open above, \
+                 so not all its values meet the upper bound"
+                    .to_owned()
+            ),
+            (
+                "status-new".to_owned(),
+                "#2".to_owned(),
+                "property axioval:example.ifc.Status is [`EXISTING`, `DEMOLISH`], and none of \
+                 its values meets the constraints"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

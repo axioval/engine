@@ -236,3 +236,54 @@ fn related_selector_omits_its_default_quantifier_and_round_trips() {
     assert!(serde_json::from_str::<Selector>(&unknown).is_err());
     assert!(serde_json::from_str::<Selector>(&any.replace("\"path\"", "\"steps\"")).is_err());
 }
+
+#[test]
+fn bounded_and_table_values_round_trip() {
+    use axioval_ir::{PropertyTableRow, PropertyValue};
+    let bounded = PropertyValue::Bounded {
+        lower: Some(Box::new(PropertyValue::Decimal(1.0))),
+        upper: None,
+        set_point: Some(Box::new(PropertyValue::Decimal(2.0))),
+    };
+    let json = serde_json::to_value(&bounded).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"type": "bounded", "value": {
+            "lower": {"type": "decimal", "value": 1.0},
+            "set_point": {"type": "decimal", "value": 2.0},
+        }})
+    );
+    assert_eq!(
+        serde_json::from_value::<PropertyValue>(json).unwrap(),
+        bounded
+    );
+    let table = PropertyValue::Table(vec![PropertyTableRow {
+        defining: PropertyValue::String("X".into()),
+        defined: PropertyValue::Integer(3),
+    }]);
+    let json = serde_json::to_value(&table).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"type": "table", "value": [{
+            "defining": {"type": "string", "value": "X"},
+            "defined": {"type": "integer", "value": 3},
+        }]})
+    );
+    assert_eq!(
+        serde_json::from_value::<PropertyValue>(json).unwrap(),
+        table
+    );
+    assert_eq!(
+        table.stated_values().unwrap(),
+        [
+            &PropertyValue::String("X".into()),
+            &PropertyValue::Integer(3)
+        ]
+    );
+    assert_eq!(
+        bounded.stated_values().unwrap(),
+        [&PropertyValue::Decimal(1.0), &PropertyValue::Decimal(2.0)]
+    );
+    assert!(PropertyValue::Integer(1).stated_values().is_none());
+    assert!(!bounded.is_scalar() && !table.is_scalar() && !PropertyValue::Null.is_scalar());
+}

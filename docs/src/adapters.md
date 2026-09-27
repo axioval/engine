@@ -39,15 +39,30 @@ is an area quantity in SI. So do the attributes of predefined property sets
 (`ifc-properties` 0.4.1, openbimrs/ifc#149) such as `IfcDoorLiningProperties`,
 `IfcDoorPanelProperties` and their window counterparts: a set is found by its
 `Name`, or by its entity name when it states none, and `LiningDepth` is a length
-in SI with its declared type (`IFCPOSITIVELENGTHMEASURE`). The request is
-refused, never answered as absent, when:
+in SI with its declared type (`IFCPOSITIVELENGTHMEASURE`). An enumeration
+attribute (`PanelOperation`) is its constant as text, typed by its
+enumeration (`IFCDOORPANELOPERATIONENUM`), and an unset optional attribute is
+`null` with its declared type.
+
+The other simple property kinds (`ifc-properties` 0.4.1, openbimrs/ifc#150)
+map onto the IR's composite values, every scalar in them read as a single
+value of its declared type, with the unit the kind states for it:
+- an `IfcPropertyEnumeratedValue` is its selected item, a `List` of them when
+  several are selected, and `null` when none is;
+- an `IfcPropertyListValue` is a `List`, `null` when it states no element;
+- an `IfcPropertyBoundedValue` is a `Bounded` value (lower and upper bound,
+  and in IFC4 the set point), `null` when it states none of them;
+- an `IfcPropertyTableValue` is a `Table` of its defining and defined values,
+  each column in its own unit, `null` without rows.
+
+The declared type is the one every scalar of the value declares; a table
+whose columns declare two types reports none. The request is refused, never
+answered as absent, when:
 - a complex quantity or two quantities carry the requested name;
 - a property set and a quantity set share the requested set name;
-- the requested attribute of a predefined set is unset, an enumeration or an
-  entity reference;
-- the value is an enumerated, list, bounded, table or reference value, which
-  `ifc-properties` reads (openbimrs/ifc#150) but the property contract cannot
-  carry as one value.
+- the requested attribute of a predefined set is an entity reference;
+- the value is an `IfcPropertyReferenceValue`, which names an entity the IR
+  cannot carry, or an `IfcComplexProperty`.
 
 Any other absence is exact.
 

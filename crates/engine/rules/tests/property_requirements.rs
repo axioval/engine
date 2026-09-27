@@ -1171,3 +1171,46 @@ fn malformed_state_rows_are_invalid_declarations() {
         );
     }
 }
+
+#[test]
+fn a_bounded_value_must_lie_within_the_range_as_a_whole() {
+    let range = |lower: Option<f64>, upper: Option<f64>| PropertyValue::Bounded {
+        lower: lower.map(|value| Box::new(length(value))),
+        upper: upper.map(|value| Box::new(length(value))),
+        set_point: None,
+    };
+    let model = Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
+        .value("w1", "Pset", "Span", range(Some(1.0), Some(5.0)))
+        .value("w2", "Pset", "Span", range(Some(1.0), None))
+        .value("w3", "Pset", "Span", range(Some(1.0), Some(7.0)));
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set", string("Pset")),
+            ("property", string("Span")),
+            ("requirement", string("required")),
+            ("minimum", number(0.5)),
+            ("maximum", number(6.0)),
+            ("unit", string("m")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "w2".into(),
+                "wrong value: Pset.Span is [range from 1 m, open above]; required between 0.5 and 6 m (requirement row 0)"
+                    .into()
+            ),
+            (
+                "w3".into(),
+                "wrong value: Pset.Span is [range from 1 m to 7 m]; required between 0.5 and 6 m (requirement row 0)"
+                    .into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}

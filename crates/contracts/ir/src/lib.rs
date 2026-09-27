@@ -302,6 +302,76 @@ pub enum PropertyValue {
     /// states whether any or every element must satisfy it; a list is never
     /// compared as if it were one of its elements.
     List(Vec<PropertyValue>),
+    /// A range the source states as one value (an IFC bounded value): a
+    /// lower and an upper bound and a set point, each a scalar value, of
+    /// one kind, and at least one of them stated. An unstated bound leaves
+    /// the range open on that side; it is never zero or infinity.
+    Bounded {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lower: Option<Box<PropertyValue>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        upper: Option<Box<PropertyValue>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        set_point: Option<Box<PropertyValue>>,
+    },
+    /// Rows mapping a defining value to a defined value (an IFC table
+    /// value), in the order the source states them; at least one row, every
+    /// cell a scalar value.
+    Table(Vec<PropertyTableRow>),
+}
+
+/// One row of a [`PropertyValue::Table`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PropertyTableRow {
+    /// The defining (independent) value.
+    pub defining: PropertyValue,
+    /// The value it defines.
+    pub defined: PropertyValue,
+}
+
+impl PropertyValue {
+    /// Whether this is one value of its own: neither null nor a list, a
+    /// bounded value or a table.
+    #[must_use]
+    pub fn is_scalar(&self) -> bool {
+        !matches!(
+            self,
+            Self::Null | Self::List(_) | Self::Bounded { .. } | Self::Table(_)
+        )
+    }
+
+    /// The scalar values a composite value states, in order: a list's
+    /// elements, a bounded value's lower bound, upper bound and set point
+    /// as far as stated, and each table row's defining then defined value.
+    /// `None` for a scalar value or null.
+    ///
+    /// A comparison quantified over a composite value compares these; a
+    /// range is more than its stated values, so a capability judging a
+    /// bounded value against bounds must also consider its open ends.
+    #[must_use]
+    pub fn stated_values(&self) -> Option<Vec<&PropertyValue>> {
+        match self {
+            Self::List(elements) => Some(elements.iter().collect()),
+            Self::Bounded {
+                lower,
+                upper,
+                set_point,
+            } => Some(
+                [lower, upper, set_point]
+                    .into_iter()
+                    .flatten()
+                    .map(AsRef::as_ref)
+                    .collect(),
+            ),
+            Self::Table(rows) => Some(
+                rows.iter()
+                    .flat_map(|row| [&row.defining, &row.defined])
+                    .collect(),
+            ),
+            _ => None,
+        }
+    }
 }
 
 /// Provenance and exactness of evidence.

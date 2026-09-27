@@ -17,13 +17,16 @@
 //! A literal that cannot be cast to the value's kind, or a constraint the kind
 //! does not take, makes the object not evaluated (`InvalidDeclaration`): the
 //! declaration cannot be applied to this value, which is neither a pass nor a
-//! violation. A quantity is not evaluated: comparing it needs units.
+//! violation. A quantity is compared only when `si_units` states that the
+//! literals are in the coherent SI unit of its dimension; otherwise it is not
+//! evaluated. A list, bounded value or table is judged by its stated values
+//! under the declared `quantifier`, a range also by its open ends.
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
 };
-use axioval_ir::contract::ParameterValue;
+use axioval_ir::contract::{ParameterValue, Quantifier};
 use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, Property, PropertyValue, Severity, TemporalPrecision,
 };
@@ -53,6 +56,11 @@ struct Constraints<'r> {
     fraction_digits: Option<i64>,
     optional: bool,
     precision: Option<TemporalPrecision>,
+    /// How the stated values of a list, bounded value or table are judged.
+    quantifier: Option<Quantifier>,
+    /// Whether numeric literals compared with a quantity are in the
+    /// coherent SI unit of its dimension.
+    si_units: bool,
 }
 
 impl<'r> Constraints<'r> {
@@ -84,6 +92,18 @@ impl<'r> Constraints<'r> {
             fraction_digits: count("fraction_digits"),
             optional: matches!(
                 rule.parameters.get("optional"),
+                Some(ParameterValue::Boolean { value: true })
+            ),
+            quantifier: match text("quantifier") {
+                None => None,
+                Some("any") => Some(Quantifier::Any),
+                Some("all") => Some(Quantifier::All),
+                Some(other) => {
+                    return Err(format!("quantifier `{other}` is not `any` or `all`"));
+                }
+            },
+            si_units: matches!(
+                rule.parameters.get("si_units"),
                 Some(ParameterValue::Boolean { value: true })
             ),
             precision: match text("precision") {
@@ -166,12 +186,24 @@ enum Verdict {
 /// regular expressions, any of, whole value), `min_inclusive`,
 /// `max_inclusive`, `min_exclusive`, `max_exclusive`, `length`,
 /// `min_length`, `max_length`, `total_digits`, `fraction_digits` (for a
-/// number only), `optional`, and `precision` (`day`, for a date or date-time
-/// value only). All given constraints must hold. A decimal's digits are
+/// number only), `optional`, `precision` (`day`, for a date or date-time
+/// value only), `quantifier` (`any` or `all`) and `si_units`. All given
+/// constraints must hold. A decimal's digits are
 /// counted on the shortest decimal that reads back as the same double, the
-/// form a model's literal has. Without `optional`, absence, `null` and blank text are violations;
-/// with it, an absent or `null` property passes and any present value,
-/// empty text included, is checked.
+/// form a model's literal has. Without `optional`, absence, `null`, blank
+/// text and an empty list are violations; with it, an absent or `null`
+/// property passes and any present value, empty text included, is checked.
+///
+/// A list, a bounded value or a table is judged by its stated values (see
+/// `PropertyValue::stated_values`) under `quantifier`: `any` holds when one
+/// of them meets every constraint, `all` when each does, and there is at
+/// least one. A range holds every value between its bounds, so under `all`
+/// a bounded value open on one side fails every bound on that side. Without
+/// a quantifier such a value is not evaluated; a scalar under a quantifier
+/// is judged as itself. `si_units` reads numeric literals compared with a
+/// quantity in the coherent SI unit of its dimension (metres, square
+/// metres, kilograms, ...), the unit the value is stated in; without it a
+/// quantity is not evaluated.
 pub struct PropertyValueConstraint;
 impl RuleCapability for PropertyValueConstraint {
     fn id(&self) -> &'static str {
@@ -190,6 +222,7 @@ impl RuleCapability for PropertyValueConstraint {
             "min_exclusive",
             "max_exclusive",
             "precision",
+            "quantifier",
         ] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::String));
         }
@@ -208,10 +241,9 @@ impl RuleCapability for PropertyValueConstraint {
         ] {
             parameters.push(ParameterDescriptor::optional(name, ParameterType::Integer));
         }
-        parameters.push(ParameterDescriptor::optional(
-            "optional",
-            ParameterType::Boolean,
-        ));
+        for name in ["optional", "si_units"] {
+            parameters.push(ParameterDescriptor::optional(name, ParameterType::Boolean));
+        }
         parameters
     }
 
@@ -327,8 +359,12 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
 }
 
 fn is_empty(value: &PropertyValue) -> bool {
-    matches!(value, PropertyValue::Null)
-        || matches!(value, PropertyValue::String(text) if text.trim().is_empty())
+    match value {
+        PropertyValue::Null => true,
+        PropertyValue::String(text) => text.trim().is_empty(),
+        PropertyValue::List(elements) => elements.is_empty(),
+        _ => false,
+    }
 }
 
 fn finding(
@@ -355,7 +391,82 @@ fn invalid(message: impl Into<String>) -> Verdict {
     Verdict::Inapplicable(NotEvaluatedReason::InvalidDeclaration, message.into())
 }
 
+/// The verdict on a value: a scalar directly, the stated values of a list,
+/// bounded value or table under the declared quantifier.
 fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
+    let Some(stated) = value.stated_values() else {
+        return scalar_verdict(value, constraints);
+    };
+    let shown = crate::support::display(Some(value));
+    let Some(quantifier) = constraints.quantifier else {
+        return Verdict::Inapplicable(
+            NotEvaluatedReason::InvalidEvidence,
+            format!(
+                "the value is {shown}; declare `quantifier` `any` or `all` to judge its values"
+            ),
+        );
+    };
+    let mut open = None;
+    match quantifier {
+        Quantifier::Any => {
+            for part in stated {
+                match scalar_verdict(part, constraints) {
+                    Verdict::Meets => return Verdict::Meets,
+                    Verdict::Fails(_) => {}
+                    inapplicable @ Verdict::Inapplicable(..) => {
+                        open.get_or_insert(inapplicable);
+                    }
+                }
+            }
+            open.unwrap_or_else(|| {
+                Verdict::Fails(format!(
+                    "is {shown}, and none of its values meets the constraints"
+                ))
+            })
+        }
+        Quantifier::All => {
+            if stated.is_empty() {
+                return Verdict::Fails(format!("is {shown}, which holds no value"));
+            }
+            // A range holds every value between its bounds: an open end
+            // passes every bound on that side.
+            if let PropertyValue::Bounded { lower, upper, .. } = value {
+                let below =
+                    constraints.min_inclusive.is_some() || constraints.min_exclusive.is_some();
+                let above =
+                    constraints.max_inclusive.is_some() || constraints.max_exclusive.is_some();
+                if below && lower.is_none() {
+                    return Verdict::Fails(format!(
+                        "is {shown}, open below, so not all its values meet the lower bound"
+                    ));
+                }
+                if above && upper.is_none() {
+                    return Verdict::Fails(format!(
+                        "is {shown}, open above, so not all its values meet the upper bound"
+                    ));
+                }
+            }
+            for part in stated {
+                match scalar_verdict(part, constraints) {
+                    Verdict::Meets => {}
+                    Verdict::Fails(why) => {
+                        return Verdict::Fails(format!("is {shown}: one of its values {why}"));
+                    }
+                    inapplicable @ Verdict::Inapplicable(..) => {
+                        open.get_or_insert(inapplicable);
+                    }
+                }
+            }
+            open.unwrap_or(Verdict::Meets)
+        }
+    }
+}
+
+fn scalar_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
+    if let (PropertyValue::Quantity { value, .. }, true) = (value, constraints.si_units) {
+        // In SI the quantity's number is the literal's number.
+        return scalar_verdict(&PropertyValue::Decimal(*value), constraints);
+    }
     if constraints.precision.is_some()
         && !matches!(value, PropertyValue::Date(_) | PropertyValue::DateTime(_))
     {
@@ -444,13 +555,15 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
         }
         PropertyValue::Quantity { .. } => Verdict::Inapplicable(
             NotEvaluatedReason::IncompleteEvidence,
-            "comparing a quantity needs its unit".into(),
+            "comparing a quantity needs its unit; declare `si_units` to read literals in SI".into(),
         ),
         PropertyValue::Null => invalid("null has no value to compare"),
-        PropertyValue::List(_) => Verdict::Inapplicable(
-            NotEvaluatedReason::InvalidEvidence,
-            "the value is a list; compare its elements with a quantified property selector".into(),
-        ),
+        PropertyValue::List(_) | PropertyValue::Bounded { .. } | PropertyValue::Table(_) => {
+            Verdict::Inapplicable(
+                NotEvaluatedReason::InvalidEvidence,
+                "a composite value nested in a value cannot be compared".into(),
+            )
+        }
     }
 }
 

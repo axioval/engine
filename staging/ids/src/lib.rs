@@ -1524,6 +1524,7 @@ impl Kind {
                     "min_exclusive",
                     "max_exclusive",
                     "precision",
+                    "quantifier",
                 ] {
                     parameters.push(parameter(id, ParameterKind::String, false));
                 }
@@ -1539,7 +1540,9 @@ impl Kind {
                 ] {
                     parameters.push(parameter(id, ParameterKind::Integer, false));
                 }
-                parameters.push(parameter("optional", ParameterKind::Boolean, false));
+                for id in ["optional", "si_units"] {
+                    parameters.push(parameter(id, ParameterKind::Boolean, false));
+                }
                 parameters
             }
             Kind::Conformance => vec![

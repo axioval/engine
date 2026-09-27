@@ -52,6 +52,40 @@ All notable changes are documented here. This project follows Semantic Versionin
   describe exactly is refused for every name, never answered in part; an
   object without a body, an unset optional attribute and another family's
   parameter are exact absences.
+- **Enumerated, list, bounded and table property values.** (Refs #44)
+  `PropertyValue` gains `Bounded { lower, upper, set_point }` (a range, each
+  part an optional scalar, at least one stated, an unstated bound leaving
+  the range open) and `Table` (rows of a `defining` and a `defined` value,
+  `PropertyTableRow`). `PropertyValue::stated_values` lists the scalars a
+  list, bounded value or table states, and `is_scalar` tells a scalar from
+  null and the composites; the property handle refuses a range without a
+  part or of mixed kinds, an empty table, and a non-scalar part or cell.
+  The IFC adapter maps the values `ifc-properties` 0.4.1 reads
+  (openbimrs/ifc#150): an `IfcPropertyEnumeratedValue` is its selected item,
+  a list of them when several are selected and null when none is; an
+  `IfcPropertyListValue` a list; an `IfcPropertyBoundedValue` a bounded
+  value; an `IfcPropertyTableValue` a table, each column in its own unit.
+  Every scalar is read as a single value of its declared type (measures in
+  SI through the unit the kind states), and the declared type is reported
+  when every scalar shares it. A predefined set's enumeration attribute is
+  its constant as text, typed by its enumeration, and an unset optional
+  attribute is null with its declared type. `IfcPropertyReferenceValue`,
+  entity-valued attributes and complex properties stay refused.
+  `property-value` takes `quantifier` (`any` or `all`), which judges a
+  list, bounded value or table by its stated values (a range under `all`
+  also by its open ends, which fail every bound on their side), and
+  `si_units`, which reads numeric literals compared with a quantity in the
+  coherent SI unit of its dimension; without them such values stay not
+  evaluated. Property selectors quantify over a bounded value's or a
+  table's stated values as over a list's, and `property-requirements`
+  judges them the same way, a range open on a required bound's side being
+  a `wrong value`. `property-value` also reads an empty list as missing.
+  **Breaking:** `PropertyValue` has two more variants; definitions bound to
+  `property-value` must declare the optional parameters `quantifier`
+  (`string`) and `si_units` (`boolean`). Previously refused IFC values
+  (enumerated, list, bounded and table values, enumeration and unset
+  predefined attributes) now resolve.
+
 - **Winders, turning flights, open risers and tessellated flights.**
   (Refs #85) `WalkingSurfaceService::measure_tread_flight` takes a
   `TreadFlightRequest` saying where a turning flight's walking line runs

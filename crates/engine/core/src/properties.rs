@@ -245,11 +245,27 @@ fn valid_value(value: &PropertyValue) -> bool {
         | PropertyValue::String(_)
         | PropertyValue::Date(_)
         | PropertyValue::DateTime(_) => true,
-        // A list holds scalar values only: no null, no nested list.
-        PropertyValue::List(elements) => elements.iter().all(|element| {
-            !matches!(element, PropertyValue::Null | PropertyValue::List(_)) && valid_value(element)
+        // A list holds scalar values only: no null, no nested composite.
+        PropertyValue::List(elements) => elements.iter().all(valid_scalar),
+        // A range states at least one scalar, and one kind of value.
+        PropertyValue::Bounded { .. } => value.stated_values().is_some_and(|stated| {
+            !stated.is_empty()
+                && stated.iter().all(|part| valid_scalar(part))
+                && stated
+                    .windows(2)
+                    .all(|pair| std::mem::discriminant(pair[0]) == std::mem::discriminant(pair[1]))
         }),
+        PropertyValue::Table(rows) => {
+            !rows.is_empty()
+                && rows
+                    .iter()
+                    .all(|row| valid_scalar(&row.defining) && valid_scalar(&row.defined))
+        }
     }
+}
+
+fn valid_scalar(value: &PropertyValue) -> bool {
+    value.is_scalar() && valid_value(value)
 }
 
 fn reviewable(evidence: &Evidence) -> bool {

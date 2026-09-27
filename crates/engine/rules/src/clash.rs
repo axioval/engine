@@ -50,6 +50,7 @@ use axioval_ir::{
 };
 
 use crate::clash_groups::{Context, Grouping, Groups, Reported, grouping, grouping_parameters};
+use crate::clash_severity::{Severities, severities, severity_parameters};
 use crate::pairs::{Unevaluated, fidelity_note, prepare, reason, refuse_declaration, severity};
 use crate::selection::property_error;
 use crate::support::{
@@ -158,6 +159,7 @@ struct Declaration<'a> {
     exclude_target_property: Option<PropertyRef<'a>>,
     exclude_same_layer: bool,
     grouping: Option<Grouping<'a>>,
+    severities: Severities,
 }
 
 /// The `exclude_paths` parameter, each entry split into its steps.
@@ -195,6 +197,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         exclude_target_property: exclusion_property(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
         grouping: grouping(&parameters)?,
+        severities: severities(&parameters)?,
     })
 }
 
@@ -885,6 +888,7 @@ impl RuleCapability for Clash {
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]);
         parameters.extend(grouping_parameters());
+        parameters.extend(severity_parameters());
         parameters
     }
 
@@ -939,20 +943,24 @@ impl RuleCapability for Clash {
                     continue;
                 }
             };
-            let outcome = unless_excluded(
+            let (outcome, severity, read) = declared.severities.report(
+                context,
+                &measured,
+                (subject, counterpart),
                 declared.profile.judge(&measured, counterpart),
-                exclusion,
-                counterpart,
+                (None, severity(rule)),
             );
+            let mut evidence = vec![measured.evidence().clone()];
+            evidence.extend(read);
             recorder.record(
                 (subject, counterpart),
                 &Context {
                     measured: Some(&measured),
                     cell: None,
                 },
-                outcome,
-                severity(rule),
-                vec![measured.evidence().clone()],
+                unless_excluded(outcome, exclusion, counterpart),
+                severity,
+                evidence,
             );
         }
         recorder.finish()

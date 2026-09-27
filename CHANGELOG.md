@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Clash severities by class and size.** (#97) `clash` and
+  `clash-matrix` take `severity_by_class` (a severity per class:
+  duplicate, containment, intersection, clearance) and grade
+  intersections by their smallest extent or shared volume (`grade_by`,
+  `severity_grades`): an intersection past a grade's `above` takes the
+  highest such grade's severity, so a 10 mm sliver can be graded below a
+  300 mm intersection. A straddling or unmeasured measure takes the most
+  severe grade it may reach, and the message says so. A matrix cell's own
+  severity wins over the class's; a grade wins over both. A duplicate's
+  finding names what the copies differ in: their types, their measured
+  volumes, and the quantities `duplicate_quantities` names, an unreadable
+  one named as unknown. **Breaking:** definitions bound to `clash` or
+  `clash-matrix` must declare the four new optional parameters, and every
+  duplicate finding's message gains the comparison.
 - **Grouped clash findings.** (#96) `clash` and `clash-matrix` take
   `group_by`: `subject` (every pair of one subject), `type_pair` (every
   pair of the same two object types) or `similar` (pairs of one class and

@@ -10,6 +10,7 @@ mod body_facts;
 mod clash;
 mod clash_groups;
 mod clash_matrix;
+mod clash_severity;
 mod classification_requirement;
 mod comparison;
 mod component_clearance;

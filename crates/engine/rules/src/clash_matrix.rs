@@ -22,6 +22,7 @@ use crate::clash::{
     exclusion_paths, exclusion_property, measure, unless_excluded,
 };
 use crate::clash_groups::{Context, Grouping, Groups, grouping, grouping_parameters};
+use crate::clash_severity::{Severities, parse_severity, severities, severity_parameters};
 use crate::pairs::{prepare, refuse_declaration, severity};
 use crate::selection::{Selection, discipline_of, selector_matches};
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
@@ -143,19 +144,11 @@ struct Declaration<'a> {
     exclude_target_property: Option<PropertyRef<'a>>,
     exclude_same_layer: bool,
     grouping: Option<Grouping<'a>>,
+    severities: Severities,
 }
 
 fn row_severity(row: Row<'_>) -> Result<Option<Severity>, Unavailable> {
-    row.text("severity")?
-        .map(|severity| match severity {
-            "error" => Ok(Severity::Error),
-            "warning" => Ok(Severity::Warning),
-            "info" => Ok(Severity::Info),
-            other => Err(invalid(format!(
-                "severity `{other}` is not `error`, `warning` or `info`"
-            ))),
-        })
-        .transpose()
+    row.text("severity")?.map(parse_severity).transpose()
 }
 
 fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
@@ -210,6 +203,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         exclude_target_property: exclusion_property(&parameters)?,
         exclude_same_layer: parameters.boolean("exclude_same_layer")?.unwrap_or(false),
         grouping: grouping(&parameters)?,
+        severities: severities(&parameters)?,
     })
 }
 
@@ -444,6 +438,7 @@ impl RuleCapability for ClashMatrix {
             ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
         ]);
         parameters.extend(grouping_parameters());
+        parameters.extend(severity_parameters());
         parameters
     }
 
@@ -590,7 +585,14 @@ impl RuleCapability for ClashMatrix {
                     continue;
                 }
             };
-            let outcome = match cell.profile.judge(&measured, counterpart) {
+            let (outcome, severity, read) = declared.severities.report(
+                context,
+                &measured,
+                (subject, counterpart),
+                cell.profile.judge(&measured, counterpart),
+                (cell.severity.clone(), severity(rule)),
+            );
+            let outcome = match outcome {
                 Outcome::Finding(class, message) => Outcome::Finding(
                     class,
                     format!("{message} (clash matrix {})", cell.name(index)),
@@ -606,6 +608,7 @@ impl RuleCapability for ClashMatrix {
                     .iter()
                     .cloned(),
             );
+            evidence.extend(read);
             evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
             evidence.dedup();
             recorder.record(
@@ -615,7 +618,7 @@ impl RuleCapability for ClashMatrix {
                     cell: Some(index),
                 },
                 unless_excluded(outcome, exclusion, counterpart),
-                cell.severity.clone().unwrap_or_else(|| severity(rule)),
+                severity,
                 evidence,
             );
         }

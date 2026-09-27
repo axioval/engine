@@ -759,6 +759,43 @@ fn with_geometry_clashes_of_one_type_pair_are_one_issue() {
     );
 }
 
+/// The crossing walls share a 0.2 m by 0.2 m by 3 m intersection: graded by
+/// its smallest extent, it is an error past 0.1 m and stays at its class's
+/// info below 0.3 m.
+#[test]
+fn with_geometry_clash_severities_grade_the_intersection() {
+    let case = Case::new("clash-severities");
+    let graded = |above: f64| {
+        let (output, result) = case.wall_clash(
+            &crossing_walls(),
+            &json!({
+                "severity_by_class": {"type": "table", "value": [
+                    {"class": {"type": "string", "value": "intersection"},
+                     "severity": {"type": "string", "value": "info"}}]},
+                "grade_by": {"type": "string", "value": "smallest_extent"},
+                "severity_grades": {"type": "table", "value": [
+                    {"above": {"type": "number", "value": above},
+                     "severity": {"type": "string", "value": "error"}}]},
+            }),
+        );
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+        let findings = result["report"]["findings"].as_array().unwrap().clone();
+        assert_eq!(findings.len(), 1, "{result:#}");
+        (
+            findings[0]["severity"].as_str().unwrap().to_owned(),
+            findings[0]["message"].as_str().unwrap().to_owned(),
+        )
+    };
+    let (severity, message) = graded(0.1);
+    assert_eq!(severity, "error", "{message}");
+    assert!(
+        message.ends_with(", graded error by its smallest extent of 0.2000 m"),
+        "{message}"
+    );
+    let (severity, message) = graded(0.3);
+    assert_eq!(severity, "info", "{message}");
+}
+
 /// The two crossing walls, one per file, each in a system of its own file
 /// named `systems.0` and `systems.1`, and on a layer named `A-WALL`.
 fn walls_in_two_files(case: &Case, systems: [&str; 2]) {

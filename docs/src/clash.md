@@ -311,6 +311,7 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 | `exclude_target_property` | property, optional | reached targets also meet when they state the same value of it |
 | `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
 | `group_by`, `per_storey`, `storey_path`, `group_property`, `group_tolerance_metres` | optional | group reported pairs into issues, see [Grouping findings](#grouping-findings) |
+| `severity_by_class`, `grade_by`, `severity_grades`, `duplicate_quantities` | optional | severities by class and size, and what duplicates are compared by, see [Severities and duplicates](#severities-and-duplicates) |
 
 Each pair falls into the first class that holds:
 
@@ -406,6 +407,7 @@ classes, switches, interval handling and exclusions included.
 | `exclude_target_property` | property, optional | as for `clash`, over `system_path` and `exclude_paths` |
 | `exclude_same_layer` | boolean, optional | skip pairs of one model sharing a presentation layer; default false |
 | `group_by`, `per_storey`, `storey_path`, `group_property`, `group_tolerance_metres` | optional | as for `clash`; a group never spans two cells |
+| `severity_by_class`, `grade_by`, `severity_grades`, `duplicate_quantities` | optional | as for `clash`; a cell's `severity` wins over the class's |
 
 Each cell keys both sides of the pair: `subject_*` and `counterpart_*`.
 
@@ -470,6 +472,41 @@ exclusion is off unless switched on.
 A finding carries its cell's severity, ends with the cell it was judged by
 (``(clash matrix cell 0 `architecture x structure`)``), and carries the
 evidence of the category values read to choose it.
+
+### Severities and duplicates
+
+A clash rule's findings need not share the rule's severity. Both `clash`
+and `clash-matrix` take:
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `severity_by_class` | table, optional | rows of `class` (`duplicate`, `containment`, `intersection`, `clearance`) and `severity`; each class once |
+| `grade_by` | string, optional | `smallest_extent` or `volume`: what intersections are graded by; required with `severity_grades` |
+| `severity_grades` | table, optional | rows of `above` (metres, or cubic metres for `volume`; not negative, each once) and `severity` |
+| `duplicate_quantities` | table, optional | rows of `property` and an optional `property_set`: quantities duplicates are compared by |
+
+A finding's severity is, in order: its grade, for an intersection whose
+measure exceeds a grade's `above` (the highest such grade); a clash matrix
+cell's own `severity`; its class's in `severity_by_class`; the rule's. The
+smallest extent is the least of the intersection's x, y and z extents, the
+volume the certified volume the bodies share. With grades above 25 mm
+(`warning`) and 200 mm (`error`), and `info` for intersections, a 10 mm
+sliver is `info` and a 300 mm intersection an `error`. The message ends
+with the grade and the measure (`, graded error by its smallest extent of
+0.3000 m`).
+
+Measures are intervals. One straddling a grade's bound, or an unmeasured
+one, takes the most severe severity it may reach, and says so: a clash is
+never reported milder than it may be.
+
+A duplicate's finding also says what the copies differ in: their types,
+their measured volumes when the two intervals are apart, and each quantity
+`duplicate_quantities` names, read from the source (`; the copies differ
+in type (IFCWALL and IFCSLAB), Qto_WallBaseQuantities.NetSideArea (12.5 and
+12)`), or what they agree in. A quantity read on one copy and absent on the
+other differs. One that cannot be read, or a volume the measurement cannot
+separate, is named as unknown (`; whether they differ in … is unknown`),
+never as the same. The quantities read are evidence of the finding.
 
 ### Grouping findings
 

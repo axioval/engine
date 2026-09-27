@@ -71,17 +71,18 @@ use axioval_engine::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
     FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
     MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
-    MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest,
-    UnreachableRegionEvidence, UnreachableTargetsEvidence,
+    MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest, PathTrace,
+    PathTraceRequest, UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
-use crate::geometry::AxiolidGeometry;
+use crate::geometry::{AxiolidGeometry, triangles};
+use crate::planar::projected_polygons;
 use crate::walkable::{
     Clearance, Floor, MARGIN, ON_SURFACE, Obstacle, Plan, PortalFacts, PortalFrame, REACH,
-    ROUTE_BUDGET, Side, contains, corridor, crosses_mid_line, floor, intersect, join, mid_line,
-    mid_line_barriers, obstacles, obstruction, plan_gap, polygon, separated, sides, subtract,
-    touching, trapezoids, witness,
+    ROUTE_BUDGET, Side, body, contains, corridor, crosses_mid_line, floor, intersect, join,
+    mid_line, mid_line_barriers, obstacles, obstruction, plan_gap, polygon, segment_cover,
+    separated, sides, subtract, touching, trapezoids, union, witness,
 };
 
 /// Relative allowance for the rounding of a summed polyline length.
@@ -801,7 +802,13 @@ impl AxiolidMetricRoutingService {
             return Err("the clear height does not exceed the maximum step".into());
         }
         let prepared = self.prepared();
-        let obstacles = self.obstacles()?;
+        let mut obstacles = self.obstacles()?;
+        // An avoided object obstructs like any other body, even a surface
+        // or portal.
+        obstacles.extend(crate::walkable::obstacles(
+            &self.geometry,
+            request.avoided(),
+        )?);
         let start = Self::place(prepared, request.origin(), step)?;
         let level = Self::level(prepared, Self::seeds(prepared, start, step), step)?;
         let domain = Self::domain(prepared, &level, &obstacles, profile, true)?;
@@ -823,11 +830,17 @@ impl AxiolidMetricRoutingService {
             reasons.extend(level.incomplete.iter().cloned());
             reasons.join("; ")
         };
+        let avoided = request
+            .avoided()
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
         let unreachable = |reason: &str| -> Result<NearestTargetOutcome, String> {
             let completeness = self.completeness(format!(
                 "axiolid:metric-route:nearest:unreachable:{reason}:level=[{}]:targets={}:\
-                 surfaces={}:portals={}:obstacles={}:connectors={}:radius={radius:.6}:\
-                 step={step:.6}:height={height:.6}",
+                 avoided=[{avoided}]:surfaces={}:portals={}:obstacles={}:connectors={}:\
+                 radius={radius:.6}:step={step:.6}:height={height:.6}",
                 level.text,
                 targets.len(),
                 self.surfaces.len(),
@@ -881,7 +894,18 @@ impl AxiolidMetricRoutingService {
             Err(error) => return Err(format!("the nearest target was not found: {error:?}")),
         };
         let point_length = reach.route.length;
-        let lower = (point_length * (1.0 - LENGTH_ROUNDING)).min(straight);
+        // The map misses shortcuts through what the level does not close
+        // over (an unmeasured surface, a connector), so only a closed level
+        // bounds from below by it; otherwise every target's straight line.
+        let lower = if level.complete() {
+            (point_length * (1.0 - LENGTH_ROUNDING)).min(straight)
+        } else {
+            targets
+                .iter()
+                .map(|target| (plan(target) - from).length())
+                .fold(f64::INFINITY, f64::min)
+                .min(point_length)
+        };
         let (target, path) = if radius <= 0.0 {
             (sorted.placed[reach.target], reach.route.polyline)
         } else {
@@ -923,12 +947,18 @@ impl AxiolidMetricRoutingService {
         let evidence = Evidence::exact(
             request.origin().subject().source.clone(),
             format!(
-                "axiolid:metric-route:nearest:level=[{}]:targets={}:placed={}:radius={radius:.6}:\
-                 step={step:.6}:height={height:.6}:lower={:.6}:upper={upper:.6}:witness={}",
+                "axiolid:metric-route:nearest:level=[{}]:targets={}:placed={}:avoided=[{}]:\
+                 radius={radius:.6}:step={step:.6}:height={height:.6}:lower={}:upper={upper:.6}:\
+                 witness={}",
                 level.text,
                 targets.len(),
                 sorted.placed.len(),
-                distance.lower_metres(),
+                avoided,
+                if level.complete() {
+                    format!("point-path={:.6}", distance.lower_metres())
+                } else {
+                    format!("straight-line={:.6}", distance.lower_metres())
+                },
                 if radius <= 0.0 {
                     "point-path"
                 } else {
@@ -1114,6 +1144,76 @@ impl AxiolidMetricRoutingService {
         ))
     }
 
+    /// How much of a polyline lies over each requested object's footprint.
+    fn trace(&self, request: &PathTraceRequest) -> Result<PathTrace, String> {
+        let points: Vec<Point2> = request.waypoints().iter().map(plan).collect();
+        let prepared = self.prepared();
+        let lengths = request
+            .objects()
+            .iter()
+            .map(|object| {
+                let (footprint, sure) = self.footprint(prepared, object)?;
+                let (inside, over) = points.windows(2).fold((0.0, 0.0), |(inside, over), pair| {
+                    let (a, b) = segment_cover(&footprint, pair[0], pair[1]);
+                    (inside + a, over + b)
+                });
+                let inside = if sure {
+                    inside * (1.0 - LENGTH_ROUNDING)
+                } else {
+                    0.0
+                };
+                let over = if over > 0.0 { rounded_up(over) } else { 0.0 };
+                LengthInterval::try_new(inside.min(over), over).map_err(|e| e.to_string())
+            })
+            .collect();
+        let evidence = Evidence::exact(
+            self.source.clone(),
+            format!(
+                "axiolid:metric-route:trace:waypoints={}:length={:.6}:objects=[{}]",
+                points.len(),
+                length(&points),
+                request
+                    .objects()
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+        );
+        PathTrace::try_new(lengths, evidence).map_err(|e| e.to_string())
+    }
+
+    /// An object's plan footprint, and whether it is exact: a declared
+    /// surface's measured floor, a body's projection, or, for a
+    /// tessellation, the plan box enclosing its true body (only an upper
+    /// bound). A bodiless object covers nothing.
+    fn footprint(&self, prepared: &Prepared, object: &ObjectId) -> Result<(Plan, bool), String> {
+        if let Some(floor) = prepared.floors.iter().find(|floor| &floor.id == object) {
+            return Ok((floor.footprint.clone(), true));
+        }
+        if self.geometry.mesh(object).is_none() && self.geometry.has_no_body(object) {
+            return Ok((Plan::empty(), true));
+        }
+        let mesh = body(&self.geometry, object, "traced object")?;
+        if self.geometry.is_tessellated(object) {
+            let ([x0, y0, _], [x1, y1, _]) =
+                self.geometry.enclosing_extent(object).ok_or_else(|| {
+                    format!("{object} has an empty mesh or an invalid chord deviation")
+                })?;
+            // Grown by the margin, so even a flat body has an area.
+            let (x0, y0, x1, y1) = (x0 - MARGIN, y0 - MARGIN, x1 + MARGIN, y1 + MARGIN);
+            let corners = vec![
+                Point2::new(x0, y0),
+                Point2::new(x1, y0),
+                Point2::new(x1, y1),
+                Point2::new(x0, y1),
+            ];
+            let footprint = polygon(corners).map_or_else(Plan::empty, Plan::piece);
+            return Ok((footprint, false));
+        }
+        Ok((union(projected_polygons(&triangles(mesh)))?, true))
+    }
+
     /// The route's waypoints between two given end points, each inner one
     /// grounded on the surface of the level holding it.
     fn waypoints(
@@ -1227,6 +1327,14 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
     ) -> Result<NearestTargetOutcome, MetricRoutingError> {
         self.nearest(request)
             .map_err(MetricRoutingError::Unavailable)
+    }
+
+    fn avoids_objects(&self) -> bool {
+        true
+    }
+
+    fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
+        self.trace(request).map_err(MetricRoutingError::Unavailable)
     }
 
     fn farthest_point(

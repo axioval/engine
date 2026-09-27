@@ -14,9 +14,9 @@ use axioval_engine::{
     FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, GeometryFidelity,
     LengthInterval, MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
     MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, NotEvaluatedReason, ObjectBounds, PlanArea, PlanAreaError,
-    PlanAreaService, PlanAreaServiceHandle, PlanCentre, PlanLength, PlanRectangle, PlanSpan,
-    PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProjectedDistanceEvidence,
+    NearestTargetRequest, NotEvaluatedReason, ObjectBounds, PathTrace, PathTraceRequest, PlanArea,
+    PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanCentre, PlanLength, PlanRectangle,
+    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProjectedDistanceEvidence,
     ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
     ProximityServiceHandle, RectangleOrientation, ServiceRegistry, UnreachableRegionEvidence,
     UnreachableTargetsEvidence, VerticalExtent, VerticalExtentError, VerticalExtentService,
@@ -40,9 +40,11 @@ enum Walk {
     Refused,
 }
 
-/// Areas, diagonals, rectangles, plan distances and walks a test declares.
-/// Walks are keyed by their start (`region` or door) and the sorted names of
-/// their targets.
+/// Areas, diagonals, rectangles, plan distances, walks and traces a test
+/// declares. Walks are keyed by their start (`region` or door) and the
+/// sorted names of their targets, followed by `~` and what they avoid.
+/// Traces are keyed by the walk's start and the object; with none declared
+/// the backend traces nothing.
 #[derive(Default)]
 struct Geometry {
     areas: BTreeMap<String, (f64, f64)>,
@@ -51,6 +53,7 @@ struct Geometry {
     rectangles: BTreeMap<String, (f64, f64, bool)>,
     distances: BTreeMap<(String, String), f64>,
     walks: BTreeMap<(String, String), Walk>,
+    traces: BTreeMap<(String, String), f64>,
 }
 
 impl Geometry {
@@ -80,6 +83,17 @@ impl Geometry {
         self
     }
 
+    /// The walk from `from` to `to` keeping out of `around`.
+    fn detour(self, from: &str, to: &str, around: &str, walk: Walk) -> Self {
+        self.walk(from, &format!("{to}~{around}"), walk)
+    }
+
+    /// `metres` of the walk from `from` lie over `object`.
+    fn trace(mut self, from: &str, object: &str, metres: f64) -> Self {
+        self.traces.insert((from.into(), object.into()), metres);
+        self
+    }
+
     fn register(self, services: &mut ServiceRegistry) {
         let shared = Arc::new(self);
         services
@@ -99,13 +113,18 @@ impl Geometry {
             .unwrap();
     }
 
-    fn lookup(&self, from: &ObjectId, targets: &[MetricPoint]) -> Walk {
+    fn lookup(&self, from: &ObjectId, targets: &[MetricPoint], avoided: &[ObjectId]) -> Walk {
         let mut names: Vec<&str> = targets
             .iter()
             .map(|target| target.subject().local_id.as_str())
             .collect();
         names.sort_unstable();
-        let key = (from.local_id.clone(), names.join(","));
+        let mut to = names.join(",");
+        if !avoided.is_empty() {
+            let avoided: Vec<&str> = avoided.iter().map(|id| id.local_id.as_str()).collect();
+            to = format!("{to}~{}", avoided.join(","));
+        }
+        let key = (from.local_id.clone(), to);
         *self
             .walks
             .get(&key)
@@ -257,15 +276,21 @@ impl MetricRoutingService for Geometry {
     ) -> Result<NearestTargetOutcome, MetricRoutingError> {
         assert!(request.profile().radius_metres() == 0.0);
         let from = request.origin().subject();
-        match self.lookup(from, request.targets()) {
-            Walk::Between(lower, upper) => Ok(NearestTargetOutcome::Reached(
-                NearestTargetEvidence::try_new(
-                    0,
-                    LengthInterval::try_new(lower, upper)?,
-                    vec![request.origin().clone(), request.targets()[0].clone()],
-                    exact(format!("nearest:{}", from.local_id)),
-                )?,
-            )),
+        match self.lookup(from, request.targets(), request.avoided()) {
+            Walk::Between(lower, upper) => {
+                // Every point stands at the same centre, so the walk goes
+                // half its length out and back.
+                let [x, y, z] = request.origin().coordinates_metres();
+                let turn = MetricPoint::try_new(from.clone(), [x + upper / 2.0, y, z])?;
+                Ok(NearestTargetOutcome::Reached(
+                    NearestTargetEvidence::try_new(
+                        0,
+                        LengthInterval::try_new(lower, upper)?,
+                        vec![request.origin().clone(), turn, request.targets()[0].clone()],
+                        exact(format!("nearest:{}", from.local_id)),
+                    )?,
+                ))
+            }
             Walk::Unreachable => Ok(NearestTargetOutcome::Unreachable(
                 UnreachableTargetsEvidence::new(
                     request.clone(),
@@ -278,6 +303,32 @@ impl MetricRoutingService for Geometry {
         }
     }
 
+    fn avoids_objects(&self) -> bool {
+        true
+    }
+
+    /// A declared length is exact; an object not declared for the walk's
+    /// start is unmeasured.
+    fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
+        if self.traces.is_empty() {
+            return Err(MetricRoutingError::Unavailable("no walk is traced".into()));
+        }
+        let from = &request.waypoints()[0].subject().local_id;
+        let lengths = request
+            .objects()
+            .iter()
+            .map(|object| {
+                self.traces
+                    .get(&(from.clone(), object.local_id.clone()))
+                    .ok_or_else(|| format!("{object} is not measured"))
+                    .and_then(|metres| {
+                        LengthInterval::exact(*metres).map_err(|error| error.to_string())
+                    })
+            })
+            .collect();
+        PathTrace::try_new(lengths, exact(format!("trace:{from}")))
+    }
+
     fn farthest_point(
         &self,
         request: &FarthestPointRequest,
@@ -285,7 +336,7 @@ impl MetricRoutingService for Geometry {
         assert!(request.profile().radius_metres() == 0.0);
         let region = request.region();
         let witness = MetricPoint::try_new(region.clone(), [19.0, 0.0, 0.0])?;
-        match self.lookup(region, request.targets()) {
+        match self.lookup(region, request.targets(), &[]) {
             Walk::Between(lower, upper) => Ok(FarthestPointOutcome::Bounded(
                 FarthestPointEvidence::try_new(
                     LengthInterval::try_new(lower, upper)?,
@@ -876,6 +927,51 @@ fn declarations_that_cannot_be_judged_are_refused() {
 }
 
 #[test]
+fn walked_passages_that_cannot_be_walked_are_refused() {
+    // Walked passages need passages and doors to walk from, and are never
+    // also declared.
+    let base = || exits(kind("door"));
+    for parameters in [
+        with(
+            base(),
+            vec![
+                uses(&[("area_per_occupant", number(2.0))]),
+                widths(),
+                ("walked_passages", ParameterValue::Boolean { value: true }),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("area_per_occupant", number(2.0))]),
+                passage_widths(),
+                ("passage_selector", selector(kind("corridor"))),
+                ("walked_passages", ParameterValue::Boolean { value: true }),
+            ],
+        ),
+        with(
+            base(),
+            vec![
+                uses(&[("area_per_occupant", number(2.0))]),
+                passage_widths(),
+                ("passage_selector", selector(kind("corridor"))),
+                ("passage_path", strings(&["opens:forward"])),
+                ("door_path", strings(&["bounds:backward"])),
+                ("door_selector", selector(kind("door"))),
+                ("walked_passages", ParameterValue::Boolean { value: true }),
+            ],
+        ),
+    ] {
+        let evaluation = evaluate(model(), Geometry::default(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)],
+            "{evaluation:?}"
+        );
+    }
+}
+
+#[test]
 fn without_the_routing_service_travel_is_not_evaluated() {
     let evaluation = model().evaluate(
         &EscapeRoute,
@@ -1332,5 +1428,252 @@ fn an_exit_door_opening_into_the_space_is_found() {
         unevaluated(&evaluation).is_empty(),
         "{:?}",
         unevaluated(&evaluation)
+    );
+}
+
+/// Office `office` and hall `hall` leave by their doors `d1` and `d2`
+/// towards exit `x1`, 2 m wide; corridor `c` is 1.2 m wide.
+fn office_and_hall() -> Model {
+    Model::default()
+        .object("office", "space")
+        .object("hall", "space")
+        .object("d1", "door")
+        .object("d2", "door")
+        .object("x1", "exit")
+        .object("c", "corridor")
+        .edge("bounds", "d1", "office")
+        .edge("bounds", "d2", "hall")
+        .edge("serves", "x1", "office")
+        .edge("serves", "x1", "hall")
+        .value("c", "Corridor", "ClearWidth", metres(1.2))
+        .value("x1", "Access", "ClearWidth", metres(2.0))
+}
+
+fn doors_and_exits() -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "clear_width_property",
+            property(Some("Access"), "ClearWidth"),
+        ),
+        ("exit_path", strings(&["serves:backward"])),
+        ("exit_selector", selector(kind("exit"))),
+        ("door_path", strings(&["bounds:backward"])),
+        ("door_selector", selector(kind("door"))),
+        ("walking_height", number(2.0)),
+        ("walking_step", number(0.02)),
+    ]
+}
+
+#[test]
+fn a_door_walk_counts_the_metres_it_walks_on_a_section_by_its_factor() {
+    // The walk from `d1` is 12 to 12.1 m, and the stair lies 5 m from the
+    // door, so it may be crossed: without a trace up to 24.2 m. The hall's
+    // 5 m walk is within 20 m at any factor.
+    let run = |on_stair: Option<f64>| {
+        let mut geometry = Geometry::default()
+            .walk("d1", "x1", Walk::Between(12.0, 12.1))
+            .walk("d2", "x1", Walk::Between(5.0, 5.0))
+            .distance("d1", "st", 5.0);
+        if let Some(metres) = on_stair {
+            geometry = geometry.trace("d1", "st", metres);
+        }
+        office_and_hall().object("st", "stair").evaluate_with(
+            &EscapeRoute,
+            &rule(
+                CAPABILITY,
+                kind("space"),
+                with(
+                    doors_and_exits(),
+                    vec![
+                        (
+                            "uses",
+                            ParameterValue::Table {
+                                value: vec![
+                                    [
+                                        ("spaces".to_owned(), selector(kind("space"))),
+                                        ("maximum_travel".to_owned(), number(20.0)),
+                                        ("route_start".to_owned(), string("door")),
+                                    ]
+                                    .into_iter()
+                                    .collect(),
+                                ],
+                            },
+                        ),
+                        sections(&[("stair", 2.0, None)]),
+                    ],
+                ),
+            ),
+            |services| geometry.register(services),
+        )
+    };
+    // 3 m of the walk on the stair: at most 12.1 + 3 = 15.1 m, within 20 m.
+    let evaluation = run(Some(3.0));
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    // 9 m on it: at most 21.1 m, which neither passes nor fails.
+    let evaluation = run(Some(9.0));
+    assert!(evaluation.findings().is_empty());
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains(
+            "between 12 and 21.1 m walking, counting the walk on section 0 (stair) up to 2 times"
+        ),
+        "{message}"
+    );
+    // The walk not on the stair at all counts plain.
+    let evaluation = run(Some(0.0));
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
+    // A backend that cannot trace leaves today's bound: up to 24.2 m.
+    let evaluation = run(None);
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("between 12 and 24.2 m walking"),
+        "{message}"
+    );
+}
+
+/// 40 m² of office (20 occupants) and 300 m² of hall (150) at 2 m² each;
+/// the corridor needs 1 m for up to 20 occupants and 1.5 m for up to 200.
+fn walked(geometry: Geometry) -> CapabilityEvaluation {
+    walked_with(office_and_hall(), geometry)
+}
+
+fn walked_with(model: Model, geometry: Geometry) -> CapabilityEvaluation {
+    model.evaluate_with(
+        &EscapeRoute,
+        &rule(
+            CAPABILITY,
+            kind("space"),
+            with(
+                doors_and_exits(),
+                vec![
+                    uses(&[("area_per_occupant", number(2.0))]),
+                    passage_widths(),
+                    ("passage_selector", selector(kind("corridor"))),
+                    (
+                        "passage_width_property",
+                        property(Some("Corridor"), "ClearWidth"),
+                    ),
+                    ("walked_passages", ParameterValue::Boolean { value: true }),
+                ],
+            ),
+        ),
+        |services| {
+            geometry
+                .area("office", 40.0, 40.0)
+                .area("hall", 300.0, 300.0)
+                .register(services);
+        },
+    )
+}
+
+/// The office's walk crosses the corridor, and no walk round it reaches
+/// the exit.
+fn office_through_the_corridor() -> Geometry {
+    Geometry::default()
+        .walk("d1", "x1", Walk::Between(10.0, 10.0))
+        .trace("d1", "c", 6.0)
+        .detour("d1", "x1", "c", Walk::Unreachable)
+        .walk("d2", "x1", Walk::Between(8.0, 8.0))
+}
+
+#[test]
+fn a_passage_every_shortest_walk_crosses_carries_its_occupants() {
+    // The hall's walk keeps off the corridor (its door lies 5 m from it
+    // and it 4 m from the exit, more than the hall's 8 m walk), so only the
+    // office's 20 occupants rely on it: 1 m is enough.
+    let evaluation = walked(
+        office_through_the_corridor()
+            .trace("d2", "c", 0.0)
+            .distance("d2", "c", 5.0)
+            .distance("c", "x1", 4.0),
+    );
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+
+    // The hall's walk crosses it too, and the walk round it is 9 m or
+    // more, longer than the hall's 8 m: every shortest walk crosses it.
+    let evaluation = walked(office_through_the_corridor().trace("d2", "c", 3.0).detour(
+        "d2",
+        "x1",
+        "c",
+        Walk::Between(9.0, 9.5),
+    ));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "c".into(),
+            format!(
+                "passage {} is 1.2 m wide (stated clear width); 170 occupant(s) relying on it \
+                 (from {}, {}) require at least 1.5 m",
+                id("c"),
+                id("hall"),
+                id("office")
+            )
+        )]
+    );
+    let finding = &evaluation.findings()[0];
+    assert_eq!(finding.related, vec![id("hall"), id("office")]);
+    for locator in ["nearest:d1", "cut-off:d1", "nearest:d2"] {
+        assert!(
+            finding.evidence.iter().any(|item| item.locator == locator),
+            "{locator}: {finding:?}"
+        );
+    }
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+}
+
+#[test]
+fn a_passage_on_only_one_of_two_shortest_walks_is_not_relied_on_surely() {
+    // The hall's witness walk crosses the corridor, but a walk round it is
+    // just as short: its occupants may or may not rely on it, so 20 to 170
+    // occupants need 1 to 1.5 m, and 1.2 m decides nothing.
+    let evaluation = walked(office_through_the_corridor().trace("d2", "c", 3.0).detour(
+        "d2",
+        "x1",
+        "c",
+        Walk::Between(8.0, 8.0),
+    ));
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("c".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains(&format!(
+            "between 20 and 170 occupants relying on it (from {}; perhaps also from {})",
+            id("office"),
+            id("hall")
+        )),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_passage_no_walk_surely_crosses_is_never_found_too_narrow() {
+    // Whether a walk round the corridor exists is unknown: with every
+    // detour refused, both spaces only perhaps rely on it, and a 0.8 m
+    // corridor, too narrow for either load, is still no finding.
+    let evaluation = walked_with(
+        office_and_hall().value("c", "Corridor", "ClearWidth", metres(0.8)),
+        Geometry::default()
+            .walk("d1", "x1", Walk::Between(10.0, 10.0))
+            .walk("d2", "x1", Walk::Between(8.0, 8.0))
+            .trace("d1", "c", 6.0)
+            .trace("d2", "c", 3.0)
+            .detour("d1", "x1", "c", Walk::Refused)
+            .detour("d2", "x1", "c", Walk::Refused),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("no walk surely crosses it")
+            && message.contains(&format!("perhaps from {}, {}", id("hall"), id("office"))),
+        "{message}"
     );
 }

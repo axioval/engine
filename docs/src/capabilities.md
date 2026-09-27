@@ -594,6 +594,7 @@ occupants.
 | `clear_width_property` | property reference | an exit's stated clear width, a length |
 | `passage_selector` | selector | the passages (corridors); checks their widths |
 | `passage_path` | string list | from a space to the passages it relies on; needs `passage_selector` |
+| `walked_passages` | boolean | the passages are those the walks from each space's doors cross, not declared; needs `passage_selector`, `door_path`, `door_selector` and a walking profile, and excludes `passage_path` |
 | `passage_width_property` | property reference | a passage's stated clear width, a length; needs `passage_selector` |
 | `exit_door_direction` | boolean | every exit door must open in the direction of escape, out of the space |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
@@ -607,15 +608,24 @@ occupants.
   part of the space that reaches no exit (proven with complete evidence) is
   a finding at a point of it. See [Metric routing](./metric-routing.md#many-targets).
 - **Multiplied sections**: a metre walked on a `sections` object counts
-  `factor` times. Metric routing answers the plain walk, not the sections it
-  crosses, so the multiplied travel is bracketed: at least the plain walk's
-  lower bound (every factor is at least one), at most its upper bound times
-  the largest factor of a section the walk may cross. A walk of at most `U`
-  metres stays within `U` of its start in plan, so a section whose
-  horizontal distance (`ProximityService`) from the space, or from the door
-  it starts at, surely exceeds `U` is not crossed; a section that is not
-  measured, or undecided, may be. A travel within the maximum only at the
-  plain length is therefore not evaluated, never a pass. A row with
+  `factor` times; where sections overlap, the largest factor. The travel
+  is the least multiplied length of any walk to an exit, bracketed: at
+  least the plain walk's lower bound (every factor is at least one), at
+  most the multiplied length of any one walk. From a door, the routing
+  answer names a walk no longer than the plain upper bound `U`, and the
+  metric-routing service traces how much of it lies over each section's
+  footprint (`trace_path`); the bound is `U` plus, per section, the length
+  over it times its factor less one, a section whose length is unknown
+  counting the whole walk. Otherwise, and whenever it is smaller, the bound
+  is `U` times the largest factor of a section the walk may cross: a walk
+  of at most `U` metres stays within `U` of its start in plan, so a section
+  whose horizontal distance (`ProximityService`) from the space, or from
+  the door it starts at, surely exceeds `U` is not crossed; a section that
+  is not measured, or undecided, may be. The farthest point's answer is a
+  point, not a walk (a walk from one point bounds that point only), so from
+  the farthest point only the second bound applies. A travel within the
+  maximum only at the plain length is therefore not evaluated unless the
+  traced walk passes, never a pass on a guess. A row with
   `shared_by` multiplies only a section at least that many checked spaces
   (including those the rule's selector cannot decide) reach along
   `section_path`; a space whose sections cannot be read may reach any.
@@ -640,6 +650,31 @@ occupants.
   `area_per_occupant`, its use or selection is undecided, its footprint is
   not measured) leaves that passage not evaluated; so does a space whose
   passages cannot be read, for every passage.
+- **Walked passages** (`walked_passages`): instead of declaring them, the
+  passages of a checked space are derived from the walks out of each of its
+  doors (`door_path`, `door_selector`) to its nearest exit. The walk the
+  routing answer names is one shortest walk, not necessarily the only one,
+  so a passage on it is not yet one the occupants rely on. With `U` the
+  plain walk's upper bound to the sure exits, a passage is **surely**
+  crossed from a door when the walk to every possible exit that keeps out of
+  it (`nearest_target` with the passage avoided) is longer than `U`, or
+  reaches no exit under complete evidence: then every shortest walk to
+  whichever exits there are enters it, ties included. Only passages the
+  named walk lies over (`trace_path`) are tried. A passage is **off** every
+  shortest walk from a door when the plan distance from the door to it and
+  on from it to the nearest possible exit (`ProximityService`) exceeds `U`;
+  every other passage **may** be crossed. A space surely relies on a
+  passage every door's walks surely cross; it may rely on one any door's
+  walks may cross; a door that cannot be walked, a space without doors or
+  with unreadable exits may use any passage. A passage carries the loads
+  of the spaces surely relying on it at least and of those that may at
+  most, so ties and unknowns widen the load rather than guess it. A
+  finding needs a width below what every load in that interval requires,
+  and at least one space surely relying on the passage; a passage no walk
+  surely crosses is never too narrow. The space itself is its own passage
+  where `passage_selector` picks it, as when declared. Each detour needs a
+  backend that walks around objects (`avoids_objects`); one that does not,
+  or refuses, proves no passage sure.
 
 Every measure is an interval, and a verdict stands only when what is
 unknown cannot change it. The travel is bounded from above through the exits
@@ -663,11 +698,10 @@ is undecided matters only when it swings into the space. Exits are the ones
 towards its own exits; a door further along the route is judged from the
 space it leaves.
 
-Not checked yet: which passages a measured walk actually crosses (the
-routing answer names no traversed objects, so passages are declared) and
-the width of the route between passages. Travel is
-measured for a point: a body's width is checked at the exits and passages,
-not along the walk.
+Not checked yet: the passages walked from the farthest point of a space
+rather than from its doors, and the width of the route between passages.
+Travel is measured for a point: a body's width is checked at the exits and
+passages, not along the walk.
 ### Openings at corridor ends
 
 `corridor-end-openings` finds windows (or any opening the rule selects) in the wall a selected corridor ends at. The rule selects the corridors, typically spaces of a corridor type.

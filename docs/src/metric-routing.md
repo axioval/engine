@@ -55,6 +55,30 @@ requested region, a claimed convergence must hold for the requested
 tolerance (`InconsistentResponse` otherwise), and an unreachable verdict
 must name the request it answers.
 
+## Walks around objects, and walks traced over objects
+
+Two further default methods let a consumer establish what a walk crosses
+without a backend naming "the" objects of a route, which would be one
+shortest walk among possibly several.
+
+- `NearestTargetRequest::with_avoided(objects)` asks for the nearest target
+  by walks that keep out of the named objects: each is an obstacle wherever
+  its body stands in the walking band, even a surface or portal. A backend
+  answers such a request only if `avoids_objects()` says so; the default is
+  `false`, and the handle then refuses the request (`Unavailable`) rather
+  than let a backend answer the plain walk. The answer's lower bound bounds
+  every walk avoiding the objects, so a lower bound beyond the plain walk's
+  upper bound, or an unreachable verdict, proves that every shortest walk
+  enters one of them, however many shortest walks there are.
+- `trace_path(PathTraceRequest)`: how much of a polyline (a route's
+  waypoints) lies over each requested object's plan footprint, in plan,
+  whatever the heights. Each `PathTrace` length is an interval whose upper
+  bound counts every part that may lie over the object, along its boundary
+  included, and whose lower bound only parts surely inside; an object whose
+  footprint is unknown answers why. The handle checks one answer per
+  requested object (sorted, deduplicated) and none whose lower bound
+  exceeds the polyline's own length. The default refuses.
+
 The engine contract contains no mesh, B-rep, IFC entity, Axiolid kernel, OpenCascade, or vendor type.
 
 ## The Axiolid backend
@@ -110,8 +134,11 @@ it, such as a door to the outside. A target placed off a closed level is
 unreachable; one the service cannot place, or placed off a level that is not
 closed, counts only by its straight-line distance, which no route beats.
 
-- **Nearest target.** The map's point distance is the lower bound. For a
-  point body it is also the upper bound: the kernel's path stays in the
+- **Nearest target.** On a closed level the map's point distance is the
+  lower bound; on a level that is not closed (a declared surface or portal
+  unmeasured, a connector leaving it) the map may miss a shortcut, so the
+  lower bound is the straight line to the nearest target. For a point
+  body the map's distance is also the upper bound: the kernel's path stays in the
   closed free region (axiolid/kernel#187, #189: routes no longer run
   across gaps along collinear walls or squeeze between touching
   obstacles). For a body with a radius the upper bound is a proven sweep
@@ -134,6 +161,19 @@ closed, counts only by its straight-line distance, which no route beats.
   barriers (`CrossingObstacles`) and a map over `axiolid-route`'s vertex
   budget refuse as well.
 
+- **Avoided objects.** The backend avoids objects: each avoided object's
+  body joins the obstacles, cut to the walking band as any obstacle is, so
+  a surface or a door avoided closes the free region it would add. A
+  tessellated or unmeasured avoided body refuses, as an obstacle does.
+- **Traces.** A declared surface's footprint is its measured floor; any
+  other body's is the union of its triangles projected to plan, and a
+  tessellation's the plan box enclosing its true body grown by the margin
+  (0.1 mm), which bounds only from above (lower bound zero). A bodiless
+  object lies under nothing. Each segment is cut where it meets the
+  footprint's boundary; a piece counts in the upper bound when its middle
+  lies inside or within the margin of the boundary, in the lower bound when
+  it lies inside and farther than the margin from it.
+
 These need `axiolid-route` 0.3.2 or later (`distance_map`, `farthest_point`);
 the workspace requires 0.3.3.
 
@@ -147,8 +187,11 @@ See [Distances and connections between spaces](./capabilities.md#distances-and-c
 
 `escape-route` measures travel to the nearest exit with `farthest_point`
 from a space's walkable area, or with `nearest_target` from its doors.
-Neither answer names the objects a walk crosses, so where metres on a stair
-or a shared section count several times, the multiplied travel is bracketed
-between the plain walk and its upper bound times the largest factor of a
-section within that bound's reach in plan. See
+Where metres on a stair or a shared section count several times, the
+multiplied travel from a door is bounded from above by the answer's own
+walk, traced over the sections; from the farthest point, whose answer is a
+point and not a walk, by the plain upper bound times the largest factor of
+a section within that bound's reach in plan. With `walked_passages`, a
+passage is one every shortest walk from a door crosses when the walk around
+it is longer than the plain walk. See
 [Escape routes](./capabilities.md#escape-routes).

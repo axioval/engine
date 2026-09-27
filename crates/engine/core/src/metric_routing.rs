@@ -358,11 +358,20 @@ pub enum MetricRouteOutcome {
 }
 
 /// The distance from one point to the nearest of several targets.
+///
+/// With [`Self::with_avoided`], every walk keeps out of the named objects:
+/// each is an obstacle wherever its body stands in the walking band, even a
+/// surface or portal the backend would otherwise walk on or through. The
+/// answer then bounds the shortest walk avoiding them all, so a lower bound
+/// beyond the plain walk's upper bound proves that every shortest walk
+/// enters one of them. Only a backend that [avoids
+/// objects](MetricRoutingService::avoids_objects) is asked.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NearestTargetRequest {
     origin: MetricPoint,
     targets: Vec<MetricPoint>,
     profile: MobilityProfile,
+    avoided: Vec<ObjectId>,
 }
 
 impl NearestTargetRequest {
@@ -379,7 +388,17 @@ impl NearestTargetRequest {
             origin,
             targets,
             profile,
+            avoided: Vec::new(),
         })
+    }
+
+    /// The same request, walking around `avoided` (sorted, deduplicated).
+    #[must_use]
+    pub fn with_avoided(mut self, mut avoided: Vec<ObjectId>) -> Self {
+        avoided.sort();
+        avoided.dedup();
+        self.avoided = avoided;
+        self
     }
 
     /// Where every route starts.
@@ -395,6 +414,11 @@ impl NearestTargetRequest {
     /// Mobility envelope.
     pub fn profile(&self) -> MobilityProfile {
         self.profile
+    }
+
+    /// The objects every walk keeps out of, sorted; empty for a plain walk.
+    pub fn avoided(&self) -> &[ObjectId] {
+        &self.avoided
     }
 }
 
@@ -652,6 +676,95 @@ pub enum FarthestPointOutcome {
     Unreachable(UnreachableRegionEvidence),
 }
 
+/// How much of a walked polyline lies over each of several objects.
+///
+/// The polyline is a route's waypoints, such as a nearest-target answer's;
+/// its length and every part of it are measured in plan, as routes are. A
+/// part lies over an object where it lies inside the object's plan
+/// footprint, whatever the heights: a walk under a stair lies over it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathTraceRequest {
+    waypoints: Vec<MetricPoint>,
+    objects: Vec<ObjectId>,
+}
+
+impl PathTraceRequest {
+    /// Creates a request; the objects are sorted and deduplicated, and the
+    /// answer follows that order.
+    pub fn try_new(
+        waypoints: Vec<MetricPoint>,
+        mut objects: Vec<ObjectId>,
+    ) -> Result<Self, MetricRoutingError> {
+        if waypoints.is_empty() {
+            return Err(MetricRoutingError::EmptyRouteEvidence);
+        }
+        objects.sort();
+        objects.dedup();
+        Ok(Self { waypoints, objects })
+    }
+
+    /// The polyline, in walking order.
+    pub fn waypoints(&self) -> &[MetricPoint] {
+        &self.waypoints
+    }
+
+    /// The objects measured, sorted.
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.objects
+    }
+
+    /// The polyline's length in plan, in metres.
+    pub fn plan_length_metres(&self) -> f64 {
+        self.waypoints
+            .windows(2)
+            .map(|pair| {
+                let ([ax, ay, _], [bx, by, _]) =
+                    (pair[0].coordinates_metres(), pair[1].coordinates_metres());
+                (bx - ax).hypot(by - ay)
+            })
+            .sum()
+    }
+}
+
+/// The length of a polyline over each requested object, in request order.
+///
+/// Each length is an interval: its upper bound counts every part that may
+/// lie over the object, along the boundary of its footprint included; its
+/// lower bound only the parts surely inside. An object whose footprint is
+/// unknown answers why instead.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathTrace {
+    lengths: Vec<Result<LengthInterval, String>>,
+    evidence: Evidence,
+}
+
+impl PathTrace {
+    /// Validates exact, reviewable provenance.
+    pub fn try_new(
+        lengths: Vec<Result<LengthInterval, String>>,
+        evidence: Evidence,
+    ) -> Result<Self, MetricRoutingError> {
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(MetricRoutingError::InexactRouteEvidence);
+        }
+        Ok(Self { lengths, evidence })
+    }
+
+    /// The length over each object, in request order, or why it is unknown.
+    pub fn lengths(&self) -> &[Result<LengthInterval, String>] {
+        &self.lengths
+    }
+
+    /// Measurement provenance.
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// Relative slack for a backend's rounding when a traced length is checked
+/// against the polyline's own length.
+const TRACE_ROUNDING: f64 = 1e-9;
+
 /// Backend-neutral metric routing interface implemented by trusted host code.
 pub trait MetricRoutingService: Send + Sync + 'static {
     /// Evaluates one route request or explicitly refuses unavailable evidence.
@@ -680,6 +793,23 @@ pub trait MetricRoutingService: Send + Sync + 'static {
         let _ = request;
         Err(MetricRoutingError::Unavailable(
             "this backend does not measure farthest points".into(),
+        ))
+    }
+
+    /// Whether [`Self::nearest_target`] honours
+    /// [`NearestTargetRequest::avoided`]. The default is `false`, and the
+    /// handle then refuses a request avoiding anything rather than let the
+    /// backend answer the plain walk.
+    fn avoids_objects(&self) -> bool {
+        false
+    }
+
+    /// Measures how much of a polyline lies over each requested object. The
+    /// default refuses.
+    fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
+        let _ = request;
+        Err(MetricRoutingError::Unavailable(
+            "this backend does not trace paths over objects".into(),
         ))
     }
 }
@@ -719,10 +849,18 @@ impl MetricRoutingServiceHandle {
     /// Executes a nearest-target query and checks the answer is bound to it:
     /// the target exists, the route starts at the origin and ends at it, and
     /// an unreachable verdict names this request.
+    ///
+    /// A request avoiding objects is refused unless the backend [avoids
+    /// objects](MetricRoutingService::avoids_objects).
     pub fn nearest_target(
         &self,
         request: &NearestTargetRequest,
     ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        if !request.avoided().is_empty() && !self.0.avoids_objects() {
+            return Err(MetricRoutingError::Unavailable(
+                "this backend does not walk around objects".into(),
+            ));
+        }
         let outcome = self.0.nearest_target(request)?;
         match &outcome {
             NearestTargetOutcome::Reached(reached) => {
@@ -776,6 +914,28 @@ impl MetricRoutingServiceHandle {
             }
         }
         Ok(outcome)
+    }
+}
+
+impl MetricRoutingServiceHandle {
+    /// Traces a polyline over objects and checks the answer is bound to it:
+    /// one length per requested object, none surely longer than the
+    /// polyline itself.
+    pub fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
+        let trace = self.0.trace_path(request)?;
+        if trace.lengths().len() != request.objects().len() {
+            return Err(MetricRoutingError::InconsistentResponse);
+        }
+        let most = request.plan_length_metres() * (1.0 + TRACE_ROUNDING) + TRACE_ROUNDING;
+        if trace
+            .lengths()
+            .iter()
+            .flatten()
+            .any(|length| length.lower_metres() > most)
+        {
+            return Err(MetricRoutingError::InconsistentResponse);
+        }
+        Ok(trace)
     }
 }
 

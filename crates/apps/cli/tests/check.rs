@@ -6726,6 +6726,124 @@ fn with_geometry_a_door_swinging_into_the_corridor_is_found() {
     );
 }
 
+/// Office #19 (x 0..4, y 0..4) opens through door #39 (x 4..4.2) onto
+/// corridor #29 (x 4.2..6.2, y 0..10), whose exit #49 (1 m clear) leads
+/// out at its north end. The spaces are 0.2 m apart, so the office's only
+/// way out is through the corridor.
+fn office_behind_a_corridor() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    let boundary = |id: u32, space: u32, door: u32| {
+        format!(
+            "#{id}=IFCRELSPACEBOUNDARY('{id:022}',$,$,$,#{space},#{door},$,.PHYSICAL.,.INTERNAL.);\n"
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Corridor'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#29),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Exit'),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceCommon',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#49),#211);\n\
+         #220=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(1.),$);\n\
+         #221=IFCPROPERTYSET('0000000000000000000221',$,'Access',$,(#220));\n\
+         #222=IFCRELDEFINESBYPROPERTIES('0000000000000000000222',$,$,$,(#49),#221);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [5.2, 5.0, 0.0], [2.0, 10.0, 3.0], space),
+        placed_box(30, [4.1, 2.0, 0.0], [0.2, 1.0, 2.1], door),
+        placed_box(40, [5.2, 10.1, 0.0], [1.0, 0.2, 2.1], door),
+        boundary(300, 19, 39),
+        boundary(301, 29, 39),
+        boundary(302, 29, 49),
+    )
+}
+
+#[test]
+fn with_geometry_a_corridor_every_walk_crosses_carries_the_office_behind_it() {
+    // The office's walk from its door crosses the corridor, and no walk
+    // round it reaches the exit: the corridor carries the office's 8
+    // occupants and its own 10. 18 need 3 m, and the corridor is at most
+    // 2 m wide.
+    let case = Case::new("geometry-escape-route-walked-passages");
+    let reference = |value: &str| {
+        json!({"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+               "property": "axioval:example.ifc.reference", "operator": "equals",
+               "value": {"type": "string", "value": value}})
+    };
+    let (output, result) = case.geometry_rule(
+        &office_behind_a_corridor(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        entity("space"),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"spaces": {"type": "selector", "value": entity("space")},
+                 "area_per_occupant": {"type": "number", "value": 2.0}},
+            ]},
+            "widths": {"type": "table", "value": [
+                {"occupants": {"type": "integer", "value": 10},
+                 "width": {"type": "number", "value": 0.5},
+                 "passage_width": {"type": "number", "value": 1.0}},
+                {"occupants": {"type": "integer", "value": 100},
+                 "width": {"type": "number", "value": 0.5},
+                 "passage_width": {"type": "number", "value": 3.0}},
+            ]},
+            "clear_width_property": {"type": "propertyReference",
+                                     "property": "axioval:example.ifc.clear-width",
+                                     "propertySet": "axioval:example.ifc.pset-access"},
+            "exit_path": {"type": "stringList", "value": [
+                "IfcRelSpaceBoundary:forward", "IfcRelSpaceBoundary:backward",
+                "IfcRelSpaceBoundary:forward"]},
+            "exit_selector": {"type": "selector", "value":
+                {"kind": "allOf", "operands": [entity("door"), reference("Exit")]}},
+            "door_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:forward"]},
+            "door_selector": {"type": "selector", "value": entity("door")},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+            "passage_selector": {"type": "selector", "value":
+                {"kind": "allOf", "operands": [entity("space"), reference("Corridor")]}},
+            "walked_passages": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#29".to_owned(),
+            "passage ifc-step:model.ifc/#29 is at most 2 m wide (the shorter side of the \
+             rectangle enclosing its footprint); 18 occupant(s) relying on it (from \
+             ifc-step:model.ifc/#19, ifc-step:model.ifc/#29) require at least 3 m"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    // The proof is the walk round the corridor, which reaches no exit.
+    let text = result.to_string();
+    assert!(
+        text.contains("axiolid:metric-route:nearest:unreachable:")
+            && text.contains(":avoided=[ifc-step:model.ifc/#29]:"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn with_geometry_exit_doors_opening_against_the_escape_are_found() {
     let case = Case::new("geometry-exit-door-direction");

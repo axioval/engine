@@ -7,7 +7,7 @@ use axioval_engine::{
     FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
     MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
     MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, ServiceRegistry, ThresholdVerdict,
+    NearestTargetRequest, PathTrace, PathTraceRequest, ServiceRegistry, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -377,4 +377,140 @@ fn a_backend_without_many_target_search_refuses_rather_than_answers() {
         service.farthest_point(&request),
         Err(MetricRoutingError::Unavailable(_))
     ));
+}
+
+/// Answers every trace with `lengths`, and says whether it walks around
+/// objects.
+struct Tracer {
+    lengths: Vec<Result<LengthInterval, String>>,
+    avoids: bool,
+}
+
+impl MetricRoutingService for Tracer {
+    fn route(
+        &self,
+        _request: &MetricRouteRequest,
+    ) -> Result<MetricRouteOutcome, MetricRoutingError> {
+        Err(MetricRoutingError::Unavailable(
+            "pairs are not routed".into(),
+        ))
+    }
+
+    fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        Ok(NearestTargetOutcome::Reached(
+            NearestTargetEvidence::try_new(
+                0,
+                LengthInterval::try_new(2.0, 2.5)?,
+                vec![request.origin().clone(), request.targets()[0].clone()],
+                evidence("nearest"),
+            )?,
+        ))
+    }
+
+    fn avoids_objects(&self) -> bool {
+        self.avoids
+    }
+
+    fn trace_path(&self, _request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
+        PathTrace::try_new(self.lengths.clone(), evidence("trace"))
+    }
+}
+
+#[test]
+fn a_walk_around_objects_is_asked_only_of_a_backend_that_avoids_them() {
+    let request = NearestTargetRequest::try_new(
+        point("cad", "a", 0.0),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+    )
+    .unwrap();
+    let avoiding = request.clone().with_avoided(vec![
+        object("cad", "z"),
+        object("cad", "c"),
+        object("cad", "z"),
+    ]);
+    assert_eq!(avoiding.avoided(), [object("cad", "c"), object("cad", "z")]);
+    assert!(request.avoided().is_empty());
+    let handle = |avoids| {
+        MetricRoutingServiceHandle::new(Arc::new(Tracer {
+            lengths: Vec::new(),
+            avoids,
+        }))
+    };
+    // The plain walk is asked of any backend; a detour only of one that
+    // walks around objects, never answered as the plain walk.
+    assert!(handle(false).nearest_target(&request).is_ok());
+    assert!(matches!(
+        handle(false).nearest_target(&avoiding),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
+    assert!(handle(true).nearest_target(&avoiding).is_ok());
+}
+
+#[test]
+fn a_trace_answers_each_object_and_none_longer_than_the_path() {
+    // 3 m, then 4 m: 7 m in plan, whatever the heights.
+    let waypoints = vec![
+        MetricPoint::try_new(object("cad", "a"), [0.0, 0.0, 0.0]).unwrap(),
+        MetricPoint::try_new(object("cad", "room"), [3.0, 0.0, 0.0]).unwrap(),
+        MetricPoint::try_new(object("cad", "b"), [3.0, 4.0, 1.0]).unwrap(),
+    ];
+    assert_eq!(
+        PathTraceRequest::try_new(Vec::new(), vec![object("cad", "s")]),
+        Err(MetricRoutingError::EmptyRouteEvidence)
+    );
+    let request = PathTraceRequest::try_new(
+        waypoints,
+        vec![object("cad", "t"), object("cad", "s"), object("cad", "t")],
+    )
+    .unwrap();
+    assert_eq!(request.objects(), [object("cad", "s"), object("cad", "t")]);
+    assert!((request.plan_length_metres() - 7.0).abs() < 1e-12);
+    let handle = |lengths: Vec<Result<LengthInterval, String>>| {
+        MetricRoutingServiceHandle::new(Arc::new(Tracer {
+            lengths,
+            avoids: false,
+        }))
+    };
+    let within = LengthInterval::try_new(2.0, 3.0).unwrap();
+    let trace = handle(vec![Ok(within), Err("unmeasured".into())])
+        .trace_path(&request)
+        .unwrap();
+    assert_eq!(trace.lengths()[0], Ok(within));
+    assert_eq!(
+        handle(vec![Ok(within)]).trace_path(&request),
+        Err(MetricRoutingError::InconsistentResponse)
+    );
+    // An upper bound past the path is only conservative; a lower bound past
+    // it is impossible.
+    assert!(
+        handle(vec![
+            Ok(LengthInterval::try_new(6.0, 8.0).unwrap()),
+            Ok(within)
+        ])
+        .trace_path(&request)
+        .is_ok()
+    );
+    assert_eq!(
+        handle(vec![Ok(LengthInterval::exact(7.5).unwrap()), Ok(within)]).trace_path(&request),
+        Err(MetricRoutingError::InconsistentResponse)
+    );
+    assert!(matches!(
+        MetricRoutingServiceHandle::new(Arc::new(DeterministicRouter)).trace_path(&request),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
+    assert_eq!(
+        PathTrace::try_new(
+            Vec::new(),
+            Evidence {
+                source: source("geometry"),
+                locator: "trace".into(),
+                exact: false,
+            }
+        ),
+        Err(MetricRoutingError::InexactRouteEvidence)
+    );
 }

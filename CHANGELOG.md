@@ -176,6 +176,34 @@ All notable changes are documented here. This project follows Semantic Versionin
   unknown height or a swing that only may overlap leave the landing not
   evaluated. **Breaking:** definitions bound to `ramp-geometry` must
   declare the new optional parameter `landing_door_swing`.
+- **Escape routes: passages from the walked route, and multiplied travel
+  split per section.** (Closes #79) Metric routing gains two default
+  methods. `NearestTargetRequest::with_avoided` asks for the nearest target
+  by walks keeping out of named objects, answered only by a backend whose
+  `avoids_objects()` is true (the handle refuses it otherwise); its lower
+  bound beyond the plain walk's upper bound, or an unreachable verdict,
+  proves every shortest walk enters one of them, ties included.
+  `trace_path` (`PathTraceRequest`, `PathTrace`) measures how much of a
+  polyline lies over each object's plan footprint, as an interval, the
+  handle checking one answer per object and none longer than the path.
+  The Axiolid backend answers both: avoided bodies join the obstacles, and
+  a trace cuts each segment at the footprint's boundary (a tessellation's
+  plan box bounds only from above). `escape-route` with the new
+  `walked_passages` derives each space's passages from the walks out of
+  its doors: surely a passage the walk round which is longer than the
+  plain walk from every door, perhaps any passage not ruled off every
+  shortest walk by plan distances, so a passage carries its sure loads at
+  least and its possible ones at most, and is found too narrow only with
+  one space surely relying on it. Declared passages stay. From a door, the
+  multiplied travel is bounded from above by the answer's own walk traced
+  over the sections (plain upper bound plus, per section, its length times
+  its factor less one) where that is tighter than the largest factor; the
+  farthest point keeps the old bound.
+  **Fixed:** the Axiolid nearest-target lower bound on a level that is not
+  closed (an unmeasured surface or portal, a connector leaving it) is the
+  straight line, not the map's distance, which may miss a shortcut.
+  **Breaking:** definitions bound to `escape-route` must declare the new
+  optional parameter `walked_passages`.
 - **Exit doors open in the direction of escape.** (Refs #79)
   `escape-route` gains `exit_door_direction`: every exit door `exit_path`
   reaches must open out of the checked space. Its leaves come from the

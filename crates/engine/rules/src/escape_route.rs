@@ -32,14 +32,17 @@
 //! **Multiplied sections.** Each row of `sections` names objects (`objects`,
 //! a stair, say) on which a walked metre counts `factor` times, at least
 //! one; with `shared_by`, only a section that many checked spaces reach
-//! along `section_path` multiplies. Metric routing measures the plain walk
-//! and not which sections it crosses, so the multiplied travel is
-//! bracketed: at least the plain walk's lower bound, at most its upper bound
-//! times the largest factor of a section the walk may cross. A walk of at
-//! most `U` metres stays within `U` of its start in plan, so a section whose
-//! horizontal distance from the start (the space, or the door) surely
-//! exceeds `U` is left out; every other one, and one that might be shared,
-//! may be crossed.
+//! along `section_path` multiplies; where sections overlap, the largest
+//! factor counts. The multiplied travel, the least multiplied length of any
+//! walk, is bracketed: at least the plain walk's lower bound, at most the
+//! multiplied length of any one walk. From a door the routing answer names
+//! a walk no longer than the plain upper bound `U`, traced over the
+//! sections: `U` plus each section's length on it times its factor less
+//! one. Otherwise, or where smaller, `U` times the largest factor of a
+//! section the walk may cross: a walk of at most `U` metres stays within
+//! `U` of its start in plan, so a section whose horizontal distance from
+//! the start (the space, or the door) surely exceeds `U` is left out; every
+//! other one, and one that might be shared, may be crossed.
 //!
 //! **Passages.** With `passage_selector`, the passages of a checked space
 //! are the `passage_selector` objects `passage_path` reaches from it, and
@@ -52,6 +55,16 @@
 //! `area_per_occupant`, an undecided use or selection, an unmeasured
 //! footprint) leaves every passage it may serve not evaluated.
 //!
+//! **Walked passages.** With `walked_passages`, a space's passages come
+//! from the walks out of its doors instead: the walk a routing answer names
+//! is one shortest walk among perhaps several, so it only picks candidates.
+//! A passage is surely relied on when, from every door, the walk to every
+//! possible exit keeping out of it is longer than the plain walk to the
+//! sure exits, or reaches none; perhaps relied on unless the plan distances
+//! from the door to it and on to the nearest exit already exceed the plain
+//! walk. A passage carries its sure loads at least and its possible ones at
+//! most, and needs one space surely relying on it to be found too narrow.
+//!
 //! **Exit door direction.** With `exit_door_direction`, every exit door
 //! must open in the direction of escape: out of the space. Its leaves come
 //! from the object-frame service and which side the space lies on from the
@@ -61,18 +74,19 @@
 //! skipped; a door without a hinged leaf, unknown leaves, and a space
 //! neither probe lies in are not evaluated.
 //!
-//! Not checked: which passages a measured walk crosses (the routing answer
-//! names no traversed objects).
+//! Not checked: passages walked from the farthest point rather than the
+//! doors.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeavesError, FarthestPointOutcome,
     FarthestPointRequest, FreeSpaceServiceHandle, MetricPoint, MetricRoutingServiceHandle,
     MobilityProfile, NearestTargetOutcome, NearestTargetRequest, NotEvaluatedReason,
-    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, PlanArea, PlanSpanServiceHandle,
-    ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
-    TableColumn,
+    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, PathTraceRequest, PlanArea,
+    PlanSpanServiceHandle, ProximityProjection, ProximityRequest, ProximityServiceHandle,
+    RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension};
@@ -159,6 +173,9 @@ struct Passages<'a> {
     path: Option<Traversal<'a>>,
     selector: &'a Selector,
     width: Option<PropertyRef<'a>>,
+    /// Whether the passages are those the walks from each space's doors
+    /// cross, rather than declared along `path`.
+    walked: bool,
 }
 
 struct Declaration<'a> {
@@ -313,6 +330,14 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     }
     let (sections, section_path) = sections(&parameters, &uses)?;
     let passages = passages(&parameters, &widths)?;
+    if passages.as_ref().is_some_and(|passages| passages.walked)
+        && (doors.is_none() || profile.is_none())
+    {
+        return Err(invalid(
+            "`walked_passages` needs `door_path`, `door_selector`, `walking_height` and \
+             `walking_step`",
+        ));
+    }
     Ok(Declaration {
         uses,
         widths,
@@ -397,15 +422,25 @@ fn passages<'a>(
 ) -> Result<Option<Passages<'a>>, Unavailable> {
     let path = parameters.strings("passage_path")?;
     let width = parameters.property("passage_width_property")?;
+    let walked = parameters.boolean("walked_passages")?.unwrap_or(false);
     let Some(selector) = parameters.selector("passage_selector")? else {
-        if path.is_some() || width.is_some() || widths.iter().any(|row| row.passage.is_some()) {
+        if path.is_some()
+            || width.is_some()
+            || walked
+            || widths.iter().any(|row| row.passage.is_some())
+        {
             return Err(invalid(
-                "`passage_path`, `passage_width_property` and `passage_width` need \
-                 `passage_selector`",
+                "`passage_path`, `walked_passages`, `passage_width_property` and \
+                 `passage_width` need `passage_selector`",
             ));
         }
         return Ok(None);
     };
+    if walked && path.is_some() {
+        return Err(invalid(
+            "`walked_passages` and `passage_path` exclude each other",
+        ));
+    }
     if widths.is_empty() || widths.iter().any(|row| row.passage.is_none()) {
         return Err(invalid(
             "`passage_selector` needs every row of `widths` to state `passage_width`",
@@ -415,6 +450,7 @@ fn passages<'a>(
         path: path.map(Traversal::path).transpose()?,
         selector,
         width,
+        walked,
     }))
 }
 
@@ -443,6 +479,7 @@ impl RuleCapability for EscapeRoute {
                 ParameterType::PropertyReference,
             ),
             ParameterDescriptor::optional("exit_door_direction", ParameterType::Boolean),
+            ParameterDescriptor::optional("walked_passages", ParameterType::Boolean),
         ]
     }
 
@@ -473,6 +510,7 @@ impl RuleCapability for EscapeRoute {
             doors,
             sections: possible_sections(context, rule, &declared),
             passages,
+            walks: RefCell::new(BTreeMap::new()),
         };
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
         let mut served = Served::default();
@@ -663,9 +701,20 @@ struct Reliance {
     most: u64,
     /// Why more occupants may rely on it than `most`.
     unbounded: Vec<String>,
-    /// The checked spaces it serves.
+    /// The checked spaces it surely serves, counted in `least`.
     spaces: Vec<ObjectId>,
+    /// The checked spaces it may serve, counted only in `most`.
+    perhaps: Vec<ObjectId>,
     evidence: Vec<Evidence>,
+}
+
+/// The passages a space's walks cross.
+#[derive(Default)]
+struct Walked {
+    /// Crossed by every shortest walk from every door, with the proof.
+    sure: BTreeMap<ObjectId, Vec<Evidence>>,
+    /// Perhaps crossed, and not surely.
+    perhaps: BTreeSet<ObjectId>,
 }
 
 /// The occupants relying on every passage reached.
@@ -749,6 +798,18 @@ enum Width {
     Unknown(String),
 }
 
+/// A space's exits placed as walking targets.
+struct Placed {
+    /// The sure exits with a point.
+    sure: Vec<Target>,
+    /// Every possible exit with a point.
+    all: Vec<Target>,
+    /// Whether every possible exit has a point.
+    complete: bool,
+    /// Why an exit has no point, or may not be one.
+    doubts: Vec<Unavailable>,
+}
+
 /// A start (a door, or none for the farthest point), whether it surely is
 /// one, and its travel bounded from below and from above.
 type Measured = (Option<ObjectId>, bool, [Result<Travel, Unavailable>; 2]);
@@ -760,6 +821,8 @@ struct Travel {
     upper: f64,
     /// Where the lower bound is attained, for a finding's message.
     at: Option<[f64; 2]>,
+    /// A walk no longer than `upper`, where the routing answer names one.
+    path: Option<Vec<MetricPoint>>,
     evidence: Vec<Evidence>,
 }
 
@@ -770,10 +833,18 @@ impl Travel {
             lower,
             upper: f64::INFINITY,
             at: None,
+            path: None,
             evidence: Vec::new(),
         }
     }
 }
+
+/// A walk from a door to the nearest of some exits, perhaps around an
+/// object: `(door, exits, avoided)`.
+type WalkKey = (ObjectId, Vec<ObjectId>, Option<ObjectId>);
+
+/// An exit and the point a walk reaches it at.
+type Target = (ObjectId, MetricPoint);
 
 struct Judge<'r, 'c> {
     context: &'r RuleContext<'c>,
@@ -783,6 +854,8 @@ struct Judge<'r, 'c> {
     doors: Option<Candidates<'c>>,
     sections: Vec<Section>,
     passages: Option<Candidates<'c>>,
+    /// Walks already measured: travel and walked passages share them.
+    walks: RefCell<BTreeMap<WalkKey, Result<Travel, Unavailable>>>,
 }
 
 /// What bounds a clear width from above where none is stated.
@@ -940,6 +1013,36 @@ impl Judge<'_, '_> {
         else {
             return None;
         };
+        if declared.walked {
+            let walked = self.walked(space, candidates);
+            let empty = Vec::new();
+            for (passage, proof) in walked
+                .sure
+                .iter()
+                .map(|(passage, proof)| (passage, Some(proof)))
+                .chain(walked.perhaps.iter().map(|passage| (passage, None)))
+            {
+                let reliance = served.passages.entry(passage.clone()).or_default();
+                match (load, proof) {
+                    (Ok(load), Some(_)) => {
+                        reliance.least += load.least;
+                        reliance.most += load.most;
+                        reliance.evidence.push(load.area.evidence().clone());
+                    }
+                    (Ok(load), None) => reliance.most += load.most,
+                    (Err(why), _) => reliance.unbounded.push(format!("{space}: {why}")),
+                }
+                if proof.is_some() {
+                    reliance.spaces.push(space.clone());
+                } else {
+                    reliance.perhaps.push(space.clone());
+                }
+                reliance
+                    .evidence
+                    .extend(proof.unwrap_or(&empty).iter().cloned());
+            }
+            return None;
+        }
         let mut reached = Vec::new();
         let mut evidence = Vec::new();
         if candidates.universe.iter().any(|object| object.id == *space) {
@@ -977,6 +1080,174 @@ impl Judge<'_, '_> {
         None
     }
 
+    /// The passages `space`'s occupants rely on, from the walks out of its
+    /// doors: surely those every shortest walk from every door crosses, and
+    /// perhaps every other one not proven off each door's shortest walks.
+    /// What cannot be walked may use any passage.
+    fn walked(&self, space: &ObjectId, candidates: &Candidates<'_>) -> Walked {
+        let all: BTreeSet<ObjectId> = candidates
+            .universe
+            .iter()
+            .map(|object| object.id.clone())
+            .collect();
+        let mut walked = Walked::default();
+        // A space that is a passage carries its own occupants.
+        if all.contains(space) {
+            walked.sure.insert(space.clone(), Vec::new());
+        }
+        let anything = |mut walked: Walked| {
+            walked.perhaps = all
+                .iter()
+                .filter(|passage| !walked.sure.contains_key(*passage))
+                .cloned()
+                .collect();
+            walked
+        };
+        let (Some(routes), Some(profile), Some((traversal, _)), Some(doors)) = (
+            self.context.services.get::<MetricRoutingServiceHandle>(),
+            self.declared.profile,
+            self.declared.doors.as_ref(),
+            self.doors.as_ref(),
+        ) else {
+            return anything(walked);
+        };
+        let Ok(exits) = self.reached(&self.declared.exits, &self.exits, space) else {
+            return anything(walked);
+        };
+        let doors = match self.reached(traversal, doors, space) {
+            Ok(doors) if !doors.sure.is_empty() || !doors.maybe.is_empty() => doors,
+            _ => return anything(walked),
+        };
+        let placed = self.placed(&exits);
+        let exits: Vec<&ObjectId> = exits.sure.iter().chain(&exits.maybe).collect();
+        let mut sure: Option<BTreeMap<ObjectId, Vec<Evidence>>> = None;
+        let mut perhaps = BTreeSet::new();
+        for door in doors.sure.iter().chain(&doors.maybe) {
+            let (door_sure, door_perhaps) =
+                self.door_passages(routes, profile, door, &exits, &placed, &all);
+            perhaps.extend(door_perhaps);
+            sure = Some(match sure {
+                None => door_sure,
+                Some(mut known) => {
+                    known.retain(|passage, _| door_sure.contains_key(passage));
+                    for (passage, proof) in door_sure {
+                        if let Some(cited) = known.get_mut(&passage) {
+                            cited.extend(proof);
+                        }
+                    }
+                    known
+                }
+            });
+        }
+        for (passage, proof) in sure.unwrap_or_default() {
+            walked.sure.entry(passage).or_default().extend(proof);
+        }
+        walked.perhaps = perhaps
+            .into_iter()
+            .filter(|passage| !walked.sure.contains_key(passage))
+            .collect();
+        walked
+    }
+
+    /// The passages every shortest walk from `door` to the nearest exit
+    /// surely crosses, with the proof, and those it may cross.
+    ///
+    /// The plain walk to the sure exits is at most `U` long. A passage is
+    /// crossed by every shortest walk to whichever exits there are when the
+    /// walk to every possible exit around it is longer than `U`, or reaches
+    /// none: such a walk to the actual exits is longer than the shortest one.
+    /// A passage is off every shortest walk when the plan distance from the
+    /// door to it and on from it to the nearest possible exit already
+    /// exceeds `U`. The walk the routing answer names crosses a passage it
+    /// lies over; only those are tried around.
+    #[allow(clippy::type_complexity)]
+    fn door_passages(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        profile: MobilityProfile,
+        door: &ObjectId,
+        exits: &[&ObjectId],
+        placed: &Placed,
+        all: &BTreeSet<ObjectId>,
+    ) -> (BTreeMap<ObjectId, Vec<Evidence>>, BTreeSet<ObjectId>) {
+        let mut sure = BTreeMap::new();
+        let walk = if placed.sure.is_empty() {
+            None
+        } else {
+            self.nearest(routes, door, &placed.sure, None, profile).ok()
+        };
+        let Some(walk) = walk.filter(|walk| walk.upper.is_finite()) else {
+            return (sure, all.clone());
+        };
+        let crossed: Option<BTreeSet<ObjectId>> = walk.path.as_ref().and_then(|path| {
+            let request =
+                PathTraceRequest::try_new(path.clone(), all.iter().cloned().collect()).ok()?;
+            let trace = routes.trace_path(&request).ok()?;
+            Some(
+                request
+                    .objects()
+                    .iter()
+                    .zip(trace.lengths())
+                    .filter(|(_, length)| {
+                        length
+                            .as_ref()
+                            .map_or(true, |length| length.upper_metres() > 0.0)
+                    })
+                    .map(|(passage, _)| passage.clone())
+                    .collect(),
+            )
+        });
+        let perhaps: BTreeSet<ObjectId> = all
+            .iter()
+            .filter(|passage| {
+                crossed
+                    .as_ref()
+                    .is_some_and(|crossed| crossed.contains(*passage))
+                    || !self.off_every_walk(door, passage, exits, walk.upper)
+            })
+            .cloned()
+            .collect();
+        if placed.complete {
+            for passage in crossed.as_ref().unwrap_or(&perhaps) {
+                if let Ok(around) = self.nearest(routes, door, &placed.all, Some(passage), profile)
+                    && around.lower > walk.upper
+                {
+                    let mut proof = walk.evidence.clone();
+                    proof.extend(around.evidence);
+                    sure.insert(passage.clone(), proof);
+                }
+            }
+        }
+        (sure, perhaps)
+    }
+
+    /// Whether every walk from `door` through `passage` to any of `exits`
+    /// is surely longer than `upper`, by the plan distances alone.
+    fn off_every_walk(
+        &self,
+        door: &ObjectId,
+        passage: &ObjectId,
+        exits: &[&ObjectId],
+        upper: f64,
+    ) -> bool {
+        let Some(proximity) = self.context.services.get::<ProximityServiceHandle>() else {
+            return false;
+        };
+        let apart = |from: &ObjectId, to: &ObjectId| {
+            if from == to {
+                return 0.0;
+            }
+            ProximityRequest::projected(from.clone(), to.clone(), ProximityProjection::Horizontal)
+                .and_then(|request| proximity.measure_distance(&request))
+                .map_or(0.0, |distance| distance.interval_metres().0)
+        };
+        let onward = exits
+            .iter()
+            .map(|exit| apart(passage, exit))
+            .fold(f64::INFINITY, f64::min);
+        apart(door, passage) + onward > upper
+    }
+
     /// Judges every passage a checked space reaches, adding the outcome to
     /// that of the passage where it is a checked space itself.
     fn judge_passages(&self, served: Served, results: &mut Vec<(ObjectId, String, Checked)>) {
@@ -992,6 +1263,7 @@ impl Judge<'_, '_> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn passage(
         &self,
         passage: &ObjectId,
@@ -1032,11 +1304,20 @@ impl Judge<'_, '_> {
                 return;
             }
         };
-        let spaces: Vec<String> = reliance.spaces.iter().map(ToString::to_string).collect();
+        let names =
+            |spaces: &[ObjectId]| spaces.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let from = match (reliance.spaces.is_empty(), reliance.perhaps.is_empty()) {
+            (_, true) => format!("from {}", names(&reliance.spaces).join(", ")),
+            (true, false) => format!("perhaps from {}", names(&reliance.perhaps).join(", ")),
+            (false, false) => format!(
+                "from {}; perhaps also from {}",
+                names(&reliance.spaces).join(", "),
+                names(&reliance.perhaps).join(", ")
+            ),
+        };
         let basis = format!(
-            "{} relying on it (from {}) require at least {} m",
+            "{} relying on it ({from}) require at least {} m",
             occupants(least, most),
-            spaces.join(", "),
             shown(low, high)
         );
         let (what, cited) = match self.width(passage, declared.width, Bound::ShortSide) {
@@ -1075,6 +1356,13 @@ impl Judge<'_, '_> {
         if let Some(why) = candidates.undecided.get(passage) {
             checked.doubts.push(incomplete(format!(
                 "whether {passage} is a passage is undecided ({why}), and it may be too narrow"
+            )));
+            return;
+        }
+        // A passage no one surely walks through requires no width.
+        if reliance.spaces.is_empty() {
+            checked.doubts.push(incomplete(format!(
+                "{what}, and no walk surely crosses it; {basis}"
             )));
             return;
         }
@@ -1396,39 +1684,25 @@ impl Judge<'_, '_> {
             return;
         };
         // What could change the verdict, reported only if it stays open.
-        let mut doubts: Vec<Unavailable> = Vec::new();
-        let mut sure: Vec<(ObjectId, MetricPoint)> = Vec::new();
-        let mut all: Vec<(ObjectId, MetricPoint)> = Vec::new();
-        let mut placed = true;
-        for exit in exits.sure.iter().chain(&exits.maybe) {
-            match representative_point(self.context, exit) {
-                Ok((point, _)) => {
-                    if exits.sure.contains(exit) {
-                        sure.push((exit.clone(), point.clone()));
-                    }
-                    all.push((exit.clone(), point));
-                }
-                Err(unavailable) => {
-                    placed = false;
-                    doubts.push(unavailable);
-                }
-            }
-        }
-        doubts.extend(
-            exits
-                .doubts(&self.exits, "an exit")
-                .into_iter()
-                .map(incomplete),
-        );
+        let Placed {
+            sure,
+            all,
+            complete: placed,
+            mut doubts,
+        } = self.placed(exits);
         let bounds = |door: Option<&ObjectId>| -> [Result<Travel, Unavailable>; 2] {
-            let measure = |targets: &[(ObjectId, MetricPoint)]| {
+            let measure = |targets: &[Target]| {
                 if targets.is_empty() {
                     return Ok(Travel::unbounded(f64::INFINITY));
                 }
-                let targets = targets.iter().map(|(_, point)| point.clone()).collect();
                 match door {
-                    None => Self::farthest(routes, &space.id, targets, profile),
-                    Some(door) => self.nearest(routes, door, targets, profile),
+                    None => Self::farthest(
+                        routes,
+                        &space.id,
+                        targets.iter().map(|(_, point)| point.clone()).collect(),
+                        profile,
+                    ),
+                    Some(door) => self.nearest(routes, door, targets, None, profile),
                 }
             };
             let upper = measure(&sure);
@@ -1484,8 +1758,10 @@ impl Judge<'_, '_> {
         // start whose every route is too long, a pass every possible start
         // within the maximum.
         // Sections multiply the walk by at least one, so the plain walk's
-        // lower bound stands; its upper bound grows by the largest factor
-        // of a section it may cross.
+        // lower bound stands. Its upper bound grows by the largest factor
+        // of a section it may cross, or, where the routing answer names a
+        // walk, to that walk's own multiplied length: any walk's cost
+        // bounds the least cost from above.
         let mut most = 0.0_f64;
         let mut multiplied = 1.0_f64;
         let mut crossed = BTreeSet::new();
@@ -1494,11 +1770,20 @@ impl Judge<'_, '_> {
             match upper {
                 Ok(upper) => {
                     let from = start.as_ref().unwrap_or(&space.id);
-                    let (factor, kinds) = self.factor(from, upper.upper, maximum);
-                    most = most.max(upper.upper * factor);
-                    if !kinds.is_empty() {
-                        multiplied = multiplied.max(factor);
-                        crossed.extend(kinds);
+                    let (factor, mut kinds) = self.factor(from, upper.upper, maximum);
+                    let mut bound = upper.upper * factor;
+                    if bound > maximum
+                        && let Some(path) = &upper.path
+                        && let Some((cost, traced)) = self.walked_cost(routes, path, upper.upper)
+                        && cost < bound
+                    {
+                        bound = cost;
+                        kinds = traced;
+                    }
+                    most = most.max(bound);
+                    for kind in kinds {
+                        multiplied = multiplied.max(self.declared.sections[kind].factor);
+                        crossed.insert(kind);
                     }
                 }
                 Err(unavailable) => {
@@ -1586,6 +1871,38 @@ impl Judge<'_, '_> {
         )));
     }
 
+    /// The representative points of `exits`: of the sure ones, of all, and
+    /// whether every one has a point.
+    fn placed(&self, exits: &Reached) -> Placed {
+        let mut placed = Placed {
+            sure: Vec::new(),
+            all: Vec::new(),
+            complete: true,
+            doubts: Vec::new(),
+        };
+        for exit in exits.sure.iter().chain(&exits.maybe) {
+            match representative_point(self.context, exit) {
+                Ok((point, _)) => {
+                    if exits.sure.contains(exit) {
+                        placed.sure.push((exit.clone(), point.clone()));
+                    }
+                    placed.all.push((exit.clone(), point));
+                }
+                Err(unavailable) => {
+                    placed.complete = false;
+                    placed.doubts.push(unavailable);
+                }
+            }
+        }
+        placed.doubts.extend(
+            exits
+                .doubts(&self.exits, "an exit")
+                .into_iter()
+                .map(incomplete),
+        );
+        placed
+    }
+
     /// The largest factor a walk of at most `reach` metres from `from` may
     /// count its metres by, and the rows of `sections` it may cross.
     ///
@@ -1631,6 +1948,50 @@ impl Judge<'_, '_> {
         (factor, kinds)
     }
 
+    /// The multiplied length of `path`, a walk of at most `plain` metres,
+    /// bounded from above, and the rows of `sections` it may cross; `None`
+    /// when the walk cannot be traced.
+    ///
+    /// Each metre counts by the largest factor of the sections it lies on,
+    /// so the excess over the plain length is at most the sum, over the
+    /// sections, of the length on each times its factor less one. A
+    /// section whose length is unknown may hold the whole walk.
+    fn walked_cost(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        path: &[MetricPoint],
+        plain: f64,
+    ) -> Option<(f64, BTreeSet<usize>)> {
+        let objects = self
+            .sections
+            .iter()
+            .map(|section| section.object.clone())
+            .collect();
+        let request = PathTraceRequest::try_new(path.to_vec(), objects).ok()?;
+        let trace = routes.trace_path(&request).ok()?;
+        let mut cost = plain;
+        let mut kinds = BTreeSet::new();
+        for (object, length) in request.objects().iter().zip(trace.lengths()) {
+            let over = length
+                .as_ref()
+                .map_or(plain, |length| length.upper_metres().min(plain));
+            if over <= 0.0 {
+                continue;
+            }
+            let mut factor = 1.0_f64;
+            for section in self
+                .sections
+                .iter()
+                .filter(|section| section.object == *object)
+            {
+                factor = factor.max(section.factor);
+                kinds.insert(section.kind);
+            }
+            cost += (factor - 1.0) * over;
+        }
+        Some((cost, kinds))
+    }
+
     /// The farthest point of `space` from the nearest of `targets`.
     fn farthest(
         routes: &MetricRoutingServiceHandle,
@@ -1647,6 +2008,9 @@ impl Judge<'_, '_> {
                     lower: bounded.distance().lower_metres(),
                     upper: bounded.distance().upper_metres(),
                     at: Some([x, y]),
+                    // The witness is a point, not a walk: a walk from one
+                    // point bounds only that point's travel.
+                    path: None,
                     evidence: vec![bounded.evidence().clone()],
                 })
             }
@@ -1656,6 +2020,7 @@ impl Judge<'_, '_> {
                     lower: f64::INFINITY,
                     upper: f64::INFINITY,
                     at: Some([x, y]),
+                    path: None,
                     evidence: vec![cut_off.completeness().evidence().clone()],
                 })
             }
@@ -1665,17 +2030,42 @@ impl Judge<'_, '_> {
         }
     }
 
-    /// The walk from `door` to the nearest of `targets`.
+    /// The walk from `door` to the nearest of `targets`, keeping out of
+    /// `avoided` where given. Each walk is measured once.
     fn nearest(
         &self,
         routes: &MetricRoutingServiceHandle,
         door: &ObjectId,
-        targets: Vec<MetricPoint>,
+        targets: &[Target],
+        avoided: Option<&ObjectId>,
         profile: MobilityProfile,
     ) -> Result<Travel, Unavailable> {
-        let (origin, cited) = representative_point(self.context, door)?;
-        let request = NearestTargetRequest::try_new(origin, targets, profile)
-            .map_err(|error| incomplete(error.to_string()))?;
+        let key = (
+            door.clone(),
+            targets.iter().map(|(exit, _)| exit.clone()).collect(),
+            avoided.cloned(),
+        );
+        if let Some(known) = self.walks.borrow().get(&key) {
+            return known.clone();
+        }
+        let walked = Self::walk(self.context, routes, door, targets, avoided, profile);
+        self.walks.borrow_mut().insert(key, walked.clone());
+        walked
+    }
+
+    fn walk(
+        context: &RuleContext<'_>,
+        routes: &MetricRoutingServiceHandle,
+        door: &ObjectId,
+        targets: &[Target],
+        avoided: Option<&ObjectId>,
+        profile: MobilityProfile,
+    ) -> Result<Travel, Unavailable> {
+        let (origin, cited) = representative_point(context, door)?;
+        let points = targets.iter().map(|(_, point)| point.clone()).collect();
+        let request = NearestTargetRequest::try_new(origin, points, profile)
+            .map_err(|error| incomplete(error.to_string()))?
+            .with_avoided(avoided.into_iter().cloned().collect());
         match routes.nearest_target(&request) {
             Ok(NearestTargetOutcome::Reached(reached)) => {
                 let mut evidence = cited;
@@ -1684,6 +2074,7 @@ impl Judge<'_, '_> {
                     lower: reached.shortest_distance().lower_metres(),
                     upper: reached.shortest_distance().upper_metres(),
                     at: None,
+                    path: Some(reached.waypoints().to_vec()),
                     evidence,
                 })
             }
@@ -1694,12 +2085,16 @@ impl Judge<'_, '_> {
                     lower: f64::INFINITY,
                     upper: f64::INFINITY,
                     at: None,
+                    path: None,
                     evidence,
                 })
             }
-            Err(error) => Err(incomplete(format!(
-                "walking from door {door} to an exit: {error}"
-            ))),
+            Err(error) => Err(incomplete(match avoided {
+                None => format!("walking from door {door} to an exit: {error}"),
+                Some(avoided) => {
+                    format!("walking from door {door} to an exit around {avoided}: {error}")
+                }
+            })),
         }
     }
 }

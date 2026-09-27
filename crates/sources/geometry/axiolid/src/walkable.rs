@@ -601,6 +601,65 @@ pub(crate) fn line_intervals(
     t0: f64,
     t1: f64,
 ) -> Vec<(f64, f64)> {
+    let cuts = line_cuts(region, origin, direction, t0, t1);
+    let mut intervals: Vec<(f64, f64)> = Vec::new();
+    for pair in cuts.windows(2) {
+        let middle = origin + direction * f64::midpoint(pair[0], pair[1]);
+        if !contains(region, middle) {
+            continue;
+        }
+        match intervals.last_mut() {
+            Some(last) if (last.1 - pair[0]).abs() <= 1e-12 => last.1 = pair[1],
+            _ => intervals.push((pair[0], pair[1])),
+        }
+    }
+    intervals
+}
+
+/// How much of the segment `a`–`b` lies over `region`: the length whose
+/// points lie inside it farther than [`MARGIN`] from its boundary, and the
+/// length inside it or within [`MARGIN`] of its boundary. The first never
+/// exceeds the exact length inside, the second never falls short of the
+/// length inside or along the boundary.
+pub(crate) fn segment_cover(region: &Plan, a: Point2, b: Point2) -> (f64, f64) {
+    let direction = b - a;
+    let length = direction.length();
+    if length <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let (mut inside, mut over) = (0.0, 0.0);
+    for pair in line_cuts(region, a, direction, 0.0, 1.0).windows(2) {
+        let middle = a + direction * f64::midpoint(pair[0], pair[1]);
+        let part = (pair[1] - pair[0]) * length;
+        let near = rings(region)
+            .flat_map(edges)
+            .any(|edge| point_segment_distance(middle, edge) <= MARGIN);
+        let within = contains(region, middle);
+        if within || near {
+            over += part;
+        }
+        if within && !near {
+            inside += part;
+        }
+    }
+    (inside, over)
+}
+
+fn point_segment_distance(point: Point2, (start, end): (Point2, Point2)) -> f64 {
+    let along = end - start;
+    let length = along.length_squared();
+    let t = if length <= 0.0 {
+        0.0
+    } else {
+        ((point - start).dot(along) / length).clamp(0.0, 1.0)
+    };
+    (point - (start + along * t)).length()
+}
+
+/// The parameters in `[t0, t1]` where `origin + direction * t` meets the
+/// boundary of `region`, with both ends, sorted: between two consecutive
+/// ones the line lies wholly inside, outside or along the boundary.
+fn line_cuts(region: &Plan, origin: Point2, direction: Vec2, t0: f64, t1: f64) -> Vec<f64> {
     let mut cuts = vec![t0, t1];
     for ring in rings(region) {
         for (a, b) in edges(ring) {
@@ -624,18 +683,7 @@ pub(crate) fn line_intervals(
     cuts.retain(|t| *t >= t0 && *t <= t1);
     cuts.sort_by(f64::total_cmp);
     cuts.dedup_by(|a, b| (*a - *b).abs() <= 1e-12);
-    let mut intervals: Vec<(f64, f64)> = Vec::new();
-    for pair in cuts.windows(2) {
-        let middle = origin + direction * f64::midpoint(pair[0], pair[1]);
-        if !contains(region, middle) {
-            continue;
-        }
-        match intervals.last_mut() {
-            Some(last) if (last.1 - pair[0]).abs() <= 1e-12 => last.1 = pair[1],
-            _ => intervals.push((pair[0], pair[1])),
-        }
-    }
-    intervals
+    cuts
 }
 
 /// Merges interval lists into their union.
@@ -768,16 +816,7 @@ pub(crate) fn centroid(region: &Plan) -> Option<Point2> {
 }
 
 fn segment_distance(a: (Point2, Point2), b: (Point2, Point2)) -> f64 {
-    let point_segment = |p: Point2, (s, e): (Point2, Point2)| {
-        let along = e - s;
-        let length = along.length_squared();
-        let t = if length <= 0.0 {
-            0.0
-        } else {
-            ((p - s).dot(along) / length).clamp(0.0, 1.0)
-        };
-        (p - (s + along * t)).length()
-    };
+    let point_segment = point_segment_distance;
     let cross = |p: Point2, q: Point2, r: Point2| (q - p).perp_dot(r - p);
     let (d1, d2) = (cross(a.0, a.1, b.0), cross(a.0, a.1, b.1));
     let (d3, d4) = (cross(b.0, b.1, a.0), cross(b.0, b.1, a.1));

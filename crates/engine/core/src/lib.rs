@@ -552,7 +552,8 @@ pub use metric_routing::{
     FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
     MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
     MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, ThresholdVerdict, UnreachableRegionEvidence, UnreachableTargetsEvidence,
+    NearestTargetRequest, PathTrace, PathTraceRequest, ThresholdVerdict, UnreachableRegionEvidence,
+    UnreachableTargetsEvidence,
 };
 pub use object_frame::{
     ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,

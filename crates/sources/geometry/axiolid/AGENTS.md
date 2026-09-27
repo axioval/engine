@@ -125,7 +125,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   place counts only by its straight line; a lower bound comes from the map
   only on a closed level with every target placed, and so does an
   unreachable verdict. Farthest points are for a point body only; never
-  report the bracket for a body with a radius.
+  report the bracket for a body with a radius. Avoided objects
+  (`avoids_objects` is true) join the obstacles through `obstacles` and
+  the band cut, surfaces and portals included; never drop an avoided body
+  that cannot be measured, refuse. `trace_path` measures each object's plan
+  footprint (a surface's floor, a body's projected triangles, a
+  tessellation's grown plan box as an upper bound only) with
+  `walkable::segment_cover`: the upper bound keeps pieces within `MARGIN` of
+  the boundary, the lower bound drops them. Keep the upper bound never
+  short of the length along the boundary.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`: parallel shelf

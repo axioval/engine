@@ -9,6 +9,7 @@
 pub mod contact;
 pub mod derived_relationships;
 pub mod envelope_membership;
+pub mod facade_area;
 pub mod free_space;
 pub mod geometry;
 pub mod guard;
@@ -22,6 +23,7 @@ pub mod vertical_extent;
 pub use contact::AxiolidContactService;
 pub use derived_relationships::AxiolidDerivedRelationshipService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
+pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::AxiolidGeometry;
 pub use guard::AxiolidGuardService;

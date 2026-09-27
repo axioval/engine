@@ -24,6 +24,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   a host-supplied void. Undecided cases (unmeasured or bodiless spaces, points
   on a boundary, ties, tessellations within reach) refuse the whole answer.
 - `src/vertical_extent.rs` implements `VerticalExtentService`: bottom and top elevations of a mesh's used positions. A tessellation widens each by its chord deviation and is never exact, even at zero deviation.
+- `src/facade_area.rs` implements `FacadeAreaService`: steep faces that look outside, classified at four samples each. A face held against another body or a host-declared space, or whose ray first meets itself or a space within `REACH`, is not facade; meeting nothing or another body is. A face whose samples disagree widens the interval, never a guess. Unmeasured bodies anywhere, bodiless declared spaces and tessellations within reach refuse.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`, measuring shelf

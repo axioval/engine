@@ -1286,6 +1286,7 @@ fn plan_area(
             "minimum": declare("minimum", "number"),
             "maximum": declare("maximum", "number"),
             "member_selector": declare("member_selector", "selector"),
+            "measure": declare("measure", "string"),
             "relationship": declare("relationship", "string"),
             "direction": declare("direction", "string"),
             "follow_chain": declare("follow_chain", "boolean"),
@@ -2187,6 +2188,291 @@ fn with_geometry_property_comparison_finds_components_in_the_same_derived_space(
             .as_str()
             .unwrap()
             .starts_with("count of compared components is 0"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// A box extruded `depth` up from `z`, its plan rectangle `length` x `width`
+/// centred at (`x`, `y`), as instances `#first` to `#first + 9`. `PL` and
+/// `REP` in `product` become its placement and shape.
+fn placed_box(
+    first: u32,
+    [x, y, z]: [f64; 3],
+    [length, width, depth]: [f64; 3],
+    product: &str,
+) -> String {
+    let [
+        origin,
+        frame,
+        placement,
+        p,
+        pos,
+        profile,
+        solid,
+        shape,
+        definition,
+        object,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|offset| first + offset);
+    format!(
+        "#{origin}=IFCCARTESIANPOINT((0.,0.,{z:.2}));\n\
+         #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+         #{p}=IFCCARTESIANPOINT(({x:.2},{y:.2}));\n\
+         #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+         #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length:.2},{width:.2});\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth:.2});\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        product
+            .replace("GID", &format!("{object:022}"))
+            .replace("PL", &format!("#{placement}"))
+            .replace("REP", &format!("#{definition}")),
+    )
+}
+
+/// Building #100 with storeys #101 at 0 m and #102 at 3 m, in metres.
+///
+/// The ground storey holds a 10 m wall #19 facing space #49, with a
+/// 2 x 1.5 m window #39 filling opening #29; the upper storey holds wall #59,
+/// 3.5 m high, beside the 3 m space #69.
+fn storeys_with_facades() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);\n\
+         #8=IFCUNITASSIGNMENT((#6,#7));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#8);\n\
+         {}{}{}{}{}{}\
+         #100=IFCBUILDING('0000000000000000000100',$,'B',$,$,#3,$,$,.ELEMENT.,$,$,$);\n\
+         #101=IFCBUILDINGSTOREY('0000000000000000000101',$,'EG',$,$,#3,$,$,.ELEMENT.,0.);\n\
+         #102=IFCBUILDINGSTOREY('0000000000000000000102',$,'OG',$,$,#3,$,$,.ELEMENT.,3.);\n\
+         #103=IFCRELAGGREGATES('0000000000000000000103',$,$,$,#100,(#101,#102));\n\
+         #104=IFCRELAGGREGATES('0000000000000000000104',$,$,$,#101,(#49));\n\
+         #105=IFCRELAGGREGATES('0000000000000000000105',$,$,$,#102,(#69));\n\
+         #106=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000106',$,$,$,(#19,#39),#101);\n\
+         #107=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000107',$,$,$,(#59),#102);\n\
+         #108=IFCRELVOIDSELEMENT('0000000000000000000108',$,$,$,#19,#29);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [5.0, -0.15, 0.0], [10.0, 0.3, 3.0], wall),
+        placed_box(
+            20,
+            [5.0, -0.15, 1.0],
+            [2.0, 0.5, 1.5],
+            "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)"
+        ),
+        placed_box(
+            30,
+            [5.0, -0.15, 1.0],
+            [2.0, 0.3, 1.5],
+            "IFCWINDOW('GID',$,$,$,$,PL,REP,$,1.5,2.,$,$,$)"
+        ),
+        placed_box(40, [5.0, 2.0, 0.0], [10.0, 4.0, 3.0], space),
+        placed_box(50, [5.0, -0.15, 3.0], [10.0, 0.3, 3.5], wall),
+        placed_box(60, [5.0, 2.0, 3.0], [10.0, 4.0, 3.0], space),
+    )
+}
+
+/// `(object, message)` of every finding in a saved result, sorted.
+fn finding_messages(result: &Value) -> Vec<(String, String)> {
+    let mut findings: Vec<(String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            (
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    findings.sort();
+    findings
+}
+
+/// The fixture definitions with storey metric rules: `level-spacing` as
+/// `storey-heights` and `area-ratio` as `window-to-wall`.
+fn storey_metric_definitions(case: &Case) -> PathBuf {
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    let concept = |name: &str| {
+        json!({"id": format!("axioval:example.ifc.{name}"), "name": text(name),
+               "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+               "citations": []})
+    };
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(case.definitions(true)).unwrap()).unwrap();
+    for name in ["IfcBuilding", "IfcBuildingStorey", "IfcSpace", "IfcWindow"] {
+        definitions["objectTypes"][format!("axioval:example.ifc.{name}")] = concept(name);
+    }
+    let mut elevation = concept("Elevation");
+    elevation["valueKind"] = json!("quantity");
+    definitions["properties"]["axioval:example.ifc.Elevation"] = elevation;
+    let declare = |parameters: &[(&str, &str, bool)]| -> Value {
+        parameters
+            .iter()
+            .chain(&[
+                ("relationship", "string", false),
+                ("direction", "string", false),
+                ("follow_chain", "boolean", false),
+                ("path", "stringList", false),
+                ("skip_absent_relationship_ends", "boolean", false),
+            ])
+            .map(|(id, kind, required)| {
+                (
+                    (*id).to_owned(),
+                    json!({"id": id, "name": text(id), "kind": kind,
+                    "required": required, "allowedValues": [], "citations": []}),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>()
+            .into()
+    };
+    let definition = |id: &str, capability: &str, parameters: Value| {
+        json!({"id": id, "name": text(id), "description": text(id),
+               "capability": format!("axioval:capability.{capability}"),
+               "parameters": parameters, "citations": [], "tags": []})
+    };
+    definitions["definitions"]["axioval:example.storey-heights"] = definition(
+        "axioval:example.storey-heights",
+        "level-spacing",
+        declare(&[
+            ("member_selector", "selector", true),
+            ("order", "propertyReference", true),
+            ("minimum", "quantity", false),
+            ("maximum", "quantity", false),
+            ("consistent", "boolean", false),
+            ("tolerance", "quantity", false),
+            ("ignore_lowest", "boolean", false),
+            ("ignore_highest", "boolean", false),
+            ("content_path", "stringList", false),
+            ("content_selector", "selector", false),
+            ("space_selector", "selector", false),
+            ("space_path", "stringList", false),
+            ("space_tolerance", "quantity", false),
+        ]),
+    );
+    definitions["definitions"]["axioval:example.window-to-wall"] = definition(
+        "axioval:example.window-to-wall",
+        "area-ratio",
+        declare(&[
+            ("numerator_selector", "selector", true),
+            ("denominator_selector", "selector", false),
+            ("minimum", "number", false),
+            ("maximum", "number", false),
+            ("numerator_property", "propertyReference", false),
+            ("denominator_property", "propertyReference", false),
+            ("measure", "string", false),
+        ]),
+    );
+    case.write("definitions.json", &definitions.to_string())
+}
+
+#[test]
+fn with_geometry_storey_heights_and_window_to_wall_ratios_are_measured() {
+    let case = Case::new("geometry-storey-metrics");
+    let of = |name: &str| {
+        json!({"kind": "entityType", "objectType": format!("axioval:example.ifc.{name}"),
+               "includeSubtypes": true})
+    };
+    let text_file = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text_file).unwrap();
+    let template = ruleset["root"]["rules"][0].clone();
+    let rule = |id: &str, definition: &str, applies_to: &str, parameters: Value| {
+        let mut rule = template.clone();
+        rule["id"] = json!(id);
+        rule["definitionId"] = json!(definition);
+        rule["parameters"] = parameters;
+        rule["applicability"]["groups"]["walls"]["selector"] = of(applies_to);
+        rule
+    };
+    let metres = |value: f64| json!({"type": "quantity", "value": value, "unit": "m"});
+    ruleset["root"]["rules"] = json!([
+        rule(
+            "storey-heights",
+            "axioval:example.storey-heights",
+            "IfcBuilding",
+            json!({
+                "member_selector": {"type": "selector", "value": of("IfcBuildingStorey")},
+                "order": {"type": "propertyReference", "property": "axioval:example.ifc.Elevation",
+                          "propertySet": "axioval:attributes"},
+                "relationship": {"type": "string", "value": "IfcRelAggregates"},
+                "maximum": metres(3.2),
+                "content_path": {"type": "stringList",
+                                 "value": ["IfcRelContainedInSpatialStructure"]},
+                "content_selector": {"type": "selector", "value": of("wall")},
+                "space_selector": {"type": "selector", "value": of("IfcSpace")},
+                "space_path": {"type": "stringList", "value": ["IfcRelAggregates"]},
+                "space_tolerance": metres(0.05),
+            }),
+        ),
+        rule(
+            "window-to-wall",
+            "axioval:example.window-to-wall",
+            "IfcBuildingStorey",
+            json!({
+                "measure": {"type": "string", "value": "facade"},
+                "numerator_selector": {"type": "selector", "value": of("IfcWindow")},
+                "denominator_selector": {"type": "selector", "value":
+                    {"kind": "anyOf", "operands": [of("wall"), of("IfcWindow")]}},
+                "maximum": {"type": "number", "value": 0.09},
+                "relationship": {"type": "string", "value": "IfcRelContainedInSpatialStructure"},
+            }),
+        ),
+    ]);
+    let model = case.write("model.ifc", &storeys_with_facades());
+    let definitions = storey_metric_definitions(&case);
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    assert_eq!(
+        finding_messages(&result),
+        [
+            // Wall #19: its 27 m² outer face net of the window and two
+            // 0.9 m² free ends; the window's outer face is 3 m².
+            (
+                "#101".to_owned(),
+                "facade area ratio is 0.0943 (3 m² of 31.8 m²); required at most 0.09".to_owned()
+            ),
+            // The upper storey's wall rises 3.5 m above its elevation.
+            (
+                "#102".to_owned(),
+                "level height is 3.5 m; required at most 3.2 m".to_owned()
+            ),
+            (
+                "#69".to_owned(),
+                "space height is 3 m and its level's height 3.5 m; they may differ by at most \
+                 0.05 m"
+                    .to_owned()
+            ),
+        ],
         "{result:#}"
     );
     assert!(

@@ -83,6 +83,24 @@ All notable changes are documented here. This project follows Semantic Versionin
   against the source. The engine exports `AdjacentSide` and
   `adjacent_side`, which read the side an adjacency evidence locator
   records, and documents that locator form as the provider contract.
+- **Storey metrics.** `level-spacing` measures the highest level from
+  geometry with `content_path` (and optionally `content_selector`): the
+  highest top of the contents the path reaches, through the vertical-extent
+  service, less the level's elevation, judged as an interval. With
+  `space_selector`, `space_path` and `space_tolerance`, each level's spaces
+  must be as high as the level. A new facade-area service
+  (`FacadeAreaService`, `FacadeArea`, `FacadeAreaServiceHandle`) measures an
+  object's outward-facing surface, with an Axiolid implementation
+  (`AxiolidFacadeAreaService`) that the CLI registers with every `IfcSpace` as
+  the interior; `area-ratio` and `plan-area` take `measure: facade` to judge
+  facade areas instead of footprints, which gives the facade area per storey
+  and the window-to-wall ratio per storey and per building. Net-to-gross and
+  empty-area ratios, storeys without elements and compartment-to-group areas
+  are compositions of existing capabilities, documented under "Storey
+  metrics". A tabular report beside the findings is not part of this change.
+  **Breaking:** the `level-spacing`, `area-ratio` and `plan-area` signatures
+  gain optional parameters, so definitions bound to them must declare them.
+
 - **Selecting objects by related objects.** The new selector kind
   `related` follows a relationship `path` from each candidate (steps
   `Relationship` or `Relationship:direction`, as in the `path` parameter)

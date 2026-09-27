@@ -436,6 +436,7 @@ mod concepts;
 mod contact;
 mod derived_relationships;
 mod envelope_membership;
+mod facade_area;
 mod free_space;
 mod guard;
 mod integrity;
@@ -472,6 +473,7 @@ pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,
     EnvelopeMembershipRequest, EnvelopeMembershipService, EnvelopeMembershipServiceHandle,
 };
+pub use facade_area::{FacadeArea, FacadeAreaError, FacadeAreaService, FacadeAreaServiceHandle};
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,

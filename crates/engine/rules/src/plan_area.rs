@@ -1,8 +1,9 @@
 //! Judgements over plan-projected areas: area ranges, ratios and plan coverage.
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PlanArea, PlanAreaError, PlanAreaServiceHandle, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, FacadeAreaError, FacadeAreaServiceHandle,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea, PlanAreaError,
+    PlanAreaServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
@@ -32,6 +33,57 @@ fn unavailable(error: PlanAreaError) -> Unavailable {
     (reason, error.to_string())
 }
 
+fn facade_service<'a>(
+    context: &RuleContext<'a>,
+) -> Result<&'a FacadeAreaServiceHandle, Unavailable> {
+    context.services.get::<FacadeAreaServiceHandle>().ok_or((
+        NotEvaluatedReason::MissingService,
+        "facade-area service is not registered".into(),
+    ))
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn facade_unavailable(error: FacadeAreaError) -> Unavailable {
+    let reason = match error {
+        FacadeAreaError::Unavailable(_) | FacadeAreaError::UnknownObject(_) => {
+            NotEvaluatedReason::BackendUnavailable
+        }
+        FacadeAreaError::InvalidMeasurement | FacadeAreaError::InexactEvidence => {
+            NotEvaluatedReason::InvalidEvidence
+        }
+    };
+    (reason, error.to_string())
+}
+
+/// Which area of an object is measured.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Measure {
+    /// The plan footprint, from the plan-area service.
+    Footprint,
+    /// The outward-facing surface, from the facade-area service.
+    Facade,
+}
+
+impl Measure {
+    /// The `measure` parameter: `footprint` (the default) or `facade`.
+    fn parse(parameters: &Parameters<'_>) -> Result<Self, Unavailable> {
+        match parameters.string("measure")? {
+            None | Some("footprint") => Ok(Self::Footprint),
+            Some("facade") => Ok(Self::Facade),
+            Some(other) => Err(invalid(format!(
+                "measure `{other}` is unsupported; use `footprint` or `facade`"
+            ))),
+        }
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Footprint => "plan area",
+            Self::Facade => "facade area",
+        }
+    }
+}
+
 /// A sum of areas as an interval, with every measurement's evidence.
 #[derive(Default)]
 pub(crate) struct Sum {
@@ -45,6 +97,20 @@ impl Sum {
         self.lower += area.lower_square_metres();
         self.upper += area.upper_square_metres();
         self.evidence.push(area.evidence().clone());
+    }
+
+    fn facades(context: &RuleContext<'_>, objects: &[ObjectId]) -> Result<Self, Unavailable> {
+        let service = facade_service(context)?;
+        let mut sum = Self::default();
+        for object in objects {
+            let area = service
+                .measure_facade_area(object)
+                .map_err(facade_unavailable)?;
+            sum.lower += area.lower_square_metres();
+            sum.upper += area.upper_square_metres();
+            sum.evidence.push(area.evidence().clone());
+        }
+        Ok(sum)
     }
 
     fn footprints(
@@ -65,8 +131,22 @@ impl Sum {
         property: Option<PropertyRef<'_>>,
         objects: &[ObjectId],
     ) -> Result<Self, Unavailable> {
+        Self::measured(context, property, Measure::Footprint, objects)
+    }
+
+    /// The summed areas of `objects`: stated by `property` when declared,
+    /// otherwise measured as `measure` says.
+    fn measured(
+        context: &RuleContext<'_>,
+        property: Option<PropertyRef<'_>>,
+        measure: Measure,
+        objects: &[ObjectId],
+    ) -> Result<Self, Unavailable> {
         let Some(property) = property else {
-            return Self::footprints(service(context)?, objects);
+            return match measure {
+                Measure::Footprint => Self::footprints(service(context)?, objects),
+                Measure::Facade => Self::facades(context, objects),
+            };
         };
         let mut sum = Self::default();
         for id in objects {
@@ -149,6 +229,12 @@ pub(crate) fn judge(lower: f64, upper: f64, minimum: Option<f64>, maximum: Optio
 /// areas from an area-quantity property instead of geometry: a window's
 /// glazing area is not its plan footprint.
 ///
+/// `measure: facade` measures the outward-facing surface of each object
+/// instead of its footprint, through the facade-area service: the
+/// window-to-wall ratio of a storey is the facade area of its windows over
+/// that of its external walls and windows (walls are measured with their
+/// openings cut out, so the windows belong in the denominator too).
+///
 /// Areas are intervals, so the ratio is too. An anchor is judged only when
 /// the whole interval is on one side of a bound; one straddling it, an
 /// undecided member, or a zero denominator is not evaluated.
@@ -167,6 +253,7 @@ impl RuleCapability for AreaRatio {
             ParameterDescriptor::optional("maximum", ParameterType::Number),
             ParameterDescriptor::optional("numerator_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("denominator_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("measure", ParameterType::String),
         ]
         .into_iter()
         .chain(traversal_parameters())
@@ -190,12 +277,12 @@ impl RuleCapability for AreaRatio {
                 parameters.selector("denominator_selector")?,
                 parameters.property("numerator_property")?,
                 parameters.property("denominator_property")?,
-                minimum,
-                maximum,
+                (minimum, maximum),
+                Measure::parse(&parameters)?,
                 parameters.traversal()?,
             ))
         })();
-        let (numerator, denominator, top_area, bottom_area, minimum, maximum, traversal) =
+        let (numerator, denominator, top_area, bottom_area, (minimum, maximum), measure, traversal) =
             match parsed {
                 Ok(parsed) => parsed,
                 Err((reason, message)) => {
@@ -225,11 +312,16 @@ impl RuleCapability for AreaRatio {
                         format!("{undecided} related object(s) {via} cannot be assigned"),
                     ));
                 }
-                let mut top = Sum::areas(context, top_area, &over.decided)?;
+                let mut top = Sum::measured(context, top_area, measure, &over.decided)?;
                 top.evidence.extend(over.evidence);
                 let mut bottom = match &under {
-                    Some(under) => Sum::areas(context, bottom_area, &under.decided)?,
-                    None => Sum::areas(context, bottom_area, std::slice::from_ref(&anchor.id))?,
+                    Some(under) => Sum::measured(context, bottom_area, measure, &under.decided)?,
+                    None => Sum::measured(
+                        context,
+                        bottom_area,
+                        measure,
+                        std::slice::from_ref(&anchor.id),
+                    )?,
                 };
                 if let Some(under) = under {
                     bottom.evidence.extend(under.evidence);
@@ -237,7 +329,7 @@ impl RuleCapability for AreaRatio {
                 if bottom.upper <= 0.0 {
                     return Err((
                         NotEvaluatedReason::IncompleteEvidence,
-                        "the denominator has no plan area".into(),
+                        format!("the denominator has no {}", measure.noun()),
                     ));
                 }
                 let lower = top.lower / bottom.upper;
@@ -270,7 +362,8 @@ impl RuleCapability for AreaRatio {
                     rule,
                     &anchor.id,
                     format!(
-                        "plan area ratio is {} ({} m² of {} m²); required {bound}",
+                        "{} ratio is {} ({} m² of {} m²); required {bound}",
+                        measure.noun(),
                         shown(lower, upper),
                         (area * 100.0).round() / 100.0,
                         (of * 100.0).round() / 100.0,
@@ -282,7 +375,8 @@ impl RuleCapability for AreaRatio {
                     anchor.id.clone(),
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
-                        "plan area ratio is {}, which straddles the bound {bound}",
+                        "{} ratio is {}, which straddles the bound {bound}",
+                        measure.noun(),
                         shown(lower, upper)
                     ),
                 ),
@@ -447,6 +541,11 @@ fn coverage(
 /// member. An anchor with members whose selection is undecided is judged
 /// only when they cannot change the verdict: they can only add area, so a
 /// sum already above the maximum stands.
+///
+/// `measure: facade` bounds the outward-facing surface instead, through the
+/// facade-area service: the facade area of each storey, summed over the
+/// external walls it contains. A facade area may be zero; a footprint may
+/// not, since an empty one means the object has no body.
 pub struct PlanAreaRange;
 
 impl RuleCapability for PlanAreaRange {
@@ -459,6 +558,7 @@ impl RuleCapability for PlanAreaRange {
             ParameterDescriptor::optional("minimum", ParameterType::Number),
             ParameterDescriptor::optional("maximum", ParameterType::Number),
             ParameterDescriptor::optional("member_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("measure", ParameterType::String),
         ]
         .into_iter()
         .chain(traversal_parameters())
@@ -487,9 +587,10 @@ impl RuleCapability for PlanAreaRange {
                     "a relationship reaches members only with `member_selector`",
                 ));
             }
-            Ok::<_, Unavailable>((minimum, maximum, members, traversal))
+            let measure = Measure::parse(&parameters)?;
+            Ok::<_, Unavailable>((minimum, maximum, members, traversal, measure))
         })();
-        let (minimum, maximum, members, traversal) = match parsed {
+        let (minimum, maximum, members, traversal, measure) = match parsed {
             Ok(parsed) => parsed,
             Err((reason, message)) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -500,19 +601,17 @@ impl RuleCapability for PlanAreaRange {
         };
         let members = members.map(|selector| Population::of(context, selector));
         let what = if members.is_some() {
-            "summed plan area of the members"
+            format!("summed {} of the members", measure.noun())
         } else {
-            "plan area"
+            measure.noun().to_owned()
         };
         let (subjects, mut evaluation) = select_objects(context, &rule.selector);
         for subject in subjects {
             let measured = match &members {
-                None => footprint(context, &subject.id).map(|area| {
-                    let mut sum = Sum::default();
-                    sum.add(&area);
-                    (sum, None)
-                }),
-                Some(population) => member_areas(context, traversal.as_ref(), subject, population),
+                None => own_area(context, measure, &subject.id).map(|sum| (sum, None)),
+                Some(population) => {
+                    member_areas(context, traversal.as_ref(), subject, population, measure)
+                }
             };
             let (sum, reached) = match measured {
                 Ok(measured) => measured,
@@ -560,6 +659,22 @@ impl RuleCapability for PlanAreaRange {
     }
 }
 
+/// The area of one object: a footprint that is not empty, or its facade.
+fn own_area(
+    context: &RuleContext<'_>,
+    measure: Measure,
+    object: &ObjectId,
+) -> Result<Sum, Unavailable> {
+    match measure {
+        Measure::Footprint => {
+            let mut sum = Sum::default();
+            sum.add(&footprint(context, object)?);
+            Ok(sum)
+        }
+        Measure::Facade => Sum::facades(context, std::slice::from_ref(object)),
+    }
+}
+
 /// A footprint that is not empty: an empty one means the object has no body.
 pub(crate) fn footprint(
     context: &RuleContext<'_>,
@@ -581,18 +696,22 @@ pub(crate) fn footprint(
 /// when members were summed.
 type Measured = (Sum, Option<(Vec<ObjectId>, usize)>);
 
-/// The summed footprints of the members `anchor` reaches, with the decided
+/// The summed areas of the members `anchor` reaches, with the decided
 /// members and the number of undecided ones.
 fn member_areas(
     context: &RuleContext<'_>,
     traversal: Option<&crate::support::Traversal<'_>>,
     anchor: &Object,
     population: &Population,
+    measure: Measure,
 ) -> Result<Measured, Unavailable> {
     let reached = tally(context, traversal, anchor, population)?;
     let mut sum = Sum::default();
     for member in &reached.decided {
-        sum.add(&footprint(context, member)?);
+        let area = own_area(context, measure, member)?;
+        sum.lower += area.lower;
+        sum.upper += area.upper;
+        sum.evidence.extend(area.evidence);
     }
     sum.evidence.extend(reached.evidence);
     Ok((sum, Some((reached.decided, reached.undecided))))

@@ -36,17 +36,18 @@ use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
-    AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService,
-    AxiolidPlanAreaService, AxiolidProximityService, AxiolidSpaceService,
-    AxiolidVerticalExtentService,
+    AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
+    AxiolidLinearQuantityService, AxiolidPlanAreaService, AxiolidProximityService,
+    AxiolidSpaceService, AxiolidVerticalExtentService,
 };
 use axioval::engine::{
     ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
-    EvidenceSession, FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
-    PlanAreaServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, SourceSnapshot, SpaceServiceHandle,
-    TraversalDirection, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
+    EvidenceSession, FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
+    LinearQuantityServiceHandle, PlanAreaServiceHandle, PropertyRequest, PropertyResolution,
+    PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle,
 };
 use axioval::ir::{ATTRIBUTE_SET, ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -204,7 +205,12 @@ pub fn attach(
     };
     let space = space_service(&model, &geometry, &source, &kinds, &is_a);
     let derived = derived_service(&geometry, &source, &kinds, &is_a, voids);
+    let facade = facade_service(&geometry, &source, &kinds, &is_a);
     let session = register(session, snapshot, geometry, space, envelope)?
+        .with_host_service(
+            FacadeAreaServiceHandle::new(Arc::new(facade)),
+            std::slice::from_ref(snapshot),
+        )?
         .with_derived_relationships(
             DerivedRelationshipServiceHandle::new(Arc::new(derived)),
             std::slice::from_ref(snapshot),
@@ -507,6 +513,25 @@ fn derived_service(
         };
     }
     service
+}
+
+/// Facade areas, with every `IfcSpace` as the interior a face may look into.
+///
+/// Which objects are spaces is an IFC fact. Whether a wall is external is
+/// not this bridge's to decide: the rule selects the walls it measures.
+fn facade_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&str, &str) -> bool,
+) -> AxiolidFacadeAreaService {
+    kinds
+        .iter()
+        .filter(|(_, kind)| is_a(kind, "IfcSpace"))
+        .fold(
+            AxiolidFacadeAreaService::new(geometry.clone(), source.clone()),
+            |service, (id, _)| service.with_space(id.clone()),
+        )
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {

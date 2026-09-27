@@ -155,8 +155,8 @@ axioval report result.json --object '#42' --evidence
 
 Semantic evidence (properties, relationships, classifications, the type
 hierarchy) is always available. `--geometry` also meshes the model, so
-geometric rules (clash, distance, contact, space, plan-area, slab-stack and free-space
-checks) can run. It is off by default because meshing costs time a purely semantic ruleset
+geometric rules (clash, distance, contact, space, plan-area, facade-area, slab-stack,
+storey-height and free-space checks) can run. It is off by default because meshing costs time a purely semantic ruleset
 does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
 
@@ -204,6 +204,12 @@ assuming zero doorways, when:
   or a niche;
 - the model has a space boundary without a required end, which makes every
   boundary answer refuse.
+
+Facade areas (`measure: facade`) look for the interior in every `IfcSpace`:
+a face looking into a space is an inner face. A room the model does not
+represent by an `IfcSpace` looks like the outside, so facade areas are only as
+good as the model's spaces. Which walls are external is the rule's selection,
+typically `IsExternal` in `Pset_WallCommon`.
 
 A group (`IfcGroup`: a zone, a system) has no body, but plan-area rules need
 its footprint, e.g. `plan-coverage` of spaces against the zones that model

@@ -234,6 +234,22 @@ mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even
 for a declared zero deviation. Bodiless and unmeasured objects are refused.
 
+`AxiolidFacadeAreaService` measures facade areas. The host declares the
+spaces (`with_space`); the CLI declares every `IfcSpace`. A triangle counts
+when its normal lies within 45° of horizontal and, from each of four sample
+points (the centroids of its midpoint sub-triangles), a probe 1 µm outside it
+lies in no other body or space (so a wall end against a neighbour, a frame in
+its reveal, or a face flush with a room does not count) and a horizontal ray
+meets, within 1 m, neither the object itself (a reveal) nor a declared space
+first (an inner face). Meeting nothing, or another body first, is outside: a
+facade across a courtyard counts. A triangle whose samples disagree is partly
+covered and widens the interval by its area with approximate evidence. A
+tessellated subject widens by `2·P·d + π·d²` over the facade triangles'
+perimeter `P`. A tessellated body within reach, an unmeasured body anywhere,
+or a declared space without a body refuses. Walls from IFC are meshed net of
+their openings, so a wall's facade excludes its windows, and a window's
+facade is its own outer face.
+
 `AxiolidDerivedRelationshipService` derives the relationships of the
 [derived-relationship service](./services.md) from the same meshes. The host
 declares which objects are spaces (`with_space`) and which are doors,

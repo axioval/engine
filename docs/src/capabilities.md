@@ -192,7 +192,7 @@ These capabilities judge exact properties, classifications and relationships onl
 | `numbering-consistency` | The numbers `pattern` (an XML Schema pattern over the whole value with exactly one group of digits) reads from `property` agree within each scope, formed as in `unique-value`. With `prefix_length`, their first digits match: objects departing from the predominant prefix are reported, and every object when none predominates. With `gap_free`, the distinct numbers step by one, and the objects above each gap are reported. At least one check must be declared. A value that is missing or does not match is not evaluated, and a gap an unreadable object could fill is not evaluated rather than reported. |
 | `manual-issue` | Raises the declared `title`, `category` and `description` once per rule, for checks owed by hand: the finding is against the first selected object and relates the others. An empty selection raises nothing. |
 
-| `level-spacing` | Each level's height, the rise of its `order` length to the next level up, lies within `minimum` and `maximum` and, with `consistent`, matches the prevailing height within `tolerance`. The highest level is not evaluated unless `ignore_highest`, since its height needs geometry; `ignore_lowest` leaves out a basement. |
+| `level-spacing` | Each level's height, the rise of its `order` length to the next level up, lies within `minimum` and `maximum` and, with `consistent`, matches the prevailing height within `tolerance`. The highest level is not evaluated unless `ignore_highest`, or unless `content_path` measures it from geometry (see [Storey metrics](#storey-metrics)); `ignore_lowest` leaves out a basement. With `space_selector`, each level's spaces must be as high as the level within `space_tolerance`. |
 
 Deliberate differences from other checkers:
 
@@ -248,6 +248,8 @@ These judge `PlanAreaService` measurements, so they need a geometry adapter.
 
 All bounds are inclusive, and `area-ratio` and `plan-area` need at least one of `minimum` and `maximum`. Areas are intervals: a tessellated body measures within a bound derived from its chord deviation. A verdict needs the whole interval on one side of a bound, so an area that straddles one is not evaluated rather than judged from a midpoint.
 
+`area-ratio` and `plan-area` take `measure`: `footprint` (the default) or `facade`. `facade` measures each object's outward-facing surface through `FacadeAreaService` instead of its footprint (see [typed host services](./services.md)); a population with a declared area property still reads the property. A facade area may be zero, so `plan-area` does not treat an empty facade as a missing body.
+
 `plan-area` reaches members as `related-count` does: through the declared traversal (`relationship` or `path`, as above; with IFC, `IfcRelAssignsToGroup` from a zone or `IfcRelAggregates` from a storey), or everywhere in the anchor's source without one; a traversal without `member_selector` is an invalid declaration. Footprints are summed, so members that overlap count twice; select members that tile the floor, such as spaces. An object with an empty footprint has no body and is not evaluated, and so is an anchor with such a member, since its sum is unknown. A member whose selection is undecided can only add area: a sum already above the maximum is still a finding, anything else is not evaluated. A finding relates the members summed. A definition bound to `plan-area` declares `minimum`, `maximum`, `member_selector` and the traversal parameters, all optional.
 
 ### Property requirements
@@ -277,6 +279,25 @@ The rule-level `case_sensitive` (default `true`) applies to `value_like` and `on
 An `optional` property may be absent, null or blank. Conditions must all hold. `value_like` and `one_of` compare text, booleans (`true`/`false`) and integers as text; any other value is not evaluated. A range compares integers and decimals when the row has no `unit`, and quantities of the unit's dimension in canonical SI units when it has one; any other pairing is not evaluated, never a pass. A list value must meet the conditions with every element, and a forbidden value is present when any element meets them. A divided value is an interval when the measured footprint is: a quotient straddling a bound, a footprint that is not positive, or a missing stated area or volume is not evaluated.
 
 Names are resolved exactly. The property service answers requests for one named property and cannot list an object's property sets or properties, so a row whose set or property name contains a wildcard (`Pset_*Common`), or that names a set without a property (set presence), cannot be decided: each such row is reported once as not evaluated for the rule (`MissingService`), and the other rows are still checked. A backslash-escaped `*` or `?` is part of an exact name. Missing property sets are therefore reported as missing properties. An unknown requirement, bounds in the wrong order, a `unit` or `per` without bounds, `stated-area` without `area_property`, an empty `one_of` value, or a value condition on a set-only row is an invalid declaration.
+
+### Storey metrics
+
+Storey checks are compositions of the capabilities above; no capability is specific to storeys. With IFC, storeys hang off the building through `IfcRelAggregates`, spaces off each storey through `IfcRelAggregates`, and elements through `IfcRelContainedInSpatialStructure`.
+
+| Metric | Rule |
+|---|---|
+| Storey height | `level-spacing` from each building over its storeys, `order` the `Elevation` attribute, bounded by `minimum` / `maximum` or `consistent`. |
+| Height of the highest storey | The same rule with `content_path: ["IfcRelContainedInSpatialStructure"]` (and optionally `content_selector`, e.g. walls): the highest top of the storey's contents, through `VerticalExtentService`, less its elevation. The height is an interval when a content is tessellated. A highest storey with no contents, an undecided content or an unmeasurable one is not evaluated. |
+| Space height matches its storey | The same rule with `space_selector` (spaces), `space_path: ["IfcRelAggregates"]` and `space_tolerance`: each space's rise from bottom to top must lie within the tolerance of its storey's height, highest storey included when it is measured. A space is not evaluated when its extent is unknown or the difference straddles the tolerance. |
+| Facade area per storey | `plan-area` from each storey with `measure: facade`, `member_selector` the external walls (`IsExternal` true in `Pset_WallCommon`) and `relationship: IfcRelContainedInSpatialStructure`. |
+| Window-to-wall ratio per storey | `area-ratio` from each storey with `measure: facade`, `numerator_selector` the windows and `denominator_selector` an `anyOf` of the external walls and the windows: walls are measured with their openings cut out, so gross wall area is the walls' facade plus the windows'. Select the windows on external walls with a `related` selector through `IfcRelFillsElement` then `IfcRelVoidsElement` backwards when internal windows exist. |
+| Window-to-wall ratio per building | The same rule from each building, with `path: ["IfcRelAggregates:forward", "IfcRelContainedInSpatialStructure:forward"]`. |
+| Net-to-gross ratio | `area-ratio` from each storey: spaces (their footprints, or `numerator_property` such as `Qto_SpaceBaseQuantities.NetFloorArea`) over the storey's own `denominator_property`, e.g. `Qto_BuildingStoreyBaseQuantities.GrossFloorArea`, through `IfcRelAggregates`. |
+| Empty-area ratio | The same rule with the empty (void) spaces as the numerator, selected by name, type or classification. |
+| Storeys with no elements or no external walls | `related-count` from each storey through `IfcRelContainedInSpatialStructure`, `minimum: 1`, with `related_selector` everything or the external walls. |
+| Compartment area against its gross-area group | Where the model assigns the compartments to the group (`IfcRelAssignsToGroup`), `area-ratio` from the group over its compartments with `denominator_selector` omitted, so the denominator is the group's own footprint (the union of its members), bounded around 1, e.g. `minimum: 0.95` and `maximum: 1.05` for 5 %. Whether a compartment lies within a group at all is `plan-coverage`. |
+
+A tabular report alongside the findings (one row per storey with these values) is not part of the report contract yet; each metric reports only its findings and not-evaluated outcomes.
 
 ### Table allocation
 

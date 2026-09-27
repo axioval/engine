@@ -14,7 +14,9 @@ use axioval_engine::{
     RuleCapability,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
-use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension, ReportValue,
+};
 use axioval_rules::{AreaRatio, PlanAreaRange};
 use common::{
     Model, findings, id, kind, number, property, rule, selector, source, string, strings,
@@ -349,4 +351,102 @@ fn net_to_gross_and_empty_area_ratios_are_area_ratios_against_a_stated_gross_are
             "plan area ratio is 0.1 (10 m² of 100 m²); required at most 0.05".into()
         )]
     );
+}
+
+/// The rows of the table `name`, by the local id of their object.
+fn rows(evaluation: &CapabilityEvaluation, name: &str) -> Vec<(String, Vec<ReportValue>)> {
+    let table = evaluation
+        .tables()
+        .iter()
+        .find(|table| table.name() == name)
+        .unwrap_or_else(|| panic!("no table {name}"));
+    table
+        .rows()
+        .iter()
+        .map(|row| {
+            let local = row.scope().object().map_or("-", |id| id.local_id.as_str());
+            (local.to_owned(), row.values().to_vec())
+        })
+        .collect()
+}
+
+#[test]
+fn every_measured_ratio_is_reported_in_a_table_passing_or_not() {
+    let (model, areas) = building();
+    let evaluation = run(
+        model,
+        areas.with("w4", 30.0, 1.0),
+        &AreaRatio,
+        &rule(RATIO, kind("storey"), window_to_wall(0.1)),
+    );
+    let columns: Vec<_> = evaluation.tables()[0]
+        .columns()
+        .iter()
+        .map(|column| (column.id.as_str(), column.kind.unit_symbol()))
+        .collect();
+    assert_eq!(
+        columns,
+        [
+            ("numerator_area", Some("m²".to_owned())),
+            ("denominator_area", Some("m²".to_owned())),
+            ("ratio", None),
+        ]
+    );
+    assert_eq!(
+        rows(&evaluation, "ratios"),
+        [
+            (
+                "eg".to_owned(),
+                vec![
+                    ReportValue::exact(6.0),
+                    ReportValue::exact(50.0),
+                    ReportValue::exact(0.12),
+                ]
+            ),
+            // og passes with no windows; its facade is approximate.
+            (
+                "og".to_owned(),
+                vec![
+                    ReportValue::exact(0.0),
+                    ReportValue::measured(29.0, 31.0),
+                    ReportValue::exact(0.0),
+                ]
+            ),
+        ]
+    );
+}
+
+#[test]
+fn every_measured_area_is_reported_in_a_table_in_its_measure() {
+    let (model, areas) = building();
+    let evaluation = run(
+        model,
+        areas,
+        &PlanAreaRange,
+        &rule(
+            RANGE,
+            kind("storey"),
+            vec![
+                ("measure", string("facade")),
+                ("member_selector", selector(external())),
+                ("relationship", string("contains")),
+                ("minimum", number(40.0)),
+            ],
+        ),
+    );
+    assert_eq!(evaluation.tables()[0].columns()[0].id, "facade_area");
+    assert_eq!(
+        rows(&evaluation, "areas"),
+        [
+            ("eg".to_owned(), vec![ReportValue::exact(44.0)]),
+            ("og".to_owned(), vec![ReportValue::exact(30.0)]),
+        ]
+    );
+    // Nothing measured, no table.
+    let (model, _) = building();
+    let evaluation = model.evaluate(
+        &AreaRatio,
+        &rule(RATIO, kind("storey"), window_to_wall(0.1)),
+    );
+    assert!(evaluation.tables().is_empty());
 }

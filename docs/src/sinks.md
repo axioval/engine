@@ -28,6 +28,10 @@ for object in &export.unanchored {
 Every topic's description repeats the message, the rule, the source-qualified
 object ids and each evidence locator with its exactness.
 
+**Report tables are not exported.** A table of measured values (see
+[Tables](./ir.md#tables)) is not an issue, so it writes no topic; a report
+with tables writes the same archive as one without.
+
 **Not-evaluated outcomes are exported by default.** An archive that lists only
 findings reads as "everything else passed". `Options::include_not_evaluated`
 turns them off explicitly.

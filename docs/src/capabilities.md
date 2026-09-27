@@ -387,7 +387,20 @@ Storey checks are compositions of the capabilities above; no capability is speci
 | Storeys with no elements or no external walls | `related-count` from each storey through `IfcRelContainedInSpatialStructure`, `minimum: 1`, with `related_selector` everything or the external walls. |
 | Compartment area against its gross-area group | Where the model assigns the compartments to the group (`IfcRelAssignsToGroup`), `area-ratio` from the group over its compartments with `denominator_selector` omitted, so the denominator is the group's own footprint (the union of its members), bounded around 1, e.g. `minimum: 0.95` and `maximum: 1.05` for 5 %. Whether a compartment lies within a group at all is `plan-coverage`. |
 
-A tabular report alongside the findings (one row per storey with these values) is not part of the report contract yet; each metric reports only its findings and not-evaluated outcomes.
+Storey height is not a property a space can be compared with through `property-comparison`: it is measured, not stated, and it is an interval when a content is tessellated. The space-against-storey comparison therefore stays with `level-spacing`, which measures both and judges the difference as an interval; a stated storey height property, where a model has one, is compared with `property-comparison` like any other quantity.
+
+#### Report tables
+
+Every metric reports what it measured beside its findings, passing or not, as tables in the report (see [Report tables](./ir.md#tables)). Rows are keyed by the object they are about, so tables of several rules join on the storey into one row per storey.
+
+| Capability | Table | Columns |
+|---|---|---|
+| `level-spacing` | `levels` | `elevation` (m), `height` (m; unknown for a level not measured) |
+| `level-spacing` with `space_selector` | `spaces` | `level` (its id), `height` (m), `level_height` (m) |
+| `plan-area` | `areas` | `plan_area` or, with `measure: facade`, `facade_area` (m²); a subject with undecided members has no row |
+| `area-ratio` | `ratios` | `numerator_area` (m²), `denominator_area` (m²), `ratio` (unknown when the denominator may be zero) |
+
+Tables need no parameter: a definition's signature is unchanged. An anchor that could not be measured has no row, and its not-evaluated outcome says why.
 
 ### Table allocation
 

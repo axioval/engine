@@ -122,7 +122,7 @@ struct ReportArgs {
     /// Only entries from this section.
     #[arg(long, value_enum)]
     section: Option<Section>,
-    /// Only findings and not-evaluated outcomes of this rule.
+    /// Only findings, not-evaluated outcomes and table rows of this rule.
     #[arg(long)]
     rule: Option<String>,
     /// Only integrity issues with this code.

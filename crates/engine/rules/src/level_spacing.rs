@@ -7,7 +7,10 @@ use axioval_engine::{
     RuleCapability, RuleContext, VerticalExtent, VerticalExtentError, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Evidence, Object, ObjectId, PropertyValue, QuantityDimension, ReportColumn, ReportTable,
+    ReportValue, RuleId,
+};
 
 use crate::counts::{Population, tally};
 use crate::selection::select_objects;
@@ -45,7 +48,43 @@ use crate::support::{
 ///
 /// A height measured from geometry is an interval; a verdict needs the whole
 /// interval on one side of a bound, and one straddling it is not evaluated.
+///
+/// Every run reports what it measured beside its findings, whether or not
+/// it passed: the table `levels` has one row per level with its `elevation`
+/// and `height` (unknown for a level not measured), and, with
+/// `space_selector`, the table `spaces` one row per measured space with its
+/// `level`, its `height` and the `level_height` it was compared with.
 pub struct LevelSpacing;
+
+/// The tables a run reports: levels, and spaces when they are compared.
+struct Tables {
+    levels: ReportTable,
+    spaces: ReportTable,
+}
+
+impl Tables {
+    fn new(rule: &RuleId) -> Self {
+        let length = |id| ReportColumn::quantity(id, QuantityDimension::Length);
+        Self {
+            levels: ReportTable::new(
+                rule.clone(),
+                "levels",
+                vec![length("elevation"), length("height")],
+            )
+            .expect("the level table's columns are valid"),
+            spaces: ReportTable::new(
+                rule.clone(),
+                "spaces",
+                vec![
+                    ReportColumn::text("level"),
+                    length("height"),
+                    length("level_height"),
+                ],
+            )
+            .expect("the space table's columns are valid"),
+        }
+    }
+}
 
 struct Level<'a> {
     object: &'a Object,
@@ -130,14 +169,24 @@ impl RuleCapability for LevelSpacing {
             }
         };
         let (anchors, mut evaluation) = select_objects(context, &rule.selector);
+        let mut tables = Tables::new(&rule.id);
         for anchor in anchors {
             match levels(context, &config, anchor) {
-                Ok(levels) => check(context, rule, &config, &levels, &mut evaluation),
+                Ok(levels) => check(
+                    context,
+                    rule,
+                    &config,
+                    &levels,
+                    &mut evaluation,
+                    &mut tables,
+                ),
                 Err((reason, message)) => {
                     evaluation.push_object_not_evaluated(anchor.id.clone(), reason, message);
                 }
             }
         }
+        evaluation.push_table(tables.levels);
+        evaluation.push_table(tables.spaces);
         evaluation
     }
 }
@@ -412,8 +461,22 @@ fn check(
     config: &Config<'_>,
     levels: &[Level<'_>],
     evaluation: &mut CapabilityEvaluation,
+    tables: &mut Tables,
 ) {
     let heights = heights(context, config, levels, evaluation);
+    for level in levels {
+        let height = heights
+            .iter()
+            .find(|height| height.level.object.id == level.object.id)
+            .map_or(ReportValue::Unknown, |height| {
+                ReportValue::measured(height.lower, height.upper)
+            });
+        // A level two anchors reach keeps the row of the first.
+        let _ = tables.levels.push_row(
+            level.object.id.clone(),
+            vec![ReportValue::exact(level.elevation), height],
+        );
+    }
     for height in &heights {
         let (fail, open) = match (config.minimum, config.maximum) {
             (Some(minimum), _) if height.upper < minimum => {
@@ -454,7 +517,14 @@ fn check(
     }
     if let Some((spaces, tolerance)) = &config.spaces {
         for height in &heights {
-            match space_heights(context, rule, spaces, *tolerance, height, evaluation) {
+            match space_heights(
+                context,
+                rule,
+                (spaces, *tolerance),
+                height,
+                evaluation,
+                &mut tables.spaces,
+            ) {
                 Ok(()) => {}
                 Err((reason, message)) => {
                     evaluation.push_object_not_evaluated(
@@ -522,10 +592,10 @@ fn consistency(
 fn space_heights(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
-    spaces: &Reach<'_>,
-    tolerance: f64,
+    (spaces, tolerance): (&Reach<'_>, f64),
     height: &Height<'_, '_>,
     evaluation: &mut CapabilityEvaluation,
+    table: &mut ReportTable,
 ) -> Result<(), Unavailable> {
     let (members, relation) = reached(context, spaces, height.level.object, "space(s)")?;
     if members.is_empty() {
@@ -542,6 +612,15 @@ fn space_heights(
         };
         let lower = extent.top().lower_metres() - extent.bottom().upper_metres();
         let upper = extent.top().upper_metres() - extent.bottom().lower_metres();
+        // A space two levels reach keeps the row of the first.
+        let _ = table.push_row(
+            space.clone(),
+            vec![
+                ReportValue::text(height.level.object.id.to_string()),
+                ReportValue::measured(lower, upper),
+                ReportValue::measured(height.lower, height.upper),
+            ],
+        );
         let (least, most) = (lower - height.upper, upper - height.lower);
         let differs = format!(
             "space height is {} and its level's height {}",

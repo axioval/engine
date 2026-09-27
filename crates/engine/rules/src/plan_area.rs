@@ -5,7 +5,10 @@ use axioval_engine::{
     NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea, PlanAreaError,
     PlanAreaServiceHandle, RuleCapability, RuleContext,
 };
-use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Evidence, Object, ObjectId, PropertyValue, QuantityDimension, ReportColumn, ReportTable,
+    ReportValue, RuleId,
+};
 
 use crate::counts::{Population, relation_text, tally};
 use crate::light_area::LightArea;
@@ -83,6 +86,23 @@ impl Measure {
             Self::Facade => "facade area",
         }
     }
+
+    /// The report-table column holding an area of this measure.
+    fn column(self) -> &'static str {
+        match self {
+            Self::Footprint => "plan_area",
+            Self::Facade => "facade_area",
+        }
+    }
+}
+
+/// A report table with valid, fixed columns.
+fn table(rule: &RuleId, name: &str, columns: Vec<ReportColumn>) -> ReportTable {
+    ReportTable::new(rule.clone(), name, columns).expect("fixed table columns are valid")
+}
+
+fn area_column(id: &str) -> ReportColumn {
+    ReportColumn::quantity(id, QuantityDimension::Area)
 }
 
 /// A sum of areas as an interval, with every measurement's evidence.
@@ -262,6 +282,10 @@ pub(crate) fn judge(lower: f64, upper: f64, minimum: Option<f64>, maximum: Optio
 /// Areas are intervals, so the ratio is too. An anchor is judged only when
 /// the whole interval is on one side of a bound; one straddling it, an
 /// undecided member, or a zero denominator is not evaluated.
+///
+/// Every run reports the table `ratios`, one row per anchor whose ratio was
+/// measured, passing or not: `numerator_area`, `denominator_area` and
+/// `ratio` (unknown when the denominator may be zero).
 pub struct AreaRatio;
 
 impl RuleCapability for AreaRatio {
@@ -348,6 +372,15 @@ impl RuleCapability for AreaRatio {
         let denominator = denominator.map(|selector| Population::of(context, selector));
         let (anchors, mut evaluation) = select_objects(context, &rule.selector);
         let via = relation_text(traversal.as_ref());
+        let mut ratios = table(
+            &rule.id,
+            "ratios",
+            vec![
+                area_column("numerator_area"),
+                area_column("denominator_area"),
+                ReportColumn::number("ratio"),
+            ],
+        );
         for anchor in anchors {
             let judged = (|| {
                 let over = tally(context, traversal.as_ref(), anchor, &numerator)?;
@@ -448,8 +481,8 @@ impl RuleCapability for AreaRatio {
                 Ok(Judged::Ratio {
                     lower,
                     upper,
-                    area: top.lower,
-                    of: bottom.lower,
+                    numerator: (top.lower, top.upper),
+                    denominator: (bottom.lower, bottom.upper),
                     provenance,
                     evidence,
                     members: over.decided,
@@ -459,12 +492,31 @@ impl RuleCapability for AreaRatio {
                 Ok(Judged::Ratio {
                     lower,
                     upper,
-                    area,
-                    of,
+                    numerator,
+                    denominator,
                     provenance,
                     evidence,
                     members,
-                }) => (lower, upper, area, of, provenance, evidence, members),
+                }) => {
+                    // Anchors are distinct objects, so rows never collide.
+                    let _ = ratios.push_row(
+                        anchor.id.clone(),
+                        vec![
+                            ReportValue::measured(numerator.0, numerator.1),
+                            ReportValue::measured(denominator.0, denominator.1),
+                            ReportValue::measured(lower, upper),
+                        ],
+                    );
+                    (
+                        lower,
+                        upper,
+                        numerator.0,
+                        denominator.0,
+                        provenance,
+                        evidence,
+                        members,
+                    )
+                }
                 Ok(Judged::Empty(evidence)) => {
                     evaluation.push_finding(finding(
                         rule,
@@ -506,6 +558,7 @@ impl RuleCapability for AreaRatio {
                 ),
             }
         }
+        evaluation.push_table(ratios);
         evaluation
     }
 }
@@ -515,8 +568,9 @@ enum Judged {
     Ratio {
         lower: f64,
         upper: f64,
-        area: f64,
-        of: f64,
+        /// The summed numerator and denominator areas, as intervals.
+        numerator: (f64, f64),
+        denominator: (f64, f64),
         /// Which light-area steps produced the numerator, for the message.
         provenance: String,
         evidence: Vec<Evidence>,
@@ -686,6 +740,11 @@ fn coverage(
 /// facade-area service: the facade area of each storey, summed over the
 /// external walls it contains. A facade area may be zero; a footprint may
 /// not, since an empty one means the object has no body.
+///
+/// Every run reports the table `areas`, one row per subject whose area was
+/// measured, passing or not, in the column `plan_area` or, with `measure:
+/// facade`, `facade_area`. A subject with undecided members has no row: its
+/// area is known only from below.
 pub struct PlanAreaRange;
 
 impl RuleCapability for PlanAreaRange {
@@ -746,6 +805,7 @@ impl RuleCapability for PlanAreaRange {
             measure.noun().to_owned()
         };
         let (subjects, mut evaluation) = select_objects(context, &rule.selector);
+        let mut areas = table(&rule.id, "areas", vec![area_column(measure.column())]);
         for subject in subjects {
             let measured = match &members {
                 None => own_area(context, measure, &subject.id).map(|sum| (sum, None)),
@@ -761,6 +821,13 @@ impl RuleCapability for PlanAreaRange {
                 }
             };
             let (related, undecided) = reached.unwrap_or_default();
+            if undecided == 0 {
+                // Subjects are distinct objects, so rows never collide.
+                let _ = areas.push_row(
+                    subject.id.clone(),
+                    vec![ReportValue::measured(sum.lower, sum.upper)],
+                );
+            }
             // Undecided members can only add area: only an excess stands.
             if undecided > 0 && !maximum.is_some_and(|maximum| sum.lower > maximum) {
                 evaluation.push_object_not_evaluated(
@@ -795,6 +862,7 @@ impl RuleCapability for PlanAreaRange {
                 ),
             }
         }
+        evaluation.push_table(areas);
         evaluation
     }
 }

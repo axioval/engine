@@ -277,3 +277,251 @@ mod scope {
         assert_eq!(own.related, [other]);
     }
 }
+
+mod tables {
+    use axioval_ir::{
+        Finding, NotEvaluated, NotEvaluatedReason, ObjectId, QuantityDimension, Report,
+        ReportColumn, ReportTable, ReportTableError, ReportValue, RuleId, Scope, Severity,
+        SourceId,
+    };
+    use serde_json::json;
+
+    fn source() -> SourceId {
+        SourceId::new("ifc-step", "model.ifc").unwrap()
+    }
+
+    fn object(local: &str) -> ObjectId {
+        ObjectId::new(source(), local).unwrap()
+    }
+
+    fn levels() -> ReportTable {
+        ReportTable::new(
+            RuleId::new("storey-height").unwrap(),
+            "levels",
+            vec![
+                ReportColumn::quantity("height", QuantityDimension::Length),
+                ReportColumn::number("ratio"),
+                ReportColumn::text("level"),
+            ],
+        )
+        .unwrap()
+    }
+
+    fn report(tables: Vec<ReportTable>) -> Report {
+        Report {
+            findings: vec![Finding::new(
+                RuleId::new("r").unwrap(),
+                object("#1"),
+                Severity::Error,
+                "m",
+            )],
+            not_evaluated: vec![NotEvaluated {
+                rule_id: RuleId::new("r").unwrap(),
+                scope: Scope::Project,
+                reason: NotEvaluatedReason::MissingService,
+                message: "m".into(),
+            }],
+            tables,
+        }
+    }
+
+    #[test]
+    fn a_report_without_tables_serializes_byte_for_byte_as_before() {
+        let text = serde_json::to_string(&report(vec![])).unwrap();
+        assert_eq!(
+            text,
+            concat!(
+                r#"{"findings":[{"rule_id":"r","object_id":{"source":{"system":"ifc-step","#,
+                r##""document":"model.ifc"},"local_id":"#1"},"severity":"error","message":"m","##,
+                r#""evidence":[]}],"not_evaluated":[{"rule_id":"r","object_id":null,"#,
+                r#""reason":"missing_service","message":"m"}]}"#
+            )
+        );
+        let read: Report = serde_json::from_str(&text).unwrap();
+        assert!(read.tables().is_empty());
+        assert_eq!(read, report(vec![]));
+    }
+
+    #[test]
+    fn tables_round_trip_with_rows_in_scope_order() {
+        let mut table = levels();
+        assert!(table.is_empty());
+        table
+            .push_row(
+                object("#9"),
+                vec![
+                    ReportValue::measured(2.9, 3.1),
+                    ReportValue::exact(0.25),
+                    ReportValue::text("EG"),
+                ],
+            )
+            .unwrap();
+        table
+            .push_row(
+                Scope::Project,
+                vec![
+                    ReportValue::Unknown,
+                    ReportValue::measured(1.0, f64::INFINITY),
+                    ReportValue::Unknown,
+                ],
+            )
+            .unwrap();
+        table
+            .push_row(
+                source(),
+                vec![
+                    ReportValue::measured(3.0, 3.0),
+                    ReportValue::Unknown,
+                    ReportValue::Unknown,
+                ],
+            )
+            .unwrap();
+        let scopes: Vec<_> = table.rows().iter().map(|row| row.scope().clone()).collect();
+        assert_eq!(
+            scopes,
+            [
+                Scope::Project,
+                Scope::Source(source()),
+                Scope::Object(object("#9"))
+            ]
+        );
+        let original = report(vec![table]);
+        let value = serde_json::to_value(&original).unwrap();
+        assert_eq!(
+            value["tables"],
+            json!([{
+                "rule_id": "storey-height",
+                "name": "levels",
+                "columns": [
+                    {"id": "height", "kind": "quantity", "dimension": "length"},
+                    {"id": "ratio", "kind": "number"},
+                    {"id": "level", "kind": "text"},
+                ],
+                "rows": [
+                    {"values": [{"type": "unknown"}, {"type": "unknown"}, {"type": "unknown"}]},
+                    {"source": {"system": "ifc-step", "document": "model.ifc"},
+                     "values": [{"type": "exact", "value": 3.0}, {"type": "unknown"},
+                                {"type": "unknown"}]},
+                    {"object_id": {"source": {"system": "ifc-step", "document": "model.ifc"},
+                                   "local_id": "#9"},
+                     "values": [{"type": "interval", "lower": 2.9, "upper": 3.1},
+                                {"type": "exact", "value": 0.25},
+                                {"type": "text", "value": "EG"}]},
+                ],
+            }])
+        );
+        let read: Report = serde_json::from_value(value).unwrap();
+        assert_eq!(read, original);
+        let rule = RuleId::new("storey-height").unwrap();
+        let table = read.table(&rule, "levels").unwrap();
+        assert_eq!(
+            table.row(&Scope::Object(object("#9"))).unwrap().values()[2],
+            ReportValue::text("EG")
+        );
+        assert!(read.table(&rule, "spaces").is_none());
+    }
+
+    #[test]
+    fn rows_read_out_of_order_are_sorted() {
+        let rows = |first: &str, second: &str| {
+            json!({
+                "rule_id": "r", "name": "t",
+                "columns": [{"id": "a", "kind": "number"}],
+                "rows": [
+                    {"object_id": {"source": {"system": "s", "document": "d"}, "local_id": first},
+                     "values": [{"type": "exact", "value": 1.0}]},
+                    {"object_id": {"source": {"system": "s", "document": "d"}, "local_id": second},
+                     "values": [{"type": "exact", "value": 2.0}]},
+                ],
+            })
+        };
+        let sorted: ReportTable = serde_json::from_value(rows("#1", "#2")).unwrap();
+        let shuffled: ReportTable = serde_json::from_value(rows("#2", "#1")).unwrap();
+        assert_eq!(sorted.rows()[0].scope(), shuffled.rows()[0].scope());
+        assert!(serde_json::from_value::<ReportTable>(rows("#1", "#1")).is_err());
+    }
+
+    #[test]
+    fn invalid_tables_and_rows_are_refused() {
+        let rule = RuleId::new("r").unwrap();
+        for name in ["", "Levels", "-x", "a b"] {
+            assert!(matches!(
+                ReportTable::new(rule.clone(), name, vec![ReportColumn::number("a")]),
+                Err(ReportTableError::InvalidName { .. })
+            ));
+        }
+        assert!(matches!(
+            ReportTable::new(rule.clone(), "t", vec![]),
+            Err(ReportTableError::NoColumns(_))
+        ));
+        assert!(matches!(
+            ReportTable::new(
+                rule.clone(),
+                "t",
+                vec![ReportColumn::number("a"), ReportColumn::text("a")]
+            ),
+            Err(ReportTableError::DuplicateColumn { .. })
+        ));
+        let mut table = levels();
+        let refused = |table: &mut ReportTable, values: Vec<ReportValue>| {
+            let error = table.push_row(object("#1"), values).unwrap_err();
+            assert!(matches!(error, ReportTableError::InvalidRow { .. }));
+            error.to_string()
+        };
+        assert!(refused(&mut table, vec![ReportValue::Unknown]).contains("1 value(s) for 3"));
+        let text_as_number = vec![
+            ReportValue::text("3 m"),
+            ReportValue::Unknown,
+            ReportValue::Unknown,
+        ];
+        assert!(refused(&mut table, text_as_number).contains("column `height`"));
+        let number_as_text = vec![
+            ReportValue::Unknown,
+            ReportValue::Unknown,
+            ReportValue::exact(1.0),
+        ];
+        assert!(refused(&mut table, number_as_text).contains("text column"));
+        let point = vec![
+            ReportValue::Interval {
+                lower: 1.0,
+                upper: 1.0,
+            },
+            ReportValue::Unknown,
+            ReportValue::Unknown,
+        ];
+        assert!(refused(&mut table, point).contains("a point is exact"));
+        let infinite = vec![
+            ReportValue::Exact {
+                value: f64::INFINITY,
+            },
+            ReportValue::Unknown,
+            ReportValue::Unknown,
+        ];
+        assert!(refused(&mut table, infinite).contains("not finite"));
+        assert!(table.is_empty());
+        table
+            .push_row(object("#1"), vec![ReportValue::Unknown; 3])
+            .unwrap();
+        assert!(refused(&mut table, vec![ReportValue::Unknown; 3]).contains("exists already"));
+        assert_eq!(table.rows().len(), 1);
+
+        let column = |value| serde_json::from_value::<ReportColumn>(value);
+        assert!(column(json!({"id": "a", "kind": "quantity"})).is_err());
+        assert!(column(json!({"id": "a", "kind": "number", "dimension": "area"})).is_err());
+        assert_eq!(
+            column(json!({"id": "a", "kind": "quantity", "dimension": "area"})).unwrap(),
+            ReportColumn::quantity("a", QuantityDimension::Area)
+        );
+    }
+
+    #[test]
+    fn measured_values_are_exact_only_as_points() {
+        assert_eq!(
+            ReportValue::measured(2.0, 2.0),
+            ReportValue::Exact { value: 2.0 }
+        );
+        assert_eq!(ReportValue::measured(2.0, 1.0), ReportValue::Unknown);
+        assert_eq!(ReportValue::exact(f64::NAN), ReportValue::Unknown);
+        assert_eq!(ReportValue::measured(1.0, 2.0).to_string(), "1..2");
+    }
+}

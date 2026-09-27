@@ -7,8 +7,8 @@ use axioval_engine::{
     ServiceRegistry, SessionSources, SnapshotBoundService, SourceSnapshot, compile,
 };
 use axioval_ir::{
-    DefinitionPackage, Finding, Object, ObjectId, Project, RuleSetPackage, Scope, Severity,
-    SourceId,
+    DefinitionPackage, Finding, Object, ObjectId, Project, QuantityDimension, ReportColumn,
+    ReportTable, ReportValue, RuleId, RuleSetPackage, Scope, Severity, SourceId,
 };
 
 struct Stub;
@@ -221,6 +221,111 @@ fn source_and_project_outcomes_order_before_object_outcomes() {
         .map(|outcome| outcome.scope.to_string())
         .collect();
     assert_eq!(scopes, ["project", "source test:a", "test:a/1"]);
+}
+
+/// Pushes tables out of name order, one without rows, and optionally one
+/// name twice.
+struct Tabled {
+    duplicate: bool,
+}
+impl RuleCapability for Tabled {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-exists"
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![ParameterDescriptor::required(
+            "property",
+            ParameterType::PropertyReference,
+        )]
+    }
+    fn evaluate(&self, _: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        let object = |local: &str| ObjectId::new(SourceId::new("test", "a").unwrap(), local);
+        // The capability names another rule; the runtime binds the compiled one.
+        let table = |name: &str| {
+            let mut table = ReportTable::new(
+                RuleId::new("elsewhere").unwrap(),
+                name,
+                vec![ReportColumn::quantity("height", QuantityDimension::Length)],
+            )
+            .unwrap();
+            for (local, height) in [("2", 3.5), ("1", 3.0)] {
+                table
+                    .push_row(object(local).unwrap(), vec![ReportValue::exact(height)])
+                    .unwrap();
+            }
+            table
+        };
+        let mut evaluation = CapabilityEvaluation::default();
+        evaluation.push_table(table("spaces"));
+        evaluation.push_table(
+            ReportTable::new(
+                RuleId::new("elsewhere").unwrap(),
+                "empty",
+                vec![ReportColumn::number("ratio")],
+            )
+            .unwrap(),
+        );
+        evaluation.push_table(table("levels"));
+        if self.duplicate {
+            evaluation.push_table(table("levels"));
+        }
+        assert_eq!(evaluation.tables().len(), 2 + usize::from(self.duplicate));
+        evaluation
+    }
+}
+
+#[test]
+fn tables_are_bound_to_their_rule_and_ordered_by_rule_and_name() {
+    let (definitions, mut rules) = packages();
+    let mut earlier = rules.root.rules[0].clone();
+    earlier.id = "a-first-rule".into();
+    rules.root.rules.push(earlier);
+    let registry = CapabilityRegistry::new()
+        .register(Tabled { duplicate: false })
+        .unwrap();
+    let plan = compile(&registry, &[definitions], &rules).unwrap();
+    let report = Runtime::new(registry)
+        .run(&Project::new(vec![]).unwrap(), plan)
+        .unwrap();
+    let tables: Vec<(String, &str)> = report
+        .tables()
+        .iter()
+        .map(|table| (table.rule_id().to_string(), table.name()))
+        .collect();
+    assert_eq!(
+        tables,
+        [
+            ("a-first-rule".to_owned(), "levels"),
+            ("a-first-rule".to_owned(), "spaces"),
+            ("wall-reference-required".to_owned(), "levels"),
+            ("wall-reference-required".to_owned(), "spaces"),
+        ]
+    );
+    let rows: Vec<String> = report.tables()[0]
+        .rows()
+        .iter()
+        .map(|row| row.scope().to_string())
+        .collect();
+    assert_eq!(rows, ["test:a/1", "test:a/2"]);
+}
+
+#[test]
+fn a_rule_reporting_one_table_twice_fails_the_run() {
+    let (definitions, rules) = packages();
+    let registry = CapabilityRegistry::new()
+        .register(Tabled { duplicate: true })
+        .unwrap();
+    let plan = compile(&registry, &[definitions], &rules).unwrap();
+    let error = Runtime::new(registry)
+        .run(&Project::new(vec![]).unwrap(), plan)
+        .unwrap_err();
+    assert_eq!(
+        error,
+        EngineError::DuplicateReportTable {
+            rule: "wall-reference-required".into(),
+            table: "levels".into(),
+        }
+    );
 }
 
 #[test]

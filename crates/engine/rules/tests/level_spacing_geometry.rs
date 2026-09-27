@@ -12,7 +12,9 @@ use axioval_engine::{
     VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::ParameterValue;
-use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension, ReportValue,
+};
 use axioval_rules::LevelSpacing;
 use common::{
     Model, boolean, findings, flagged, id, kind, property, rule, selector, source, string, strings,
@@ -245,6 +247,67 @@ fn the_spaces_of_an_unmeasured_highest_level_are_not_judged() {
         unevaluated(&evaluation),
         [("og".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
     );
+}
+
+/// The rows of the table `name`, by the local id of their object.
+fn rows(evaluation: &CapabilityEvaluation, name: &str) -> Vec<(String, Vec<ReportValue>)> {
+    let table = evaluation
+        .tables()
+        .iter()
+        .find(|table| table.name() == name)
+        .unwrap_or_else(|| panic!("no table {name}"));
+    table
+        .rows()
+        .iter()
+        .map(|row| {
+            let local = row.scope().object().map_or("-", |id| id.local_id.as_str());
+            (local.to_owned(), row.values().to_vec())
+        })
+        .collect()
+}
+
+#[test]
+fn every_level_and_space_height_is_reported_in_a_table() {
+    let evaluation = run(
+        model(),
+        extents().with("wall-og", 3.0, 6.5, 0.01),
+        [contents(), spaces(0.6)].concat(),
+    );
+    assert!(evaluation.findings().is_empty());
+    let length = |value| ReportValue::exact(value);
+    let measured = ReportValue::measured(3.49, 3.51);
+    assert_eq!(
+        rows(&evaluation, "levels"),
+        [
+            ("eg".to_owned(), vec![length(0.0), length(3.0)]),
+            ("og".to_owned(), vec![length(3.0), measured.clone()]),
+        ]
+    );
+    let level = |local: &str| ReportValue::text(id(local).to_string());
+    assert_eq!(
+        rows(&evaluation, "spaces"),
+        [
+            (
+                "space-eg".to_owned(),
+                vec![level("eg"), length(3.0), length(3.0)]
+            ),
+            (
+                "space-og".to_owned(),
+                vec![level("og"), length(3.0), measured]
+            ),
+        ]
+    );
+    // Without contents the highest level's height is unknown, and its
+    // spaces are not compared, so they have no row.
+    let evaluation = run(model(), extents(), spaces(0.05));
+    assert_eq!(
+        rows(&evaluation, "levels"),
+        [
+            ("eg".to_owned(), vec![length(0.0), length(3.0)]),
+            ("og".to_owned(), vec![length(3.0), ReportValue::Unknown]),
+        ]
+    );
+    assert_eq!(rows(&evaluation, "spaces").len(), 1);
 }
 
 #[test]

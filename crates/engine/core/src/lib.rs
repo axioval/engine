@@ -6,7 +6,9 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
-use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId, Scope, SourceId};
+use axioval_ir::{
+    Finding, NotEvaluated, ObjectId, Project, Report, ReportTable, RuleId, Scope, SourceId,
+};
 use thiserror::Error;
 
 mod session;
@@ -92,6 +94,9 @@ pub enum EngineError {
         kind: String,
         concept: String,
     },
+    /// One rule reported two tables of one name.
+    #[error("rule `{rule}` reported table `{table}` twice")]
+    DuplicateReportTable { rule: String, table: String },
 }
 
 pub use schema::ColumnKind;
@@ -256,6 +261,7 @@ pub struct RuleContext<'a> {
 pub struct CapabilityEvaluation {
     findings: Vec<Finding>,
     not_evaluated: Vec<CapabilityNotEvaluated>,
+    tables: Vec<ReportTable>,
 }
 /// A not-evaluated outcome before the runtime binds its compiled rule ID.
 #[derive(Clone, Debug, PartialEq)]
@@ -296,12 +302,27 @@ impl CapabilityEvaluation {
     pub fn not_evaluated_outcomes(&self) -> &[CapabilityNotEvaluated] {
         &self.not_evaluated
     }
+    /// Tables of measured values emitted by this capability.
+    #[must_use]
+    pub fn tables(&self) -> &[ReportTable] {
+        &self.tables
+    }
     /// Creates a conclusive evaluation from zero or more findings.
     #[must_use]
     pub fn evaluated(findings: Vec<Finding>) -> Self {
         Self {
             findings,
-            not_evaluated: Vec::new(),
+            ..Self::default()
+        }
+    }
+    /// Adds a table of measured values, reported beside the findings.
+    ///
+    /// A table without rows is dropped: it measured nothing, and the
+    /// not-evaluated outcomes already say why. Tables are informative only;
+    /// they never stand in for a finding or a not-evaluated outcome.
+    pub fn push_table(&mut self, table: ReportTable) {
+        if !table.is_empty() {
+            self.tables.push(table);
         }
     }
     /// Creates a rule-level not-evaluated outcome.
@@ -710,6 +731,7 @@ impl Runtime {
         let services = &services;
         let context = RuleContext { project, services };
         let mut findings = Vec::new();
+        let mut tables: Vec<ReportTable> = Vec::new();
         let mut not_evaluated: Vec<NotEvaluated> = plan
             .deferred
             .into_iter()
@@ -728,6 +750,13 @@ impl Runtime {
             let rule_id = rule.id.clone();
             let evaluation = capability.evaluate(&context, &rule);
             findings.extend(evaluation.findings);
+            // The compiled rule is the table's identity, whatever the capability named.
+            tables.extend(
+                evaluation
+                    .tables
+                    .into_iter()
+                    .map(|table| table.with_rule_id(rule_id.clone())),
+            );
             not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
         findings.sort_by(|a, b| {
@@ -738,9 +767,20 @@ impl Runtime {
                 .then_with(|| a.message.cmp(&b.message))
         });
         not_evaluated.sort();
+        tables.sort_by(|a, b| (a.rule_id(), a.name()).cmp(&(b.rule_id(), b.name())));
+        if let Some(pair) = tables
+            .windows(2)
+            .find(|pair| (pair[0].rule_id(), pair[0].name()) == (pair[1].rule_id(), pair[1].name()))
+        {
+            return Err(EngineError::DuplicateReportTable {
+                rule: pair[0].rule_id().to_string(),
+                table: pair[0].name().to_owned(),
+            });
+        }
         Ok(Report {
             findings,
             not_evaluated,
+            tables,
         })
     }
 }

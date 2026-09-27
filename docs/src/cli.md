@@ -78,7 +78,8 @@ The JSON result goes to stdout, or to `--report`:
 }
 ```
 
-`report` is the engine's `Report`. `integrity` lists irregularities of the model
+`report` is the engine's `Report`; when rules measured values it also has
+`tables` (see [Tables](./ir.md#tables)). `integrity` lists irregularities of the model
 itself (see [Independent adapters](./adapters.md)); they are not rule findings.
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model:
@@ -278,6 +279,29 @@ listing entry then carries `scope` (`source model.ifc` or `project`) instead of
 `--object` also accepts a source document name (`model.ifc`) and lists the
 entries about that source. The summary never gives such an entry as an example,
 since every example is an object to drill into; its message names the source.
+
+**Tables.** Measured values rules report (storey heights, areas, ratios; see
+[Report tables](./capabilities.md#report-tables)) form the `table` section of
+the summary: one group per table, its rule, name and row count, its columns
+with units, and example objects. They never change the status. When the
+first group is not a table, `next` suggests `--section tables`. The listing
+has one entry per row: its `level` is the table's name, its message the
+row's values with units, and `--rule` and `--object` filter rows as they
+filter findings:
+
+```text
+table:
+       2  levels   storey-heights
+          columns: elevation (m), height (m)
+          e.g. #101 IFCBUILDINGSTOREY …; #102 IFCBUILDINGSTOREY …
+
+$ axioval report r.json --section tables --rule storey-heights
+[table] levels storey-heights  #102 IFCBUILDINGSTOREY 0000000000000000000102
+    elevation 3 m · height 3.5 m
+```
+
+Numbers are shown to six decimals, an interval as `lower..upper`; the saved
+JSON keeps them in full.
 
 Both views end with the exact command for the next step: the largest group,
 an example object, the next page. Every suggested command is quoted for a POSIX

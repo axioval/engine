@@ -66,7 +66,7 @@ Every imported fact and computed evidence can reference its source record, adapt
 
 ## Reports
 
-`Report` keeps conclusive `findings` separate from `not_evaluated` outcomes. Every not-evaluated record identifies its rule and its scope, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist.
+`Report` keeps conclusive `findings` separate from `not_evaluated` outcomes, and both separate from the `tables` of measured values (see [Tables](#tables)). Every not-evaluated record identifies its rule and its scope, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist.
 
 ### Scope
 
@@ -88,6 +88,30 @@ The runtime orders findings by rule, then scope, then message, and not-evaluated
 - a not-evaluated outcome always has `object_id` (`null` unless it is about one object), and `source` only when it is about one source.
 
 A record naming both an object and a source is rejected: an object id already names its source. Readers written before scopes existed reject a finding without `object_id` or with `source`, so a report containing scoped entries needs a reader of this version.
+
+### Tables
+
+A finding says what is wrong; a table says what was measured, whether it passed or not: one row per storey with its elevation and height, one per anchor with its areas and their ratio. `Report::tables` holds `ReportTable`s, each reported by one rule under a name unique for that rule.
+
+- **Columns** have a lowercase id (1 to 64 ASCII letters, digits, `-` or `_`) unique in the table and a kind: `quantity` with a `QuantityDimension` (values in its coherent SI unit, as for properties), `number` (dimensionless, such as a ratio) or `text`.
+- **Rows** are keyed by `Scope`, at most one per scope, and hold one value per column: `exact` (a finite number), `interval` (`lower < upper`, finite, sure to hold the exact value), `text`, or `unknown`. A measured interval is exact exactly when it is a point; `ReportValue::measured` writes a point as `exact` and non-finite bounds as `unknown`.
+- **Ordering.** The runtime sorts tables by rule, then name; rows are always in scope order (project, sources, objects), whatever order they were added or read in. Rows of several rules' tables join on their scope.
+- **Validation.** Names, row widths, value kinds, finiteness and duplicate scopes are checked when a table is built and when it is read. A capability adds tables with `CapabilityEvaluation::push_table`; a table without rows is dropped, the runtime binds each table to the compiled rule, and a rule reporting one name twice fails the run.
+
+Tables are informative: they never stand in for a finding or a not-evaluated outcome, and sinks that write issues (BCF) ignore them.
+
+```json
+"tables": [{
+  "rule_id": "storey-heights", "name": "levels",
+  "columns": [{"id": "elevation", "kind": "quantity", "dimension": "length"},
+              {"id": "height", "kind": "quantity", "dimension": "length"}],
+  "rows": [{"object_id": {"source": {"system": "ifc-step", "document": "model.ifc"}, "local_id": "#102"},
+            "values": [{"type": "exact", "value": 3.0},
+                       {"type": "interval", "lower": 3.49, "upper": 3.51}]}]
+}]
+```
+
+A row names its scope as a finding does: `object_id`, `source`, or neither for the project. The `tables` field is omitted when empty, so a report without tables serializes byte for byte as before; readers written before tables existed reject a report containing them.
 
 ## No source leakage
 

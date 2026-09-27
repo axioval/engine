@@ -25,6 +25,32 @@ All notable changes are documented here. This project follows Semantic Versionin
   `direction` field, so code constructing or matching it must name it. Door
   swing footprints as distance sources wait on door leaves
   (openbimrs/ifc#148). (#60)
+- **Report tables.** A report carries named tables of measured values
+  beside its findings (`Report::tables`, `axioval_ir::ReportTable`): per
+  rule, typed columns (`quantity` with its SI dimension, `number`, `text`)
+  and one row per scope, keyed like findings (`object_id`, `source`, or
+  neither for the project), with `exact`, `interval` or `unknown` numbers
+  and text. Tables are ordered by rule and name, rows by scope; names,
+  row widths and values are validated when built and when read. The
+  field is omitted when empty, so a report without tables serializes byte
+  for byte as before. Capabilities add tables with
+  `CapabilityEvaluation::push_table`; the runtime binds each to its
+  compiled rule and fails the run (`EngineError::DuplicateReportTable`)
+  when a rule reports one name twice. `level-spacing` reports `levels`
+  (`elevation`, `height`) and, with `space_selector`, `spaces` (`level`,
+  `height`, `level_height`); `plan-area` reports `areas` (`plan_area` or
+  `facade_area`); `area-ratio` reports `ratios` (`numerator_area`,
+  `denominator_area`, `ratio`). They report every measured value, passing
+  or not, and need no new parameter. `axioval report` summarizes each
+  table as a group (rows, columns, example objects) and lists its rows
+  with `--section tables`, filtered by `--rule` and `--object`; BCF export
+  ignores tables. Space height against its storey's height stays with
+  `level-spacing` (`space_selector`), now visible per space in `spaces`.
+  **Breaking:** `Report` gains the public field `tables`, so a struct
+  literal must set it; `EngineError` gains a variant; a report containing
+  tables needs a reader of this version, since older readers reject the
+  unknown field. (#56)
+
 - **Accessible route.** `accessible-route` requires each selected
   destination to be reachable from a start point through the route spaces
   for a mobility profile (`width_metres`, `clear_height_metres`), through

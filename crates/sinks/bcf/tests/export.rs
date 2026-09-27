@@ -6,7 +6,8 @@ use std::io::{Cursor, Read};
 use axioval_bcf::{ExportError, IFC_GLOBAL_ID_SCHEME, NOT_EVALUATED_TOPIC_TYPE, Options, export};
 use axioval_ir::{
     Evidence, ExternalId, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, Project,
-    Report, RuleId, Scope, Severity, SourceId,
+    QuantityDimension, Report, ReportColumn, ReportTable, ReportValue, RuleId, Scope, Severity,
+    SourceId,
 };
 
 const WALL: &str = "2O2Fr$t4X7Zf8NOew3FLOH";
@@ -67,6 +68,7 @@ fn report(document: &str, first: u64) -> Report {
             reason: NotEvaluatedReason::MissingService,
             message: "no geometry service is registered".into(),
         }],
+        tables: vec![],
     }
 }
 
@@ -183,6 +185,29 @@ fn identical_input_writes_identical_bytes() {
 }
 
 #[test]
+fn report_tables_write_no_topics() {
+    let bytes = |report: &Report| {
+        export(report, &model("a.ifc", 1), &options())
+            .unwrap()
+            .to_bytes()
+            .unwrap()
+    };
+    let plain = report("a.ifc", 1);
+    let mut tabled = plain.clone();
+    let mut table = ReportTable::new(
+        RuleId::new("storey-height").unwrap(),
+        "levels",
+        vec![ReportColumn::quantity("height", QuantityDimension::Length)],
+    )
+    .unwrap();
+    table
+        .push_row(id("a.ifc", 1), vec![ReportValue::exact(3.0)])
+        .unwrap();
+    tabled.tables.push(table);
+    assert_eq!(bytes(&tabled), bytes(&plain));
+}
+
+#[test]
 fn a_federation_of_two_revisions_keeps_every_guid_unique() {
     let mut objects: Vec<_> = model("a.ifc", 1).objects().cloned().collect();
     objects.extend(model("b.ifc", 1).objects().cloned());
@@ -266,6 +291,7 @@ fn scoped_report(document: &str, first: u64) -> Report {
             reason: NotEvaluatedReason::IncompleteEvidence,
             message: "0 object(s) match and 3 more may".into(),
         }],
+        tables: vec![],
     }
 }
 
@@ -323,6 +349,7 @@ fn a_project_finding_is_written_and_its_guid_is_stable() {
             "no object matches the selection in the project; required at least 1",
         )],
         not_evaluated: vec![],
+        tables: vec![],
     };
     let guid = |project: &Project| {
         export(&report, project, &options())

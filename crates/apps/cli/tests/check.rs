@@ -2920,6 +2920,63 @@ fn with_geometry_storey_heights_and_window_to_wall_ratios_are_measured() {
             .is_none_or(Vec::is_empty),
         "{result:#}"
     );
+    storey_tables_are_reported(&result, saved.to_str().unwrap());
+}
+
+/// What the storey metrics measured is reported beside the findings,
+/// passing or not, and `report` summarizes and lists it.
+fn storey_tables_are_reported(result: &Value, saved: &str) {
+    let tables: Vec<(&str, &str, usize)> = result["report"]["tables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|table| {
+            (
+                table["rule_id"].as_str().unwrap(),
+                table["name"].as_str().unwrap(),
+                table["rows"].as_array().unwrap().len(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        tables,
+        [
+            ("storey-heights", "levels", 2),
+            ("storey-heights", "spaces", 2),
+            ("window-to-wall", "ratios", 2),
+        ],
+        "{result:#}"
+    );
+    let summary = stdout(&report(&[saved]));
+    assert!(
+        summary.contains("table:\n       2  levels   storey-heights\n          columns: elevation (m), height (m)"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains(&format!("axioval report {saved} --section tables\n")),
+        "{summary}"
+    );
+    let listing = stdout(&report(&[
+        saved,
+        "--section",
+        "tables",
+        "--rule",
+        "storey-heights",
+    ]));
+    assert!(
+        listing.contains("[table] levels storey-heights  #102 IFCBUILDINGSTOREY"),
+        "{listing}"
+    );
+    assert!(
+        listing.contains("elevation 3 m · height 3.5 m"),
+        "{listing}"
+    );
+    assert!(listing.contains("showing 1–4 of 4"), "{listing}");
+    let listing = report(&[saved, "--section", "tables", "--object", "#101", "--json"]);
+    let listing: Value = serde_json::from_slice(&listing.stdout).unwrap();
+    assert_eq!(listing["total"], 2, "{listing:#}");
+    assert_eq!(listing["entries"][1]["section"], "tables");
+    assert_eq!(listing["entries"][1]["level"], "ratios");
 }
 
 /// A file of 3 m-high rectangular walls: `(first id, centre x, centre y,

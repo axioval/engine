@@ -19,7 +19,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use axioval::ir::{
-    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Scope, Severity, SourceId,
+    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, ReportColumn, ReportRow,
+    ReportTable, ReportValue, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -224,6 +225,7 @@ impl CheckOutput {
                 .iter()
                 .filter_map(NotEvaluated::object_id),
         );
+        named.extend(table_objects(&report));
         let objects = named
             .into_iter()
             .filter_map(|id| {
@@ -262,6 +264,12 @@ impl CheckOutput {
             .iter()
             .map(|f| &f.scope)
             .chain(self.report.not_evaluated().iter().map(|n| &n.scope))
+            .chain(
+                self.report
+                    .tables()
+                    .iter()
+                    .flat_map(|table| table.rows().iter().map(ReportRow::scope)),
+            )
             .filter_map(|scope| match scope {
                 Scope::Source(source) => Some(source),
                 Scope::Project | Scope::Object(_) => None,
@@ -287,6 +295,7 @@ impl CheckOutput {
                     .iter()
                     .flat_map(|g| g.unmeasured.iter().map(|u| &u.object)),
             )
+            .chain(table_objects(&self.report))
     }
 
     /// `#2 IFCWALL 2O2Fr$t4X7Zf8NOew3FLOH`: local id, kind, GlobalId when known.
@@ -342,6 +351,8 @@ pub enum Section {
     Integrity,
     /// Objects `check --geometry` could not mesh.
     Geometry,
+    /// Rows of the tables of measured values rules report.
+    Tables,
 }
 
 impl Section {
@@ -351,8 +362,62 @@ impl Section {
             Self::NotEvaluated => "not-evaluated",
             Self::Integrity => "integrity",
             Self::Geometry => "geometry",
+            Self::Tables => "table",
         }
     }
+}
+
+/// The objects the rows of the report's tables are about.
+fn table_objects(report: &Report) -> impl Iterator<Item = &ObjectId> {
+    report
+        .tables()
+        .iter()
+        .flat_map(|table| table.rows().iter().filter_map(|row| row.scope().object()))
+}
+
+/// A column as a summary names it: `height (m)`.
+fn column_text(column: &ReportColumn) -> String {
+    match column.kind.unit_symbol() {
+        Some(unit) => format!("{} ({unit})", column.id),
+        None => column.id.clone(),
+    }
+}
+
+/// A table's columns, as the message of its summary group.
+fn columns_text(table: &ReportTable) -> String {
+    let columns: Vec<String> = table.columns().iter().map(column_text).collect();
+    format!("columns: {}", columns.join(", "))
+}
+
+/// A number as a reader reads it: at most six decimals.
+fn decimal(value: f64) -> String {
+    format!("{}", (value * 1e6).round() / 1e6)
+}
+
+/// One row's values, `elevation 3 m · height 3.49..3.51 m`.
+fn row_text(table: &ReportTable, values: &[ReportValue]) -> String {
+    table
+        .columns()
+        .iter()
+        .zip(values)
+        .map(|(column, value)| {
+            let unit = column
+                .kind
+                .unit_symbol()
+                .map(|unit| format!(" {unit}"))
+                .unwrap_or_default();
+            let text = match value {
+                ReportValue::Unknown => "unknown".to_owned(),
+                ReportValue::Exact { value } => format!("{}{unit}", decimal(*value)),
+                ReportValue::Interval { lower, upper } => {
+                    format!("{}..{}{unit}", decimal(*lower), decimal(*upper))
+                }
+                ReportValue::Text { value } => value.clone(),
+            };
+            format!("{} {text}", column.id)
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// Entries sharing a rule (or integrity code) and a severity (or reason).
@@ -571,6 +636,23 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
                 Some(output.describe(&unmeasured.object, qualify)),
             );
     }
+    // One group per table: its rows are the count, its columns the message.
+    for table in output.report.tables() {
+        let columns = columns_text(table);
+        let tally = tallies
+            .entry((
+                Section::Tables,
+                table.rule_id().to_string(),
+                table.name().to_owned(),
+            ))
+            .or_default();
+        for row in table.rows() {
+            tally.add(
+                &columns,
+                row.scope().object().map(|id| output.describe(id, qualify)),
+            );
+        }
+    }
 
     tallies
 }
@@ -667,6 +749,10 @@ fn next_steps(
                 format!("axioval report {quoted} --code {}", shell_quote(&group.key))
             }
             Section::Geometry => format!("axioval report {quoted} --section geometry"),
+            Section::Tables => format!(
+                "axioval report {quoted} --section tables --rule {}",
+                shell_quote(&group.key)
+            ),
             _ => format!("axioval report {quoted} --rule {}", shell_quote(&group.key)),
         });
     }
@@ -678,6 +764,12 @@ fn next_steps(
         && groups.iter().any(|g| g.section == Section::Geometry)
     {
         next.push(format!("axioval report {quoted} --section geometry"));
+    }
+    // Measured values are what a reader asks for next once issues are known.
+    if groups.first().is_some_and(|g| g.section != Section::Tables)
+        && groups.iter().any(|g| g.section == Section::Tables)
+    {
+        next.push(format!("axioval report {quoted} --section tables"));
     }
     if let Some(example) = groups.iter().flat_map(|g| &g.examples).next() {
         let id = example.split(' ').next().unwrap_or(example);
@@ -907,6 +999,10 @@ pub fn list(
         }));
     }
 
+    if filter.code.is_none() && wants(Section::Tables) {
+        matched.extend(table_entries(output, filter, qualify));
+    }
+
     let total = matched.len();
     let entries: Vec<Entry> = matched.into_iter().skip(offset).take(limit).collect();
     let end = offset + entries.len();
@@ -917,6 +1013,44 @@ pub fn list(
         entries,
         next,
     }
+}
+
+/// The rows of the report's tables that `filter`'s rule and object select,
+/// in table order.
+fn table_entries(output: &CheckOutput, filter: &Filter, qualify: bool) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    for table in output.report.tables() {
+        if filter
+            .rule
+            .as_deref()
+            .is_some_and(|wanted| wanted != table.rule_id().to_string())
+        {
+            continue;
+        }
+        let rows = table.rows().iter().filter(|row| {
+            filter.object.as_deref().is_none_or(|query| {
+                names_source(row.scope(), query)
+                    || row
+                        .scope()
+                        .object()
+                        .is_some_and(|id| output.names(id, query))
+            })
+        });
+        entries.extend(rows.map(|row| {
+            let (object, scope) = subject_fields(output, row.scope(), qualify);
+            Entry {
+                section: Section::Tables,
+                key: table.rule_id().to_string(),
+                level: table.name().to_owned(),
+                object,
+                scope,
+                related: vec![],
+                message: row_text(table, row.values()),
+                evidence: vec![],
+            }
+        }));
+    }
+    entries
 }
 
 /// Whether `query` names the source a source-scoped entry is about, by its

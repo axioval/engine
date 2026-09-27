@@ -19,6 +19,12 @@ pub use contract::{DefinitionPackage, RuleSetPackage};
 pub mod temporal;
 pub use temporal::{Date, DateTime, TemporalError, TemporalPrecision};
 
+/// Named tables of measured values reported beside findings.
+pub mod table;
+pub use table::{
+    ReportColumn, ReportColumnKind, ReportRow, ReportTable, ReportTableError, ReportValue,
+};
+
 /// Validation error for source-neutral contracts.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum IrError {
@@ -945,12 +951,19 @@ impl TryFrom<NotEvaluatedWire> for NotEvaluated {
     }
 }
 /// Ordered report from a plan execution.
+///
+/// `tables` holds the measured values rules report beside their findings,
+/// ordered by rule and table name. It is omitted from the serialized form
+/// when empty, so a report without tables serializes byte for byte as
+/// before tables existed.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Report {
     pub findings: Vec<Finding>,
     #[serde(default)]
     pub not_evaluated: Vec<NotEvaluated>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<ReportTable>,
 }
 impl Report {
     /// Findings in deterministic order.
@@ -960,5 +973,15 @@ impl Report {
     /// Fail-closed rule or object evaluations in deterministic order.
     pub fn not_evaluated(&self) -> &[NotEvaluated] {
         &self.not_evaluated
+    }
+    /// Tables of measured values, by rule and table name.
+    pub fn tables(&self) -> &[ReportTable] {
+        &self.tables
+    }
+    /// The table `name` of `rule_id`, if the report has it.
+    pub fn table(&self, rule_id: &RuleId, name: &str) -> Option<&ReportTable> {
+        self.tables
+            .iter()
+            .find(|table| table.rule_id() == rule_id && table.name() == name)
     }
 }

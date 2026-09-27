@@ -332,6 +332,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   candidates' plan triangles, never exactly. **Breaking:** definitions
   bound to `component-clearance` must declare the optional parameters
   `wall_selector`, `wall_reach` and `wall_inset`.
+- **Door heights, measured thresholds, widest leaves and revolving
+  doors.** (Closes #131) `keyed-limit` gains two quantities. `clear-height`
+  is a stated clear height, else `overall_height` less the head lining
+  (`lining_thickness`) and the threshold (`threshold_thickness`) the door
+  states; a declared thickness the door does not state is unknown, never
+  zero, so only a door too low even without it is found. `threshold-step`
+  measures `|door bottom + threshold − floor|` from geometry on each side
+  `floor_path` reaches: a sill 4 cm above the corridor's floor fails a 2 cm
+  maximum with no property stated, and with `ramp_selector` and
+  `ramp_reach` a selected ramp within reach of the door in plan and over
+  the space is that side's floor, at its top; a ramp that only may be
+  there leaves both floors possible. `clear_width_from_leaves` is now a
+  string: `passage` as before, or `widest-leaf`, the widest hinged leaf
+  less the lining at its jamb and its own thickness (cited as
+  `…:step=widest-leaf`). `related-count` gains `same_ends`: a related
+  object counts only when that path reaches the same objects from it as
+  from the anchor, so a revolving door whose only swing door leads to
+  another space is a finding. **Breaking:** definitions bound to
+  `keyed-limit` must declare `clear_width_from_leaves` as a `string`
+  (it was a `boolean`; `true` is now `passage`) and the new optional
+  parameters `overall_height`, `lining_thickness`, `threshold_thickness`,
+  `ramp_selector` and `ramp_reach`; definitions bound to `related-count`
+  the new optional parameter `same_ends`.
 
 - **Window leaves.** (#36) `ObjectFrameService::leaves` answers a window's
   panels as leaves, as it answers a door's: the IFC adapter derives them
@@ -622,8 +645,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 - **Door clear widths from the lining and leaves, and door clearances by
   swing side.** (Refs #82) `keyed-limit`'s `clear-width` gains a step
   between the stated width and the rule's deduction:
-  with `clear_width_from_leaves`, the overall width less the lining on
-  both jambs and every hinged leaf's thickness, as the door's leaves state
+  with `clear_width_from_leaves` `passage`, the overall width less the
+  lining on both jambs and every hinged leaf's thickness, as the door's leaves state
   them (with IFC, `LiningThickness` and `PanelDepth`), cited as the inexact
   `…:step=lining-and-leaves`. It moves on when the source states no leaves
   or thicknesses or a leaf does not swing. `component-clearance` takes
@@ -634,7 +657,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   multi-leaf door leaves what it cannot place not evaluated. A threshold is
   the lining's `ThresholdThickness`, read as any property.
   **Breaking:** definitions bound to `keyed-limit` must declare the new
-  optional parameter `clear_width_from_leaves`.
+  optional `string` parameter `clear_width_from_leaves`.
 - **Distances to door swings.** (Closes #60) `distance` gains
   `subject_extent` and `counterpart_extent`: `door_swing` measures that side
   by the floor sectors its doors' hinged leaves sweep instead of its body,

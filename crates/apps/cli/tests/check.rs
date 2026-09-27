@@ -2160,6 +2160,7 @@ fn derived_count(
             "related_selector": declare("related_selector", "selector"),
             "minimum": declare("minimum", "integer"),
             "maximum": declare("maximum", "integer"),
+            "same_ends": declare("same_ends", "stringList"),
             "relationship": declare("relationship", "string"),
             "direction": declare("direction", "string"),
             "follow_chain": declare("follow_chain", "boolean"),
@@ -9076,6 +9077,78 @@ fn with_geometry_local_circulation_ignores_a_skirting_below_the_band() {
     }));
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert_eq!(finding_messages(&result), [], "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// Rooms #19 (x 0..4) and #29 (x 4.2..8.2), both with their floor at 0 m,
+/// 3 m high and 4 m deep. Door #39 between them, at y 0.5..1.5,
+/// has its bottom 4 cm above the floors; door #49, at y 2.5..3.5, stands on
+/// them. Both are 2.1 m high and 0.1 m thick, and state no threshold.
+/// `Pset_SpaceCommon.Reference` gives each room's use.
+fn doors_on_sills() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Office'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19,#29),#201);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [6.2, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(30, [4.1, 1.0, 0.04], [0.1, 1.0, 2.1], door),
+        placed_box(40, [4.1, 3.0, 0.0], [0.1, 1.0, 2.1], door),
+    )
+}
+
+#[test]
+fn with_geometry_a_door_sill_above_the_floor_is_found() {
+    let case = Case::new("geometry-threshold-step");
+    let (output, result) = case.geometry_rule(
+        &doors_on_sills(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.keyed-limit",
+        &registry_signature("axioval:capability.keyed-limit"),
+        entity("door"),
+        json!({
+            "limits": {"type": "table", "value": [
+                {"key_1": {"type": "string", "value": "*"},
+                 "maximum": {"type": "number", "value": 0.02}},
+            ]},
+            "quantity": {"type": "string", "value": "threshold-step"},
+            "floor_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+            "key_1": {"type": "propertyReference",
+                      "property": "axioval:example.ifc.reference",
+                      "propertySet": "axioval:example.ifc.pset-space-common"},
+            "key_1_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #39's bottom lies 4 cm above both floors, #49's on them.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0].1.starts_with("the step from the floor of ")
+            && findings[0]
+                .1
+                .contains("to the door's bottom is 0.04 m; required at most 0.02 m"),
+        "{result:#}"
+    );
     assert!(
         result["report"]["not_evaluated"]
             .as_array()

@@ -8,8 +8,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, ElevationInterval, PlanArea, PlanAreaError, PlanAreaService,
-    PlanAreaServiceHandle, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    CapabilityEvaluation, ElevationInterval, GeometryFidelity, ObjectBounds, PlanArea,
+    PlanAreaError, PlanAreaService, PlanAreaServiceHandle, ProjectedDistanceEvidence,
+    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle, VerticalExtent, VerticalExtentError, VerticalExtentService,
     VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, TableRow};
@@ -525,10 +527,12 @@ fn a_package_binds_the_limit_table() {
         parameter("propertyReference", false),
     );
     parameters.insert("width_deduction".into(), parameter("quantity", false));
-    parameters.insert(
-        "clear_width_from_leaves".into(),
-        parameter("boolean", false),
-    );
+    parameters.insert("clear_width_from_leaves".into(), parameter("string", false));
+    for name in ["overall_height", "lining_thickness", "threshold_thickness"] {
+        parameters.insert(name.into(), parameter("propertyReference", false));
+    }
+    parameters.insert("ramp_selector".into(), parameter("selector", false));
+    parameters.insert("ramp_reach".into(), parameter("quantity", false));
     for index in 1..=4 {
         parameters.insert(
             format!("key_{index}"),
@@ -1105,7 +1109,7 @@ fn a_clear_width_is_derived_from_the_lining_and_leaves() {
         )
         .handle();
     let mut parameters = door_keys(Some(0.2));
-    parameters.push(("clear_width_from_leaves", common::boolean(true)));
+    parameters.push(("clear_width_from_leaves", string("passage")));
     let evaluation = model.evaluate_with(
         &KeyedLimit,
         &rule(ID, kind("door"), parameters),
@@ -1149,4 +1153,427 @@ fn a_clear_width_is_derived_from_the_lining_and_leaves() {
         .unwrap();
     assert!(derived.locator.ends_with("d1:step=lining-and-leaves"));
     assert!(!derived.exact);
+}
+
+/// With `clear_width_from_leaves` `widest-leaf`, a door's clear width is its
+/// widest leaf's: the leaf less the lining at the jamb it meets and its own
+/// thickness, however wide the whole passage is.
+#[test]
+fn a_widest_leaf_too_narrow_is_found_although_the_passage_is_wide() {
+    use common::doors::{Doors, hinged};
+    // A 1.4 m double door: a 0.9 m leaf hinged at x 0 and a 0.5 m leaf
+    // hinged at x 1.4, 0.05 m lining and 0.04 m leaves. Its widest leaf
+    // gives 0.9 - 0.05 - 0.04 = 0.81 m; the passage 1.22 m.
+    let model = || doors(&[("d1", "DOUBLE_DOOR_SINGLE_SWING", Some(1.4), None)]);
+    let frames = || {
+        Doors::default()
+            .door(
+                "d1",
+                vec![
+                    hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 0.9, false),
+                    hinged(
+                        [1.4, 0.0, 0.0],
+                        [-1.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0],
+                        0.5,
+                        false,
+                    ),
+                ],
+                1.4,
+                Some(0.05),
+            )
+            .handle()
+    };
+    let limits = vec![row([Some("DOUBLE_DOOR_*"), None, None], Some(1.0), None)];
+    let evaluate = |mode: &str| {
+        let parameters = vec![
+            ("limits", table(limits.clone())),
+            ("quantity", string("clear-width")),
+            ("key_1", property(Some("Attributes"), "OperationType")),
+            ("clear_width_from_leaves", string(mode)),
+        ];
+        model().evaluate_with(
+            &KeyedLimit,
+            &rule(ID, kind("door"), parameters),
+            |services| {
+                services.register(frames()).unwrap();
+            },
+        )
+    };
+    let evaluation = evaluate("widest-leaf");
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "d1".into(),
+            "clear width of the widest leaf (leaf 0.9 m less 0.05 m lining at one jamb and 0.04 \
+             m of open leaf, as the door states them) is 0.81 m; required at least 1 m (limit \
+             row 0: Attributes.OperationType `DOUBLE_DOOR_SINGLE_SWING`)"
+                .into()
+        )]
+    );
+    let derived = evaluation.findings()[0]
+        .evidence
+        .iter()
+        .find(|evidence| evidence.locator.starts_with("axioval:derived.clear-width:"))
+        .unwrap();
+    assert!(derived.locator.ends_with("d1:step=widest-leaf"));
+    assert!(!derived.exact);
+    let evaluation = evaluate("passage");
+    assert!(findings(&evaluation).is_empty());
+    assert!(unevaluated(&evaluation).is_empty());
+    let evaluation = evaluate("every-leaf");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+/// Doors `(name, overall height, lining, threshold, stated clear height)`.
+type TallDoor<'a> = (&'a str, f64, Option<f64>, Option<f64>, Option<f64>);
+
+fn tall_doors(doors: &[TallDoor<'_>]) -> Model {
+    let mut model = Model::default();
+    for (door, overall, lining, threshold, stated) in doors {
+        model = model
+            .object(door, "door")
+            .text(door, "Attributes", "OperationType", "SINGLE_SWING_LEFT")
+            .value(door, "Attributes", "OverallHeight", length(*overall));
+        for (name, value) in [
+            ("LiningThickness", lining),
+            ("ThresholdThickness", threshold),
+            ("ClearHeight", stated),
+        ] {
+            if let Some(value) = value {
+                model = model.value(door, "Lining", name, length(*value));
+            }
+        }
+    }
+    model
+}
+
+fn height_keys(stated: bool) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        (
+            "limits",
+            table(vec![row([Some("*"), None, None], Some(2.05), None)]),
+        ),
+        ("quantity", string("clear-height")),
+        ("key_1", property(Some("Attributes"), "OperationType")),
+        (
+            "overall_height",
+            property(Some("Attributes"), "OverallHeight"),
+        ),
+        (
+            "lining_thickness",
+            property(Some("Lining"), "LiningThickness"),
+        ),
+        (
+            "threshold_thickness",
+            property(Some("Lining"), "ThresholdThickness"),
+        ),
+    ];
+    if stated {
+        parameters.push(("quantity_property", property(Some("Lining"), "ClearHeight")));
+    }
+    parameters
+}
+
+/// A door's clear height is its overall height less its head lining and
+/// threshold; an unstated thickness bounds it only from above, so only a
+/// door too low even without it is found.
+#[test]
+fn a_door_too_low_after_its_lining_and_threshold_is_found() {
+    let model = || {
+        tall_doors(&[
+            // 2.1 m less 0.05 m and 0.02 m: 2.03 m.
+            ("d1", 2.1, Some(0.05), Some(0.02), None),
+            // 2.2 m less 0.05 m and 0.02 m: 2.13 m.
+            ("d2", 2.2, Some(0.05), Some(0.02), None),
+            // No threshold stated: at most 2.15 m, at least nothing.
+            ("d3", 2.2, Some(0.05), None, None),
+            // At most 2.0 m even without a threshold.
+            ("d4", 2.05, Some(0.05), None, None),
+            // A stated clear height governs.
+            ("d5", 2.1, Some(0.05), Some(0.02), Some(2.06)),
+        ])
+    };
+    let evaluation = model().evaluate(&KeyedLimit, &rule(ID, kind("door"), height_keys(true)));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "d1".into(),
+                "clear height (Attributes.OverallHeight 2.1 m less the lining 0.05 m less the \
+                 threshold 0.02 m) is 2.03 m; required at least 2.05 m (limit row 0: \
+                 Attributes.OperationType `SINGLE_SWING_LEFT`)"
+                    .into()
+            ),
+            (
+                "d4".into(),
+                "clear height (Attributes.OverallHeight 2.05 m less the lining 0.05 m less a \
+                 threshold Lining.ThresholdThickness does not state) is between 0 and 2 m; \
+                 required at least 2.05 m (limit row 0: Attributes.OperationType \
+                 `SINGLE_SWING_LEFT`)"
+                    .into()
+            ),
+        ]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let derived = evaluation.findings()[0]
+        .evidence
+        .iter()
+        .find(|evidence| {
+            evidence
+                .locator
+                .starts_with("axioval:derived.clear-height:")
+        })
+        .unwrap();
+    assert!(!derived.exact);
+    // Thicknesses need the overall height, and a width deduction applies to
+    // a clear width only.
+    let without_overall = {
+        let mut parameters = height_keys(true);
+        parameters.retain(|(name, _)| *name != "overall_height");
+        parameters
+    };
+    let with_deduction = {
+        let mut parameters = height_keys(false);
+        parameters.push(("width_deduction", metres(0.1)));
+        parameters
+    };
+    for parameters in [without_overall, with_deduction] {
+        let evaluation = model().evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters));
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+/// Horizontal distances from doors to ramps and which ramps overlap which
+/// spaces in plan; nothing has a box.
+#[derive(Default)]
+struct Ramps {
+    distances: BTreeMap<(String, String), f64>,
+    over: Vec<(String, String)>,
+}
+
+impl ProximityService for Ramps {
+    fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let pair = (
+            request.subject().local_id.clone(),
+            request.counterpart().local_id.clone(),
+        );
+        let distance = match request.projection() {
+            ProximityProjection::Horizontal => self
+                .distances
+                .get(&pair)
+                .copied()
+                .ok_or(ProximityError::Unavailable)?,
+            ProximityProjection::PlanOverlap => {
+                if self.over.contains(&pair) {
+                    0.0
+                } else {
+                    f64::INFINITY
+                }
+            }
+            _ => return Err(ProximityError::UnsupportedProjection),
+        };
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            distance,
+            distance,
+            GeometryFidelity::Exact,
+            Evidence::exact(source(), format!("distance:{}:{}", pair.0, pair.1)),
+        )
+    }
+}
+
+fn step_keys(ramps: bool) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = vec![
+        (
+            "limits",
+            table(vec![row([Some("*"), None, None], None, Some(0.02))]),
+        ),
+        ("quantity", string("threshold-step")),
+        ("floor_path", strings(&["adjacent"])),
+        ("key_1", property(Some("Attributes"), "OperationType")),
+    ];
+    if ramps {
+        parameters.push(("ramp_selector", common::selector(kind("ramp"))));
+        parameters.push(("ramp_reach", metres(0.4)));
+    }
+    parameters
+}
+
+/// Doors between spaces, each `(door, spaces)`, and ramps.
+fn stepped(doors: &[(&str, &[&str])], ramps: &[&str]) -> Model {
+    let mut model = Model::default();
+    for space in ["k", "o", "low"] {
+        model = model.object(space, "space");
+    }
+    for (door, spaces) in doors {
+        model = model.object(door, "door").text(
+            door,
+            "Attributes",
+            "OperationType",
+            "SINGLE_SWING_LEFT",
+        );
+        for space in *spaces {
+            model = model.edge("adjacent", door, space);
+        }
+    }
+    for ramp in ramps {
+        model = model.object(ramp, "ramp");
+    }
+    model
+}
+
+fn step(
+    model: Model,
+    bottoms: Bottoms,
+    ramps: Ramps,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model.evaluate_with(
+        &KeyedLimit,
+        &rule(ID, kind("door"), parameters),
+        |services| {
+            services
+                .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(Arc::new(ramps)))
+                .unwrap();
+        },
+    )
+}
+
+/// A threshold step is measured from geometry: a sill 4 cm above the
+/// corridor's floor fails a 2 cm maximum with no property stated.
+#[test]
+fn a_sill_above_the_corridor_floor_is_found_from_geometry() {
+    // Corridor k and office o have their floors at 0 m. d1's bottom lies
+    // 4 cm above both, d2's on them.
+    let model = stepped(&[("d1", &["k", "o"]), ("d2", &["k", "o"])], &[]);
+    let bottoms = Bottoms::default()
+        .with("k", 0.0, 0.0)
+        .with("o", 0.0, 0.0)
+        .with("d1", 0.04, 0.0)
+        .with("d2", 0.0, 0.0);
+    let evaluation = step(model, bottoms, Ramps::default(), step_keys(false));
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert!(unevaluated(&evaluation).is_empty());
+    let message = &findings(&evaluation)[0].1;
+    assert!(
+        message.starts_with(&format!(
+            "the step from the floor of {} to the door's bottom is 0.04 m; required at most \
+             0.02 m",
+            id("k")
+        )),
+        "{message}"
+    );
+    assert_eq!(
+        evaluation.findings()[0]
+            .related
+            .iter()
+            .map(|object| object.local_id.as_str())
+            .collect::<Vec<_>>(),
+        ["k", "o"]
+    );
+}
+
+/// A stated threshold adds to the door's bottom; a declared one the door
+/// does not state leaves only a step already too high decided.
+#[test]
+fn a_stated_threshold_adds_to_the_step_and_an_unstated_one_is_unknown() {
+    let model = stepped(&[("d1", &["k"]), ("d2", &["k"]), ("d3", &["k"])], &[])
+        .value("d1", "Lining", "ThresholdThickness", length(0.03))
+        .value("d2", "Lining", "ThresholdThickness", length(0.01));
+    let bottoms = Bottoms::default()
+        .with("k", 0.0, 0.0)
+        .with("d1", 0.0, 0.0)
+        .with("d2", 0.0, 0.0)
+        .with("d3", 0.0, 0.0);
+    let mut parameters = step_keys(false);
+    parameters.push((
+        "threshold_thickness",
+        property(Some("Lining"), "ThresholdThickness"),
+    ));
+    let evaluation = step(model, bottoms, Ramps::default(), parameters);
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert!(
+        findings(&evaluation)[0]
+            .1
+            .contains("to the door's bottom with its 0.03 m threshold is 0.03 m"),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// A ramp within reach of the door and over a space is that side's floor,
+/// measured at its top.
+#[test]
+fn a_ramp_near_the_door_is_the_floor_on_its_side() {
+    // Space `low` has its floor at 0 m; d1 at 0.5 m opens onto it at the
+    // top of ramp r1, 0.1 m away and over `low`; d2 does the same with no
+    // ramp near it; d3's ramp r3 is 1 m away.
+    let model = stepped(
+        &[("d1", &["low"]), ("d2", &["low"]), ("d3", &["low"])],
+        &["r1", "r3"],
+    );
+    let bottoms = Bottoms::default()
+        .with("low", 0.0, 0.0)
+        .with("d1", 0.5, 0.0)
+        .with("d2", 0.5, 0.0)
+        .with("d3", 0.5, 0.0)
+        // Every body is 1 m tall, so the ramps' tops lie at 0.5 m.
+        .with("r1", -0.5, 0.0)
+        .with("r3", -0.5, 0.0);
+    let mut ramps = Ramps::default();
+    for (door, ramp, distance) in [
+        ("d1", "r1", 0.1),
+        ("d1", "r3", 5.0),
+        ("d2", "r1", 5.0),
+        ("d2", "r3", 5.0),
+        ("d3", "r1", 5.0),
+        ("d3", "r3", 1.0),
+    ] {
+        ramps.distances.insert((door.into(), ramp.into()), distance);
+    }
+    ramps.over = vec![("r1".into(), "low".into()), ("r3".into(), "low".into())];
+    let evaluation = step(model, bottoms, ramps, step_keys(true));
+    assert_eq!(flagged(&evaluation), ["d2", "d3"]);
+    assert!(unevaluated(&evaluation).is_empty());
+    // The rule declares its ramps and their reach together.
+    let mut parameters = step_keys(true);
+    parameters.retain(|(name, _)| *name != "ramp_reach");
+    let evaluation = step(
+        stepped(&[("d1", &["low"])], &[]),
+        Bottoms::default(),
+        Ramps::default(),
+        parameters,
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+    );
 }

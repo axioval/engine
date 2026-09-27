@@ -43,6 +43,8 @@ impl Population {
 pub(crate) struct Tally {
     pub(crate) decided: Vec<ObjectId>,
     pub(crate) undecided: usize,
+    /// The reached objects whose selection is undecided.
+    pub(crate) possible: Vec<ObjectId>,
     pub(crate) evidence: Vec<Evidence>,
 }
 
@@ -77,16 +79,67 @@ pub(crate) fn tally(
             Vec::new(),
         ),
     };
-    let decided: Vec<ObjectId> = reached
-        .iter()
-        .filter(|id| population.matched.contains(*id))
-        .cloned()
-        .collect();
+    let (decided, possible): (Vec<ObjectId>, Vec<ObjectId>) = reached
+        .into_iter()
+        .partition(|id| population.matched.contains(id));
     Ok(Tally {
-        undecided: reached.len() - decided.len(),
+        undecided: possible.len(),
         decided,
+        possible,
         evidence,
     })
+}
+
+/// Keeps the reached objects of `tally` from which `ends` reaches the same
+/// set of objects as from `anchor`: a revolving door's swing door between
+/// the same pair of spaces. An object whose ends cannot be read may share
+/// them, so it moves to the undecided; one whose ends differ is dropped.
+/// An anchor whose ends cannot be read, or reach nothing, is unavailable.
+pub(crate) fn same_ends(
+    context: &RuleContext<'_>,
+    ends: &Traversal<'_>,
+    anchor: &Object,
+    tally: Tally,
+) -> Result<Tally, Unavailable> {
+    let everything: Vec<&Object> = context.project.objects().collect();
+    let (own, mut evidence) = ends.related(context, &anchor.id, &everything)?;
+    if own.is_empty() {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("`same_ends` {} reaches nothing from it", ends.relationship),
+        ));
+    }
+    let own: BTreeSet<ObjectId> = own.into_iter().collect();
+    evidence.extend(tally.evidence);
+    let mut kept = Tally {
+        decided: Vec::new(),
+        undecided: 0,
+        possible: Vec::new(),
+        evidence,
+    };
+    for (object, sure) in tally
+        .decided
+        .into_iter()
+        .map(|object| (object, true))
+        .chain(tally.possible.into_iter().map(|object| (object, false)))
+    {
+        match ends.related(context, &object, &everything) {
+            Ok((reached, cited)) => {
+                if reached.into_iter().collect::<BTreeSet<_>>() != own {
+                    continue;
+                }
+                kept.evidence.extend(cited);
+                if sure {
+                    kept.decided.push(object);
+                } else {
+                    kept.possible.push(object);
+                }
+            }
+            Err(_) => kept.possible.push(object),
+        }
+    }
+    kept.undecided = kept.possible.len();
+    Ok(kept)
 }
 
 pub(crate) fn relation_text(traversal: Option<&Traversal<'_>>) -> String {
@@ -105,6 +158,13 @@ pub(crate) fn relation_text(traversal: Option<&Traversal<'_>>) -> String {
 /// no relationship, every such object in the anchor's own source counts.
 /// `minimum` and `maximum` bound the count, inclusive; at least one is
 /// required.
+///
+/// With `same_ends`, a relationship path like `path`, a related object
+/// counts only when that path reaches the same set of objects from it as
+/// from the anchor: a revolving door needs a swing door between the same
+/// spaces, not any door of one of them. An object whose ends cannot be read
+/// counts as unknown; an anchor whose ends cannot be read or reach nothing
+/// is not evaluated.
 ///
 /// An object whose membership in `related_selector` cannot be decided is
 /// counted as unknown. The anchor is judged when the verdict holds either
@@ -125,6 +185,7 @@ impl RuleCapability for RelatedCount {
             ParameterDescriptor::optional("related_selector", ParameterType::Selector),
             ParameterDescriptor::optional("minimum", ParameterType::Integer),
             ParameterDescriptor::optional("maximum", ParameterType::Integer),
+            ParameterDescriptor::optional("same_ends", ParameterType::StringList),
         ]
         .into_iter()
         .chain(crate::support::traversal_parameters())
@@ -154,9 +215,13 @@ impl RuleCapability for RelatedCount {
                 minimum,
                 maximum,
                 parameters.traversal()?,
+                parameters
+                    .strings("same_ends")?
+                    .map(Traversal::path)
+                    .transpose()?,
             ))
         })();
-        let (related, minimum, maximum, traversal) = match parsed {
+        let (related, minimum, maximum, traversal, ends) = match parsed {
             Ok(parsed) => parsed,
             Err((reason, message)) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -167,9 +232,18 @@ impl RuleCapability for RelatedCount {
         };
         let population = Population::of(context, related.unwrap_or(&Selector::All));
         let (anchors, mut evaluation) = select_objects(context, &rule.selector);
-        let via = relation_text(traversal.as_ref());
+        let mut via = relation_text(traversal.as_ref());
+        if let Some(ends) = &ends {
+            via = format!("{via} with the same ends via {}", ends.relationship);
+        }
         for anchor in anchors {
-            let tally = match tally(context, traversal.as_ref(), anchor, &population) {
+            let tallied = tally(context, traversal.as_ref(), anchor, &population).and_then(
+                |tally| match &ends {
+                    Some(ends) => same_ends(context, ends, anchor, tally),
+                    None => Ok(tally),
+                },
+            );
+            let tally = match tallied {
                 Ok(tally) => tally,
                 Err((reason, message)) => {
                     evaluation.push_object_not_evaluated(anchor.id.clone(), reason, message);

@@ -1,12 +1,14 @@
 //! Limits looked up in a keyed table: the applicable row is chosen by key
 //! values read from the object or from objects related to it.
 
+mod threshold;
+
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeavesError, NotEvaluatedReason,
-    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
-    TableColumn, VerticalExtent,
+    CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeaf, DoorLeaves,
+    DoorLeavesError, LeafMotion, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext, TableColumn, VerticalExtent,
 };
-use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
 use crate::door_swing;
 use crate::level_spacing::{extent, extents};
@@ -67,6 +69,35 @@ enum Quantity<'a> {
     /// A door's clear width: stated, or its overall width less a deduction
     /// the rule states.
     ClearWidth(ClearWidth<'a>),
+    /// A door's clear height: stated, or its overall height less its head
+    /// lining and threshold.
+    ClearHeight(ClearHeight<'a>),
+    /// The step from each floor `floor_path` reaches (or a ramp's top near
+    /// the door) to the door's bottom and threshold.
+    ThresholdStep(threshold::ThresholdStep<'a>),
+}
+
+/// Which clear width the door's leaves give.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LeafMode {
+    /// The whole passage, every hinged leaf standing open in it.
+    Passage,
+    /// The widest hinged leaf's own passage.
+    WidestLeaf,
+}
+
+impl LeafMode {
+    fn parse(value: Option<&str>) -> Result<Option<Self>, Unavailable> {
+        match value {
+            None => Ok(None),
+            Some("passage") => Ok(Some(Self::Passage)),
+            Some("widest-leaf") => Ok(Some(Self::WidestLeaf)),
+            Some(other) => Err(invalid(format!(
+                "`clear_width_from_leaves` `{other}` is unsupported; use `passage` or \
+                 `widest-leaf`"
+            ))),
+        }
+    }
 }
 
 /// Where a clear width comes from, in the order the steps are tried.
@@ -78,8 +109,9 @@ enum Quantity<'a> {
 struct ClearWidth<'a> {
     /// The clear width the object states, tried first.
     stated: Option<PropertyRef<'a>>,
-    /// Whether to derive it next from the door's leaves and lining.
-    leaves: bool,
+    /// Whether, and how, to derive it next from the door's leaves and
+    /// lining.
+    leaves: Option<LeafMode>,
     /// The overall width and the deduction from it, in metres.
     derived: Option<(PropertyRef<'a>, f64)>,
 }
@@ -89,7 +121,7 @@ impl<'a> ClearWidth<'a> {
     /// deduction only together.
     fn declared(
         stated: Option<PropertyRef<'a>>,
-        leaves: bool,
+        leaves: Option<LeafMode>,
         overall: Option<PropertyRef<'a>>,
         deduction: Option<f64>,
     ) -> Result<Self, Unavailable> {
@@ -102,7 +134,7 @@ impl<'a> ClearWidth<'a> {
                 ));
             }
         };
-        if stated.is_none() && !leaves && derived.is_none() {
+        if stated.is_none() && leaves.is_none() && derived.is_none() {
             return Err(invalid(
                 "`quantity` `clear-width` needs `quantity_property`, \
                  `clear_width_from_leaves`, or `overall_width` with `width_deduction`",
@@ -133,14 +165,14 @@ impl<'a> ClearWidth<'a> {
                 });
             }
         }
-        if self.leaves
-            && let Some(measured) = Self::from_leaves(context, object, &mut evidence)?
+        if let Some(mode) = self.leaves
+            && let Some(measured) = Self::from_leaves(context, object, mode, &mut evidence)?
         {
             return Ok(measured);
         }
         let Some((overall, deduction)) = self.derived else {
             let mut absent: Vec<String> = self.stated.iter().map(ToString::to_string).collect();
-            if self.leaves {
+            if self.leaves.is_some() {
                 absent.push("the lining and leaf thicknesses".into());
             }
             return Err((
@@ -191,13 +223,16 @@ impl<'a> ClearWidth<'a> {
 
     /// The clear width of a door whose leaves all swing, from what it
     /// states: the overall width less the lining on both jambs and the
-    /// thickness of every hinged leaf standing open in the opening. `None`
-    /// (move on) when the source states no leaves, no lining thickness or
-    /// a leaf thickness, or when a leaf slides, rolls or is fixed, so that
-    /// this derivation does not apply.
+    /// thickness of every hinged leaf standing open in the opening, or with
+    /// [`LeafMode::WidestLeaf`] the widest hinged leaf's width less the
+    /// lining at each jamb it meets and its own thickness. `None` (move on)
+    /// when the source states no leaves, no lining thickness or a leaf
+    /// thickness, or when a leaf slides or rolls (for the passage, also when
+    /// one is fixed), so that this derivation does not apply.
     fn from_leaves(
         context: &RuleContext<'_>,
         object: &Object,
+        mode: LeafMode,
         evidence: &mut Vec<Evidence>,
     ) -> Result<Option<Measured>, Unavailable> {
         let Some(frames) = context.services.get::<ObjectFrameServiceHandle>() else {
@@ -217,49 +252,32 @@ impl<'a> ClearWidth<'a> {
                 ));
             }
         };
-        if leaves
-            .leaves()
-            .iter()
-            .any(|leaf| !leaf.motion().is_hinged())
-        {
-            return Ok(None);
-        }
-        let Some(lining) = leaves.lining_thickness_metres() else {
+        let derived = match mode {
+            LeafMode::Passage => passage(&leaves),
+            LeafMode::WidestLeaf => widest_leaf(&leaves),
+        };
+        let Some(derived) = derived else {
             return Ok(None);
         };
-        let mut depth = 0.0;
-        for leaf in leaves.hinged() {
-            let Some(leaf_depth) = leaf.depth_metres() else {
-                return Ok(None);
-            };
-            depth += leaf_depth;
-        }
-        let overall = leaves.overall_width_metres();
-        let deduction = 2.0 * lining + depth;
-        let (lower, upper) = difference(overall, deduction);
+        let (lower, upper) = difference(derived.width, derived.deduction);
         if upper <= 0.0 {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
                 format!(
-                    "the overall width {} m less its lining and leaves {} m leaves no clear width",
-                    shown(overall, overall),
-                    shown(deduction, deduction)
+                    "the {} {} m less its lining and leaves {} m leaves no clear width",
+                    derived.from,
+                    shown(derived.width, derived.width),
+                    shown(derived.deduction, derived.deduction)
                 ),
             ));
         }
         evidence.push(leaves.evidence().clone());
-        evidence.push(Self::record(&object.id, "lining-and-leaves", false));
+        evidence.push(Self::record(&object.id, derived.step, false));
         Ok(Some(Measured {
             lower,
             upper,
             unit: " m".into(),
-            what: format!(
-                "clear width (overall width {} m less 2 × {} m lining and {} m of open leaf, as \
-                 the door states them)",
-                shown(overall, overall),
-                shown(lining, lining),
-                shown(depth, depth)
-            ),
+            what: derived.what,
             evidence: std::mem::take(evidence),
         }))
     }
@@ -273,6 +291,234 @@ impl<'a> ClearWidth<'a> {
         );
         evidence.exact = exact;
         evidence
+    }
+}
+
+/// A clear width derived from a door's leaves: what it is taken from, the
+/// deduction, and how a finding words it.
+struct FromLeaves {
+    from: &'static str,
+    width: f64,
+    deduction: f64,
+    step: &'static str,
+    what: String,
+}
+
+/// The whole passage: the overall width less the lining on both jambs and
+/// every hinged leaf standing open in it; `None` when a leaf does not swing
+/// or a thickness is not stated.
+fn passage(leaves: &DoorLeaves) -> Option<FromLeaves> {
+    if leaves
+        .leaves()
+        .iter()
+        .any(|leaf| !leaf.motion().is_hinged())
+    {
+        return None;
+    }
+    let lining = leaves.lining_thickness_metres()?;
+    let mut depth = 0.0;
+    for leaf in leaves.hinged() {
+        depth += leaf.depth_metres()?;
+    }
+    let overall = leaves.overall_width_metres();
+    Some(FromLeaves {
+        from: "overall width",
+        width: overall,
+        deduction: 2.0 * lining + depth,
+        step: "lining-and-leaves",
+        what: format!(
+            "clear width (overall width {} m less 2 × {} m lining and {} m of open leaf, as the \
+             door states them)",
+            shown(overall, overall),
+            shown(lining, lining),
+            shown(depth, depth)
+        ),
+    })
+}
+
+/// The widest hinged leaf's passage: its width less the lining at each
+/// jamb its closed edge meets (where the door's outermost leaves end) and
+/// its own thickness standing open. A fixed leaf narrows nothing but may
+/// stand between a leaf and a jamb. `None` when a leaf slides or rolls, no
+/// leaf swings, or a thickness it needs is not stated.
+fn widest_leaf(leaves: &DoorLeaves) -> Option<FromLeaves> {
+    let all = leaves.leaves();
+    if all
+        .iter()
+        .any(|leaf| matches!(leaf.motion(), LeafMotion::Slide(_) | LeafMotion::RollUp))
+    {
+        return None;
+    }
+    let axis = all.first()?.along().components();
+    let span = |leaf: &DoorLeaf| {
+        let (from, to) = leaf.closed_edge();
+        let project =
+            |point: [f64; 3]| point[0] * axis[0] + point[1] * axis[1] + point[2] * axis[2];
+        let (a, b) = (project(from), project(to));
+        (a.min(b), a.max(b))
+    };
+    let (low, high) = all
+        .iter()
+        .map(span)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), (a, b)| {
+            (low.min(a), high.max(b))
+        });
+    let tolerance = 1e-9 * low.abs().max(high.abs()).max(1.0);
+    let mut best: Option<FromLeaves> = None;
+    for leaf in leaves.hinged() {
+        let (a, b) = span(leaf);
+        let jambs =
+            u8::from((a - low).abs() <= tolerance) + u8::from((high - b).abs() <= tolerance);
+        let lining = if jambs == 0 {
+            0.0
+        } else {
+            leaves.lining_thickness_metres()?
+        };
+        let depth = leaf.depth_metres()?;
+        let width = leaf.width_metres();
+        let deduction = f64::from(jambs).mul_add(lining, depth);
+        if best
+            .as_ref()
+            .is_some_and(|best| best.width - best.deduction >= width - deduction)
+        {
+            continue;
+        }
+        let jamb_words = match jambs {
+            0 => String::new(),
+            1 => format!(" {} m lining at one jamb and", shown(lining, lining)),
+            _ => format!(" 2 × {} m lining and", shown(lining, lining)),
+        };
+        best = Some(FromLeaves {
+            from: "widest leaf",
+            width,
+            deduction,
+            step: "widest-leaf",
+            what: format!(
+                "clear width of the widest leaf (leaf {} m less{jamb_words} {} m of open leaf, as \
+                 the door states them)",
+                shown(width, width),
+                shown(depth, depth)
+            ),
+        });
+    }
+    best
+}
+
+/// A door's clear height: the length `quantity_property` states, else the
+/// length `overall_height` states less the head lining and the threshold
+/// the door states. A declared thickness the door does not state is
+/// unknown, never zero: the clear height is then bounded only from above.
+struct ClearHeight<'a> {
+    stated: Option<PropertyRef<'a>>,
+    overall: Option<PropertyRef<'a>>,
+    lining: Option<PropertyRef<'a>>,
+    threshold: Option<PropertyRef<'a>>,
+}
+
+impl ClearHeight<'_> {
+    fn measure(&self, context: &RuleContext<'_>, object: &Object) -> Result<Measured, Unavailable> {
+        let mut evidence = Vec::new();
+        if let Some(stated) = self.stated
+            && let Some(height) = LightArea::length(context, object, stated, &mut evidence)?
+        {
+            evidence.push(clear_height_record(&object.id, "stated", true));
+            return Ok(Measured {
+                lower: height,
+                upper: height,
+                unit: " m".into(),
+                what: format!("clear height ({stated})"),
+                evidence,
+            });
+        }
+        let stated = self
+            .stated
+            .map_or_else(String::new, |stated| format!("{stated} and "));
+        let Some(overall) = self.overall else {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "{}is absent and the rule states no overall height to derive it from",
+                    stated.trim_end_matches("and ")
+                ),
+            ));
+        };
+        let Some(height) = LightArea::length(context, object, overall, &mut evidence)? else {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("{stated}{overall} are absent, so no clear height can be derived"),
+            ));
+        };
+        let (mut lower, mut upper) = (height, height);
+        let mut words = vec![format!("{overall} {} m", shown(height, height))];
+        let mut unknown = false;
+        for (declared, noun) in [(self.lining, "lining"), (self.threshold, "threshold")] {
+            let Some(property) = declared else { continue };
+            if let Some(value) = thickness(context, object, property, &mut evidence)? {
+                lower = difference(lower, value).0;
+                upper = difference(upper, value).1;
+                words.push(format!("less the {noun} {} m", shown(value, value)));
+            } else {
+                unknown = true;
+                words.push(format!("less a {noun} {property} does not state"));
+            }
+        }
+        if upper <= 0.0 {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("{} leaves no clear height", words.join(" ")),
+            ));
+        }
+        evidence.push(clear_height_record(
+            &object.id,
+            "overall-height-less-lining-and-threshold",
+            false,
+        ));
+        Ok(Measured {
+            lower: if unknown { 0.0 } else { lower.max(0.0) },
+            upper,
+            unit: " m".into(),
+            what: format!("clear height ({})", words.join(" ")),
+            evidence,
+        })
+    }
+}
+
+/// The evidence entry recording which step produced a clear height; the
+/// derivation takes the lining to run across the head, so it is never
+/// exact.
+fn clear_height_record(object: &ObjectId, step: &str, exact: bool) -> Evidence {
+    let mut evidence = Evidence::exact(
+        object.source.clone(),
+        format!("axioval:derived.clear-height:{object}:step={step}"),
+    );
+    evidence.exact = exact;
+    evidence
+}
+
+/// A thickness `object` states: `None` when absent or null, a non-negative
+/// length otherwise; anything else leaves the object not evaluated.
+fn thickness(
+    context: &RuleContext<'_>,
+    object: &Object,
+    property: PropertyRef<'_>,
+    evidence: &mut Vec<Evidence>,
+) -> Result<Option<f64>, Unavailable> {
+    let resolved = resolve(context, object, property)?;
+    evidence.extend(resolved.evidence());
+    match resolved.value() {
+        None | Some(PropertyValue::Null) => Ok(None),
+        Some(PropertyValue::Quantity {
+            value,
+            dimension: QuantityDimension::Length,
+        }) if value.is_finite() && *value >= 0.0 => Ok(Some(*value)),
+        other => Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "{} {property} is {}, not a non-negative length",
+                object.id,
+                display(other)
+            ),
+        )),
     }
 }
 
@@ -300,12 +546,22 @@ enum Key {
 /// object's bottom elevation above the bottom of each object `floor_path`
 /// reaches from it (a window's spaces), in metres, or `clear-width`, a
 /// door's clear width in metres: the length `quantity_property` states,
-/// else, with `clear_width_from_leaves`, the overall width less the lining
-/// on both jambs and every open hinged leaf's thickness as the door's
-/// leaves state them, else the length `overall_width` states less the
-/// rule's `width_deduction`; each step only after an exact absence. The deduction is the rule author's declared
-/// approximation of frame and lining; a width derived with it says so and
-/// cites an inexact `axioval:derived.clear-width` evidence entry.
+/// else, with `clear_width_from_leaves` `passage`, the overall width less
+/// the lining on both jambs and every open hinged leaf's thickness as the
+/// door's leaves state them (`widest-leaf`: the widest hinged leaf less the
+/// lining at its jambs and its thickness), else the length `overall_width`
+/// states less the rule's `width_deduction`; each step only after an exact
+/// absence. The deduction is the rule author's declared approximation of
+/// frame and lining; a width derived with it says so and cites an inexact
+/// `axioval:derived.clear-width` evidence entry.
+///
+/// `clear-height` is a door's stated clear height, else `overall_height`
+/// less the `lining_thickness` and `threshold_thickness` it states, a
+/// declared thickness it does not state leaving only an upper bound.
+/// `threshold-step` is the step from each floor `floor_path` reaches to the
+/// door's bottom and stated threshold, measured from geometry; with
+/// `ramp_selector` a ramp within `ramp_reach` over a space is that side's
+/// floor, at its top.
 ///
 /// A sill height is judged per reached floor, each against the one row the
 /// keys select: a window too high above any one of its spaces' floors is a
@@ -339,7 +595,12 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::optional("floor_path", ParameterType::StringList),
             ParameterDescriptor::optional("overall_width", ParameterType::PropertyReference),
             ParameterDescriptor::optional("width_deduction", ParameterType::Quantity),
-            ParameterDescriptor::optional("clear_width_from_leaves", ParameterType::Boolean),
+            ParameterDescriptor::optional("clear_width_from_leaves", ParameterType::String),
+            ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("ramp_reach", ParameterType::Quantity),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ];
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -429,54 +690,97 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
             maximum,
         });
     }
+    Ok((keys, limits, quantity(parameters)?))
+}
+
+/// Which quantities each quantity-specific parameter applies to.
+const APPLIES: &[(&str, &[&str])] = &[
+    (
+        "quantity_property",
+        &["property", "clear-width", "clear-height"],
+    ),
+    ("floor_path", &["sill-height", "threshold-step"]),
+    ("overall_width", &["clear-width"]),
+    ("width_deduction", &["clear-width"]),
+    ("clear_width_from_leaves", &["clear-width"]),
+    ("overall_height", &["clear-height"]),
+    ("lining_thickness", &["clear-height"]),
+    ("threshold_thickness", &["clear-height", "threshold-step"]),
+    ("ramp_selector", &["threshold-step"]),
+    ("ramp_reach", &["threshold-step"]),
+];
+
+/// The declared quantity, its own parameters checked against it.
+fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable> {
+    let named = parameters.required_string("quantity")?;
+    if !matches!(
+        named,
+        "plan-area"
+            | "property"
+            | "sill-height"
+            | "clear-width"
+            | "clear-height"
+            | "threshold-step"
+    ) {
+        return Err(invalid(format!("quantity `{named}` is unsupported")));
+    }
+    for (parameter, quantities) in APPLIES {
+        if parameters.0.parameters.contains_key(*parameter) && !quantities.contains(&named) {
+            let quantities = quantities
+                .iter()
+                .map(|quantity| format!("`{quantity}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(invalid(format!(
+                "`{parameter}` applies only to {quantities}, not `{named}`"
+            )));
+        }
+    }
     let property = parameters.property("quantity_property")?;
     let floor = parameters.strings("floor_path")?;
-    let named = parameters.required_string("quantity")?;
-    let overall = parameters.property("overall_width")?;
-    let deduction = length(parameters, "width_deduction")?;
-    let from_leaves = parameters
-        .boolean("clear_width_from_leaves")?
-        .unwrap_or(false);
-    if named != "clear-width" && (overall.is_some() || deduction.is_some() || from_leaves) {
-        return Err(invalid(format!(
-            "`overall_width`, `width_deduction` and `clear_width_from_leaves` apply only to \
-             `clear-width`, not `{named}`"
-        )));
-    }
-    let quantity = match (named, property, floor) {
-        ("clear-width", _, Some(_)) => {
-            return Err(invalid(
-                "`floor_path` applies only to `sill-height`, not `clear-width`",
-            ));
-        }
-        ("clear-width", stated, None) => Quantity::ClearWidth(ClearWidth::declared(
-            stated,
-            from_leaves,
-            overall,
-            deduction,
+    Ok(match named {
+        "plan-area" => Quantity::PlanArea,
+        "property" => Quantity::Property(
+            property.ok_or_else(|| invalid("`quantity` `property` needs `quantity_property`"))?,
+        ),
+        "sill-height" => Quantity::SillHeight(Traversal::path(
+            floor.ok_or_else(|| invalid("`quantity` `sill-height` needs `floor_path`"))?,
         )?),
-        ("plan-area", None, None) => Quantity::PlanArea,
-        ("property", Some(property), None) => Quantity::Property(property),
-        ("sill-height", None, Some(path)) => Quantity::SillHeight(Traversal::path(path)?),
-        ("property", None, _) => {
-            return Err(invalid("`quantity` `property` needs `quantity_property`"));
+        "clear-width" => Quantity::ClearWidth(ClearWidth::declared(
+            property,
+            LeafMode::parse(parameters.string("clear_width_from_leaves")?)?,
+            parameters.property("overall_width")?,
+            length(parameters, "width_deduction")?,
+        )?),
+        "clear-height" => {
+            let overall = parameters.property("overall_height")?;
+            let lining = parameters.property("lining_thickness")?;
+            let threshold = parameters.property("threshold_thickness")?;
+            if property.is_none() && overall.is_none() {
+                return Err(invalid(
+                    "`quantity` `clear-height` needs `quantity_property` or `overall_height`",
+                ));
+            }
+            if overall.is_none() && (lining.is_some() || threshold.is_some()) {
+                return Err(invalid(
+                    "`lining_thickness` and `threshold_thickness` are deducted from \
+                     `overall_height`, which is not declared",
+                ));
+            }
+            Quantity::ClearHeight(ClearHeight {
+                stated: property,
+                overall,
+                lining,
+                threshold,
+            })
         }
-        ("sill-height", _, None) => {
-            return Err(invalid("`quantity` `sill-height` needs `floor_path`"));
-        }
-        (other @ ("plan-area" | "sill-height"), Some(_), _) => {
-            return Err(invalid(format!(
-                "`quantity_property` applies only to `property` and `clear-width`, not `{other}`"
-            )));
-        }
-        (other @ ("plan-area" | "property"), _, Some(_)) => {
-            return Err(invalid(format!(
-                "`floor_path` applies only to `sill-height`, not `{other}`"
-            )));
-        }
-        (other, _, _) => return Err(invalid(format!("quantity `{other}` is unsupported"))),
-    };
-    Ok((keys, limits, quantity))
+        _ => Quantity::ThresholdStep(threshold::ThresholdStep::parse(
+            parameters,
+            Traversal::path(
+                floor.ok_or_else(|| invalid("`quantity` `threshold-step` needs `floor_path`"))?,
+            )?,
+        )?),
+    })
 }
 
 /// The key values of one object, with the evidence and the objects they
@@ -634,8 +938,11 @@ fn measure(
     object: &Object,
 ) -> Result<Measured, Unavailable> {
     match quantity {
-        Quantity::SillHeight(_) => Err(invalid("a sill height is judged per floor")),
+        Quantity::SillHeight(_) | Quantity::ThresholdStep(_) => Err(invalid(
+            "a sill height or threshold step is judged per floor",
+        )),
         Quantity::ClearWidth(clear) => clear.measure(context, object),
+        Quantity::ClearHeight(clear) => clear.measure(context, object),
         Quantity::PlanArea => {
             let area = footprint(context, &object.id)?;
             Ok(Measured {
@@ -736,9 +1043,22 @@ fn check(
         let described = format!("limit row {index}: {}", keys.describe(declared));
         return sill_height(context, rule, floor, subject, limit, &described, keys);
     }
+    if let Quantity::ThresholdStep(step) = quantity {
+        let described = format!("limit row {index}: {}", keys.describe(declared));
+        let limit = (limit.minimum, limit.maximum);
+        return step.judge(
+            context,
+            rule,
+            subject,
+            limit,
+            &described,
+            keys.evidence,
+            keys.sources,
+        );
+    }
     let measured = measure(context, quantity, subject)?;
     let unit = &measured.unit;
-    let verdict = if matches!(quantity, Quantity::ClearWidth(_)) {
+    let verdict = if matches!(quantity, Quantity::ClearWidth(_) | Quantity::ClearHeight(_)) {
         judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
     } else {
         judge(measured.lower, measured.upper, limit.minimum, limit.maximum)
@@ -806,7 +1126,8 @@ fn judge_as_displayed(
             .into_iter()
             .flatten()
             .find(|bound| {
-                (value - bound).abs() <= 4.0 * f64::EPSILON * value.abs().max(bound.abs())
+                value.is_finite()
+                    && (value - bound).abs() <= 4.0 * f64::EPSILON * value.abs().max(bound.abs())
             })
             .unwrap_or(value)
     };

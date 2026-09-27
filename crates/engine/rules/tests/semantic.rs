@@ -478,6 +478,110 @@ mod related_count {
         );
     }
 
+    /// Revolving doors `rv1` (lobby to street) and `rv2` (lobby to hall),
+    /// swing doors `s1` (lobby to street) and `s2` (lobby to office), each
+    /// door reaching its spaces through `adjacent`.
+    fn entrances() -> Model {
+        let mut model = Model::default();
+        for space in ["lobby", "street", "hall", "office"] {
+            model = model.object(space, "space");
+        }
+        for (door, operation, spaces) in [
+            ("rv1", "REVOLVING", ["lobby", "street"]),
+            ("rv2", "REVOLVING", ["lobby", "hall"]),
+            ("s1", "SWING", ["lobby", "street"]),
+            ("s2", "SWING", ["lobby", "office"]),
+        ] {
+            model = model
+                .object(door, "door")
+                .text(door, "Pset", "Operation", operation);
+            for space in spaces {
+                model = model.edge("adjacent", door, space);
+            }
+        }
+        model
+    }
+
+    /// With `same_ends`, only a related object between the same spaces
+    /// counts: a revolving door whose only swing door leads elsewhere is a
+    /// finding.
+    #[test]
+    fn a_revolving_door_needs_a_swing_door_between_the_same_spaces() {
+        let parameters = |ends: bool| {
+            let mut parameters = vec![
+                (
+                    "related_selector",
+                    selector(matches("Pset", "Operation", "SWING")),
+                ),
+                (
+                    "path",
+                    common::strings(&["adjacent:forward", "adjacent:backward"]),
+                ),
+                ("minimum", integer(1)),
+            ];
+            if ends {
+                parameters.push(("same_ends", common::strings(&["adjacent:forward"])));
+            }
+            parameters
+        };
+        let evaluation = entrances().evaluate(
+            &RelatedCount,
+            &rule(
+                ID,
+                matches("Pset", "Operation", "REVOLVING"),
+                parameters(true),
+            ),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "rv2".into(),
+                "0 related object(s) via adjacent then adjacent with the same ends via adjacent; \
+                 required at least 1"
+                    .into()
+            )]
+        );
+        assert!(unevaluated(&evaluation).is_empty());
+        // Without it, any swing door of the lobby would do.
+        let evaluation = entrances().evaluate(
+            &RelatedCount,
+            &rule(
+                ID,
+                matches("Pset", "Operation", "REVOLVING"),
+                parameters(false),
+            ),
+        );
+        assert!(findings(&evaluation).is_empty());
+        // A door between the same spaces the selection cannot decide may be
+        // the one required.
+        let model = entrances()
+            .object("s3", "door")
+            .edge("adjacent", "s3", "lobby")
+            .edge("adjacent", "s3", "hall")
+            .unreadable("s3");
+        let evaluation = model.evaluate(
+            &RelatedCount,
+            &rule(
+                ID,
+                matches("Pset", "Operation", "REVOLVING"),
+                parameters(true),
+            ),
+        );
+        assert!(
+            findings(&evaluation).is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+        // s3 itself may be a revolving door too.
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("s3".to_owned(), NotEvaluatedReason::BackendUnavailable),
+                ("rv2".to_owned(), NotEvaluatedReason::IncompleteEvidence)
+            ]
+        );
+    }
+
     #[test]
     fn a_bound_is_required() {
         let evaluation = rooms().evaluate(&RelatedCount, &rule(ID, kind("room"), doors(vec![])));

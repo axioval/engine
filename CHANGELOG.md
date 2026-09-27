@@ -131,7 +131,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   possible destinations) instead of one route per pair, so a body sweep is
   proven to one destination only. **Breaking:** `MetricRoutingError` gains
   `NoTargets`, `InvalidTolerance` and `InconsistentResponse`; the workspace
-  requires `axiolid-route` 0.3.2, which is not yet published. (#79)
+  requires `axiolid-route` 0.3.2. (#79)
 - **Floating clearance volumes and size modes.** `component-clearance`
   takes `slide_from` and `slide_to`: the volume floats and is free when it
   is free at some offset between the two across the side. It is decided by

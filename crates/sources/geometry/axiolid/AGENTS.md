@@ -216,36 +216,24 @@ an API.
 
 ## Waiting on upstream
 
-- `axiolid-inspect` 0.3.1 (certified `intersection_volume`,
-  `enclosed_volume`, axiolid/kernel#183) is on the kernel's main branch; the
-  workspace requires `0.3` and builds against it once it is published.
-
 - axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
   plan areas here are off by ~1.5e-8 of the extent while reported exact.
 - axiolid/kernel#174: publish certified `boundary_distance`/`boundary_clearance`,
   so curved parts can get exact clearances instead of tessellated estimates.
-- `src/placement.rs` already uses `Region::minkowski_sum`,
-  `minkowski_erosion`, the one-sided disc morphology below and `union_soup`
-  (axiolid/kernel#145, #163), which the published 0.3.0 overlay lacks. It is
-  built and tested against local kernel sources through an untracked
-  `.cargo/config.toml` patch; the crate cannot be published until those
-  overlay APIs are.
-- axiolid/kernel#163: one-sided disc morphology (`Region::erode_inner` and
-  friends, axiolid-overlay 0.3.1, not yet published; coverage already uses
-  the dilations). With it, walkability can
-  erode free regions by half the width and prove gaps inside surfaces
-  blocking, and metric routing can report such routes blocked instead of
-  refusing them.
-- axiolid-overlay 0.3.0 validates operands with an area-scaled cross
-  product against the linear tolerance and flags collinear non-adjacent
-  edges anywhere on their lines; 0.3.1 checks the extent. Until it is
-  published, `walkable.rs` re-cuts overlay output into trapezoids.
-- `axiolid-route` 0.3.2 publication (axiolid/kernel#186): the many-target
-  queries need it. It also fixes the 0.3.0 visibility edges that passed
-  over gaps along collinear boundary edges and between touching obstacles
-  (#187, #189); the single-route service still treats the kernel path as a
-  lower bound or proposal only, and the many-target queries use a point
-  path as a witness only on 0.3.2.
+- One-sided disc morphology (`Region::erode_inner` and friends, #163) is
+  published in axiolid-overlay 0.3.2, but walkability does not use it yet.
+  With it, walkability could erode free regions by half the width and prove
+  gaps inside surfaces blocking, and metric routing could report such routes
+  blocked instead of refusing them.
+- axiolid-overlay 0.3.2 accepts its settled outputs as operands, but
+  `Region::new` still refuses some unions of its own output
+  (`SelfIntersection`, and `HoleOutsideOuter` from pairwise `union`), as
+  coverage's travel cells show. `walkable.rs` still re-cuts overlay output
+  into trapezoids and `coverage.rs` hands the overlay convex pieces; drop
+  both only once that is fixed and the tests pass without them.
+- The single-route service still treats the kernel path as a lower bound or
+  proposal only; the many-target queries of `axiolid-route` 0.3.2 use a point
+  path as a witness only.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

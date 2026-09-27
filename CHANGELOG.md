@@ -65,6 +65,41 @@ All notable changes are documented here. This project follows Semantic Versionin
   `with_gross_area_space` are removed; the CLI's `--envelope-zone` is
   removed (a usage error, status 2), since a rule states the same zone with
   `gross_area_group_selector` and `gross_area_group_path`.
+- **Distance modes, projections and scoping.** `distance` takes a `mode`:
+  `nearest` (the default, as before), `none_closer_than` (no counterpart
+  closer than `minimum_metres`) or `at_least` (at least `count`
+  counterparts within `maximum_metres`, and no nearer than
+  `minimum_metres` when declared, so N within a range). A `projection`
+  measures the distance in space (`minimum_3d`, the default), in plan
+  between footprints (`horizontal`), between the vertical extents of bodies
+  above one another (`vertical`, related when their footprints overlap or,
+  with `footprint_offset_metres`, come closer than the offset), or as
+  overlapping footprints (`plan_overlap`). The traversal parameters
+  (`relationship` or `path`, as elsewhere) scope counterparts to those
+  sharing a container with the subject, declared or derived
+  (`axioval:derived.contained-in-space`). Every distance is judged as an
+  interval: undecided counterparts (a straddling interval, an unmeasured
+  distance or extent, an undecided container) count as unknown, and a
+  verdict is given only when they cannot change it. `ProximityRequest`
+  carries a `ProximityProjection` (`ProximityRequest::projected`),
+  `ProximityService::measure_distance` returns a
+  `ProjectedDistanceEvidence` interval (exact evidence is a point;
+  infinite bounds say the bodies are unrelated in the projection), and
+  `projected_candidate_pairs` keeps the broad phase complete in each
+  projection. The Axiolid adapter measures horizontal distance exactly over
+  the projected triangles, non-convex footprints and edge-on sheets
+  included, and widens every projection on tessellated geometry by the
+  chord deviation; it asserts a tessellated plan overlap only from a
+  witness point deeper than the deviations, and leaves it open otherwise.
+  Door-swing footprints as sources wait on object frames (#36).
+  **Breaking:** definitions bound to `distance` must declare the new
+  optional parameters (`mode`, `count`, `projection`,
+  `footprint_offset_metres` and the traversal parameters); `distance`
+  judges tessellated measurements by their interval, so one straddling a
+  bound is now not evaluated rather than decided on the mesh value;
+  `ProximityError` has the new variant `UnsupportedProjection`,
+  `ProximityRequest` a projection field, and `ProximityEvidence::try_new`
+  refuses a request in any projection but `minimum_3d`.
 - **Date and date-time values.** `PropertyValue::Date` is a calendar day
   (`{"type": "date", "value": "2026-09-27"}`) and `PropertyValue::DateTime`
   an instant with the UTC offset it was stated in

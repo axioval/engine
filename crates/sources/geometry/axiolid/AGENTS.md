@@ -52,6 +52,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   two-manifold meshes have an inside; a pair with one is measured, two open
   surfaces report no penetration.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`.
+  `measure_distance` answers projections: horizontal distance folds 2D
+  closest points over projected triangles (edge-on ones as segments), exact
+  for non-convex footprints; vertical is the extent gap of footprint-related
+  bodies; plan overlap uses the overlay. A tessellated overlap is asserted
+  only from a witness deeper than the deviations and denied only beyond the
+  combined deviation; otherwise it stays open. Never decide it on the mesh.
 - **Every service honours fidelity.** Proximity reports approximate evidence.
   The services whose contracts only accept exact evidence -- contact,
   envelope, free space, guard, space -- refuse with their inexact-evidence

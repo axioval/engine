@@ -22,10 +22,10 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `walkability.rs` owns complete source-neutral walkable-region snapshots and deterministic three-valued width-constrained routes. Derived region IDs are evidence-local, not model objects. Reject unrequested object mappings, relation-only portals, duplicate passages, incomplete coverage, and backend geometry types.
 
-`proximity.rs` owns pairwise proximity contracts: extents with geometry fidelity, and separation, plan overlap, witnessed penetration and containment per pair. Evidence exactness must equal fidelity; a tessellation is never exact. Penetration is a lower bound and `None` only when neither body is a closed solid, never zero by default. No clash verdict crosses this seam.
+`proximity.rs` owns pairwise proximity contracts: extents with geometry fidelity, and separation, plan overlap, witnessed penetration and containment per pair. Evidence exactness must equal fidelity; a tessellation is never exact. Penetration is a lower bound and `None` only when neither body is a closed solid, never zero by default. A request carries a `ProximityProjection`; `ProximityEvidence` is only for `Minimum3d`, and `measure_distance` returns a `ProjectedDistanceEvidence` interval that is a point when exact and infinite when the bodies are unrelated in the projection. The default `measure_distance` refuses every projection but `Minimum3d`. No clash verdict crosses this seam.
 
 `facade_area.rs` owns the outward-facing surface area per object as an interval, exact exactly when a point; the handle refuses an area naming another object. Which objects are external is never this seam's.
 
 `vertical_extent.rs` owns bottom and top elevation intervals per object. Evidence is exact exactly when both are points, and the handle refuses an extent naming another object. No stacking or spacing verdict crosses this seam.
 
-`pairwise.rs` owns the broad-phase candidate search. It must stay complete: discard only by the gap between enclosing boxes (mesh extent grown by chord deviation), and keep it proven against the exhaustive search in its tests.
+`pairwise.rs` owns the broad-phase candidate search. It must stay complete: discard only by the gap between enclosing boxes (mesh extent grown by chord deviation), and keep it proven against the exhaustive search in its tests. `projected_candidate_pairs` prunes each projection by the box gap that bounds that projection (plan gap in plan, footprint offset plus vertical gap for `Vertical`); never prune a projection by the gap in space.

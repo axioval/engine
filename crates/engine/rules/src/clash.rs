@@ -18,7 +18,7 @@
 
 use axioval_engine::{
     BodyContainment, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, ProximityRequest, RuleCapability, RuleContext,
+    ParameterType, ProximityProjection, ProximityRequest, RuleCapability, RuleContext,
 };
 use axioval_ir::Finding;
 
@@ -63,7 +63,7 @@ impl RuleCapability for Clash {
         let margin = declared
             .as_ref()
             .map(|declared| declared.clearance.unwrap_or(0.0));
-        let prepared = match prepare(context, rule, margin) {
+        let prepared = match prepare(context, rule, margin, ProximityProjection::Minimum3d) {
             Ok(prepared) => prepared,
             Err(refused) => return refused,
         };
@@ -98,7 +98,7 @@ impl RuleCapability for Clash {
                     continue;
                 }
             };
-            let note = fidelity_note(&measured);
+            let note = fidelity_note(measured.fidelity());
             let hard = match (measured.containment(), measured.penetration_metres()) {
                 (Some(BodyContainment::SubjectInsideCounterpart), _) => {
                     Some(format!("lies wholly inside {counterpart}{note}"))

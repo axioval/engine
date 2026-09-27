@@ -8,8 +8,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CandidatePair, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectBounds,
-    ProximityError, ProximityEvidence, ProximityServiceHandle, RuleContext, candidate_pairs,
+    CandidatePair, CapabilityEvaluation, CompiledRule, GeometryFidelity, NotEvaluatedReason,
+    ObjectBounds, ProximityError, ProximityProjection, ProximityServiceHandle, RuleContext,
+    projected_candidate_pairs,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Object, ObjectId, Severity};
@@ -76,10 +77,26 @@ pub(crate) fn counterpart_selector(rule: &CompiledRule) -> Option<&Selector> {
 pub(crate) fn reason(error: ProximityError) -> NotEvaluatedReason {
     match error {
         ProximityError::Unavailable => NotEvaluatedReason::IncompleteEvidence,
+        ProximityError::UnsupportedProjection => NotEvaluatedReason::BackendUnavailable,
         ProximityError::InvalidMeasurement
         | ProximityError::EvidenceFidelityMismatch
         | ProximityError::SameObject => NotEvaluatedReason::InvalidEvidence,
     }
+}
+
+/// Refuses every selected subject because the declaration is unusable.
+pub(crate) fn refuse_declaration(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    message: &str,
+) -> CapabilityEvaluation {
+    let (subjects, evaluation) = select_objects(context, &rule.selector);
+    refuse_all(
+        &subjects,
+        evaluation,
+        &NotEvaluatedReason::InvalidDeclaration,
+        message,
+    )
 }
 
 /// Marks every subject not evaluated for one rule-wide reason.
@@ -95,14 +112,17 @@ pub(crate) fn refuse_all(
     evaluation
 }
 
-/// Selects both groups and runs the broad phase within `margin_metres`.
+/// Selects both groups and runs the broad phase within `margin_metres` in
+/// `projection`.
 ///
 /// Returns the evaluation early, with every subject refused, when the
 /// declaration or the service is unusable.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn prepare<'a>(
     context: &RuleContext<'a>,
     rule: &CompiledRule,
     margin_metres: Option<f64>,
+    projection: ProximityProjection,
 ) -> Result<Prepared<'a>, CapabilityEvaluation> {
     let (subjects, evaluation) = select_objects(context, &rule.selector);
     let (Some(selector), Some(margin)) = (counterpart_selector(rule), margin_metres) else {
@@ -173,7 +193,12 @@ pub(crate) fn prepare<'a>(
             .filter_map(|object| bounds.get(&object.id).cloned())
             .collect()
     };
-    let pairs = match candidate_pairs(&group(&subjects), &group(&counterparts), margin) {
+    let pairs = match projected_candidate_pairs(
+        &group(&subjects),
+        &group(&counterparts),
+        projection,
+        margin,
+    ) {
         Ok(pairs) => pairs,
         Err(error) => {
             return Err(refuse_all(
@@ -184,7 +209,6 @@ pub(crate) fn prepare<'a>(
             ));
         }
     };
-
     Ok(Prepared {
         service,
         subjects: subjects
@@ -208,13 +232,13 @@ pub(crate) fn prepare<'a>(
 }
 
 /// Human-readable suffix for measurements on tessellated geometry.
-pub(crate) fn fidelity_note(measured: &ProximityEvidence) -> String {
-    if measured.fidelity().is_exact() {
+pub(crate) fn fidelity_note(fidelity: GeometryFidelity) -> String {
+    if fidelity.is_exact() {
         String::new()
     } else {
         format!(
             " (approximate: tessellated geometry, true surfaces within {:.4} m)",
-            measured.fidelity().deviation_metres()
+            fidelity.deviation_metres()
         )
     }
 }

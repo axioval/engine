@@ -167,6 +167,23 @@ pub(crate) fn plan_overlap_area(
     second: &[Triangle],
     tolerance: axiolid_core::Tolerance,
 ) -> Option<f64> {
+    Some(
+        plan_overlap_polygons(first, second, tolerance)?
+            .iter()
+            .map(polygon_area)
+            .sum(),
+    )
+}
+
+/// The overlap of two triangle sets' footprints, as polygons.
+///
+/// `None` when the overlay cannot be computed; an empty footprint overlaps
+/// nothing.
+pub(crate) fn plan_overlap_polygons(
+    first: &[Triangle],
+    second: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Option<Vec<Polygon>> {
     let first = OverlayInput {
         frame: plan_frame(),
         polygons: projected_polygons(first),
@@ -176,7 +193,7 @@ pub(crate) fn plan_overlap_area(
         polygons: projected_polygons(second),
     };
     if first.polygons.is_empty() || second.polygons.is_empty() {
-        return Some(0.0);
+        return Some(Vec::new());
     }
     let result = overlay(
         &first,
@@ -186,7 +203,7 @@ pub(crate) fn plan_overlap_area(
         tolerance,
     )
     .ok()?;
-    Some(result.polygons.iter().map(polygon_area).sum())
+    Some(result.polygons)
 }
 
 #[cfg(test)]

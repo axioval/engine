@@ -38,6 +38,9 @@ pub enum ProximityError {
     /// A body cannot be measured against itself.
     #[error("proximity of an object to itself is undefined")]
     SameObject,
+    /// The request's projection is not measured by this method or service.
+    #[error("the requested proximity projection is not supported")]
+    UnsupportedProjection,
 }
 
 /// An axis-aligned box in canonical metres.
@@ -180,21 +183,112 @@ impl ObjectBounds {
     }
 }
 
+/// The direction in which a distance between two bodies is measured.
+///
+/// No projection's distance bounds another's from below, so the broad phase
+/// prunes each by its own box gap ([`crate::projected_candidate_pairs`]).
+#[derive(Clone, Copy, Debug)]
+pub enum ProximityProjection {
+    /// Shortest distance between the two surfaces in space.
+    Minimum3d,
+    /// Plan distance between the two footprints: zero when they meet in plan.
+    Horizontal,
+    /// Gap between the two bodies' vertical extents (bottom to top), for
+    /// bodies above or below one another. The bodies are related when their
+    /// footprints overlap with positive area or, with a positive
+    /// `footprint_offset_metres`, when the counterpart's footprint comes
+    /// closer than the offset to the subject's (the subject's footprint grown
+    /// by the offset). Unrelated bodies have no distance in this projection.
+    Vertical { footprint_offset_metres: f64 },
+    /// Whether the footprints overlap with positive area: distance zero when
+    /// they do, none when they do not.
+    PlanOverlap,
+}
+
+impl ProximityProjection {
+    /// Whether the projection's offset is finite and non-negative.
+    fn is_valid(&self) -> bool {
+        match self {
+            Self::Vertical {
+                footprint_offset_metres,
+            } => footprint_offset_metres.is_finite() && *footprint_offset_metres >= 0.0,
+            _ => true,
+        }
+    }
+    /// Whether a pair may have no distance at all in this projection.
+    pub fn may_be_unrelated(&self) -> bool {
+        matches!(self, Self::Vertical { .. } | Self::PlanOverlap)
+    }
+    /// The projection's spelling in evidence locators and messages.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Minimum3d => "minimum_3d",
+            Self::Horizontal => "horizontal",
+            Self::Vertical { .. } => "vertical",
+            Self::PlanOverlap => "plan_overlap",
+        }
+    }
+    fn key(&self) -> (u8, f64) {
+        match self {
+            Self::Minimum3d => (0, 0.0),
+            Self::Horizontal => (1, 0.0),
+            Self::Vertical {
+                footprint_offset_metres,
+            } => (2, *footprint_offset_metres),
+            Self::PlanOverlap => (3, 0.0),
+        }
+    }
+}
+
+impl PartialEq for ProximityProjection {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+impl Eq for ProximityProjection {}
+impl PartialOrd for ProximityProjection {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for ProximityProjection {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let (a, a_offset) = self.key();
+        let (b, b_offset) = other.key();
+        a.cmp(&b).then_with(|| a_offset.total_cmp(&b_offset))
+    }
+}
+
 /// A request to measure the proximity of two distinct objects.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProximityRequest {
     subject: ObjectId,
     counterpart: ObjectId,
+    projection: ProximityProjection,
 }
 
 impl ProximityRequest {
+    /// A request in space ([`ProximityProjection::Minimum3d`]).
     pub fn try_new(subject: ObjectId, counterpart: ObjectId) -> Result<Self, ProximityError> {
+        Self::projected(subject, counterpart, ProximityProjection::Minimum3d)
+    }
+    /// A request measured in `projection`; a vertical offset must be finite
+    /// and non-negative.
+    pub fn projected(
+        subject: ObjectId,
+        counterpart: ObjectId,
+        projection: ProximityProjection,
+    ) -> Result<Self, ProximityError> {
         if subject == counterpart {
             return Err(ProximityError::SameObject);
+        }
+        if !projection.is_valid() {
+            return Err(ProximityError::InvalidMeasurement);
         }
         Ok(Self {
             subject,
             counterpart,
+            projection,
         })
     }
     pub fn subject(&self) -> &ObjectId {
@@ -202,6 +296,9 @@ impl ProximityRequest {
     }
     pub fn counterpart(&self) -> &ObjectId {
         &self.counterpart
+    }
+    pub fn projection(&self) -> ProximityProjection {
+        self.projection
     }
 }
 
@@ -261,6 +358,10 @@ impl ProximityEvidence {
         if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
             return Err(ProximityError::EvidenceFidelityMismatch);
         }
+        // Penetration and containment are questions in space.
+        if request.projection() != ProximityProjection::Minimum3d {
+            return Err(ProximityError::UnsupportedProjection);
+        }
         Ok(Self {
             request,
             separation_metres,
@@ -307,17 +408,116 @@ impl ProximityEvidence {
     }
 }
 
+/// The distance between two bodies in a request's projection, as an interval.
+///
+/// `(lower, upper)` in metres, both equal for exact geometry. An upper bound
+/// of infinity says the bodies may be unrelated in the projection (not above
+/// one another, not overlapping in plan); a lower bound of infinity says they
+/// are. Only [`ProximityProjection::may_be_unrelated`] projections may report
+/// an infinite bound, and exact evidence is a point: whether exact bodies are
+/// related is decided, never left open.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProjectedDistanceEvidence {
+    request: ProximityRequest,
+    lower_metres: f64,
+    upper_metres: f64,
+    fidelity: GeometryFidelity,
+    evidence: Evidence,
+}
+
+impl ProjectedDistanceEvidence {
+    /// Rejects incoherent intervals and evidence whose exactness does not
+    /// match the geometry it was measured on.
+    pub fn try_new(
+        request: ProximityRequest,
+        lower_metres: f64,
+        upper_metres: f64,
+        fidelity: GeometryFidelity,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let deviation = fidelity.deviation_metres();
+        let unbounded_allowed = request.projection().may_be_unrelated();
+        let bound_ok = |value: f64| {
+            value >= 0.0 && (value.is_finite() || (unbounded_allowed && value == f64::INFINITY))
+        };
+        if !bound_ok(lower_metres)
+            || !bound_ok(upper_metres)
+            || lower_metres > upper_metres
+            || !deviation.is_finite()
+            || deviation < 0.0
+            || (fidelity.is_exact() && lower_metres < upper_metres)
+        {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            lower_metres,
+            upper_metres,
+            fidelity,
+            evidence,
+        })
+    }
+
+    /// The distance interval of a measurement in space.
+    pub fn from_proximity(measured: &ProximityEvidence) -> Result<Self, ProximityError> {
+        let (lower, upper) = measured.separation_interval_metres();
+        Self::try_new(
+            measured.request().clone(),
+            lower,
+            upper,
+            measured.fidelity(),
+            measured.evidence().clone(),
+        )
+    }
+
+    pub fn request(&self) -> &ProximityRequest {
+        &self.request
+    }
+    /// `(lower, upper)` bounds on the true distance; infinite when unrelated.
+    pub fn interval_metres(&self) -> (f64, f64) {
+        (self.lower_metres, self.upper_metres)
+    }
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures extents and pairwise proximity of model objects.
 ///
 /// ADR 0004: every method returns a measurement. None decides a clash.
 pub trait ProximityService: Send + Sync + 'static {
     /// The extent of one object's measured geometry.
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError>;
-    /// How close two objects come and how far they overlap.
+    /// How close two objects come and how far they overlap, in space.
+    ///
+    /// A request in any other projection is refused with
+    /// [`ProximityError::UnsupportedProjection`].
     fn measure_proximity(
         &self,
         request: &ProximityRequest,
     ) -> Result<ProximityEvidence, ProximityError>;
+    /// The distance between two objects in the request's projection.
+    ///
+    /// The default answers [`ProximityProjection::Minimum3d`] from
+    /// [`Self::measure_proximity`] and refuses every other projection, so a
+    /// service that does not measure projections fails closed.
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        match request.projection() {
+            ProximityProjection::Minimum3d => {
+                ProjectedDistanceEvidence::from_proximity(&self.measure_proximity(request)?)
+            }
+            _ => Err(ProximityError::UnsupportedProjection),
+        }
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -336,6 +536,18 @@ impl ProximityServiceHandle {
         request: &ProximityRequest,
     ) -> Result<ProximityEvidence, ProximityError> {
         self.0.measure_proximity(request)
+    }
+    /// The distance in the request's projection. Evidence answering another
+    /// request, projection included, is refused.
+    pub fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let measured = self.0.measure_distance(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
     }
 }
 
@@ -462,6 +674,101 @@ mod tests {
         .unwrap();
         let (lower, upper) = measured.separation_interval_metres();
         assert!((lower - 0.007).abs() < 1e-12 && (upper - 0.013).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_vertical_offset_must_be_finite_and_non_negative() {
+        for offset in [-0.1, f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                ProximityRequest::projected(
+                    id("pipe"),
+                    id("wall"),
+                    ProximityProjection::Vertical {
+                        footprint_offset_metres: offset
+                    }
+                ),
+                Err(ProximityError::InvalidMeasurement)
+            );
+        }
+    }
+
+    /// Penetration is a question in space; a projected request cannot carry it.
+    #[test]
+    fn full_proximity_evidence_is_only_measured_in_space() {
+        let horizontal =
+            ProximityRequest::projected(id("pipe"), id("wall"), ProximityProjection::Horizontal)
+                .unwrap();
+        assert_eq!(
+            ProximityEvidence::try_new(
+                horizontal,
+                0.1,
+                Some(0.0),
+                0.0,
+                None,
+                GeometryFidelity::Exact,
+                exact()
+            ),
+            Err(ProximityError::UnsupportedProjection)
+        );
+    }
+
+    #[test]
+    fn projected_distance_intervals_are_coherent() {
+        let plan =
+            ProximityRequest::projected(id("pipe"), id("wall"), ProximityProjection::PlanOverlap)
+                .unwrap();
+        let tessellated = GeometryFidelity::tessellated(0.002).unwrap();
+        // Exact evidence is a point, related or not.
+        assert!(
+            ProjectedDistanceEvidence::try_new(
+                plan.clone(),
+                f64::INFINITY,
+                f64::INFINITY,
+                GeometryFidelity::Exact,
+                exact()
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(
+                plan.clone(),
+                0.0,
+                f64::INFINITY,
+                GeometryFidelity::Exact,
+                exact()
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        // A tessellation may leave the relation open, but never claim exactness.
+        assert!(
+            ProjectedDistanceEvidence::try_new(
+                plan.clone(),
+                0.0,
+                f64::INFINITY,
+                tessellated,
+                approximate()
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(plan, 0.0, 0.0, tessellated, exact()),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        // Bodies always have a distance in space and in plan.
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(
+                request(),
+                0.0,
+                f64::INFINITY,
+                tessellated,
+                approximate()
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            ProjectedDistanceEvidence::try_new(request(), 0.3, 0.2, tessellated, approximate()),
+            Err(ProximityError::InvalidMeasurement)
+        );
     }
 
     #[test]

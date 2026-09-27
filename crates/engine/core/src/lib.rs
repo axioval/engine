@@ -503,15 +503,18 @@ pub use metric_routing::{
 pub use object_frame::{
     ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,
 };
-pub use pairwise::{CandidatePair, CandidateSearchError, candidate_pairs};
+pub use pairwise::{
+    CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
+};
 pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use proximity::{
-    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, ProximityError, ProximityEvidence,
-    ProximityRequest, ProximityService, ProximityServiceHandle,
+    BodyContainment, Bounds3, GeometryFidelity, ObjectBounds, ProjectedDistanceEvidence,
+    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,

@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 
 use axioval_ir::ObjectId;
 
-use crate::proximity::{Bounds3, ObjectBounds};
+use crate::proximity::{Bounds3, ObjectBounds, ProximityProjection};
 
 /// Why a candidate search could not run.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -139,6 +139,83 @@ pub fn candidate_pairs(
     Ok(pairs)
 }
 
+/// Every subject/counterpart pair that may lie within `margin_metres` of
+/// each other in `projection`, in identity order.
+///
+/// Each projection prunes by the gap that bounds its own distance from below,
+/// so the search stays complete:
+///
+/// - `Minimum3d`: the Euclidean box gap, as [`candidate_pairs`].
+/// - `Horizontal`: the plan box gap. Two bodies on different storeys can be
+///   close in plan, so the vertical gap discards nothing.
+/// - `PlanOverlap`: footprints that overlap have boxes that meet in plan, so
+///   the plan margin is zero whatever `margin_metres` says.
+/// - `Vertical`: the bodies are related only when their plan box gap is within
+///   the footprint offset, and their distance is at least the vertical gap
+///   between their boxes, which must be within the margin.
+pub fn projected_candidate_pairs(
+    subjects: &[ObjectBounds],
+    counterparts: &[ObjectBounds],
+    projection: ProximityProjection,
+    margin_metres: f64,
+) -> Result<Vec<CandidatePair>, CandidateSearchError> {
+    if !margin_metres.is_finite() || margin_metres < 0.0 {
+        return Err(CandidateSearchError::InvalidMargin);
+    }
+    let plan_margin = match projection {
+        ProximityProjection::Minimum3d => {
+            return candidate_pairs(subjects, counterparts, margin_metres);
+        }
+        ProximityProjection::Horizontal => margin_metres,
+        ProximityProjection::PlanOverlap => 0.0,
+        ProximityProjection::Vertical {
+            footprint_offset_metres,
+        } => footprint_offset_metres,
+    };
+    // Flattening loses the vertical extent, so refuse conflicting inputs
+    // before it could hide a conflict in height.
+    let mut enclosing: BTreeMap<&ObjectId, Bounds3> = BTreeMap::new();
+    for bounds in subjects.iter().chain(counterparts) {
+        let known = enclosing
+            .entry(bounds.object())
+            .or_insert_with(|| bounds.enclosing());
+        if *known != bounds.enclosing() {
+            return Err(CandidateSearchError::ConflictingBounds(
+                bounds.object().clone(),
+            ));
+        }
+    }
+    let flat = |group: &[ObjectBounds]| -> Result<Vec<ObjectBounds>, CandidateSearchError> {
+        group
+            .iter()
+            .map(|bounds| {
+                let (min, max) = (bounds.bounds().min(), bounds.bounds().max());
+                Bounds3::try_new([min[0], min[1], 0.0], [max[0], max[1], 0.0])
+                    .and_then(|flat| {
+                        ObjectBounds::try_new(bounds.object().clone(), flat, bounds.fidelity())
+                    })
+                    .map_err(|_| CandidateSearchError::InvalidMargin)
+            })
+            .collect()
+    };
+    let pairs = candidate_pairs(&flat(subjects)?, &flat(counterparts)?, plan_margin)?;
+    if !matches!(projection, ProximityProjection::Vertical { .. }) {
+        return Ok(pairs);
+    }
+    let vertical_gap = |a: &Bounds3, b: &Bounds3| {
+        (b.min()[2] - a.max()[2])
+            .max(a.min()[2] - b.max()[2])
+            .max(0.0)
+    };
+    Ok(pairs
+        .into_iter()
+        .filter(|pair| {
+            vertical_gap(&enclosing[pair.subject()], &enclosing[pair.counterpart()])
+                <= margin_metres
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,6 +276,135 @@ mod tests {
             expected.sort();
             assert_eq!(found, expected, "margin {margin}");
         }
+    }
+
+    /// Each projection must keep every pair whose projected box gap is within
+    /// its margin: that gap bounds the projected distance from below.
+    #[test]
+    fn projected_sweeps_match_exhaustive_search() {
+        let objects: Vec<ObjectBounds> = (0..40)
+            .map(|i| {
+                let x = f64::from((i * 37) % 23) * 0.7;
+                let y = f64::from((i * 11) % 7) * 0.9;
+                let z = f64::from((i * 5) % 4) * 3.0;
+                ObjectBounds::try_new(
+                    id(&format!("o{i:02}")),
+                    Bounds3::try_new([x, y, z], [x + 1.0, y + 0.5, z + 0.3]).unwrap(),
+                    if i % 3 == 0 {
+                        GeometryFidelity::tessellated(0.05).unwrap()
+                    } else {
+                        GeometryFidelity::Exact
+                    },
+                )
+                .unwrap()
+            })
+            .collect();
+        let (subjects, counterparts) = objects.split_at(15);
+        let gap = |a: &Bounds3, b: &Bounds3, axis: usize| {
+            (b.min()[axis] - a.max()[axis])
+                .max(a.min()[axis] - b.max()[axis])
+                .max(0.0)
+        };
+        let plan_gap = |a: &Bounds3, b: &Bounds3| gap(a, b, 0).hypot(gap(a, b, 1));
+        for margin in [0.0, 0.3, 2.0, 4.0] {
+            for projection in [
+                ProximityProjection::Minimum3d,
+                ProximityProjection::Horizontal,
+                ProximityProjection::PlanOverlap,
+                ProximityProjection::Vertical {
+                    footprint_offset_metres: 0.0,
+                },
+                ProximityProjection::Vertical {
+                    footprint_offset_metres: 1.0,
+                },
+            ] {
+                let found =
+                    projected_candidate_pairs(subjects, counterparts, projection, margin).unwrap();
+                let mut expected = Vec::new();
+                for s in subjects {
+                    for c in counterparts {
+                        let (a, b) = (s.enclosing(), c.enclosing());
+                        let keep = match projection {
+                            ProximityProjection::Minimum3d => a.gap(&b) <= margin,
+                            ProximityProjection::Horizontal => plan_gap(&a, &b) <= margin,
+                            ProximityProjection::PlanOverlap => plan_gap(&a, &b) <= 0.0,
+                            ProximityProjection::Vertical {
+                                footprint_offset_metres,
+                            } => {
+                                plan_gap(&a, &b) <= footprint_offset_metres
+                                    && gap(&a, &b, 2) <= margin
+                            }
+                        };
+                        if keep {
+                            expected.push(CandidatePair {
+                                subject: s.object().clone(),
+                                counterpart: c.object().clone(),
+                            });
+                        }
+                    }
+                }
+                expected.sort();
+                assert_eq!(found, expected, "{} margin {margin}", projection.name());
+            }
+        }
+    }
+
+    /// Bodies on different storeys are close in plan and above one another.
+    #[test]
+    fn projections_ignore_the_height_that_does_not_measure_them() {
+        let low = exact("low", 0.0);
+        let high = ObjectBounds::try_new(
+            id("high"),
+            Bounds3::try_new([0.5, 0.0, 10.0], [1.5, 1.0, 11.0]).unwrap(),
+            GeometryFidelity::Exact,
+        )
+        .unwrap();
+        let (subjects, counterparts) = (&[low][..], &[high][..]);
+        assert!(
+            candidate_pairs(subjects, counterparts, 1.0)
+                .unwrap()
+                .is_empty()
+        );
+        for projection in [
+            ProximityProjection::Horizontal,
+            ProximityProjection::PlanOverlap,
+        ] {
+            assert_eq!(
+                projected_candidate_pairs(subjects, counterparts, projection, 0.0)
+                    .unwrap()
+                    .len(),
+                1
+            );
+        }
+        let vertical = ProximityProjection::Vertical {
+            footprint_offset_metres: 0.0,
+        };
+        assert_eq!(
+            projected_candidate_pairs(subjects, counterparts, vertical, 9.0)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            projected_candidate_pairs(subjects, counterparts, vertical, 8.5)
+                .unwrap()
+                .is_empty()
+        );
+        let conflicting = ObjectBounds::try_new(
+            id("low"),
+            Bounds3::try_new([0.0, 0.0, 5.0], [1.0, 1.0, 6.0]).unwrap(),
+            GeometryFidelity::Exact,
+        )
+        .unwrap();
+        assert_eq!(
+            projected_candidate_pairs(
+                subjects,
+                &[conflicting],
+                ProximityProjection::Horizontal,
+                0.0
+            ),
+            Err(CandidateSearchError::ConflictingBounds(id("low")))
+        );
     }
 
     #[test]

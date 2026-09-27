@@ -786,6 +786,100 @@ pub enum ContainmentOutcome {
     Outside(ContainmentEvidence),
 }
 
+/// Asks whether the tops of `supports` hold a clearance footprint (the
+/// plan of `frame` and `shape`, as for [`ContainmentRequest`]): the
+/// upward-facing surfaces of the supports between `from` and `to` metres of
+/// elevation, such as a slab or landing near the floor under a door's clear
+/// area.
+///
+/// Only the plan and the elevation band are compared. The supports are the
+/// rule's selection, sorted and deduplicated; with none, nothing holds the
+/// footprint.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SupportCoverageRequest {
+    frame: MetricFrame,
+    shape: ClearanceShape,
+    supports: Vec<ObjectId>,
+    from: f64,
+    to: f64,
+}
+impl SupportCoverageRequest {
+    /// Refuses a band that is not finite or whose ends are reversed.
+    pub fn try_new(
+        frame: MetricFrame,
+        shape: ClearanceShape,
+        mut supports: Vec<ObjectId>,
+        from_metres: f64,
+        to_metres: f64,
+    ) -> Result<Self, FreeSpaceError> {
+        if !(from_metres.is_finite() && to_metres.is_finite() && from_metres <= to_metres) {
+            return Err(FreeSpaceError::InvalidElevationBand);
+        }
+        supports.sort();
+        supports.dedup();
+        Ok(Self {
+            frame,
+            shape,
+            supports,
+            from: from_metres,
+            to: to_metres,
+        })
+    }
+    pub fn frame(&self) -> &MetricFrame {
+        &self.frame
+    }
+    pub fn shape(&self) -> ClearanceShape {
+        self.shape
+    }
+    pub fn supports(&self) -> &[ObjectId] {
+        &self.supports
+    }
+    /// The lowest elevation a top may lie at, in metres.
+    pub fn from_metres(&self) -> f64 {
+        self.from
+    }
+    /// The highest elevation a top may lie at, in metres.
+    pub fn to_metres(&self) -> f64 {
+        self.to
+    }
+}
+
+/// Exact evidence for a support-coverage answer, bound to its request.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SupportCoverageEvidence {
+    request: SupportCoverageRequest,
+    evidence: Evidence,
+}
+impl SupportCoverageEvidence {
+    pub fn try_new(
+        request: SupportCoverageRequest,
+        evidence: Evidence,
+    ) -> Result<Self, FreeSpaceError> {
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(FreeSpaceError::InexactSupportEvidence);
+        }
+        Ok(Self { request, evidence })
+    }
+    pub fn request(&self) -> &SupportCoverageRequest {
+        &self.request
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// Whether the supports' tops hold a clearance footprint.
+///
+/// Both answers are whole-footprint claims: `Supported` that no part of
+/// positive area lies outside the tops within the band, `Unsupported` that
+/// some part does. A backend that can only bound the footprint (a
+/// cylinder's disc) answers neither while the bounds disagree.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SupportCoverageOutcome {
+    Supported(SupportCoverageEvidence),
+    Unsupported(SupportCoverageEvidence),
+}
+
 /// One exact placement witness. It does not claim exhaustive search coverage.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClearancePlacementEvidence {
@@ -957,6 +1051,18 @@ pub trait FreeSpaceService: Send + Sync + 'static {
             "this free-space service does not compare clearance footprints with scopes".into(),
         ))
     }
+    /// Whether the tops of the request's supports hold a clearance
+    /// footprint. A service that does not compare footprints with supports
+    /// refuses, never answering either way.
+    fn assess_support_coverage(
+        &self,
+        request: &SupportCoverageRequest,
+    ) -> Result<SupportCoverageOutcome, FreeSpaceError> {
+        let _ = request;
+        Err(FreeSpaceError::Unavailable(
+            "this free-space service does not compare clearance footprints with supports".into(),
+        ))
+    }
     /// Where a path of the request's width can run in its space, and which
     /// entrances and components it comes near (see [`CirculationMap`]). A
     /// service that does not map circulation refuses.
@@ -1033,6 +1139,27 @@ impl FreeSpaceServiceHandle {
 }
 
 impl FreeSpaceServiceHandle {
+    /// Whether the supports' tops hold the footprint; an answer to another
+    /// request is refused.
+    ///
+    /// # Errors
+    ///
+    /// The backend's refusal, or [`FreeSpaceError::ResponseRequestMismatch`].
+    pub fn assess_support_coverage(
+        &self,
+        request: &SupportCoverageRequest,
+    ) -> Result<SupportCoverageOutcome, FreeSpaceError> {
+        let outcome = self.0.assess_support_coverage(request)?;
+        let actual = match &outcome {
+            SupportCoverageOutcome::Supported(value)
+            | SupportCoverageOutcome::Unsupported(value) => value.request(),
+        };
+        if actual != request {
+            return Err(FreeSpaceError::ResponseRequestMismatch);
+        }
+        Ok(outcome)
+    }
+
     /// Maps circulation and checks that the map answers `request`.
     ///
     /// # Errors

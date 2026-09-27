@@ -5616,6 +5616,51 @@ fn with_geometry_a_front_is_derived_from_the_wall_behind_a_wc() {
 }
 
 #[test]
+fn with_geometry_one_free_side_is_enough_under_any() {
+    let case = Case::new("geometry-clearance-any-side");
+    let not_a_space = json!({"kind": "not", "operand": entity("space")});
+    let run = |quantifier: &str| {
+        case.geometry_rule(
+            &washrooms(),
+            &[("space", "IfcSpace"), ("terminal", "IfcSanitaryTerminal")],
+            "axioval:capability.component-clearance",
+            &registry_signature("axioval:capability.component-clearance"),
+            entity("terminal"),
+            json!({
+                "sides": {"type": "stringList", "value": ["left", "right"]},
+                "quantifier": {"type": "string", "value": quantifier},
+                "front_axis": {"type": "string", "value": "forward"},
+                "width": {"type": "quantity", "value": 70, "unit": "cm"},
+                "depth": {"type": "quantity", "value": 90, "unit": "cm"},
+                "height_reference": {"type": "string", "value": "floor"},
+                "top_datum": {"type": "string", "value": "floor"},
+                "top_offset": {"type": "quantity", "value": 2, "unit": "m"},
+                "align": {"type": "string", "value": "right"},
+                "space_path": {"type": "stringList",
+                               "value": ["axioval:derived.contained-in-space:forward"]},
+                "obstacles": {"type": "selector", "value": not_a_space.clone()},
+            }),
+        )
+    };
+    // #29's left side holds the vanity unit #39, its right side is free.
+    let (output, result) = run("any");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    let (output, result) = run("all");
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#29".to_owned(),
+            "left clearance (0.7 m wide, 0.9 m deep, up to 2 m above the floor) is obstructed \
+             by ifc-step:model.ifc/#39"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+}
+
+#[test]
 fn with_geometry_a_wc_axis_far_from_the_side_wall_is_found() {
     let case = Case::new("geometry-centre-line-distance");
     let (output, result) = case.geometry_rule(

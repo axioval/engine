@@ -7,7 +7,8 @@ use axioval_engine::{
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
     FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint, MobilityProfile,
     ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
-    PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportedPlacement, ThresholdVerdict,
+    PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportCoverageEvidence,
+    SupportCoverageOutcome, SupportCoverageRequest, SupportedPlacement, ThresholdVerdict,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -808,6 +809,76 @@ fn containment_evidence_must_be_exact_and_bound_to_the_request() {
     let handle = FreeSpaceServiceHandle::new(Arc::new(WrongContainment));
     assert_eq!(
         handle.assess_containment(&containment("cad", vec![object("cad", "room")])),
+        Err(FreeSpaceError::ResponseRequestMismatch)
+    );
+}
+
+fn coverage(doc: &str, supports: Vec<ObjectId>) -> SupportCoverageRequest {
+    let volume = request(doc, "door");
+    SupportCoverageRequest::try_new(
+        volume.frame().clone(),
+        volume.shape(),
+        supports,
+        -0.02,
+        0.02,
+    )
+    .unwrap()
+}
+
+/// Answers every support question about another volume.
+struct WrongSupport;
+impl FreeSpaceService for WrongSupport {
+    fn assess_clearance(&self, req: &ClearanceRequest) -> Result<ClearanceOutcome, FreeSpaceError> {
+        DeterministicFreeSpace.assess_clearance(req)
+    }
+    fn find_placement(&self, req: &PlacementRequest) -> Result<PlacementOutcome, FreeSpaceError> {
+        DeterministicFreeSpace.find_placement(req)
+    }
+    fn measure_free_area(&self, req: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
+        DeterministicFreeSpace.measure_free_area(req)
+    }
+    fn assess_support_coverage(
+        &self,
+        _req: &SupportCoverageRequest,
+    ) -> Result<SupportCoverageOutcome, FreeSpaceError> {
+        Ok(SupportCoverageOutcome::Supported(
+            SupportCoverageEvidence::try_new(
+                coverage("other", vec![object("other", "slab")]),
+                evidence("supported-other"),
+            )?,
+        ))
+    }
+}
+
+#[test]
+fn support_coverage_is_refused_by_default_and_bound_to_its_request() {
+    let request = coverage(
+        "cad",
+        vec![object("cad", "b"), object("cad", "a"), object("cad", "b")],
+    );
+    assert_eq!(
+        request.supports(),
+        &[object("cad", "a"), object("cad", "b")]
+    );
+    let volume = self::request("cad", "door");
+    assert_eq!(
+        SupportCoverageRequest::try_new(volume.frame().clone(), volume.shape(), vec![], 0.1, 0.0),
+        Err(FreeSpaceError::InvalidElevationBand)
+    );
+    let handle = FreeSpaceServiceHandle::new(Arc::new(DeterministicFreeSpace));
+    assert!(matches!(
+        handle.assess_support_coverage(&request),
+        Err(FreeSpaceError::Unavailable(_))
+    ));
+    let mut approximate = evidence("supported");
+    approximate.exact = false;
+    assert_eq!(
+        SupportCoverageEvidence::try_new(request.clone(), approximate),
+        Err(FreeSpaceError::InexactSupportEvidence)
+    );
+    let handle = FreeSpaceServiceHandle::new(Arc::new(WrongSupport));
+    assert_eq!(
+        handle.assess_support_coverage(&request),
         Err(FreeSpaceError::ResponseRequestMismatch)
     );
 }

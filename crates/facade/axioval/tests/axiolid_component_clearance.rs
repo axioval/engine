@@ -797,3 +797,229 @@ fn a_front_between_two_walls_as_near_is_not_decided() {
         NotEvaluatedReason::InvalidDeclaration
     );
 }
+
+fn texts(values: &[&str]) -> ParameterValue {
+    ParameterValue::StringList {
+        value: values.iter().map(|value| (*value).to_owned()).collect(),
+    }
+}
+
+/// A front area as wide as the WC, clamped to 0.8 to 1.2 m, 0.5 m deep,
+/// from the floor to 50 mm above the WC's top (0.45 m).
+fn sized_front(scene: Scene) -> CapabilityEvaluation {
+    scene.check(&[
+        ("side", text("front")),
+        ("align", text("centre")),
+        ("width", none()),
+        ("width_mode", text("component_clamped")),
+        ("width_minimum", metres(0.8)),
+        ("width_maximum", metres(1.2)),
+        ("depth", metres(0.5)),
+        ("height", none()),
+        ("top_datum", text("top")),
+        ("top_offset", metres(0.05)),
+    ])
+}
+
+#[test]
+fn a_front_area_is_sized_from_the_component_and_its_top() {
+    // The WC is 0.4 m wide: clamped, the area spans x 0.8 to 1.6.
+    let post = |x: f64, bottom: f64| {
+        Scene::wc().body(
+            "post",
+            "fixture",
+            cuboid([x, 0.9, bottom], [x + 0.05, 1.0, bottom + 0.3]),
+        )
+    };
+    let outcome = sized_front(post(1.5, 0.0));
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "front clearance (0.8 m wide, 0.5 m deep, up to 0.05 m above the component's top) \
+             is obstructed by cad:model/post"
+                .to_owned(),
+            vec!["post".to_owned()]
+        )],
+        "{outcome:#?}"
+    );
+    // Beyond the clamped width, or above the top datum, it is clear.
+    assert!(clean(&sized_front(post(1.65, 0.0))));
+    assert!(clean(&sized_front(post(1.5, 0.5))));
+    // Just below 0.45 m it still reaches in.
+    assert_eq!(findings(&sized_front(post(1.5, 0.44))).len(), 1);
+}
+
+#[test]
+fn a_component_sized_width_follows_the_component() {
+    // `component_plus` 0.3 m: 0.7 m wide over the 0.4 m WC.
+    let outcome = Scene::wc()
+        .body("post", "fixture", cuboid([1.5, 0.9, 0.0], [1.55, 1.0, 0.3]))
+        .check(&[
+            ("side", text("front")),
+            ("align", text("centre")),
+            ("width", metres(0.3)),
+            ("width_mode", text("component_plus")),
+            ("depth", metres(0.5)),
+        ]);
+    assert_eq!(findings(&outcome).len(), 1, "{outcome:#?}");
+    assert!(
+        findings(&outcome)[0]
+            .0
+            .starts_with("front clearance (0.7 m wide"),
+        "{outcome:#?}"
+    );
+    // Measured from its midline, 0.5 m deep reaches only 0.15 m past the
+    // WC's front (y 0.7 to 0.85), short of the post.
+    let outcome = Scene::wc()
+        .body("post", "fixture", cuboid([1.1, 0.9, 0.0], [1.3, 1.0, 0.3]))
+        .check(&[
+            ("side", text("front")),
+            ("align", text("centre")),
+            ("width", metres(0.4)),
+            ("depth", metres(0.5)),
+            ("depth_from", text("midline")),
+        ]);
+    assert!(clean(&outcome), "{outcome:#?}");
+}
+
+/// A thin panel right in front of the WC (y 0.72 to 0.82) and a front area
+/// 0.6 m wide and 0.5 m deep that may float away from the WC.
+fn floating_front(to: f64) -> CapabilityEvaluation {
+    Scene::wc()
+        .body(
+            "panel",
+            "fixture",
+            cuboid([1.1, 0.72, 0.0], [1.3, 0.82, 1.0]),
+        )
+        .check(&[
+            ("side", text("front")),
+            ("align", text("centre")),
+            ("width", metres(0.6)),
+            ("depth", metres(0.5)),
+            ("depth_slide_from", metres(0.0)),
+            ("depth_slide_to", metres(to)),
+        ])
+}
+
+#[test]
+fn a_volume_floats_away_from_the_component() {
+    // Obstructed where it starts, free 150 mm out: a 200 mm float passes.
+    assert!(clean(&floating_front(0.2)));
+    let outcome = floating_front(0.1);
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "front clearance (0.6 m wide, 0.5 m deep, 2 m high) fits nowhere between 0 m and \
+             0.1 m away from the component in cad:model/room"
+                .to_owned(),
+            vec!["room".to_owned()]
+        )],
+        "{outcome:#?}"
+    );
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+}
+
+#[test]
+fn one_free_side_is_enough_under_any() {
+    let both = [
+        ("side", none()),
+        ("sides", texts(&["left", "right"])),
+        ("align", text("centre")),
+    ];
+    // The basin blocks the left side only.
+    let mut any = both.to_vec();
+    any.push(("quantifier", text("any")));
+    assert!(clean(&basin(Scene::wc()).check(&any)));
+    let outcome = basin(Scene::wc()).check(&both);
+    let found = findings(&outcome);
+    assert_eq!(found.len(), 1, "{outcome:#?}");
+    assert!(found[0].0.starts_with("left clearance"), "{outcome:#?}");
+    // With a second basin on the right, neither side is free.
+    let outcome = basin(Scene::wc())
+        .body("basin2", "basin", cuboid([1.8, 0.2, 0.8], [2.1, 0.5, 1.0]))
+        .check(&any);
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "left or right clearance has no free side: left (0.7 m wide, 0.9 m deep, 2 m high) \
+             is obstructed by cad:model/basin; right (0.7 m wide, 0.9 m deep, 2 m high) is \
+             obstructed by cad:model/basin2"
+                .to_owned(),
+            vec!["basin".to_owned(), "basin2".to_owned()]
+        )],
+        "{outcome:#?}"
+    );
+}
+
+/// A front area 0.8 m wide and 1.2 m deep (y 0.7 to 1.9) at the WC's
+/// bottom, over a slab whose top lies at `top` and which ends at `edge`.
+fn over_slab(edge: f64, top: f64) -> CapabilityEvaluation {
+    Scene::wc()
+        .body(
+            "slab",
+            "slab",
+            cuboid([-1.0, -1.0, top - 0.2], [4.0, edge, top]),
+        )
+        .check(&[
+            ("side", text("front")),
+            ("align", text("centre")),
+            ("width", metres(0.8)),
+            ("depth", metres(1.2)),
+            ("height_reference", text("bottom")),
+            ("space_path", none()),
+            ("obstacles", selector(kind("fixture"))),
+            ("support_selector", selector(kind("slab"))),
+            ("support_tolerance", metres(0.02)),
+        ])
+}
+
+#[test]
+fn a_clear_area_overhanging_the_slab_edge_is_unsupported() {
+    assert!(clean(&over_slab(3.0, 0.0)));
+    let outcome = over_slab(1.0, 0.0);
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "front clearance (0.8 m wide, 1.2 m deep, 2 m high) is not wholly supported: part \
+             of it lies over no top of the supports within 0.02 m of its base"
+                .to_owned(),
+            Vec::new()
+        )],
+        "{outcome:#?}"
+    );
+    // A slab 0.1 m below the base is beyond the tolerance.
+    assert_eq!(findings(&over_slab(3.0, -0.1)).len(), 1);
+}
+
+#[test]
+fn the_new_declarations_fail_closed() {
+    let invalid = |parameters: &[(&str, ParameterValue)]| {
+        let outcome = Scene::wc().check(parameters);
+        assert_eq!(
+            unevaluated(&outcome)[0].0,
+            NotEvaluatedReason::InvalidDeclaration,
+            "{outcome:#?}"
+        );
+    };
+    // Both `side` and `sides`, or `any` with one side.
+    invalid(&[("sides", texts(&["left"]))]);
+    invalid(&[("quantifier", text("any"))]);
+    // A height and a top datum.
+    invalid(&[("top_datum", text("top"))]);
+    // A clamp without its bounds, or bounds without the clamp.
+    invalid(&[("width_mode", text("component_clamped"))]);
+    invalid(&[("width_minimum", metres(0.5))]);
+    // A support for a floating volume, or without a tolerance.
+    invalid(&[
+        ("support_selector", selector(kind("slab"))),
+        ("support_tolerance", metres(0.02)),
+        ("depth_slide_from", metres(0.0)),
+        ("depth_slide_to", metres(0.1)),
+    ]);
+    invalid(&[("support_selector", selector(kind("slab")))]);
+    // A depth float back into the component.
+    invalid(&[
+        ("depth_slide_from", metres(-0.1)),
+        ("depth_slide_to", metres(0.1)),
+    ]);
+}

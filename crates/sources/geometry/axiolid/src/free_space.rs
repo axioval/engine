@@ -865,4 +865,11 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
     ) -> Result<ContainmentOutcome, FreeSpaceError> {
         crate::containment::assess(&self.geometry, &self.source, request)
     }
+
+    fn assess_support_coverage(
+        &self,
+        request: &axioval_engine::SupportCoverageRequest,
+    ) -> Result<axioval_engine::SupportCoverageOutcome, FreeSpaceError> {
+        crate::support_coverage::assess(&self.geometry, &self.source, request)
+    }
 }

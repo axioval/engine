@@ -30,6 +30,7 @@ pub mod proximity;
 mod side_distance;
 pub mod sight;
 pub mod space;
+pub(crate) mod support_coverage;
 pub mod triangle_count;
 pub mod vertical_extent;
 pub mod walkability;

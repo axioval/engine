@@ -131,6 +131,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   `Option` beside the new `code_pattern`; `Selector` gains `Source`,
   `ComparisonOperator` gains `IsEmpty` and `IsNotEmpty`, and
   `EvidenceSessionError` gains `ConflictingMetadata`.
+- **Clearances sized from the component, up to a datum, floating away,
+  on any side and supported.** (#129) `component-clearance` sizes each of
+  width, depth and height `fixed`, `component_plus` or
+  `component_clamped` (`*_mode`, `*_minimum`, `*_maximum`) from the
+  component's own extents across and along the side and its height, each
+  an interval; starts the volume at the component's face or midline
+  (`depth_from`); takes an independent top (`top_datum`, `top_offset`:
+  floor, the component's bottom or top) instead of a height; floats away
+  from the component (`depth_slide_from`, `depth_slide_to`), alone or with
+  the sideways slide; checks several `sides` with `quantifier` `all` or
+  `any` (one free side is enough); and, with `support_selector` and
+  `support_tolerance`, requires the volume's plan to lie on the tops of
+  the selected bodies near its base, so an external door's clear area
+  overhanging the slab edge is found. `FreeSpaceService` gains
+  `assess_support_coverage` (`SupportCoverageRequest`,
+  `SupportCoverageOutcome`, `SupportCoverageEvidence`); the default
+  refuses, and the Axiolid free-space service answers it from the
+  supports' upward faces in the band. **Breaking:** `side` and `height`
+  are now optional (`sides` or `top_datum` replace them), and definitions
+  bound to `component-clearance` must declare the new optional
+  parameters.
+
 - **Centre lines beside walls.** (#130) The capability
   `centre-line-distance` judges the distance from the centre line of a
   footprint's least-area rectangle (its `long` or `short` axis, or

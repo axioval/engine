@@ -617,7 +617,8 @@ pub use free_space::{
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
     FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence, PlacementDomain,
     PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    SignedDistanceInterval, SupportedPlacement,
+    SignedDistanceInterval, SupportCoverageEvidence, SupportCoverageOutcome,
+    SupportCoverageRequest, SupportedPlacement,
 };
 pub use guard::{
     ClimbableCandidate, GuardCandidate, GuardEdge, GuardError, GuardEvidence, GuardSearch,

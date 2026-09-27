@@ -7,6 +7,7 @@ mod accessible_route;
 mod allowed_profile;
 mod body_extent;
 mod body_facts;
+mod centre_line_distance;
 mod clash;
 mod clash_cases;
 mod clash_groups;
@@ -81,6 +82,7 @@ mod xsd_pattern;
 pub use accessible_route::AccessibleRoute;
 pub use allowed_profile::AllowedProfile;
 pub use body_extent::BodyExtent;
+pub use centre_line_distance::CentreLineDistance;
 pub use clash::Clash;
 pub use clash_matrix::ClashMatrix;
 pub use classification_requirement::ClassificationRequirement;
@@ -209,6 +211,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(SpaceConnection))
         .and_then(|registry| registry.register(SpaceDistance))
         .and_then(|registry| registry.register(ComponentClearance))
+        .and_then(|registry| registry.register(CentreLineDistance))
         .and_then(|registry| registry.register(ComponentVisibility))
         .and_then(|registry| registry.register(EffectiveCoverage))
         .and_then(|registry| registry.register(LocalCirculation))

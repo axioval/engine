@@ -131,6 +131,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   `Option` beside the new `code_pattern`; `Selector` gains `Source`,
   `ComparisonOperator` gains `IsEmpty` and `IsNotEmpty`, and
   `EvidenceSessionError` gains `ConflictingMetadata`.
+- **Centre lines beside walls.** (#130) The capability
+  `centre-line-distance` judges the distance from the centre line of a
+  footprint's least-area rectangle (its `long` or `short` axis, or
+  `against-wall`, from the wall the component stands against to its
+  front) to the nearest `wall_selector` wall beside it, within `reach`:
+  the nearer of the two sides (`nearest`) or each side (`both`), against
+  `minimum` and `maximum`. Results are "too close", "too far" and "no
+  wall nearby"; a straddling interval is not evaluated. It reads the
+  walls through `PlanSpanService::measure_side_distances`.
+
 - **A front against the wall.** (#128) `component-clearance` takes
   `front_axis` `against-wall`, with `wall_selector`, `wall_reach` and
   `wall_inset`: the sides are those of the footprint's least-area

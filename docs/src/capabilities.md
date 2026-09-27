@@ -1066,6 +1066,31 @@ Each side and each question (clear, inside the space) is its own finding or not-
 
 **Size modes.** A `minimum` is one question per side: is the volume, less `size_tolerance` in every dimension, free? A `maximum` asks, per dimension (width, depth and height, or radius and height), whether the volume `size_tolerance` larger in that dimension is free, grown the way the volume is anchored (the depth away from the component, the width away from an aligned edge or both ways when centred, the height upwards): a free one is a finding (`… is free, so the free volume exceeds the maximum width`), an obstructed one passes. `fixed` asks both. Each question is its own finding or not-evaluated outcome, fixed or floating. The largest volume that fits is not measured: a maximum is decided by the one larger volume only.
 
+### Centre lines beside walls
+
+`axioval:capability.centre-line-distance` requires the centre line of each selected component's footprint to lie between `minimum` and `maximum` from the walls beside it: a WC's axis 405 to 455 mm from the side wall, a basin's from the wall beside it. The centre line is one of the axes of the footprint's least-area rectangle, through its centre; the distance is measured square to it, to the nearest `wall_selector` wall in the strip beside the footprint on each side (as long as the footprint along the line, narrowed by `inset` at both ends), through `PlanSpanService::measure_side_distances` (see [Services](./services.md)). It needs the plan-span service.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `wall_selector` | `selector` | Required. The walls (or other bodies) to measure to. |
+| `centre_line` | `string` | Required. `long` or `short`: the rectangle's longer or shorter axis (a square, or sides the measurement cannot order, has neither). `against-wall`: from the wall the component stands against to its front, derived as `component-clearance`'s `front_axis` `against-wall` does; the sides are then its left and right. |
+| `sides` | `string` | Required. `nearest`: the nearer wall of the two sides is judged. `both`: each side is judged on its own, so a missing second wall is a finding. |
+| `minimum`, `maximum` | `quantity` | The distance range, at least one; the minimum no larger than the maximum. |
+| `reach` | `quantity` | Required. How far from the centre line to look; at least `minimum` and `maximum`. A wall beyond it is none. |
+| `inset` | `quantity` | How far each strip is narrowed at both ends (default 0), so the wall behind the component, which touches the strips beside it along their edge, is not taken for a wall beside it. |
+
+Each judged side (or the nearest wall) is its own finding or not-evaluated outcome, with one of three results: `too close` (a sure wall surely nearer than `minimum`), `too far` (every wall that may be there farther than `maximum`, or no wall within it), and `no wall nearby` (none within `reach`). A pass needs every wall that may be there no nearer than `minimum` and, with a maximum, a sure wall no farther than it. A wall the selection cannot decide, or one that may or may not lie in the strip, can only be nearer: it lowers the lower bound and never passes a maximum. Distances are intervals widened by the rectangle's uncertainty and the rounding of the clipping, so a distance straddling a bound is not evaluated, and the evidence is never exact. A footprint whose least-area orientation is tied, or a tessellated one, has no sides and is not evaluated.
+
+```json
+{"wall_selector": {"type": "selector", "value": {"kind": "entityType", "objectType": "…wall"}},
+ "centre_line": {"type": "string", "value": "against-wall"},
+ "sides": {"type": "string", "value": "nearest"},
+ "minimum": {"type": "quantity", "value": 405, "unit": "mm"},
+ "maximum": {"type": "quantity", "value": 455, "unit": "mm"},
+ "reach": {"type": "quantity", "value": 1, "unit": "m"},
+ "inset": {"type": "quantity", "value": 1, "unit": "cm"}}
+```
+
 ### Visibility of targets
 
 `axioval:capability.component-visibility` requires targets to be in view from an eye above each selected component: a reception desk that must see the entrance doors, or a device that must be seen from nowhere. The eye stands `eye_height` above the component's base (the bottom of its vertical extent) over the centre of its footprint, read through `VerticalExtentService` and `PlanSpanService`; each target is asked about through the line-of-sight service (`SightService`), so it needs a geometry adapter.

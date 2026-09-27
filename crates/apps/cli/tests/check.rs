@@ -5615,6 +5615,39 @@ fn with_geometry_a_front_is_derived_from_the_wall_behind_a_wc() {
     );
 }
 
+#[test]
+fn with_geometry_a_wc_axis_far_from_the_side_wall_is_found() {
+    let case = Case::new("geometry-centre-line-distance");
+    let (output, result) = case.geometry_rule(
+        &washroom_with_walls(),
+        &[("wall", "IfcWall"), ("terminal", "IfcSanitaryTerminal")],
+        "axioval:capability.centre-line-distance",
+        &registry_signature("axioval:capability.centre-line-distance"),
+        entity("terminal"),
+        json!({
+            "wall_selector": {"type": "selector", "value": entity("wall")},
+            "centre_line": {"type": "string", "value": "against-wall"},
+            "sides": {"type": "string", "value": "nearest"},
+            "minimum": {"type": "quantity", "value": 405, "unit": "mm"},
+            "maximum": {"type": "quantity", "value": 455, "unit": "mm"},
+            "reach": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "inset": {"type": "quantity", "value": 1, "unit": "cm"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #29's axis (x 1.2) lies 1.2 m from the west wall's face (x 0).
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#29".to_owned(),
+            "centre line to the nearest wall: too far: 1.2 m from ifc-step:model.ifc/#49, more \
+             than the maximum 0.455 m"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+}
+
 /// As [`placed_box`], with the profile's length turned `degrees` from the
 /// x-axis about its centre, as instances `#first` to `#first + 10`; the
 /// product is `#first + 10`.

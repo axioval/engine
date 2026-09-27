@@ -12,9 +12,9 @@
 //! [`SpaceCategory`]), so results can be grouped by problem as well as by space.
 
 use axioval_engine::{
-    Cap, CapCoverage, CapRequest, CapabilityEvaluation, CompiledRule, Containment,
-    NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
-    SpaceError, SpaceService, SpaceServiceHandle,
+    BoundaryRequest, Cap, CapCoverage, CapRequest, CapabilityEvaluation, CompiledRule, Containment,
+    Deviation, NotEvaluatedReason, OverlapRequest, ParameterDescriptor, ParameterType,
+    RuleCapability, RuleContext, SpaceError, SpaceService, SpaceServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, ObjectId, Severity};
@@ -49,7 +49,7 @@ pub enum SpaceCategory {
     UncoveredTopCap,
     /// The bottom cap is not fully covered.
     UncoveredBottomCap,
-    /// Storey floor area belongs to no space.
+    /// A connected region of storey floor belongs to no space.
     UnallocatedArea,
 }
 
@@ -83,6 +83,10 @@ impl RuleCapability for SpaceValidation {
         "axioval:capability.space-validation"
     }
 
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         vec![
             ParameterDescriptor::required("required_height_metres", ParameterType::Number),
@@ -97,6 +101,8 @@ impl RuleCapability for SpaceValidation {
             ParameterDescriptor::optional("tolerance_metres", ParameterType::Number),
             ParameterDescriptor::optional("top_cap_elements", ParameterType::Selector),
             ParameterDescriptor::optional("bottom_cap_elements", ParameterType::Selector),
+            ParameterDescriptor::optional("boundary_elements", ParameterType::Selector),
+            ParameterDescriptor::optional("intersection_elements", ParameterType::Selector),
         ]
     }
 
@@ -144,12 +150,49 @@ impl RuleCapability for SpaceValidation {
             }
         };
 
+        // Which elements bound and intersect spaces is the rule's choice,
+        // selected once for every space.
+        let boundary = element_plan(
+            context,
+            policy.boundary_elements.as_ref(),
+            "boundary",
+            BoundaryRequest::new(),
+            BoundaryRequest::with_elements,
+        );
+        let intersection = element_plan(
+            context,
+            policy.intersection_elements.as_ref(),
+            "intersection",
+            OverlapRequest::new(),
+            OverlapRequest::with_elements,
+        );
+
         for object in selected {
             let space = &object.id;
             check_duplicates(service, space, rule, &evidence, &mut evaluation);
             check_height(service, space, &policy, rule, &evidence, &mut evaluation);
-            check_boundary(service, space, &policy, rule, &evidence, &mut evaluation);
-            check_overlaps(service, space, &policy, rule, &evidence, &mut evaluation);
+            if let Some(request) = planned(&boundary, space, &mut evaluation) {
+                check_boundary(
+                    service,
+                    space,
+                    request,
+                    &policy,
+                    rule,
+                    &evidence,
+                    &mut evaluation,
+                );
+            }
+            if let Some(request) = planned(&intersection, space, &mut evaluation) {
+                check_overlaps(
+                    service,
+                    space,
+                    request,
+                    &policy,
+                    rule,
+                    &evidence,
+                    &mut evaluation,
+                );
+            }
             for plan in [&top, &bottom] {
                 check_cap(service, space, plan, rule, &evidence, &mut evaluation);
             }
@@ -166,6 +209,8 @@ struct Policy {
     tolerance_metres: f64,
     top_cap_elements: Option<Selector>,
     bottom_cap_elements: Option<Selector>,
+    boundary_elements: Option<Selector>,
+    intersection_elements: Option<Selector>,
     required_height_metres: f64,
     uncovered_segment_length_metres: f64,
     check_top_cap: bool,
@@ -199,6 +244,8 @@ impl Policy {
             tolerance_metres,
             top_cap_elements: selector("top_cap_elements")?,
             bottom_cap_elements: selector("bottom_cap_elements")?,
+            boundary_elements: selector("boundary_elements")?,
+            intersection_elements: selector("intersection_elements")?,
             required_height_metres: number("required_height_metres")?,
             uncovered_segment_length_metres: number("uncovered_segment_length_metres")?,
             check_top_cap: boolean("check_top_cap")?,
@@ -320,6 +367,65 @@ fn cap_plans(
     ))
 }
 
+/// What to do about a sub-check whose elements a rule may select.
+enum ElementPlan<R> {
+    /// Nothing is selected, so nothing can bound or intersect a space.
+    Skip,
+    /// Measure with this request.
+    Check(R),
+    /// The selection could not be decided: an undecided element may be the
+    /// one covering a boundary or intersecting a space.
+    Undecided(NotEvaluatedReason, String),
+}
+
+/// Selects a sub-check's elements, or keeps the service's default without a
+/// selector. A selection of nothing skips the sub-check, as a cap selection
+/// does: a check with no element to judge by says nothing about the space.
+fn element_plan<R>(
+    context: &RuleContext<'_>,
+    selector: Option<&Selector>,
+    name: &str,
+    default: R,
+    with_elements: impl Fn(R, Vec<ObjectId>) -> R,
+) -> ElementPlan<R> {
+    let Some(selector) = selector else {
+        return ElementPlan::Check(default);
+    };
+    let (elements, selection) = select_objects(context, selector);
+    if let Some(outcome) = selection.not_evaluated_outcomes().first() {
+        return ElementPlan::Undecided(
+            outcome.reason().clone(),
+            format!(
+                "{name} elements could not be selected: {}",
+                outcome.message()
+            ),
+        );
+    }
+    if elements.is_empty() {
+        return ElementPlan::Skip;
+    }
+    ElementPlan::Check(with_elements(
+        default,
+        elements.iter().map(|object| object.id.clone()).collect(),
+    ))
+}
+
+/// The request to measure `space` with, or `None` after recording why not.
+fn planned<'p, R>(
+    plan: &'p ElementPlan<R>,
+    space: &ObjectId,
+    evaluation: &mut CapabilityEvaluation,
+) -> Option<&'p R> {
+    match plan {
+        ElementPlan::Skip => None,
+        ElementPlan::Check(request) => Some(request),
+        ElementPlan::Undecided(reason, message) => {
+            evaluation.push_object_not_evaluated(space.clone(), reason.clone(), message.clone());
+            None
+        }
+    }
+}
+
 fn cap_name(cap: Cap) -> &'static str {
     match cap {
         Cap::Top => "top",
@@ -386,12 +492,13 @@ fn check_height(
 fn check_boundary(
     service: &dyn SpaceService,
     space: &ObjectId,
+    request: &BoundaryRequest,
     policy: &Policy,
     rule: &CompiledRule,
     evidence: &Evidence,
     evaluation: &mut CapabilityEvaluation,
 ) {
-    match service.measure_boundary_gaps(space) {
+    match service.measure_boundary_gaps(space, request) {
         Ok(gaps) => {
             // Only gaps at least as long as the declared segment count; a
             // shorter gap is a modelling artefact, not an uncovered wall.
@@ -429,12 +536,13 @@ fn check_boundary(
 fn check_overlaps(
     service: &dyn SpaceService,
     space: &ObjectId,
+    request: &OverlapRequest,
     policy: &Policy,
     rule: &CompiledRule,
     evidence: &Evidence,
     evaluation: &mut CapabilityEvaluation,
 ) {
-    match service.measure_overlaps(space) {
+    match service.measure_overlaps(space, request) {
         Ok(overlaps) => {
             for overlap in overlaps {
                 let message = match overlap.containment() {
@@ -541,6 +649,9 @@ fn cap_shortfall(coverage: &CapCoverage) -> Option<(Severity, f64)> {
     Some((severity, ratio))
 }
 
+/// Judges each unallocated region on its own against the allowance, so a
+/// large hole is found while small shafts beside it pass. The deviation is
+/// the region's excess over the allowance, so severity bands can grade it.
 fn check_residuals(
     service: &dyn SpaceService,
     policy: &Policy,
@@ -548,20 +659,28 @@ fn check_residuals(
     evidence: &Evidence,
     evaluation: &mut CapabilityEvaluation,
 ) {
-    match service.measure_storey_residuals() {
-        Ok(residuals) => {
-            for residual in residuals {
-                if residual.area_square_metres() > policy.maximum_unallocated_area_square_metres {
-                    evaluation.push_finding(finding(
-                        rule,
-                        residual.storey().clone(),
-                        Severity::Warning,
-                        SpaceCategory::UnallocatedArea.message(&format!(
-                            "{:.3} m2 of storey floor belongs to no space",
-                            residual.area_square_metres()
-                        )),
-                        evidence,
-                    ));
+    match service.measure_unallocated_regions() {
+        Ok(regions) => {
+            let allowance = policy.maximum_unallocated_area_square_metres;
+            for region in regions {
+                let area = region.area_square_metres();
+                if area > allowance {
+                    evaluation.push_graded_finding(
+                        finding(
+                            rule,
+                            region.storey().clone(),
+                            Severity::Warning,
+                            SpaceCategory::UnallocatedArea.message(&format!(
+                                "a region of {area:.3} m2 of storey floor belongs to no space \
+                                 (allowed {allowance:.3} m2)"
+                            )),
+                            evidence,
+                        )
+                        // The bodies around the region, so a reviewer can
+                        // find where it lies.
+                        .with_related(region.elements().iter().cloned()),
+                        Deviation::above(allowance, area, area),
+                    );
                 }
             }
         }

@@ -9709,3 +9709,79 @@ fn bcf_topics_are_labelled_by_folder_and_tags_of_each_ruleset() {
         ]
     );
 }
+
+/// Space #16 (x 0..4) inside furniture #26 (x -1..5), and wall #36 far
+/// away at x 20..24; every body 4 m deep in y.
+fn space_in_furniture() -> String {
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        body(
+            10,
+            2.0,
+            4.0,
+            3.0,
+            "IFCSPACE('0000000000000000000016',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)"
+        ),
+        body(
+            20,
+            2.0,
+            6.0,
+            1.0,
+            "IFCFURNITURE('0000000000000000000026',$,$,$,$,#3,REP,$,$)"
+        ),
+        body(
+            30,
+            22.0,
+            4.0,
+            3.0,
+            "IFCWALL('0000000000000000000036',$,$,$,$,#3,REP,$,$)"
+        ),
+    )
+}
+
+/// The rule chooses the elements bounding a space: bounded only by
+/// furniture, its boundary is uncovered when walls bound it and covered once
+/// furniture is selected.
+#[test]
+fn with_geometry_space_validation_selects_its_bounding_elements() {
+    let run = |name: &str, boundary: Value| {
+        Case::new(name).geometry_rule(
+            &space_in_furniture(),
+            &[("space", "IfcSpace"), ("furniture", "IfcFurniture")],
+            "axioval:capability.space-validation",
+            &registry_signature("axioval:capability.space-validation"),
+            entity("space"),
+            json!({
+                "required_height_metres": {"type": "number", "value": 2.5},
+                "uncovered_segment_length_metres": {"type": "number", "value": 0.5},
+                "check_top_cap": {"type": "boolean", "value": false},
+                "check_bottom_cap": {"type": "boolean", "value": false},
+                "check_unallocated_area": {"type": "boolean", "value": false},
+                "maximum_unallocated_area_square_metres": {"type": "number", "value": 1.0},
+                "intersection_elements": {"type": "selector", "value": entity("wall")},
+                "boundary_elements": {"type": "selector", "value": boundary},
+            }),
+        )
+    };
+    let (output, result) = run("geometry-space-walls", entity("wall"));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = sorted_findings(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#16");
+    assert!(
+        findings[0].1.starts_with("uncovered_boundary"),
+        "{result:#}"
+    );
+
+    let furniture = json!({"kind": "anyOf", "operands": [entity("wall"), entity("furniture")]});
+    let (output, result) = run("geometry-space-furniture", furniture);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(sorted_findings(&result).is_empty(), "{result:#}");
+}

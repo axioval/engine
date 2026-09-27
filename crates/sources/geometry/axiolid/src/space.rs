@@ -6,22 +6,24 @@
 //!
 //! Roles (which object is a space, a slab, a roof, a storey) are semantic
 //! facts a mesh does not carry, so the host declares them. Inferring a role
-//! from geometry alone would present a guess as a measurement. A cap request
-//! that names its own elements replaces the declared slabs and roofs: the rule
-//! then says what bounds a space.
+//! from geometry alone would present a guess as a measurement. A cap,
+//! boundary or overlap request that names its own elements replaces the
+//! declared defaults: the rule then says what bounds or intersects a space.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError, SpaceOverlap,
-    SpaceService, StoreyResidual, SupportCounts,
+    BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
+    OverlapRequest, SpaceError, SpaceOverlap, SpaceService, SupportCounts, UnallocatedRegion,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{boundary_rings, plan_frame, polygon_area, projected_polygons, ring_segments};
+use crate::planar::{
+    boundary_rings, footprint_polygons, plan_frame, polygon_area, projected_polygons, ring_segments,
+};
 use axiolid_core::Point2;
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, overlay};
 
 /// Areas below this are numerical dust, not a measured overlap.
 ///
@@ -39,15 +41,13 @@ const CONTAINMENT_RATIO: f64 = 0.999;
 /// How far an element may sit from a cap plane and still cap it.
 const CAP_PLANE_TOLERANCE_M: f64 = 1.0e-6;
 
-/// One storey's geometry while residual floor area is accumulated.
+/// One storey's geometry while unallocated floor regions are measured.
 #[derive(Default)]
 struct StoreyBodies {
     /// Non-space bodies contributing floor area.
     floor: Vec<Triangle>,
     /// Spaces that account for part of that floor.
     spaces: Vec<Triangle>,
-    /// The floor-contributing elements, for the finding.
-    elements: Vec<ObjectId>,
 }
 
 /// What a declared object is, for the purposes of space validation.
@@ -330,11 +330,14 @@ impl SpaceService for AxiolidSpaceService {
     fn measure_boundary_gaps(
         &self,
         space: &ObjectId,
+        request: &BoundaryRequest,
     ) -> Result<Vec<axioval_engine::BoundaryGap>, SpaceError> {
-        self.complete()?;
+        self.complete_with(request.elements().unwrap_or_default())?;
         let subject = self.triangles_of(space)?;
-        // Any footprint touching the boundary in plan may cover it.
-        self.require_exact(space, 0.0, true, |_| true)?;
+        // Any bounding footprint touching the boundary in plan may cover it.
+        self.require_exact(space, 0.0, true, |candidate| {
+            self.bounds(request.elements(), candidate)
+        })?;
         let tolerance = tolerance()?;
         // Unioning the triangle soup collapses interior edges, leaving the
         // real perimeter: the shared edge between two triangles of one slab is
@@ -348,7 +351,7 @@ impl SpaceService for AxiolidSpaceService {
             for (a, b) in ring_segments(ring) {
                 let length = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
                 let midpoint = Point2::new(f64::midpoint(a.x, b.x), f64::midpoint(a.y, b.y));
-                let coverer = self.covering_element(space, midpoint);
+                let coverer = self.covering_element(space, midpoint, request.elements());
                 match coverer {
                     Some(element) => {
                         // A covered segment closes the current run. The gap
@@ -382,17 +385,25 @@ impl SpaceService for AxiolidSpaceService {
         Ok(gaps)
     }
 
-    fn measure_overlaps(&self, space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError> {
-        self.complete()?;
+    fn measure_overlaps(
+        &self,
+        space: &ObjectId,
+        request: &OverlapRequest,
+    ) -> Result<Vec<SpaceOverlap>, SpaceError> {
+        let requested = request.elements();
+        self.complete_with(requested.unwrap_or_default())?;
         let subject = self.triangles_of(space)?;
-        self.require_exact(space, 0.0, false, |_| true)?;
+        let chosen = |candidate: &ObjectId| {
+            requested.is_none_or(|elements| elements.binary_search(candidate).is_ok())
+        };
+        self.require_exact(space, 0.0, false, chosen)?;
         let tolerance = tolerance()?;
         let subject_area = plan_area(&subject, tolerance);
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
 
         let mut overlaps = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space {
+            if candidate == space || !chosen(candidate) {
                 continue;
             }
             let other = triangles(mesh);
@@ -511,11 +522,11 @@ impl SpaceService for AxiolidSpaceService {
         CapCoverage::try_new(whole, covered, covering)
     }
 
-    fn measure_storey_residuals(&self) -> Result<Vec<StoreyResidual>, SpaceError> {
+    fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError> {
         self.complete()?;
         let tolerance = tolerance()?;
-        // Residuals sum every storey-assigned body, so any tessellated one
-        // makes them estimates.
+        // Regions are cut from every storey-assigned body, so any tessellated
+        // one makes them estimates.
         if self
             .storeys
             .keys()
@@ -534,36 +545,52 @@ impl SpaceService for AxiolidSpaceService {
                 entry.spaces.extend(body);
             } else {
                 entry.floor.extend(body);
-                entry.elements.push(object.clone());
             }
         }
 
-        let mut residuals = Vec::new();
+        let mut regions = Vec::new();
         for (storey, bodies) in per_storey {
-            let StoreyBodies {
-                floor: floor_bodies,
-                spaces: space_bodies,
-                elements,
-            } = bodies;
-            if floor_bodies.is_empty() {
+            if bodies.floor.is_empty() {
                 continue;
             }
-            let floor_area = plan_area(&floor_bodies, tolerance);
-            // Residual is floor the spaces do not account for. Subtracting the
-            // covered part rather than differencing polygons keeps this exact
-            // for the union-of-spaces case that matters.
-            let allocated = if space_bodies.is_empty() {
-                0.0
+            // Each polygon of the floor less the spaces is one connected
+            // region: judged apart, a hole is not hidden among small shafts.
+            let floor =
+                footprint_polygons(&bodies.floor, tolerance).ok_or(SpaceError::Unavailable)?;
+            let spaces =
+                footprint_polygons(&bodies.spaces, tolerance).ok_or(SpaceError::Unavailable)?;
+            let left = if spaces.is_empty() || floor.is_empty() {
+                floor
             } else {
-                shared_area(&floor_bodies, &space_bodies, tolerance)?
+                overlay(
+                    &OverlayInput {
+                        frame: plan_frame(),
+                        polygons: floor,
+                    },
+                    &OverlayInput {
+                        frame: plan_frame(),
+                        polygons: spaces,
+                    },
+                    OverlayOperation::Difference,
+                    FillRule::NonZero,
+                    tolerance,
+                )
+                .map_err(|_| SpaceError::Unavailable)?
+                .polygons
             };
-            residuals.push(StoreyResidual::try_new(
-                storey,
-                (floor_area - allocated).max(0.0),
-                elements,
-            )?);
+            for region in left {
+                let area = polygon_area(&region);
+                if area <= AREA_EPSILON_M2 {
+                    continue;
+                }
+                regions.push(UnallocatedRegion::try_new(
+                    storey.clone(),
+                    area,
+                    self.surrounding(&region),
+                )?);
+            }
         }
-        Ok(residuals)
+        Ok(regions)
     }
 
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
@@ -590,14 +617,28 @@ impl SpaceService for AxiolidSpaceService {
 }
 
 impl AxiolidSpaceService {
+    /// Whether `candidate` may cover a space boundary: one of `elements` when
+    /// a request names them, otherwise any body that is not a space.
+    fn bounds(&self, elements: Option<&[ObjectId]>, candidate: &ObjectId) -> bool {
+        match elements {
+            Some(elements) => elements.binary_search(candidate).is_ok(),
+            None => !self.is_space(candidate),
+        }
+    }
+
     /// The element covering a point on the space boundary, if any.
     ///
-    /// "Covered" means an object other than the space itself has plan
+    /// "Covered" means a bounding object other than the space itself has plan
     /// footprint at that point: a wall standing on the boundary covers it, and
     /// an unbounded stretch has nothing there.
-    fn covering_element(&self, space: &ObjectId, point: Point2) -> Option<ObjectId> {
+    fn covering_element(
+        &self,
+        space: &ObjectId,
+        point: Point2,
+        elements: Option<&[ObjectId]>,
+    ) -> Option<ObjectId> {
         for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space || self.is_space(candidate) {
+            if candidate == space || !self.bounds(elements, candidate) {
                 continue;
             }
             let body = triangles(mesh);
@@ -606,6 +647,35 @@ impl AxiolidSpaceService {
             }
         }
         None
+    }
+}
+
+impl AxiolidSpaceService {
+    /// The bodies whose footprint meets `region`'s boundary: the floor it
+    /// lies in, and the spaces and elements around it. Sampled at every
+    /// vertex and edge midpoint of its rings, so a reviewer can open what
+    /// encloses the unallocated area.
+    fn surrounding(&self, region: &Polygon) -> Vec<ObjectId> {
+        let samples: Vec<Point2> = std::iter::once(&region.outer)
+            .chain(&region.holes)
+            .flat_map(ring_segments)
+            .flat_map(|(a, b)| {
+                [
+                    a,
+                    Point2::new(f64::midpoint(a.x, b.x), f64::midpoint(a.y, b.y)),
+                ]
+            })
+            .collect();
+        self.geometry
+            .objects()
+            .filter(|(_, mesh)| {
+                let body = triangles(mesh);
+                samples
+                    .iter()
+                    .any(|point| point_in_footprint(&body, *point))
+            })
+            .map(|(object, _)| object.clone())
+            .collect()
     }
 }
 

@@ -113,10 +113,13 @@ A free corridor width is not a free-floor option. Whether a path of a width runs
 
 A derivation whose bounding input is not declared is an invalid declaration of the whole rule, never measured around nothing. A bounding or group selector that cannot decide an object leaves that derivation not evaluated, since the undecided object might bound the envelope; so does a selector that selects nothing, groups with no member, or a refused relationship answer along the path. The other derivation is still measured. A bounding object is the envelope's inside and takes no part in the comparison. An object the model declares neither external nor internal, or whose body could not be measured, is not evaluated, never read as internal. A definition bound to this capability must declare all four parameters, the last three as optional.
 
-`axioval:capability.space-validation` checks each selected space through `SpaceServiceHandle`, one measurement per sub-check, so a sub-check the adapter cannot measure is not evaluated without sinking the others. It takes `required_height_metres`, `uncovered_segment_length_metres`, `check_top_cap`, `check_bottom_cap`, `check_unallocated_area` and `maximum_unallocated_area_square_metres`, and three optional parameters:
+`axioval:capability.space-validation` checks each selected space through `SpaceServiceHandle`, one measurement per sub-check, so a sub-check the adapter cannot measure is not evaluated without sinking the others. It takes `required_height_metres`, `uncovered_segment_length_metres`, `check_top_cap`, `check_bottom_cap`, `check_unallocated_area` and `maximum_unallocated_area_square_metres`, and five optional parameters:
 
 - `tolerance_metres` (default 0.005): a space is too low only when it misses `required_height_metres` by more than this, and an overlap no thicker than this is contact, not an intersection.
 - `top_cap_elements` and `bottom_cap_elements`: selectors naming the elements that may cap a space from above or below. The selection travels in the `CapRequest`, and the service considers exactly those elements. Without a selector the host's declared slabs (and, for the top, roofs) are used. A selector that selects nothing skips that cap; one that leaves objects undecided makes that cap not evaluated for every space, since an undecided element may be the covering one.
+- `boundary_elements` and `intersection_elements`: selectors naming the elements that bound a space (cover its boundary) and that a space must not intersect. The selection travels in the `BoundaryRequest` and the `OverlapRequest`, and the service considers exactly those elements. Without a selector every body that is not a space bounds a space, and every other body (spaces included) is checked for intersection. As with the caps, a selector that selects nothing skips its sub-check, and an undecided one makes it not evaluated for every space. A space enclosed only by furniture has an uncovered boundary when `boundary_elements` selects walls, and none once it selects furniture too.
+
+With `check_unallocated_area`, the service reports each connected region of storey floor that no space covers (`SpaceService::measure_unallocated_regions`), and each region is judged on its own against `maximum_unallocated_area_square_metres`: two 0.5 m² shafts and a 20 m² hole on one storey under a 1 m² allowance give one finding, for the hole. The finding is against the storey, names the region's area and relates the bodies around it; its deviation is the region's excess over the allowance, so `severityBands` can grade it (a band `below` 1 for up to twice the allowance, `below` 4 for up to five times).
 
 Every finding message starts with its sub-check's category code, so results can be grouped by problem as well as by space:
 
@@ -128,7 +131,7 @@ Every finding message starts with its sub-check's category code, so results can 
 | `contained_body` | The space contains, or lies inside, another body. |
 | `intersecting_space` / `intersecting_component` | The space intersects another space or a component. |
 | `uncovered_top_cap` / `uncovered_bottom_cap` | A cap less than 98 % covered; under 1 % is an error, up to 15 % a warning, otherwise information. |
-| `unallocated_area` | Storey floor area belonging to no space, reported against the storey. |
+| `unallocated_area` | A connected region of storey floor belonging to no space and larger than the allowance, reported against the storey. |
 
 ### Property selectors
 

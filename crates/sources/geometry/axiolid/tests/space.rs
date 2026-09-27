@@ -3,7 +3,9 @@
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidSpaceService};
-use axioval_engine::{Cap, CapRequest, Containment, SpaceError, SpaceService};
+use axioval_engine::{
+    BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceError, SpaceService,
+};
 use axioval_ir::{ObjectId, SourceId};
 
 fn source() -> SourceId {
@@ -93,7 +95,7 @@ fn plan_overlap_without_vertical_overlap_is_not_an_intersection() {
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
     assert!(
         service
-            .measure_overlaps(&id("space"))
+            .measure_overlaps(&id("space"), &OverlapRequest::new())
             .expect("measurable")
             .is_empty(),
         "a body on another storey is not an intersection"
@@ -107,7 +109,9 @@ fn a_body_inside_the_space_is_contained() {
         .with_mesh(id("space"), body(0.0, 10.0, 0.0, 10.0, 0.0, 3.0))
         .with_mesh(id("column"), body(4.0, 5.0, 4.0, 5.0, 0.0, 3.0));
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
-    let overlaps = service.measure_overlaps(&id("space")).expect("measurable");
+    let overlaps = service
+        .measure_overlaps(&id("space"), &OverlapRequest::new())
+        .expect("measurable");
     assert_eq!(overlaps.len(), 1);
     assert_eq!(overlaps[0].containment(), Containment::OtherInsideSubject);
     assert!(!overlaps[0].other_is_space(), "a column is not a space");
@@ -121,7 +125,9 @@ fn a_partial_intersection_reports_its_shared_extent() {
         .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
         .with_mesh(id("wall"), body(3.0, 6.0, 0.0, 4.0, 1.0, 3.0));
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
-    let overlaps = service.measure_overlaps(&id("space")).expect("measurable");
+    let overlaps = service
+        .measure_overlaps(&id("space"), &OverlapRequest::new())
+        .expect("measurable");
     assert_eq!(overlaps.len(), 1);
     assert_eq!(overlaps[0].containment(), Containment::Partial);
     // 1 m x 4 m of shared plan, 2 m of shared height.
@@ -187,7 +193,7 @@ fn only_declared_cap_elements_cover_a_cap() {
     );
 }
 
-/// Floor a space does not account for is reported as residual.
+/// Floor a space does not account for is reported as an unallocated region.
 #[test]
 fn unallocated_floor_area_is_reported_per_storey() {
     let geometry = AxiolidGeometry::new()
@@ -198,7 +204,7 @@ fn unallocated_floor_area_is_reported_per_storey() {
         .with_slab(id("floor"))
         .with_storey(id("floor"), id("level-0"))
         .with_storey(id("space"), id("level-0"));
-    let residuals = service.measure_storey_residuals().expect("measurable");
+    let residuals = service.measure_unallocated_regions().expect("measurable");
     assert_eq!(residuals.len(), 1);
     // 100 m2 of floor, 50 m2 covered by the space.
     assert!(
@@ -241,10 +247,18 @@ fn an_unavailable_aspect_does_not_suppress_the_rest() {
         "an unsupplied input must be reported, not guessed"
     );
     // Every aspect of the space that IS present still answers.
-    assert!(service.measure_boundary_gaps(&id("space")).is_ok());
+    assert!(
+        service
+            .measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
+            .is_ok()
+    );
     assert!(service.measure_clear_height(&id("space")).is_ok());
     assert!(service.measure_duplicates(&id("space")).is_ok());
-    assert!(service.measure_overlaps(&id("space")).is_ok());
+    assert!(
+        service
+            .measure_overlaps(&id("space"), &OverlapRequest::new())
+            .is_ok()
+    );
     assert!(
         service
             .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
@@ -283,7 +297,7 @@ fn an_abutting_body_is_not_an_intersection() {
         .with_space(id("neighbour"));
     assert!(
         service
-            .measure_overlaps(&id("space"))
+            .measure_overlaps(&id("space"), &OverlapRequest::new())
             .expect("measurable")
             .is_empty(),
         "sharing a face is adjacency, not intersection"
@@ -300,7 +314,9 @@ fn a_space_inside_another_body_reports_subject_containment() {
         .with_mesh(id("space"), body(2.0, 4.0, 2.0, 4.0, 0.0, 3.0))
         .with_mesh(id("shell"), body(0.0, 10.0, 0.0, 10.0, 0.0, 3.0));
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
-    let overlaps = service.measure_overlaps(&id("space")).expect("measurable");
+    let overlaps = service
+        .measure_overlaps(&id("space"), &OverlapRequest::new())
+        .expect("measurable");
     assert_eq!(overlaps.len(), 1);
     assert_eq!(overlaps[0].containment(), Containment::SubjectInsideOther);
 }
@@ -365,7 +381,7 @@ fn an_unwalled_boundary_is_reported_as_a_gap() {
         .with_mesh(id("wall"), body(-0.1, 4.1, -0.1, 0.1, 0.0, 3.0));
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
     let gaps = service
-        .measure_boundary_gaps(&id("space"))
+        .measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
         .expect("measurable");
 
     let uncovered: f64 = gaps
@@ -391,7 +407,7 @@ fn a_fully_walled_space_has_no_gaps() {
         .with_mesh(id("enclosure"), body(-0.5, 4.5, -0.5, 4.5, 0.0, 3.0));
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
     let gaps = service
-        .measure_boundary_gaps(&id("space"))
+        .measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
         .expect("measurable");
     assert!(
         gaps.is_empty(),
@@ -454,7 +470,7 @@ fn an_unmeasured_declared_object_makes_space_measurements_unavailable() {
             .map(|m| m.metres()),
         Err(SpaceError::Unavailable)
     );
-    assert!(service.measure_storey_residuals().is_err());
+    assert!(service.measure_unallocated_regions().is_err());
     // An unmeasured object with no role or storey does not concern spaces.
     let unrelated = AxiolidGeometry::new()
         .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.7))
@@ -522,5 +538,122 @@ fn an_unmeasured_requested_cap_element_makes_the_cap_unavailable() {
         service
             .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
             .is_ok()
+    );
+}
+
+/// Each connected region of floor no space covers is its own entry: two
+/// 0.5 m² shafts and a 20 m² hole on one storey are three regions, each
+/// naming the bodies around it.
+#[test]
+fn each_unallocated_region_is_measured_apart() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("floor"), body(0.0, 10.0, 0.0, 10.0, 0.0, 0.2))
+        // Leaves a 0.5 m x 1 m shaft at its east end.
+        .with_mesh(id("a"), body(0.0, 9.5, 0.0, 1.0, 0.2, 3.0))
+        .with_mesh(id("b"), body(0.0, 10.0, 1.0, 2.0, 0.2, 3.0))
+        // Leaves a second shaft.
+        .with_mesh(id("c"), body(0.0, 9.5, 2.0, 3.0, 0.2, 3.0))
+        .with_mesh(id("d"), body(0.0, 10.0, 3.0, 6.0, 0.2, 3.0))
+        // Leaves a 5 m x 4 m hole.
+        .with_mesh(id("e"), body(0.0, 5.0, 6.0, 10.0, 0.2, 3.0));
+    let mut service = AxiolidSpaceService::new(geometry, source())
+        .with_slab(id("floor"))
+        .with_storey(id("floor"), id("level-0"));
+    for space in ["a", "b", "c", "d", "e"] {
+        service = service
+            .with_space(id(space))
+            .with_storey(id(space), id("level-0"));
+    }
+    let mut regions = service.measure_unallocated_regions().expect("measurable");
+    regions.sort_by(|x, y| x.area_square_metres().total_cmp(&y.area_square_metres()));
+    let areas: Vec<f64> = regions
+        .iter()
+        .map(axioval_engine::UnallocatedRegion::area_square_metres)
+        .collect();
+    assert_eq!(areas.len(), 3, "{areas:?}");
+    for (area, expected) in areas.iter().zip([0.5, 0.5, 20.0]) {
+        assert!((area - expected).abs() < 1e-6, "{areas:?}");
+    }
+    assert!(
+        regions
+            .iter()
+            .all(|region| region.storey() == &id("level-0"))
+    );
+    let hole = &regions[2];
+    assert_eq!(hole.elements(), &[id("d"), id("e"), id("floor")]);
+}
+
+/// A boundary request naming its elements replaces the default: a space
+/// bounded only by furniture is covered by default, uncovered when only
+/// walls bound it, and covered again once furniture is selected.
+#[test]
+fn a_boundary_request_chooses_the_bounding_elements() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("furniture"), body(-0.5, 4.5, -0.5, 4.5, 0.0, 1.0))
+        .with_mesh(id("wall"), body(20.0, 24.0, 0.0, 0.2, 0.0, 3.0));
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    let uncovered = |request: &BoundaryRequest| -> f64 {
+        service
+            .measure_boundary_gaps(&id("space"), request)
+            .expect("measurable")
+            .iter()
+            .map(axioval_engine::BoundaryGap::length_metres)
+            .sum()
+    };
+    assert!(uncovered(&BoundaryRequest::new()) < 1e-9);
+    let walls = BoundaryRequest::new().with_elements(vec![id("wall")]);
+    assert!((uncovered(&walls) - 16.0).abs() < 1e-6);
+    let furniture = BoundaryRequest::new().with_elements(vec![id("wall"), id("furniture")]);
+    assert!(uncovered(&furniture) < 1e-9);
+}
+
+/// An overlap request naming its elements measures only those.
+#[test]
+fn an_overlap_request_chooses_the_intersecting_elements() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("column"), body(1.0, 2.0, 1.0, 2.0, 0.0, 3.0))
+        .with_mesh(id("duct"), body(3.0, 6.0, 0.0, 4.0, 2.0, 2.5));
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    let others = |request: &OverlapRequest| -> Vec<ObjectId> {
+        service
+            .measure_overlaps(&id("space"), request)
+            .expect("measurable")
+            .iter()
+            .map(|overlap| overlap.other().clone())
+            .collect()
+    };
+    assert_eq!(
+        others(&OverlapRequest::new()),
+        vec![id("column"), id("duct")]
+    );
+    assert_eq!(
+        others(&OverlapRequest::new().with_elements(vec![id("duct")])),
+        vec![id("duct")]
+    );
+}
+
+/// A requested element that could not be measured may be the one covering
+/// or intersecting, so the measurement refuses.
+#[test]
+fn an_unmeasured_requested_element_makes_boundary_and_overlaps_unavailable() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_unmeasured(id("wall"), "unsupported representation");
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    assert_eq!(
+        service.measure_boundary_gaps(
+            &id("space"),
+            &BoundaryRequest::new().with_elements(vec![id("wall")])
+        ),
+        Err(SpaceError::Unavailable)
+    );
+    assert_eq!(
+        service.measure_overlaps(
+            &id("space"),
+            &OverlapRequest::new().with_elements(vec![id("wall")])
+        ),
+        Err(SpaceError::Unavailable)
     );
 }

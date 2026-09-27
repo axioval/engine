@@ -203,15 +203,21 @@ impl CapCoverage {
     }
 }
 
-/// Floor area on a storey that belongs to no space.
+/// One connected region of storey floor that belongs to no space.
+///
+/// Each region is measured on its own, so a rule can judge a large hole apart
+/// from small shafts on the same storey: a storey total would hide which one
+/// misses the allowance.
 #[derive(Clone, Debug, PartialEq)]
-pub struct StoreyResidual {
+pub struct UnallocatedRegion {
     storey: ObjectId,
     area_square_metres: f64,
     elements: Vec<ObjectId>,
 }
 
-impl StoreyResidual {
+impl UnallocatedRegion {
+    /// A region of `area_square_metres` on `storey`, surrounded by
+    /// `elements` (the bodies whose footprint meets its boundary).
     pub fn try_new(
         storey: ObjectId,
         area_square_metres: f64,
@@ -234,6 +240,7 @@ impl StoreyResidual {
     pub fn area_square_metres(&self) -> f64 {
         self.area_square_metres
     }
+    /// The elements surrounding the region, in canonical order.
     pub fn elements(&self) -> &[ObjectId] {
         &self.elements
     }
@@ -317,6 +324,70 @@ impl CapRequest {
     }
 }
 
+/// A request for the uncovered runs of a space's boundary.
+///
+/// Which elements bound a space is a policy choice: [`Self::with_elements`]
+/// carries the rule's selection, and the service then counts exactly those
+/// elements as covering. Without it the service counts every body that is
+/// not a space.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BoundaryRequest {
+    elements: Option<Vec<ObjectId>>,
+}
+
+impl BoundaryRequest {
+    /// Asks for the gaps no body other than a space covers.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Asks for the gaps none of these elements covers, in canonical order.
+    #[must_use]
+    pub fn with_elements(mut self, elements: Vec<ObjectId>) -> Self {
+        self.elements = Some(canonical(elements));
+        self
+    }
+    /// The elements the caller chose, or `None` for the host's default.
+    pub fn elements(&self) -> Option<&[ObjectId]> {
+        self.elements.as_deref()
+    }
+}
+
+/// A request for the bodies a space overlaps.
+///
+/// Which elements a space must not intersect is a policy choice:
+/// [`Self::with_elements`] carries the rule's selection, and the service then
+/// measures overlaps with exactly those elements. Without it every other body
+/// is measured.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OverlapRequest {
+    elements: Option<Vec<ObjectId>>,
+}
+
+impl OverlapRequest {
+    /// Asks for overlaps with every other body.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Asks for overlaps with exactly these elements, in canonical order.
+    #[must_use]
+    pub fn with_elements(mut self, elements: Vec<ObjectId>) -> Self {
+        self.elements = Some(canonical(elements));
+        self
+    }
+    /// The elements the caller chose, or `None` for every other body.
+    pub fn elements(&self) -> Option<&[ObjectId]> {
+        self.elements.as_deref()
+    }
+}
+
+fn canonical(mut elements: Vec<ObjectId>) -> Vec<ObjectId> {
+    elements.sort();
+    elements.dedup();
+    elements
+}
+
 /// Measures the geometry a space-validation policy reasons about.
 ///
 /// ADR 0004: every method returns a measurement. None returns a finding, and
@@ -326,10 +397,20 @@ pub trait SpaceService: Send + Sync + 'static {
     fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError>;
     /// The clear height of `space`.
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError>;
-    /// Uncovered runs of the space boundary.
-    fn measure_boundary_gaps(&self, space: &ObjectId) -> Result<Vec<BoundaryGap>, SpaceError>;
-    /// Bodies overlapping `space`.
-    fn measure_overlaps(&self, space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError>;
+    /// Uncovered runs of the space boundary, covered only by the elements
+    /// `request` names or, when it names none, by any body but a space.
+    fn measure_boundary_gaps(
+        &self,
+        space: &ObjectId,
+        request: &BoundaryRequest,
+    ) -> Result<Vec<BoundaryGap>, SpaceError>;
+    /// Bodies overlapping `space`: the elements `request` names or, when it
+    /// names none, every other body.
+    fn measure_overlaps(
+        &self,
+        space: &ObjectId,
+        request: &OverlapRequest,
+    ) -> Result<Vec<SpaceOverlap>, SpaceError>;
     /// Coverage of one horizontal cap of `space`, by the elements `request`
     /// names or, when it names none, by the host-declared cap elements.
     fn measure_cap_coverage(
@@ -337,8 +418,9 @@ pub trait SpaceService: Send + Sync + 'static {
         space: &ObjectId,
         request: &CapRequest,
     ) -> Result<CapCoverage, SpaceError>;
-    /// Floor area belonging to no space, per storey.
-    fn measure_storey_residuals(&self) -> Result<Vec<StoreyResidual>, SpaceError>;
+    /// Floor area belonging to no space, one entry per connected region of
+    /// each storey.
+    fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError>;
     /// Counts of the elements that can form horizontal caps.
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError>;
     /// Evidence backing this service's measurements.
@@ -412,6 +494,21 @@ mod tests {
     }
 
     #[test]
+    fn boundary_and_overlap_requests_are_canonical_and_absent_by_default() {
+        assert_eq!(BoundaryRequest::new().elements(), None);
+        assert_eq!(OverlapRequest::new().elements(), None);
+        let ids = vec![oid("b"), oid("a"), oid("b")];
+        assert_eq!(
+            BoundaryRequest::new().with_elements(ids.clone()).elements(),
+            Some(&[oid("a"), oid("b")][..])
+        );
+        assert_eq!(
+            OverlapRequest::new().with_elements(ids).elements(),
+            Some(&[oid("a"), oid("b")][..])
+        );
+    }
+
+    #[test]
     fn cap_ratio_is_exact() {
         let coverage = CapCoverage::try_new(4.0, 1.0, Vec::new()).unwrap();
         assert!((coverage.covered_ratio() - 0.25).abs() < f64::EPSILON);
@@ -431,7 +528,7 @@ mod tests {
         );
         assert!(BoundaryGap::try_new(f64::INFINITY, Vec::new()).is_err());
         assert!(SpaceOverlap::try_new(oid("o"), false, -1.0, 1.0, Containment::Partial).is_err());
-        assert!(StoreyResidual::try_new(oid("st"), f64::NAN, Vec::new()).is_err());
+        assert!(UnallocatedRegion::try_new(oid("st"), f64::NAN, Vec::new()).is_err());
     }
 
     #[test]

@@ -443,7 +443,7 @@ The CLI meshes each product's net body, with openings subtracted, using
 `ifc-geometry` and hands the meshes to the Axiolid geometry services, one set
 over every model, bound to every model's snapshot. Evidence about one object
 cites that object's model; set-level evidence (free space, guards, envelope,
-storey residuals) cites the first model in source order. That
+unallocated regions) cites the first model in source order. That
 bridge lives in the CLI, not in an adapter, because the IFC and Axiolid
 adapters must not depend on each other. Every object ends in one of four
 states:
@@ -464,7 +464,9 @@ and `IfcBuilding` give roles, and the spatial tree gives each object's storey.
 An element the file places twice, or anything under a structure aggregated
 twice, gets no storey rather than a guessed one. The slab and roof roles are
 only the default cap elements: a rule's `top_cap_elements` or
-`bottom_cap_elements` selector replaces them for that cap.
+`bottom_cap_elements` selector replaces them for that cap, as
+`boundary_elements` and `intersection_elements` replace the default
+bounding and intersecting bodies.
 
 Space-boundary coverage takes every `IfcSpace` and every `IfcRelSpaceBoundary`
 (and subtype) naming one. Each boundary's `ConnectionGeometry` surface is

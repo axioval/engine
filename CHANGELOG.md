@@ -18,6 +18,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   in folders, then its tags. `check --bcf` labels every topic this way,
   qualified by package with several rulesets; GUIDs are unchanged.
   **Breaking:** `Options` gains a field.
+- **Space validation chooses its bounding and intersecting elements, and
+  judges each unallocated region.** (#137) `space-validation` takes
+  `boundary_elements` and `intersection_elements` selectors, carried in the
+  new `BoundaryRequest` and `OverlapRequest` like the cap selectors in
+  `CapRequest`: a space enclosed only by furniture has an uncovered
+  boundary unless furniture is selected. A selection of nothing skips the
+  sub-check; an undecided one leaves it not evaluated. Unallocated floor is
+  reported per connected region (`UnallocatedRegion`, relating the bodies
+  around it) and each region is judged on its own, so two 0.5 m² shafts
+  pass a 1 m² allowance that a 20 m² hole beside them fails; the finding's
+  deviation is the region's excess, so severity bands grade it.
+  **Breaking:** definitions bound to `space-validation` must declare the two
+  new optional parameters; `SpaceService::measure_boundary_gaps` and
+  `measure_overlaps` take a request, and `measure_storey_residuals`
+  (`StoreyResidual`) is replaced by `measure_unallocated_regions`
+  (`UnallocatedRegion`).
 - **BCF cameras and BCF 3.0.** (#109) `axioval_bcf::Options` gains
   `bounds`, each object's measured `Bounds`, and `version`
   (`Version::V2_1` or `Version::V3_0`). A topic whose objects are all

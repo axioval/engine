@@ -67,7 +67,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   push past the area epsilon for a box flush with a wall. A scope without a
   mesh or tessellated refuses.
 - `src/space.rs` implements `SpaceService`: seven independent space
-  measurements over storey-assigned, role-tagged geometry.
+  measurements over storey-assigned, role-tagged geometry. A cap, boundary
+  or overlap request naming its elements replaces the declared default,
+  and an unmeasured requested element refuses. Unallocated regions are the
+  polygons of each storey's floor footprint less its spaces' footprint, one
+  per connected region, each relating the bodies its rings touch.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
   the envelope when its plan footprint meets a bounding space. The bounding
   spaces are the request's (the rule's selection), never host-declared; a

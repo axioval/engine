@@ -14,12 +14,12 @@ use axioval_axiolid::{
     AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService, AxiolidSpaceService,
 };
 use axioval_engine::{
-    BoxClearance, ClearanceRequest, ClearanceShape, ContactError, ContactRequest, ContactService,
-    ContactSide, ContactTolerance, EnvelopeDerivation, EnvelopeMembershipError,
+    BoundaryRequest, BoxClearance, ClearanceRequest, ClearanceShape, ContactError, ContactRequest,
+    ContactService, ContactSide, ContactTolerance, EnvelopeDerivation, EnvelopeMembershipError,
     EnvelopeMembershipRequest, EnvelopeMembershipService, FreeAreaRequest, FreeSpaceError,
     FreeSpaceService, GuardError, GuardSearch, GuardService, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, MetricDirection, MetricFrame, MetricPoint,
-    MobilityProfile, ShelfGeometry, SpaceError, SpaceService,
+    MobilityProfile, OverlapRequest, ShelfGeometry, SpaceError, SpaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -231,19 +231,27 @@ fn spaces(column_x: f64) -> AxiolidSpaceService {
 fn space_measurements_refuse_a_curved_part_touching_the_space() {
     let near = spaces(1.0);
     assert_eq!(
-        near.measure_overlaps(&id("space")).unwrap_err(),
+        near.measure_overlaps(&id("space"), &OverlapRequest::new())
+            .unwrap_err(),
         SpaceError::InexactEvidence
     );
     assert_eq!(
-        near.measure_boundary_gaps(&id("space")).unwrap_err(),
+        near.measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
+            .unwrap_err(),
         SpaceError::InexactEvidence
     );
     // Clear height reads the space alone, which is exact.
     assert!(near.measure_clear_height(&id("space")).is_ok());
 
     let far = spaces(40.0);
-    assert!(far.measure_overlaps(&id("space")).is_ok());
-    assert!(far.measure_boundary_gaps(&id("space")).is_ok());
+    assert!(
+        far.measure_overlaps(&id("space"), &OverlapRequest::new())
+            .is_ok()
+    );
+    assert!(
+        far.measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
+            .is_ok()
+    );
 }
 
 #[test]

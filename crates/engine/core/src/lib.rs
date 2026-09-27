@@ -740,8 +740,9 @@ pub use sight::{
 };
 pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{
-    BoundaryGap, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment, SpaceError,
-    SpaceOverlap, SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
+    BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
+    OverlapRequest, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts,
+    UnallocatedRegion,
 };
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,

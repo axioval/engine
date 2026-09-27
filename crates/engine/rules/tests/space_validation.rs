@@ -11,9 +11,9 @@ use std::{
 };
 
 use axioval_engine::{
-    BoundaryGap, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule, Containment,
-    NotEvaluatedReason, RuleCapability, RuleContext, ServiceRegistry, SpaceError, SpaceOverlap,
-    SpaceService, SpaceServiceHandle, StoreyResidual, SupportCounts,
+    BoundaryGap, BoundaryRequest, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule,
+    Containment, NotEvaluatedReason, OverlapRequest, RuleCapability, RuleContext, ServiceRegistry,
+    SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts, UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, Severity, SourceId};
@@ -76,7 +76,7 @@ fn rule() -> CompiledRule {
 type Answer<T> = Option<Result<T, SpaceError>>;
 type GapRows = Vec<(f64, Vec<ObjectId>)>;
 type OverlapRows = Vec<(bool, f64, f64, Containment)>;
-type ResidualRows = Vec<(ObjectId, f64)>;
+type ResidualRows = Vec<(ObjectId, f64, Vec<ObjectId>)>;
 
 #[derive(Default)]
 struct Stub {
@@ -91,6 +91,10 @@ struct Stub {
     cap_requests: Mutex<Vec<CapRequest>>,
     /// How often the support counts were asked for.
     support_calls: Mutex<usize>,
+    /// Every boundary request the capability made, in order.
+    boundary_requests: Mutex<Vec<BoundaryRequest>>,
+    /// Every overlap request the capability made, in order.
+    overlap_requests: Mutex<Vec<OverlapRequest>>,
 }
 
 fn evidence() -> Evidence {
@@ -105,7 +109,12 @@ impl SpaceService for Stub {
         let metres = self.height.unwrap_or(Ok(3.0))?;
         ClearHeightEvidence::try_new(space.clone(), metres, evidence())
     }
-    fn measure_boundary_gaps(&self, _space: &ObjectId) -> Result<Vec<BoundaryGap>, SpaceError> {
+    fn measure_boundary_gaps(
+        &self,
+        _space: &ObjectId,
+        request: &BoundaryRequest,
+    ) -> Result<Vec<BoundaryGap>, SpaceError> {
+        self.boundary_requests.lock().unwrap().push(request.clone());
         self.gaps
             .clone()
             .unwrap_or(Ok(Vec::new()))?
@@ -113,7 +122,12 @@ impl SpaceService for Stub {
             .map(|(length, elements)| BoundaryGap::try_new(length, elements))
             .collect()
     }
-    fn measure_overlaps(&self, _space: &ObjectId) -> Result<Vec<SpaceOverlap>, SpaceError> {
+    fn measure_overlaps(
+        &self,
+        _space: &ObjectId,
+        request: &OverlapRequest,
+    ) -> Result<Vec<SpaceOverlap>, SpaceError> {
+        self.overlap_requests.lock().unwrap().push(request.clone());
         self.overlaps
             .clone()
             .unwrap_or(Ok(Vec::new()))?
@@ -132,12 +146,12 @@ impl SpaceService for Stub {
         let (whole, covered) = self.cap.unwrap_or(Ok((10.0, 10.0)))?;
         CapCoverage::try_new(whole, covered, Vec::new())
     }
-    fn measure_storey_residuals(&self) -> Result<Vec<StoreyResidual>, SpaceError> {
+    fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError> {
         self.residuals
             .clone()
             .unwrap_or(Ok(Vec::new()))?
             .into_iter()
-            .map(|(storey, area)| StoreyResidual::try_new(storey, area, Vec::new()))
+            .map(|(storey, area, elements)| UnallocatedRegion::try_new(storey, area, elements))
             .collect()
     }
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
@@ -339,7 +353,7 @@ fn cap_check_is_skipped_when_the_model_has_no_supporting_elements() {
 fn storey_residual_above_the_allowance_is_reported_against_the_storey() {
     let outcome = evaluate(
         Stub {
-            residuals: Some(Ok(vec![(oid("storey-1"), 5.0)])),
+            residuals: Some(Ok(vec![(oid("storey-1"), 5.0, Vec::new())])),
             ..Stub::default()
         },
         &rule_with(&[(
@@ -352,7 +366,7 @@ fn storey_residual_above_the_allowance_is_reported_against_the_storey() {
 
     let within = evaluate(
         Stub {
-            residuals: Some(Ok(vec![(oid("storey-1"), 0.5)])),
+            residuals: Some(Ok(vec![(oid("storey-1"), 0.5, Vec::new())])),
             ..Stub::default()
         },
         &rule_with(&[(
@@ -692,7 +706,7 @@ fn each_sub_check_reports_its_category() {
         (half_cap(), bottom, SpaceCategory::UncoveredBottomCap),
         (
             Stub {
-                residuals: Some(Ok(vec![(oid("storey-1"), 5.0)])),
+                residuals: Some(Ok(vec![(oid("storey-1"), 5.0, Vec::new())])),
                 ..Stub::default()
             },
             residual,
@@ -707,6 +721,135 @@ fn each_sub_check_reports_its_category() {
             message.starts_with(&format!("{}: ", category.code())),
             "{message:?} should start with {}",
             category.code()
+        );
+    }
+}
+
+/// Each unallocated region is judged on its own: two 0.5 m² shafts pass a
+/// 1 m² allowance that a 20 m² hole on the same storey fails, and the one
+/// finding names the hole's area and the bodies around it.
+#[test]
+fn each_unallocated_region_is_judged_on_its_own() {
+    let outcome = evaluate(
+        Stub {
+            residuals: Some(Ok(vec![
+                (oid("storey-1"), 0.5, vec![oid("shaft-wall-1")]),
+                (oid("storey-1"), 20.0, vec![oid("slab"), oid("space-1")]),
+                (oid("storey-1"), 0.5, vec![oid("shaft-wall-2")]),
+            ])),
+            ..Stub::default()
+        },
+        &rule_with(&[(
+            "check_unallocated_area",
+            ParameterValue::Boolean { value: true },
+        )]),
+    );
+    assert_eq!(outcome.findings().len(), 1);
+    let finding = &outcome.findings()[0];
+    assert_eq!(finding.object_id(), Some(&oid("storey-1")));
+    assert!(finding.message.contains("20.000 m2"), "{}", finding.message);
+    assert_eq!(finding.related, vec![oid("slab"), oid("space-1")]);
+    // 20 m² against 1 m² is 19 times the allowance over: bands grade it.
+    let deviation = outcome.deviation(0).expect("graded");
+    assert!(deviation.lower() <= 19.0 && 19.0 <= deviation.upper());
+    assert!(SpaceValidation.grades_deviation());
+}
+
+/// Without selectors the service's defaults bound and intersect a space: the
+/// requests carry no elements.
+#[test]
+fn without_element_selectors_the_service_defaults_are_used() {
+    let stub = Arc::new(Stub::default());
+    evaluate_shared(&stub, &rule());
+    let boundary = stub.boundary_requests.lock().unwrap();
+    let overlap = stub.overlap_requests.lock().unwrap();
+    assert_eq!(boundary.len(), 1);
+    assert_eq!(boundary[0].elements(), None);
+    assert_eq!(overlap.len(), 1);
+    assert_eq!(overlap[0].elements(), None);
+}
+
+/// `boundary_elements` and `intersection_elements` state the elements that
+/// bound and intersect a space; each request carries exactly its selection.
+#[test]
+fn element_selectors_choose_the_bounding_and_intersecting_elements() {
+    let stub = Arc::new(Stub::default());
+    evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("boundary_elements", of_type("covering")),
+            ("intersection_elements", of_type("slab")),
+        ]),
+    );
+    assert_eq!(
+        stub.boundary_requests.lock().unwrap()[0].elements(),
+        Some(&[oid("ceiling")][..])
+    );
+    assert_eq!(
+        stub.overlap_requests.lock().unwrap()[0].elements(),
+        Some(&[oid("slab")][..])
+    );
+}
+
+/// A selector selecting nothing leaves nothing to bound or intersect a
+/// space, so that sub-check is skipped rather than reporting every boundary.
+#[test]
+fn an_element_selector_selecting_nothing_skips_its_sub_check() {
+    let stub = Arc::new(Stub {
+        gaps: Some(Ok(vec![(2.0, Vec::new())])),
+        overlaps: Some(Ok(vec![(false, 2.0, 1.0, Containment::Partial)])),
+        ..Stub::default()
+    });
+    let outcome = evaluate_shared(
+        &stub,
+        &rule_with(&[
+            ("boundary_elements", of_type("wall")),
+            ("intersection_elements", of_type("wall")),
+        ]),
+    );
+    assert!(stub.boundary_requests.lock().unwrap().is_empty());
+    assert!(stub.overlap_requests.lock().unwrap().is_empty());
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// An undecided selection may hide the covering or intersecting element: the
+/// sub-check is not evaluated for each space, and the others still run.
+#[test]
+fn an_undecided_element_selection_leaves_only_its_sub_check_unevaluated() {
+    let classified = || ParameterValue::Selector {
+        value: Box::new(Selector::Classification {
+            system: "uniclass".into(),
+            code: Some("Ss_25".into()),
+            code_pattern: None,
+            include_descendants: false,
+        }),
+    };
+    for key in ["boundary_elements", "intersection_elements"] {
+        let stub = Arc::new(Stub {
+            height: Some(Ok(2.0)),
+            ..Stub::default()
+        });
+        let outcome = evaluate_shared(&stub, &rule_with(&[(key, classified())]));
+        assert_eq!(outcome.findings().len(), 1, "the height still reports");
+        let unevaluated = outcome.not_evaluated_outcomes();
+        assert_eq!(unevaluated.len(), 1, "{key}");
+        assert_eq!(unevaluated[0].object_id(), Some(&oid("space-1")));
+        let prefix = key.trim_end_matches("_elements");
+        assert!(unevaluated[0].message().starts_with(prefix), "{key}");
+    }
+}
+
+#[test]
+fn a_mistyped_element_selector_is_an_invalid_declaration() {
+    for key in ["boundary_elements", "intersection_elements"] {
+        let outcome = evaluate(
+            Stub::default(),
+            &rule_with(&[(key, ParameterValue::Boolean { value: true })]),
+        );
+        assert_eq!(
+            outcome.not_evaluated_outcomes()[0].reason(),
+            &NotEvaluatedReason::InvalidDeclaration
         );
     }
 }

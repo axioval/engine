@@ -40,7 +40,10 @@
 //! Handrails ([`HandrailEvidence`]) along a flight or a run are the rule's
 //! selection, reported as positions along and across the walking direction
 //! and as the height of their top above the pitch line: the nosing line of a
-//! flight, the surface of a run.
+//! flight, the surface of a run. The rails along one side are the pieces of
+//! its handrail, ordered bottom to top here ([`HandrailEvidence::side_rail`])
+//! with the gaps between them ([`HandrailEvidence::gap`]), never by an
+//! adapter.
 //!
 //! A service refuses a shape it cannot decide rather than approximate it.
 
@@ -49,7 +52,7 @@ use std::sync::Arc;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
-use crate::{ElevationInterval, MetricDirection};
+use crate::{ConvexPlanRegion, ElevationInterval, MetricDirection};
 
 /// Failure to measure a stair flight, a ramp or headroom.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -1622,6 +1625,42 @@ impl RailMeasurement {
     pub fn top_rise(&self) -> Option<MeasuredInterval> {
         self.top_rise
     }
+
+    /// The rectangle the rail fills in plan along `direction`: the one
+    /// holding every rectangle its positions allow (`outer`), or the one
+    /// every such rectangle holds. `None` when that is empty.
+    fn plan(&self, direction: MetricDirection, outer: bool) -> Option<ConvexPlanRegion> {
+        let ((near, far), (low, high)) = if outer {
+            (
+                (self.start.lower_metres(), self.end.upper_metres()),
+                (self.left.lower_metres(), self.right.upper_metres()),
+            )
+        } else {
+            (
+                (self.start.upper_metres(), self.end.lower_metres()),
+                (self.left.upper_metres(), self.right.lower_metres()),
+            )
+        };
+        if near >= far || low >= high {
+            return None;
+        }
+        let [dx, dy, _] = direction.components();
+        let [ax, ay, _] = across(direction).components();
+        let at = |along: f64, beside: f64| {
+            [
+                along.mul_add(dx, beside * ax),
+                along.mul_add(dy, beside * ay),
+            ]
+        };
+        // Along, then across a quarter turn anticlockwise: anticlockwise.
+        ConvexPlanRegion::try_new(vec![
+            at(near, low),
+            at(far, low),
+            at(far, high),
+            at(near, high),
+        ])
+        .ok()
+    }
 }
 
 /// The handrails along a flight or run.
@@ -1723,6 +1762,63 @@ impl HandrailEvidence {
     #[must_use]
     pub fn top_extension(&self, rail: &RailMeasurement) -> MeasuredInterval {
         between(rail.end, self.pitch.1)
+    }
+
+    /// The pieces of the handrail along `side`: every measured rail running
+    /// along it ([`Self::side`]), bottom to top. Pieces are consecutive when
+    /// each starts and ends decidably further along than the one before;
+    /// two starting or ending where the positions cannot tell apart, or one
+    /// lying within another's stretch (a second rail beside or below it),
+    /// leave the order undecided, and the pieces are returned as `Err`,
+    /// named. No rail along the side is an empty rail.
+    pub fn side_rail(
+        &self,
+        side: RailSide,
+    ) -> Result<Vec<&(ObjectId, RailMeasurement)>, Vec<ObjectId>> {
+        let mut pieces: Vec<&(ObjectId, RailMeasurement)> = self
+            .rails
+            .iter()
+            .filter(|(_, rail)| self.side(rail) == Some(side))
+            .collect();
+        pieces.sort_by(|a, b| {
+            a.1.start
+                .lower_metres()
+                .total_cmp(&b.1.start.lower_metres())
+                .then_with(|| a.0.cmp(&b.0))
+        });
+        let ordered = pieces.windows(2).all(|pair| {
+            let (lower, upper) = (&pair[0].1, &pair[1].1);
+            lower.start.upper_metres() < upper.start.lower_metres()
+                && lower.end.upper_metres() < upper.end.lower_metres()
+        });
+        if ordered {
+            Ok(pieces)
+        } else {
+            Err(pieces.into_iter().map(|(rail, _)| rail.clone()).collect())
+        }
+    }
+
+    /// The gap in plan between two rails: the least horizontal distance
+    /// between the rectangles their bodies fill, zero where they touch or
+    /// overlap, as an interval sure to hold it. `None` when a rail's
+    /// positions leave no rectangle it surely fills, so no upper bound.
+    #[must_use]
+    pub fn gap(&self, a: &RailMeasurement, b: &RailMeasurement) -> Option<MeasuredInterval> {
+        let direction = self.direction;
+        let (outer_a, inner_a) = (a.plan(direction, true)?, a.plan(direction, false));
+        let (outer_b, inner_b) = (b.plan(direction, true)?, b.plan(direction, false));
+        let (inner_a, inner_b) = (inner_a?, inner_b?);
+        let scale = [&outer_a, &outer_b]
+            .iter()
+            .flat_map(|region| region.ring())
+            .flatten()
+            .fold(1.0_f64, |scale, value| scale.max(value.abs()));
+        // Placing the corners rounds by a few units in the last place of
+        // the positions, and so does the separation.
+        let margin = 64.0 * f64::EPSILON * scale;
+        let lower = (outer_a.separation(&outer_b) - margin).max(0.0);
+        let upper = inner_a.separation(&inner_b).max(0.0) + margin;
+        MeasuredInterval::try_new(lower, upper.max(lower)).ok()
     }
 
     /// The side a rail runs along: the one whose half of the walking
@@ -2273,6 +2369,88 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    fn piece(start: f64, end: f64, left: f64, right: f64) -> RailMeasurement {
+        RailMeasurement::try_new(
+            (point(start), point(end)),
+            (point(left), point(right)),
+            MeasuredInterval::try_new(0.9, 0.9 + 1e-9).unwrap(),
+            MeasuredInterval::try_new(0.9, 0.9 + 1e-9).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn the_pieces_along_a_side_are_ordered_with_their_gaps() {
+        let request = HandrailRequest::try_new(
+            id("a"),
+            WalkingStretch::Flight,
+            [id("p"), id("q"), id("r"), id("s"), id("m")],
+            (0.2, 1.5),
+            0.3,
+        )
+        .unwrap();
+        let measure = |rails: Vec<(ObjectId, RailMeasurement)>| {
+            HandrailEvidence::try_new(
+                request.clone(),
+                x(),
+                (point(0.0), point(0.84)),
+                (point(0.0), point(1.2)),
+                rails,
+                evidence(false),
+            )
+            .unwrap()
+        };
+        // Left: `q` then `p` with a 0.1 m gap; right: `r` then `s` meeting
+        // end to end; `m` reaches over the middle.
+        let measured = measure(vec![
+            (id("p"), piece(0.5, 1.14, 1.25, 1.3)),
+            (id("q"), piece(-0.3, 0.4, 1.25, 1.3)),
+            (id("r"), piece(-0.3, 0.4, -0.1, -0.05)),
+            (id("s"), piece(0.4, 1.14, -0.1, -0.05)),
+            (id("m"), piece(-0.3, 1.14, 0.55, 0.65)),
+        ]);
+        let left = measured.side_rail(RailSide::Left).unwrap();
+        let names: Vec<&ObjectId> = left.iter().map(|(rail, _)| rail).collect();
+        assert_eq!(names, [&id("q"), &id("p")]);
+        let gap = measured.gap(&left[0].1, &left[1].1).unwrap();
+        assert!(
+            contains(gap, 0.1) && gap.upper() - gap.lower() < 1e-12,
+            "{gap:?}"
+        );
+        let right = measured.side_rail(RailSide::Right).unwrap();
+        let gap = measured.gap(&right[0].1, &right[1].1).unwrap();
+        assert!(gap.lower() == 0.0 && gap.upper() < 1e-12, "{gap:?}");
+        // Offset across, pieces are apart diagonally.
+        let apart = measured
+            .gap(&piece(-0.3, 0.4, 1.25, 1.3), &piece(0.7, 1.14, 1.6, 1.65))
+            .unwrap();
+        assert!(contains(apart, 0.3_f64.hypot(0.3)), "{apart:?}");
+        // A second rail within the first's stretch leaves the order open.
+        let nested = measure(vec![
+            (id("p"), piece(-0.3, 1.14, 1.25, 1.3)),
+            (id("q"), piece(0.0, 0.84, 1.3, 1.35)),
+        ]);
+        assert_eq!(
+            nested.side_rail(RailSide::Left),
+            Err(vec![id("p"), id("q")])
+        );
+        assert_eq!(nested.side_rail(RailSide::Right), Ok(vec![]));
+        // A piece too uncertain to surely fill a rectangle has no upper
+        // bound on its gap.
+        let blurred = RailMeasurement::try_new(
+            (around(0.5, 0.2), around(0.6, 0.2)),
+            (point(1.25), point(1.3)),
+            MeasuredInterval::try_new(0.9, 0.9).unwrap(),
+            MeasuredInterval::try_new(0.9, 0.9).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(measured.gap(&left[0].1, &blurred), None);
+    }
+
+    fn around(value: f64, margin: f64) -> ElevationInterval {
+        ElevationInterval::try_new(value - margin, value + margin).unwrap()
     }
 
     #[test]

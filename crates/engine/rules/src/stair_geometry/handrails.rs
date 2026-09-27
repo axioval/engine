@@ -1,6 +1,14 @@
 //! The handrail checks `stair-geometry` and `ramp-geometry` share: the
-//! height of each rail above the pitch line, its level extension beyond the
-//! ends, and the sides a rail runs along.
+//! height of each rail above the pitch line, the level extension of the
+//! handrail along each side beyond the ends, the gaps between its pieces,
+//! and the sides a rail runs along.
+//!
+//! The rails along one side are the pieces of one handrail, put in order by
+//! the contract ([`HandrailEvidence::side_rail`]): its extension is its
+//! first piece's at the bottom and its last piece's at the top, and the gap
+//! between consecutive pieces is its continuity. Heights are each piece's.
+//! Pieces the contract cannot put in order leave the side's extension and
+//! continuity not evaluated.
 
 use std::collections::BTreeSet;
 
@@ -36,6 +44,7 @@ pub(super) struct HandrailCheck<'a> {
     above: f64,
     height: Range,
     extension: Option<f64>,
+    gap: Option<f64>,
     sides: Option<Required>,
 }
 
@@ -47,6 +56,7 @@ pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
         ParameterDescriptor::optional("handrail_height_minimum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_height_maximum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_extension_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("handrail_gap_maximum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_sides", ParameterType::String),
         ParameterDescriptor::optional("handrail_both_sides_above_width", ParameterType::Quantity),
     ]
@@ -60,6 +70,7 @@ pub(super) fn parse<'a>(
     let above = length(parameters, "handrail_reach_above")?;
     let height = range(parameters, "handrail_height")?;
     let extension = length(parameters, "handrail_extension_minimum")?;
+    let gap = length(parameters, "handrail_gap_maximum")?;
     let wider = length(parameters, "handrail_both_sides_above_width")?;
     let sides = match (parameters.string("handrail_sides")?, wider) {
         (None, None) => None,
@@ -77,7 +88,8 @@ pub(super) fn parse<'a>(
             )));
         }
     };
-    let declared = height != (None, None) || extension.is_some() || sides.is_some();
+    let declared =
+        height != (None, None) || extension.is_some() || gap.is_some() || sides.is_some();
     match (rails, reach, above, declared) {
         (Some(rails), Some(reach), Some(above), true) => Ok(Some(HandrailCheck {
             rails,
@@ -85,6 +97,7 @@ pub(super) fn parse<'a>(
             above,
             height,
             extension,
+            gap,
             sides,
         })),
         (None, None, None, false) => Ok(None),
@@ -150,14 +163,11 @@ pub(super) fn handrails(
         }
     };
     let evidence = vec![measured.evidence().clone()];
-    let slack = slack(scale(&measured));
-    let pending = |check: Check| match check {
-        Check::Pass if *undecided => Check::Undecided(format!(
-            "the handrails along {} pass, but a rail the selection could not decide may run \
-             along it",
-            along.label
-        )),
-        other => other,
+    let judged = Judged {
+        measured: &measured,
+        slack: slack(scale(&measured)),
+        along,
+        undecided: *undecided,
     };
     let mut checks: Checks = Vec::new();
     let mut push = |check: Check, related: Vec<ObjectId>| {
@@ -166,43 +176,39 @@ pub(super) fn handrails(
     if check.height != (None, None) {
         let mut all = Vec::new();
         for (rail, measurement) in measured.rails() {
-            all.extend(height(rail, measurement, check.height, slack, along));
+            all.extend(height(rail, measurement, check.height, judged.slack, along));
         }
-        push_all(&mut push, all, pending(Check::Pass));
+        push_all(&mut push, all, judged.pending(Check::Pass));
     }
     if let Some(minimum) = check.extension {
-        let mut all = Vec::new();
-        for (rail, measurement) in measured.rails() {
-            all.extend(extension(
-                &measured,
-                rail,
-                measurement,
-                minimum,
-                slack,
-                along,
-            ));
-        }
-        push_all(&mut push, all, pending(Check::Pass));
+        push_all(
+            &mut push,
+            judged.extensions(minimum),
+            judged.pending(Check::Pass),
+        );
+    }
+    if let Some(maximum) = check.gap {
+        push_all(&mut push, judged.gaps(maximum), Check::Pass);
     }
     if let Some(required) = check.sides {
-        let (check, related) = sides(&measured, required, slack, along, *undecided);
+        let (check, related) = sides(&measured, required, judged.slack, along, *undecided);
         push(check, related);
     }
     checks
 }
 
-/// Pushes each failing or undecided check with the rail it names, or
+/// Pushes each failing or undecided check with the rails it names, or
 /// `passing` when every one passes.
 fn push_all(
     push: &mut impl FnMut(Check, Vec<ObjectId>),
-    checks: Vec<(Check, ObjectId)>,
+    checks: Vec<(Check, Vec<ObjectId>)>,
     passing: Check,
 ) {
     let mut any = false;
-    for (check, rail) in checks {
+    for (check, rails) in checks {
         if !matches!(check, Check::Pass) {
             any = true;
-            push(check, vec![rail]);
+            push(check, rails);
         }
     }
     if !any && !matches!(passing, Check::Pass) {
@@ -233,7 +239,7 @@ fn height(
     (minimum, maximum): Range,
     slack: f64,
     along: &Along<'_>,
-) -> Vec<(Check, ObjectId)> {
+) -> Vec<(Check, Vec<ObjectId>)> {
     let mut checks = Vec::new();
     let bound = bound_words(minimum, maximum, metres);
     for (value, words, limit) in [
@@ -263,51 +269,207 @@ fn height(
                 Check::Undecided(format!("{measured}, which straddles {bound}"))
             }
         };
-        checks.push((check, rail.clone()));
+        checks.push((check, vec![rail.clone()]));
     }
     checks
 }
 
-/// A rail's extension beyond both ends against the rule's minimum, and
-/// whether it runs level over it.
-fn extension(
-    measured: &HandrailEvidence,
-    rail: &ObjectId,
-    measurement: &RailMeasurement,
-    minimum: f64,
+/// Which end of the pitch line a rail extends beyond.
+#[derive(Clone, Copy)]
+enum End {
+    Bottom,
+    Top,
+}
+
+/// One stretch's handrails and how they are judged.
+struct Judged<'m> {
+    measured: &'m HandrailEvidence,
     slack: f64,
-    along: &Along<'_>,
-) -> Vec<(Check, ObjectId)> {
-    let ends = [
-        (
-            "bottom",
-            measured.bottom_extension(measurement),
-            measurement.bottom_rise(),
-        ),
-        (
-            "top",
-            measured.top_extension(measurement),
-            measurement.top_rise(),
-        ),
-    ];
-    let mut checks = Vec::new();
-    for (end, reach, rise) in ends {
-        let place = format!("beyond the {end} of {}", along.label);
+    along: &'m Along<'m>,
+    /// Whether the selection left an object undecided, which may be a
+    /// rail.
+    undecided: bool,
+}
+
+impl Judged<'_> {
+    /// A pass not evaluated when an undecided object may be a rail.
+    fn pending(&self, check: Check) -> Check {
+        match check {
+            Check::Pass if self.undecided => Check::Undecided(format!(
+                "the handrails along {} pass, but a rail the selection could not decide may run \
+                 along it",
+                self.along.label
+            )),
+            other => other,
+        }
+    }
+
+    /// A failure not evaluated when an undecided object may be another
+    /// piece of the handrail: `why` says what it may do.
+    fn continued(&self, check: Check, why: &str) -> Check {
+        match check {
+            Check::Fail(message) if self.undecided => Check::Undecided(format!(
+                "{message}; a rail the selection could not decide may {why}"
+            )),
+            other => other,
+        }
+    }
+
+    /// The extension of the handrail along each side, from its first piece
+    /// at the bottom and its last at the top, and of each rail reaching
+    /// over the middle on its own.
+    fn extensions(&self, minimum: f64) -> Vec<(Check, Vec<ObjectId>)> {
+        let mut checks = Vec::new();
+        for side in [RailSide::Left, RailSide::Right] {
+            match self.measured.side_rail(side) {
+                Ok(pieces) => {
+                    for (end, piece) in [(End::Bottom, pieces.first()), (End::Top, pieces.last())] {
+                        let Some((rail, measurement)) = piece else {
+                            continue;
+                        };
+                        let check = self.extension(rail, measurement, end, minimum);
+                        checks.push((self.continued(check, "continue it"), vec![rail.clone()]));
+                    }
+                }
+                Err(pieces) => checks.push((
+                    Check::Undecided(format!(
+                        "{}, so its extension is not measured",
+                        unordered(side, &pieces, self.along)
+                    )),
+                    vec![],
+                )),
+            }
+        }
+        for (rail, measurement) in self.measured.rails() {
+            if self.measured.side(measurement).is_some() {
+                continue;
+            }
+            for end in [End::Bottom, End::Top] {
+                let check = match self.extension(rail, measurement, end, minimum) {
+                    Check::Fail(message) => Check::Undecided(format!(
+                        "{message}; it reaches over the middle of {}, so it may be one piece of a \
+                         longer rail",
+                        self.along.label
+                    )),
+                    other => other,
+                };
+                checks.push((check, vec![rail.clone()]));
+            }
+        }
+        checks
+    }
+
+    /// A rail's extension beyond one end against the rule's minimum, and
+    /// whether it runs level over it.
+    fn extension(
+        &self,
+        rail: &ObjectId,
+        measurement: &RailMeasurement,
+        end: End,
+        minimum: f64,
+    ) -> Check {
+        let (words, reach, rise) = match end {
+            End::Bottom => (
+                "bottom",
+                self.measured.bottom_extension(measurement),
+                measurement.bottom_rise(),
+            ),
+            End::Top => (
+                "top",
+                self.measured.top_extension(measurement),
+                measurement.top_rise(),
+            ),
+        };
+        let place = format!("beyond the {words} of {}", self.along.label);
         let measured = format!(
             "handrail {rail} reaches {} {place}",
             shown(reach.lower(), reach.upper())
         );
         let required = format!("at least {} required", metres(minimum));
-        let check = match judge(reach.lower(), reach.upper(), Some(minimum - slack), None) {
+        match judge(
+            reach.lower(),
+            reach.upper(),
+            Some(minimum - self.slack),
+            None,
+        ) {
             Verdict::Fail(_) => Check::Fail(format!("{measured}; {required}")),
             Verdict::Undecided(_) => {
                 Check::Undecided(format!("{measured}, which straddles {required}"))
             }
             Verdict::Pass => level(rail, rise, minimum, &place),
-        };
-        checks.push((check, rail.clone()));
+        }
     }
-    checks
+
+    /// The gaps between consecutive pieces of the handrail along each side
+    /// against the rule's maximum.
+    fn gaps(&self, maximum: f64) -> Vec<(Check, Vec<ObjectId>)> {
+        let mut checks = Vec::new();
+        let allowed = format!("at most {} allowed", metres(maximum));
+        for side in [RailSide::Left, RailSide::Right] {
+            let pieces = match self.measured.side_rail(side) {
+                Ok(pieces) => pieces,
+                Err(pieces) => {
+                    checks.push((
+                        Check::Undecided(format!(
+                            "{}, so its continuity is not measured",
+                            unordered(side, &pieces, self.along)
+                        )),
+                        vec![],
+                    ));
+                    continue;
+                }
+            };
+            for pair in pieces.windows(2) {
+                let ((lower, a), (upper, b)) = (pair[0], pair[1]);
+                let named = format!(
+                    "handrail pieces {lower} and {upper} along the {} side of {}",
+                    side_words(side),
+                    self.along.label
+                );
+                let related = vec![lower.clone(), upper.clone()];
+                let Some(gap) = self.measured.gap(a, b) else {
+                    checks.push((
+                        Check::Undecided(format!("the gap between {named} is not measured")),
+                        related,
+                    ));
+                    continue;
+                };
+                let measured = format!(
+                    "{named} leave a gap of {} in plan",
+                    shown(gap.lower(), gap.upper())
+                );
+                let check = match judge(
+                    gap.lower(),
+                    gap.upper(),
+                    None,
+                    Some(maximum + 2.0 * self.slack),
+                ) {
+                    Verdict::Pass => Check::Pass,
+                    Verdict::Fail(_) => Check::Fail(format!("{measured}; {allowed}")),
+                    Verdict::Undecided(_) => {
+                        Check::Undecided(format!("{measured}, which straddles {allowed}"))
+                    }
+                };
+                checks.push((self.continued(check, "bridge it"), related));
+            }
+        }
+        checks
+    }
+}
+
+/// Why the pieces along a side cannot be put in order.
+fn unordered(side: RailSide, pieces: &[ObjectId], along: &Along<'_>) -> String {
+    let names = pieces
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "the handrails along the {} side of {} ({names}) lie beside or within one another, not \
+         one after another",
+        side_words(side),
+        along.label
+    )
 }
 
 /// Whether a rail's top runs level over the extension it must reach.

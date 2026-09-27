@@ -168,6 +168,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Handrails in pieces.** (Refs #85) The rails along one side of a flight
+  or run are the pieces of one handrail: `HandrailEvidence::side_rail`
+  puts them in order from the bottom (each starting and ending decidably
+  further along than the one before, otherwise refused with their names)
+  and `HandrailEvidence::gap` bounds the plan gap between two pieces.
+  `stair-geometry` and `ramp-geometry` take the extension from the first
+  piece at the bottom and the last at the top, check heights per piece, and
+  gain `handrail_gap_maximum`: a gap between consecutive pieces larger than
+  allowed is a finding relating both. Pieces that cannot be put in order
+  leave the side's extension and gaps not evaluated; a rail reaching over
+  the middle that falls short may be a piece, so it is not evaluated; an
+  undecided rail may continue a short extension or bridge a gap.
+  **Breaking:** definitions bound to `stair-geometry` or `ramp-geometry`
+  must declare the new optional parameter `handrail_gap_maximum`.
 - **Doors on and over stair landings.** (Refs #85) `stair-geometry` gains
   `landing_doors`, `landing_door_height` and `landing_door_swing`, as
   ramps have them: no selected door may stand in the column over the

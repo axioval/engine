@@ -3882,6 +3882,104 @@ fn with_geometry_a_handrail_too_low_above_the_nosing_line_is_found() {
     );
 }
 
+/// The side profile of a piece of [`rail_profile`]'s rail from `from` to
+/// `to` along x.
+fn rail_piece_profile(height: f64, from: f64, to: f64) -> Vec<[f64; 2]> {
+    let top = |x: f64| 0.17 + height + x.clamp(0.0, 0.84) * 0.51 / 0.84;
+    let mut along = vec![from];
+    along.extend([0.0, 0.84].into_iter().filter(|x| *x > from && *x < to));
+    along.push(to);
+    let mut points: Vec<[f64; 2]> = along.iter().map(|x| [*x, top(*x) - 0.05]).collect();
+    points.extend(along.iter().rev().map(|x| [*x, top(*x)]));
+    points
+}
+
+/// Stair flight #108 as in [`handrails_and_ramp_ends`] with its left
+/// handrail in two pieces, #208 from x -0.3 to 0.4 and #308 from x 0.5 to
+/// 1.14, 0.1 m apart, and its right handrail #408 in one.
+fn handrail_in_pieces() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        swept(
+            200,
+            [0.0, 0.05, 0.0],
+            &rail_piece_profile(0.9, -0.3, 0.4),
+            0.05,
+            rail
+        ),
+        swept(
+            300,
+            [0.0, 0.05, 0.0],
+            &rail_piece_profile(0.9, 0.5, 1.14),
+            0.05,
+            rail
+        ),
+        swept(400, [0.0, -1.2, 0.0], &rail_profile(0.9), 0.05, rail),
+    )
+}
+
+#[test]
+fn with_geometry_a_gap_between_handrail_pieces_is_found() {
+    let case = Case::new("geometry-stair-handrail-pieces");
+    let run = |gap: f64| {
+        case.geometry_rule(
+            &handrail_in_pieces(),
+            &[("flight", "IfcStairFlight"), ("rail", "IfcRailing")],
+            "axioval:capability.stair-geometry",
+            &registry_signature("axioval:capability.stair-geometry"),
+            entity("flight"),
+            json!({
+                "handrail_objects": {"type": "selector", "value": entity("rail")},
+                "handrail_reach_across": {"type": "quantity", "value": 0.2, "unit": "m"},
+                "handrail_reach_above": {"type": "quantity", "value": 1.5, "unit": "m"},
+                "handrail_height_minimum": {"type": "quantity", "value": 0.8, "unit": "m"},
+                "handrail_extension_minimum": {"type": "quantity", "value": 30, "unit": "cm"},
+                "handrail_gap_maximum": {"type": "quantity", "value": gap, "unit": "m"},
+                "handrail_sides": {"type": "string", "value": "both"},
+            }),
+        )
+    };
+    let (output, result) = run(0.05);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The left handrail reaches 0.3 m beyond either end from its first and
+    // last piece, but breaks off for 0.1 m between them.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#108", "{result:#}");
+    assert!(
+        findings[0].1.ends_with(
+            "#308 along the left side of the flight leave a gap of 0.1 m in plan; at most 0.05 m \
+             allowed"
+        ),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    // A gap of 0.15 m is allowed: the handrail in pieces passes.
+    let (output, result) = run(0.15);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+}
+
 #[test]
 fn with_geometry_an_obstacle_at_the_foot_of_a_ramp_is_found() {
     let case = Case::new("geometry-ramp-ends");

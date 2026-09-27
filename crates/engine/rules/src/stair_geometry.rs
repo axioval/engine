@@ -72,8 +72,10 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 ///   the floors of the `headroom_below_spaces` the rule selects;
 /// - `handrail_height_minimum`/`handrail_height_maximum` bound the height of
 ///   each `handrail_objects` rail's top above the nosing line,
-///   `handrail_extension_minimum` how far it reaches level beyond the first
-///   and last nosing, and `handrail_sides` (`one` or `both`, with
+///   `handrail_extension_minimum` how far the handrail along each side
+///   reaches level beyond the first and last nosing (its first and last
+///   piece), `handrail_gap_maximum` the gaps between its pieces, and
+///   `handrail_sides` (`one` or `both`, with
 ///   `handrail_both_sides_above_width` both for wider flights) the sides a
 ///   rail runs along. A rail belongs to the flight within
 ///   `handrail_reach_across` of its sides and `handrail_reach_above` above

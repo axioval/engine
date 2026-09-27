@@ -963,6 +963,48 @@ fn handrails_along_a_flight_measure_height_extension_and_side() {
 }
 
 #[test]
+fn a_rail_in_pieces_is_measured_piece_by_piece_and_put_in_order() {
+    // The left rail of `handrails_along_a_flight_…` cut at x 0.4 and 0.5.
+    let at = |x: f64| 1.08 + x * 0.54 / 0.84;
+    let lower = vec![[-0.3, 1.08], [0.0, 1.08], [0.4, at(0.4)]];
+    let upper = vec![[0.5, at(0.5)], [0.84, 1.62], [1.14, 1.62]];
+    let stairs = flight_with(vec![
+        ("upper", rail(&upper, 0.05, 1.25, 0.05)),
+        ("lower", rail(&lower, 0.05, 1.25, 0.05)),
+    ]);
+    let measured = handrails(
+        &stairs,
+        WalkingStretch::Flight,
+        "flight",
+        &["upper", "lower"],
+    )
+    .unwrap();
+    for local in ["lower", "upper"] {
+        let piece = rail_of(&measured, local);
+        assert_eq!(measured.side(piece), Some(RailSide::Left));
+        assert!(
+            holds(piece.lowest(), 0.9) && holds(piece.highest(), 0.9),
+            "{piece:?}"
+        );
+    }
+    let pieces = measured.side_rail(RailSide::Left).unwrap();
+    let names: Vec<&ObjectId> = pieces.iter().map(|(rail, _)| rail).collect();
+    assert_eq!(names, [&id("lower"), &id("upper")]);
+    // The first piece reaches beyond the bottom, level; the last beyond the
+    // top.
+    let (first, last) = (&pieces[0].1, &pieces[1].1);
+    assert!(holds(measured.bottom_extension(first), 0.3));
+    assert!(first.bottom_rise().unwrap().upper() < 1e-12);
+    assert!(holds(measured.top_extension(last), 0.3));
+    assert!(last.top_rise().unwrap().upper() < 1e-12);
+    let gap = measured.gap(first, last).unwrap();
+    assert!(
+        holds(gap, 0.1) && gap.upper() - gap.lower() < 1e-9,
+        "{gap:?}"
+    );
+}
+
+#[test]
 fn a_rail_sloping_on_past_the_flight_rises_over_its_extension() {
     // The rail keeps climbing 0.3 m past the last nosing, then stops.
     let top = vec![[0.0, 1.08], [1.14, 1.08 + 1.14 * 0.54 / 0.84]];

@@ -492,6 +492,8 @@ fn model() -> Model {
         .object("low_rail", "railing")
         .object("short_rail", "railing")
         .object("ramp_rail", "railing")
+        .object("lower_piece", "railing")
+        .object("upper_piece", "railing")
         .object("door", "door")
         .object("bin", "furniture")
 }
@@ -1251,6 +1253,110 @@ fn handrails_too_low_too_short_sloping_or_on_one_side_are_found() {
     assert_eq!(
         unevaluated(&evaluation),
         [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// `regular`'s left rail in two pieces 0.1 m apart: the lower reaches 0.3 m
+/// beyond the bottom, the upper 0.3 m beyond the top, neither beyond both.
+/// Its right rail is one piece.
+fn in_pieces() -> Stairs {
+    stairs()
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "lower_piece",
+            rail((1.25, 1.3), (-0.3, 0.4), (0.9, 0.9), (Some(0.0), None)),
+        )
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "upper_piece",
+            rail((1.25, 1.3), (0.5, 1.14), (0.9, 0.9), (None, Some(0.0))),
+        )
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "left_rail",
+            rail((-0.1, -0.05), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+        )
+}
+
+fn piece_parameters(gap: f64) -> Vec<(&'static str, ParameterValue)> {
+    handrail_parameters(vec![
+        ("handrail_height_minimum", metres(0.8)),
+        ("handrail_extension_minimum", metres(0.3)),
+        ("handrail_gap_maximum", metres(gap)),
+        ("handrail_sides", string("one")),
+    ])
+}
+
+#[test]
+fn a_handrail_in_pieces_extends_from_its_ends_and_its_gaps_are_found() {
+    // `irregular`'s left pieces lie one within the other.
+    let stairs = in_pieces()
+        .rail(
+            "irregular",
+            WalkingStretch::Flight,
+            "lower_piece",
+            rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+        )
+        .rail(
+            "irregular",
+            WalkingStretch::Flight,
+            "upper_piece",
+            rail((1.3, 1.35), (0.0, 0.84), (0.9, 0.9), (None, None)),
+        );
+    let evaluation = check_stairs(model(), stairs, piece_parameters(0.05));
+    let (lower, upper) = (id("lower_piece"), id("upper_piece"));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "regular".into(),
+            format!(
+                "handrail pieces {lower} and {upper} along the left side of the flight leave a \
+                 gap of 0.1 m in plan; at most 0.05 m allowed"
+            )
+        )]
+    );
+    assert_eq!(
+        evaluation.findings()[0].related,
+        [lower.clone(), upper.clone()]
+    );
+    let messages: Vec<String> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| outcome.object_id() == Some(&id("irregular")))
+        .map(|outcome| outcome.message().to_owned())
+        .collect();
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    for what in ["extension", "continuity"] {
+        assert!(
+            messages.iter().any(|message| message.starts_with(&format!(
+                "the handrails along the left side of the flight ({lower}, {upper}) lie beside or \
+                 within one another"
+            )) && message
+                .ends_with(&format!("so its {what} is not measured"))),
+            "{messages:?}"
+        );
+    }
+}
+
+#[test]
+fn a_handrail_in_pieces_within_the_allowed_gap_passes() {
+    let evaluation = check_stairs(model(), in_pieces(), piece_parameters(0.15));
+    assert!(
+        findings(&evaluation)
+            .iter()
+            .all(|(object, _)| object != "regular"),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(
+        !unevaluated(&evaluation)
+            .iter()
+            .any(|(object, _)| object == "regular"),
+        "{:?}",
+        unevaluated(&evaluation)
     );
 }
 

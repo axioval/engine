@@ -6,10 +6,12 @@
 #![cfg(feature = "ifc")]
 #![allow(missing_docs)]
 
-use axioval::engine::{CapabilityRegistry, ParameterType, Runtime, compile};
+mod common;
+use axioval::engine::{CapabilityRegistry, Runtime, compile};
 use axioval::ifc::{IFC4_TYPE_SYSTEM, import_ifc_session};
 use axioval::ir::{DefinitionPackage, MATERIAL_SET, Report, RuleSetPackage};
 use axioval::rules::register_builtins;
+use common::kind;
 use serde_json::{Value, json};
 
 /// Millimetres. #1 is 300 mm thick through its type #40, #2 is 175 mm thick
@@ -53,24 +55,6 @@ fn concept(id: &str, ifc_name: &str) -> Value {
         "name": text(id),
         "externalNames": [{ "typeSystem": IFC4_TYPE_SYSTEM, "name": ifc_name }],
     })
-}
-
-fn kind(parameter_type: ParameterType) -> &'static str {
-    match parameter_type {
-        ParameterType::Boolean => "boolean",
-        ParameterType::Integer => "integer",
-        ParameterType::Number => "number",
-        ParameterType::String => "string",
-        ParameterType::Quantity => "quantity",
-        ParameterType::Enum => "enum",
-        ParameterType::Reference => "reference",
-        ParameterType::ObjectTypeReference => "objectTypeReference",
-        ParameterType::PropertyReference => "propertyReference",
-        ParameterType::Selector => "selector",
-        ParameterType::StringList => "stringList",
-        ParameterType::ReferenceList => "referenceList",
-        ParameterType::Table(_) => "table",
-    }
 }
 
 /// `property-predicate`, its signature taken from the registry.

@@ -7,10 +7,12 @@
 #![cfg(feature = "ifc")]
 #![allow(missing_docs)]
 
-use axioval::engine::{CapabilityRegistry, ParameterType, Runtime, compile};
+mod common;
+use axioval::engine::{CapabilityRegistry, Runtime, compile};
 use axioval::ifc::{IFC4_TYPE_SYSTEM, import_ifc_session};
 use axioval::ir::{DefinitionPackage, Report, RuleSetPackage};
 use axioval::rules::register_builtins;
+use common::kind;
 use serde_json::{Value, json};
 
 /// Fire wall #10 has openings #20 (door #30, type `T30-RS-1`) and #21 (door
@@ -66,24 +68,6 @@ fn property_concept(id: &str, ifc_name: &str, value_kind: &str) -> Value {
     let mut concept = concept(id, ifc_name);
     concept["valueKind"] = json!(value_kind);
     concept
-}
-
-fn kind(parameter_type: ParameterType) -> &'static str {
-    match parameter_type {
-        ParameterType::Boolean => "boolean",
-        ParameterType::Integer => "integer",
-        ParameterType::Number => "number",
-        ParameterType::String => "string",
-        ParameterType::Quantity => "quantity",
-        ParameterType::Enum => "enum",
-        ParameterType::Reference => "reference",
-        ParameterType::ObjectTypeReference => "objectTypeReference",
-        ParameterType::PropertyReference => "propertyReference",
-        ParameterType::Selector => "selector",
-        ParameterType::StringList => "stringList",
-        ParameterType::ReferenceList => "referenceList",
-        ParameterType::Table(_) => "table",
-    }
 }
 
 /// The `property-comparison` definition, its signature taken from the registry.

@@ -141,12 +141,18 @@ fn exact_evidence_from_another_source_is_rejected() {
 
 #[test]
 fn non_finite_present_property_is_rejected() {
+    use axioval_ir::PropertyValue;
+    let text = || PropertyValue::String("A-WALL".into());
     for value in [
-        axioval_ir::PropertyValue::Decimal(f64::NAN),
-        axioval_ir::PropertyValue::Quantity {
+        PropertyValue::Decimal(f64::NAN),
+        PropertyValue::Quantity {
             value: f64::INFINITY,
             dimension: axioval_ir::QuantityDimension::Length,
         },
+        // A list holds finite scalars only: no null, no nested list.
+        PropertyValue::List(vec![text(), PropertyValue::Decimal(f64::NAN)]),
+        PropertyValue::List(vec![text(), PropertyValue::Null]),
+        PropertyValue::List(vec![PropertyValue::List(vec![text()])]),
     ] {
         let property = axioval_ir::Property::new("Pset_WallCommon", "Reference", value)
             .unwrap()

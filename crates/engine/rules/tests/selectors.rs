@@ -3,7 +3,7 @@
 
 mod common;
 
-use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
+use axioval_ir::contract::{ComparisonOperator, ParameterValue, Quantifier, Selector};
 use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
 use axioval_rules::ManualIssue;
 use common::{Model, boolean, integer, number, rule, string, strings, unevaluated};
@@ -51,6 +51,7 @@ fn options(
         value: Some(value),
         case_sensitive,
         trim,
+        quantifier: None,
     }
 }
 
@@ -472,8 +473,150 @@ fn a_selector_that_does_not_fit_its_operator_is_an_invalid_declaration() {
             value: None,
             case_sensitive: true,
             trim: true,
+            quantifier: None,
         },
     ] {
         invalid_everywhere(model(), selector, &["a"]);
     }
+}
+
+fn text(value: &str) -> PropertyValue {
+    PropertyValue::String(value.to_owned())
+}
+
+fn list(texts: &[&str]) -> PropertyValue {
+    PropertyValue::List(texts.iter().map(|value| text(value)).collect())
+}
+
+fn quantified(
+    operator: ComparisonOperator,
+    value: Option<ParameterValue>,
+    quantifier: Option<Quantifier>,
+) -> Selector {
+    Selector::Property {
+        property_set: Some(SET.into()),
+        property: NAME.into(),
+        operator,
+        value,
+        case_sensitive: true,
+        trim: false,
+        quantifier,
+    }
+}
+
+/// `a` on two agreed layers, `b` on one agreed and one other, `c` on
+/// neither, `d` an empty list, `e` a plain text value.
+fn layered() -> Model {
+    values(vec![
+        ("a", list(&["A-WALL", "A-DOOR"])),
+        ("b", list(&["A-AXIS", "A-WALL"])),
+        ("c", list(&["A-AXIS"])),
+        ("d", list(&[])),
+        ("e", text("A-WALL")),
+    ])
+}
+
+#[test]
+fn a_quantifier_compares_every_element_or_any_element() {
+    let agreed = || Some(strings(&["A-WALL", "A-DOOR"]));
+    assert_eq!(
+        select(
+            layered(),
+            quantified(ComparisonOperator::OneOf, agreed(), Some(Quantifier::All))
+        ),
+        selected(&["a", "e"])
+    );
+    assert_eq!(
+        select(
+            layered(),
+            quantified(ComparisonOperator::OneOf, agreed(), Some(Quantifier::Any))
+        ),
+        selected(&["a", "b", "e"])
+    );
+    // No element on a forbidden layer; an empty list is never vacuously true.
+    assert_eq!(
+        select(
+            layered(),
+            quantified(
+                ComparisonOperator::NoneOf,
+                Some(strings(&["A-AXIS"])),
+                Some(Quantifier::All)
+            )
+        ),
+        selected(&["a", "e"])
+    );
+    assert_eq!(
+        select(
+            layered(),
+            quantified(
+                ComparisonOperator::Like,
+                Some(string("A-*")),
+                Some(Quantifier::All)
+            )
+        ),
+        selected(&["a", "b", "c", "e"])
+    );
+}
+
+#[test]
+fn a_list_without_a_quantifier_is_not_evaluated() {
+    let (chosen, undecided) = select(
+        layered(),
+        property(ComparisonOperator::OneOf, strings(&["A-WALL"])),
+    );
+    assert_eq!(chosen, ["e"]);
+    assert_eq!(
+        undecided,
+        ["a", "b", "c", "d"].map(|object| (object.to_owned(), NotEvaluatedReason::InvalidEvidence))
+    );
+    // Presence needs no quantifier, and refuses one.
+    assert_eq!(
+        select(
+            layered(),
+            quantified(ComparisonOperator::Exists, None, None)
+        ),
+        selected(&["a", "b", "c", "d", "e"])
+    );
+    invalid_everywhere(
+        layered(),
+        quantified(ComparisonOperator::Exists, None, Some(Quantifier::Any)),
+        &["a", "b", "c", "d", "e"],
+    );
+}
+
+#[test]
+fn an_element_that_cannot_be_compared_leaves_the_object_open() {
+    let mixed = || {
+        values(vec![
+            (
+                "a",
+                PropertyValue::List(vec![PropertyValue::Integer(1), text("A-WALL")]),
+            ),
+            (
+                "b",
+                PropertyValue::List(vec![PropertyValue::Integer(1), text("A-AXIS")]),
+            ),
+        ])
+    };
+    let agreed = || Some(strings(&["A-WALL"]));
+    // `any` is decided by the matching text element of `a` alone.
+    let (chosen, undecided) = select(
+        mixed(),
+        quantified(ComparisonOperator::OneOf, agreed(), Some(Quantifier::Any)),
+    );
+    assert_eq!(chosen, ["a"]);
+    assert_eq!(
+        undecided,
+        [("b".to_owned(), NotEvaluatedReason::InvalidEvidence)]
+    );
+    // `all` is decided by the failing text element of `b` alone.
+    let (chosen, undecided) = select(
+        mixed(),
+        quantified(ComparisonOperator::OneOf, agreed(), Some(Quantifier::All)),
+    );
+    assert!(chosen.is_empty(), "{chosen:?}");
+    assert_eq!(
+        undecided,
+        [("a".to_owned(), NotEvaluatedReason::InvalidEvidence)]
+    );
 }

@@ -446,14 +446,24 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
             format!("{value} {}", dimension.unit_symbol())
         }
         Some(PropertyValue::String(value)) => format!("`{value}`"),
+        Some(PropertyValue::List(values)) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(|value| display(Some(value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 
-/// Whether a value is missing in the sense of "nothing stated": absent, null or blank text.
+/// Whether a value is missing in the sense of "nothing stated": absent,
+/// null, blank text, or a list of nothing but such values.
 pub(crate) fn undefined(value: Option<&PropertyValue>) -> bool {
     match value {
         None | Some(PropertyValue::Null) => true,
         Some(PropertyValue::String(text)) => text.trim().is_empty(),
+        Some(PropertyValue::List(values)) => values.iter().all(|value| undefined(Some(value))),
         Some(_) => false,
     }
 }
@@ -499,6 +509,15 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
             };
             format!("text:{text}")
         }
+        // Elements keep their order; `\u{1f}` cannot occur in a key's prefix.
+        PropertyValue::List(values) => format!(
+            "list:{}",
+            values
+                .iter()
+                .map(|value| value_key(value, trim, case_sensitive))
+                .collect::<Vec<_>>()
+                .join("\u{1f}")
+        ),
         other => format!("value:{}", display(Some(other))),
     }
 }

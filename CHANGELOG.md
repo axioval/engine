@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Every presentation layer of an object, and models without layers.**
+  `axioval:presentation.Layer` now lists all distinct layers of an object,
+  sorted by name, as the new `PropertyValue::List` (scalar elements only;
+  the resolver rejects a null or nested element). Property selectors take a
+  `quantifier`: `any` or `all` elements must satisfy the operator, a scalar
+  counts as a list of one, and `all` never holds for an empty list. "Every
+  layer is agreed" is `oneOf` with `quantifier: all`, "at least one layer is
+  agreed" the same with `any`. A source that records a kind of fact for no
+  object answers `PropertyResolutionError::NotRecorded`, reported as the new
+  `NotEvaluatedReason::NotRecorded` once per rule and source like an unbound
+  concept: the IFC adapter answers so for a model without any
+  `IfcPresentationLayerAssignment`, so a layer rule over it is not
+  applicable rather than a pass or a "no value" finding per object.
+  **Breaking:** an object on several layers is no longer a conflict; its
+  layer is a list, which a selector without `quantifier` leaves not
+  evaluated, so existing layer rules must add one. `Selector::Property` has
+  the new field `quantifier` (omitted from serialized packages when unset),
+  and `PropertyValue`, `PropertyResolutionError` and `NotEvaluatedReason`
+  each have a new variant. `property-value` does not evaluate a list.
 - **Property comparison along paths, within spaces and buildings.**
   `property-comparison` takes a relationship `path` in `related` mode, and
   new `same_space` and `same_building` modes compare with the objects that

@@ -453,22 +453,30 @@ pub use walkability::{
     WalkabilitySnapshot,
 };
 
-/// Binds a rule's outcomes to it, reporting each unbound concept once.
+/// Binds a rule's outcomes to it, reporting each source-wide cause once.
 ///
-/// An unbound concept depends on the package and the source, never on the
-/// object, so every object of that source fails identically. Listing each one
-/// buries the single cause under thousands of copies. Object-level outcomes
-/// with that reason are merged per source and message into one rule-level
-/// outcome scoped to that source, naming the count and a few examples. Every
-/// other outcome keeps its scope.
-fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> Vec<NotEvaluated> {
+/// An unbound concept depends on the package and the source, and an
+/// unrecorded fact on the source alone, never on the object, so every object
+/// of that source fails identically. Listing each one buries the single
+/// cause under thousands of copies. Object-level outcomes with either reason
+/// are merged per source, reason and message into one rule-level outcome
+/// scoped to that source, naming the count and a few examples. Every other
+/// outcome keeps its scope.
+fn collapse_source_wide(
+    rule_id: &RuleId,
+    outcomes: Vec<CapabilityNotEvaluated>,
+) -> Vec<NotEvaluated> {
     const EXAMPLES: usize = 3;
-    let mut merged: BTreeMap<(axioval_ir::SourceId, String), Vec<ObjectId>> = BTreeMap::new();
+    let mut merged: BTreeMap<(axioval_ir::SourceId, NotEvaluatedReason, String), Vec<ObjectId>> =
+        BTreeMap::new();
     let mut kept = Vec::new();
     for outcome in outcomes {
         match (outcome.reason, outcome.scope) {
-            (NotEvaluatedReason::UnboundConcept, Scope::Object(object)) => merged
-                .entry((object.source.clone(), outcome.message))
+            (
+                reason @ (NotEvaluatedReason::UnboundConcept | NotEvaluatedReason::NotRecorded),
+                Scope::Object(object),
+            ) => merged
+                .entry((object.source.clone(), reason, outcome.message))
                 .or_default()
                 .push(object),
             (reason, scope) => kept.push(NotEvaluated {
@@ -479,7 +487,7 @@ fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> 
             }),
         }
     }
-    kept.extend(merged.into_iter().map(|((source, message), mut objects)| {
+    kept.extend(merged.into_iter().map(|((source, reason, message), mut objects)| {
         objects.sort();
         let examples: Vec<&str> = objects
             .iter()
@@ -495,7 +503,7 @@ fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> 
         NotEvaluated {
             rule_id: rule_id.clone(),
             scope: Scope::Source(source.clone()),
-            reason: NotEvaluatedReason::UnboundConcept,
+            reason,
             message: format!(
                 "{message}; {} object(s) of source `{source}` not evaluated (e.g. {}{tail})",
                 objects.len(),
@@ -584,7 +592,7 @@ impl Runtime {
             let rule_id = rule.id.clone();
             let evaluation = capability.evaluate(&context, &rule);
             findings.extend(evaluation.findings);
-            not_evaluated.extend(collapse_unbound(&rule_id, evaluation.not_evaluated));
+            not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
         findings.sort_by(|a, b| {
             a.rule_id

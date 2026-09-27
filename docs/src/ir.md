@@ -31,13 +31,15 @@ A quantity is stated in the coherent SI unit of its `QuantityDimension`:
 
 Quantities compare only when their dimensions are equal. A dimensionless measure, such as a ratio, is a plain decimal.
 
+A `List` holds several values of one property, in the order the source states them, such as every presentation layer of an object. Its elements are scalar values: never `null` and never another list; the property resolver rejects any other list as an invalid value. A list is never compared as a whole or as if it were one of its elements: a property selector states a `quantifier` (see [Property selectors](./capabilities.md#property-selectors)). Its wire form is `{"type": "list", "value": [{"type": "string", "value": "A-WALL"}]}`.
+
 ### Attribute sets
 
 Some facts about an object are not in any property set but in fields of the object itself, such as a space's number and name, or the name of its construction type. Reserved property-set names reach them through the same property resolver, and so do the object's presentation layer and material:
 
 - `ATTRIBUTE_SET` (`axioval:attributes`) names the object's own attributes, by the source's attribute name.
 - `TYPE_ATTRIBUTE_SET` (`axioval:type-attributes`) names the attributes of the type object the source assigns to the object. An object with no type has none (an exact absence). An object with several types is a conflict, not a choice.
-- `PRESENTATION_SET` (`axioval:presentation`) names how the object is presented. Its property `Layer` (`PRESENTATION_LAYER`) is the presentation (CAD) layer of the object's shape. An object on no layer has none; one on several distinct layers is a conflict.
+- `PRESENTATION_SET` (`axioval:presentation`) names how the object is presented. Its property `Layer` (`PRESENTATION_LAYER`) lists every presentation (CAD) layer of the object's shape, as a list of strings sorted by name. An object on no layer has none (an exact absence), but only in a source that assigns layers at all: a source with no layer assignment answers that it records no layers, so a layer rule over it is not evaluated (`NotRecorded`, once per rule and source) instead of flagging or passing every object.
 
 - `MATERIAL_SET` (`axioval:material`) names the material the object is made of: its own, or else its type object's. Its properties, matched ignoring ASCII case:
   - `Kind`: `material`, `layer-set`, `constituent-set`, `profile-set` or `list`.

@@ -70,6 +70,41 @@ fn canonical_quantity_round_trips_with_dimension() {
 }
 
 #[test]
+fn list_value_and_selector_quantifier_round_trip() {
+    use axioval_ir::PropertyValue;
+    let value = PropertyValue::List(vec![
+        PropertyValue::String("A-AXIS".into()),
+        PropertyValue::String("A-WALL".into()),
+    ]);
+    let json = serde_json::to_value(&value).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"type": "list", "value": [
+            {"type": "string", "value": "A-AXIS"},
+            {"type": "string", "value": "A-WALL"},
+        ]})
+    );
+    assert_eq!(
+        serde_json::from_value::<PropertyValue>(json).unwrap(),
+        value
+    );
+    let quantified = r#"{"kind":"property","propertySet":"axioval:presentation","property":"Layer","operator":"oneOf","value":{"type":"stringList","value":["A-WALL"]},"quantifier":"all"}"#;
+    let selector: Selector = serde_json::from_str(quantified).unwrap();
+    assert!(matches!(
+        selector,
+        Selector::Property {
+            quantifier: Some(axioval_ir::contract::Quantifier::All),
+            ..
+        }
+    ));
+    assert_eq!(
+        serde_json::to_value(&selector).unwrap(),
+        serde_json::from_str::<serde_json::Value>(quantified).unwrap()
+    );
+    assert!(serde_json::from_str::<Selector>(&quantified.replace("\"all\"", "\"some\"")).is_err());
+}
+
+#[test]
 fn contract_rejects_unknown_fields() {
     let mutated = D.replacen(
         "\"schemaVersion\":",

@@ -125,8 +125,9 @@ The adapter looks for layer assignments on:
 - their items;
 - the representations that `IfcMappedItem`s map in, which is how a type's shared geometry reaches its occurrences.
 
-Several distinct layers are a conflict. An object without a shape, or with no assigned layer, has none. The locator names the object and the assignment
-(`layer:#1:#80`).
+The value lists every distinct layer, sorted by name (`["A-AXIS", "A-WALL"]`). An object without a shape, or with no assigned layer, has none. A model
+without any `IfcPresentationLayerAssignment` records no layers: every request is answered `NotRecorded`, never absent, so a layer rule is reported not
+applicable to that source. The locator names the object and each assignment, in the order of the layers (`layer:#4:#82,#80`).
 
 ### Materials
 

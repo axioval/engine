@@ -1,4 +1,5 @@
-//! Presentation layers resolve through shape representations and mapped items.
+//! Presentation layers resolve through shape representations and mapped items,
+//! every one of an object's layers is listed, and a model without layers says so.
 #![allow(missing_docs)]
 
 use axioval_engine::{
@@ -9,7 +10,7 @@ use axioval_ir::{ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, 
 
 /// #1 is on A-WALL through its representation, #2 through an item, #3 through
 /// the representation its mapped item maps in, #4 on two layers, #5 has no
-/// shape at all.
+/// shape at all, #6 a shape on no layer.
 const DATA: &str = "\
 #90=IFCCARTESIANPOINT((0.,0.,0.));
 #91=IFCAXIS2PLACEMENT3D(#90,$,$);
@@ -33,14 +34,21 @@ const DATA: &str = "\
 #41=IFCSHAPEREPRESENTATION(#92,'Body','Brep',(#90));
 #42=IFCSHAPEREPRESENTATION(#92,'Axis','Curve2D',(#90));
 #5=IFCWALL('0000000000000000000005',$,'W5',$,$,$,$,$,$);
+#6=IFCWALL('0000000000000000000006',$,'W6',$,$,$,#60,$,$);
+#60=IFCPRODUCTDEFINITIONSHAPE($,$,(#61));
+#61=IFCSHAPEREPRESENTATION(#92,'Body','Brep',(#90));
 #80=IFCPRESENTATIONLAYERASSIGNMENT('A-WALL',$,(#11,#22,#41),$);
 #81=IFCPRESENTATIONLAYERASSIGNMENT('A-DOOR',$,(#34),$);
 #82=IFCPRESENTATIONLAYERASSIGNMENT('A-AXIS',$,(#42),$);
 ";
 
 fn resolve(local: &str) -> Result<PropertyResolution, PropertyResolutionError> {
+    resolve_in(DATA, local)
+}
+
+fn resolve_in(data: &str, local: &str) -> Result<PropertyResolution, PropertyResolutionError> {
     let bytes = format!(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{DATA}ENDSEC;\nEND-ISO-10303-21;\n"
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
     );
     let session = import_ifc_session("model.ifc", bytes.as_bytes()).unwrap();
     let object = ObjectId::new(SourceId::new("ifc-step", "model.ifc").unwrap(), local).unwrap();
@@ -53,11 +61,19 @@ fn resolve(local: &str) -> Result<PropertyResolution, PropertyResolutionError> {
         .resolve(&request)
 }
 
-fn layer(local: &str) -> Option<String> {
+fn layers(local: &str) -> Option<Vec<String>> {
     match resolve(local).unwrap() {
         PropertyResolution::Present(resolved) => match &resolved.property().value {
-            PropertyValue::String(name) => Some(name.clone()),
-            other => panic!("not a layer name: {other:?}"),
+            PropertyValue::List(names) => Some(
+                names
+                    .iter()
+                    .map(|name| match name {
+                        PropertyValue::String(name) => name.clone(),
+                        other => panic!("not a layer name: {other:?}"),
+                    })
+                    .collect(),
+            ),
+            other => panic!("not a layer list: {other:?}"),
         },
         PropertyResolution::Absent(_) => None,
     }
@@ -65,8 +81,8 @@ fn layer(local: &str) -> Option<String> {
 
 #[test]
 fn a_layer_on_the_representation_or_an_item_is_the_objects_layer() {
-    assert_eq!(layer("#1").as_deref(), Some("A-WALL"));
-    assert_eq!(layer("#2").as_deref(), Some("A-WALL"));
+    assert_eq!(layers("#1").unwrap(), ["A-WALL"]);
+    assert_eq!(layers("#2").unwrap(), ["A-WALL"]);
     let PropertyResolution::Present(resolved) = resolve("#1").unwrap() else {
         panic!("expected a layer");
     };
@@ -76,14 +92,37 @@ fn a_layer_on_the_representation_or_an_item_is_the_objects_layer() {
 
 #[test]
 fn a_mapped_items_layer_reaches_the_occurrence() {
-    assert_eq!(layer("#3").as_deref(), Some("A-DOOR"));
+    assert_eq!(layers("#3").unwrap(), ["A-DOOR"]);
 }
 
 #[test]
-fn several_layers_conflict_and_no_shape_is_absence() {
-    assert!(matches!(
-        resolve("#4"),
-        Err(PropertyResolutionError::Conflicting(message)) if message.contains("A-AXIS, A-WALL")
-    ));
-    assert_eq!(layer("#5"), None);
+fn every_layer_of_an_object_is_listed_by_name_with_its_assignment() {
+    assert_eq!(layers("#4").unwrap(), ["A-AXIS", "A-WALL"]);
+    let PropertyResolution::Present(resolved) = resolve("#4").unwrap() else {
+        panic!("expected layers");
+    };
+    let locator = &resolved.property().evidence.as_ref().unwrap().locator;
+    assert!(locator.ends_with("layer:#4:#82,#80"), "{locator}");
+}
+
+#[test]
+fn no_layer_in_a_layered_model_is_absence() {
+    assert_eq!(layers("#5"), None);
+    assert_eq!(layers("#6"), None);
+}
+
+#[test]
+fn a_model_without_layer_assignments_records_no_layers() {
+    let unlayered: String = DATA
+        .lines()
+        .filter(|line| !line.contains("IFCPRESENTATIONLAYERASSIGNMENT"))
+        .flat_map(|line| [line, "\n"])
+        .collect();
+    for local in ["#1", "#5"] {
+        assert!(matches!(
+            resolve_in(&unlayered, local),
+            Err(PropertyResolutionError::NotRecorded(message))
+                if message.contains("no presentation layers") && !message.contains(local)
+        ));
+    }
 }

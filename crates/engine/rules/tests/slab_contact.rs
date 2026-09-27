@@ -563,6 +563,7 @@ mod scope {
                     value: Some(boolean(true)),
                     case_sensitive: true,
                     trim: false,
+                    quantifier: None,
                 },
             ],
         };

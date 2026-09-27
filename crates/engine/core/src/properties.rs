@@ -30,6 +30,12 @@ pub enum PropertyResolutionError {
     /// The source cannot currently provide a conclusive answer.
     #[error("property resolution unavailable: {0}")]
     Unavailable(String),
+    /// The source records this kind of property for no object at all (a
+    /// model with no presentation layers), so an object's missing value is
+    /// no evidence of absence. The message describes the source, never the
+    /// object, so every object of the source answers identically.
+    #[error("{0}")]
+    NotRecorded(String),
 }
 
 /// Request for one direct property on one source-qualified object.
@@ -235,6 +241,10 @@ fn valid_value(value: &PropertyValue) -> bool {
         | PropertyValue::Boolean(_)
         | PropertyValue::Integer(_)
         | PropertyValue::String(_) => true,
+        // A list holds scalar values only: no null, no nested list.
+        PropertyValue::List(elements) => elements.iter().all(|element| {
+            !matches!(element, PropertyValue::Null | PropertyValue::List(_)) && valid_value(element)
+        }),
     }
 }
 

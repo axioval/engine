@@ -27,6 +27,12 @@ pub enum Selector {
         /// Whether a text value is trimmed of surrounding whitespace first.
         #[serde(default, skip_serializing_if = "is_false")]
         trim: bool,
+        /// How a list value is compared: `any` element or `all` of them
+        /// must satisfy the operator. A scalar value counts as a list of
+        /// one. Without it a list value is not evaluated, never compared as
+        /// a whole; `exists` takes none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quantifier: Option<Quantifier>,
     },
     Classification {
         system: String,
@@ -65,8 +71,21 @@ impl Selector {
             value,
             case_sensitive: true,
             trim: false,
+            quantifier: None,
         }
     }
+}
+/// Which elements of a list value a property selector must hold for.
+///
+/// `all` never holds vacuously: an empty list satisfies neither quantifier,
+/// as an absent value satisfies no comparison.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Quantifier {
+    /// At least one element satisfies the comparison.
+    Any,
+    /// Every element satisfies it, and there is at least one.
+    All,
 }
 /// How a property selector compares the resolved value with its `value`.
 ///

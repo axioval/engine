@@ -219,6 +219,12 @@ pub enum PropertyValue {
         dimension: QuantityDimension,
     },
     String(String),
+    /// Several values of one property, in the order the source states them
+    /// (the presentation layers of an object). Elements are scalar values:
+    /// never `Null` and never a nested list. A comparison against a list
+    /// states whether any or every element must satisfy it; a list is never
+    /// compared as if it were one of its elements.
+    List(Vec<PropertyValue>),
 }
 
 /// Provenance and exactness of evidence.
@@ -278,13 +284,16 @@ pub const TYPE_ATTRIBUTE_SET: &str = "axioval:type-attributes";
 
 /// Property set that names how an object is presented in its source.
 ///
-/// Its one property, [`PRESENTATION_LAYER`], is the name of the presentation
-/// (CAD) layer the object's shape is assigned to. An object on no layer has
-/// none (an exact absence); an object on several distinct layers is a
-/// conflict. Reserved like [`ATTRIBUTE_SET`].
+/// Its one property, [`PRESENTATION_LAYER`], lists the names of the
+/// presentation (CAD) layers the object's shape is assigned to, as a
+/// [`PropertyValue::List`] of strings: every distinct layer, sorted. An
+/// object on no layer has none (an exact absence), unless its source assigns
+/// no layer to any object at all: then absence says nothing about the
+/// object, and the source answers that it records no layers
+/// ([`NotEvaluatedReason::NotRecorded`]). Reserved like [`ATTRIBUTE_SET`].
 pub const PRESENTATION_SET: &str = "axioval:presentation";
 
-/// The layer property in [`PRESENTATION_SET`].
+/// The layer list property in [`PRESENTATION_SET`].
 pub const PRESENTATION_LAYER: &str = "Layer";
 
 /// Property set that names the material an object is made of.
@@ -797,6 +806,12 @@ pub enum NotEvaluatedReason {
     /// express. A fact about the package and the source, never about one
     /// object, so the runtime reports it once per rule and source.
     UnboundConcept,
+    /// The source records the consulted kind of fact for no object at all
+    /// (a model with no presentation layers), so neither a value nor an
+    /// absence can be stated and the rule does not apply to that source. A
+    /// fact about the source, never about one object, so the runtime reports
+    /// it once per rule and source.
+    NotRecorded,
 }
 /// Explicit fail-closed evaluation outcome. This is not a compliance finding.
 ///

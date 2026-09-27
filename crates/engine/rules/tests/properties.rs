@@ -324,6 +324,7 @@ fn property_applicability_uses_exact_resolution_without_silent_skip() {
         value: None,
         case_sensitive: true,
         trim: false,
+        quantifier: None,
     });
     let trigger = exact_property(TRIGGER_SET, TRIGGER, PropertyValue::Boolean(true));
     let project = Project::new(vec![object().with_property(trigger.clone())]).unwrap();
@@ -342,6 +343,7 @@ fn property_applicability_without_service_is_explicitly_not_evaluated() {
         value: None,
         case_sensitive: true,
         trim: false,
+        quantifier: None,
     });
     let report = run(
         &Project::new(vec![object()]).unwrap(),
@@ -363,6 +365,7 @@ fn malformed_property_selector_is_rejected_before_resolution() {
         value: Some(ParameterValue::Boolean { value: true }),
         case_sensitive: true,
         trim: false,
+        quantifier: None,
     });
     let report = run(
         &Project::new(vec![object()]).unwrap(),

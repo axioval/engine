@@ -372,6 +372,10 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
             "comparing a quantity needs its unit".into(),
         ),
         PropertyValue::Null => invalid("null has no value to compare"),
+        PropertyValue::List(_) => Verdict::Inapplicable(
+            NotEvaluatedReason::InvalidEvidence,
+            "the value is a list; compare its elements with a quantified property selector".into(),
+        ),
     }
 }
 

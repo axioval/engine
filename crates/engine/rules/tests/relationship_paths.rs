@@ -46,6 +46,7 @@ fn unrated_doors() -> Selector {
                     value: Some(string("EI\\d+.*")),
                     case_sensitive: true,
                     trim: false,
+                    quantifier: None,
                 }),
             },
         ],
@@ -65,6 +66,7 @@ fn a_path_reaches_the_doors_filling_a_walls_openings() {
                 value: None,
                 case_sensitive: true,
                 trim: false,
+                quantifier: None,
             },
             vec![
                 ("related_selector", selector(unrated_doors())),
@@ -87,6 +89,7 @@ fn a_path_reaches_the_doors_filling_a_walls_openings() {
                 value: None,
                 case_sensitive: true,
                 trim: false,
+                quantifier: None,
             },
             vec![
                 ("related_selector", selector(unrated_doors())),

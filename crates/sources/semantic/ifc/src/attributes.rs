@@ -111,7 +111,11 @@ impl Attributes {
 }
 
 impl Attributes {
-    /// The one presentation layer of `object`; several distinct ones conflict.
+    /// Every distinct presentation layer of `object`, sorted by name.
+    ///
+    /// An object on no layer is exactly absent, but only in a model that
+    /// assigns layers at all; in one without a single layer assignment the
+    /// source answers that it records none.
     fn layer(
         &self,
         model: &Model,
@@ -127,23 +131,25 @@ impl Attributes {
             .get_or_init(|| layers::index(schema, model))
             .as_ref()
             .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
+        if index.is_empty() {
+            // Nothing in the model is on a layer: an object's missing layer
+            // says nothing about it. The message names the source only, so
+            // every object answers identically and is reported once.
+            return Err(PropertyResolutionError::NotRecorded(
+                "the source assigns no presentation layers (no IfcPresentationLayerAssignment)"
+                    .into(),
+            ));
+        }
         let found = layers::layers_of(schema, model, index, object)
             .map_err(PropertyResolutionError::Incomplete)?;
-        let mut found = found.into_iter();
-        match (found.next(), found.next()) {
-            (None, _) => Ok(None),
-            (Some((layer, assignment)), None) => Ok(Some(AttributeValue {
-                value: PropertyValue::String(layer),
-                detail: format!("layer:{object}:{assignment}"),
-            })),
-            (Some((first, _)), Some((second, _))) => {
-                Err(PropertyResolutionError::Conflicting(format!(
-                    "{object} is on {} layers ({first}, {second}{})",
-                    2 + found.len(),
-                    if found.len() > 0 { ", ..." } else { "" }
-                )))
-            }
+        if found.is_empty() {
+            return Ok(None);
         }
+        let assignments: Vec<String> = found.values().map(ToString::to_string).collect();
+        Ok(Some(AttributeValue {
+            value: PropertyValue::List(found.into_keys().map(PropertyValue::String).collect()),
+            detail: format!("layer:{object}:{}", assignments.join(",")),
+        }))
     }
 }
 

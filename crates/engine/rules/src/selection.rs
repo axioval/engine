@@ -6,7 +6,7 @@ use axioval_engine::{
     PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, TypeHierarchyError,
     TypeHierarchyServiceHandle,
 };
-use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
+use axioval_ir::contract::{ComparisonOperator, ParameterValue, Quantifier, Selector};
 use axioval_ir::{Evidence, Object, PropertyValue, QuantityDimension};
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
@@ -78,6 +78,7 @@ pub(crate) fn selector_matches(
             value,
             case_sensitive,
             trim,
+            quantifier,
         } => property_selector_matches(
             context,
             object,
@@ -90,6 +91,7 @@ pub(crate) fn selector_matches(
                     case_sensitive: *case_sensitive,
                     trim: *trim,
                 },
+                *quantifier,
             ),
             evidence,
         ),
@@ -324,11 +326,23 @@ fn property_selector_matches(
     object: &Object,
     set: Option<&str>,
     name: &str,
-    test: (&ComparisonOperator, Option<&ParameterValue>, TextOptions),
+    test: (
+        &ComparisonOperator,
+        Option<&ParameterValue>,
+        TextOptions,
+        Option<Quantifier>,
+    ),
     evidence: &mut Vec<Evidence>,
 ) -> Selection {
-    let (operator, expected, options) = test;
-    let test = match Test::parse(operator, expected, options) {
+    let (operator, expected, options, quantifier) = test;
+    let parsed = Test::parse(operator, expected, options).and_then(|test| {
+        if quantifier.is_some() && matches!(test, Test::Exists) {
+            Err("`quantifier` applies to value comparisons, not to `exists`".into())
+        } else {
+            Ok(test)
+        }
+    });
+    let test = match parsed {
         Ok(test) => test,
         Err(message) => {
             return Selection::NotEvaluated(
@@ -355,7 +369,7 @@ fn property_selector_matches(
         Ok(PropertyResolution::Present(resolved)) => {
             let property = resolved.property();
             evidence.extend(property.evidence.iter().cloned());
-            match test.holds(&property.value, options) {
+            match test.holds_quantified(&property.value, quantifier, options) {
                 Ok(matches) => verdict(matches),
                 Err(message) => Selection::NotEvaluated(
                     NotEvaluatedReason::InvalidEvidence,
@@ -375,6 +389,7 @@ pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedRea
         PropertyResolutionError::Incomplete(message) => {
             (NotEvaluatedReason::IncompleteEvidence, message)
         }
+        PropertyResolutionError::NotRecorded(message) => (NotEvaluatedReason::NotRecorded, message),
         error => (NotEvaluatedReason::InvalidEvidence, error.to_string()),
     }
 }
@@ -535,6 +550,54 @@ impl Test {
         Ok(test)
     }
 
+    /// Whether `actual` satisfies the test under `quantifier`.
+    ///
+    /// A list is compared only element by element, and only when the
+    /// selector states how; a scalar under a quantifier is a list of one.
+    /// `all` needs at least one element, so an empty list satisfies neither
+    /// quantifier. An element that cannot be compared decides the outcome
+    /// only when the others leave it open.
+    fn holds_quantified(
+        &self,
+        actual: &PropertyValue,
+        quantifier: Option<Quantifier>,
+        options: TextOptions,
+    ) -> Result<bool, String> {
+        let Some(quantifier) = quantifier else {
+            if matches!(actual, PropertyValue::List(_)) && !matches!(self, Self::Exists) {
+                return Err(
+                    "the value is a list; state `quantifier` `any` or `all` to compare its elements"
+                        .into(),
+                );
+            }
+            return self.holds(actual, options);
+        };
+        let elements = match actual {
+            PropertyValue::List(elements) => elements.as_slice(),
+            scalar => std::slice::from_ref(scalar),
+        };
+        let (decisive, mut undecided) = match quantifier {
+            Quantifier::Any => (true, None),
+            Quantifier::All => (false, None),
+        };
+        for element in elements {
+            if matches!(element, PropertyValue::List(_)) {
+                return Err("a list nested in a list cannot be compared".into());
+            }
+            match self.holds(element, options) {
+                Ok(held) if held == decisive => return Ok(decisive),
+                Ok(_) => {}
+                Err(message) => {
+                    undecided.get_or_insert(message);
+                }
+            }
+        }
+        match undecided {
+            Some(message) => Err(message),
+            None => Ok(!decisive && !elements.is_empty()),
+        }
+    }
+
     /// Whether `actual` satisfies the test; `Err` when the value's type
     /// cannot be compared with the declared one, so the object is not
     /// evaluated rather than silently left out.
@@ -646,6 +709,7 @@ fn kind(value: &PropertyValue) -> String {
             format!("a quantity in {}", dimension.unit_symbol())
         }
         PropertyValue::String(_) => "text".into(),
+        PropertyValue::List(_) => "a list".into(),
     }
 }
 

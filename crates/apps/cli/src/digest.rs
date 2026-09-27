@@ -286,6 +286,7 @@ fn reason(reason: &NotEvaluatedReason) -> &'static str {
         NotEvaluatedReason::InvalidEvidence => "invalid-evidence",
         NotEvaluatedReason::InvalidDeclaration => "invalid-declaration",
         NotEvaluatedReason::UnboundConcept => "unbound-concept",
+        NotEvaluatedReason::NotRecorded => "not-recorded",
         NotEvaluatedReason::ResourceLimit => "resource-limit",
     }
 }

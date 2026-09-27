@@ -42,18 +42,19 @@ use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
     AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
-    AxiolidLinearQuantityService, AxiolidPlanAreaService, AxiolidPlanSpanService,
-    AxiolidProximityService, AxiolidSpaceService, AxiolidTriangleCountService,
-    AxiolidVerticalExtentService,
+    AxiolidLinearQuantityService, AxiolidMetricRoutingService, AxiolidPlanAreaService,
+    AxiolidPlanSpanService, AxiolidProximityService, AxiolidSpaceService,
+    AxiolidTriangleCountService, AxiolidVerticalExtentService, AxiolidWalkabilityService,
 };
 use axioval::engine::{
     ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
     EvidenceSession, FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
-    LinearQuantityServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    SourceSnapshot, SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle,
-    TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
+    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
+    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
+    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SourceSnapshot, SpaceServiceHandle,
+    TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle, WalkabilityServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -238,9 +239,10 @@ pub fn attach(
     }
     let envelope = envelope_service(&session, &geometry, &source, &kinds)?;
     let space = space_service(&parsed, &geometry, &source, &kinds, &is_a);
+    let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
     let derived = derived_service(&geometry, &kinds, &is_a, voids);
     let facade = facade_service(&geometry, &kinds, &is_a);
-    let session = register(session, &snapshots, geometry, space, envelope)?
+    let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
         .with_derived_relationships(
             DerivedRelationshipServiceHandle::new(Arc::new(derived)),
@@ -256,6 +258,7 @@ fn register(
     geometry: AxiolidGeometry,
     space: AxiolidSpaceService,
     envelope: AxiolidEnvelopeMembershipService,
+    (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
 ) -> Result<EvidenceSession, Box<dyn Error>> {
     let source = snapshots
         .first()
@@ -328,7 +331,11 @@ fn register(
         .with_host_service(
             EnvelopeMembershipServiceHandle::new(Arc::new(envelope)),
             bound,
-        )?;
+        )?
+        // Walkable surfaces, entrances and obstacles are the walkability
+        // rule's selection; metric routing's are IFC classes.
+        .with_host_service(WalkabilityServiceHandle::new(Arc::new(walkability)), bound)?
+        .with_host_service(MetricRoutingServiceHandle::new(Arc::new(routing)), bound)?;
     Ok(session)
 }
 
@@ -514,6 +521,81 @@ fn derived_service(
     }
     service
 }
+
+/// The walkability and metric-routing services over `geometry`.
+fn route_services(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+    voids: &[(ObjectId, Void)],
+) -> (AxiolidWalkabilityService, AxiolidMetricRoutingService) {
+    (
+        walkability_service(geometry, source, voids),
+        routing_service(geometry, source, kinds, is_a, voids),
+    )
+}
+
+/// Walkable regions over the surfaces, entrances and obstacles each request
+/// selects. The bridge only hands over the voids of opening elements, which
+/// have no body of their own. IFC states no door clear width the bridge can
+/// trust (a door's overall width includes its lining), so none is declared:
+/// a door bounds route widths from above only.
+fn walkability_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidWalkabilityService {
+    voids.iter().fold(
+        AxiolidWalkabilityService::new(geometry.clone(), source.clone()),
+        |service, (id, void)| match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, false)) => service.with_tessellated_opening_void(id.clone(), mesh.clone()),
+            Err(reason) => service.with_unmeasured_opening_void(id.clone(), reason.clone()),
+        },
+    )
+}
+
+/// Metric routes over every `IfcSpace` as a walkable surface, every `IfcDoor`
+/// and opening element as a portal, and every stair, ramp (and their flights)
+/// and transport element as a vertical connector; all are IFC facts. Every
+/// other body obstructs. Windows are not portals: a window filling an opening
+/// obstructs it.
+fn routing_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidMetricRoutingService {
+    let mut service = AxiolidMetricRoutingService::new(geometry.clone(), source.clone());
+    for id in kinds.keys() {
+        if is_a(id, "IfcSpace") {
+            service = service.with_surface(id.clone());
+        } else if is_a(id, "IfcDoor") {
+            service = service.with_portal(id.clone());
+        } else if CONNECTORS.iter().any(|connector| is_a(id, connector)) {
+            service = service.with_connector(id.clone());
+        }
+    }
+    for (id, void) in voids {
+        service = match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, false)) => service.with_tessellated_opening_void(id.clone(), mesh.clone()),
+            Err(reason) => service.with_unmeasured_opening_void(id.clone(), reason.clone()),
+        };
+    }
+    service
+}
+
+/// Entity types that join levels. Names from both IFC2X3 and IFC4.
+const CONNECTORS: &[&str] = &[
+    "IfcStair",
+    "IfcStairFlight",
+    "IfcRamp",
+    "IfcRampFlight",
+    "IfcTransportElement",
+];
 
 /// Facade areas, with every `IfcSpace` as the interior a face may look into.
 ///
@@ -706,4 +788,100 @@ fn space_service(
         }
     }
     service
+}
+
+#[cfg(test)]
+mod tests {
+    use super::attach;
+    use axioval::engine::{
+        MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingServiceHandle,
+        MobilityProfile, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle,
+    };
+    use axioval::ifc::import_ifc_session;
+    use axioval::ir::ObjectId;
+
+    /// Rooms `#16` (x 0..4) and `#26` (x 4.2..8.2) with a 0.9 m door body
+    /// `#40` in the gap between them, and nothing else.
+    fn rooms_and_door() -> String {
+        let body = |first: u32, x: f64, y: f64, dx: f64, dy: f64, depth: f64| {
+            let [point, position, profile, solid, shape] = [0, 1, 2, 3, 4].map(|o| first + o);
+            format!(
+                "#{point}=IFCCARTESIANPOINT(({x},{y}));\n\
+                 #{position}=IFCAXIS2PLACEMENT2D(#{point},$);\n\
+                 #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{position},{dx},{dy});\n\
+                 #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth});\n\
+                 #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+                 #{}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n",
+                first + 5
+            )
+        };
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#2);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             {}#16=IFCSPACE('0000000000000000000016',$,$,$,$,#3,#15,$,.ELEMENT.,$,$);\n\
+             {}#26=IFCSPACE('0000000000000000000026',$,$,$,$,#3,#25,$,.ELEMENT.,$,$);\n\
+             {}#40=IFCDOOR('0000000000000000000040',$,$,$,$,#3,#35,$,2.1,0.9,$,$,$);\n\
+             ENDSEC;\nEND-ISO-10303-21;\n",
+            body(10, 2.0, 2.0, 4.0, 4.0, 3.0),
+            body(20, 6.2, 2.0, 4.0, 4.0, 3.0),
+            body(30, 4.1, 2.0, 0.1, 0.9, 2.1),
+        )
+    }
+
+    #[test]
+    fn geometry_registers_walkability_and_metric_routing() {
+        let bytes = rooms_and_door();
+        let session = import_ifc_session("rooms.ifc", bytes.as_bytes()).unwrap();
+        let models: super::ModelBytes = session
+            .snapshots()
+            .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+            .collect();
+        let (session, report) = attach(session, &models).unwrap();
+        assert_eq!(report.exact, 3, "{report:?}");
+        let id = |local: &str| ObjectId {
+            source: session.snapshots().next().unwrap().source().clone(),
+            local_id: local.to_owned(),
+        };
+
+        let walkability = session.service::<WalkabilityServiceHandle>().unwrap();
+        let request = |width: f64| {
+            WalkabilityRequest::try_new(
+                vec![id("#16"), id("#26")],
+                vec![id("#40")],
+                Vec::new(),
+                width,
+                None,
+                true,
+                false,
+            )
+            .unwrap()
+        };
+        // IFC states no clear width the bridge trusts, so a door that could
+        // pass stays undecided, and one too narrow blocks.
+        let wide_enough = walkability.snapshot(&request(0.8)).unwrap();
+        assert_eq!(
+            wide_enough.route_between(&id("#16"), &id("#26")).unwrap(),
+            WalkabilityRouteOutcome::Indeterminate
+        );
+        let too_narrow = walkability.snapshot(&request(1.0)).unwrap();
+        assert_eq!(
+            too_narrow.route_between(&id("#16"), &id("#26")).unwrap(),
+            WalkabilityRouteOutcome::Unreachable
+        );
+
+        let routing = session.service::<MetricRoutingServiceHandle>().unwrap();
+        let route = MetricRouteRequest::new(
+            MetricPoint::try_new(id("#16"), [1.0, 2.0, 0.0]).unwrap(),
+            MetricPoint::try_new(id("#26"), [7.0, 2.0, 0.0]).unwrap(),
+            MobilityProfile::try_new(0.5, 2.0, 0.02, 0.06).unwrap(),
+        );
+        assert!(matches!(
+            routing.route(&route).unwrap(),
+            MetricRouteOutcome::Blocked(_)
+        ));
+    }
 }

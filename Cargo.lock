@@ -440,6 +440,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiolid-route"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "815c202023441d14fe854a4a296be856637ea92f558fd8b50c68dcca2a5380f2"
+dependencies = [
+ "axiolid-contracts",
+ "axiolid-core",
+ "axiolid-guarantees",
+ "axiolid-overlay",
+ "axiolid-predicates",
+]
+
+[[package]]
 name = "axiolid-spatial"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,6 +518,7 @@ dependencies = [
  "axiolid-mesh",
  "axiolid-overlay",
  "axiolid-ray-mesh",
+ "axiolid-route",
  "axiolid-spatial",
  "axioval-engine",
  "axioval-ir",

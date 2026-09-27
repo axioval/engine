@@ -1,8 +1,9 @@
 //! Walkability topology contract tests.
 use axioval_engine::{
-    LengthInterval, ServiceRegistry, VerifiedWalkablePassage, WalkabilityError, WalkabilityRegion,
-    WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService,
-    WalkabilityServiceHandle, WalkabilitySnapshot,
+    LengthInterval, ServiceRegistry, VerifiedWalkablePassage, VerticalConnector,
+    VerticalConnectorKind, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
+    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
+    WalkabilitySnapshot,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -220,5 +221,85 @@ fn snapshot_enforces_portal_policy() {
             ev("complete")
         ),
         Err(WalkabilityError::ForbiddenPortalPassage)
+    );
+}
+
+fn stair() -> VerticalConnector {
+    VerticalConnector::new(oid("cad", "stair"), VerticalConnectorKind::Stair)
+}
+
+#[test]
+fn a_connector_has_one_kind() {
+    assert_eq!(
+        req("cad").with_connectors(vec![
+            stair(),
+            VerticalConnector::new(oid("cad", "stair"), VerticalConnectorKind::Ramp),
+        ]),
+        Err(WalkabilityError::ConflictingConnector)
+    );
+    let r = req("cad").with_connectors(vec![stair(), stair()]).unwrap();
+    assert_eq!(r.connectors(), &[stair()]);
+}
+
+#[test]
+fn a_passage_is_a_portal_or_a_connector_never_both() {
+    let crossing = VerifiedWalkablePassage::try_new(
+        rid("a"),
+        rid("b"),
+        Some(oid("cad", "door")),
+        LengthInterval::try_new(1.0, 1.0).unwrap(),
+        ev("passage"),
+    )
+    .unwrap();
+    assert_eq!(
+        crossing.with_connector(stair()),
+        Err(WalkabilityError::PortalConnectorPassage)
+    );
+}
+
+fn levels(request: WalkabilityRequest) -> Result<WalkabilitySnapshot, WalkabilityError> {
+    WalkabilitySnapshot::try_new(
+        request,
+        vec![
+            region("a", vec![oid("cad", "space")]),
+            region("b", vec![oid("cad", "door")]),
+        ],
+        vec![edge("a", "b", 1.0, 1.0).with_connector(stair()).unwrap()],
+        ev("complete"),
+    )
+}
+
+#[test]
+fn a_connector_passage_must_be_requested() {
+    assert_eq!(
+        levels(req("cad")),
+        Err(WalkabilityError::ForbiddenConnectorPassage)
+    );
+    let ramp = VerticalConnector::new(oid("cad", "stair"), VerticalConnectorKind::Ramp);
+    assert_eq!(
+        levels(req("cad").with_connectors(vec![ramp]).unwrap()),
+        Err(WalkabilityError::ForbiddenConnectorPassage)
+    );
+}
+
+#[test]
+fn forbidding_a_connector_kind_makes_a_route_through_it_unreachable() {
+    let snapshot = levels(req("cad").with_connectors(vec![stair()]).unwrap()).unwrap();
+    let (from, to) = (oid("cad", "space"), oid("cad", "door"));
+    assert!(matches!(
+        snapshot.route_between(&from, &to).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    assert!(matches!(
+        snapshot
+            .route_between_avoiding(&from, &to, &[VerticalConnectorKind::Lift])
+            .unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    assert_eq!(
+        snapshot
+            .route_between_avoiding(&from, &to, &[VerticalConnectorKind::Stair])
+            .unwrap(),
+        WalkabilityRouteOutcome::Unreachable
     );
 }

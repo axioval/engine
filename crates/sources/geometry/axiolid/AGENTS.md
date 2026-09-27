@@ -29,6 +29,34 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/vertical_extent.rs` implements `VerticalExtentService`: bottom and top elevations of a mesh's used positions. A tessellation widens each by its chord deviation and is never exact, even at zero deviation. Directional extents project the same positions; only a coordinate axis projects exactly, any other direction widens by the dot product's rounding bound and is approximate.
 - `src/triangle_count.rs` implements `TriangleCountService`: the triangles of the registered mesh. Exact evidence only for a planar mesh; bodiless counts zero, unmeasured refuses.
 - `src/facade_area.rs` implements `FacadeAreaService`: steep faces that look outside, classified at four samples each. A face held against another body or a host-declared space, or whose ray first meets itself or a space within `REACH`, is not facade; meeting nothing or another body is. A face whose samples disagree widens the interval, never a guess. Unmeasured bodies anywhere, bodiless declared spaces and tessellations within reach refuse.
+- `src/walkable.rs` (internal) builds walkable plan domains for the two route
+  services: floors (closed exact bodies with one horizontal underside), band
+  footprints (what a body occupies inside an open headroom band: the boundary
+  clipped to the band plus the winding section just above its bottom), portal
+  frames, sides and corridors, mid-line chord bounds, and sweep proofs.
+  **Never use `Region::erode` (0.3.0)**: it does not state its side. The
+  module's own `erode` removes an enclosure of the boundary's disc sweep and
+  only proposes paths; `sweep_inside` proves them with an outer enclosure
+  grown by `MARGIN`, which must stay above the overlay's grid snapping.
+  Width upper bounds come only from chords of a portal's mid-line.
+  Plans are `Plan`, never `Region`: overlay 0.3.0 rejects its own output as
+  an operand (collinear non-adjacent edges count as self-intersection), so
+  every operation cuts its operands into trapezoids first and validates
+  with a tight tolerance. Test against the published 0.3.0, not a local
+  kernel checkout.
+- `src/walkability.rs` implements `WalkabilityService`: a region per surface
+  (a hub) and per portal face (a landing). Every definite passage must end
+  where the next begins, or a definite route could transit a surface without
+  a proven sweep; never add a hub-like region whose passages are definite
+  without a sweep from a shared point. A door's leaf and lining are unknown,
+  so a crossing is definite only for a bodiless opening or a stated clear
+  width (`with_clear_width`). Connector passages are never definite.
+- `src/metric_routing.rs` implements `MetricRoutingService` on the origin's
+  level. `Blocked` needs complete evidence (every declared surface and portal
+  measured, no connector touching the level) and a separation of the free
+  region less the chord-proven bands around narrow portals' mid-lines. The
+  `axiolid-route` path is a lower bound only: it can cut across outside gaps
+  between collinear boundary edges.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`, measuring shelf
@@ -98,8 +126,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   obstacle.
 - A geometry set may hold several sources. Evidence about one object (contact,
   proximity, facade area, vertical and directional extent, triangle count, shelf
-  length, clear height, derived relationships) cites that object's source; only set-level measurements take
-  the source given to their constructor.
+  length, clear height, derived relationships, a walkability passage, a
+  reachable metric route's origin) cites that object's source; only
+  set-level measurements (a walkability snapshot, a blocked route's
+  completeness) take the source given to their constructor.
 - `src/lib.rs` keeps the source-scoping contracts and the in-memory conformance
   double. `UnavailableGeometryBackend` remains the explicit "no kernel linked"
   placeholder.
@@ -125,6 +155,19 @@ an API.
   plan areas here are off by ~1.5e-8 of the extent while reported exact.
 - axiolid/kernel#174: publish certified `boundary_distance`/`boundary_clearance`,
   so curved parts can get exact clearances instead of tessellated estimates.
+- axiolid/kernel#163: one-sided disc morphology (`Region::erode_inner` and
+  friends, axiolid-overlay 0.3.1, not yet published). With it, walkability can
+  erode free regions by half the width and prove gaps inside surfaces
+  blocking, and metric routing can report such routes blocked instead of
+  refusing them.
+- axiolid-overlay 0.3.0 validates operands with an area-scaled cross
+  product against the linear tolerance and flags collinear non-adjacent
+  edges anywhere on their lines; 0.3.1 checks the extent. Until it is
+  published, `walkable.rs` re-cuts overlay output into trapezoids.
+- `axiolid-route` 0.3.0 checks a visibility edge by proper crossings and its
+  midpoint only, so an edge along two collinear boundary edges passes over
+  the gap between them. Its path may leave the region; use it as a lower
+  bound or a proposal, never as a witness or a disconnection proof.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

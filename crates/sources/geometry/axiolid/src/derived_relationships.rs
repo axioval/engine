@@ -753,18 +753,18 @@ fn first_hit(
 }
 
 /// The direction through an opening's thickness, from its plan points.
-struct Axis {
+pub(crate) struct Axis {
     /// Unit plan normal, canonically signed: `x` positive, or `x` zero and
     /// `y` positive.
-    normal: Vec2,
-    thickness: f64,
-    centre: Point2,
+    pub(crate) normal: Vec2,
+    pub(crate) thickness: f64,
+    pub(crate) centre: Point2,
 }
 
 /// The narrowest direction across the convex hull of `points`, found by
 /// rotating calipers over the hull's edges; `None` for a degenerate hull or
 /// when two directions are equally narrow.
-fn thin_axis(points: &[Point2]) -> Option<Axis> {
+pub(crate) fn thin_axis(points: &[Point2]) -> Option<Axis> {
     let hull = convex_hull(points);
     if hull.len() < 3 {
         return None;
@@ -809,7 +809,7 @@ fn thin_axis(points: &[Point2]) -> Option<Axis> {
     })
 }
 
-fn span(points: &[Point2], direction: Vec2) -> (f64, f64) {
+pub(crate) fn span(points: &[Point2], direction: Vec2) -> (f64, f64) {
     points
         .iter()
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), point| {
@@ -819,7 +819,7 @@ fn span(points: &[Point2], direction: Vec2) -> (f64, f64) {
 }
 
 /// Andrew's monotone chain, counter-clockwise, without collinear points.
-fn convex_hull(points: &[Point2]) -> Vec<Point2> {
+pub(crate) fn convex_hull(points: &[Point2]) -> Vec<Point2> {
     let mut sorted: Vec<Point2> = points.to_vec();
     sorted.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
     sorted.dedup();

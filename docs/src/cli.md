@@ -302,7 +302,8 @@ axioval report result.json --object '#42' --evidence
 Semantic evidence (properties, relationships, classifications, the type
 hierarchy) is always available. `--geometry` also meshes the model, so
 geometric rules (clash, distance, contact, space, plan-area, facade-area, slab-stack,
-storey-height, exit-separation, counterpart-coverage, body-extent, triangle-count and free-space checks) can run. It is off by default because meshing costs time a purely semantic ruleset
+storey-height, exit-separation, counterpart-coverage, body-extent, triangle-count and free-space checks) can run, and registers the walkability
+and metric-routing services. It is off by default because meshing costs time a purely semantic ruleset
 does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
 
@@ -384,6 +385,19 @@ counts the furniture in each space of a model that states no spatial
 containment, and with `axioval:derived.adjacent-space` forward from each door
 counts the spaces it connects. Without `--geometry`, the IFC relationship service
 refuses a derived identity, so its rule is not evaluated.
+
+Walkability takes its surfaces, entrances, obstacles and connectors from each
+request; the CLI hands over only the voids of opening elements. Metric
+routing has no selection in its request, so the CLI declares every `IfcSpace`
+a walkable surface, every `IfcDoor` and opening element a portal, and every
+`IfcStair`, `IfcStairFlight`, `IfcRamp`, `IfcRampFlight` and
+`IfcTransportElement` a vertical connector; every other body obstructs,
+including a window filling an opening. IFC states no door clear width the CLI
+trusts (a door's overall width includes its lining), so none is declared: a
+door bounds a route's width from above only, and a route through a door that
+could pass is undecided rather than reachable. See
+[Walkability topology](./walkability.md) and
+[Metric routing](./metric-routing.md).
 
 External-wall validation compares the objects a model declares external with
 the objects on the envelope of a set of bounding spaces. IFC does not say which

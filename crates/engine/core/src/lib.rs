@@ -549,9 +549,9 @@ pub use vertical_extent::{
     VerticalExtentService, VerticalExtentServiceHandle,
 };
 pub use walkability::{
-    VerifiedWalkablePassage, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
-    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
-    WalkabilitySnapshot,
+    VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind, WalkabilityError,
+    WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome,
+    WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
 };
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.

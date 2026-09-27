@@ -32,6 +32,54 @@ pub enum WalkabilityError {
     ObjectUnavailable,
     #[error("backend returned another request")]
     ResponseRequestMismatch,
+    #[error("vertical connector is declared twice with different kinds")]
+    ConflictingConnector,
+    #[error("passage is both a portal and a vertical connector")]
+    PortalConnectorPassage,
+    #[error("connector passage violates the request connector declaration")]
+    ForbiddenConnectorPassage,
+    /// The backend refused: evidence it would need is missing, approximate
+    /// or outside what it can measure. Never a negative verdict.
+    #[error("walkability unavailable: {0}")]
+    Unavailable(String),
+}
+/// What kind of vertical connector joins walkable regions on different levels.
+///
+/// The kind is the rule's (or its source's) classification, carried in the
+/// request, never inferred from geometry. A rule forbids a kind by routing
+/// with [`WalkabilitySnapshot::route_between_avoiding`], so a route that
+/// needs a stair is unreachable for it.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum VerticalConnectorKind {
+    Lift,
+    Ramp,
+    Stair,
+}
+impl VerticalConnectorKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Lift => "lift",
+            Self::Ramp => "ramp",
+            Self::Stair => "stair",
+        }
+    }
+}
+/// A selected object that joins levels, and its kind.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct VerticalConnector {
+    object: ObjectId,
+    kind: VerticalConnectorKind,
+}
+impl VerticalConnector {
+    pub fn new(object: ObjectId, kind: VerticalConnectorKind) -> Self {
+        Self { object, kind }
+    }
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+    pub fn kind(&self) -> VerticalConnectorKind {
+        self.kind
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct WalkabilityRequest {
@@ -42,6 +90,7 @@ pub struct WalkabilityRequest {
     elevation_band: Option<LengthInterval>,
     traverse_verified_portals: bool,
     include_motion_envelopes: bool,
+    connectors: Vec<VerticalConnector>,
 }
 impl WalkabilityRequest {
     pub fn try_new(
@@ -70,7 +119,32 @@ impl WalkabilityRequest {
             elevation_band,
             traverse_verified_portals,
             include_motion_envelopes,
+            connectors: Vec::new(),
         })
+    }
+    /// Declares the vertical connectors the backend may join levels through.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::ConflictingConnector`] when one object is given
+    /// two kinds.
+    pub fn with_connectors(
+        mut self,
+        mut connectors: Vec<VerticalConnector>,
+    ) -> Result<Self, WalkabilityError> {
+        connectors.sort();
+        connectors.dedup();
+        if connectors
+            .windows(2)
+            .any(|pair| pair[0].object == pair[1].object)
+        {
+            return Err(WalkabilityError::ConflictingConnector);
+        }
+        self.connectors = connectors;
+        Ok(self)
+    }
+    pub fn connectors(&self) -> &[VerticalConnector] {
+        &self.connectors
     }
     pub fn surfaces(&self) -> &[ObjectId] {
         &self.surfaces
@@ -132,6 +206,7 @@ pub struct VerifiedWalkablePassage {
     a: WalkabilityRegionId,
     b: WalkabilityRegionId,
     portal: Option<ObjectId>,
+    connector: Option<VerticalConnector>,
     clear_width: LengthInterval,
     evidence: Evidence,
 }
@@ -156,9 +231,29 @@ impl VerifiedWalkablePassage {
             a,
             b,
             portal,
+            connector: None,
             clear_width,
             evidence,
         })
+    }
+    /// Marks this passage as a climb through a vertical connector.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::PortalConnectorPassage`] when the passage already
+    /// crosses a portal.
+    pub fn with_connector(
+        mut self,
+        connector: VerticalConnector,
+    ) -> Result<Self, WalkabilityError> {
+        if self.portal.is_some() {
+            return Err(WalkabilityError::PortalConnectorPassage);
+        }
+        self.connector = Some(connector);
+        Ok(self)
+    }
+    pub fn connector(&self) -> Option<&VerticalConnector> {
+        self.connector.as_ref()
     }
     pub fn endpoints(&self) -> (&WalkabilityRegionId, &WalkabilityRegionId) {
         (&self.a, &self.b)
@@ -207,6 +302,7 @@ impl WalkabilitySnapshot {
             .iter()
             .chain(request.entrances())
             .chain(request.obstacles())
+            .chain(request.connectors().iter().map(VerticalConnector::object))
             .cloned()
             .collect();
         if regions
@@ -224,11 +320,27 @@ impl WalkabilitySnapshot {
         }) {
             return Err(WalkabilityError::ForbiddenPortalPassage);
         }
-        passages.sort_by(|a, b| (&a.a, &a.b, &a.portal).cmp(&(&b.a, &b.b, &b.portal)));
-        if passages.windows(2).any(|window| {
-            (&window[0].a, &window[0].b, &window[0].portal)
-                == (&window[1].a, &window[1].b, &window[1].portal)
+        if passages.iter().any(|passage| {
+            passage
+                .connector
+                .as_ref()
+                .is_some_and(|connector| request.connectors.binary_search(connector).is_err())
         }) {
+            return Err(WalkabilityError::ForbiddenConnectorPassage);
+        }
+        let key = |p: &VerifiedWalkablePassage| {
+            (
+                p.a.clone(),
+                p.b.clone(),
+                p.portal.clone(),
+                p.connector.clone(),
+            )
+        };
+        passages.sort_by_key(key);
+        if passages
+            .windows(2)
+            .any(|window| key(&window[0]) == key(&window[1]))
+        {
             return Err(WalkabilityError::DuplicatePassage);
         }
         let mut object_regions: BTreeMap<ObjectId, Vec<WalkabilityRegionId>> = BTreeMap::new();
@@ -269,6 +381,23 @@ impl WalkabilitySnapshot {
         from: &ObjectId,
         to: &ObjectId,
     ) -> Result<WalkabilityRouteOutcome, WalkabilityError> {
+        self.route_between_avoiding(from, to, &[])
+    }
+    /// Routes as [`Self::route_between`], but never through a passage whose
+    /// vertical connector is of a `forbidden` kind. Forbidding
+    /// [`VerticalConnectorKind::Stair`] makes a stairs-only connection
+    /// unreachable.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::ObjectUnavailable`] when an endpoint is mapped to
+    /// no region.
+    pub fn route_between_avoiding(
+        &self,
+        from: &ObjectId,
+        to: &ObjectId,
+        forbidden: &[VerticalConnectorKind],
+    ) -> Result<WalkabilityRouteOutcome, WalkabilityError> {
         let starts = self
             .object_regions
             .get(from)
@@ -277,10 +406,10 @@ impl WalkabilitySnapshot {
             .object_regions
             .get(to)
             .ok_or(WalkabilityError::ObjectUnavailable)?;
-        if let Some(path) = self.path(starts, goals, false) {
+        if let Some(path) = self.path(starts, goals, false, forbidden) {
             return Ok(WalkabilityRouteOutcome::Reachable(path));
         }
-        if self.path(starts, goals, true).is_some() {
+        if self.path(starts, goals, true, forbidden).is_some() {
             Ok(WalkabilityRouteOutcome::Indeterminate)
         } else {
             Ok(WalkabilityRouteOutcome::Unreachable)
@@ -291,9 +420,17 @@ impl WalkabilitySnapshot {
         starts: &[WalkabilityRegionId],
         goals: &[WalkabilityRegionId],
         possible: bool,
+        forbidden: &[VerticalConnectorKind],
     ) -> Option<Vec<WalkabilityRegionId>> {
         let mut graph: BTreeMap<WalkabilityRegionId, Vec<WalkabilityRegionId>> = BTreeMap::new();
         for edge in &self.passages {
+            if edge
+                .connector
+                .as_ref()
+                .is_some_and(|connector| forbidden.contains(&connector.kind))
+            {
+                continue;
+            }
             let usable = if possible {
                 edge.clear_width.upper_metres() >= self.request.minimum_width
             } else {

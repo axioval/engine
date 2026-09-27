@@ -6,6 +6,42 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Walkability and metric routing from geometry.** `axioval-axiolid` now
+  implements both contracts, and `--geometry` registers them.
+  `AxiolidWalkabilityService` builds a region per selected surface (its floor
+  footprint minus the obstacles' parts inside the headroom band) and two per
+  selected entrance, one per face. A portal crossing's width is at most the
+  longest free interval of its mid-line (and a stated clear width), so a door
+  narrower than the route width makes the route `Unreachable` with complete
+  evidence; a crossing is definite only when a sweep of the body from
+  landing to landing is proven inside the free region with exact booleans
+  and the leaf and lining admit it (a bodiless opening, or a door whose clear
+  width the host states). `AxiolidMetricRoutingService` routes on the
+  origin's level over host-declared surfaces, portals and connectors, every
+  other body obstructing between the maximum step and the clear height: a
+  proven sweep gives `Reachable` with its length as the upper bound and the
+  exact point shortest path (narrow portals cut) as the lower bound; a level
+  that the points or narrow portals separate, with no vertical connector
+  touching it, is `Blocked`. A gap narrower than the body inside a room is
+  refused rather than reported blocked until one-sided erosion is published
+  (axiolid-overlay 0.3.1). The CLI declares every `IfcSpace` a surface,
+  every `IfcDoor` and opening element a portal and every stair, ramp and
+  transport element a connector, and states no clear widths. Passage and
+  route evidence cites the measured object's own source, so it stays right
+  with several models; both services are bound to every snapshot. New
+  dependency:
+  `axiolid-route` 0.3.0. (#76)
+- **Typed vertical connectors.** `VerticalConnector` pairs an object with a
+  `VerticalConnectorKind` (`Lift`, `Ramp`, `Stair`);
+  `WalkabilityRequest::with_connectors` selects them and
+  `VerifiedWalkablePassage::with_connector` marks a climb, which the snapshot
+  accepts only for a requested connector of the same kind.
+  `WalkabilitySnapshot::route_between_avoiding` routes without the forbidden
+  kinds, so a stairs-only connection is `Unreachable` once stairs are
+  forbidden. `WalkabilityError` gains `ConflictingConnector`,
+  `PortalConnectorPassage`, `ForbiddenConnectorPassage` and
+  `Unavailable(String)` (a backend refusal); matching it exhaustively is a
+  breaking change. (#76)
 - **Clash classes, axis tolerances and pair exclusions.** `clash` now puts
   each pair in one class: a **duplicate** (the two surfaces lie within
   `duplicate_tolerance_metres` of each other, default zero), one body

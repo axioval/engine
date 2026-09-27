@@ -14,6 +14,7 @@ pub mod free_space;
 pub mod geometry;
 pub mod guard;
 pub mod linear_quantity;
+pub mod metric_routing;
 pub mod plan_area;
 pub mod plan_span;
 pub(crate) mod planar;
@@ -21,6 +22,8 @@ pub mod proximity;
 pub mod space;
 pub mod triangle_count;
 pub mod vertical_extent;
+pub mod walkability;
+pub(crate) mod walkable;
 
 pub use contact::AxiolidContactService;
 pub use derived_relationships::AxiolidDerivedRelationshipService;
@@ -30,12 +33,14 @@ pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::AxiolidGeometry;
 pub use guard::AxiolidGuardService;
 pub use linear_quantity::AxiolidLinearQuantityService;
+pub use metric_routing::AxiolidMetricRoutingService;
 pub use plan_area::AxiolidPlanAreaService;
 pub use plan_span::AxiolidPlanSpanService;
 pub use proximity::AxiolidProximityService;
 pub use space::AxiolidSpaceService;
 pub use triangle_count::AxiolidTriangleCountService;
 pub use vertical_extent::AxiolidVerticalExtentService;
+pub use walkability::AxiolidWalkabilityService;
 
 use std::collections::BTreeMap;
 

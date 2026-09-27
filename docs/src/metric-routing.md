@@ -27,3 +27,45 @@ A known longer route plus an unavailable shortcut can therefore prove route exis
 `MetricRouteOutcome::Blocked` requires `CompleteMetricEvidence`: exact, reviewable provenance that topology and relevant obstacles were complete for the query. `BlockedMetricRouteEvidence` binds that proof to the complete request, including endpoints and mobility profile; the service handle rejects evidence returned for another request. Missing geometry, partial obstacle composition, unsupported connectors, resource limits, and backend failures return `MetricRoutingError`; they never become `Blocked` or a passing rule result.
 
 The engine contract contains no mesh, B-rep, IFC entity, Axiolid kernel, OpenCascade, or vendor type.
+
+## The Axiolid backend
+
+`AxiolidMetricRoutingService` (in `axioval-axiolid`) routes over declared
+walkable surfaces (closed exact bodies with one horizontal floor), portals
+(doors and bodiless openings with their voids) and vertical connectors. Every
+other body obstructs where it enters the band between the profile's maximum
+step and its clear height above a floor; an unmeasured body refuses every
+route. Lengths are measured in plan.
+
+A route stays on the origin's **level**: the surfaces reachable from it
+through portals whose sill lies within a step of both floors, and through
+shared boundaries whose floors differ by at most a step. End points must lie
+on exactly one surface.
+
+- `Reachable`: a path proposed through the level's free region, less an
+  enclosure of its boundary's disc sweep, is accepted only once the body's
+  sweep along
+  it is proven inside the free region with exact booleans, and only if every
+  door it crosses admits the body (a bodiless opening does; a door only by a
+  stated clear width). Its length is the upper bound. The lower bound is the
+  `axiolid-route` shortest path for a point through the free region, with
+  every portal too narrow for the body cut at its mid-line; with incomplete
+  evidence it is the straight line. The route kernel may accept an edge along
+  collinear boundary edges across an outside gap, which only shortens its
+  path, so it is used as a bound and never as a witness.
+- `Blocked` with `CompleteMetricEvidence` when the destination is off the
+  level, or when the level's free region, less a band around the mid-line of
+  every portal whose free chord is shorter than the body, separates the two
+  points. No body centre lies in that band: a centre at distance `t` from the
+  mid-line covers a chord `2·sqrt(r² − t²)` of it. Blocked needs every
+  declared surface and portal measured and no declared connector touching
+  the level, since a connector could lead round through another level.
+- A reachable route's evidence cites the source of its origin's object; a
+  blocked verdict's completeness is set-level and cites the source the host
+  gave the service.
+- `MetricRoutingError::Unavailable` otherwise, with the lower bound in the
+  reason. A gap narrower than the body between obstacles inside a room
+  cannot be proven blocking with `axiolid-overlay` 0.3.0, whose erosion does
+  not state its side; such a route is refused, not blocked, until one-sided
+  erosion (`Region::erode_inner`, 0.3.1) is published. Routes across vertical
+  connectors are not measured.

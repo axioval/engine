@@ -79,10 +79,11 @@ use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
-    BodyContainment, Bounds3, FaceDistanceError, FaceDistanceEvidence, FaceDistanceRequest,
-    GeometryFidelity, IntersectionVolume, LengthInterval, ObjectBounds, OverlapExtents,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, VerticalDirection, VolumeInterval,
+    BodyContainment, Bounds3, ConvexPlanRegion, FaceDistanceError, FaceDistanceEvidence,
+    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, LengthInterval, ObjectBounds,
+    OverlapExtents, ProjectedDistanceEvidence, ProximityError, ProximityEvidence,
+    ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
+    RegionDistanceRequest, VerticalDirection, VolumeInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -410,6 +411,17 @@ fn flat_distance(first: &Flat, second: &Flat) -> Result<f64, ProximityError> {
 /// A body's footprint as indexed projected triangles.
 fn footprint(body: &Body<'_>) -> Result<Indexed<Flat>, ProximityError> {
     let flats: Vec<Flat> = body.soup.items.iter().map(flatten).collect();
+    let boxes = flats.iter().map(flat_box).collect();
+    Indexed::build(flats, boxes)
+}
+
+/// A convex plan region as a fan of flat triangles at z = 0.
+fn region_flats(region: &ConvexPlanRegion) -> Result<Indexed<Flat>, ProximityError> {
+    let ring = region.ring();
+    let at = |[x, y]: [f64; 2]| Point3::new(x, y, 0.0);
+    let flats: Vec<Flat> = (1..ring.len() - 1)
+        .map(|index| flatten(&[at(ring[0]), at(ring[index]), at(ring[index + 1])]))
+        .collect();
     let boxes = flats.iter().map(flat_box).collect();
     Indexed::build(flats, boxes)
 }
@@ -1227,6 +1239,35 @@ impl ProximityService for AxiolidProximityService {
         request: &FaceDistanceRequest,
     ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
         crate::face_distance::measure(self, &self.geometry, request)
+    }
+
+    fn measure_region_distance(
+        &self,
+        request: &RegionDistanceRequest,
+    ) -> Result<RegionDistanceEvidence, ProximityError> {
+        let counterpart = request.counterpart();
+        let body = self.body(counterpart)?;
+        let fidelity = self.geometry.fidelity(counterpart)?;
+        let distance = nearest(
+            &region_flats(request.region())?,
+            &footprint(&body)?,
+            flat_distance,
+        )?;
+        let deviation = fidelity.deviation_metres();
+        RegionDistanceEvidence::try_new(
+            request.clone(),
+            (distance - deviation).max(0.0),
+            distance + deviation,
+            fidelity,
+            Evidence {
+                source: counterpart.source.clone(),
+                locator: format!(
+                    "axiolid:distance:region:{}-gon:{counterpart}",
+                    request.region().ring().len()
+                ),
+                exact: fidelity.is_exact(),
+            },
+        )
     }
 
     fn measure_distance(

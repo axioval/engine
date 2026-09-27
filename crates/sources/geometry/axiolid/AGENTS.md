@@ -161,6 +161,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`. A
   host-declared bodiless object is refused with `ProximityError::NoBody`,
   never `Unavailable`, so a comparison can tell "no body" from "unmeasured".
+  `measure_region_distance` folds the same 2D closest points between a
+  stated region's fan triangles and the counterpart's footprint, widened by
+  the counterpart's chord deviation.
   `measure_distance` answers projections: horizontal distance folds 2D
   closest points over projected triangles (edge-on ones as segments), exact
   for non-convex footprints; vertical is the extent gap of footprint-related

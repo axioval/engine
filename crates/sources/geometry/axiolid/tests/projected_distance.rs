@@ -428,3 +428,50 @@ fn a_projected_request_is_not_a_clash_measurement() {
         ProximityError::UnsupportedProjection
     );
 }
+
+/// A stated plan region, such as a door's swing, measured to a footprint:
+/// exact bodies give a point, zero where the region reaches the footprint;
+/// a tessellated body widens it by its deviation.
+#[test]
+fn a_region_is_measured_to_a_footprint_in_plan() {
+    use axioval_engine::{ConvexPlanRegion, RegionDistanceRequest};
+    // A quarter disc of 0.9 m about the origin.
+    let sector = |reach: f64| {
+        let mut ring = vec![[0.0, 0.0]];
+        for step in 0..=8 {
+            let angle = f64::from(step) * std::f64::consts::FRAC_PI_2 / 8.0;
+            ring.push([reach * angle.cos(), reach * angle.sin()]);
+        }
+        ConvexPlanRegion::try_new(ring).unwrap()
+    };
+    let geometry = AxiolidGeometry::default()
+        .with_mesh(id("far"), cuboid([2.0, 0.0, 5.0], [3.0, 1.0, 6.0]))
+        .with_mesh(id("under"), cuboid([0.5, 0.5, 0.0], [0.6, 0.6, 0.1]))
+        .with_tessellated_mesh(id("round"), column([0.0, 2.0], 0.2, [0.0, 1.0], 24), 0.01);
+    let service = AxiolidProximityService::new(geometry);
+    let measure = |object: &str| {
+        let request = RegionDistanceRequest::new(sector(0.9), id(object));
+        let measured = service.measure_region_distance(&request).unwrap();
+        assert_eq!(measured.request(), &request);
+        measured
+    };
+    let far = measure("far");
+    assert!(far.evidence().exact);
+    let (lower, upper) = far.interval_metres();
+    assert!(
+        (lower - 1.1).abs() < 1e-12 && (upper - lower).abs() < f64::EPSILON,
+        "{lower} {upper}"
+    );
+    let (lower, upper) = measure("under").interval_metres();
+    assert!(lower.abs() < f64::EPSILON && upper.abs() < f64::EPSILON);
+    let round = measure("round");
+    assert!(!round.evidence().exact);
+    let (lower, upper) = round.interval_metres();
+    // The column's chord polygon lies 0.2 m around (0, 2); the arc's top is
+    // at (0, 0.9).
+    assert!(lower < 0.9 && upper > 0.9 && upper - lower <= 0.02 + 1e-12);
+    assert!(matches!(
+        service.measure_region_distance(&RegionDistanceRequest::new(sector(0.9), id("none"))),
+        Err(ProximityError::Unavailable)
+    ));
+}

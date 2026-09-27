@@ -6436,3 +6436,122 @@ fn property_sets_and_properties_named_by_pattern_are_enumerated() {
     assert_eq!(rule_findings(&result), expected, "{result:#}");
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
+
+/// A door with leaves as instances `#first` to `#first + 20`; the door is
+/// `#first + 10`. It is placed at `origin` with its local x along `along`
+/// (horizontal) and its body `width` wide, 0.1 m deep and 2.1 m high over
+/// local x 0..`width`, y 0..0.1. It states `operation` and one
+/// `IfcDoorPanelProperties` per `(PanelOperation, PanelPosition,
+/// PanelWidth)`, 40 mm deep, and a lining 50 mm thick.
+fn swinging_door(
+    first: u32,
+    [x, y, z]: [f64; 3],
+    [ax, ay]: [f64; 2],
+    width: f64,
+    operation: &str,
+    panels: &[(&str, &str, &str)],
+) -> String {
+    let at = |offset: u32| first + offset;
+    let door = at(10);
+    let mut records = format!(
+        "#{p}=IFCCARTESIANPOINT(({x:?},{y:?},{z:?}));\n\
+         #{d}=IFCDIRECTION(({ax:?},{ay:?},0.));\n\
+         #{a}=IFCAXIS2PLACEMENT3D(#{p},#4,#{d});\n\
+         #{l}=IFCLOCALPLACEMENT($,#{a});\n\
+         #{c}=IFCCARTESIANPOINT(({half:?},0.05));\n\
+         #{c2}=IFCAXIS2PLACEMENT2D(#{c},$);\n\
+         #{r}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{c2},{width:?},0.1);\n\
+         #{s}=IFCEXTRUDEDAREASOLID(#{r},#2,#4,2.1);\n\
+         #{sh}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{s}));\n\
+         #{pd}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{sh}));\n\
+         #{door}=IFCDOOR('{door:022}',$,$,$,$,#{l},#{pd},$,2.1,{width:?},.DOOR.,.{operation}.,$);\n\
+         #{lining}=IFCDOORLININGPROPERTIES('{lining:022}',$,$,$,0.1,0.05,$,0.02,$,$,$,$,$,$,$,$,$);\n\
+         #{rel}=IFCRELDEFINESBYPROPERTIES('{rel:022}',$,$,$,(#{door}),#{lining});\n",
+        p = at(0),
+        d = at(1),
+        a = at(2),
+        l = at(3),
+        c = at(4),
+        c2 = at(5),
+        r = at(6),
+        s = at(7),
+        sh = at(8),
+        pd = at(9),
+        half = width / 2.0,
+        lining = at(11),
+        rel = at(12),
+    );
+    for (index, (panel_operation, position, ratio)) in (0_u32..).zip(panels) {
+        let (set, rel) = (at(13 + 2 * index), at(14 + 2 * index));
+        let _ = write!(
+            records,
+            "#{set}=IFCDOORPANELPROPERTIES('{set:022}',$,$,$,0.04,.{panel_operation}.,{ratio},.{position}.,$);\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('{rel:022}',$,$,$,(#{door}),#{set});\n"
+        );
+    }
+    records
+}
+
+/// Door #30 at the origin, 0.9 m wide, hinged left and opening north over
+/// the quarter disc x, y >= 0 within 0.9 m; column #59 (x 0.2..0.4,
+/// y 1.2..1.4) stands 0.32 m beyond its arc and column #69 (x 3..3.2)
+/// 2.1 m from it. Sliding door #90 at x 5 sweeps nothing.
+fn doors_and_columns() -> String {
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,$)";
+    model_with(&format!(
+        "{}{}{}{}",
+        swinging_door(
+            20,
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0],
+            0.9,
+            "SINGLE_SWING_LEFT",
+            &[("SWINGING", "LEFT", "$")]
+        ),
+        placed_box(50, [0.3, 1.3, 0.0], [0.2, 0.2, 2.0], column),
+        placed_box(60, [3.1, 0.5, 0.0], [0.2, 0.2, 2.0], column),
+        swinging_door(
+            80,
+            [5.0, 0.0, 0.0],
+            [1.0, 0.0],
+            0.9,
+            "SLIDING_TO_LEFT",
+            &[("SLIDING", "LEFT", "$")]
+        ),
+    ))
+}
+
+#[test]
+fn with_geometry_a_column_within_a_door_swing_reach_is_found() {
+    let case = Case::new("geometry-door-swing-distance");
+    let (output, result) = case.geometry_rule(
+        &doors_and_columns(),
+        &[("door", "IfcDoor"), ("column", "IfcColumn")],
+        "axioval:capability.distance",
+        &registry_signature("axioval:capability.distance"),
+        entity("door"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("column")},
+            "subject_extent": {"type": "string", "value": "door_swing"},
+            "mode": {"type": "string", "value": "none_closer_than"},
+            "projection": {"type": "string", "value": "horizontal"},
+            "minimum_metres": {"type": "number", "value": 0.5},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    let [(door, message)] = &findings[..] else {
+        panic!("one finding: {result:#}")
+    };
+    assert_eq!(door, "#30");
+    assert!(
+        message.contains("/#59 at horizontal distance between 0.316"),
+        "{message}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

@@ -37,7 +37,7 @@ use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
 
-use crate::{LengthInterval, SignedDistanceInterval};
+use crate::{ConvexPlanRegion, LengthInterval, SignedDistanceInterval};
 
 /// Why a proximity measurement could not be produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -802,6 +802,90 @@ impl ProjectedDistanceEvidence {
     }
 }
 
+/// A request for the plan distance from a stated convex region to an
+/// object's footprint, such as from the floor area a door leaf sweeps to a
+/// column.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegionDistanceRequest {
+    region: ConvexPlanRegion,
+    counterpart: ObjectId,
+}
+
+impl RegionDistanceRequest {
+    pub fn new(region: ConvexPlanRegion, counterpart: ObjectId) -> Self {
+        Self {
+            region,
+            counterpart,
+        }
+    }
+    pub fn region(&self) -> &ConvexPlanRegion {
+        &self.region
+    }
+    pub fn counterpart(&self) -> &ObjectId {
+        &self.counterpart
+    }
+}
+
+/// The plan distance from a region to an object's footprint, as an
+/// interval: zero when they meet in plan, a point exactly when the
+/// counterpart's geometry is exact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegionDistanceEvidence {
+    request: RegionDistanceRequest,
+    lower_metres: f64,
+    upper_metres: f64,
+    fidelity: GeometryFidelity,
+    evidence: Evidence,
+}
+
+impl RegionDistanceEvidence {
+    /// Rejects incoherent intervals, evidence whose exactness does not match
+    /// the counterpart's geometry, and evidence from another source than the
+    /// counterpart's.
+    pub fn try_new(
+        request: RegionDistanceRequest,
+        lower_metres: f64,
+        upper_metres: f64,
+        fidelity: GeometryFidelity,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let bound_ok = |value: f64| value.is_finite() && value >= 0.0;
+        if !bound_ok(lower_metres)
+            || !bound_ok(upper_metres)
+            || lower_metres > upper_metres
+            || (fidelity.is_exact() && lower_metres < upper_metres)
+        {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.exact != fidelity.is_exact()
+            || evidence.locator.trim().is_empty()
+            || evidence.source != request.counterpart().source
+        {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            lower_metres,
+            upper_metres,
+            fidelity,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &RegionDistanceRequest {
+        &self.request
+    }
+    /// `(lower, upper)` bounds on the true plan distance.
+    pub fn interval_metres(&self) -> (f64, f64) {
+        (self.lower_metres, self.upper_metres)
+    }
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Which faces of a body a [`FaceDistanceRequest`] measures to, by the
 /// direction of their outward normal.
 ///
@@ -1010,6 +1094,17 @@ pub trait ProximityService: Send + Sync + 'static {
         let _ = request;
         Err(FaceDistanceError::Unsupported)
     }
+    /// The plan distance from a stated region to an object's footprint.
+    ///
+    /// The default refuses with [`ProximityError::UnsupportedProjection`],
+    /// so a service that does not measure regions fails closed.
+    fn measure_region_distance(
+        &self,
+        request: &RegionDistanceRequest,
+    ) -> Result<RegionDistanceEvidence, ProximityError> {
+        let _ = request;
+        Err(ProximityError::UnsupportedProjection)
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -1050,6 +1145,18 @@ impl ProximityServiceHandle {
         let measured = self.0.measure_face_distance(request)?;
         if measured.request() != request {
             return Err(FaceDistanceError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
+    /// The plan distance from a region. Evidence answering another request
+    /// is refused.
+    pub fn measure_region_distance(
+        &self,
+        request: &RegionDistanceRequest,
+    ) -> Result<RegionDistanceEvidence, ProximityError> {
+        let measured = self.0.measure_region_distance(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
         }
         Ok(measured)
     }
@@ -1531,6 +1638,64 @@ mod tests {
         assert_eq!(
             Bounds3::try_new([1.0, 0.0, 0.0], [0.0, 1.0, 1.0]),
             Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn region_distances_bind_their_request_and_default_to_refusal() {
+        struct Nothing;
+        impl ProximityService for Nothing {
+            fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+            fn measure_proximity(
+                &self,
+                _: &ProximityRequest,
+            ) -> Result<ProximityEvidence, ProximityError> {
+                Err(ProximityError::Unavailable)
+            }
+        }
+        let region = ConvexPlanRegion::try_new(vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]).unwrap();
+        let request = RegionDistanceRequest::new(region, id("wall"));
+        let evidence = |exact: bool| Evidence {
+            source: SourceId::new("cad", "m").unwrap(),
+            locator: "region".into(),
+            exact,
+        };
+        assert!(
+            RegionDistanceEvidence::try_new(
+                request.clone(),
+                0.5,
+                0.5,
+                GeometryFidelity::Exact,
+                evidence(true)
+            )
+            .is_ok()
+        );
+        // Exact evidence is a point; tessellated evidence is not exact.
+        assert_eq!(
+            RegionDistanceEvidence::try_new(
+                request.clone(),
+                0.4,
+                0.5,
+                GeometryFidelity::Exact,
+                evidence(true)
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            RegionDistanceEvidence::try_new(
+                request.clone(),
+                0.4,
+                0.5,
+                GeometryFidelity::tessellated(0.05).unwrap(),
+                evidence(true)
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        assert_eq!(
+            ProximityServiceHandle::new(Arc::new(Nothing)).measure_region_distance(&request),
+            Err(ProximityError::UnsupportedProjection)
         );
     }
 }

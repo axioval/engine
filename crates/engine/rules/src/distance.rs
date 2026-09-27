@@ -16,6 +16,13 @@
 //! plan. Counterparts may be scoped to the subject's containers (its space,
 //! its group) through the traversal parameters.
 //!
+//! With `subject_extent` or `counterpart_extent` `door_swing`, that side is
+//! measured by the floor area its doors' leaves sweep (the door-swing
+//! footprint) instead of its body, in plan (`projection: horizontal`). Each
+//! sector is bracketed between an inscribed and a circumscribed polygon, so
+//! its distance is an interval too; a door without a hinged leaf sweeps
+//! nothing and has no distance to anything.
+//!
 //! Every distance is an interval, a point for exact geometry. A counterpart
 //! counts only when its whole interval satisfies the bound, and is certainly
 //! excluded only when its whole interval misses it; one whose interval
@@ -25,16 +32,23 @@
 //! The broad phase is complete in every projection, so a counterpart it does
 //! not propose is proven beyond the search margin.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    ProjectedDistanceEvidence, ProximityProjection, ProximityRequest, RuleCapability, RuleContext,
-    VerticalDirection,
+    CapabilityEvaluation, CompiledRule, ConvexPlanRegion, GeometryFidelity, NotEvaluatedReason,
+    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, ProjectedDistanceEvidence,
+    ProximityProjection, ProximityRequest, ProximityServiceHandle, RegionDistanceRequest,
+    RuleCapability, RuleContext, VerticalDirection,
 };
 use axioval_ir::{Evidence, Object, ObjectId};
 
-use crate::pairs::{Prepared, fidelity_note, prepare, reason, refuse_declaration};
+use crate::door_swing::{self, Footprint, box_gap};
+use crate::pairs::{
+    Prepared, Unevaluated, counterpart_selector, fidelity_note, prepare, reason, refuse_all,
+    refuse_declaration,
+};
+use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid, traversal_parameters};
 
 /// Requires counterparts to keep a declared distance from each subject.
@@ -49,6 +63,9 @@ enum Mode {
 
 struct Declaration<'a> {
     mode: Mode,
+    /// Whether the subjects and the counterparts are measured by their
+    /// door swings rather than their bodies.
+    swings: (bool, bool),
     minimum: Option<f64>,
     maximum: Option<f64>,
     projection: ProximityProjection,
@@ -139,8 +156,22 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             return Err(invalid(format!("projection `{other}` is unsupported")));
         }
     };
+    let extent = |name: &str| match parameters.string(name)? {
+        None | Some("body") => Ok(false),
+        Some("door_swing") => Ok(true),
+        Some(other) => Err(invalid(format!(
+            "`{name}` `{other}` is unsupported; use `body` or `door_swing`"
+        ))),
+    };
+    let swings = (extent("subject_extent")?, extent("counterpart_extent")?);
+    if (swings.0 || swings.1) && projection != ProximityProjection::Horizontal {
+        return Err(invalid(
+            "a `door_swing` extent is a plan footprint: declare `projection` `horizontal`",
+        ));
+    }
     Ok(Declaration {
         mode,
+        swings,
         minimum,
         maximum,
         projection,
@@ -177,15 +208,57 @@ struct Candidate {
     counterpart: ObjectId,
     /// Whether it shares a container with the subject; `None` if undecided.
     in_scope: Option<bool>,
-    measured: Result<ProjectedDistanceEvidence, Unavailable>,
+    measured: Result<Measured, Unavailable>,
+}
+
+/// A measured distance as an interval, with what it measured and the
+/// evidence behind it.
+struct Measured {
+    lower: f64,
+    upper: f64,
+    /// `horizontal distance`, `vertical distance`, ...
+    what: &'static str,
+    /// ` above`, ` below` or nothing.
+    side: &'static str,
+    /// Why the interval is not a point, for messages.
+    note: String,
+    evidence: Vec<Evidence>,
+}
+
+impl Measured {
+    fn projected(measured: &ProjectedDistanceEvidence) -> Self {
+        let (what, side) = match measured.request().projection() {
+            ProximityProjection::Minimum3d => ("distance", ""),
+            ProximityProjection::Horizontal => ("horizontal distance", ""),
+            ProximityProjection::Vertical { direction, .. } => (
+                "vertical distance",
+                match direction {
+                    VerticalDirection::Either => "",
+                    VerticalDirection::Above => " above",
+                    VerticalDirection::Below => " below",
+                },
+            ),
+            ProximityProjection::PlanOverlap => ("plan-overlap distance", ""),
+        };
+        let (lower, upper) = measured.interval_metres();
+        Self {
+            lower,
+            upper,
+            what,
+            side,
+            note: fidelity_note(measured.fidelity()),
+            evidence: vec![measured.evidence().clone()],
+        }
+    }
+
+    fn interval_metres(&self) -> (f64, f64) {
+        (self.lower, self.upper)
+    }
 }
 
 impl Candidate {
     fn interval(&self) -> Option<(f64, f64)> {
-        self.measured
-            .as_ref()
-            .ok()
-            .map(ProjectedDistanceEvidence::interval_metres)
+        self.measured.as_ref().ok().map(Measured::interval_metres)
     }
     fn certainly_in_scope(&self) -> bool {
         self.in_scope == Some(true)
@@ -212,7 +285,7 @@ impl Candidate {
                     "{} to {} straddles {bound}{}",
                     describe(measured),
                     self.counterpart,
-                    fidelity_note(measured.fidelity())
+                    measured.note
                 ),
             ),
         }
@@ -220,20 +293,8 @@ impl Candidate {
 }
 
 /// A distance as a reviewer reads it: a point, a range, or no relation.
-fn describe(measured: &ProjectedDistanceEvidence) -> String {
-    let (projection, side) = match measured.request().projection() {
-        ProximityProjection::Minimum3d => ("distance", ""),
-        ProximityProjection::Horizontal => ("horizontal distance", ""),
-        ProximityProjection::Vertical { direction, .. } => (
-            "vertical distance",
-            match direction {
-                VerticalDirection::Either => "",
-                VerticalDirection::Above => " above",
-                VerticalDirection::Below => " below",
-            },
-        ),
-        ProximityProjection::PlanOverlap => ("plan-overlap distance", ""),
-    };
+fn describe(measured: &Measured) -> String {
+    let (projection, side) = (measured.what, measured.side);
     match measured.interval_metres() {
         (lower, _) if lower.is_infinite() => format!("no {projection}{side}"),
         (lower, upper) if lower >= upper => format!("{projection} {lower:.4} m{side}"),
@@ -298,7 +359,7 @@ fn keep_apart(
             "nearest counterpart {} is at {}, closer than the required {minimum:.4} m{}",
             nearest.counterpart,
             describe(measured),
-            fidelity_note(measured.fidelity())
+            measured.note
         )
     } else {
         format!(
@@ -306,7 +367,7 @@ fn keep_apart(
             violating.len(),
             nearest.counterpart,
             describe(measured),
-            fidelity_note(measured.fidelity())
+            measured.note
         )
     };
     let shown: &[&Candidate] = if nearest_mode {
@@ -320,7 +381,7 @@ fn keep_apart(
         evidence: shown
             .iter()
             .filter_map(|c| c.measured.as_ref().ok())
-            .map(|measured| measured.evidence().clone())
+            .flat_map(|measured| measured.evidence.iter().cloned())
             .collect(),
     }
 }
@@ -375,7 +436,7 @@ fn within(
             "nearest counterpart {} is at {}, farther than the allowed {upper:.4} m{}",
             candidate.counterpart,
             describe(measured),
-            fidelity_note(measured.fidelity())
+            measured.note
         ),
         (true, None) => format!("no counterpart lies within {upper:.4} m"),
         (false, _) => format!(
@@ -402,7 +463,7 @@ fn within(
         evidence: named
             .iter()
             .filter_map(|c| c.measured.as_ref().ok())
-            .map(|measured| measured.evidence().clone())
+            .flat_map(|measured| measured.evidence.iter().cloned())
             .collect(),
     }
 }
@@ -488,6 +549,7 @@ fn candidates(
         let outcome =
             ProximityRequest::projected(subject.clone(), counterpart.clone(), declared.projection)
                 .and_then(|request| prepared.service.measure_distance(&request))
+                .map(|measured| Measured::projected(&measured))
                 .map_err(|error| {
                     (
                         reason(error),
@@ -521,6 +583,305 @@ fn candidates(
     (measured, unmeasurable)
 }
 
+/// What one side of a pair is measured by.
+enum Extent {
+    /// The body, with its plan box grown by the chord deviation.
+    Body(([f64; 2], [f64; 2])),
+    /// The door-swing footprint.
+    Swing(Footprint),
+}
+
+impl Extent {
+    /// The plan box around the extent; `None` for a footprint sweeping
+    /// nothing.
+    fn plan_box(&self) -> Option<([f64; 2], [f64; 2])> {
+        match self {
+            Self::Body(plan) => Some(*plan),
+            Self::Swing(footprint) => footprint.plan_box(),
+        }
+    }
+}
+
+/// Subjects and counterparts measured by door swings on at least one side,
+/// with their extents read.
+struct Swings<'a> {
+    proximity: Option<&'a ProximityServiceHandle>,
+    subjects: Vec<ObjectId>,
+    counterparts: Vec<ObjectId>,
+    extents: BTreeMap<(ObjectId, bool), Extent>,
+    unmeasurable_counterparts: BTreeSet<ObjectId>,
+    unevaluated: Unevaluated,
+    margin: f64,
+    sides: (bool, bool),
+}
+
+impl<'a> Swings<'a> {
+    #[allow(clippy::too_many_lines)]
+    /// Selects both groups and reads each object's extent: its door swing
+    /// or its body, as its side declares.
+    fn prepare(
+        context: &RuleContext<'a>,
+        rule: &CompiledRule,
+        declared: &Declaration<'_>,
+    ) -> Result<Self, CapabilityEvaluation> {
+        let (subjects, evaluation) = select_objects(context, &rule.selector);
+        let Some(selector) = counterpart_selector(rule) else {
+            return Err(refuse_all(
+                &subjects,
+                evaluation,
+                &NotEvaluatedReason::InvalidDeclaration,
+                "`counterparts` is not a selector",
+            ));
+        };
+        let Some(frames) = context.services.get::<ObjectFrameServiceHandle>() else {
+            return Err(refuse_all(
+                &subjects,
+                evaluation,
+                &NotEvaluatedReason::MissingService,
+                "door swings need the object-frame service, which is not registered",
+            ));
+        };
+        let proximity = context.services.get::<ProximityServiceHandle>();
+        if proximity.is_none() && !(declared.swings.0 && declared.swings.1) {
+            return Err(refuse_all(
+                &subjects,
+                evaluation,
+                &NotEvaluatedReason::MissingService,
+                "proximity service is not registered",
+            ));
+        }
+        let (counterparts, counterpart_selection) = select_objects(context, selector);
+        let mut unevaluated = Unevaluated::default();
+        for outcome in evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .chain(counterpart_selection.not_evaluated_outcomes())
+        {
+            if let Some(object) = outcome.object_id() {
+                unevaluated.push(
+                    object.clone(),
+                    outcome.reason().clone(),
+                    outcome.message().to_owned(),
+                );
+            }
+        }
+        let read = |object: &ObjectId, swing: bool| -> Result<Extent, Unavailable> {
+            if swing {
+                let leaves = door_swing::leaves(frames, object)?;
+                return Footprint::of(&leaves).map(Extent::Swing);
+            }
+            let Some(service) = proximity else {
+                return Err((
+                    NotEvaluatedReason::MissingService,
+                    "proximity service is not registered".into(),
+                ));
+            };
+            let bounds = service
+                .bounds(object)
+                .map_err(|error| (reason(error), error.to_string()))?;
+            if bounds.object() != object {
+                return Err((
+                    NotEvaluatedReason::InvalidEvidence,
+                    "proximity bounds name a different object".into(),
+                ));
+            }
+            let enclosing = bounds.enclosing();
+            let (low, high) = (enclosing.min(), enclosing.max());
+            Ok(Extent::Body(([low[0], low[1]], [high[0], high[1]])))
+        };
+        let mut extents = BTreeMap::new();
+        let mut kept = (Vec::new(), Vec::new());
+        let mut unmeasurable_counterparts = BTreeSet::new();
+        for (objects, swing, is_subject) in [
+            (&subjects, declared.swings.0, true),
+            (&counterparts, declared.swings.1, false),
+        ] {
+            for object in objects {
+                if let Entry::Vacant(slot) = extents.entry((object.id.clone(), swing)) {
+                    match read(&object.id, swing) {
+                        Ok(extent) => {
+                            slot.insert(extent);
+                        }
+                        Err((why, message)) => {
+                            unevaluated.push(
+                                object.id.clone(),
+                                why,
+                                format!("{message}; its distances were not checked"),
+                            );
+                            if !is_subject {
+                                unmeasurable_counterparts.insert(object.id.clone());
+                            }
+                            continue;
+                        }
+                    }
+                }
+                if is_subject {
+                    kept.0.push(object.id.clone());
+                } else {
+                    kept.1.push(object.id.clone());
+                }
+            }
+        }
+        // A counterpart whose extent failed as a subject may still have
+        // failed only there; one failing as a counterpart is unmeasurable.
+        kept.1
+            .retain(|object| !unmeasurable_counterparts.contains(object));
+        Ok(Self {
+            proximity,
+            subjects: kept.0,
+            counterparts: kept.1,
+            extents,
+            unmeasurable_counterparts,
+            unevaluated,
+            margin: declared.margin(),
+            sides: declared.swings,
+        })
+    }
+
+    /// The plan distance from `footprint` to `body`'s footprint: bounded
+    /// below through the circumscribed regions, above through the inscribed
+    /// ones.
+    fn to_body(&self, footprint: &Footprint, body: &ObjectId) -> Result<Measured, Unavailable> {
+        let Some(service) = self.proximity else {
+            return Err((
+                NotEvaluatedReason::MissingService,
+                "proximity service is not registered".into(),
+            ));
+        };
+        let measure = |region: &ConvexPlanRegion| {
+            service
+                .measure_region_distance(&RegionDistanceRequest::new(region.clone(), body.clone()))
+                .map_err(|error| {
+                    (
+                        reason(error),
+                        format!(
+                            "the distance from a door swing to {body} could not be measured: \
+                             {error}"
+                        ),
+                    )
+                })
+        };
+        let mut measured = Measured {
+            lower: f64::INFINITY,
+            upper: f64::INFINITY,
+            what: "horizontal distance",
+            side: "",
+            note: String::new(),
+            evidence: vec![footprint.evidence.clone()],
+        };
+        let mut fidelity = GeometryFidelity::Exact;
+        for (inner, outer) in &footprint.parts {
+            let below = measure(outer)?;
+            let above = measure(inner)?;
+            measured.lower = measured.lower.min(below.interval_metres().0);
+            measured.upper = measured.upper.min(above.interval_metres().1);
+            fidelity = fidelity.combined(below.fidelity());
+            measured.evidence.push(below.evidence().clone());
+            measured.evidence.push(above.evidence().clone());
+        }
+        measured.note = fidelity_note(fidelity);
+        Ok(measured)
+    }
+
+    fn measure(&self, subject: &ObjectId, counterpart: &ObjectId) -> Result<Measured, Unavailable> {
+        let (Some(from), Some(to)) = (
+            self.extents.get(&(subject.clone(), self.sides.0)),
+            self.extents.get(&(counterpart.clone(), self.sides.1)),
+        ) else {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("the extent of {subject} or {counterpart} could not be read"),
+            ));
+        };
+        match (from, to) {
+            (Extent::Swing(from), Extent::Swing(to)) => {
+                let (lower, upper) = from.distance_to(to);
+                Ok(Measured {
+                    lower,
+                    upper,
+                    what: "horizontal distance",
+                    side: "",
+                    note: String::new(),
+                    evidence: vec![from.evidence.clone(), to.evidence.clone()],
+                })
+            }
+            (Extent::Swing(from), Extent::Body(_)) => self.to_body(from, counterpart),
+            (Extent::Body(_), Extent::Swing(to)) => self.to_body(to, subject),
+            (Extent::Body(_), Extent::Body(_)) => Err(invalid(
+                "neither side is a door swing, so this pair belongs to the body path",
+            )),
+        }
+    }
+
+    /// Candidates for `subject`: every counterpart whose extent's plan box
+    /// comes within the margin of the subject's, in scope or undecided.
+    fn candidates(
+        &self,
+        scope: &mut Scope<'_, '_>,
+        subject: &ObjectId,
+        subject_containers: &BTreeSet<ObjectId>,
+    ) -> (Vec<Candidate>, Vec<Candidate>) {
+        let mut measured = Vec::new();
+        let from = self
+            .extents
+            .get(&(subject.clone(), self.sides.0))
+            .and_then(Extent::plan_box);
+        for counterpart in &self.counterparts {
+            if counterpart == subject {
+                continue;
+            }
+            let to = self
+                .extents
+                .get(&(counterpart.clone(), self.sides.1))
+                .and_then(Extent::plan_box);
+            // A footprint sweeping nothing has no distance; a box gap
+            // beyond the margin bounds the distance from below.
+            let (Some(from), Some(to)) = (from, to) else {
+                continue;
+            };
+            if box_gap(from, to) > self.margin {
+                continue;
+            }
+            let in_scope = scope.shares(subject_containers, counterpart);
+            if in_scope == Some(false) {
+                continue;
+            }
+            measured.push(Candidate {
+                counterpart: counterpart.clone(),
+                in_scope,
+                measured: self.measure(subject, counterpart),
+            });
+        }
+        let unmeasurable = self
+            .unmeasurable_counterparts
+            .iter()
+            .filter(|counterpart| *counterpart != subject)
+            .filter_map(|counterpart| {
+                let in_scope = scope.shares(subject_containers, counterpart);
+                (in_scope != Some(false)).then(|| Candidate {
+                    counterpart: counterpart.clone(),
+                    in_scope,
+                    measured: Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!(
+                            "the extent of counterpart {counterpart} could not be read, so its \
+                             distance is unknown"
+                        ),
+                    )),
+                })
+            })
+            .collect();
+        (measured, unmeasurable)
+    }
+}
+
+/// Where the pairs come from: bodies through the broad phase, or door
+/// swings on at least one side.
+enum Pairs<'a> {
+    Bodies(Prepared<'a>),
+    Swings(Swings<'a>),
+}
+
 impl RuleCapability for Distance {
     fn id(&self) -> &'static str {
         "axioval:capability.distance"
@@ -536,6 +897,8 @@ impl RuleCapability for Distance {
             ParameterDescriptor::optional("projection", ParameterType::String),
             ParameterDescriptor::optional("footprint_offset_metres", ParameterType::Number),
             ParameterDescriptor::optional("vertical_direction", ParameterType::String),
+            ParameterDescriptor::optional("subject_extent", ParameterType::String),
+            ParameterDescriptor::optional("counterpart_extent", ParameterType::String),
         ];
         parameters.extend(traversal_parameters());
         parameters
@@ -546,14 +909,25 @@ impl RuleCapability for Distance {
             Ok(declared) => declared,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
-        let prepared = match prepare(context, rule, Some(declared.margin()), declared.projection) {
-            Ok(prepared) => prepared,
-            Err(refused) => return refused,
+        let pairs = if declared.swings.0 || declared.swings.1 {
+            match Swings::prepare(context, rule, &declared) {
+                Ok(swings) => Pairs::Swings(swings),
+                Err(refused) => return refused,
+            }
+        } else {
+            match prepare(context, rule, Some(declared.margin()), declared.projection) {
+                Ok(prepared) => Pairs::Bodies(prepared),
+                Err(refused) => return refused,
+            }
+        };
+        let subjects = match &pairs {
+            Pairs::Bodies(prepared) => prepared.subjects.clone(),
+            Pairs::Swings(swings) => swings.subjects.clone(),
         };
         let mut scope = Scope::new(declared.scope.as_ref(), context);
         let mut evaluation = CapabilityEvaluation::default();
 
-        for subject in &prepared.subjects {
+        for subject in &subjects {
             let (subject_containers, scope_evidence) = if declared.scope.is_some() {
                 match scope.containers(subject) {
                     Ok((containers, evidence)) => (containers.clone(), evidence.clone()),
@@ -569,13 +943,18 @@ impl RuleCapability for Distance {
             } else {
                 (BTreeSet::new(), Vec::new())
             };
-            let (measured, unmeasurable) = candidates(
-                &prepared,
-                &declared,
-                &mut scope,
-                subject,
-                &subject_containers,
-            );
+            let (measured, unmeasurable) = match &pairs {
+                Pairs::Bodies(prepared) => candidates(
+                    prepared,
+                    &declared,
+                    &mut scope,
+                    subject,
+                    &subject_containers,
+                ),
+                Pairs::Swings(swings) => {
+                    swings.candidates(&mut scope, subject, &subject_containers)
+                }
+            };
             let nearest_mode = matches!(declared.mode, Mode::Nearest);
             let apart = declared
                 .keep_apart()
@@ -619,7 +998,10 @@ impl RuleCapability for Distance {
                 evaluation.push_object_not_evaluated(subject.clone(), reason, message);
             }
         }
-        prepared.unevaluated.drain_into(&mut evaluation);
+        match pairs {
+            Pairs::Bodies(prepared) => prepared.unevaluated.drain_into(&mut evaluation),
+            Pairs::Swings(swings) => swings.unevaluated.drain_into(&mut evaluation),
+        }
         evaluation
     }
 }

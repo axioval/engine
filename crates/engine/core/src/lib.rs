@@ -473,6 +473,7 @@ mod metric_routing;
 mod object_frame;
 mod pairwise;
 mod plan_area;
+mod plan_region;
 mod plan_span;
 mod properties;
 mod proximity;
@@ -560,6 +561,7 @@ pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
 pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand};
+pub use plan_region::ConvexPlanRegion;
 pub use plan_span::{
     CentrePlacement, PlanCentre, PlanLength, PlanRecess, PlanRecesses, PlanRectangle, PlanSection,
     PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
@@ -573,7 +575,8 @@ pub use proximity::{
     BodyContainment, Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence,
     FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds, OverlapExtents,
     ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, ProximityServiceHandle, VerticalDirection, VolumeInterval,
+    ProximityRequest, ProximityService, ProximityServiceHandle, RegionDistanceEvidence,
+    RegionDistanceRequest, VerticalDirection, VolumeInterval,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,

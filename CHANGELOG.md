@@ -147,6 +147,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   (enumerated, list, bounded and table values, enumeration and unset
   predefined attributes) now resolve.
 
+- **Distances to door swings.** (Closes #60) `distance` gains
+  `subject_extent` and `counterpart_extent`: `door_swing` measures that side
+  by the floor sectors its doors' hinged leaves sweep instead of its body,
+  in plan (`projection` `horizontal` only). Each sector is bracketed between
+  an inscribed and a circumscribed polygon, so the distance is an interval;
+  a door without a hinged leaf sweeps nothing, and one whose leaves cannot
+  be read is not evaluated or unknown. `ProximityService` gains
+  `measure_region_distance` (refusing by default): the plan distance from a
+  `ConvexPlanRegion` to an object's footprint as a `RegionDistanceEvidence`,
+  answered by the Axiolid adapter from the same 2D closest points as
+  `Horizontal`. `ConvexPlanRegion::separation` measures two regions without
+  geometry. **Breaking:** definitions bound to `distance` must declare the
+  two new optional parameters.
 - **Door leaves.** (Refs #36) `ObjectFrameService::leaves` (refusing
   by default with `DoorLeavesError::Unsupported`, forwarded by federation)
   answers a door's `DoorLeaves`: the operation type as the source names

@@ -20,6 +20,7 @@ mod corridor_end_openings;
 mod counterpart_coverage;
 mod counts;
 mod distance;
+mod door_swing;
 mod effective_coverage;
 mod escape_route;
 mod exit_separation;

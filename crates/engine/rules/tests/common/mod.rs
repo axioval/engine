@@ -15,6 +15,8 @@ use axioval_engine::{
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId, SourceId};
 
+pub mod doors;
+
 pub fn source() -> SourceId {
     SourceId::new("test", "model").unwrap()
 }

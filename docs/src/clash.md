@@ -138,6 +138,20 @@ distances fails closed.
 | `Vertical { footprint_offset_metres, direction }` | gap between the vertical extents (bottom to top) of bodies above one another, one-sided with a direction |
 | `PlanOverlap` | zero when the footprints overlap with positive area |
 
+`measure_region_distance(request)` measures from a stated region instead of
+a body: the plan distance from a `ConvexPlanRegion` (a convex polygon in
+canonical metres, anticlockwise) to the counterpart's footprint, zero when
+they meet, as a `RegionDistanceEvidence` interval bound to its
+`RegionDistanceRequest`. It is exact exactly when the counterpart is, and
+its evidence cites the counterpart's source. The trait's default refuses
+with `UnsupportedProjection`. `ConvexPlanRegion::separation` measures two
+regions against each other without geometry: their distance apart, or minus
+their depth of overlap. Capabilities use regions for door swings, bracketing
+each sector between an inscribed and a circumscribed polygon. The Axiolid
+adapter folds 2D closest points between the region's fan triangles and the
+counterpart's projected triangles, as for `Horizontal`, and widens a
+tessellated counterpart by its chord deviation.
+
 `Vertical` and `PlanOverlap` relate only some pairs. Vertical bodies are
 related when their footprints overlap with positive area, or, with a positive
 offset, when the counterpart's footprint comes closer than the offset to the
@@ -519,6 +533,7 @@ declared distance. It takes these parameters:
 | `projection` | string, optional | `minimum_3d` (default), `horizontal`, `vertical`, `plan_overlap` |
 | `footprint_offset_metres` | number, optional | grows the subject's footprint for `vertical` |
 | `vertical_direction` | string, optional | `either` (default), `above` or `below`: where a counterpart must lie for `vertical` |
+| `subject_extent`, `counterpart_extent` | string, optional | `body` (default) or `door_swing`: what each side is measured by |
 | `relationship`, `direction`, `follow_chain`, `path`, `skip_absent_relationship_ends` | optional | the container traversal |
 
 The modes:
@@ -563,8 +578,24 @@ unknown. When nothing lies within a maximum, that is a finding: the broad
 phase is complete, so a pair it does not report is farther apart than the
 margin.
 
-Door-swing footprints as distance sources wait on door leaves in the IFC
-source (upstream openbimrs/ifc#148) and on object frames (#36).
+**Door swings.** With `subject_extent` or `counterpart_extent`
+`door_swing`, that side is measured by its door-swing footprint instead of
+its body: the floor sectors its hinged leaves sweep, as the object-frame
+service states them (`ObjectFrameService::leaves`). Only `horizontal` is
+allowed, since a footprint is a plan shape; anything else is an invalid
+declaration. Each sector is bracketed between an inscribed and a
+circumscribed convex polygon (64 per quarter turn, a radial gap under
+0.12 mm per metre of leaf), so the distance is the interval from the
+circumscribed polygons' distance to the inscribed ones'. A swing measured
+against a body goes through `measure_region_distance`; two swings are
+measured against each other without geometry. A door without a hinged leaf
+(sliding, rolling, fixed) sweeps nothing and has no distance to anything. A
+door whose leaves cannot be read, or an object that is not a door, is not
+evaluated as a subject and unknown as a counterpart. The broad phase is the
+plan gap between the footprint's box and the counterpart's box grown by its
+chord deviation, which bounds the distance from below. "No column within
+0.5 m of a door's swing" is `none_closer_than` with `subject_extent`
+`door_swing`; "no door swing within 0.5 m of another" declares both sides.
 
 These capabilities fail closed:
 

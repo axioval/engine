@@ -2764,6 +2764,53 @@ fn with_geometry_exits_too_close_for_their_hall_are_found() {
     }
 }
 
+#[test]
+fn with_geometry_an_exit_flag_is_read_from_its_sources_in_order() {
+    let case = Case::new("geometry-exit-separation-flag-sources");
+    let source = |path: Option<&str>| {
+        let mut row = json!({
+            "property_set": {"type": "string",
+                             "value": "axioval:example.ifc.pset-space-fire-safety"},
+            "property": {"type": "string", "value": "axioval:example.ifc.sprinkler-protection"},
+        });
+        if let Some(path) = path {
+            row["path"] = json!({"type": "string", "value": path});
+        }
+        row
+    };
+    let (output, result) = case.geometry_rule(
+        &halls_with_exits(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.exit-separation",
+        &registry_signature("axioval:capability.exit-separation"),
+        entity("space"),
+        json!({
+            "exit_path": {"type": "stringList",
+                          "value": ["axioval:derived.adjacent-space:backward"]},
+            "exit_selector": {"type": "selector", "value": entity("door")},
+            "flag_sources": {"type": "table", "value": [
+                source(None),
+                source(Some("IfcRelContainedInSpatialStructure:backward")),
+            ]},
+            "flag_default": {"type": "boolean", "value": true},
+            "flagged_fraction": {"type": "number", "value": 1.0 / 3.0},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Each hall states its own flag, so the storey and the default are never
+    // consulted: #19 is not sprinklered and its exits are too close.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#19", "{result:#}");
+    assert!(findings[0].1.ends_with("false)"), "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Corridor #19 (x 0..20, y 0..2) and office #29 (x 0..6, y 4..9), both 3 m
 /// high, with 1 m windows 0.2 m deep: #39 in the corridor's east end wall,
 /// #49 in its south side wall, #59 in the office's east wall.

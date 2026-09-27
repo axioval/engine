@@ -15,12 +15,12 @@ use axioval_engine::{
     ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
     ProximityServiceHandle,
 };
-use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
+use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, ObjectId, PropertyValue};
 use axioval_rules::ExitSeparation;
 use common::{
-    Model, findings, id, integer, kind, number, property, rule, selector, source, string, strings,
-    unevaluated,
+    Model, boolean, findings, id, integer, kind, number, property, rule, selector, source, string,
+    strings, unevaluated,
 };
 
 const CAPABILITY: &str = "axioval:capability.exit-separation";
@@ -292,6 +292,136 @@ fn a_sprinklered_storey_needs_only_a_third_of_the_diagonal() {
             .1
             .contains("required at least 7.4536 m (0.3333 ×"),
         "{evaluation:?}"
+    );
+}
+
+/// The flag read on the space, then its storey, then its building, with a
+/// default when none states it.
+fn sprinklered_anywhere(default: Option<bool>) -> Vec<(&'static str, ParameterValue)> {
+    let source = |path: Option<&str>| {
+        let mut row: TableRow = [
+            ("property_set".to_owned(), string("Fire")),
+            ("property".to_owned(), string("Sprinklered")),
+        ]
+        .into_iter()
+        .collect();
+        if let Some(path) = path {
+            row.insert("path".into(), string(path));
+        }
+        row
+    };
+    let mut parameters = vec![
+        (
+            "flag_sources",
+            ParameterValue::Table {
+                value: vec![
+                    source(None),
+                    source(Some("contains:backward")),
+                    source(Some("contains:backward contains:backward")),
+                ],
+            },
+        ),
+        ("flagged_fraction", number(1.0 / 3.0)),
+    ];
+    if let Some(default) = default {
+        parameters.push(("flag_default", boolean(default)));
+    }
+    parameters
+}
+
+#[test]
+fn the_flag_is_read_from_the_first_source_stating_it() {
+    // Nine metres: short of a half (11.18 m), beyond a third (7.45 m).
+    let nine = || Plan::default().apart("d1", "d2", 9.0, 9.0);
+    let building = || {
+        model()
+            .object("site", "building")
+            .edge("contains", "site", "level")
+    };
+    let flag = |model: Model, local: &str, value: bool| {
+        model.value(local, "Fire", "Sprinklered", PropertyValue::Boolean(value))
+    };
+
+    // The hall states nothing; its storey says sprinklered.
+    let evaluation = evaluate(
+        flag(building(), "level", true),
+        hall(),
+        nine(),
+        sprinklered_anywhere(Some(false)),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // The hall's own value comes first.
+    let evaluation = evaluate(
+        flag(flag(building(), "level", true), "hall", false),
+        hall(),
+        nine(),
+        sprinklered_anywhere(None),
+    );
+    let found = findings(&evaluation);
+    assert_eq!(found.len(), 1, "{evaluation:?}");
+    assert!(
+        found[0].1.ends_with("22.3607 m, Fire.Sprinklered false)"),
+        "{}",
+        found[0].1
+    );
+
+    // Only the building states it.
+    let evaluation = evaluate(
+        flag(building(), "site", true),
+        hall(),
+        nine(),
+        sprinklered_anywhere(None),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // Nothing stated anywhere: the default applies, and the message says so.
+    let evaluation = evaluate(
+        building(),
+        hall(),
+        nine(),
+        sprinklered_anywhere(Some(false)),
+    );
+    let found = findings(&evaluation);
+    assert_eq!(found.len(), 1, "{evaluation:?}");
+    assert!(
+        found[0].1.ends_with(
+            "Fire.Sprinklered nor Fire.Sprinklered (via contains) nor Fire.Sprinklered (via \
+             contains then contains) not stated, default false)"
+        ),
+        "{}",
+        found[0].1
+    );
+    let evaluation = evaluate(building(), hall(), nine(), sprinklered_anywhere(Some(true)));
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // Without a default, nothing stated is unknown.
+    let evaluation = evaluate(building(), hall(), nine(), sprinklered_anywhere(None));
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("hall".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+
+    // A null on the storey is stated, not absent: the building's value is
+    // never reached and the flag is unknown.
+    let evaluation = evaluate(
+        flag(building(), "site", true).value("level", "Fire", "Sprinklered", PropertyValue::Null),
+        hall(),
+        nine(),
+        sprinklered_anywhere(Some(true)),
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("hall".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let message = evaluation.not_evaluated_outcomes()[0].message().to_owned();
+    assert!(
+        message.contains("Fire.Sprinklered (via contains) unknown"),
+        "{message}"
     );
 }
 
@@ -583,6 +713,25 @@ fn invalid_declarations_refuse_the_rule() {
         (
             vec![("fraction", number(0.0))],
             "`fraction` must be a positive number",
+        ),
+        (
+            vec![("flag_default", boolean(true))],
+            "`flag_default` needs `flag` or `flag_sources`",
+        ),
+        (
+            {
+                let mut both = sprinklered_anywhere(None);
+                both.push(("flag", property(Some("Fire"), "Sprinklered")));
+                both
+            },
+            "not both",
+        ),
+        (
+            vec![
+                ("flag_sources", ParameterValue::Table { value: vec![] }),
+                ("flagged_fraction", number(0.3)),
+            ],
+            "`flag_sources` has no rows",
         ),
         (vec![("separation", string("edges"))], "separation `edges`"),
         (vec![("pairs", string("some"))], "pairs `some`"),

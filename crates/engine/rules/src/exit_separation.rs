@@ -6,6 +6,9 @@
 //! `fraction` of the space's longest plan diagonal apart; when `flag`, read
 //! on the space or on the objects `flag_path` reaches from it, is `true`,
 //! `flagged_fraction` applies instead (a sprinklered storey, say).
+//! `flag_sources` reads the flag from several places in order instead (the
+//! space, then its storey, then its building): the first that states a
+//! value decides, and `flag_default` applies when none does.
 //!
 //! Separation is measured in plan between the exits' closest points (the
 //! proximity service's `horizontal` distance), their centres or their
@@ -16,24 +19,34 @@
 //! whole interval lies at or above the whole required interval, too close
 //! only when it lies wholly below it, and unknown otherwise. An unknown flag
 //! widens the required interval to span both fractions, so it decides
-//! nothing it could change. Exits whose selection is undecided can only add
+//! nothing it could change. Only an exact absence moves on to the next
+//! source; a source that cannot be read, or states a null, non-boolean or
+//! disagreeing value, leaves the flag unknown. Exits whose selection is undecided can only add
 //! pairs: a verdict stands only when they cannot change it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PlanSpan, PlanSpanError, PlanSpanServiceHandle, ProximityProjection, ProximityRequest,
-    ProximityServiceHandle, RuleCapability, RuleContext,
+    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, PlanSpan, PlanSpanError, PlanSpanServiceHandle, ProximityProjection,
+    ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue};
 
 use crate::plan_area::shown;
 use crate::selection::{Selection, select_objects, selector_matches};
+use crate::support::table::Row;
 use crate::support::{
-    Parameters, PropertyRef, Traversal, Unavailable, display, finding, invalid, resolve, undefined,
+    Parameters, PropertyRef, Resolved, Traversal, Unavailable, display, finding, invalid, resolve,
+    undefined,
 };
+
+const FLAG_SOURCE_COLUMNS: &[TableColumn] = &[
+    TableColumn::optional("property_set", ColumnKind::String),
+    TableColumn::required("property", ColumnKind::String),
+    TableColumn::optional("path", ColumnKind::String),
+];
 
 /// Requires each selected space's exits to lie far enough apart for its size.
 pub struct ExitSeparation;
@@ -64,9 +77,122 @@ enum Pairs {
 
 /// The flag that selects the second fraction, and where it is read.
 struct Flag<'a> {
-    property: PropertyRef<'a>,
-    path: Option<Traversal<'a>>,
+    /// Where the flag is read, in order: the first that states a value
+    /// decides.
+    sources: Vec<FlagSource<'a>>,
+    /// The value when no source states one.
+    default: Option<bool>,
     fraction: f64,
+}
+
+/// One place the flag is read: a property of the space, or of the objects
+/// a path reaches from it.
+struct FlagSource<'a> {
+    property: PropertyRef<'a>,
+    /// The path's steps, validated when declared.
+    path: Option<Vec<String>>,
+}
+
+impl FlagSource<'_> {
+    fn traversal(&self) -> Option<Traversal<'_>> {
+        self.path
+            .as_ref()
+            .map(|path| Traversal::path(path).expect("the path was validated when it was declared"))
+    }
+
+    fn named(&self) -> String {
+        match self.traversal() {
+            None => self.property.to_string(),
+            Some(path) => format!("{} (via {})", self.property, path.relationship),
+        }
+    }
+}
+
+/// What one flag source states.
+enum Stated {
+    Value(bool),
+    /// Exactly nothing: every object it is read on lacks the property, or
+    /// its path reaches none.
+    Nothing(String),
+    Unknown(String),
+}
+
+fn flag_source(
+    property: PropertyRef<'_>,
+    path: Option<Vec<String>>,
+) -> Result<FlagSource<'_>, Unavailable> {
+    if let Some(path) = &path {
+        Traversal::path(path)?;
+    }
+    Ok(FlagSource { property, path })
+}
+
+/// The rows of `flag_sources`: a property (with its set) and the path the
+/// objects it is read on are reached along, its steps separated by spaces.
+fn flag_sources(rows: Vec<Row<'_>>) -> Result<Vec<FlagSource<'_>>, Unavailable> {
+    if rows.is_empty() {
+        return Err(invalid("`flag_sources` has no rows"));
+    }
+    rows.into_iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let property = row
+                .text("property")?
+                .filter(|name| !name.trim().is_empty())
+                .ok_or_else(|| invalid(format!("flag source {index} has no `property`")))?;
+            let set = row.text("property_set")?;
+            if set.is_some_and(|set| set.trim().is_empty()) {
+                return Err(invalid(format!(
+                    "flag source {index} has a blank `property_set`"
+                )));
+            }
+            let path = row
+                .text("path")?
+                .map(|path| path.split_whitespace().map(str::to_owned).collect());
+            flag_source(
+                PropertyRef {
+                    set,
+                    name: property,
+                },
+                path,
+            )
+            .map_err(|(reason, why)| (reason, format!("flag source {index}: {why}")))
+        })
+        .collect()
+}
+
+fn flag<'a>(parameters: &Parameters<'a>) -> Result<Option<Flag<'a>>, Unavailable> {
+    let sources = match (
+        parameters.property("flag")?,
+        parameters.strings("flag_path")?,
+        parameters.table("flag_sources")?,
+    ) {
+        (None, None, None) => None,
+        (Some(property), path, None) => {
+            Some(vec![flag_source(property, path.map(<[String]>::to_vec))?])
+        }
+        (None, None, Some(rows)) => Some(flag_sources(rows)?),
+        (None, Some(_), None) => return Err(invalid("`flag_path` is declared without `flag`")),
+        (_, _, Some(_)) => {
+            return Err(invalid(
+                "declare either `flag` (with `flag_path`) or `flag_sources`, not both",
+            ));
+        }
+    };
+    let default = parameters.boolean("flag_default")?;
+    match (sources, fraction(parameters, "flagged_fraction")?) {
+        (None, None) if default.is_some() => {
+            Err(invalid("`flag_default` needs `flag` or `flag_sources`"))
+        }
+        (None, None) => Ok(None),
+        (Some(sources), Some(fraction)) => Ok(Some(Flag {
+            sources,
+            default,
+            fraction,
+        })),
+        (Some(_), None) => Err(invalid("`flag` needs `flagged_fraction`")),
+        (None, Some(_)) => Err(invalid("`flagged_fraction` needs `flag` or `flag_sources`")),
+    }
 }
 
 struct Declaration<'a> {
@@ -96,21 +222,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             .ok_or_else(|| invalid("parameter `exit_path` is required"))?,
     )?;
     let exit_selector = parameters.required_selector("exit_selector")?;
-    let flag = match (
-        parameters.property("flag")?,
-        parameters.strings("flag_path")?,
-        fraction(&parameters, "flagged_fraction")?,
-    ) {
-        (None, None, None) => None,
-        (Some(property), path, Some(fraction)) => Some(Flag {
-            property,
-            path: path.map(Traversal::path).transpose()?,
-            fraction,
-        }),
-        (Some(_), _, None) => return Err(invalid("`flag` needs `flagged_fraction`")),
-        (None, _, Some(_)) => return Err(invalid("`flagged_fraction` needs `flag`")),
-        (None, Some(_), None) => return Err(invalid("`flag_path` is declared without `flag`")),
-    };
+    let flag = flag(&parameters)?;
     let separation = match parameters.string("separation")?.unwrap_or("closest") {
         "closest" => Separation::Closest,
         "centres" => Separation::Span(PlanSpan::Centres),
@@ -155,6 +267,11 @@ impl RuleCapability for ExitSeparation {
             ParameterDescriptor::optional("flag", ParameterType::PropertyReference),
             ParameterDescriptor::optional("flag_path", ParameterType::StringList),
             ParameterDescriptor::optional("flagged_fraction", ParameterType::Number),
+            ParameterDescriptor::optional(
+                "flag_sources",
+                ParameterType::Table(FLAG_SOURCE_COLUMNS),
+            ),
+            ParameterDescriptor::optional("flag_default", ParameterType::Boolean),
             ParameterDescriptor::optional("separation", ParameterType::String),
             ParameterDescriptor::optional("pairs", ParameterType::String),
             ParameterDescriptor::optional("minimum_exits", ParameterType::Integer),
@@ -553,93 +670,121 @@ fn fractions(
     let Some(flag) = &declared.flag else {
         return Ok(((declared.fraction, declared.fraction), String::new()));
     };
-    let named = match &flag.path {
-        None => flag.property.to_string(),
-        Some(path) => format!("{} (via {})", flag.property, path.relationship),
+    let applying = |value: bool| {
+        let fraction = if value {
+            flag.fraction
+        } else {
+            declared.fraction
+        };
+        (fraction, fraction)
     };
-    Ok(match read_flag(context, flag, space, evidence, related)? {
-        Ok(true) => ((flag.fraction, flag.fraction), format!(", {named} true")),
-        Ok(false) => (
-            (declared.fraction, declared.fraction),
-            format!(", {named} false"),
-        ),
-        Err(why) => (
-            (
-                flag.fraction.min(declared.fraction),
-                flag.fraction.max(declared.fraction),
-            ),
-            format!(", {named} unknown: {why}"),
-        ),
-    })
+    let both = (
+        flag.fraction.min(declared.fraction),
+        flag.fraction.max(declared.fraction),
+    );
+    let mut silent = Vec::new();
+    for source in &flag.sources {
+        let named = source.named();
+        match read_flag(context, source, space, evidence, related)? {
+            Stated::Value(value) => return Ok((applying(value), format!(", {named} {value}"))),
+            Stated::Unknown(why) => return Ok((both, format!(", {named} unknown: {why}"))),
+            Stated::Nothing(why) => silent.push((named, why)),
+        }
+    }
+    let names: Vec<&str> = silent.iter().map(|(named, _)| named.as_str()).collect();
+    if let Some(value) = flag.default {
+        return Ok((
+            applying(value),
+            format!(", {} not stated, default {value}", names.join(" nor ")),
+        ));
+    }
+    let why: Vec<&str> = silent.iter().map(|(_, why)| why.as_str()).collect();
+    Ok((
+        both,
+        format!(", {} unknown: {}", names.join(" nor "), why.join("; ")),
+    ))
 }
 
-/// The flag's value on the space or the objects its path reaches, which must
-/// agree; `Err` says why it is unknown.
+/// What one source states about the flag: the value on the space or the
+/// objects its path reaches, which must agree, or exactly nothing when every
+/// one of them lacks it.
 fn read_flag(
     context: &RuleContext<'_>,
-    flag: &Flag<'_>,
+    source: &FlagSource<'_>,
     space: &Object,
     evidence: &mut Vec<Evidence>,
     related: &mut BTreeSet<ObjectId>,
-) -> Result<Result<bool, String>, Unavailable> {
-    let holders = match &flag.path {
+) -> Result<Stated, Unavailable> {
+    let property = source.property;
+    let holders = match source.traversal() {
         None => vec![space.id.clone()],
         Some(path) => {
             let everything: Vec<&Object> = context.project.objects().collect();
             let (reached, cited) = match path.related(context, &space.id, &everything) {
                 Ok(reached) => reached,
-                Err((_, why)) => return Ok(Err(why)),
+                Err((_, why)) => return Ok(Stated::Unknown(why)),
             };
             evidence.extend(cited);
             if reached.is_empty() {
-                return Ok(Err(format!("{} reaches no object", path.relationship)));
+                return Ok(Stated::Nothing(format!(
+                    "{} reaches no object",
+                    path.relationship
+                )));
             }
             reached
         }
     };
     let mut found: Option<(bool, ObjectId)> = None;
+    let mut lacking: Option<ObjectId> = None;
     for holder in holders {
         let Some(object) = context.project.object(&holder) else {
             return Err(invalid(format!("{holder} is not in the project")));
         };
-        let resolved = match resolve(context, object, flag.property) {
+        let resolved = match resolve(context, object, property) {
             Ok(resolved) => resolved,
-            Err((_, why)) => return Ok(Err(format!("{} of {holder}: {why}", flag.property))),
+            Err((_, why)) => return Ok(Stated::Unknown(format!("{property} of {holder}: {why}"))),
         };
         evidence.extend(resolved.evidence());
         if holder != space.id {
             related.insert(holder.clone());
         }
-        let value = match resolved.value() {
-            Some(PropertyValue::Boolean(value)) => *value,
-            other if undefined(other) => {
-                return Ok(Err(format!(
-                    "{} of {holder} is {}",
-                    flag.property,
-                    display(other)
-                )));
+        let value = match &resolved {
+            Resolved::Absent(_) => {
+                lacking.get_or_insert(holder);
+                continue;
             }
-            other => {
-                return Ok(Err(format!(
-                    "{} of {holder} is {}, not a boolean",
-                    flag.property,
-                    display(other)
-                )));
-            }
+            Resolved::Present(stated) => match &stated.value {
+                PropertyValue::Boolean(value) => *value,
+                // Stated empty is not an absence: never move on from it.
+                other if undefined(Some(other)) => {
+                    return Ok(Stated::Unknown(format!(
+                        "{property} of {holder} is {}",
+                        display(Some(other))
+                    )));
+                }
+                other => {
+                    return Ok(Stated::Unknown(format!(
+                        "{property} of {holder} is {}, not a boolean",
+                        display(Some(other))
+                    )));
+                }
+            },
         };
         match &found {
             Some((held, first)) if *held != value => {
-                return Ok(Err(format!(
-                    "{} differs between {first} ({held}) and {holder} ({value})",
-                    flag.property
+                return Ok(Stated::Unknown(format!(
+                    "{property} differs between {first} ({held}) and {holder} ({value})"
                 )));
             }
             Some(_) => {}
             None => found = Some((value, holder)),
         }
     }
-    Ok(found.map_or_else(
-        || Err(format!("{} has no value", flag.property)),
-        |(value, _)| Ok(value),
-    ))
+    Ok(match (found, lacking) {
+        (Some((value, _)), None) => Stated::Value(value),
+        (Some((value, first)), Some(without)) => Stated::Unknown(format!(
+            "{first} states {property} {value}, {without} states nothing"
+        )),
+        (None, _) => Stated::Nothing(format!("{property} has no value")),
+    })
 }

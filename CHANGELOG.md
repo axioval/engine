@@ -24,6 +24,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   finding (`PRIORITY_HIGH`, `PRIORITY_NORMAL`, `PRIORITY_LOW`). A
   not-evaluated outcome's topic has none: no severity was decided. Every
   archive with findings gains the element; GUIDs are unchanged.
+- **Exit-separation flags read from several places in order.** (#121)
+  `exit-separation` takes `flag_sources`, a table of property (with its
+  set) and path rows read in order (the space, then its storey, then its
+  building), and `flag_default`. The first source that states a value
+  decides; only an exact absence moves on, and nothing stated anywhere
+  takes the default. A space without its own value whose storey states
+  `true` gets the flagged fraction. **Breaking:** definitions bound to
+  `exit-separation` must declare the two new optional parameters.
 - **Closest distance between space bodies.** (#120) A `space-distance`
   row's `measure` takes `closest`: the shortest distance between the two
   spaces' bodies through the proximity service (`minimum_3d`), judged pair

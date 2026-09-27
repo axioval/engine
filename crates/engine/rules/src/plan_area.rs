@@ -1,4 +1,4 @@
-//! Judgements over plan-projected areas: area ratios and plan coverage.
+//! Judgements over plan-projected areas: area ranges, ratios and plan coverage.
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
@@ -427,4 +427,170 @@ fn coverage(
         evidence,
         best.map(|(_, candidate)| candidate),
     )))
+}
+
+/// Requires measured plan areas to lie within a range, in square metres.
+///
+/// Without `member_selector`, each selected object's own footprint must lie
+/// within `minimum` and `maximum`, inclusive; at least one is required: a
+/// space of at least 8 m², a fire compartment of at most 400 m².
+///
+/// With `member_selector`, each selected object is an anchor, and the summed
+/// footprints of the members it reaches (through the declared relationship,
+/// or everywhere in its source, as in `related-count`) must lie within the
+/// range: the space area of each storey. Footprints are summed, so
+/// overlapping members count twice; select members that do not overlap.
+///
+/// Areas are intervals. A verdict needs the whole interval on one side of a
+/// bound; one straddling it is not evaluated. An object with no plan
+/// footprint (no body) is not evaluated, and so is an anchor with such a
+/// member. An anchor with members whose selection is undecided is judged
+/// only when they cannot change the verdict: they can only add area, so a
+/// sum already above the maximum stands.
+pub struct PlanAreaRange;
+
+impl RuleCapability for PlanAreaRange {
+    fn id(&self) -> &'static str {
+        "axioval:capability.plan-area"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![
+            ParameterDescriptor::optional("minimum", ParameterType::Number),
+            ParameterDescriptor::optional("maximum", ParameterType::Number),
+            ParameterDescriptor::optional("member_selector", ParameterType::Selector),
+        ]
+        .into_iter()
+        .chain(traversal_parameters())
+        .collect()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        let parameters = Parameters(rule);
+        let parsed = (|| {
+            let minimum = parameters.number("minimum")?;
+            let maximum = parameters.number("maximum")?;
+            if minimum.is_none() && maximum.is_none() {
+                return Err(invalid("minimum or maximum is required"));
+            }
+            if minimum.is_some_and(|value| value < 0.0) || maximum.is_some_and(|value| value < 0.0)
+            {
+                return Err(invalid("an area bound is negative"));
+            }
+            if matches!((minimum, maximum), (Some(low), Some(high)) if low > high) {
+                return Err(invalid("minimum exceeds maximum"));
+            }
+            let members = parameters.selector("member_selector")?;
+            let traversal = parameters.traversal()?;
+            if members.is_none() && traversal.is_some() {
+                return Err(invalid(
+                    "a relationship reaches members only with `member_selector`",
+                ));
+            }
+            Ok::<_, Unavailable>((minimum, maximum, members, traversal))
+        })();
+        let (minimum, maximum, members, traversal) = match parsed {
+            Ok(parsed) => parsed,
+            Err((reason, message)) => {
+                return CapabilityEvaluation::not_evaluated(
+                    reason,
+                    format!("plan-area: {message}"),
+                );
+            }
+        };
+        let members = members.map(|selector| Population::of(context, selector));
+        let what = if members.is_some() {
+            "summed plan area of the members"
+        } else {
+            "plan area"
+        };
+        let (subjects, mut evaluation) = select_objects(context, &rule.selector);
+        for subject in subjects {
+            let measured = match &members {
+                None => footprint(context, &subject.id).map(|area| {
+                    let mut sum = Sum::default();
+                    sum.add(&area);
+                    (sum, None)
+                }),
+                Some(population) => member_areas(context, traversal.as_ref(), subject, population),
+            };
+            let (sum, reached) = match measured {
+                Ok(measured) => measured,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(subject.id.clone(), reason, message);
+                    continue;
+                }
+            };
+            let (related, undecided) = reached.unwrap_or_default();
+            // Undecided members can only add area: only an excess stands.
+            if undecided > 0 && !maximum.is_some_and(|maximum| sum.lower > maximum) {
+                evaluation.push_object_not_evaluated(
+                    subject.id.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "{undecided} member(s) {} cannot be assigned",
+                        relation_text(traversal.as_ref())
+                    ),
+                );
+                continue;
+            }
+            match judge(sum.lower, sum.upper, minimum, maximum) {
+                Verdict::Pass => {}
+                Verdict::Fail(bound) => evaluation.push_finding(finding(
+                    rule,
+                    &subject.id,
+                    format!(
+                        "{what} is {} m²; required {bound} m²",
+                        shown(sum.lower, sum.upper)
+                    ),
+                    sum.evidence,
+                    related,
+                )),
+                Verdict::Undecided(bound) => evaluation.push_object_not_evaluated(
+                    subject.id.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "{what} is {} m², which straddles the bound {bound} m²",
+                        shown(sum.lower, sum.upper)
+                    ),
+                ),
+            }
+        }
+        evaluation
+    }
+}
+
+/// A footprint that is not empty: an empty one means the object has no body.
+fn footprint(context: &RuleContext<'_>, object: &ObjectId) -> Result<PlanArea, Unavailable> {
+    let area = service(context)?
+        .measure_footprint(object)
+        .map_err(unavailable)?;
+    if area.upper_square_metres() <= 0.0 {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("{object} has no plan footprint (no body)"),
+        ));
+    }
+    Ok(area)
+}
+
+/// A summed area, with the members summed and the number left undecided
+/// when members were summed.
+type Measured = (Sum, Option<(Vec<ObjectId>, usize)>);
+
+/// The summed footprints of the members `anchor` reaches, with the decided
+/// members and the number of undecided ones.
+fn member_areas(
+    context: &RuleContext<'_>,
+    traversal: Option<&crate::support::Traversal<'_>>,
+    anchor: &Object,
+    population: &Population,
+) -> Result<Measured, Unavailable> {
+    let reached = tally(context, traversal, anchor, population)?;
+    let mut sum = Sum::default();
+    for member in &reached.decided {
+        sum.add(&footprint(context, member)?);
+    }
+    sum.evidence.extend(reached.evidence);
+    Ok((sum, Some((reached.decided, reached.undecided))))
 }

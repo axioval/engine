@@ -326,3 +326,198 @@ mod plan_coverage {
         );
     }
 }
+
+mod plan_area_range {
+    use super::*;
+    use axioval_ir::contract::{ComparisonOperator, Selector};
+    use axioval_rules::PlanAreaRange;
+
+    const ID: &str = "axioval:capability.plan-area";
+
+    #[test]
+    fn each_space_area_lies_within_the_range_boundaries_included() {
+        let model = Model::default()
+            .object("large", "space")
+            .object("small", "space")
+            .object("tiny", "space")
+            .object("bodiless", "space");
+        let rectangles = Rectangles::default()
+            .with("large", [0.0, 0.0, 4.0, 5.0], 0.0)
+            .with("small", [0.0, 0.0, 3.0, 2.0], 0.0)
+            .with("tiny", [0.0, 0.0, 2.0, 2.0], 0.0)
+            // A declared bodiless object measures an exactly empty footprint.
+            .with("bodiless", [0.0, 0.0, 0.0, 0.0], 0.0);
+        let evaluation = run(
+            model,
+            rectangles,
+            &PlanAreaRange,
+            &rule(
+                ID,
+                kind("space"),
+                vec![("minimum", number(6.0)), ("maximum", number(20.0))],
+            ),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "tiny".into(),
+                "plan area is 4 m²; required at least 6 m²".into()
+            )]
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [(
+                "bodiless".to_owned(),
+                NotEvaluatedReason::IncompleteEvidence
+            )]
+        );
+    }
+
+    #[test]
+    fn a_tessellated_area_straddling_a_bound_is_not_evaluated() {
+        let model = Model::default()
+            .object("straddling", "space")
+            .object("beyond", "space");
+        let rectangles = Rectangles::default()
+            .with("straddling", [0.0, 0.0, 5.0, 4.0], 1.0)
+            .with("beyond", [0.0, 0.0, 5.0, 5.0], 1.0);
+        let evaluation = run(
+            model,
+            rectangles,
+            &PlanAreaRange,
+            &rule(ID, kind("space"), vec![("maximum", number(20.0))]),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "beyond".into(),
+                "plan area is between 24 and 26 m²; required at most 20 m²".into()
+            )]
+        );
+        assert!(!evaluation.findings()[0].evidence[0].exact);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [(
+                "straddling".to_owned(),
+                NotEvaluatedReason::IncompleteEvidence
+            )]
+        );
+    }
+
+    /// Storey `a` holds 26 m² of spaces, `b` 30 m², `c` 23 to 27 m², `d` a
+    /// bodiless space. Storey `a`'s slab is not a member.
+    fn storeys() -> (Model, Rectangles) {
+        let model = Model::default()
+            .object("a", "storey")
+            .object("b", "storey")
+            .object("c", "storey")
+            .object("d", "storey")
+            .object("slab", "slab")
+            .object("a1", "space")
+            .object("a2", "space")
+            .object("b1", "space")
+            .object("c1", "space")
+            .object("d1", "space")
+            .edge("contains", "a", "slab")
+            .edge("contains", "a", "a1")
+            .edge("contains", "a", "a2")
+            .edge("contains", "b", "b1")
+            .edge("contains", "c", "c1")
+            .edge("contains", "d", "d1");
+        let rectangles = Rectangles::default()
+            .with("slab", [0.0, 0.0, 10.0, 10.0], 0.0)
+            .with("a1", [0.0, 0.0, 4.0, 5.0], 0.0)
+            .with("a2", [4.0, 0.0, 7.0, 2.0], 0.0)
+            .with("b1", [0.0, 0.0, 6.0, 5.0], 0.0)
+            .with("c1", [0.0, 0.0, 5.0, 5.0], 2.0)
+            .with("d1", [0.0, 0.0, 0.0, 0.0], 0.0);
+        (model, rectangles)
+    }
+
+    fn members(member: Selector, maximum: f64) -> Vec<(&'static str, ParameterValue)> {
+        vec![
+            ("member_selector", selector(member)),
+            ("maximum", number(maximum)),
+            ("relationship", string("contains")),
+        ]
+    }
+
+    #[test]
+    fn the_space_area_of_each_storey_is_summed_and_bounded() {
+        let (model, rectangles) = storeys();
+        let evaluation = run(
+            model,
+            rectangles,
+            &PlanAreaRange,
+            &rule(ID, kind("storey"), members(kind("space"), 26.0)),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "b".into(),
+                "summed plan area of the members is 30 m²; required at most 26 m²".into()
+            )]
+        );
+        assert_eq!(evaluation.findings()[0].related.len(), 1);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("c".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("d".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+    }
+
+    #[test]
+    fn undecided_members_leave_only_an_excess_standing() {
+        let room = Selector::property(
+            Some("Pset".into()),
+            "IsRoom",
+            ComparisonOperator::Exists,
+            None,
+        );
+        let (model, rectangles) = storeys();
+        let model = model
+            .text("a1", "Pset", "IsRoom", "yes")
+            .text("b1", "Pset", "IsRoom", "yes")
+            .unreadable("a2")
+            .object("b2", "space")
+            .edge("contains", "b", "b2")
+            .unreadable("b2");
+        let rectangles = rectangles.with("b2", [0.0, 0.0, 1.0, 1.0], 0.0);
+        let evaluation = run(
+            model,
+            rectangles,
+            &PlanAreaRange,
+            &rule(ID, kind("storey"), members(room, 26.0)),
+        );
+        // `b` already exceeds the maximum; `a` might, with `a2`.
+        assert_eq!(flagged(&evaluation), ["b"]);
+        assert!(
+            unevaluated(&evaluation)
+                .contains(&("a".to_owned(), NotEvaluatedReason::IncompleteEvidence))
+        );
+    }
+
+    #[test]
+    fn a_relationship_needs_a_member_selector() {
+        let (model, rectangles) = storeys();
+        let evaluation = run(
+            model,
+            rectangles,
+            &PlanAreaRange,
+            &rule(
+                ID,
+                kind("storey"),
+                vec![
+                    ("maximum", number(26.0)),
+                    ("relationship", string("contains")),
+                ],
+            ),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}

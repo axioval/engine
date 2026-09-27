@@ -54,7 +54,7 @@ pub use manual_issue::ManualIssue;
 pub use name_sequence::NameSequence;
 pub use numbering_consistency::NumberingConsistency;
 pub use object_count::ObjectCount;
-pub use plan_area::{AreaRatio, PlanCoverage};
+pub use plan_area::{AreaRatio, PlanAreaRange, PlanCoverage};
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
 pub use property_rules::{
@@ -103,5 +103,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(LevelSpacing))
         .and_then(|registry| registry.register(AreaRatio))
         .and_then(|registry| registry.register(PlanCoverage))
+        .and_then(|registry| registry.register(PlanAreaRange))
         .and_then(|registry| registry.register(SlabStackSpacing))
 }

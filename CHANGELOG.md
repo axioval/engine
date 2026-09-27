@@ -25,6 +25,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   the new field `quantifier` (omitted from serialized packages when unset),
   and `PropertyValue`, `PropertyResolutionError` and `NotEvaluatedReason`
   each have a new variant. `property-value` does not evaluate a list.
+- **Plan area ranges.** The new capability `plan-area` requires each
+  selected object's measured footprint to lie within `minimum` and
+  `maximum` square metres (a space area range, a fire compartment's area
+  limit), or, with `member_selector`, the summed footprints of the members
+  each anchor reaches through the declared traversal (the space area of each
+  storey). Tessellated areas are intervals, and one straddling a bound is not
+  evaluated; an object without a body, or an anchor with such a member, is
+  not evaluated. Undecided members can only add area, so only an excess
+  over the maximum stands.
 - **Property comparison along paths, within spaces and buildings.**
   `property-comparison` takes a relationship `path` in `related` mode, and
   new `same_space` and `same_building` modes compare with the objects that

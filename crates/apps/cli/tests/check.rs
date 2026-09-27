@@ -1252,6 +1252,186 @@ fn with_geometry_a_zone_with_a_bodiless_member_has_no_footprint() {
     );
 }
 
+/// Runs `plan-area` over `model` with geometry on the `subject` objects,
+/// with `parameters`; spaces are the declared member type. Returns the
+/// output and the saved result.
+fn plan_area(
+    name: &str,
+    model: &str,
+    subject: (&str, &str),
+    parameters: &Value,
+) -> (Output, Value) {
+    let case = Case::new(name);
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    for (id, name) in [("space", "IfcSpace"), subject] {
+        definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
+            "id": format!("axioval:example.ifc.{id}"),
+            "name": {"default": name, "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        });
+    }
+    let declare = |id: &str, kind: &str| {
+        json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": false, "allowedValues": [], "citations": []})
+    };
+    definitions["definitions"]["axioval:example.area"] = json!({
+        "id": "axioval:example.area",
+        "name": {"default": "Area", "translations": {}},
+        "description": {"default": "Plan areas lie within a range.", "translations": {}},
+        "capability": "axioval:capability.plan-area",
+        "parameters": {
+            "minimum": declare("minimum", "number"),
+            "maximum": declare("maximum", "number"),
+            "member_selector": declare("member_selector", "selector"),
+            "relationship": declare("relationship", "string"),
+            "direction": declare("direction", "string"),
+            "follow_chain": declare("follow_chain", "boolean"),
+            "path": declare("path", "stringList"),
+            "skip_absent_relationship_ends": declare("skip_absent_relationship_ends", "boolean"),
+        },
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("areas-bounded");
+    rule["definitionId"] = json!("axioval:example.area");
+    rule["parameters"] = parameters.clone();
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!(format!("axioval:example.ifc.{}", subject.0));
+    let model = case.write("model.ifc", model);
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let result = std::fs::read_to_string(&saved)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Value::Null);
+    (output, result)
+}
+
+fn flagged_objects(result: &Value, entries: &str) -> Vec<String> {
+    let mut objects: Vec<String> = result["report"][entries]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|entry| entry["object_id"]["local_id"].as_str().unwrap().to_owned())
+        .collect();
+    objects.sort();
+    objects
+}
+
+#[test]
+fn with_geometry_plan_area_bounds_each_space_boundary_included() {
+    // Every space with a body measures 4 m x 4 m = 16 m².
+    let number = |value: f64| json!({"type": "number", "value": value});
+    let (output, result) = plan_area(
+        "geometry-plan-area-boundary",
+        &spaces_in_a_zone(false),
+        ("space", "IfcSpace"),
+        &json!({"minimum": number(16.0), "maximum": number(16.0)}),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(
+        flagged_objects(&result, "findings").is_empty(),
+        "{result:#}"
+    );
+    // Only the bodiless space #50, which has no footprint to measure.
+    assert_eq!(
+        flagged_objects(&result, "not_evaluated"),
+        ["#50"],
+        "{result:#}"
+    );
+
+    let (output, result) = plan_area(
+        "geometry-plan-area-exceeded",
+        &spaces_in_a_zone(false),
+        ("space", "IfcSpace"),
+        &json!({"maximum": number(15.99)}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        flagged_objects(&result, "findings"),
+        ["#16", "#26", "#46"],
+        "{result:#}"
+    );
+    assert_eq!(
+        result["report"]["findings"][0]["message"], "plan area is 16 m²; required at most 15.99 m²",
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_plan_area_sums_the_members_of_a_zone() {
+    // Spaces #16 and #26 of zone #90 measure 16 m² each; overlapping
+    // members count twice in a sum.
+    let parameters = |maximum: f64| {
+        json!({
+            "member_selector": {"type": "selector", "value": {
+                "kind": "entityType", "objectType": "axioval:example.ifc.space",
+                "includeSubtypes": true}},
+            "relationship": {"type": "string", "value": "IfcRelAssignsToGroup"},
+            "maximum": {"type": "number", "value": maximum},
+        })
+    };
+    let (output, result) = plan_area(
+        "geometry-plan-area-zone-boundary",
+        &spaces_in_a_zone(false),
+        ("zone", "IfcZone"),
+        &parameters(32.0),
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}\n{result:#}",
+        stderr(&output)
+    );
+
+    let (output, result) = plan_area(
+        "geometry-plan-area-zone-exceeded",
+        &spaces_in_a_zone(false),
+        ("zone", "IfcZone"),
+        &parameters(31.0),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(flagged_objects(&result, "findings"), ["#90"], "{result:#}");
+    assert_eq!(
+        result["report"]["findings"][0]["message"],
+        "summed plan area of the members is 32 m²; required at most 31 m²",
+        "{result:#}"
+    );
+
+    // A member without a body leaves the sum unknown.
+    let (output, result) = plan_area(
+        "geometry-plan-area-zone-bodiless",
+        &spaces_in_a_zone(true),
+        ("zone", "IfcZone"),
+        &parameters(32.0),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(
+        flagged_objects(&result, "not_evaluated"),
+        ["#90"],
+        "{result:#}"
+    );
+}
+
 /// Slabs #16, #26 and #36, 0.2 m thick, stacked at 0, 3 and 6.5 m.
 fn stacked_slabs() -> String {
     let slab = |first: u32, elevation: f64| {

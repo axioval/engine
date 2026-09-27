@@ -7,6 +7,7 @@
 //! like a check's; the structured comparison rides beside it in the
 //! result's `comparison` field.
 
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
@@ -124,7 +125,8 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     let bounds = args
         .geometry
         .then(|| geometry::bounds(&[&base, &revised], &output.report));
-    emit(&output, &project, bounds, args.output)?;
+    // A comparison runs no ruleset, so its topics have no rule labels.
+    emit(&output, &project, bounds, BTreeMap::new(), args.output)?;
     Ok(Outcome::of(&output.report))
 }
 

@@ -163,7 +163,9 @@ groups them.
 topic date is `--bcf-date`, else `SOURCE_DATE_EPOCH` when set, else the current
 time, all in UTC. With `SOURCE_DATE_EPOCH` set, the same inputs write
 byte-identical archives. Objects the archive cannot select, because they have
-no valid unique GlobalId, are named on stderr.
+no valid unique GlobalId, are named on stderr. Each topic is labelled with its
+rule id, then the rule's folder path (`Folder: Structure / Walls`) and tags
+from the ruleset.
 
 With `--geometry`, each viewpoint gets a perspective and an orthogonal camera
 fitted to the measured bounds of the topic's objects. An object that was not

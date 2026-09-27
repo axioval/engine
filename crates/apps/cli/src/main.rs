@@ -27,8 +27,8 @@ use axioval::{
     bcf,
     engine::{
         DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, IntegritySeverity,
-        LocationMethod, LocationPolicy, Runtime, SourceIntegrityServiceHandle, SourceMetadata,
-        UnmappedReason, compile_rulesets,
+        LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
+        SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile_rulesets,
     },
     ifc::import_ifc_session,
     ir::{
@@ -423,6 +423,7 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     if args.locate == Locate::Geometry && !args.geometry {
         return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
     }
+    let labels = rule_labels(&rulesets);
     let (session, bytes) = sources(&args.models)?;
     let session = session.with_discipline_map(
         &args
@@ -463,13 +464,32 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let bounds = args
         .geometry
         .then(|| geometry::bounds(&[&session], &output.report));
-    emit(&output, session.project(), bounds, args.output)?;
+    emit(&output, session.project(), bounds, labels, args.output)?;
     Ok(Outcome::of(&output.report))
+}
+
+/// The BCF labels of every rule: folder path and tags, keyed by rule id as
+/// the report names it, qualified by package when several rulesets run.
+fn rule_labels(rulesets: &[RuleSetPackage]) -> BTreeMap<String, Vec<String>> {
+    let qualify = rulesets.len() > 1;
+    let mut labels = BTreeMap::new();
+    for ruleset in rulesets {
+        for (rule, own) in bcf::ruleset_labels(ruleset) {
+            let rule = if qualify {
+                format!("{}{QUALIFIED_RULE_SEPARATOR}{rule}", ruleset.package.id)
+            } else {
+                rule
+            };
+            labels.insert(rule, own);
+        }
+    }
+    labels
 }
 
 /// Writes a result as `args` asks: JSON to stdout or `--report`, a summary,
 /// a BCF archive, and diagnostics to stderr. `bounds` are the measured
-/// objects' extents with `--geometry`, which fit the BCF cameras.
+/// objects' extents with `--geometry`, which fit the BCF cameras;
+/// `rule_labels` label each rule's topics (see [`rule_labels`]).
 ///
 /// Everything is built before anything is written, so a run that fails
 /// leaves no partial output behind.
@@ -477,6 +497,7 @@ pub(crate) fn emit(
     output: &CheckOutput,
     project: &Project,
     bounds: Option<BTreeMap<ObjectId, bcf::Bounds>>,
+    rule_labels: BTreeMap<String, Vec<String>>,
     args: OutputArgs,
 ) -> Result<(), Box<dyn Error>> {
     let json = serde_json::to_string_pretty(output)? + "\n";
@@ -489,6 +510,7 @@ pub(crate) fn emit(
             let options = bcf::Options {
                 version: args.bcf_version.into(),
                 bounds,
+                rule_labels,
                 ..bcf::Options::new(args.bcf_author, date)
             };
             let export = bcf::export(&output.report, project, &options)?;

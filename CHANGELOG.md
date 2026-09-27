@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **BCF labels from rulesets.** (#109) `axioval_bcf::Options` gains
+  `rule_labels`, labels written after each topic's rule id, and
+  `ruleset_labels` derives them from a ruleset: `Folder: <path>` for a rule
+  in folders, then its tags. `check --bcf` labels every topic this way,
+  qualified by package with several rulesets; GUIDs are unchanged.
+  **Breaking:** `Options` gains a field.
 - **BCF cameras and BCF 3.0.** (#109) `axioval_bcf::Options` gains
   `bounds`, each object's measured `Bounds`, and `version`
   (`Version::V2_1` or `Version::V3_0`). A topic whose objects are all

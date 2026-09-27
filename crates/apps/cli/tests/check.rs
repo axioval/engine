@@ -135,6 +135,8 @@ fn a_finding_exits_3_and_is_written_as_json_and_bcf() {
     let topic = &archive.topics().next().unwrap().topic;
     assert_eq!(topic.creation_date.as_deref(), Some("2026-09-26T10:00:00Z"));
     assert_eq!(topic.creation_author.as_deref(), Some("axioval"));
+    // The rule id, then the rule's tag from the ruleset.
+    assert_eq!(topic.labels, ["wall-reference-required", "example"]);
     assert!(stderr(&output).contains("1 finding(s), 0 not evaluated"));
 }
 
@@ -852,7 +854,7 @@ fn with_geometry_a_duct_wall_clash_is_located_by_storey_and_derived_space() {
     let topic = &archive.topics().next().unwrap().topic;
     assert_eq!(
         topic.labels,
-        ["under-test", "Storey: Level 1", "Space: 101"],
+        ["under-test", "example", "Storey: Level 1", "Space: 101"],
         "{topic:?}"
     );
 }
@@ -2182,7 +2184,7 @@ fn an_empty_selection_is_a_source_finding_in_json_summary_listing_and_bcf() {
         archive.diagnostics()
     );
     let topic = &archive.topics().next().unwrap().topic;
-    assert_eq!(topic.labels, ["spaces-exist"]);
+    assert_eq!(topic.labels, ["spaces-exist", "example"]);
     assert!(
         topic
             .description
@@ -9640,5 +9642,56 @@ fn with_geometry_a_door_sill_above_the_floor_is_found() {
             .as_array()
             .is_none_or(Vec::is_empty),
         "{result:#}"
+    );
+}
+
+#[test]
+fn bcf_topics_are_labelled_by_folder_and_tags_of_each_ruleset() {
+    let case = Case::new("bcf-rule-labels");
+    let nested = |package: &str, folder: &str| {
+        let path = case.ruleset_as(package);
+        let mut ruleset: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let rule = ruleset["root"]["rules"][0].take();
+        ruleset["root"]["rules"] = json!([]);
+        ruleset["root"]["folders"] = json!([{
+            "id": "f", "name": {"default": folder, "translations": {}},
+            "rules": [rule], "folders": [],
+        }]);
+        case.write(&format!("{package}.json"), &ruleset.to_string())
+    };
+    let rulesets = [
+        nested("org.example.client", "Handover"),
+        nested("org.example.discipline", "Walls"),
+    ];
+    let model = case.write("model.ifc", &ifc("0000000000000000000002", false));
+    let bcf = case.path("issues.bcfzip");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+    command
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(case.definitions(true))
+        .args(["--bcf", bcf.to_str().unwrap()])
+        .env("SOURCE_DATE_EPOCH", "1790416800");
+    for ruleset in &rulesets {
+        command.arg("--ruleset").arg(ruleset);
+    }
+    let output = command.output().unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    let mut labels: Vec<Vec<String>> = archive
+        .topics()
+        .map(|markup| markup.topic.labels.clone())
+        .collect();
+    labels.sort();
+    assert_eq!(
+        labels,
+        [
+            ["org.example.client/r1", "Folder: Handover", "example"],
+            ["org.example.discipline/r1", "Folder: Walls", "example"],
+        ]
     );
 }

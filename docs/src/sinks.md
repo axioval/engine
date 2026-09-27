@@ -25,6 +25,14 @@ for object in &export.unanchored {
 | Finding | `TopicType` is the severity (`Error`, `Warning`, `Info`); `Priority` follows it (`High`, `Normal`, `Low`); the labels are the rule id, then `Storey: <name>` and `Space: <name>` for a located finding |
 | Not-evaluated outcome | `TopicType` is `Not evaluated`; no `Priority`, since no severity was decided; the description names the reason |
 
+**Labels.** A topic's first label is its rule id. `Options::rule_labels`
+adds labels per rule after it (before any location labels), and
+`ruleset_labels` derives them from a
+ruleset: `Folder: <path>` for a rule inside folders (folder names joined by
+` / `, the root left out), then the rule's tags, trimmed, each once. Labels
+never enter the GUID key. The CLI labels every check this way; with several
+rulesets the keys are qualified by package as the rule ids are.
+
 Every topic's description repeats the message, the rule, the source-qualified
 object ids and each evidence locator with its exactness.
 

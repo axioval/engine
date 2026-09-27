@@ -50,6 +50,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use axioval_ir::contract::{RuleFolder, RuleSetPackage};
 use axioval_ir::{
     Finding, Location, NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report, Scope,
     Severity,
@@ -185,6 +186,10 @@ pub struct Options {
     /// bounded; an object missing from the map leaves its viewpoint without
     /// a camera and is listed in [`Export::unframed`].
     pub bounds: Option<BTreeMap<ObjectId, Bounds>>,
+    /// Labels each rule's topics carry after the rule id, keyed by the rule
+    /// id as the report names it: its ruleset folder path and tags, see
+    /// [`ruleset_labels`]. Empty adds none.
+    pub rule_labels: BTreeMap<String, Vec<String>>,
 }
 
 impl Options {
@@ -197,6 +202,7 @@ impl Options {
             include_not_evaluated: true,
             version: Version::V2_1,
             bounds: None,
+            rule_labels: BTreeMap::new(),
         }
     }
 }
@@ -465,7 +471,7 @@ impl Entry {
             topic_type: Some(self.topic_type.clone()),
             topic_status: Some(options.status.clone()),
             priority: self.priority.map(str::to_owned),
-            labels: self.labels.clone(),
+            labels: merged_labels(&self.labels, &options.rule_labels),
             creation_date: options.date.clone(),
             creation_author: options.author.clone(),
             viewpoints,
@@ -629,6 +635,71 @@ fn labels(rule: &str, location: Option<&Location>) -> Vec<String> {
                 .iter()
                 .map(|place| format!("Space: {}", named(place))),
         );
+    }
+    labels
+}
+
+/// Labels a ruleset gives its rules, keyed by rule id as written in it:
+/// `Folder: <path>` for a rule inside folders (names joined by ` / `, the
+/// root folder left out), then the rule's tags. A rule directly in the root
+/// and without tags has none.
+///
+/// Names and tags are trimmed and blank ones dropped, because BCF refuses
+/// labels with surrounding whitespace. A host running several rulesets
+/// qualifies the keys as it qualifies the rule ids.
+#[must_use]
+pub fn ruleset_labels(ruleset: &RuleSetPackage) -> BTreeMap<String, Vec<String>> {
+    fn walk(
+        folder: &RuleFolder,
+        path: &mut Vec<String>,
+        labels: &mut BTreeMap<String, Vec<String>>,
+    ) {
+        for rule in &folder.rules {
+            let mut own = Vec::new();
+            if !path.is_empty() {
+                own.push(format!("Folder: {}", path.join(" / ")));
+            }
+            own.extend(
+                rule.tags
+                    .iter()
+                    .map(|tag| tag.trim())
+                    .filter(|tag| !tag.is_empty())
+                    .map(str::to_owned),
+            );
+            if !own.is_empty() {
+                labels.insert(rule.id.clone(), own);
+            }
+        }
+        for child in &folder.folders {
+            let name = child.name.default.trim();
+            let pushed = !name.is_empty();
+            if pushed {
+                path.push(name.to_owned());
+            }
+            walk(child, path, labels);
+            if pushed {
+                path.pop();
+            }
+        }
+    }
+    let mut labels = BTreeMap::new();
+    walk(&ruleset.root, &mut Vec::new(), &mut labels);
+    labels
+}
+
+/// A topic's labels: the rule id, then the host's labels for the rule
+/// (folder path, tags), then the location's, each once. Labels never enter
+/// the GUID key.
+fn merged_labels(located: &[String], rule_labels: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+    let Some((rule, places)) = located.split_first() else {
+        return Vec::new();
+    };
+    let own = rule_labels.get(rule.as_str()).into_iter().flatten();
+    let mut labels: Vec<String> = Vec::new();
+    for label in std::iter::once(rule).chain(own).chain(places) {
+        if !labels.contains(label) {
+            labels.push(label.clone());
+        }
     }
     labels
 }

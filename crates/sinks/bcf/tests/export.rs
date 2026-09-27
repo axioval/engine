@@ -133,6 +133,33 @@ fn a_located_entry_is_labelled_by_storey_and_space_under_the_same_guid() {
         ]
     );
     assert_eq!(located[0].guid, plain[0].guid);
+
+    // A rule's own labels go between the rule id and the location.
+    let labelled = Options {
+        rule_labels: [(
+            "slab-contact".to_owned(),
+            vec!["Folder: Structure".to_owned()],
+        )]
+        .into(),
+        ..options()
+    };
+    let mut both = report("a.ifc", 1);
+    both.findings[0].location = Some(axioval_ir::Location {
+        storeys: vec![axioval_ir::Place {
+            id: id("a.ifc", 90),
+            name: Some("Level 1".into()),
+        }],
+        spaces: vec![],
+        unresolved: None,
+    });
+    let topic = &export(&both, &model("a.ifc", 1), &labelled)
+        .unwrap()
+        .document
+        .topics[0];
+    assert_eq!(
+        topic.labels,
+        ["slab-contact", "Folder: Structure", "Storey: Level 1"]
+    );
 }
 
 #[test]
@@ -725,5 +752,94 @@ mod cameras {
                 view_to_world_scale: 2.0 * MIN_FRAME_RADIUS_METRES
             }
         );
+    }
+}
+
+mod labels {
+    use axioval_bcf::{Options, export, ruleset_labels};
+    use axioval_ir::RuleSetPackage;
+    use serde_json::{Value, json};
+
+    use super::{model, options, report};
+
+    /// The schema fixture's ruleset with its rule renamed `slab-contact`,
+    /// nested in `Structure / Walls` and tagged, beside a root rule without
+    /// tags.
+    fn ruleset() -> RuleSetPackage {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/schema-v0.1.0/ruleset.json"
+        ))
+        .unwrap();
+        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let mut rule = ruleset["root"]["rules"][0].clone();
+        rule["id"] = json!("slab-contact");
+        rule["tags"] = json!(["structure", " ", "example"]);
+        let mut untagged = rule.clone();
+        untagged["id"] = json!("door-fire-rating");
+        untagged["tags"] = json!([]);
+        ruleset["root"]["rules"] = json!([untagged]);
+        ruleset["root"]["folders"] = json!([{
+            "id": "structure",
+            "name": {"default": "Structure", "translations": {}},
+            "rules": [],
+            "folders": [{
+                "id": "walls",
+                "name": {"default": " Walls ", "translations": {}},
+                "rules": [rule],
+                "folders": [],
+            }],
+        }]);
+        serde_json::from_value(ruleset).unwrap()
+    }
+
+    #[test]
+    fn a_ruleset_labels_its_rules_by_folder_path_and_tags() {
+        let labels = ruleset_labels(&ruleset());
+        assert_eq!(
+            labels.get("slab-contact").unwrap(),
+            &["Folder: Structure / Walls", "structure", "example"]
+        );
+        // A root rule without tags has no labels of its own.
+        assert!(!labels.contains_key("door-fire-rating"), "{labels:?}");
+    }
+
+    #[test]
+    fn topics_carry_the_rule_labels_after_the_rule_id_under_unchanged_guids() {
+        let plain = export(&report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+        let labelled = Options {
+            rule_labels: ruleset_labels(&ruleset()),
+            ..options()
+        };
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &labelled).unwrap();
+        let archive = openbim_bcf::read_slice(&export.to_bytes().unwrap()).unwrap();
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        let labels: Vec<Vec<String>> = archive
+            .topics()
+            .map(|markup| markup.topic.labels.clone())
+            .collect();
+        assert!(
+            labels.contains(&vec![
+                "slab-contact".to_owned(),
+                "Folder: Structure / Walls".to_owned(),
+                "structure".to_owned(),
+                "example".to_owned(),
+            ]),
+            "{labels:?}"
+        );
+        assert!(labels.contains(&vec!["door-fire-rating".to_owned()]));
+        let guids = |export: &axioval_bcf::Export| -> Vec<String> {
+            export
+                .document
+                .topics
+                .iter()
+                .map(|topic| topic.guid.clone())
+                .collect()
+        };
+        assert_eq!(guids(&export), guids(&plain));
     }
 }

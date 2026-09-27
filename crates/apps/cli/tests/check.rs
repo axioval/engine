@@ -9872,3 +9872,73 @@ fn wall_opening_heads_too_far_below_the_wall_top_are_found() {
         "{result:#}"
     );
 }
+
+/// Walls #10 (5 m) and #20 (4 m), 3 m high, both stating a net side area
+/// of 15 m², in a project measured in metres and square metres.
+fn walls_stating_side_areas() -> String {
+    let mut data = String::new();
+    for (first, y, length) in [(10u32, 0.0, 5.0), (20, 5.0, 4.0)] {
+        let [p, pos, profile, solid, shape, product, wall] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        let _ = write!(
+            data,
+            "#{p}=IFCCARTESIANPOINT(({x},{y}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length:?},0.2);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{wall}=IFCWALL('{wall:022}',$,$,$,$,#3,#{product},$,$);\n{}",
+            wall_areas(first + 100, wall, 15.0, 15.0),
+            x = length / 2.0,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);\n\
+         #8=IFCUNITASSIGNMENT((#6,#7));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#8);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+#[test]
+fn with_geometry_a_stated_side_area_is_divided_by_the_measured_face() {
+    let case = Case::new("property-requirements-face-area");
+    let (output, result) = case.geometry_rule(
+        &walls_stating_side_areas(),
+        &[],
+        "axioval:capability.property-requirements",
+        &registry_signature("axioval:capability.property-requirements"),
+        entity("wall"),
+        json!({"requirements": {"type": "table", "value": [{
+            "property_set": {"type": "string", "value": "axioval:example.ifc.qto-wall"},
+            "property": {"type": "string", "value": "axioval:example.ifc.net-side-area"},
+            "requirement": {"type": "string", "value": "required"},
+            "minimum": {"type": "number", "value": 0.99},
+            "maximum": {"type": "number", "value": 1.01},
+            "unit": {"type": "string", "value": "m2"},
+            "per": {"type": "string", "value": "measured-face-area"},
+        }]}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The 5 m wall's side is 15 m², the 4 m wall's only 12 m².
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#26".to_owned(),
+            "wrong value: axioval:example.ifc.qto-wall.axioval:example.ifc.net-side-area is \
+             15 m² (1.25 m² per m² of measured face area); required between 0.99 and 1.01 m2 per m² of measured face \
+             area (requirement row 0)"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

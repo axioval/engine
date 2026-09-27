@@ -109,6 +109,18 @@ impl FacadeArea {
 pub trait FacadeAreaService: Send + Sync + 'static {
     /// The area of `object`'s faces that face the outside.
     fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError>;
+    /// The area of `object`'s largest plane face: all of its body's faces
+    /// lying in one oriented plane, such as a wall's side less its openings
+    /// or a slab's top. The answer is a [`FacadeArea`] of that face.
+    ///
+    /// The default refuses with [`FacadeAreaError::Unavailable`], so a
+    /// service that does not measure faces fails closed.
+    fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+        let _ = object;
+        Err(FacadeAreaError::Unavailable(
+            "face areas are not measured by this service".into(),
+        ))
+    }
 }
 
 /// Registry handle for a [`FacadeAreaService`].
@@ -126,6 +138,16 @@ impl FacadeAreaServiceHandle {
     /// different question and is refused.
     pub fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
         let area = self.0.measure_facade_area(object)?;
+        if area.object() != object {
+            return Err(FacadeAreaError::InvalidMeasurement);
+        }
+        Ok(area)
+    }
+
+    /// The area of `object`'s largest plane face. An area naming another
+    /// object answers a different question and is refused.
+    pub fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+        let area = self.0.measure_face_area(object)?;
         if area.object() != object {
             return Err(FacadeAreaError::InvalidMeasurement);
         }

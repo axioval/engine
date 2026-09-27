@@ -109,7 +109,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the turned-box test fails without them. Curved, unmeasured or bodiless
   spaces and unmeasured boundaries refuse.
 - `src/triangle_count.rs` implements `TriangleCountService`: the triangles of the registered mesh. Exact evidence only for a planar mesh; bodiless counts zero, unmeasured refuses.
-- `src/facade_area.rs` implements `FacadeAreaService`: steep faces that look outside, classified at four samples each. A face held against another body or a host-declared space, or whose ray first meets itself or a space within `REACH`, is not facade; meeting nothing or another body is. A face whose samples disagree widens the interval, never a guess. Unmeasured bodies anywhere, bodiless declared spaces and tessellations within reach refuse.
+- `src/facade_area.rs` implements `FacadeAreaService`: steep faces that look outside, classified at four samples each. A face held against another body or a host-declared space, or whose ray first meets itself or a space within `REACH`, is not facade; meeting nothing or another body is. A face whose samples disagree widens the interval, never a guess. Unmeasured bodies anywhere, bodiless declared spaces and tessellations within reach refuse. `measure_face_area` sums the triangles of each plane (parallel normals either way wound, corners within `ON_SURFACE`) and answers the largest, exactly, for exact meshes only: a tessellated body's planes are chords, so it refuses; never widen a chord plane into a face.
 - `src/walkable.rs` (internal) builds walkable plan domains for the two route
   services: floors (closed exact bodies with one horizontal underside), band
   footprints (what a body occupies inside an open headroom band: the boundary
@@ -217,7 +217,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   not bound. Intersection volumes come only from `axiolid-inspect`'s
   certified integrals (`intersection_volume`, `enclosed_volume`), for two
   closed solids; a kernel refusal leaves the volume `None`, never zero, and
-  a tessellation widens it by `tube_volume`, never by nothing. A tessellated overlap is asserted
+  a tessellation widens it by `tube_volume`, never by nothing.
+  `measure_body_volume` is one closed body's `enclosed_volume` widened
+  the same way; an open surface refuses. A tessellated overlap is asserted
   only from a witness deeper than the deviations and denied only beyond the
   combined deviation; otherwise it stays open. Never decide it on the mesh.
 - `src/face_distance.rs` answers `measure_face_distance` for the proximity

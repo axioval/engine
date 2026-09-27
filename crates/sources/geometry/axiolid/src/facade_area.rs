@@ -258,7 +258,99 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
         let (lower, upper) = ((certain - band).max(0.0), certain + possible + band);
         FacadeArea::try_new(object.clone(), lower, upper, evidence)
     }
+
+    fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+        if self.geometry.has_no_body(object) {
+            return Err(FacadeAreaError::Unavailable(format!(
+                "{object} is declared to have no body"
+            )));
+        }
+        let mesh = self
+            .geometry
+            .mesh(object)
+            .ok_or_else(|| FacadeAreaError::UnknownObject(object.clone()))?;
+        // A tessellated body's planes are chords of curved faces, so its
+        // largest group of coplanar triangles is not a face of the object.
+        if !matches!(self.geometry.fidelity(object), Ok(GeometryFidelity::Exact)) {
+            return Err(FacadeAreaError::Unavailable(format!(
+                "{object} is tessellated, so its plane faces are not certified"
+            )));
+        }
+        let soup = triangles(mesh);
+        if soup.is_empty() || !audit_mesh(mesh, tolerance()?).is_surface_usable() {
+            return Err(FacadeAreaError::Unavailable(format!(
+                "the mesh of {object} cannot be measured"
+            )));
+        }
+        let (area, planes) = largest_plane(&soup);
+        if area <= 0.0 {
+            return Err(FacadeAreaError::Unavailable(format!(
+                "the mesh of {object} has no face with area"
+            )));
+        }
+        FacadeArea::try_new(
+            object.clone(),
+            area,
+            area,
+            Evidence {
+                source: object.source.clone(),
+                locator: format!("face-area:{object}:planes={planes}"),
+                exact: true,
+            },
+        )
+    }
 }
+
+/// A plane of the mesh: unit normal (sign fixed so its first
+/// non-zero component is positive) and the offset along it.
+struct Plane {
+    normal: Vec3,
+    offset: f64,
+    area: f64,
+}
+
+/// The summed area of the triangles in the plane holding the most, and the
+/// number of distinct planes. A triangle joins a plane when its normal is
+/// parallel and every corner lies within [`ON_SURFACE`] of it, whichever way
+/// it is wound.
+fn largest_plane(soup: &[Triangle]) -> (f64, usize) {
+    let mut planes: Vec<Plane> = Vec::new();
+    for &[a, b, c] in soup {
+        let cross = (b - a).cross(c - a);
+        let doubled = cross.length();
+        if doubled <= ON_SURFACE {
+            continue;
+        }
+        let mut normal = cross / doubled;
+        let flip = [normal.x, normal.y, normal.z]
+            .into_iter()
+            .find(|component| component.abs() > PARALLEL)
+            .is_some_and(|component| component < 0.0);
+        if flip {
+            normal = -normal;
+        }
+        let on = |plane: &Plane| {
+            plane.normal.dot(normal).abs() >= 1.0 - PARALLEL
+                && [a, b, c].iter().all(|corner| {
+                    (plane.normal.dot(Vec3::new(corner.x, corner.y, corner.z)) - plane.offset).abs()
+                        <= ON_SURFACE
+                })
+        };
+        match planes.iter_mut().find(|plane| on(plane)) {
+            Some(plane) => plane.area += doubled / 2.0,
+            None => planes.push(Plane {
+                normal,
+                offset: normal.dot(Vec3::new(a.x, a.y, a.z)),
+                area: doubled / 2.0,
+            }),
+        }
+    }
+    let largest = planes.iter().map(|plane| plane.area).fold(0.0, f64::max);
+    (largest, planes.len())
+}
+
+/// How far two unit normals may be from parallel and still share a plane.
+const PARALLEL: f64 = 1e-12;
 
 fn tolerance() -> Result<Tolerance, FacadeAreaError> {
     Tolerance::new(ON_SURFACE, ON_SURFACE)

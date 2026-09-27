@@ -592,3 +592,44 @@ fn extents_along_a_walls_own_axes_measure_its_thickness() {
         Err(ProximityError::Unavailable)
     );
 }
+
+#[test]
+fn a_closed_body_encloses_its_certified_volume() {
+    let service = AxiolidProximityService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("wall"), wall())
+            .with_tessellated_mesh(id("column"), column([0.0, 0.0], 0.5, [0.0, 3.0], 32), 0.01)
+            .with_mesh(id("sheet"), quad(0.0))
+            .with_no_body(id("storey")),
+    );
+    let volume = service.measure_body_volume(&id("wall")).unwrap();
+    assert_eq!(volume.object(), &id("wall"));
+    assert!(volume.evidence().exact && volume.fidelity().is_exact());
+    assert_volume(volume.volume(), 2.4);
+
+    // A tessellated body is widened by its chord band, so the true
+    // cylinder's volume lies inside and the evidence is approximate.
+    let volume = service.measure_body_volume(&id("column")).unwrap();
+    let true_volume = std::f64::consts::PI * 0.25 * 3.0;
+    assert!(!volume.evidence().exact);
+    assert!(
+        volume.volume().lower_cubic_metres() < true_volume
+            && true_volume < volume.volume().upper_cubic_metres(),
+        "{volume:?}"
+    );
+
+    // An open surface encloses nothing; a bodiless or unknown object has no
+    // volume to measure.
+    assert_eq!(
+        service.measure_body_volume(&id("sheet")),
+        Err(ProximityError::Unavailable)
+    );
+    assert_eq!(
+        service.measure_body_volume(&id("storey")),
+        Err(ProximityError::NoBody)
+    );
+    assert_eq!(
+        service.measure_body_volume(&id("ghost")),
+        Err(ProximityError::Unavailable)
+    );
+}

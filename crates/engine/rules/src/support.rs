@@ -1147,6 +1147,20 @@ pub(crate) mod table {
                 _ => None,
             })
         }
+
+        /// A `date` or `dateTime` cell as the property value it bounds.
+        pub(crate) fn temporal(
+            self,
+            column: &str,
+        ) -> Result<Option<axioval_ir::PropertyValue>, Unavailable> {
+            self.typed(column, |value| match value {
+                ParameterValue::Date { value } => Some(axioval_ir::PropertyValue::Date(*value)),
+                ParameterValue::DateTime { value } => {
+                    Some(axioval_ir::PropertyValue::DateTime(*value))
+                }
+                _ => None,
+            })
+        }
     }
 
     /// A whole-value wildcard pattern, read as `like` reads it in property

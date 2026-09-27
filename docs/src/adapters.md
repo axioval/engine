@@ -569,6 +569,16 @@ or a declared space without a body refuses. Walls from IFC are meshed net of
 their openings, so a wall's facade excludes its windows, and a window's
 facade is its own outer face.
 
+The same service answers `measure_face_area`: the largest summed area of the
+triangles lying in one plane (parallel normals, whichever way wound, every
+corner within 1 nm of the plane), so a wall's side less its openings, or a
+slab's top, even when the body is modelled in pieces. Only an exact mesh
+answers, and exactly; a tessellated body's planes are chords of curved
+faces, so it refuses, as does a bodiless or unknown object.
+`AxiolidProximityService::measure_body_volume` answers the certified
+`enclosed_volume` of a closed two-manifold, widened by the chord band
+(`tube_volume`) for a tessellated one; an open surface refuses.
+
 `AxiolidDerivedRelationshipService` derives the relationships of the
 [derived-relationship service](./services.md) from the same meshes. The host
 declares which objects are spaces (`with_space`) and which are doors,

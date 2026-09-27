@@ -240,3 +240,41 @@ fn unknown_bodiless_and_unmeasured_objects_refuse() {
         Err(FacadeAreaError::Unavailable(_))
     ));
 }
+
+#[test]
+fn a_face_area_is_the_largest_plane_face() {
+    // One wall modelled as two boxes: the coplanar sides join into one
+    // 10 x 3 face, and the butt joint's faces stay two small ones.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(
+            id("wall"),
+            boxes(&[
+                ([0.0, -0.3, 0.0], [4.0, 0.0, 3.0]),
+                ([4.0, -0.3, 0.0], [10.0, 0.0, 3.0]),
+            ]),
+        )
+        .with_mesh(id("slab"), cuboid([0.0, 0.0, 3.0], [10.0, 4.0, 3.25]))
+        .with_tessellated_mesh(id("vault"), room(), 0.001)
+        .with_no_body(id("storey"));
+    let service = AxiolidFacadeAreaService::new(geometry);
+    let area = service.measure_face_area(&id("wall")).unwrap();
+    assert!(area.is_exact() && area.evidence().exact);
+    assert!(close(area.lower_square_metres(), 30.0), "{area:?}");
+    assert!(area.evidence().locator.starts_with("face-area:"));
+    let area = service.measure_face_area(&id("slab")).unwrap();
+    assert!(close(area.upper_square_metres(), 40.0), "{area:?}");
+
+    // A tessellated body's planes are chords, never certified faces.
+    assert!(matches!(
+        service.measure_face_area(&id("vault")),
+        Err(FacadeAreaError::Unavailable(_))
+    ));
+    assert!(matches!(
+        service.measure_face_area(&id("storey")),
+        Err(FacadeAreaError::Unavailable(_))
+    ));
+    assert_eq!(
+        service.measure_face_area(&id("ghost")),
+        Err(FacadeAreaError::UnknownObject(id("ghost")))
+    );
+}

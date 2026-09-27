@@ -711,7 +711,7 @@ pub use properties::{
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
 };
 pub use proximity::{
-    BodyContainment, Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence,
+    BodyContainment, BodyVolume, Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence,
     FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds, OverlapAlongEvidence,
     OverlapAlongRequest, OverlapExtents, ProjectedDistanceEvidence, ProximityError,
     ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,

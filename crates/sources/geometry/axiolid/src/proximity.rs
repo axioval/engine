@@ -84,12 +84,12 @@ use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
-    BodyContainment, Bounds3, ConvexPlanRegion, FaceDistanceError, FaceDistanceEvidence,
-    FaceDistanceRequest, GeometryFidelity, IntersectionVolume, LengthInterval, MetricDirection,
-    ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest, OverlapExtents,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, RegionDistanceEvidence, RegionDistanceRequest,
-    VerticalDirection, VolumeInterval,
+    BodyContainment, BodyVolume, Bounds3, ConvexPlanRegion, FaceDistanceError,
+    FaceDistanceEvidence, FaceDistanceRequest, GeometryFidelity, IntersectionVolume,
+    LengthInterval, MetricDirection, ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest,
+    OverlapExtents, ProjectedDistanceEvidence, ProximityError, ProximityEvidence,
+    ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
+    RegionDistanceRequest, VerticalDirection, VolumeInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -1386,6 +1386,29 @@ impl ProximityService for AxiolidProximityService {
         request: &FaceDistanceRequest,
     ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
         crate::face_distance::measure(self, &self.geometry, request)
+    }
+
+    fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
+        let body = self.body(object)?;
+        // Only a closed two-manifold encloses a volume.
+        if !body.solid {
+            return Err(ProximityError::Unavailable);
+        }
+        let fidelity = self.geometry.fidelity(object)?;
+        let enclosed = enclosed_volume(body.mesh).map_err(|_| ProximityError::Unavailable)?;
+        let band = tube_volume(&body, fidelity.deviation_metres());
+        let volume =
+            VolumeInterval::try_new((enclosed.lower - band).max(0.0), enclosed.upper + band)?;
+        BodyVolume::try_new(
+            object.clone(),
+            volume,
+            fidelity,
+            Evidence {
+                source: object.source.clone(),
+                locator: format!("axiolid:volume:{object}"),
+                exact: fidelity.is_exact(),
+            },
+        )
     }
 
     fn measure_region_distance(

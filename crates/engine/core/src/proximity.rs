@@ -645,6 +645,54 @@ impl IntersectionVolume {
     }
 }
 
+/// The certified volume one closed body encloses.
+///
+/// A tessellated body's volume is widened by the band its chord deviation
+/// allows, so the interval always holds the true volume; only an exact mesh
+/// may carry exact evidence.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodyVolume {
+    object: ObjectId,
+    volume: VolumeInterval,
+    fidelity: GeometryFidelity,
+    evidence: Evidence,
+}
+
+impl BodyVolume {
+    /// The volume of `object`. Exact evidence needs exact geometry, and
+    /// every piece of evidence needs a reviewable locator.
+    pub fn try_new(
+        object: ObjectId,
+        volume: VolumeInterval,
+        fidelity: GeometryFidelity,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        if evidence.exact && !fidelity.is_exact() || evidence.locator.trim().is_empty() {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            object,
+            volume,
+            fidelity,
+            evidence,
+        })
+    }
+    /// The measured object.
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+    /// Bounds on the enclosed volume.
+    pub fn volume(&self) -> VolumeInterval {
+        self.volume
+    }
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// How close two bodies come and how far they overlap.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProximityEvidence {
@@ -1219,6 +1267,15 @@ pub trait ProximityService: Send + Sync + 'static {
         let _ = request;
         Err(ProximityError::UnsupportedProjection)
     }
+
+    /// The volume one closed body encloses.
+    ///
+    /// The default refuses with [`ProximityError::Unavailable`], so a
+    /// service that does not measure volumes fails closed.
+    fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
+        let _ = object;
+        Err(ProximityError::Unavailable)
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -1274,6 +1331,15 @@ impl ProximityServiceHandle {
         }
         Ok(measured)
     }
+    /// The volume `object` encloses. A volume naming another object answers
+    /// a different question and is refused.
+    pub fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
+        let measured = self.0.measure_body_volume(object)?;
+        if measured.object() != object {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
     /// The plan distance from a region. Evidence answering another request
     /// is refused.
     pub fn measure_region_distance(
@@ -1298,6 +1364,43 @@ mod tests {
     }
     fn request() -> ProximityRequest {
         ProximityRequest::try_new(id("pipe"), id("wall")).unwrap()
+    }
+
+    /// A service answering one volume whatever it is asked.
+    struct OneVolume(BodyVolume);
+
+    #[test]
+    fn a_body_volume_keeps_its_exactness_honest_and_names_its_object() {
+        let tessellated = GeometryFidelity::Tessellated {
+            chord_deviation_metres: 0.01,
+        };
+        let volume = VolumeInterval::try_new(1.0, 1.1).unwrap();
+        assert_eq!(
+            BodyVolume::try_new(id("wall"), volume, tessellated, exact()),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        let measured = BodyVolume::try_new(id("wall"), volume, tessellated, approximate()).unwrap();
+        let handle = ProximityServiceHandle::new(Arc::new(OneVolume(measured.clone())));
+        assert_eq!(handle.measure_body_volume(&id("wall")), Ok(measured));
+        assert_eq!(
+            handle.measure_body_volume(&id("pipe")),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    impl ProximityService for OneVolume {
+        fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_proximity(
+            &self,
+            _: &ProximityRequest,
+        ) -> Result<ProximityEvidence, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_body_volume(&self, _: &ObjectId) -> Result<BodyVolume, ProximityError> {
+            Ok(self.0.clone())
+        }
     }
     fn exact() -> Evidence {
         Evidence::exact(SourceId::new("cad", "m").unwrap(), "proximity:pipe:wall")

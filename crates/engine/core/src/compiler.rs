@@ -628,7 +628,9 @@ fn cell_fits(kind: ColumnKind, cell: &ParameterValue) -> bool {
         | (ColumnKind::Integer, ParameterValue::Integer { .. })
         | (ColumnKind::Boolean, ParameterValue::Boolean { .. })
         | (ColumnKind::Selector, ParameterValue::Selector { .. })
-        | (ColumnKind::Reference, ParameterValue::Reference { .. }) => true,
+        | (ColumnKind::Reference, ParameterValue::Reference { .. })
+        | (ColumnKind::Date, ParameterValue::Date { .. })
+        | (ColumnKind::DateTime, ParameterValue::DateTime { .. }) => true,
         (ColumnKind::TextPattern, ParameterValue::String { value }) => well_formed_pattern(value),
         (ColumnKind::Number, ParameterValue::Number { value }) => value.is_finite(),
         (ColumnKind::Quantity, ParameterValue::Quantity { value, unit }) => {

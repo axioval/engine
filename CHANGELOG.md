@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Exclusive and date bounds, and measured volume and face divisors, in
+  property requirements.** (#110) `property-requirements` rows take
+  `minimum_exclusive` and `maximum_exclusive`, so `> 0` fails on 0; date
+  bounds `minimum_date`/`maximum_date` and `minimum_date_time`/
+  `maximum_date_time` with an optional `precision` `day`, compared as every
+  date comparison is; and `per` `measured-volume` (the certified volume of
+  the closed body) and `measured-face-area` (its largest plane face, such
+  as a wall's side). Table parameters take `date` and `dateTime` columns
+  (`ColumnKind::Date`, `ColumnKind::DateTime`). `ProximityService` gains
+  `measure_body_volume` (`BodyVolume`) and `FacadeAreaService`
+  `measure_face_area`, both refusing by default; the Axiolid adapter
+  answers the volume from `enclosed_volume` widened by the chord band, and
+  the face area exactly from exact meshes only. **Breaking:** the
+  `requirements` table gains seven optional columns, so a definition
+  bound to `property-requirements` must declare them.
 - **Categories as data and BCF category labels.** (#109) A finding
   carries `categories`, the nested category levels its rule read,
   outermost first, beside the bracketed headings in its message; empty and

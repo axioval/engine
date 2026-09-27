@@ -1,6 +1,7 @@
 //! Tables of property requirements: which properties an object must, may or
 //! must not carry, and the values they may hold.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use axioval_engine::{
@@ -9,9 +10,11 @@ use axioval_engine::{
     TableColumn,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, Property, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Evidence, Object, ObjectId, Property, PropertyValue, QuantityDimension, TemporalPrecision,
+};
 
-use crate::plan_area::{Verdict, footprint, judge, shown};
+use crate::plan_area::{Bound, Verdict, body_volume, face_area, footprint, judge_bounds, shown};
 use crate::selection::{
     NameSpec, Selection, enumerate, select_objects, selector_matches, sets_without_match,
     xsd_name_pattern,
@@ -19,7 +22,7 @@ use crate::selection::{
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     MAX_DECIMALS, Parameters, PropertyRef, Unavailable, category_prefix, display, exact_f64,
-    finding, invalid, resolve, round_decimal, si_quantity, undefined, value_key,
+    finding, invalid, resolve, round_decimal, si_quantity, temporal_order, undefined, value_key,
 };
 
 const COLUMNS: &[TableColumn] = &[
@@ -40,6 +43,13 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("unit", ColumnKind::String),
     TableColumn::optional("per", ColumnKind::String),
     TableColumn::optional("decimals", ColumnKind::Integer),
+    TableColumn::optional("minimum_exclusive", ColumnKind::Boolean),
+    TableColumn::optional("maximum_exclusive", ColumnKind::Boolean),
+    TableColumn::optional("minimum_date", ColumnKind::Date),
+    TableColumn::optional("maximum_date", ColumnKind::Date),
+    TableColumn::optional("minimum_date_time", ColumnKind::DateTime),
+    TableColumn::optional("maximum_date_time", ColumnKind::DateTime),
+    TableColumn::optional("precision", ColumnKind::String),
 ];
 
 /// Checks each selected object against every row of a `requirements` table
@@ -57,9 +67,16 @@ const COLUMNS: &[TableColumn] = &[
 /// character), `one_of_like` (wildcard patterns separated by `|`),
 /// `contains` (a substring of a text value, or an element of a list value)
 /// and a numeric range `minimum`/`maximum` in `unit`, optionally `per` the
-/// object's `measured-area` (plan footprint), `stated-area`
-/// (`area_property`) or `stated-volume` (`volume_property`), and optionally
-/// rounded to `decimals` in the row's unit before it is bounded.
+/// object's `measured-area` (plan footprint), `measured-volume` (certified
+/// body volume), `measured-face-area` (its largest plane face, such as a
+/// wall's side), `stated-area` (`area_property`) or `stated-volume`
+/// (`volume_property`), and optionally rounded to `decimals` in the row's
+/// unit before it is bounded. A date range bounds a date or date-time value
+/// by `minimum_date`/`maximum_date` or `minimum_date_time`/
+/// `maximum_date_time`, compared chronologically (`precision` `day`
+/// compares a date-time with a date by its day). `minimum_exclusive` and
+/// `maximum_exclusive` make either kind of bound exclude its own value, so
+/// `> 0` fails on 0.
 /// `applies_to` restricts a row to the objects a selector picks, such as one
 /// exact class or a class with its subtypes; a blank cell applies the row to
 /// every selected object.
@@ -218,6 +235,8 @@ impl NameSel {
 #[derive(Clone, Copy)]
 enum Per {
     MeasuredArea,
+    MeasuredVolume,
+    MeasuredFaceArea,
     StatedArea,
     StatedVolume,
 }
@@ -226,6 +245,8 @@ impl Per {
     fn describe(self) -> &'static str {
         match self {
             Self::MeasuredArea => "per m² of measured plan area",
+            Self::MeasuredVolume => "per m³ of measured volume",
+            Self::MeasuredFaceArea => "per m² of measured face area",
             Self::StatedArea => "per m² of stated area",
             Self::StatedVolume => "per m³ of stated volume",
         }
@@ -236,6 +257,8 @@ impl Per {
 struct Range {
     minimum: Option<f64>,
     maximum: Option<f64>,
+    minimum_exclusive: bool,
+    maximum_exclusive: bool,
     /// The size of one `unit` in canonical SI units; 1 for a number.
     scale: f64,
     /// The declared unit as written and its dimension; `None` for a number.
@@ -247,6 +270,17 @@ struct Range {
     decimals: Option<u32>,
 }
 
+/// A date range: bounds as `date` or `dateTime` values, compared in time.
+struct Dates {
+    minimum: Option<PropertyValue>,
+    maximum: Option<PropertyValue>,
+    minimum_exclusive: bool,
+    maximum_exclusive: bool,
+    precision: Option<TemporalPrecision>,
+    /// The declared bounds as written, for messages.
+    written: String,
+}
+
 /// The conditions a row puts on a value; all must hold.
 #[derive(Default)]
 struct Condition {
@@ -255,6 +289,7 @@ struct Condition {
     one_of_like: Vec<(String, TextPattern)>,
     contains: Option<String>,
     range: Option<Range>,
+    dates: Option<Dates>,
     case_sensitive: bool,
 }
 
@@ -269,6 +304,7 @@ impl Condition {
             || !self.one_of.is_empty()
             || !self.one_of_like.is_empty()
             || self.range.is_some()
+            || self.dates.is_some()
     }
 
     fn describe(&self) -> String {
@@ -304,6 +340,9 @@ impl Condition {
                 text = format!("{text} (rounded to {decimals} decimal(s))");
             }
             parts.push(text);
+        }
+        if let Some(dates) = &self.dates {
+            parts.push(dates.written.clone());
         }
         parts.join(" and ")
     }
@@ -602,12 +641,24 @@ fn parse_condition(
         other => other.map(str::to_owned),
     };
     let range = parse_range(row, area_property, volume_property)?;
+    let dates = parse_dates(row)?;
+    if range.is_some() && dates.is_some() {
+        return Err(invalid("a row bounds either a number or a date, not both"));
+    }
+    if range.is_none() && dates.is_none() {
+        for column in ["minimum_exclusive", "maximum_exclusive"] {
+            if row.boolean(column)?.is_some() {
+                return Err(invalid(format!("`{column}` needs its bound")));
+            }
+        }
+    }
     Ok(Condition {
         like,
         one_of,
         one_of_like,
         contains,
         range,
+        dates,
         case_sensitive,
     })
 }
@@ -634,6 +685,15 @@ fn parse_range(
     if matches!((minimum, maximum), (Some(low), Some(high)) if low > high) {
         return Err(invalid("minimum exceeds maximum"));
     }
+    let (minimum_exclusive, maximum_exclusive) =
+        exclusive_flags(row, minimum.is_some(), maximum.is_some())?;
+    if (minimum_exclusive || maximum_exclusive)
+        && matches!((minimum, maximum), (Some(low), Some(high)) if low >= high)
+    {
+        return Err(invalid(
+            "an exclusive range between equal bounds holds no value",
+        ));
+    }
     let decimals = match decimals {
         None => None,
         Some(value) if (0..=MAX_DECIMALS).contains(&value) => {
@@ -655,6 +715,8 @@ fn parse_range(
     let per = match per {
         None => None,
         Some("measured-area") => Some(Per::MeasuredArea),
+        Some("measured-volume") => Some(Per::MeasuredVolume),
+        Some("measured-face-area") => Some(Per::MeasuredFaceArea),
         Some("stated-area") if area_property.is_some() => Some(Per::StatedArea),
         Some("stated-volume") if volume_property.is_some() => Some(Per::StatedVolume),
         Some("stated-area") => {
@@ -665,27 +727,134 @@ fn parse_range(
         }
         Some(other) => {
             return Err(invalid(format!(
-                "`per` `{other}` is not `measured-area`, `stated-area` or `stated-volume`"
+                "`per` `{other}` is not `measured-area`, `measured-volume`, `measured-face-area`, `stated-area` or `stated-volume`"
             )));
         }
     };
     let suffix = unit
         .as_ref()
         .map_or_else(String::new, |(unit, _)| format!(" {unit}"));
-    let written = match (minimum, maximum) {
-        (Some(low), Some(high)) => format!("between {low} and {high}{suffix}"),
-        (Some(low), None) => format!("at least {low}{suffix}"),
-        (None, Some(high)) => format!("at most {high}{suffix}"),
-        (None, None) => unreachable!("a range has a bound"),
-    };
+    let written = written_bounds(
+        minimum.map(|low| (low.to_string(), minimum_exclusive)),
+        maximum.map(|high| (high.to_string(), maximum_exclusive)),
+        &suffix,
+    );
     Ok(Some(Range {
         minimum,
         maximum,
+        minimum_exclusive,
+        maximum_exclusive,
         scale,
         unit,
         written,
         per,
         decimals,
+    }))
+}
+
+/// The `minimum_exclusive` and `maximum_exclusive` flags of a row, each
+/// only beside its bound.
+fn exclusive_flags(
+    row: Row<'_>,
+    minimum: bool,
+    maximum: bool,
+) -> Result<(bool, bool), Unavailable> {
+    let flag = |column: &str, bound: bool| match row.boolean(column)? {
+        Some(_) if !bound => Err(invalid(format!("`{column}` needs its bound"))),
+        other => Ok(other.unwrap_or(false)),
+    };
+    Ok((
+        flag("minimum_exclusive", minimum)?,
+        flag("maximum_exclusive", maximum)?,
+    ))
+}
+
+/// Bounds as a reviewer reads them.
+fn written_bounds(
+    minimum: Option<(String, bool)>,
+    maximum: Option<(String, bool)>,
+    suffix: &str,
+) -> String {
+    let low = |(value, exclusive): (String, bool)| {
+        if exclusive {
+            format!("more than {value}{suffix}")
+        } else {
+            format!("at least {value}{suffix}")
+        }
+    };
+    let high = |(value, exclusive): (String, bool)| {
+        if exclusive {
+            format!("less than {value}{suffix}")
+        } else {
+            format!("at most {value}{suffix}")
+        }
+    };
+    match (minimum, maximum) {
+        (Some((low, false)), Some((high, false))) => format!("between {low} and {high}{suffix}"),
+        (Some(minimum), Some(maximum)) => format!("{} and {}", low(minimum), high(maximum)),
+        (Some(minimum), None) => low(minimum),
+        (None, Some(maximum)) => high(maximum),
+        (None, None) => unreachable!("a range has a bound"),
+    }
+}
+
+/// A row's date range, if it declares a date or date-time bound.
+fn parse_dates(row: Row<'_>) -> Result<Option<Dates>, Unavailable> {
+    let bound = |date: &str, date_time: &str| -> Result<Option<PropertyValue>, Unavailable> {
+        match (row.temporal(date)?, row.temporal(date_time)?) {
+            (Some(_), Some(_)) => Err(invalid(format!(
+                "`{date}` and `{date_time}` are one bound; state one"
+            ))),
+            (one, other) => Ok(one.or(other)),
+        }
+    };
+    let minimum = bound("minimum_date", "minimum_date_time")?;
+    let maximum = bound("maximum_date", "maximum_date_time")?;
+    let precision = match row.text("precision")? {
+        None => None,
+        Some("day") => Some(TemporalPrecision::Day),
+        Some(other) => {
+            return Err(invalid(format!(
+                "precision `{other}` is unsupported; the only precision is `day`"
+            )));
+        }
+    };
+    if minimum.is_none() && maximum.is_none() {
+        if precision.is_some() {
+            return Err(invalid("`precision` needs a date bound"));
+        }
+        return Ok(None);
+    }
+    let (minimum_exclusive, maximum_exclusive) =
+        exclusive_flags(row, minimum.is_some(), maximum.is_some())?;
+    if let (Some(low), Some(high)) = (&minimum, &maximum) {
+        match temporal_order(low, high, precision) {
+            Some(Ok(Ordering::Greater)) => return Err(invalid("minimum exceeds maximum")),
+            Some(Ok(Ordering::Equal)) if minimum_exclusive || maximum_exclusive => {
+                return Err(invalid(
+                    "an exclusive range between equal bounds holds no value",
+                ));
+            }
+            Some(Err(why)) => return Err(invalid(why)),
+            _ => {}
+        }
+    }
+    let written = written_bounds(
+        minimum
+            .as_ref()
+            .map(|low| (display(Some(low)), minimum_exclusive)),
+        maximum
+            .as_ref()
+            .map(|high| (display(Some(high)), maximum_exclusive)),
+        "",
+    );
+    Ok(Some(Dates {
+        minimum,
+        maximum,
+        minimum_exclusive,
+        maximum_exclusive,
+        precision,
+        written,
     }))
 }
 
@@ -1048,10 +1217,13 @@ fn meets(
     }
     // A range holds every value between its bounds: one open on the side a
     // bound limits has values beyond it.
-    if let (PropertyValue::Bounded { lower, upper, .. }, Some(range), true) =
-        (value, &condition.range, every)
-        && ((range.minimum.is_some() && lower.is_none())
-            || (range.maximum.is_some() && upper.is_none()))
+    let (limits_below, limits_above) = match (&condition.range, &condition.dates) {
+        (Some(range), _) => (range.minimum.is_some(), range.maximum.is_some()),
+        (None, Some(dates)) => (dates.minimum.is_some(), dates.maximum.is_some()),
+        (None, None) => (false, false),
+    };
+    if let (PropertyValue::Bounded { lower, upper, .. }, true) = (value, every)
+        && ((limits_below && lower.is_none()) || (limits_above && upper.is_none()))
     {
         return whole.and(Holds::No(None));
     }
@@ -1144,6 +1316,17 @@ fn measure_divisor(
             evidence.push(area.evidence().clone());
             return positive(area.lower_square_metres(), area.upper_square_metres());
         }
+        Per::MeasuredVolume => {
+            let volume = body_volume(context, &subject.id)?;
+            evidence.push(volume.evidence().clone());
+            let interval = volume.volume();
+            return positive(interval.lower_cubic_metres(), interval.upper_cubic_metres());
+        }
+        Per::MeasuredFaceArea => {
+            let area = face_area(context, &subject.id)?;
+            evidence.push(area.evidence().clone());
+            return positive(area.lower_square_metres(), area.upper_square_metres());
+        }
         Per::StatedArea => (declared.area_property, QuantityDimension::Area),
         Per::StatedVolume => (declared.volume_property, QuantityDimension::Volume),
     };
@@ -1218,9 +1401,18 @@ fn holds(condition: &Condition, value: &PropertyValue, divisor: Option<Divisor>)
         Holds::Yes => {}
         other => return other,
     }
-    let Some(range) = &condition.range else {
-        return Holds::Yes;
-    };
+    if let Some(dates) = &condition.dates {
+        return date_holds(dates, value);
+    }
+    match &condition.range {
+        Some(range) => range_holds(range, value, divisor),
+        None => Holds::Yes,
+    }
+}
+
+/// Whether one number or quantity, divided by `divisor`, lies within a row's
+/// numeric range.
+fn range_holds(range: &Range, value: &PropertyValue, divisor: Option<Divisor>) -> Holds {
     let number = match (value, &range.unit) {
         (
             PropertyValue::Quantity {
@@ -1273,21 +1465,34 @@ fn holds(condition: &Condition, value: &PropertyValue, divisor: Option<Divisor>)
     let per = range
         .per
         .map_or_else(String::new, |per| format!(" {}", per.describe()));
+    let bounds = |scale: f64| {
+        (
+            range.minimum.map(|value| Bound {
+                value: value * scale,
+                exclusive: range.minimum_exclusive,
+            }),
+            range.maximum.map(|value| Bound {
+                value: value * scale,
+                exclusive: range.maximum_exclusive,
+            }),
+        )
+    };
     let verdict = match range.decimals {
         // Bounds in canonical SI units, so an exact value is not rescaled.
-        None => judge(
-            lower,
-            upper,
-            range.minimum.map(|bound| bound * range.scale),
-            range.maximum.map(|bound| bound * range.scale),
-        ),
+        None => {
+            let (minimum, maximum) = bounds(range.scale);
+            judge_bounds(lower, upper, minimum, maximum)
+        }
         // Rounding reads the value in the row's unit, where its bounds are.
-        Some(decimals) => judge(
-            round_decimal(lower / range.scale, decimals),
-            round_decimal(upper / range.scale, decimals),
-            range.minimum,
-            range.maximum,
-        ),
+        Some(decimals) => {
+            let (minimum, maximum) = bounds(1.0);
+            judge_bounds(
+                round_decimal(lower / range.scale, decimals),
+                round_decimal(upper / range.scale, decimals),
+                minimum,
+                maximum,
+            )
+        }
     };
     match verdict {
         Verdict::Pass => Holds::Yes,
@@ -1308,6 +1513,36 @@ fn holds(condition: &Condition, value: &PropertyValue, divisor: Option<Divisor>)
             }
         )),
     }
+}
+
+/// Whether one date or date-time lies within a row's date range.
+fn date_holds(dates: &Dates, value: &PropertyValue) -> Holds {
+    let within = |bound: Option<&PropertyValue>, exclusive: bool, outside: Ordering| {
+        let Some(bound) = bound else {
+            return Holds::Yes;
+        };
+        match temporal_order(value, bound, dates.precision) {
+            None => Holds::Undecided(format!(
+                "{} is not a date or a date-time",
+                display(Some(value))
+            )),
+            Some(Err(why)) => Holds::Undecided(why),
+            Some(Ok(order)) if order == outside || (exclusive && order == Ordering::Equal) => {
+                Holds::No(None)
+            }
+            Some(Ok(_)) => Holds::Yes,
+        }
+    };
+    within(
+        dates.minimum.as_ref(),
+        dates.minimum_exclusive,
+        Ordering::Less,
+    )
+    .and(within(
+        dates.maximum.as_ref(),
+        dates.maximum_exclusive,
+        Ordering::Greater,
+    ))
 }
 
 /// Refines a missing property to a missing set when the row names a set and

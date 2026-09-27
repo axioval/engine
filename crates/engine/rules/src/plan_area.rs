@@ -1,9 +1,9 @@
 //! Judgements over plan-projected areas: area ranges, ratios and plan coverage.
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, FacadeAreaError, FacadeAreaServiceHandle,
-    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea, PlanAreaError,
-    PlanAreaServiceHandle, RuleCapability, RuleContext,
+    BodyVolume, CapabilityEvaluation, CompiledRule, Deviation, FacadeArea, FacadeAreaError,
+    FacadeAreaServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea,
+    PlanAreaError, PlanAreaServiceHandle, ProximityServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::{
     Evidence, Object, ObjectId, PropertyValue, QuantityDimension, ReportColumn, ReportTable,
@@ -229,7 +229,7 @@ pub(crate) fn deviation(
     None
 }
 
-/// Where a ratio interval stands against inclusive bounds.
+/// Where a measured interval stands against its bounds.
 pub(crate) enum Verdict {
     Pass,
     Fail(String),
@@ -237,20 +237,65 @@ pub(crate) enum Verdict {
 }
 
 pub(crate) fn judge(lower: f64, upper: f64, minimum: Option<f64>, maximum: Option<f64>) -> Verdict {
-    if let Some(minimum) = minimum {
-        if upper < minimum {
-            return Verdict::Fail(format!("at least {minimum}"));
-        }
-        if lower < minimum {
-            return Verdict::Undecided(format!("at least {minimum}"));
+    judge_bounds(
+        lower,
+        upper,
+        minimum.map(Bound::inclusive),
+        maximum.map(Bound::inclusive),
+    )
+}
+
+/// A bound, and whether it excludes its own value.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Bound {
+    pub(crate) value: f64,
+    pub(crate) exclusive: bool,
+}
+
+impl Bound {
+    pub(crate) fn inclusive(value: f64) -> Self {
+        Self {
+            value,
+            exclusive: false,
         }
     }
-    if let Some(maximum) = maximum {
-        if lower > maximum {
-            return Verdict::Fail(format!("at most {maximum}"));
+}
+
+/// Where an interval stands against bounds that may exclude their value: a
+/// verdict needs the whole interval on one side, and an exclusive bound
+/// fails the value it names.
+pub(crate) fn judge_bounds(
+    lower: f64,
+    upper: f64,
+    minimum: Option<Bound>,
+    maximum: Option<Bound>,
+) -> Verdict {
+    if let Some(Bound { value, exclusive }) = minimum {
+        let text = if exclusive {
+            format!("more than {value}")
+        } else {
+            format!("at least {value}")
+        };
+        let below = |measured: f64| measured < value || (exclusive && measured <= value);
+        if below(upper) {
+            return Verdict::Fail(text);
         }
-        if upper > maximum {
-            return Verdict::Undecided(format!("at most {maximum}"));
+        if below(lower) {
+            return Verdict::Undecided(text);
+        }
+    }
+    if let Some(Bound { value, exclusive }) = maximum {
+        let text = if exclusive {
+            format!("less than {value}")
+        } else {
+            format!("at most {value}")
+        };
+        let above = |measured: f64| measured > value || (exclusive && measured >= value);
+        if above(lower) {
+            return Verdict::Fail(text);
+        }
+        if above(upper) {
+            return Verdict::Undecided(text);
         }
     }
     Verdict::Pass
@@ -933,6 +978,33 @@ pub(crate) fn footprint(
         ));
     }
     Ok(area)
+}
+
+/// The certified volume an object's closed body encloses.
+pub(crate) fn body_volume(
+    context: &RuleContext<'_>,
+    object: &ObjectId,
+) -> Result<BodyVolume, Unavailable> {
+    let service = context.services.get::<ProximityServiceHandle>().ok_or((
+        NotEvaluatedReason::MissingService,
+        "proximity service is not registered".into(),
+    ))?;
+    service.measure_body_volume(object).map_err(|error| {
+        (
+            crate::pairs::reason(error),
+            format!("the volume of {object} is unavailable: {error}"),
+        )
+    })
+}
+
+/// The area of an object's largest plane face.
+pub(crate) fn face_area(
+    context: &RuleContext<'_>,
+    object: &ObjectId,
+) -> Result<FacadeArea, Unavailable> {
+    facade_service(context)?
+        .measure_face_area(object)
+        .map_err(facade_unavailable)
 }
 
 /// A summed area, with the members summed and the number left undecided

@@ -90,6 +90,10 @@ pub enum ColumnKind {
     Boolean,
     Selector,
     Reference,
+    /// A calendar day, written as a `date` value.
+    Date,
+    /// An instant with its UTC offset, written as a `dateTime` value.
+    DateTime,
 }
 impl ColumnKind {
     /// The kind's name in normalized packages.
@@ -104,6 +108,8 @@ impl ColumnKind {
             Self::Boolean => "boolean",
             Self::Selector => "selector",
             Self::Reference => "reference",
+            Self::Date => "date",
+            Self::DateTime => "dateTime",
         }
     }
 }

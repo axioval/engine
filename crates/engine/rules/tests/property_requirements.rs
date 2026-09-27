@@ -8,8 +8,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle,
-    SourceSnapshot, TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
+    BodyVolume, CapabilityEvaluation, FacadeArea, FacadeAreaError, FacadeAreaService,
+    FacadeAreaServiceHandle, GeometryFidelity, ObjectBounds, PlanArea, PlanAreaError,
+    PlanAreaService, PlanAreaServiceHandle, ProximityError, ProximityEvidence, ProximityRequest,
+    ProximityService, ProximityServiceHandle, SourceSnapshot, TypeHierarchyError,
+    TypeHierarchyService, TypeHierarchyServiceHandle, VolumeInterval,
 };
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
@@ -1412,4 +1415,299 @@ fn a_required_pattern_needs_a_match_in_every_named_set() {
             "missing property: Pset_ConcreteCommon.Reference is absent (requirement row 0)".into()
         )]
     );
+}
+
+#[test]
+fn an_exclusive_bound_fails_its_own_value() {
+    let model = Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
+        .value("w1", "Pset", "Load", PropertyValue::Decimal(0.0))
+        .value("w2", "Pset", "Load", PropertyValue::Decimal(1.0))
+        .value("w3", "Pset", "Load", PropertyValue::Decimal(5.0));
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set", string("Pset")),
+            ("property", string("Load")),
+            ("requirement", string("required")),
+            ("minimum", number(0.0)),
+            ("minimum_exclusive", boolean(true)),
+            ("maximum", number(5.0)),
+            ("maximum_exclusive", boolean(true)),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "w1".into(),
+                "wrong value: Pset.Load is 0; required more than 0 and less than 5 \
+                 (requirement row 0)"
+                    .into()
+            ),
+            (
+                "w3".into(),
+                "wrong value: Pset.Load is 5; required more than 0 and less than 5 \
+                 (requirement row 0)"
+                    .into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+fn date(text: &str) -> PropertyValue {
+    PropertyValue::Date(text.parse().unwrap())
+}
+
+fn date_cell(text: &str) -> ParameterValue {
+    ParameterValue::Date {
+        value: text.parse().unwrap(),
+    }
+}
+
+fn inspections() -> Model {
+    Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
+        .object("w4", "wall")
+        .value("w1", "Pset", "Inspected", date("2019-12-31"))
+        .value("w2", "Pset", "Inspected", date("2020-01-01"))
+        .value(
+            "w3",
+            "Pset",
+            "Inspected",
+            PropertyValue::DateTime("2020-06-01T10:00:00Z".parse().unwrap()),
+        )
+        .value("w4", "Pset", "Inspected", PropertyValue::Decimal(2020.0))
+}
+
+fn dated(extra: &[(&str, ParameterValue)]) -> TableRow {
+    let mut cells = vec![
+        ("property_set", string("Pset")),
+        ("property", string("Inspected")),
+        ("requirement", string("required")),
+        ("minimum_date", date_cell("2020-01-01")),
+    ];
+    cells.extend_from_slice(extra);
+    row(&cells)
+}
+
+#[test]
+fn a_date_row_bounds_dates_by_day() {
+    let evaluation = run(inspections(), requirements(vec![dated(&[])]));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "wrong value: Pset.Inspected is 2019-12-31; required at least 2020-01-01 \
+             (requirement row 0)"
+                .into()
+        )]
+    );
+    // A date-time compares with a date bound only by its day, and a number
+    // never compares with a date.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            ("w3".into(), NotEvaluatedReason::IncompleteEvidence),
+            ("w4".into(), NotEvaluatedReason::IncompleteEvidence),
+        ]
+    );
+    let evaluation = run(
+        inspections(),
+        requirements(vec![dated(&[
+            ("minimum_exclusive", boolean(true)),
+            ("precision", string("day")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation)
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect::<Vec<_>>(),
+        ["w1", "w2"]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w4".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// Certified body volumes and largest plane faces per object.
+#[derive(Default)]
+struct Bodies {
+    volumes: BTreeMap<ObjectId, (f64, f64)>,
+    faces: BTreeMap<ObjectId, f64>,
+}
+
+impl ProximityService for Bodies {
+    fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+    fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
+        let (lower, upper) = *self
+            .volumes
+            .get(object)
+            .ok_or(ProximityError::Unavailable)?;
+        let fidelity = if lower < upper {
+            GeometryFidelity::Tessellated {
+                chord_deviation_metres: 0.01,
+            }
+        } else {
+            GeometryFidelity::Exact
+        };
+        let mut evidence = Evidence::exact(source(), format!("volume:{object}"));
+        evidence.exact = fidelity.is_exact();
+        BodyVolume::try_new(
+            object.clone(),
+            VolumeInterval::try_new(lower, upper)?,
+            fidelity,
+            evidence,
+        )
+    }
+}
+
+impl FacadeAreaService for Bodies {
+    fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+        Err(FacadeAreaError::UnknownObject(object.clone()))
+    }
+    fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+        let area = *self
+            .faces
+            .get(object)
+            .ok_or_else(|| FacadeAreaError::UnknownObject(object.clone()))?;
+        FacadeArea::try_new(
+            object.clone(),
+            area,
+            area,
+            Evidence::exact(source(), format!("face:{object}")),
+        )
+    }
+}
+
+fn masses() -> Model {
+    Model::default()
+        .object("w1", "wall")
+        .object("w2", "wall")
+        .object("w3", "wall")
+        .value("w1", "Pset", "Mass", PropertyValue::Decimal(1000.0))
+        .value("w2", "Pset", "Mass", PropertyValue::Decimal(1000.0))
+        .value("w3", "Pset", "Mass", PropertyValue::Decimal(1000.0))
+}
+
+fn divided(per: &str) -> CapabilityEvaluation {
+    let mut bodies = Bodies::default();
+    bodies.volumes.insert(id("w1"), (1.0, 1.0));
+    bodies.volumes.insert(id("w2"), (4.0, 4.0));
+    // 1000 / [1.9, 2.1] straddles 500.
+    bodies.volumes.insert(id("w3"), (1.9, 2.1));
+    bodies.faces.insert(id("w1"), 10.0);
+    bodies.faces.insert(id("w2"), 1.0);
+    let bodies = Arc::new(bodies);
+    masses().evaluate_with(
+        &PropertyRequirements,
+        &rule(
+            ID,
+            kind("wall"),
+            requirements(vec![row(&[
+                ("property_set", string("Pset")),
+                ("property", string("Mass")),
+                ("requirement", string("required")),
+                ("maximum", number(500.0)),
+                ("per", string(per)),
+            ])]),
+        ),
+        move |services| {
+            services
+                .register(ProximityServiceHandle::new(bodies.clone()))
+                .unwrap();
+            services
+                .register(FacadeAreaServiceHandle::new(bodies))
+                .unwrap();
+        },
+    )
+}
+
+#[test]
+fn a_range_divided_by_the_measured_volume_or_face_area() {
+    let evaluation = divided("measured-volume");
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "wrong value: Pset.Mass is 1000 (1000 per m³ of measured volume); required at most \
+             500 per m³ of measured volume (requirement row 0)"
+                .into()
+        )]
+    );
+    // A straddling quotient is not evaluated.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w3".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let evaluation = divided("measured-face-area");
+    assert_eq!(
+        findings(&evaluation)
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect::<Vec<_>>(),
+        ["w2"]
+    );
+    // w3 has no measured face: the service refuses, so it is not evaluated.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("w3".into(), NotEvaluatedReason::BackendUnavailable)]
+    );
+}
+
+#[test]
+fn malformed_bounds_are_invalid_declarations() {
+    for extra in [
+        vec![("minimum_exclusive", boolean(true))],
+        vec![
+            ("maximum", number(1.0)),
+            ("minimum_exclusive", boolean(true)),
+        ],
+        vec![
+            ("minimum", number(1.0)),
+            ("maximum", number(1.0)),
+            ("maximum_exclusive", boolean(true)),
+        ],
+        vec![
+            ("minimum", number(1.0)),
+            ("minimum_date", date_cell("2020-01-01")),
+        ],
+        vec![
+            ("minimum_date", date_cell("2021-01-01")),
+            ("maximum_date", date_cell("2020-01-01")),
+        ],
+        vec![("precision", string("day"))],
+        vec![
+            ("minimum_date", date_cell("2020-01-01")),
+            ("precision", string("hour")),
+        ],
+        vec![("maximum", number(1.0)), ("per", string("measured-mass"))],
+    ] {
+        let mut cells = vec![
+            ("property", string("A")),
+            ("requirement", string("required")),
+        ];
+        cells.extend(extra);
+        let evaluation = run(
+            Model::default().object("w1", "wall"),
+            requirements(vec![row(&cells)]),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)],
+            "{cells:?}"
+        );
+    }
 }

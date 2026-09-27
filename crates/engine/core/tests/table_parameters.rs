@@ -19,6 +19,8 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("strict", ColumnKind::Boolean),
     TableColumn::optional("scope", ColumnKind::Selector),
     TableColumn::optional("reference", ColumnKind::Reference),
+    TableColumn::optional("from", ColumnKind::Date),
+    TableColumn::optional("until", ColumnKind::DateTime),
 ];
 
 struct Limits;
@@ -60,6 +62,8 @@ fn declared_columns() -> Vec<Value> {
         column("strict", "boolean", false),
         column("scope", "selector", false),
         column("reference", "reference", false),
+        column("from", "date", false),
+        column("until", "dateTime", false),
     ]
 }
 
@@ -143,12 +147,20 @@ fn a_capability_receives_the_typed_rows_in_declared_order() {
         "kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true
     }});
     full["reference"] = json!({"type": "reference", "value": "axioval:example.office"});
+    full["from"] = json!({"type": "date", "value": "2026-01-01"});
+    full["until"] = json!({"type": "dateTime", "value": "2026-12-31T23:00:00Z"});
     let rules = bind(&json!({}), Some(vec![full, row("Office*", 10.0)])).unwrap();
     let ParameterValue::Table { value: rows } = &rules[0].parameters["limits"] else {
         panic!("limits is a table");
     };
     assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0].len(), 8);
+    assert_eq!(rows[0].len(), 10);
+    assert_eq!(
+        rows[0]["from"],
+        ParameterValue::Date {
+            value: "2026-01-01".parse().unwrap()
+        }
+    );
     assert_eq!(
         rows[1]["space_type"],
         ParameterValue::String {
@@ -257,6 +269,16 @@ fn a_cell_of_another_kind_fails_compilation() {
             "reference",
         ),
         ("label", json!({"type": "table", "value": []}), "string"),
+        (
+            "from",
+            json!({"type": "string", "value": "2026-01-01"}),
+            "date",
+        ),
+        (
+            "until",
+            json!({"type": "date", "value": "2026-01-01"}),
+            "dateTime",
+        ),
     ] {
         let mut cells = row("Office", 12.0);
         cells[column] = cell;

@@ -29,7 +29,9 @@ mod name_sequence;
 mod numbering_consistency;
 mod object_count;
 mod opening_spaces;
+mod orientation;
 mod pairs;
+mod parking_bay;
 mod plan_area;
 mod property_comparison;
 mod property_predicate;
@@ -51,6 +53,7 @@ mod support;
 mod table_allocation;
 mod triangle_count;
 mod unique_value;
+mod wall_spacing;
 mod xsd_pattern;
 
 pub use accessible_route::AccessibleRoute;
@@ -82,6 +85,7 @@ pub use name_sequence::NameSequence;
 pub use numbering_consistency::NumberingConsistency;
 pub use object_count::ObjectCount;
 pub use opening_spaces::OpeningSpaces;
+pub use parking_bay::ParkingBay;
 pub use plan_area::{AreaRatio, PlanAreaRange, PlanCoverage};
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
@@ -102,6 +106,7 @@ pub use stair_geometry::{RampGeometryCheck, StairGeometryCheck};
 pub use table_allocation::TableAllocation;
 pub use triangle_count::TriangleCountLimit;
 pub use unique_value::UniqueValue;
+pub use wall_spacing::WallSpacing;
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`
 /// syntax, for a property selector's `matches` operator.
 pub use xsd_pattern::translate as translate_xsd_pattern;
@@ -151,6 +156,8 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(GroupComposition))
         .and_then(|registry| registry.register(ExitSeparation))
         .and_then(|registry| registry.register(CounterpartCoverage))
+        .and_then(|registry| registry.register(ParkingBay))
+        .and_then(|registry| registry.register(WallSpacing))
         .and_then(|registry| registry.register(BodyExtent))
         .and_then(|registry| registry.register(TriangleCountLimit))
         .and_then(|registry| registry.register(SameContainer))

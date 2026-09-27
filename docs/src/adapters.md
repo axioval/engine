@@ -303,6 +303,26 @@ the footprint when it lies inside (or outside) the measured one farther from
 every boundary edge than its own radius plus the chord deviation, and is
 undecided otherwise, on the boundary of an exact footprint included.
 
+The service's least-area rectangle is the overlay's rotating calipers over
+every plan vertex of the footprint (`minimum_area_rectangle`, axiolid-overlay
+0.3.2 or later). The choice of orientation is exact, and ties between
+orientations are counted; only the output is rounded, by at most the
+kernel's stated error for the centre, every corner and every half extent,
+which fixes each axis within `asin(e / (L − e))` for a longer half extent
+`L`. A rectangle along the coordinate axes turns nothing and is taken from
+the extreme coordinates, exact whenever their differences and sums are. A
+tessellated footprint widens every half extent and the centre by its chord
+deviation and has an unproven orientation.
+
+`AxiolidPlanAreaService` measures the area outside bands with the same
+overlay: each band is the convex hull of its two footprints' vertices,
+clipped to the positions along the band's direction that both reach. The
+clip lines are computed, so each is moved 0.1 µm (more for large
+coordinates) inwards for the surely covered part and outwards for the
+possibly covered one, which also keeps a cut clear of the overlay's
+tolerance around hull vertices; the area outside lies between the two. A
+band bounded by a tessellated footprint is refused.
+
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even

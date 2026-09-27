@@ -25,15 +25,32 @@
 //! measured area `A`. A footprint no larger than its band has no bounded
 //! centre and is refused.
 //!
+//! The rectangle of least area enclosing a footprint comes from the
+//! overlay's rotating calipers over every plan vertex: the choice of
+//! orientation is exact, only the output is rounded, by at most the
+//! kernel's stated `error` for the centre, every corner and every half
+//! extent. Two corners `2L` apart along the long side (`L` the longer half
+//! extent) then fix each axis within `asin(e / (L − e))`. A rectangle along
+//! the coordinate axes (its first axis exactly `(1, 0)`, which the exact
+//! choice returns only for an edge along x) turns nothing, so it is taken
+//! from the extreme coordinates instead: exact whenever their differences
+//! and sums are. A tessellated
+//! footprint lies within `d` of the true one, so the true footprint's
+//! extents along the measured axes lie within `d` of the measured ones, but
+//! which orientation encloses the true footprint with least area is not
+//! known: its orientation is unproven. Several orientations of least area
+//! (up to quarter turns) are tied.
+//!
 //! A centre lies inside its footprint when it lies inside the measured one
 //! farther from every boundary edge than the centre's own uncertainty plus
 //! the chord deviation, outside likewise, and undecided otherwise: a centre
 //! on the boundary of an exact footprint is undecided too.
 
-use axiolid_overlay::{Polygon, Ring};
+use axiolid_core::Point2;
+use axiolid_overlay::{Polygon, RectangleError, Ring, minimum_area_rectangle};
 use axioval_engine::{
-    CentrePlacement, PlanAreaError, PlanCentre, PlanLength, PlanSpan, PlanSpanError,
-    PlanSpanService,
+    CentrePlacement, PlanAreaError, PlanCentre, PlanLength, PlanRectangle, PlanSpan, PlanSpanError,
+    PlanSpanService, RectangleOrientation,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -161,6 +178,63 @@ impl AxiolidPlanSpanService {
             },
         )
     }
+}
+
+/// How far, in radians, an axis fixed by two corners `2 * long` apart can
+/// turn when each corner may move by `error`: a quarter turn when the
+/// corners may meet.
+fn axis_error(long: f64, error: f64) -> f64 {
+    if error == 0.0 {
+        return 0.0;
+    }
+    if long <= error {
+        return std::f64::consts::FRAC_PI_2;
+    }
+    (error / (long - error)).min(1.0).asin()
+}
+
+/// A `(lower, upper)` interval of lengths.
+trait Widened {
+    /// The interval grown by `margin` each way, never below zero.
+    fn widened(self, margin: f64) -> Self;
+}
+
+impl Widened for (f64, f64) {
+    fn widened(self, margin: f64) -> Self {
+        ((self.0 - margin).max(0.0), self.1 + margin)
+    }
+}
+
+/// `a + b` rounded, and its rounding error, exactly (two-sum).
+fn two_sum(a: f64, b: f64) -> (f64, f64) {
+    let sum = a + b;
+    let back = sum - a;
+    (sum, (a - (sum - back)) + (b - back))
+}
+
+/// Half of `high - low`, as an interval holding the exact value.
+fn half_width((low, high): (f64, f64)) -> (f64, f64) {
+    let (difference, error) = two_sum(high, -low);
+    let (lower, upper) = if error > 0.0 {
+        (difference, difference.next_up())
+    } else if error < 0.0 {
+        (difference.next_down(), difference)
+    } else {
+        (difference, difference)
+    };
+    (0.5 * lower.max(0.0), 0.5 * upper)
+}
+
+/// The midpoint of `low` and `high`, and how far the exact one can lie
+/// from it.
+fn midpoint((low, high): (f64, f64)) -> (f64, f64) {
+    let (sum, error) = two_sum(low, high);
+    let radius = if error == 0.0 {
+        0.0
+    } else {
+        0.5 * (sum.next_up() - sum)
+    };
+    (0.5 * sum, radius)
 }
 
 /// Whether `point` lies inside the polygons, outside them, or too close to
@@ -296,6 +370,86 @@ impl PlanSpanService for AxiolidPlanSpanService {
             [centre.0, centre.1],
             slack,
             placement,
+            evidence,
+        )
+    }
+
+    fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
+        let footprint = self.footprint(object)?;
+        let points: Vec<Point2> = footprint
+            .soup
+            .iter()
+            .flatten()
+            .map(|point| Point2::new(point.x, point.y))
+            .collect();
+        let measured = minimum_area_rectangle(&points).map_err(|error| match error {
+            RectangleError::Empty => {
+                PlanSpanError::Unavailable(format!("{object} has no footprint (no body)"))
+            }
+            _ => PlanSpanError::InvalidMeasurement,
+        })?;
+        let rectangle = measured.rectangle;
+        let deviation = footprint.deviation;
+        let orientation = if deviation > 0.0 {
+            RectangleOrientation::Unproven
+        } else if measured.evidence.minimal_orientations > 1 {
+            RectangleOrientation::Tied
+        } else {
+            RectangleOrientation::Unique
+        };
+        let axes = rectangle.axes.map(|axis| [axis.x, axis.y]);
+        // Along the coordinate axes nothing is turned: the extremes are
+        // input coordinates, and only their differences and sums round.
+        #[allow(clippy::float_cmp)]
+        let (centre, radius, halves, turn) = if axes[0] == [1.0, 0.0] {
+            let extremes = |coordinate: fn(&Point2) -> f64| {
+                points
+                    .iter()
+                    .map(coordinate)
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), value| {
+                        (low.min(value), high.max(value))
+                    })
+            };
+            let (x, y) = (extremes(|p| p.x), extremes(|p| p.y));
+            let (cx, rx) = midpoint(x);
+            let (cy, ry) = midpoint(y);
+            ([cx, cy], rx + ry, [half_width(x), half_width(y)], 0.0)
+        } else {
+            let error = measured.evidence.error;
+            let [a, b] = rectangle.half_extents;
+            (
+                [rectangle.centre.x, rectangle.centre.y],
+                error,
+                [(a, a).widened(error), (b, b).widened(error)],
+                axis_error(a.max(b), error),
+            )
+        };
+        let slack = radius + deviation;
+        let halves = halves.map(|half| half.widened(deviation));
+        #[allow(clippy::float_cmp)]
+        let exact = slack == 0.0
+            && turn == 0.0
+            && halves.iter().all(|(low, high)| low == high)
+            && orientation == RectangleOrientation::Unique;
+        let locator = format!(
+            "plan-rectangle:{object}:({:.6},{:.6}):{}",
+            centre[0],
+            centre[1],
+            orientation.name()
+        );
+        let evidence = Evidence {
+            source: object.source.clone(),
+            locator,
+            exact,
+        };
+        PlanRectangle::try_new(
+            object.clone(),
+            centre,
+            slack,
+            axes,
+            turn,
+            halves,
+            orientation,
             evidence,
         )
     }

@@ -640,6 +640,7 @@ nearest-destination search over many targets awaits axiolid/kernel#186.
 | `tolerance` | length, optional | coverage: one growth for both checks |
 | `horizontal_tolerance`, `vertical_tolerance` | lengths, optional | conformity: separate growths, declared together instead of `tolerance` |
 | `info_above`, `warning_above`, `error_above` | numbers, optional | uncovered shares in `[0, 1)` above which a finding has that severity; at least one, ascending in that order |
+| `axis_tolerance` | plane angle, optional | only counterparts whose long axis lies within this angle of parallel to the element's count; in `[0°, 45°)` |
 
 - **Plan**: the share of the element's footprint outside the union of the counterparts' footprints, each grown by the horizontal tolerance in every plan direction, through `PlanAreaService`'s uncovered area.
 - **Height**: the share of the element's vertical extent outside the union of the vertical extents, each grown by the vertical tolerance below and above, of the counterparts that overlap it in plan (their grown footprint covers part of its footprint).
@@ -648,7 +649,53 @@ A negative tolerance switches its check off, so conformity with `vertical_tolera
 
 Shares are intervals: a tessellated body's footprint and extent are, and so is a footprint grown by a disc, which the plan-area service brackets between two polygons. A share straddling the lowest threshold is not evaluated; one above it that straddles a higher threshold is graded by the most severe band it may reach, and the message says so. A counterpart the selector cannot decide, whose extent cannot be read, or whose cover cannot be measured can only cover more, so a pass stands and anything else is not evaluated. Measured areas carry the plan overlay's rounding (around 10⁻⁸ of the extent), so a threshold of exactly 0 can flag a fully covered element; use a small positive one.
 
-Counterparts are not filtered by direction: a perpendicular wall meeting the element within the horizontal tolerance overlaps it in plan and counts towards its height. Keeping only axis-compatible counterparts needs a minimum-area rectangle per footprint, which no geometry service provides yet.
+Without `axis_tolerance`, counterparts are not filtered by direction: a perpendicular wall meeting the element within the horizontal tolerance overlaps it in plan and counts towards its height. With it, only **axis-compatible** counterparts count: a long axis is the longer side of the least-area rectangle around a footprint (`PlanSpanService::measure_rectangle`, which then also needs the plan-span service), and a counterpart whose long axis lies surely further from parallel than the tolerance is left out. A counterpart whose angle straddles the tolerance, or whose axes or the element's are not their own (a square has no long axis, a footprint enclosed equally well at two orientations none, a tessellated one no proven one), may count: it is a possible cover only, so a finding it could remove is not evaluated and says why.
+
+### Parking bays
+
+`axioval:capability.parking-bay` checks each selected parking bay along its own axes: those of the least-area rectangle around its footprint (`PlanSpanService::measure_rectangle`), never its bounding box, so a bay turned 45° whose box is long enough but which is itself too short is found. Its length is the longer side, its width the shorter; the ends are the two sides across the long axis, the sides the two along it. It needs the plan-span service and, depending on the checks declared, the vertical-extent and proximity services.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `min_width`, `max_width`, `min_length`, `max_length` | lengths, optional | inclusive bounds on the sides of the rectangle |
+| `min_height`, `max_height` | lengths, optional | inclusive bounds on the bay's vertical extent |
+| `aisles` | selector, optional | the aisles a bay opens onto; with `orientation` |
+| `orientation` | string, optional | `parallel`, `perpendicular` or `angled`: how the bay's long axis must stand to an aisle's |
+| `angle_tolerance` | plane angle | required with `orientation`: how far from parallel or perpendicular still counts as it, in `[0°, 45°)`; `angled` is anything further from both |
+| `aisle_reach` | length, optional | how far in plan an aisle may lie from the bay (default 0: meeting it) |
+| `obstacles` | selector, optional | what obstructs a bay, such as columns and walls |
+| `obstruction_reach` | length | how far in plan from the bay an obstacle obstructs it |
+| `end_obstructions`, `side_obstructions` | strings | how many ends and sides may be obstructed: `none`, `one` or `both` |
+
+Declaring nothing to check, an orientation without aisles, or part of the obstruction parameters is an invalid declaration. Each declared check is its own finding or not-evaluated outcome:
+
+- **Size**: the width and length (and height) are intervals judged against the bounds; one straddling a bound is not evaluated. Sizes need a unique orientation: a footprint several rectangles of least area enclose, or a tessellated one, is not evaluated.
+- **Orientation**: the bay passes when a selected aisle surely within reach stands at the required angle; it is a finding ("not perpendicular to any aisle", or "no aisle lies within") when no aisle that may be within reach may stand so, relating the aisles found. A bay or aisle without a long axis (a square) leaves the angle undecided.
+- **Obstructions**: an obstacle within reach obstructs an end when it reaches past the end's line and overlaps the end's span across the bay; likewise a side. Positions come from each object's extent along the bay's axes (`VerticalExtentService::measure_directional_extent`), widened by how far the axes may be turned. More ends (or sides) surely obstructed than allowed is a finding naming the obstacles; an obstacle within the bay's rectangle, past none of its edges, is always one. An obstacle the selector cannot decide, whose extent cannot be read or whose position straddles an edge may obstruct any edge it could reach, so it leaves the count not evaluated when it could exceed the allowance. A square bay has no ends; with obstacles near it, the count is not evaluated.
+
+Angled bays drawn as parallelograms are enclosed by a rectangle that is not their own; their dimensions along the stall line wait on a parallelogram measurement.
+
+### Wall spacing
+
+`axioval:capability.wall-spacing` checks the parallel walls or beams on each selected storey. It needs the plan-span, proximity, vertical-extent and (with a maximum) plan-area services, and a relationship service for the paths.
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `members` | selector, required | the walls or beams |
+| `member_path` | stringList, required | steps from the storey to its members, as in `path`; with IFC, `IfcRelContainedInSpatialStructure` |
+| `angle_tolerance` | plane angle, required | how far from parallel two long axes may be, in `[0°, 45°)` |
+| `minimum` | length, optional | the least plan distance between a parallel pair |
+| `maximum` | length, optional | the largest distance at which a parallel pair bounds a band |
+| `footprints` | selector | with `maximum`: the objects whose footprints make the storey's gross footprint, such as its slabs |
+| `footprint_path` | stringList | with `maximum`: steps from the storey to them |
+| `uncovered_above` | area | with `maximum`: how much of a footprint may lie outside every band |
+
+At least one of `minimum` and `maximum` is declared, and `maximum` with `footprints`, `footprint_path` and `uncovered_above`. Two members form a **parallel pair** when their long axes (as for parking bays) lie within `angle_tolerance` of parallel and they face each other: along the first one's long axis, their extents share a stretch of positive length. Two collinear walls meeting end to end are no pair.
+
+- **Minimum**: a parallel pair closer in plan than `minimum` (closest points, `horizontal` distance) is a finding against the storey that names and relates both.
+- **Maximum**: each parallel pair at most `maximum` apart bounds a **band**, the convex hull of both footprints cut to the stretch they share (`PlanAreaService::measure_outside_bands`). The area of each footprint object outside every band above `uncovered_above` is a finding, relating the footprint and the members bounding a band; one at or below it passes.
+
+Everything is an interval. A pair is too close only when it is surely parallel, facing, selected and closer than the minimum; a pair that may be is not evaluated with the reason. The uncovered area's upper bound comes from the sure bands, its lower bound from every possible one, and drops to zero when a member's extent cannot be read or a possible pair has no long axis to cut its band along; a straddling area is not evaluated. A storey reaching no footprint object is not evaluated. A band bounded by a tessellated member is refused by the Axiolid service.
 
 ### Accessible route
 

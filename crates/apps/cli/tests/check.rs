@@ -4272,3 +4272,223 @@ fn with_geometry_an_obstructed_wc_transfer_area_is_found() {
         "{result:#}"
     );
 }
+
+/// As [`placed_box`], with the profile's length turned `degrees` from the
+/// x-axis about its centre, as instances `#first` to `#first + 10`; the
+/// product is `#first + 10`.
+fn turned_box(
+    first: u32,
+    [x, y, z]: [f64; 3],
+    [length, width, depth]: [f64; 3],
+    degrees: f64,
+    product: &str,
+) -> String {
+    let [
+        origin,
+        frame,
+        placement,
+        p,
+        direction,
+        pos,
+        profile,
+        solid,
+        shape,
+        definition,
+        object,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|offset| first + offset);
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    format!(
+        "#{origin}=IFCCARTESIANPOINT((0.,0.,{z:?}));\n\
+         #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+         #{p}=IFCCARTESIANPOINT(({x:?},{y:?}));\n\
+         #{direction}=IFCDIRECTION(({cos:?},{sin:?}));\n\
+         #{pos}=IFCAXIS2PLACEMENT2D(#{p},#{direction});\n\
+         #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length:?},{width:?});\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth:?});\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        product
+            .replace("GID", &format!("{object:022}"))
+            .replace("PL", &format!("#{placement}"))
+            .replace("REP", &format!("#{definition}")),
+    )
+}
+
+/// The file header, units and project, then `data`.
+fn model_with(data: &str) -> String {
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);\n\
+         #8=IFCUNITASSIGNMENT((#6,#7));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#8);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// An aisle slab #19 (x -5..25, y 0..6) with parking spaces north of it,
+/// 2.2 m high: #29 (2.5 x 5 m, square to the aisle at x 0..2.5) and #40
+/// (2.5 x 4.8 m turned 45 degrees at x 10, its bounding box 5.16 m
+/// square). Column #59 stands 0.1 m west of #29's side and #69 0.05 m past
+/// its far end.
+fn car_park() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,.PARKING.,$)";
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,.COLUMN.)";
+    let turned_centre = 6.0 + 7.3 / 2.0_f64.sqrt() / 2.0;
+    model_with(&format!(
+        "{}{}{}{}{}",
+        placed_box(
+            10,
+            [10.0, 3.0, -0.2],
+            [30.0, 6.0, 0.2],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.FLOOR.)"
+        ),
+        placed_box(20, [1.25, 8.5, 0.0], [2.5, 5.0, 2.2], space),
+        turned_box(30, [10.0, turned_centre, 0.0], [4.8, 2.5, 2.2], 45.0, space),
+        placed_box(50, [-0.3, 8.2, 0.0], [0.4, 0.4, 3.0], column),
+        placed_box(60, [1.2, 11.25, 0.0], [0.4, 0.4, 3.0], column),
+    ))
+}
+
+#[test]
+fn with_geometry_parking_spaces_are_checked_along_their_own_axes() {
+    let case = Case::new("geometry-parking-bay");
+    let (output, result) = case.geometry_rule(
+        &car_park(),
+        &[
+            ("space", "IfcSpace"),
+            ("slab", "IfcSlab"),
+            ("column", "IfcColumn"),
+        ],
+        "axioval:capability.parking-bay",
+        &registry_signature("axioval:capability.parking-bay"),
+        entity("space"),
+        json!({
+            "min_width": {"type": "quantity", "value": 2.4, "unit": "m"},
+            "min_length": {"type": "quantity", "value": 5, "unit": "m"},
+            "min_height": {"type": "quantity", "value": 2.1, "unit": "m"},
+            "aisles": {"type": "selector", "value": entity("slab")},
+            "aisle_reach": {"type": "quantity", "value": 0.1, "unit": "m"},
+            "orientation": {"type": "string", "value": "perpendicular"},
+            "angle_tolerance": {"type": "quantity", "value": 5, "unit": "deg"},
+            "obstacles": {"type": "selector", "value": entity("column")},
+            "obstruction_reach": {"type": "quantity", "value": 0.2, "unit": "m"},
+            "end_obstructions": {"type": "string", "value": "none"},
+            "side_obstructions": {"type": "string", "value": "one"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    // #29 is long enough, but a column stands past its far end. #40's
+    // bounding box is 5.16 m long; along its own axis it is 4.8 m, and it
+    // stands at 45 degrees to the aisle.
+    assert_eq!(found.len(), 3, "{result:#}");
+    assert_eq!(
+        found[0],
+        (
+            "#29".to_owned(),
+            "1 of its ends obstructed by ifc-step:model.ifc/#69, none allowed".to_owned()
+        ),
+        "{result:#}"
+    );
+    assert_eq!(found[1].0, "#40");
+    assert!(
+        found[1]
+            .1
+            .starts_with("length along the bay's own axes is 4.8 m; at least 5 m"),
+        "{found:#?}"
+    );
+    assert_eq!(found[2].0, "#40");
+    assert!(
+        found[2]
+            .1
+            .starts_with("the bay is not perpendicular to any aisle within 0.1 m"),
+        "{found:#?}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// Storey #101 over slab #19 (10 x 8 m), holding walls 0.2 m thick along
+/// x: #29 at y 0..0.2, #39 at y 5..5.2 from x 2, #49 at y 5.6..5.8, and
+/// #59 across them at x 0..0.2.
+fn walls_on_a_storey() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    model_with(&format!(
+        "{}{}{}{}{}\
+         #100=IFCBUILDING('0000000000000000000100',$,'B',$,$,#3,$,$,.ELEMENT.,$,$,$);\n\
+         #101=IFCBUILDINGSTOREY('0000000000000000000101',$,'EG',$,$,#3,$,$,.ELEMENT.,0.);\n\
+         #103=IFCRELAGGREGATES('0000000000000000000103',$,$,$,#100,(#101));\n\
+         #106=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000106',$,$,$,(#19,#29,#39,#49,#59),#101);\n",
+        placed_box(
+            10,
+            [5.0, 4.0, -0.3],
+            [10.0, 8.0, 0.3],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.FLOOR.)"
+        ),
+        placed_box(20, [5.0, 0.1, 0.0], [10.0, 0.2, 3.0], wall),
+        placed_box(30, [6.0, 5.1, 0.0], [8.0, 0.2, 3.0], wall),
+        placed_box(40, [5.0, 5.7, 0.0], [10.0, 0.2, 3.0], wall),
+        placed_box(50, [0.1, 2.9, 0.0], [0.2, 5.4, 3.0], wall),
+    ))
+}
+
+#[test]
+fn with_geometry_close_parallel_walls_and_an_uncovered_strip_are_found() {
+    let case = Case::new("geometry-wall-spacing");
+    let contained = json!({"type": "stringList",
+                           "value": ["IfcRelContainedInSpatialStructure"]});
+    let (output, result) = case.geometry_rule(
+        &walls_on_a_storey(),
+        &[("storey", "IfcBuildingStorey"), ("slab", "IfcSlab")],
+        "axioval:capability.wall-spacing",
+        &registry_signature("axioval:capability.wall-spacing"),
+        entity("storey"),
+        json!({
+            "members": {"type": "selector", "value": entity("wall")},
+            "member_path": contained,
+            "angle_tolerance": {"type": "quantity", "value": 5, "unit": "deg"},
+            "minimum": {"type": "quantity", "value": 1, "unit": "m"},
+            "maximum": {"type": "quantity", "value": 6, "unit": "m"},
+            "footprints": {"type": "selector", "value": entity("slab")},
+            "footprint_path": contained,
+            "uncovered_above": {"type": "quantity", "value": 1, "unit": "m2"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 2, "{result:#}");
+    // The bands reach y 5.8 at most: the 2.2 m strip north of #49 is left.
+    assert_eq!(found[0].0, "#101");
+    assert!(
+        found[0].1.starts_with(
+            "22 m² of ifc-step:model.ifc/#19 lies outside every band between parallel \
+             members at most 6 m apart"
+        ),
+        "{found:#?}"
+    );
+    assert!(
+        found[1].1.starts_with(
+            "ifc-step:model.ifc/#39 and ifc-step:model.ifc/#49 are parallel and 0.4 m apart \
+             in plan; at least 1 m required"
+        ),
+        "{found:#?}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

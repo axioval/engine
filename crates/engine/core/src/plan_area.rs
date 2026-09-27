@@ -90,6 +90,64 @@ impl PlanArea {
     }
 }
 
+/// The band between two footprints facing each other along a direction.
+///
+/// It is the convex hull of the two footprints, cut to the positions along
+/// `direction` that both footprints reach: between two parallel walls, the
+/// strip between them over the length they share, walls included. Where
+/// their reaches along the direction do not overlap, the band is empty.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanBand {
+    first: ObjectId,
+    second: ObjectId,
+    direction: [f64; 2],
+}
+
+impl PlanBand {
+    /// The band between `first` and `second` along `direction`, a plan
+    /// vector normalised here. The two are ordered, so one band has one
+    /// spelling.
+    pub fn try_new(
+        first: ObjectId,
+        second: ObjectId,
+        direction: [f64; 2],
+    ) -> Result<Self, PlanAreaError> {
+        let length = direction[0].hypot(direction[1]);
+        if first == second {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a band needs two objects, not {first} twice"
+            )));
+        }
+        if !length.is_finite() || length <= f64::EPSILON {
+            return Err(PlanAreaError::Unavailable(format!(
+                "a band needs a plan direction, not {direction:?}"
+            )));
+        }
+        let (first, second) = if first < second {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        Ok(Self {
+            first,
+            second,
+            direction: [direction[0] / length, direction[1] / length],
+        })
+    }
+
+    /// The two objects, in order.
+    #[must_use]
+    pub fn objects(&self) -> [&ObjectId; 2] {
+        [&self.first, &self.second]
+    }
+
+    /// The unit plan direction along which the band is cut.
+    #[must_use]
+    pub fn direction(&self) -> [f64; 2] {
+        self.direction
+    }
+}
+
 /// Measures plan-projected areas of model objects.
 pub trait PlanAreaService: Send + Sync + 'static {
     /// The area of `object`'s footprint: its geometry projected onto the
@@ -118,6 +176,22 @@ pub trait PlanAreaService: Send + Sync + 'static {
         let _ = (object, cover, growth_metres);
         Err(PlanAreaError::Unavailable(
             "this plan-area service does not measure uncovered areas".into(),
+        ))
+    }
+
+    /// The area of `object`'s footprint outside the union of `bands`.
+    ///
+    /// An empty set of bands leaves the whole footprint outside. A service
+    /// that does not measure bands refuses; it never answers with the
+    /// footprint or with zero.
+    fn measure_outside_bands(
+        &self,
+        object: &ObjectId,
+        bands: &[PlanBand],
+    ) -> Result<PlanArea, PlanAreaError> {
+        let _ = (object, bands);
+        Err(PlanAreaError::Unavailable(
+            "this plan-area service does not measure bands".into(),
         ))
     }
 }
@@ -174,6 +248,37 @@ impl PlanAreaServiceHandle {
         cover.sort();
         cover.dedup();
         self.0.measure_uncovered_area(object, &cover, growth_metres)
+    }
+
+    /// The area of `object`'s footprint outside the union of `bands`.
+    ///
+    /// A band bounded by `object` itself is refused rather than measured;
+    /// `bands` reach the service sorted and without repeats.
+    pub fn measure_outside_bands(
+        &self,
+        object: &ObjectId,
+        bands: &[PlanBand],
+    ) -> Result<PlanArea, PlanAreaError> {
+        if bands.iter().any(|band| band.objects().contains(&object)) {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{object} cannot bound a band over its own footprint"
+            )));
+        }
+        let mut bands = bands.to_vec();
+        bands.sort_by(|a, b| {
+            (
+                a.objects(),
+                a.direction[0].to_bits(),
+                a.direction[1].to_bits(),
+            )
+                .cmp(&(
+                    b.objects(),
+                    b.direction[0].to_bits(),
+                    b.direction[1].to_bits(),
+                ))
+        });
+        bands.dedup();
+        self.0.measure_outside_bands(object, &bands)
     }
 }
 
@@ -235,6 +340,27 @@ mod tests {
         assert!(matches!(
             handle.measure_uncovered_area(&id("a"), &[id("b")], 0.0),
             Err(PlanAreaError::Unavailable(_))
+        ));
+        let band = super::PlanBand::try_new(id("b"), id("c"), [1.0, 0.0]).unwrap();
+        assert!(matches!(
+            handle.measure_outside_bands(&id("a"), &[band]),
+            Err(PlanAreaError::Unavailable(_))
+        ));
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn a_band_is_ordered_normalised_and_never_bounded_by_its_subject() {
+        let band = super::PlanBand::try_new(id("c"), id("b"), [0.0, 2.0]).unwrap();
+        assert_eq!(band.objects(), [&id("b"), &id("c")]);
+        assert_eq!(band.direction(), [0.0, 1.0]);
+        assert!(super::PlanBand::try_new(id("b"), id("b"), [1.0, 0.0]).is_err());
+        assert!(super::PlanBand::try_new(id("b"), id("c"), [0.0, 0.0]).is_err());
+        assert!(super::PlanBand::try_new(id("b"), id("c"), [f64::NAN, 1.0]).is_err());
+        let handle = PlanAreaServiceHandle::new(Arc::new(FootprintsOnly::default()));
+        assert!(matches!(
+            handle.measure_outside_bands(&id("b"), &[band]),
+            Err(PlanAreaError::Unavailable(message)) if message.contains("its own footprint")
         ));
     }
 

@@ -7,6 +7,11 @@
 //! distance between two footprints is the proximity service's `horizontal`
 //! projection; this seam does not repeat it.
 //!
+//! It also owns the rectangle of least area enclosing a footprint, which
+//! gives a footprint its own axes: a parking bay's length along the bay, a
+//! wall's direction. The rectangle says how well its orientation is known;
+//! a square has no long axis, and a tessellated footprint no proven one.
+//!
 //! A length is an interval. A mesh that is the object's exact shape measures
 //! exactly; one that approximates curved faces measures within a bound the
 //! adapter derives from its declared chord deviation, and a rule must decide
@@ -200,6 +205,243 @@ impl PlanCentre {
     }
 }
 
+/// How well the orientation of a [`PlanRectangle`] is known.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RectangleOrientation {
+    /// Exactly one orientation encloses the footprint with the least area,
+    /// up to quarter turns, and the rectangle has it: its axes are the
+    /// footprint's own.
+    Unique,
+    /// Several orientations share the least area. The rectangle is one of
+    /// them; another may have other sides, so neither its axes nor its
+    /// sides are the footprint's own.
+    Tied,
+    /// The mesh approximates the object's shape, so which orientation
+    /// encloses the true footprint with the least area is not known. The
+    /// half extents still bound the true footprint along these axes.
+    Unproven,
+}
+
+impl RectangleOrientation {
+    /// The orientation's stable name, as evidence locators cite it.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Unique => "unique",
+            Self::Tied => "tied",
+            Self::Unproven => "unproven",
+        }
+    }
+}
+
+/// The rectangle of least area enclosing an object's footprint, oriented
+/// in plan: a centre, two unit axes and the half extents along them.
+///
+/// Every value is bounded: the true centre lies within
+/// [`Self::centre_radius_metres`] of [`Self::centre`], each true axis within
+/// [`Self::axis_error_radians`] of the stated one, and each true half
+/// extent inside its interval. The evidence is exact exactly when every
+/// bound is a point and the orientation is [`RectangleOrientation::Unique`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanRectangle {
+    object: ObjectId,
+    centre: [f64; 2],
+    centre_radius: f64,
+    axes: [[f64; 2]; 2],
+    axis_error: f64,
+    half_extents: [(f64, f64); 2],
+    orientation: RectangleOrientation,
+    evidence: Evidence,
+}
+
+/// How far a stated axis may stray from unit length and from a quarter
+/// turn of the other: the rounding of a normalised vector, with room.
+const AXIS_ROUNDING: f64 = 1e-9;
+
+impl PlanRectangle {
+    /// The rectangle enclosing `object`'s footprint.
+    ///
+    /// `axes` are unit vectors, the second the first turned a quarter
+    /// counter-clockwise, the first pointing into `[0, 90)` degrees, so one
+    /// rectangle has one spelling. `half_extents` are `(lower, upper)`
+    /// intervals along the axes in order.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_new(
+        object: ObjectId,
+        centre: [f64; 2],
+        centre_radius: f64,
+        axes: [[f64; 2]; 2],
+        axis_error: f64,
+        half_extents: [(f64, f64); 2],
+        orientation: RectangleOrientation,
+        evidence: Evidence,
+    ) -> Result<Self, PlanSpanError> {
+        let finite = centre
+            .iter()
+            .chain(axes.iter().flatten())
+            .all(|value| value.is_finite());
+        let bounded = |value: f64| value.is_finite() && value >= 0.0;
+        let [[ux, uy], [vx, vy]] = axes;
+        let unit = (ux.mul_add(ux, uy * uy) - 1.0).abs() <= AXIS_ROUNDING;
+        let quarter = (vx + uy).abs() <= AXIS_ROUNDING && (vy - ux).abs() <= AXIS_ROUNDING;
+        if !finite
+            || !bounded(centre_radius)
+            || !bounded(axis_error)
+            || axis_error > std::f64::consts::FRAC_PI_2
+            || !unit
+            || !quarter
+            || !(ux > 0.0 && uy >= 0.0)
+            || half_extents
+                .iter()
+                .any(|&(lower, upper)| !bounded(lower) || !upper.is_finite() || lower > upper)
+        {
+            return Err(PlanSpanError::InvalidMeasurement);
+        }
+        #[allow(clippy::float_cmp)]
+        let exact = centre_radius == 0.0
+            && axis_error == 0.0
+            && half_extents.iter().all(|(lower, upper)| lower == upper)
+            && orientation == RectangleOrientation::Unique;
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(PlanSpanError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            centre,
+            centre_radius,
+            axes,
+            axis_error,
+            half_extents,
+            orientation,
+            evidence,
+        })
+    }
+
+    /// The object whose footprint the rectangle encloses.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The measured centre, in canonical metres.
+    #[must_use]
+    pub fn centre(&self) -> [f64; 2] {
+        self.centre
+    }
+
+    /// How far, in metres, the true centre can lie from [`Self::centre`].
+    #[must_use]
+    pub fn centre_radius_metres(&self) -> f64 {
+        self.centre_radius
+    }
+
+    /// The two unit axes, the second the first turned a quarter
+    /// counter-clockwise.
+    #[must_use]
+    pub fn axes(&self) -> [[f64; 2]; 2] {
+        self.axes
+    }
+
+    /// How far, in radians, each true axis can be turned from the stated
+    /// one.
+    #[must_use]
+    pub fn axis_error_radians(&self) -> f64 {
+        self.axis_error
+    }
+
+    /// The half extents along the two axes, each `(lower, upper)` metres.
+    #[must_use]
+    pub fn half_extents_metres(&self) -> [(f64, f64); 2] {
+        self.half_extents
+    }
+
+    /// How well the orientation is known.
+    #[must_use]
+    pub fn orientation(&self) -> RectangleOrientation {
+        self.orientation
+    }
+
+    /// Whether the rectangle is known exactly.
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
+        self.evidence.exact
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+
+    /// Why the axes are not the footprint's own, or `None` when they are.
+    fn unoriented(&self) -> Option<String> {
+        match self.orientation {
+            RectangleOrientation::Unique => None,
+            RectangleOrientation::Tied => Some(format!(
+                "several orientations enclose {} with the least area",
+                self.object
+            )),
+            RectangleOrientation::Unproven => Some(format!(
+                "{} is tessellated, so the orientation enclosing its true footprint with the \
+                 least area is not known",
+                self.object
+            )),
+        }
+    }
+
+    /// The footprint's width and length along its own axes: the shorter and
+    /// the longer side, each `(lower, upper)` metres.
+    ///
+    /// Refused unless the orientation is [`RectangleOrientation::Unique`]:
+    /// another rectangle of least area may have other sides. Near-equal
+    /// sides are fine; which of them is the longer does not matter here.
+    pub fn width_and_length(&self) -> Result<[(f64, f64); 2], String> {
+        if let Some(reason) = self.unoriented() {
+            return Err(reason);
+        }
+        let [(a0, a1), (b0, b1)] = self.half_extents;
+        Ok([
+            (2.0 * a0.min(b0), 2.0 * a1.min(b1)),
+            (2.0 * a0.max(b0), 2.0 * a1.max(b1)),
+        ])
+    }
+
+    /// The index of the longer axis, when the orientation is unique and one
+    /// side is surely longer than the other. A square, or a rectangle whose
+    /// sides the measurement cannot order, has no long axis.
+    pub fn long_axis(&self) -> Result<usize, String> {
+        if let Some(reason) = self.unoriented() {
+            return Err(reason);
+        }
+        let [(a0, a1), (b0, b1)] = self.half_extents;
+        if a0 > b1 {
+            Ok(0)
+        } else if b0 > a1 {
+            Ok(1)
+        } else {
+            Err(format!(
+                "the sides of {} are too close to equal to tell its long axis",
+                self.object
+            ))
+        }
+    }
+
+    /// The acute angle between this footprint's long axis and `other`'s, in
+    /// degrees within `[0, 90]`, as `(lower, upper)` sure to hold the angle
+    /// between the true axes.
+    pub fn long_axis_angle(&self, other: &Self) -> Result<(f64, f64), String> {
+        let own = self.axes[self.long_axis()?];
+        let theirs = other.axes[other.long_axis()?];
+        let dot = own[0].mul_add(theirs[0], own[1] * theirs[1]).abs();
+        let cross = own[0].mul_add(theirs[1], -(own[1] * theirs[0])).abs();
+        let angle = cross.atan2(dot).to_degrees();
+        // The rounding of the products and the arctangent, well inside a
+        // micro-degree, plus how far either axis may be turned.
+        let slack = (self.axis_error + other.axis_error).to_degrees() + 1e-9;
+        Ok(((angle - slack).max(0.0), (angle + slack).min(90.0)))
+    }
+}
+
 /// Measures plan spans of model objects.
 pub trait PlanSpanService: Send + Sync + 'static {
     /// The longest distance between two points of `object`'s footprint: its
@@ -221,6 +463,14 @@ pub trait PlanSpanService: Send + Sync + 'static {
     fn measure_centre(&self, object: &ObjectId) -> Result<PlanCentre, PlanSpanError> {
         Err(PlanSpanError::Unavailable(format!(
             "this plan-span service does not locate the centre of {object}"
+        )))
+    }
+    /// The rectangle of least area enclosing `object`'s footprint. A
+    /// service that does not orient footprints refuses by default, never
+    /// answering with the footprint's axis-aligned box.
+    fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
+        Err(PlanSpanError::Unavailable(format!(
+            "this plan-span service does not orient the footprint of {object}"
         )))
     }
 }
@@ -269,6 +519,19 @@ impl PlanSpanServiceHandle {
         }
         Ok(centre)
     }
+
+    /// The least-area rectangle enclosing `object`'s footprint; a rectangle
+    /// naming another object is refused.
+    pub fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
+        let rectangle = self.0.measure_rectangle(object)?;
+        if rectangle.object() != object {
+            return Err(PlanSpanError::Unavailable(format!(
+                "a rectangle of {} was returned for {object}",
+                rectangle.object()
+            )));
+        }
+        Ok(rectangle)
+    }
 }
 
 #[cfg(test)]
@@ -276,8 +539,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        CentrePlacement, PlanCentre, PlanLength, PlanSpan, PlanSpanError, PlanSpanService,
-        PlanSpanServiceHandle,
+        CentrePlacement, PlanCentre, PlanLength, PlanRectangle, PlanSpan, PlanSpanError,
+        PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
     };
     use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -326,6 +589,102 @@ mod tests {
         ) -> Result<PlanLength, PlanSpanError> {
             Err(PlanSpanError::Unavailable("unused".into()))
         }
+    }
+
+    /// A rectangle of `a` with half extents `half` along the axes, turned
+    /// `turn` radians from the x-axis.
+    fn rectangle(
+        half: [(f64, f64); 2],
+        turn: f64,
+        orientation: RectangleOrientation,
+    ) -> Result<PlanRectangle, PlanSpanError> {
+        #[allow(clippy::float_cmp)]
+        let exact = half.iter().all(|(low, high)| low == high)
+            && orientation == RectangleOrientation::Unique;
+        let (sin, cos) = turn.sin_cos();
+        PlanRectangle::try_new(
+            id("a"),
+            [0.0, 0.0],
+            0.0,
+            [[cos, sin], [-sin, cos]],
+            0.0,
+            half,
+            orientation,
+            Evidence {
+                source: SourceId::new("cad", "m").unwrap(),
+                locator: "plan-rectangle:a".into(),
+                exact,
+            },
+        )
+    }
+
+    #[test]
+    fn a_rectangle_has_a_long_axis_only_when_one_side_is_surely_longer() {
+        let unique = RectangleOrientation::Unique;
+        let bay = rectangle([(1.25, 1.25), (2.5, 2.5)], 0.0, unique).unwrap();
+        assert_eq!(bay.long_axis(), Ok(1));
+        assert_eq!(bay.width_and_length(), Ok([(2.5, 2.5), (5.0, 5.0)]));
+        let square = rectangle([(1.5, 1.5), (1.5, 1.5)], 0.0, unique).unwrap();
+        assert!(square.long_axis().is_err());
+        assert_eq!(square.width_and_length(), Ok([(3.0, 3.0), (3.0, 3.0)]));
+        // Sides whose intervals overlap cannot be ordered.
+        let close = rectangle([(1.0, 1.2), (1.1, 1.3)], 0.0, unique).unwrap();
+        assert!(close.long_axis().is_err());
+        assert_eq!(close.width_and_length(), Ok([(2.0, 2.4), (2.2, 2.6)]));
+        for orientation in [RectangleOrientation::Tied, RectangleOrientation::Unproven] {
+            let other = rectangle([(1.25, 1.25), (2.5, 2.5)], 0.0, orientation).unwrap();
+            assert!(other.long_axis().is_err());
+            assert!(other.width_and_length().is_err());
+        }
+    }
+
+    #[test]
+    fn long_axes_meet_at_an_acute_angle_interval() {
+        let unique = RectangleOrientation::Unique;
+        let along = rectangle([(2.5, 2.5), (1.0, 1.0)], 0.0, unique).unwrap();
+        let turned = rectangle([(1.0, 1.0), (2.5, 2.5)], 30.0_f64.to_radians(), unique).unwrap();
+        // The turned one's long axis is its second: 120 degrees, so 60.
+        let (low, high) = along.long_axis_angle(&turned).unwrap();
+        assert!(
+            low <= 60.0 && 60.0 <= high && high - low < 1e-6,
+            "{low} {high}"
+        );
+        let (low, _) = along.long_axis_angle(&along).unwrap();
+        assert!(low.abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_rectangle_must_be_valid_and_honest_about_its_exactness() {
+        let unique = RectangleOrientation::Unique;
+        // A first axis outside [0, 90) degrees has another spelling.
+        assert_eq!(
+            rectangle([(1.0, 1.0), (2.0, 2.0)], 100.0_f64.to_radians(), unique),
+            Err(PlanSpanError::InvalidMeasurement)
+        );
+        assert_eq!(
+            rectangle([(2.0, 1.0), (2.0, 2.0)], 0.0, unique),
+            Err(PlanSpanError::InvalidMeasurement)
+        );
+        let mut evidence = Evidence::exact(SourceId::new("cad", "m").unwrap(), "r");
+        evidence.exact = true;
+        assert_eq!(
+            PlanRectangle::try_new(
+                id("a"),
+                [0.0, 0.0],
+                0.0,
+                [[1.0, 0.0], [0.0, 1.0]],
+                0.0,
+                [(1.0, 1.0), (2.0, 2.0)],
+                RectangleOrientation::Unproven,
+                evidence,
+            ),
+            Err(PlanSpanError::InexactEvidence)
+        );
+        let handle = PlanSpanServiceHandle::new(Arc::new(Silent));
+        assert!(matches!(
+            handle.measure_rectangle(&id("a")),
+            Err(PlanSpanError::Unavailable(_))
+        ));
     }
 
     #[test]

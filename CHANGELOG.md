@@ -21,6 +21,48 @@ All notable changes are documented here. This project follows Semantic Versionin
   styled surface is exactly absent; a surface style without shading, and
   two styled items on one item, are refused; the material fallback in
   IFC2X3 waits on openbimrs/ifc#77. (#71)
+- **Footprints with their own axes.** `PlanSpanService::measure_rectangle`
+  answers the rectangle of least area enclosing a footprint as a
+  `PlanRectangle`: centre and radius, two unit axes and how far they may be
+  turned, and the half extents as intervals. `RectangleOrientation` says
+  whether the axes are the footprint's own (`Unique`), one of several
+  least-area orientations (`Tied`) or unproven on a tessellation;
+  `width_and_length` answers only for a unique orientation, `long_axis`
+  also needs one side surely longer (a square has none), and
+  `long_axis_angle` bounds the acute angle between two long axes. The
+  default refuses. The Axiolid service measures it with the overlay's exact
+  rotating calipers (axiolid-overlay 0.3.2, now the workspace's minimum),
+  widened by the kernel's rounding bound, and exactly from the extreme
+  coordinates when the rectangle lies along the coordinate axes.
+  `PlanAreaService::measure_outside_bands` measures a footprint's area
+  outside a set of `PlanBand`s, each the convex hull of two footprints cut
+  to the stretch along a direction that both reach; the default refuses,
+  and the Axiolid service brackets each computed cut inwards and outwards
+  and refuses a band bounded by a tessellated footprint. (#87, #61)
+- **Parking bays.** `parking-bay` checks each selected bay along its own
+  axes, never its bounding box: `min_width`, `max_width`, `min_length`,
+  `max_length`, `min_height` and `max_height`; with `aisles`,
+  `orientation` (`parallel`, `perpendicular` or `angled`) and
+  `angle_tolerance`, its long axis against an aisle within `aisle_reach`;
+  with `obstacles`, `obstruction_reach`, `end_obstructions` and
+  `side_obstructions` (`none`, `one`, `both`), how many ends and sides
+  objects within reach obstruct, from their extents along the bay's axes.
+  A bay turned 45 degrees whose box is long enough but which is itself too
+  short is found. A bay without a unique orientation, or a square one
+  where its ends matter, is not evaluated. (#87)
+- **Wall spacing.** `wall-spacing` judges the parallel walls or beams a
+  storey reaches along `member_path`: pairs whose long axes lie within
+  `angle_tolerance` of parallel and that face each other must stand at
+  least `minimum` apart in plan, and with `maximum`, `footprints`,
+  `footprint_path` and `uncovered_above`, the bands between pairs at most
+  `maximum` apart must cover each footprint object up to that area. Sure
+  and possible pairs bound the uncovered area from above and below. (#61)
+- **Axis-compatible counterparts.** `counterpart-coverage` takes an
+  optional `axis_tolerance`: only counterparts whose long axis lies within
+  it of parallel to the element's count, one surely at another angle is
+  left out, and one whose angle or axes are undecided is a possible cover
+  only. **Breaking:** definitions bound to `counterpart-coverage` must
+  declare the new optional parameter `axis_tolerance`. (#63)
 - **Above or below in vertical distances.** `distance` takes a
   `vertical_direction` (`either`, the default, `above` or `below`) with the
   `vertical` projection, so a rule can require a sprinkler at most 0.5 m

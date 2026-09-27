@@ -537,10 +537,10 @@ pub use object_frame::{
 pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
-pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle};
+pub use plan_area::{PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand};
 pub use plan_span::{
-    CentrePlacement, PlanCentre, PlanLength, PlanSpan, PlanSpanError, PlanSpanService,
-    PlanSpanServiceHandle,
+    CentrePlacement, PlanCentre, PlanLength, PlanRectangle, PlanSpan, PlanSpanError,
+    PlanSpanService, PlanSpanServiceHandle, RectangleOrientation,
 };
 pub use properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,

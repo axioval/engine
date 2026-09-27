@@ -7,13 +7,14 @@ use std::fmt::Write as _;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectBounds, ParameterDescriptor,
-    ParameterType, PlanArea, PlanAreaServiceHandle, ProximityProjection, ProximityServiceHandle,
-    RuleCapability, RuleContext, VerticalExtent, VerticalExtentError, VerticalExtentServiceHandle,
-    projected_candidate_pairs,
+    ParameterType, PlanArea, PlanAreaServiceHandle, PlanRectangle, PlanSpanServiceHandle,
+    ProximityProjection, ProximityServiceHandle, RuleCapability, RuleContext, VerticalExtent,
+    VerticalExtentError, VerticalExtentServiceHandle, projected_candidate_pairs,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension, Severity};
 
+use crate::orientation::{Alignment, Tri, aligned, angle_tolerance, rectangle, rectangle_service};
 use crate::pairs::{reason as proximity_reason, refuse_all};
 use crate::plan_area::{footprint, shown, unavailable};
 use crate::selection::select_objects;
@@ -52,10 +53,16 @@ const NAME: &str = "counterpart-coverage";
 /// the selector cannot decide, or whose extent or footprint cannot be read,
 /// can only cover more: a pass stands, anything else is not evaluated.
 ///
-/// Counterparts are not filtered by axis: a perpendicular wall meeting the
-/// element within the horizontal tolerance overlaps it in plan and counts
-/// towards its height. Axis compatibility needs a minimum-area rectangle the
-/// geometry services do not provide yet.
+/// With `axis_tolerance`, only axis-compatible counterparts count: those
+/// whose long axis (from the least-area rectangle of the footprint) lies
+/// within that angle of parallel to the element's. A counterpart surely at
+/// another angle is left out; one whose angle straddles the tolerance, or
+/// whose axes or the element's are not their own (a square, several
+/// least-area rectangles, a tessellated footprint), may count: it can only
+/// cover more, so it leaves a finding it could remove not evaluated.
+/// Without `axis_tolerance`, a perpendicular wall meeting the element
+/// within the horizontal tolerance overlaps it in plan and counts towards
+/// its height.
 pub struct CounterpartCoverage;
 
 /// A declared threshold and the severity of the band above it.
@@ -69,6 +76,9 @@ struct Config<'a> {
     vertical: Option<f64>,
     /// Ascending thresholds.
     bands: Vec<Band>,
+    /// Largest angle, in degrees, between compatible long axes; `None`
+    /// counts counterparts at any angle.
+    axis: Option<f64>,
 }
 
 impl RuleCapability for CounterpartCoverage {
@@ -85,6 +95,7 @@ impl RuleCapability for CounterpartCoverage {
             ParameterDescriptor::optional("info_above", ParameterType::Number),
             ParameterDescriptor::optional("warning_above", ParameterType::Number),
             ParameterDescriptor::optional("error_above", ParameterType::Number),
+            ParameterDescriptor::optional("axis_tolerance", ParameterType::Quantity),
         ]
     }
 
@@ -206,6 +217,7 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
         horizontal,
         vertical,
         bands,
+        axis: angle_tolerance(parameters, "axis_tolerance")?,
     })
 }
 
@@ -213,6 +225,7 @@ struct Services<'a> {
     areas: &'a PlanAreaServiceHandle,
     proximity: &'a ProximityServiceHandle,
     extents: Option<&'a VerticalExtentServiceHandle>,
+    rectangles: Option<&'a PlanSpanServiceHandle>,
 }
 
 impl<'a> Services<'a> {
@@ -240,6 +253,10 @@ impl<'a> Services<'a> {
                         .get::<VerticalExtentServiceHandle>()
                         .ok_or_else(|| missing("vertical-extent"))?,
                 ),
+            },
+            rectangles: match config.axis {
+                None => None,
+                Some(_) => Some(rectangle_service(context)?),
             },
         })
     }
@@ -345,6 +362,8 @@ struct Cover {
     most: Vec<ObjectId>,
     /// Why the cover may be larger still than `most`.
     unknown: Vec<String>,
+    /// Why counterparts in `most` only may be axis-compatible.
+    axes: Vec<String>,
     evidence: Vec<Evidence>,
 }
 
@@ -382,8 +401,14 @@ impl Subject<'_, '_> {
             least: Vec::new(),
             most: Vec::new(),
             unknown: Vec::new(),
+            axes: Vec::new(),
             evidence: vec![area.evidence().clone()],
         };
+        let own = self.services.rectangles.map(|service| {
+            rectangle(service, &self.object.id).map_err(|(_, message)| {
+                format!("the axes of {} are unknown: {message}", self.object.id)
+            })
+        });
         let blind = self.counterparts.blind.len();
         if blind > 0 {
             cover.unknown.push(format!(
@@ -417,6 +442,16 @@ impl Subject<'_, '_> {
             } else {
                 Overlap::Maybe
             };
+            let overlap = match (&own, self.config.axis) {
+                (Some(own), Some(tolerance)) => {
+                    match self.compatible(own, counterpart, tolerance, &mut cover) {
+                        Tri::No => continue,
+                        Tri::Yes => overlap,
+                        Tri::Maybe => Overlap::Maybe,
+                    }
+                }
+                _ => overlap,
+            };
             cover.evidence.push(uncovered.evidence().clone());
             let selected = self.counterparts.matched.contains(counterpart);
             if selected && overlap == Overlap::Sure {
@@ -425,6 +460,35 @@ impl Subject<'_, '_> {
             cover.most.push(counterpart.clone());
         }
         cover
+    }
+
+    /// Whether `counterpart`'s long axis lies within `tolerance` degrees of
+    /// parallel to the subject's.
+    fn compatible(
+        &self,
+        own: &Result<PlanRectangle, String>,
+        counterpart: &ObjectId,
+        tolerance: f64,
+        cover: &mut Cover,
+    ) -> Tri {
+        let Some(service) = self.services.rectangles else {
+            return Tri::Maybe;
+        };
+        let theirs = rectangle(service, counterpart)
+            .map_err(|(_, message)| format!("the axes of {counterpart} are unknown: {message}"));
+        let (answer, why) = match (own, &theirs) {
+            (Ok(own), Ok(theirs)) => {
+                cover
+                    .evidence
+                    .extend([own.evidence().clone(), theirs.evidence().clone()]);
+                aligned(own, theirs, Alignment::Parallel, tolerance)
+            }
+            (Err(why), _) | (_, Err(why)) => (Tri::Maybe, Some(why.clone())),
+        };
+        if let Some(why) = why {
+            cover.axes.push(why);
+        }
+        answer
     }
 
     fn plan(&self, area: &PlanArea, cover: &Cover, growth: f64) -> Check {
@@ -529,7 +593,7 @@ impl Subject<'_, '_> {
         }
         let Some(surely) = reached(lower) else {
             let mut message = format!("{what}, which straddles the threshold {lowest}");
-            for unknown in &cover.unknown {
+            for unknown in cover.unknown.iter().chain(&cover.axes) {
                 message.push_str("; ");
                 message.push_str(unknown);
             }

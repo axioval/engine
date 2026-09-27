@@ -26,15 +26,33 @@
 //! of the true cover within `r + d` of the measured one). When `r < d` the
 //! inner growth is the measured cover itself, widened by its band. The
 //! subject's own band widens both ends.
+//!
+//! A band between two footprints is the convex hull of both, cut to the
+//! positions along the band's direction that both reach. The hull's
+//! vertices are footprint vertices, but the two cuts are computed, so each
+//! cut is moved by `CUT_MARGIN` (0.1 µm, more for large coordinates) inwards for the
+//! surely covered part and outwards for the possibly covered one: the area
+//! outside the bands lies between the two. A band bounded by a tessellated
+//! footprint refuses; its hull is not bounded here.
 
-use axioval_engine::{GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService};
+use axiolid_core::Point2;
+use axiolid_overlay::{Polygon, Ring};
+use axioval_engine::{GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService, PlanBand};
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::{
-    Disc, footprint_measure, grown_polygons, plan_overlap_area, polygons_overlap_area,
-    projected_polygons,
+    Disc, footprint_measure, grown_polygons, hull_of, plan_overlap_area, polygons_overlap_area,
+    projected_polygons, ring_area,
 };
+
+/// How far a computed band cut is moved, in metres, plus `CUT_SCALE` of the
+/// largest coordinate it is computed from: far above the rounding of a dot
+/// product and of a point on a hull edge, and above the overlay's linear
+/// tolerance, so a cut never lands on a hull vertex it would be refused
+/// beside.
+const CUT_MARGIN: f64 = 1e-7;
+const CUT_SCALE: f64 = 1e-12;
 
 /// Overlay tolerance: tight, because exact evidence must not be laundered
 /// through a loose one.
@@ -193,6 +211,61 @@ pub(crate) fn tolerance() -> Result<axiolid_core::Tolerance, PlanAreaError> {
         .map_err(|_| PlanAreaError::Unavailable("invalid overlay tolerance".into()))
 }
 
+/// The part of the convex polygon `hull` (counter-clockwise) whose position
+/// along the unit `direction` lies in `[low, high]`, as fan triangles.
+fn cut(hull: &[(f64, f64)], direction: [f64; 2], low: f64, high: f64) -> Vec<Polygon> {
+    let along = |(x, y): (f64, f64)| x.mul_add(direction[0], y * direction[1]);
+    let clip = |points: Vec<(f64, f64)>, keep: &dyn Fn(f64) -> f64| {
+        let mut kept = Vec::new();
+        for (index, &current) in points.iter().enumerate() {
+            let next = points[(index + 1) % points.len()];
+            let (a, b) = (keep(along(current)), keep(along(next)));
+            if a >= 0.0 {
+                kept.push(current);
+            }
+            if (a >= 0.0) != (b >= 0.0) {
+                let t = a / (a - b);
+                kept.push((
+                    (next.0 - current.0).mul_add(t, current.0),
+                    (next.1 - current.1).mul_add(t, current.1),
+                ));
+            }
+        }
+        kept
+    };
+    let mut clipped = clip(hull.to_vec(), &|position| position - low);
+    if clipped.len() >= 3 {
+        clipped = clip(clipped, &|position| high - position);
+    }
+    // A cut through a hull vertex repeats it, which the overlay refuses.
+    clipped.dedup_by(|a, b| (a.0 - b.0).hypot(a.1 - b.1) < CUT_MARGIN);
+    while clipped.len() > 1 {
+        let (first, last) = (clipped[0], clipped[clipped.len() - 1]);
+        if (first.0 - last.0).hypot(first.1 - last.1) >= CUT_MARGIN {
+            break;
+        }
+        clipped.pop();
+    }
+    let Some(&apex) = clipped.first() else {
+        return Vec::new();
+    };
+    clipped[1..]
+        .windows(2)
+        .filter_map(|pair| {
+            let ring = Ring {
+                points: [apex, pair[0], pair[1]]
+                    .into_iter()
+                    .map(|(x, y)| Point2::new(x, y))
+                    .collect(),
+            };
+            (ring_area(&ring) > f64::EPSILON).then_some(Polygon {
+                outer: ring,
+                holes: Vec::new(),
+            })
+        })
+        .collect()
+}
+
 /// Area of the band of width `2d` along a boundary of length `perimeter`.
 pub(crate) fn band(perimeter: f64, deviation: f64) -> f64 {
     2.0 * perimeter * deviation + std::f64::consts::PI * deviation * deviation
@@ -298,6 +371,91 @@ impl PlanAreaService for AxiolidPlanAreaService {
             cover
                 .iter()
                 .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        PlanArea::try_new(
+            lower,
+            upper,
+            Evidence {
+                source: self.source.clone(),
+                locator,
+                exact,
+            },
+        )
+    }
+
+    fn measure_outside_bands(
+        &self,
+        object: &ObjectId,
+        bands: &[PlanBand],
+    ) -> Result<PlanArea, PlanAreaError> {
+        let subject = self.measure(object)?;
+        let (mut inner, mut outer) = (Vec::new(), Vec::new());
+        for band in bands {
+            let [first, second] = band.objects();
+            let direction = band.direction();
+            let mut points = Vec::new();
+            let mut reach = (f64::NEG_INFINITY, f64::INFINITY);
+            for member in [first, second] {
+                let footprint = self.measure(member)?;
+                if footprint.deviation > 0.0 {
+                    return Err(PlanAreaError::Unavailable(format!(
+                        "{member} is tessellated, so the band it bounds is not measured"
+                    )));
+                }
+                let vertices: Vec<(f64, f64)> = footprint
+                    .soup
+                    .iter()
+                    .flatten()
+                    .map(|point| (point.x, point.y))
+                    .collect();
+                if vertices.is_empty() {
+                    return Err(PlanAreaError::Unavailable(format!(
+                        "{member} has no footprint to bound a band"
+                    )));
+                }
+                let positions = vertices
+                    .iter()
+                    .map(|(x, y)| x.mul_add(direction[0], y * direction[1]));
+                let low = positions.clone().fold(f64::INFINITY, f64::min);
+                let high = positions.fold(f64::NEG_INFINITY, f64::max);
+                reach = (reach.0.max(low), reach.1.min(high));
+                points.extend(vertices);
+            }
+            let size = points
+                .iter()
+                .fold(0.0_f64, |size, (x, y)| size.max(x.abs()).max(y.abs()));
+            let margin = CUT_SCALE.mul_add(size, CUT_MARGIN);
+            let hull = hull_of(points);
+            inner.extend(cut(&hull, direction, reach.0 + margin, reach.1 - margin));
+            outer.extend(cut(&hull, direction, reach.0 - margin, reach.1 + margin));
+        }
+        let tolerance = tolerance()?;
+        let overlap = |polygons: Vec<Polygon>| {
+            polygons_overlap_area(projected_polygons(&subject.soup), polygons, tolerance)
+                .map(|area| area.min(subject.area))
+                .ok_or_else(|| {
+                    PlanAreaError::Unavailable(format!(
+                        "the bands over {object} cannot be computed"
+                    ))
+                })
+        };
+        let (inner, outer) = (overlap(inner)?, overlap(outer)?);
+        let subject_band = band(subject.perimeter, subject.deviation);
+        let upper = (subject.area - inner + subject_band).max(0.0);
+        let lower = (subject.area - outer - subject_band).max(0.0).min(upper);
+        let locator = format!(
+            "outside-bands:{object}:{}",
+            bands
+                .iter()
+                .map(|band| {
+                    let [first, second] = band.objects();
+                    let [x, y] = band.direction();
+                    format!("{first}|{second}|({x:.6},{y:.6})")
+                })
                 .collect::<Vec<_>>()
                 .join(",")
         );

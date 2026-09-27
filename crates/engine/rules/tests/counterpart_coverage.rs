@@ -8,9 +8,11 @@ use std::sync::Arc;
 
 use axioval_engine::{
     Bounds3, CapabilityEvaluation, CompiledRule, ElevationInterval, GeometryFidelity, ObjectBounds,
-    PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, ProximityError,
-    ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle, VerticalExtent,
-    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanLength, PlanRectangle,
+    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProximityError,
+    ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
+    RectangleOrientation, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, Severity};
@@ -160,6 +162,48 @@ impl ProximityService for Boxes {
     }
 }
 
+/// Each box is its own least-area rectangle; a tessellated one has no
+/// proven orientation.
+impl PlanSpanService for Boxes {
+    fn measure_diameter(&self, _: &ObjectId) -> Result<PlanLength, PlanSpanError> {
+        unreachable!("coverage measures no diameters")
+    }
+
+    fn measure_span(
+        &self,
+        _: &ObjectId,
+        _: &ObjectId,
+        _: PlanSpan,
+    ) -> Result<PlanLength, PlanSpanError> {
+        unreachable!("coverage measures no spans")
+    }
+
+    fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
+        let body = self
+            .get(object)
+            .map_err(|_| PlanSpanError::UnknownObject(object.clone()))?;
+        let [x0, y0, x1, y1] = body.plan;
+        let d = body.deviation;
+        let mut evidence = Evidence::exact(source(), format!("rectangle:{object}"));
+        evidence.exact = d == 0.0;
+        let half = |length: f64| ((length / 2.0 - d).max(0.0), length / 2.0 + d);
+        PlanRectangle::try_new(
+            object.clone(),
+            [f64::midpoint(x0, x1), f64::midpoint(y0, y1)],
+            d,
+            [[1.0, 0.0], [0.0, 1.0]],
+            0.0,
+            [half(x1 - x0), half(y1 - y0)],
+            if d == 0.0 {
+                RectangleOrientation::Unique
+            } else {
+                RectangleOrientation::Unproven
+            },
+            evidence,
+        )
+    }
+}
+
 impl VerticalExtentService for Boxes {
     fn measure_vertical_extent(
         &self,
@@ -221,7 +265,10 @@ fn run_with(model: Model, boxes: Boxes, rule: &CompiledRule) -> CapabilityEvalua
             .register(ProximityServiceHandle::new(shared.clone()))
             .unwrap();
         services
-            .register(VerticalExtentServiceHandle::new(shared))
+            .register(VerticalExtentServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(PlanSpanServiceHandle::new(shared))
             .unwrap();
     })
 }
@@ -536,5 +583,122 @@ fn a_missing_service_leaves_every_wall_not_evaluated() {
     assert_eq!(
         unevaluated(&evaluation),
         ["w1", "w2", "w3"].map(|wall| (wall.to_owned(), NotEvaluatedReason::MissingService))
+    );
+}
+
+fn degrees(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "deg".into(),
+    }
+}
+
+/// `w1` along x with `p1`, a structural wall across it, standing on its
+/// middle.
+fn crossed() -> Boxes {
+    Boxes::default()
+        .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+        .with("p1", [1.9, -1.0, 2.1, 1.2], 0.0, 3.0)
+}
+
+#[test]
+fn a_perpendicular_counterpart_counts_only_without_an_axis_tolerance() {
+    // Without an axis tolerance, p1 covers w1's height where they cross.
+    let found = graded(&run(
+        crossed(),
+        &coverage_rule(vec![("tolerance", metres(0.0))]),
+    ));
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].2.starts_with("plan: 0.95 of the footprint"),
+        "{found:#?}"
+    );
+
+    // Within 5 degrees of parallel only, p1 is no counterpart at all.
+    let evaluation = run(
+        crossed(),
+        &coverage_rule(vec![
+            ("tolerance", metres(0.0)),
+            ("axis_tolerance", degrees(5.0)),
+        ]),
+    );
+    let found = graded(&evaluation);
+    assert_eq!(found.len(), 2, "{found:#?}");
+    assert!(
+        found
+            .iter()
+            .all(|(_, _, message)| message.ends_with("no counterpart overlaps it")),
+        "{found:#?}"
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn a_parallel_counterpart_counts_with_an_axis_tolerance() {
+    let boxes = three_walls();
+    let found = graded(&run(
+        boxes,
+        &coverage_rule(vec![
+            ("tolerance", metres(0.02)),
+            ("axis_tolerance", degrees(5.0)),
+        ]),
+    ));
+    // As without the tolerance: every structural wall is parallel.
+    assert_eq!(
+        found.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["w2", "w2", "w3"],
+        "{found:#?}"
+    );
+}
+
+#[test]
+fn a_counterpart_without_a_long_axis_is_an_undecided_cover() {
+    // A square column under all of w1: it may or may not share its axis.
+    let boxes = Boxes::default()
+        .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+        .with("q1", [0.0, -1.9, 4.0, 2.1], 0.0, 3.0);
+    let evaluation = run(
+        boxes,
+        &coverage_rule(vec![
+            ("tolerance", metres(0.0)),
+            ("axis_tolerance", degrees(5.0)),
+        ]),
+    );
+    assert!(graded(&evaluation).is_empty(), "{:#?}", graded(&evaluation));
+    let outcomes = evaluation.not_evaluated_outcomes();
+    assert_eq!(outcomes.len(), 2, "{outcomes:?}");
+    assert!(
+        outcomes
+            .iter()
+            .all(|outcome| outcome.message().contains("too close to equal")),
+        "{outcomes:?}"
+    );
+}
+
+#[test]
+fn an_element_without_proven_axes_leaves_every_cover_undecided() {
+    // w1 is tessellated: which way it runs is not proven.
+    let boxes = three_walls().tessellated("w1", 0.001);
+    let evaluation = run(
+        boxes,
+        &coverage_rule(vec![
+            ("tolerance", metres(0.02)),
+            ("axis_tolerance", degrees(5.0)),
+        ]),
+    );
+    let outcomes: Vec<String> = unevaluated(&evaluation)
+        .into_iter()
+        .map(|(object, _)| object)
+        .collect();
+    assert_eq!(
+        outcomes,
+        ["w1", "w1"],
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("is tessellated")
     );
 }

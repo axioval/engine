@@ -642,9 +642,9 @@ pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
     ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
-    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
-    FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence, PlacementDomain,
-    PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    EntranceReach, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
+    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
+    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
     SignedDistanceInterval, SupportCoverageEvidence, SupportCoverageOutcome,
     SupportCoverageRequest, SupportedPlacement,
 };

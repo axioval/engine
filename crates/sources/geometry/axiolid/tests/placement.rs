@@ -4,8 +4,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
-    BoxClearance, CylinderClearance, ElevationBand, FrameOffsetPlacement, FreeSpaceError,
-    FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, PlacementDomain,
+    BoxClearance, CylinderClearance, ElevationBand, EntranceReach, FrameOffsetPlacement,
+    FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, PlacementDomain,
     PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
     SignedDistanceInterval, SupportedPlacement, SweptDoor, SwingSector,
 };
@@ -687,4 +687,49 @@ fn a_door_swing_is_an_obstacle() {
             .unwrap_err(),
         FreeSpaceError::ConflictingSweptDoors
     );
+}
+
+/// A room 6 m by 3 m entered through a door in its south wall at x
+/// 0.3..1.2; a bed 0.5 m high stands from the south wall at x 1.4..3.4 up
+/// to y 2.2, leaving 0.8 m north of it. A turning circle fits east of the
+/// bed only, the strip west of it being 1.4 m wide.
+fn bedroom() -> AxiolidGeometry {
+    room(&[rect(0.0, 6.0, 0.0, 3.0)])
+        .with_mesh(id("door"), prisms(&[rect(0.3, 1.2, -0.2, 0.0)], 0.0, 2.1))
+        .with_mesh(id("bed"), prisms(&[rect(1.4, 3.4, 0.0, 2.2)], 0.0, 0.5))
+}
+
+fn reached_from_the_door(
+    shape: PlacementShape,
+    path: f64,
+) -> Result<PlacementOutcome, FreeSpaceError> {
+    let request = PlacementRequest::new_in_domain(
+        id("room"),
+        shape,
+        vec![id("bed"), id("door")],
+        PlacementDomain::Supported(SupportedPlacement::try_new(id("room"), 0.0).unwrap()),
+    )
+    .unwrap()
+    .with_entrance_reach(EntranceReach::try_new(vec![id("door")], path, 0.05).unwrap());
+    // The entrance is walked through, never an obstacle.
+    assert_eq!(request.obstacles(), &[id("bed")]);
+    AxiolidFreeSpaceService::new(bedroom(), source()).find_placement(&request)
+}
+
+#[test]
+fn a_turning_circle_behind_a_bed_is_not_reached_by_a_wide_path() {
+    // Without a path it fits, east of the bed.
+    let (centre, _) = found(place(bedroom(), turning_circle(), &["bed", "door"]));
+    assert!(centre[0] > 3.4, "{centre:?}");
+    // A 1.2 m path does not pass the 0.8 m north of the bed.
+    nowhere(reached_from_the_door(turning_circle(), 1.2));
+    let square = || rectangle(1.5, 1.5, along(1.0, 0.0));
+    nowhere(reached_from_the_door(square(), 1.2));
+    // A 0.7 m one does, and the circle it reaches lies east of the bed.
+    let (centre, _) = found(reached_from_the_door(turning_circle(), 0.7));
+    assert!(centre[0] > 3.4, "{centre:?}");
+    found(reached_from_the_door(square(), 0.7));
+    let any = || rectangle(1.5, 1.5, PlacementOrientation::Any);
+    nowhere(reached_from_the_door(any(), 1.2));
+    found(reached_from_the_door(any(), 0.7));
 }

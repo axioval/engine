@@ -105,6 +105,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   pair not evaluated. **Breaking:** definitions bound to `clash` or
   `clash-matrix` must declare the new optional parameter;
   `ProximityService` gains a defaulted method.
+- **Free floor reached from the entrances.** (#124) `free-floor-circle`
+  and `free-floor-rectangle` take `entrance_path_width` (with
+  `entrance_tolerance_metres`, default 0.05 m) and the entrance
+  declaration of `local-circulation` (`access_path`, `door_selector`,
+  `opening_selector`, `space_selector`): the shape must meet a piece of
+  the free area, eroded by half the path's width, that comes near one of
+  the space's entrances. `PlacementRequest::with_entrance_reach`
+  (`EntranceReach`) carries the entrances and the path; the entrances are
+  walked through, never obstacles. The Axiolid search maps the reached
+  pieces from both sides as a circulation map does and intersects the
+  configuration space with their Minkowski sum with the shape (a disc
+  dilation for a circle); a witness is re-verified by overlap, an absence
+  holds against the possibly reached pieces grown by 1 µm. A turning
+  circle that fits only behind a bed leaving 0.8 m beside it is a finding
+  for a 1.2 m path, worded `…: the shape fits only where no path 1.2 m
+  wide from an entrance reaches it`. **Breaking:** definitions bound to
+  either capability must declare the six new optional parameters.
 - **Door swings as obstacles.** (#122) `free-floor-circle`,
   `free-floor-rectangle`, `local-circulation` and `accessible-route` take
   `subtract_door_swings`: the floor the selected doors' hinged leaves

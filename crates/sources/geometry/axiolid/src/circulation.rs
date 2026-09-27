@@ -42,13 +42,13 @@ use axiolid_overlay::{Polygon, Region};
 use axiolid_route::{NodeKind, Skeleton, skeleton};
 use axioval_engine::{
     CirculationContact, CirculationMap, CirculationNode, CirculationNodeKind, CirculationRequest,
-    FreeSpaceError, LengthInterval,
+    EntranceReach, FreeSpaceError, LengthInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::free_space::AxiolidFreeSpaceService;
 use crate::geometry::triangles;
-use crate::placement::{self, KNIFE_EDGE_METRES};
+use crate::placement::{self, KNIFE_EDGE_METRES, Reached, Scene};
 
 /// The skeleton's pruning factor: keeps corridors, junctions and dead ends
 /// and drops the spurs into right-angled and sharper corners.
@@ -352,6 +352,63 @@ impl AxiolidFreeSpaceService {
             unmapped,
             evidence,
         )
+    }
+
+    /// The pieces of `scene`'s free area eroded by half `reach`'s width
+    /// that come near one of its entrances: surely (pieces inside the exact
+    /// erosion meeting an entrance's footprint grown from inside) and
+    /// possibly (pieces containing it meeting the footprint grown from
+    /// outside), as a circulation map's contacts are decided.
+    pub(crate) fn reached(
+        &self,
+        scene: &Scene,
+        reach: &EntranceReach,
+    ) -> Result<Reached, FreeSpaceError> {
+        let t = scene.tolerance;
+        let err = |e| unavailable("disc morphology", e);
+        let radius = reach.width_metres() / 2.0;
+        let near = radius + reach.tolerance_metres();
+        let mut inner = scene.scope.erode_inner(radius, t).map_err(err)?;
+        if !scene.obstacles.is_empty() && !inner.is_empty() {
+            inner = inner
+                .difference(&scene.obstacles.dilate_outer(radius, t).map_err(err)?, t)
+                .map_err(err)?;
+        }
+        let shrunk = radius - KNIFE_EDGE_METRES;
+        let mut outer = scene.scope.erode_outer(shrunk, t).map_err(err)?;
+        if !scene.sure.is_empty() && !outer.is_empty() {
+            outer = outer
+                .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
+                .map_err(err)?;
+        }
+        let mut sure = Vec::new();
+        let mut maybe = Vec::new();
+        for entrance in reach.entrances() {
+            let footprint = self.subject_footprint(entrance, t)?;
+            let grown_in = footprint.dilate_inner(near, t).map_err(err)?;
+            let grown_out = footprint.dilate_outer(near, t).map_err(err)?;
+            for polygon in inner.polygons() {
+                if !sure.contains(polygon) && meets(&piece(polygon, t)?, &grown_in, t)? {
+                    sure.push(polygon.clone());
+                }
+            }
+            for polygon in outer.polygons() {
+                if !maybe.contains(polygon) && meets(&piece(polygon, t)?, &grown_out, t)? {
+                    maybe.push(polygon.clone());
+                }
+            }
+        }
+        let region = |polygons: Vec<Polygon>| {
+            if polygons.is_empty() {
+                Ok(Region::empty())
+            } else {
+                Region::new(polygons, t).map_err(|e| unavailable("reached pieces", e))
+            }
+        };
+        Ok(Reached {
+            inner: region(sure)?,
+            outer: region(maybe)?,
+        })
     }
 
     /// The plan footprint of an entrance or component.

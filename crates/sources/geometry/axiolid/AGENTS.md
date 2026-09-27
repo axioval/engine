@@ -29,6 +29,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   witnesses avoid, inscribed in `Scene::sure`, against which absence is
   proven; never prove absence against `obstacles` or find a witness
   against `sure`.
+  An entrance reach (`Scene::reach`, built by `circulation.rs`'s
+  `reached` as a map's contacts are) limits centres to where the shape
+  meets the surely reached pieces (Minkowski sum, `dilate_inner` for a
+  circle), re-verified by overlap with the shape or a circle's inscribed
+  polygon; absence misses the possibly reached ones for the shape grown by
+  `KNIFE_EDGE_METRES` (`dilate_outer` of the radius plus it). Never verify
+  a reach with the circumscribed polygon.
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside

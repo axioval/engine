@@ -9,6 +9,8 @@
 //! search found nowhere it fits. Neither may be returned on a hunch -- an
 //! adapter that cannot search exhaustively must say so instead.
 
+use std::fmt::Write as _;
+
 use axiolid_core::{Point2, Point3};
 use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
@@ -500,6 +502,7 @@ impl AxiolidFreeSpaceService {
                 obstacles,
                 tolerance,
                 window: None,
+                reach: None,
             }
         } else {
             let with = |sectors: Vec<Ring>| {
@@ -513,6 +516,7 @@ impl AxiolidFreeSpaceService {
                 sure: with(inner)?,
                 tolerance,
                 window: None,
+                reach: None,
             }
         };
         Ok((scene, floor))
@@ -685,6 +689,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         )?))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn find_placement(
         &self,
         request: &PlacementRequest,
@@ -715,6 +720,9 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         let (mut scene, floor) = self.placement_scene(request, tolerance)?;
         if let Some(offsets) = offsets {
             scene.window = Some(offset_window(offsets, request.scope(), floor)?);
+        }
+        if let Some(reach) = request.entrance_reach() {
+            scene.reach = Some(self.reached(&scene, reach)?);
         }
 
         let search = match request.shape() {
@@ -749,6 +757,16 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         for merged in request.merged_scopes() {
             locator.push('+');
             locator.push_str(&merged.to_string());
+        }
+        if let Some(reach) = request.entrance_reach() {
+            let entrances: Vec<String> =
+                reach.entrances().iter().map(ToString::to_string).collect();
+            let _ = write!(
+                locator,
+                ":reached-from={}:path-width={:.6}",
+                entrances.join(","),
+                reach.width_metres()
+            );
         }
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {

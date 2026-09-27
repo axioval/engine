@@ -22,6 +22,12 @@
 //!   whole interval empty. Undecided intervals are split until a budget runs
 //!   out, and then the search refuses.
 //!
+//! A reach from entrances limits the centre to where the shape meets the
+//! pieces of a path from an entrance: a witness meets the surely reached
+//! pieces (re-verified by overlap with the shape, or with its inscribed
+//! polygon for a circle), and an absence misses the possibly reached ones
+//! even for the shape grown by [`KNIFE_EDGE_METRES`].
+//!
 //! A frame-offset domain limits the centre to a box of offsets in an anchor
 //! frame (a [`Window`]). The configuration space is intersected with that
 //! box: witnesses come from the box as computed and must also pass the
@@ -89,6 +95,17 @@ pub(crate) struct Scene {
     pub(crate) tolerance: Tolerance,
     /// The frame-offset box the centre must also lie in, if any.
     pub(crate) window: Option<Window>,
+    /// Where a path from the entrances runs, if the shape must be reached.
+    pub(crate) reach: Option<Reached>,
+}
+
+/// The pieces of the free area eroded by half a path's width that come
+/// near an entrance: `inner` inside the exact ones that surely do (a path
+/// runs from the entrance into any shape meeting it), `outer` containing
+/// every one that may (a shape missing it is not reached).
+pub(crate) struct Reached {
+    pub(crate) inner: Region,
+    pub(crate) outer: Region,
 }
 
 /// A box of centres in an anchor frame: offsets along its right axis in
@@ -188,6 +205,22 @@ pub(crate) fn rectangle(centre: Point2, width: f64, depth: f64, right: Axis) -> 
     }
 }
 
+/// A regular polygon inside a circle of `radius`, its vertices on it.
+fn inscribed(centre: Point2, radius: f64) -> Ring {
+    let sides = f64::from(VERIFY_SIDES);
+    Ring {
+        points: (0..VERIFY_SIDES)
+            .map(|i| {
+                let angle = 2.0 * PI * f64::from(i) / sides;
+                Point2::new(
+                    centre.x + radius * angle.cos(),
+                    centre.y + radius * angle.sin(),
+                )
+            })
+            .collect(),
+    }
+}
+
 /// A regular polygon around a circle of `radius`, so the circle lies inside.
 fn circumscribed(centre: Point2, radius: f64) -> Ring {
     let sides = f64::from(VERIFY_SIDES);
@@ -260,6 +293,80 @@ impl Scene {
             .is_empty())
     }
 
+    /// The centres of `free` at which the convex, centrally symmetric
+    /// `shape` meets the reached region: the inner one for a witness, the
+    /// outer one for an absence (the caller grows the shape by the
+    /// knife-edge margin). Without a reach, `free` itself.
+    fn reaching(
+        &self,
+        free: Region,
+        shape: &Ring,
+        absence: bool,
+    ) -> Result<Region, FreeSpaceError> {
+        let Some(reach) = &self.reach else {
+            return Ok(free);
+        };
+        let target = if absence { &reach.outer } else { &reach.inner };
+        if target.is_empty() || free.is_empty() {
+            return Ok(Region::empty());
+        }
+        let near = target
+            .minkowski_sum(shape, self.tolerance)
+            .map_err(|e| unavailable("reach", e))?;
+        free.intersection(&near, self.tolerance)
+            .map_err(|e| unavailable("reach", e))
+    }
+
+    /// As [`Self::reaching`] for a disc of `radius`: centres within it of
+    /// the inner region (from inside) for a witness, of the outer one
+    /// (from outside, grown by the knife-edge margin) for an absence.
+    fn reaching_disc(
+        &self,
+        free: Region,
+        radius: f64,
+        absence: bool,
+    ) -> Result<Region, FreeSpaceError> {
+        let Some(reach) = &self.reach else {
+            return Ok(free);
+        };
+        let target = if absence { &reach.outer } else { &reach.inner };
+        if target.is_empty() || free.is_empty() {
+            return Ok(Region::empty());
+        }
+        let near = if absence {
+            target.dilate_outer(radius + KNIFE_EDGE_METRES, self.tolerance)
+        } else {
+            target.dilate_inner(radius, self.tolerance)
+        }
+        .map_err(|e| unavailable("reach", e))?;
+        free.intersection(&near, self.tolerance)
+            .map_err(|e| unavailable("reach", e))
+    }
+
+    /// Whether `ring`, inside the shape, shares area with the surely
+    /// reached region; always without a reach.
+    fn reaches(&self, ring: Ring) -> Result<bool, FreeSpaceError> {
+        let Some(reach) = &self.reach else {
+            return Ok(true);
+        };
+        if reach.inner.is_empty() {
+            return Ok(false);
+        }
+        let body = Region::new(
+            vec![Polygon {
+                outer: ring,
+                holes: Vec::new(),
+            }],
+            self.tolerance,
+        )
+        .map_err(|e| unavailable("reach", e))?;
+        Ok(body
+            .intersection(&reach.inner, self.tolerance)
+            .map_err(|e| unavailable("reach", e))?
+            .area()
+            > CONTACT_AREA_M2)
+    }
+
     /// Whether `ring` lies in the scope and meets no obstacle, up to contact.
     fn fits(&self, ring: Ring) -> Result<bool, FreeSpaceError> {
         let body = Region::new(
@@ -284,11 +391,13 @@ impl Scene {
         Ok(blocked <= CONTACT_AREA_M2)
     }
 
-    /// A centre in `free` at which `place` verifies, if any candidate does.
+    /// A centre in `free` at which `place` fits and `touch` (inside the
+    /// shape) is reached, if any candidate does.
     fn witness(
         &self,
         free: &Region,
         place: impl Fn(Point2) -> Ring,
+        touch: impl Fn(Point2) -> Ring,
     ) -> Result<Option<Point2>, FreeSpaceError> {
         let mut offered = candidates(free);
         if let Some(window) = &self.window {
@@ -299,7 +408,7 @@ impl Scene {
             offered.retain(|c| (window.admits)(*c));
         }
         for candidate in offered {
-            if self.fits(place(candidate))? {
+            if self.fits(place(candidate))? && self.reaches(touch(candidate))? {
                 return Ok(Some(candidate));
             }
         }
@@ -395,10 +504,12 @@ pub(crate) fn fixed_rectangle(
     right: Axis,
 ) -> Result<Search, FreeSpaceError> {
     let origin = Point2::new(0.0, 0.0);
+    let shape = rectangle(origin, width, depth, right);
     let free =
-        scene.for_witness(scene.free_for(&rectangle(origin, width, depth, right), false)?)?;
+        scene.for_witness(scene.reaching(scene.free_for(&shape, false)?, &shape, false)?)?;
     if !free.is_empty() || scene.window.is_some() {
-        if let Some(centre) = scene.witness(&free, |c| rectangle(c, width, depth, right))? {
+        let place = |c| rectangle(c, width, depth, right);
+        if let Some(centre) = scene.witness(&free, place, place)? {
             return Ok(Search::Found { centre, right });
         }
     }
@@ -411,7 +522,14 @@ pub(crate) fn fixed_rectangle(
             "the rectangle is too small to prove absent".into(),
         ));
     }
-    if scene.nowhere_in_domain(&scene.free_for(&rectangle(origin, w, d, right), true)?)? {
+    let grown = rectangle(
+        origin,
+        width + 2.0 * KNIFE_EDGE_METRES,
+        depth + 2.0 * KNIFE_EDGE_METRES,
+        right,
+    );
+    let shrunk = scene.free_for(&rectangle(origin, w, d, right), true)?;
+    if scene.nowhere_in_domain(&scene.reaching(shrunk, &grown, true)?)? {
         return Ok(Search::Nowhere);
     }
     Err(FreeSpaceError::Unavailable(if free.is_empty() {
@@ -453,9 +571,11 @@ pub(crate) fn any_rectangle(
         spent += 1;
         let middle = f64::midpoint(low, high);
         let right = Axis::at(middle);
-        let free = scene.free_for(&rectangle(origin, width, depth, right), false)?;
+        let shape = rectangle(origin, width, depth, right);
+        let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
+        let place = |c| rectangle(c, width, depth, right);
         if !free.is_empty()
-            && let Some(centre) = scene.witness(&free, |c| rectangle(c, width, depth, right))?
+            && let Some(centre) = scene.witness(&free, place, place)?
         {
             return Ok(Search::Found { centre, right });
         }
@@ -464,10 +584,18 @@ pub(crate) fn any_rectangle(
         // rectangle that deep inside the middle one is inside every rotation.
         let shrink = half_diagonal * (high - low) / 2.0 + KNIFE_EDGE_METRES;
         let (w, d) = (width - 2.0 * shrink, depth - 2.0 * shrink);
+        // Every rotation within the interval lies inside the middle
+        // rectangle grown by the shrink, so it meets the reached region
+        // only where that one does.
+        let grown = rectangle(origin, width + 2.0 * shrink, depth + 2.0 * shrink, right);
         if w > 0.0
             && d > 0.0
             && scene
-                .free_for(&rectangle(origin, w, d, right), true)?
+                .reaching(
+                    scene.free_for(&rectangle(origin, w, d, right), true)?,
+                    &grown,
+                    true,
+                )?
                 .is_empty()
         {
             continue;
@@ -491,9 +619,13 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
             .difference(&scene.obstacles.dilate_outer(radius, t).map_err(err)?, t)
             .map_err(err)?
     };
-    let inner = scene.for_witness(inner)?;
+    let inner = scene.for_witness(scene.reaching_disc(inner, radius, false)?)?;
     if (!inner.is_empty() || scene.window.is_some())
-        && let Some(centre) = scene.witness(&inner, |c| circumscribed(c, radius))?
+        && let Some(centre) = scene.witness(
+            &inner,
+            |c| circumscribed(c, radius),
+            |c| inscribed(c, radius),
+        )?
     {
         return Ok(Search::Found {
             centre,
@@ -517,7 +649,7 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
             .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
             .map_err(err)?
     };
-    if scene.nowhere_in_domain(&outer)? {
+    if scene.nowhere_in_domain(&scene.reaching_disc(outer, radius, true)?)? {
         return Ok(Search::Nowhere);
     }
     Err(FreeSpaceError::Unavailable(

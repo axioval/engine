@@ -498,6 +498,72 @@ fn same_axes(a: &MetricFrame, b: &MetricFrame) -> bool {
     a.right() == b.right() && a.forward() == b.forward() && a.up() == b.up()
 }
 
+/// The entrances a placement must be reached from, by a path of a width.
+///
+/// A placement is reached when its shape meets a piece of the free area
+/// eroded by half the path's width that comes within half the width plus
+/// the tolerance of an entrance's plan footprint, as a
+/// [`crate::CirculationMap`] proves a contact: a path that wide runs from
+/// the entrance into the shape. The path is free in the placement's band,
+/// clear of the same obstacles and swept doors; the entrances themselves
+/// are walked through, so they and their swings are never obstacles.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EntranceReach {
+    entrances: Vec<ObjectId>,
+    width_metres: f64,
+    tolerance_metres: f64,
+}
+
+impl EntranceReach {
+    /// A path `width_metres` wide from one of `entrances`, which it comes
+    /// within half its width plus `tolerance_metres` of. Without entrances
+    /// nothing is reached.
+    ///
+    /// # Errors
+    ///
+    /// [`FreeSpaceError::InvalidClearanceShape`] for a width that is not
+    /// positive and finite or a tolerance that is negative or not finite.
+    pub fn try_new(
+        mut entrances: Vec<ObjectId>,
+        width_metres: f64,
+        tolerance_metres: f64,
+    ) -> Result<Self, FreeSpaceError> {
+        if !(width_metres.is_finite()
+            && width_metres > 0.0
+            && tolerance_metres.is_finite()
+            && tolerance_metres >= 0.0)
+        {
+            return Err(FreeSpaceError::InvalidClearanceShape);
+        }
+        entrances.sort();
+        entrances.dedup();
+        Ok(Self {
+            entrances,
+            width_metres,
+            tolerance_metres,
+        })
+    }
+
+    /// The entrances, sorted.
+    #[must_use]
+    pub fn entrances(&self) -> &[ObjectId] {
+        &self.entrances
+    }
+
+    /// The path's width.
+    #[must_use]
+    pub fn width_metres(&self) -> f64 {
+        self.width_metres
+    }
+
+    /// How much farther than half the width an entrance may be from the
+    /// path and still be reached.
+    #[must_use]
+    pub fn tolerance_metres(&self) -> f64 {
+        self.tolerance_metres
+    }
+}
+
 /// Searches an object-grounded scope for any placement of a clearance shape.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacementRequest {
@@ -508,6 +574,7 @@ pub struct PlacementRequest {
     band: Option<ElevationBand>,
     merged: Vec<ObjectId>,
     swept: Vec<SweptDoor>,
+    reach: Option<EntranceReach>,
 }
 impl PlacementRequest {
     pub fn new(scope: ObjectId, shape: PlacementShape, mut obstacles: Vec<ObjectId>) -> Self {
@@ -521,6 +588,7 @@ impl PlacementRequest {
             band: None,
             merged: Vec::new(),
             swept: Vec::new(),
+            reach: None,
         }
     }
     pub fn new_in_domain(
@@ -555,6 +623,7 @@ impl PlacementRequest {
             band: None,
             merged: Vec::new(),
             swept: Vec::new(),
+            reach: None,
         })
     }
     /// Counts obstacles only inside `band` above the scope's floor.
@@ -587,8 +656,28 @@ impl PlacementRequest {
     /// [`FreeSpaceError::ConflictingSweptDoors`] when one door is given
     /// twice with different sectors.
     pub fn with_swept_doors(mut self, swept: Vec<SweptDoor>) -> Result<Self, FreeSpaceError> {
-        self.swept = tidy_swept(swept).ok_or(FreeSpaceError::ConflictingSweptDoors)?;
+        let mut swept = tidy_swept(swept).ok_or(FreeSpaceError::ConflictingSweptDoors)?;
+        if let Some(reach) = &self.reach {
+            swept.retain(|door| reach.entrances.binary_search(door.door()).is_err());
+        }
+        self.swept = swept;
         Ok(self)
+    }
+    /// Requires the placement to be reached from `reach`'s entrances (see
+    /// [`EntranceReach`]). The entrances are walked through: they leave the
+    /// obstacles, and their swings the swept doors.
+    #[must_use]
+    pub fn with_entrance_reach(mut self, reach: EntranceReach) -> Self {
+        self.obstacles
+            .retain(|object| reach.entrances.binary_search(object).is_err());
+        self.swept
+            .retain(|door| reach.entrances.binary_search(door.door()).is_err());
+        self.reach = Some(reach);
+        self
+    }
+    /// The entrances the placement must be reached from, if any.
+    pub fn entrance_reach(&self) -> Option<&EntranceReach> {
+        self.reach.as_ref()
     }
     /// The doors whose swept sectors are obstacles, sorted by door.
     pub fn swept_doors(&self) -> &[SweptDoor] {

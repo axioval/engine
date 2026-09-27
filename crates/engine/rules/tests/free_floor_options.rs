@@ -39,11 +39,15 @@ impl FreeSpaceService for Scripted {
     ) -> Result<PlacementOutcome, FreeSpaceError> {
         self.requests.lock().unwrap().push(request.clone());
         let evidence = Evidence::exact(source(), "search");
-        if request
-            .obstacles()
-            .iter()
-            .chain(request.swept_doors().iter().map(SweptDoor::door))
-            .any(|obstacle| self.blocking.contains(obstacle))
+        let unreached = request
+            .entrance_reach()
+            .is_some_and(|_| self.blocking.contains(&id("path")));
+        if unreached
+            || request
+                .obstacles()
+                .iter()
+                .chain(request.swept_doors().iter().map(SweptDoor::door))
+                .any(|obstacle| self.blocking.contains(obstacle))
         {
             return Ok(PlacementOutcome::NoPlacement(
                 CompletePlacementEvidence::try_new(request.clone(), evidence)?,
@@ -408,4 +412,57 @@ fn selected_door_swings_are_sent_as_obstacles() {
         self::doors(),
     );
     assert!(requests[0].swept_doors().is_empty());
+}
+
+/// `entrance_path_width` sends the space's entrances with the path's width;
+/// a shape that fits but is not reached is worded apart.
+#[test]
+fn the_shape_must_be_reached_from_the_entrances() {
+    let model = || model_with_door().object("hatch", "door");
+    let rule = circle(vec![
+        ("obstacles", selector(kind("furniture"))),
+        ("entrance_path_width", number(1.2)),
+        ("access_path", strings(&["Opens:forward"])),
+        ("door_selector", selector(kind("door"))),
+    ]);
+    let (evaluation, requests) = run(model(), &FreeFloorCircle, &rule, &[]);
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    let reach = requests[0].entrance_reach().unwrap();
+    assert_eq!(reach.entrances(), &ids(&["door"])[..]);
+    assert!((reach.width_metres() - 1.2).abs() < 1e-12);
+    assert!((reach.tolerance_metres() - 0.05).abs() < 1e-12);
+    let (evaluation, requests) = run(model(), &FreeFloorCircle, &rule, &["path"]);
+    assert_eq!(evaluation.findings().len(), 1, "{evaluation:#?}");
+    assert_eq!(
+        evaluation.findings()[0].message,
+        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an \
+         entrance reaches it"
+    );
+    assert_eq!(evaluation.findings()[0].related, ids(&["door"]));
+    // The last search asked without the path.
+    assert!(requests.last().unwrap().entrance_reach().is_none());
+    // Declarations fail closed.
+    for parameters in [
+        vec![("entrance_path_width", number(1.2))],
+        vec![
+            ("access_path", strings(&["Opens:forward"])),
+            ("door_selector", selector(kind("door"))),
+        ],
+        vec![("entrance_tolerance_metres", number(0.1))],
+    ] {
+        let (evaluation, _) = run(
+            model_with_door(),
+            &FreeFloorCircle,
+            &circle(parameters),
+            &[],
+        );
+        assert_eq!(
+            unevaluated(&evaluation)[0].1,
+            NotEvaluatedReason::InvalidDeclaration
+        );
+    }
+}
+
+fn model_with_door() -> Model {
+    model().object("door", "door").edge("Opens", "door", "room")
 }

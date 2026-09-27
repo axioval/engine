@@ -1,18 +1,22 @@
 //! Shared policy of the free-floor capabilities: obstacles, door swings,
-//! elevation band, merged spaces and the three-valued placement judgement.
+//! elevation band, merged spaces, the path from the entrances and the
+//! three-valued placement judgement.
 
 use std::collections::BTreeSet;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, ElevationBand, FreeSpaceError, FreeSpaceServiceHandle,
-    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlacementDomain, PlacementOutcome,
-    PlacementRequest, PlacementShape, RuleContext, SupportedPlacement, SweptDoor,
+    CapabilityEvaluation, CompiledRule, ElevationBand, EntranceReach, FreeSpaceError,
+    FreeSpaceServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    PlacementDomain, PlacementOutcome, PlacementRequest, PlacementShape, RuleContext,
+    SupportedPlacement, SweptDoor,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Severity};
 
 use crate::door_swing::Swings;
+use crate::level_spacing::metres;
 use crate::selection::select_objects;
+use crate::space_access::{AccessDeclaration, AccessIndex, AccessType};
 use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
 /// The optional parameters both free-floor capabilities take.
@@ -23,7 +27,24 @@ pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
         ParameterDescriptor::optional("band_to_metres", ParameterType::Number),
         ParameterDescriptor::optional("merge_path", ParameterType::StringList),
         ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
+        ParameterDescriptor::optional("entrance_path_width", ParameterType::Number),
+        ParameterDescriptor::optional("entrance_tolerance_metres", ParameterType::Number),
+        ParameterDescriptor::optional("access_path", ParameterType::StringList),
+        ParameterDescriptor::optional("door_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("space_selector", ParameterType::Selector),
     ]
+}
+
+/// The default distance an entrance may be from the path beyond its half
+/// width, as in `local-circulation`.
+const DEFAULT_ENTRANCE_TOLERANCE: f64 = 0.05;
+
+/// A path from the space's entrances that must reach the shape.
+struct EntrancePath<'a> {
+    access: AccessDeclaration<'a>,
+    width: f64,
+    tolerance: f64,
 }
 
 /// What a free-floor rule declares besides its shape.
@@ -36,6 +57,8 @@ pub(crate) struct Options<'a> {
     merge: Option<Traversal<'a>>,
     /// The doors whose swings are obstacles.
     swings: Option<&'a Selector>,
+    /// The path from the entrances the shape must be reached by.
+    entrance: Option<EntrancePath<'a>>,
 }
 
 impl<'a> Options<'a> {
@@ -59,11 +82,46 @@ impl<'a> Options<'a> {
             Some(path) => Some(Traversal::path(path)?),
             None => None,
         };
+        let access = AccessDeclaration::parse(&parameters)?;
+        let width = parameters.number("entrance_path_width")?;
+        let tolerance = parameters.number("entrance_tolerance_metres")?;
+        let entrance = match (access, width) {
+            (Some(access), Some(width)) if width.is_finite() && width > 0.0 => {
+                let tolerance = tolerance.unwrap_or(DEFAULT_ENTRANCE_TOLERANCE);
+                if !(tolerance.is_finite() && tolerance >= 0.0) {
+                    return Err(invalid("`entrance_tolerance_metres` must not be negative"));
+                }
+                Some(EntrancePath {
+                    access,
+                    width,
+                    tolerance,
+                })
+            }
+            (_, Some(_)) => {
+                return Err(invalid(
+                    "`entrance_path_width` must be positive and needs `access_path` to find \
+                     the entrances",
+                ));
+            }
+            (Some(_), None) => {
+                return Err(invalid(
+                    "`access_path` finds the entrances `entrance_path_width` reaches from; \
+                     declare both",
+                ));
+            }
+            (None, None) if tolerance.is_some() => {
+                return Err(invalid(
+                    "`entrance_tolerance_metres` needs `entrance_path_width`",
+                ));
+            }
+            (None, None) => None,
+        };
         Ok(Self {
             obstacles: parameters.selector("obstacles")?,
             band,
             merge,
             swings: parameters.selector("subtract_door_swings")?,
+            entrance,
         })
     }
 }
@@ -158,25 +216,37 @@ pub(crate) fn evaluate(
         Err((reason, message)) => return unavailable(selected, &reason, &message, evaluation),
     };
     let everything: Vec<&Object> = context.project.objects().collect();
+    let index = options
+        .entrance
+        .as_ref()
+        .map(|entrance| entrance.access.index(context));
+    let ground = Ground {
+        context,
+        service,
+        obstacles: &obstacles,
+        swings: &swings,
+        everything: &everything,
+        index: index.as_ref(),
+        shape,
+        options,
+    };
     for space in selected {
-        match judge(
-            context,
-            service,
-            &obstacles,
-            &swings,
-            &everything,
-            space,
-            shape,
-            options,
-        ) {
+        match ground.judge(space) {
             Ok(None) => {}
-            Ok(Some((merged, evidence))) => evaluation.push_finding(Finding {
+            Ok(Some(absent)) => evaluation.push_finding(Finding {
                 rule_id: rule.id.clone(),
                 scope: axioval_ir::Scope::Object(space.id.clone()),
                 severity: severity(rule),
-                related: merged,
-                message: message.into(),
-                evidence,
+                related: absent.related,
+                message: match absent.unreached {
+                    Some(width) => format!(
+                        "{message}: the shape fits only where no path {} wide from an \
+                         entrance reaches it",
+                        metres(width)
+                    ),
+                    None => message.into(),
+                },
+                evidence: absent.evidence,
             }),
             Err((reason, message)) => {
                 evaluation.push_object_not_evaluated(space.id.clone(), reason, message);
@@ -186,30 +256,44 @@ pub(crate) fn evaluate(
     evaluation
 }
 
-/// The merged spaces and evidence of a proven absence, or `None` for a
-/// witness.
-type Judged = Result<Option<(Vec<ObjectId>, Vec<Evidence>)>, Unavailable>;
+/// A proven absence: the merged spaces and entrances it relates, its
+/// evidence, and the path width when the shape fits but is not reached.
+struct Absent {
+    related: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
+    unreached: Option<f64>,
+}
 
-#[allow(clippy::too_many_arguments)]
-fn judge(
-    context: &RuleContext<'_>,
-    service: &FreeSpaceServiceHandle,
-    obstacles: &Obstacles,
-    swings: &Swings,
-    everything: &[&Object],
-    space: &Object,
-    shape: &PlacementShape,
-    options: &Options<'_>,
-) -> Judged {
-    let (merged, mut evidence) = match &options.merge {
-        Some(path) => path.related(context, &space.id, everything)?,
-        None => (Vec::new(), Vec::new()),
-    };
-    let spaces: BTreeSet<&ObjectId> = std::iter::once(&space.id).chain(&merged).collect();
-    let (sure, maybe) = obstacles.around(&spaces);
-    let ask = |candidates: Vec<ObjectId>,
-               swept: Vec<SweptDoor>|
-     -> Result<PlacementOutcome, Unavailable> {
+/// A proven absence, or `None` for a witness.
+type Judged = Result<Option<Absent>, Unavailable>;
+
+/// Everything a space is judged against.
+struct Ground<'a> {
+    context: &'a RuleContext<'a>,
+    service: &'a FreeSpaceServiceHandle,
+    obstacles: &'a Obstacles,
+    swings: &'a Swings,
+    everything: &'a [&'a Object],
+    index: Option<&'a AccessIndex>,
+    shape: &'a PlacementShape,
+    options: &'a Options<'a>,
+}
+
+/// One search: its obstacles, swept doors and entrances (`None` when the
+/// shape need not be reached).
+struct Ask {
+    candidates: Vec<ObjectId>,
+    swept: Vec<SweptDoor>,
+    entrances: Option<Vec<ObjectId>>,
+}
+
+impl Ground<'_> {
+    fn ask(
+        &self,
+        space: &Object,
+        merged: &[ObjectId],
+        ask: Ask,
+    ) -> Result<PlacementOutcome, Unavailable> {
         // A merged search spans several floors, so no single support holds
         // its base; the search is still bounded by the spaces' footprints.
         let domain = if merged.is_empty() {
@@ -219,72 +303,162 @@ fn judge(
         } else {
             PlacementDomain::Unconstrained
         };
-        let mut request =
-            PlacementRequest::new_in_domain(space.id.clone(), shape.clone(), candidates, domain)
-                .map_err(|e| error(&e))?
-                .with_merged_scopes(merged.clone())
-                .map_err(|e| error(&e))?;
-        if let Some(band) = options.band {
+        let mut request = PlacementRequest::new_in_domain(
+            space.id.clone(),
+            self.shape.clone(),
+            ask.candidates,
+            domain,
+        )
+        .map_err(|e| error(&e))?
+        .with_merged_scopes(merged.to_vec())
+        .map_err(|e| error(&e))?;
+        if let Some(band) = self.options.band {
             request = request.with_band(band);
         }
-        if !swept.is_empty() {
-            request = request.with_swept_doors(swept).map_err(|e| error(&e))?;
+        if let (Some(entrances), Some(path)) = (ask.entrances, &self.options.entrance) {
+            request = request.with_entrance_reach(
+                EntranceReach::try_new(entrances, path.width, path.tolerance)
+                    .map_err(|e| error(&e))?,
+            );
         }
-        service.find_placement(&request).map_err(|e| error(&e))
-    };
-    let mut candidates = sure.clone();
-    candidates.extend(maybe.iter().cloned());
-    let mut swept = swings.sure.clone();
-    swept.extend(swings.maybe.iter().cloned());
-    let proof = match ask(candidates, swept)? {
-        PlacementOutcome::Found(_) if swings.unknown.is_empty() => return Ok(None),
-        PlacementOutcome::Found(_) => {
-            let names: Vec<String> = swings
-                .unknown
-                .iter()
-                .map(|(door, why)| format!("{door} ({why})"))
-                .collect();
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "the shape fits, but the swing of a door whose leaves are unknown may \
-                     cover every fit: {}",
-                    names.join(", ")
-                ),
-            ));
+        if !ask.swept.is_empty() {
+            request = request.with_swept_doors(ask.swept).map_err(|e| error(&e))?;
         }
-        PlacementOutcome::NoPlacement(proof) => proof,
-    };
-    let proof = if maybe.is_empty() && swings.maybe.is_empty() {
-        proof
-    } else {
-        match ask(sure, swings.sure.clone())? {
-            PlacementOutcome::NoPlacement(proof) => proof,
+        self.service.find_placement(&request).map_err(|e| error(&e))
+    }
+
+    /// The entrances of `spaces`: sure ones with their evidence, and every
+    /// one, sure or possible. `None` without an entrance path.
+    fn entrances(
+        &self,
+        spaces: &[&ObjectId],
+    ) -> Option<(Vec<ObjectId>, Vec<ObjectId>, Vec<Evidence>)> {
+        let index = self.index?;
+        let mut sure = Vec::new();
+        let mut all = Vec::new();
+        let mut evidence = Vec::new();
+        for space in spaces {
+            let found = index.entrances(space, AccessType::Any);
+            for (door, cited) in found.sure {
+                sure.push(door.clone());
+                all.push(door);
+                evidence.extend(cited);
+            }
+            all.extend(found.maybe.into_iter().map(|(door, _)| door));
+        }
+        for list in [&mut sure, &mut all] {
+            list.sort();
+            list.dedup();
+        }
+        Some((sure, all, evidence))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn judge(&self, space: &Object) -> Judged {
+        let (merged, mut evidence) = match &self.options.merge {
+            Some(path) => path.related(self.context, &space.id, self.everything)?,
+            None => (Vec::new(), Vec::new()),
+        };
+        let spaces: BTreeSet<&ObjectId> = std::iter::once(&space.id).chain(&merged).collect();
+        let (sure, maybe) = self.obstacles.around(&spaces);
+        let swings = self.swings;
+        let entrances = self.entrances(&spaces.iter().copied().collect::<Vec<_>>());
+        let mut candidates = sure.clone();
+        candidates.extend(maybe.iter().cloned());
+        let mut swept = swings.sure.clone();
+        swept.extend(swings.maybe.iter().cloned());
+        let first = Ask {
+            candidates,
+            swept,
+            entrances: entrances.as_ref().map(|(sure, _, _)| sure.clone()),
+        };
+        let proof = match self.ask(space, &merged, first)? {
+            PlacementOutcome::Found(_) if swings.unknown.is_empty() => return Ok(None),
             PlacementOutcome::Found(_) => {
-                let names: Vec<String> = maybe
+                let names: Vec<String> = swings
+                    .unknown
                     .iter()
-                    .map(ToString::to_string)
-                    .chain(
-                        swings
-                            .maybe
-                            .iter()
-                            .map(|door| format!("the swing of {}", door.door())),
-                    )
+                    .map(|(door, why)| format!("{door} ({why})"))
                     .collect();
                 return Err((
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
-                        "the shape fits only if objects the obstacle selection cannot decide \
-                         are not obstacles: {}",
+                        "the shape fits, but the swing of a door whose leaves are unknown may \
+                         cover every fit: {}",
                         names.join(", ")
                     ),
                 ));
             }
+            PlacementOutcome::NoPlacement(proof) => proof,
+        };
+        let possible_entrances = entrances
+            .as_ref()
+            .is_some_and(|(sure, all, _)| sure.len() < all.len());
+        let proof = if maybe.is_empty() && swings.maybe.is_empty() && !possible_entrances {
+            proof
+        } else {
+            let again = Ask {
+                candidates: sure.clone(),
+                swept: swings.sure.clone(),
+                entrances: entrances.as_ref().map(|(_, all, _)| all.clone()),
+            };
+            match self.ask(space, &merged, again)? {
+                PlacementOutcome::NoPlacement(proof) => proof,
+                PlacementOutcome::Found(_) => {
+                    let mut names: Vec<String> = maybe
+                        .iter()
+                        .map(ToString::to_string)
+                        .chain(
+                            swings
+                                .maybe
+                                .iter()
+                                .map(|door| format!("the swing of {}", door.door())),
+                        )
+                        .collect();
+                    if let Some((sure, all, _)) = &entrances {
+                        names.extend(
+                            all.iter()
+                                .filter(|door| !sure.contains(door))
+                                .map(|door| format!("whether {door} is an entrance")),
+                        );
+                    }
+                    return Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!(
+                            "the shape fits only if what the selections cannot decide goes \
+                             its way: {}",
+                            names.join(", ")
+                        ),
+                    ));
+                }
+            }
+        };
+        evidence.push(proof.evidence().clone());
+        evidence.extend(swings.evidence.iter().cloned());
+        let mut related = merged.clone();
+        let mut unreached = None;
+        if let (Some((_, all, cited)), Some(path)) = (&entrances, &self.options.entrance) {
+            related.extend(all.iter().cloned());
+            evidence.extend(cited.iter().cloned());
+            // Worded apart: the shape fits, but no path reaches it.
+            let plain = Ask {
+                candidates: sure,
+                swept: swings.sure.clone(),
+                entrances: None,
+            };
+            if let Ok(PlacementOutcome::Found(found)) = self.ask(space, &merged, plain) {
+                evidence.push(found.evidence().clone());
+                unreached = Some(path.width);
+            }
         }
-    };
-    evidence.push(proof.evidence().clone());
-    evidence.extend(swings.evidence.iter().cloned());
-    Ok(Some((merged, evidence)))
+        related.sort();
+        related.dedup();
+        Ok(Some(Absent {
+            related,
+            evidence,
+            unreached,
+        }))
+    }
 }
 
 pub(crate) fn severity(rule: &CompiledRule) -> Severity {

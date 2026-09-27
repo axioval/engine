@@ -8953,3 +8953,64 @@ fn bcf_3_without_geometry_writes_nothing_and_fails_with_status_1() {
     );
     assert!(!bcf.exists(), "nothing is written when 3.0 is refused");
 }
+
+/// Bedroom #19 (x 0..6, y 0..3, 3 m high) entered through door #29 in its
+/// south wall at x 0.3..1.2, bounding it. Bed #39, 0.5 m high, stands from
+/// the south wall at x 1.4..3.4 up to y 2.2, leaving 0.8 m north of it; a
+/// turning circle fits east of it only, the strip west of it being 1.4 m
+/// wide.
+fn bedroom_behind_a_bed() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,0.9,$,$,$)";
+    let bed = "IFCFURNITURE('GID',$,$,$,$,PL,REP,$,$)";
+    model_with(&format!(
+        "{}{}{}\
+         #300=IFCRELSPACEBOUNDARY('0000000000000000000300',$,$,$,#19,#29,$,.PHYSICAL.,.INTERNAL.);\n",
+        placed_box(10, [3.0, 1.5, 0.0], [6.0, 3.0, 3.0], space),
+        placed_box(20, [0.75, -0.1, 0.0], [0.9, 0.2, 2.1], door),
+        placed_box(30, [2.4, 1.1, 0.0], [2.0, 2.2, 0.5], bed),
+    ))
+}
+
+#[test]
+fn with_geometry_a_turning_circle_behind_a_bed_is_not_reached_from_the_door() {
+    let case = Case::new("geometry-free-floor-entrance-path");
+    let check = |width: f64| {
+        case.geometry_rule(
+            &bedroom_behind_a_bed(),
+            &[("door", "IfcDoor"), ("space", "IfcSpace")],
+            "axioval:capability.free-floor-circle",
+            &registry_signature("axioval:capability.free-floor-circle"),
+            entity("space"),
+            json!({
+                "diameter_metres": {"type": "number", "value": 1.5},
+                "height_metres": {"type": "number", "value": 2.0},
+                "entrance_path_width": {"type": "number", "value": width},
+                "access_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:backward"]},
+                "door_selector": {"type": "selector", "value": entity("door")},
+            }),
+        )
+    };
+    let (output, result) = check(1.2);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#19".to_owned(),
+            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide \
+             from an entrance reaches it"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    // A 0.7 m path passes north of the bed.
+    let (output, result) = check(0.7);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

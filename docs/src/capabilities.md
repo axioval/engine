@@ -1197,7 +1197,7 @@ Checks on how a model is built rather than on what it designs. Each sub-check ma
 | Material-layer thickness against the body's thickness | `body-extent` with `axis` `forward` and `target_property` the material set's `TotalThickness`, within a `tolerance`. |
 | Polygon count per element | `triangle-count` with a `maximum`. |
 | A door or window on another storey than its host | `same-container` from each door or window along `IfcRelFillsElement:backward`, `IfcRelVoidsElement:backward` to its host, climbing `IfcRelContainedInSpatialStructure` `backward` to the storeys. |
-| Space-boundary coverage of a space's surface | Not decided yet (below). |
+| Space-boundary coverage of a space's surface | `space-boundary-coverage` with `minimum_covered_share`, `maximum_uncovered_area` and/or `maximum_overlap_area`. |
 | Door swing direction | Not decided yet: it needs door leaves (hinge side and swing), which the object-frame contract does not carry yet (upstream openbimrs/ifc#148). |
 
 `axioval:capability.body-extent` measures each selected object's body along one of its own placement axes, through `ObjectFrameService` (the frame) and `VerticalExtentService` (the extent along the frame's axis), so it needs both a semantic adapter that states placements and a geometry adapter.
@@ -1224,7 +1224,16 @@ The extent is the whole body's depth along the axis: the highest less the lowest
 
 `axioval:capability.same-container` requires each selected object to lie in the same nearest containers as every counterpart `counterpart_path` (steps as in `path`) reaches from it. `counterpart_selector` restricts which reached objects count; `container_selector` names the containers, climbed to along the traversal parameters (`relationship` and `direction`, or `path`) exactly as `property-comparison`'s container modes climb, so `follow_chain` does not apply. The two sets must be equal: an object in no container while its counterpart is in one differs too. An object reaching no counterpart has nothing to agree with and passes. A container selector that cannot decide an object leaves every selected object not evaluated; an undecided counterpart leaves the object not evaluated unless a decided one already differs; a refused relationship answer leaves it not evaluated. A finding names each differing counterpart and its containers, and relates them together with the object's own. `property-comparison` cannot express this check: its candidates and targets are compared by property value, and a counterpart's container is no property of either object.
 
-Space-boundary coverage, the share of a space's surface its `IfcRelSpaceBoundary` connection geometry covers, is left open. The relationship service answers which elements bound a space, not the boundaries' surfaces: the connection geometry is neither an object nor meshed by the geometry bridge, so no service measures the covered area, and a rule over the bounding elements' bodies would decide something else.
+`axioval:capability.space-boundary-coverage` measures how much of each selected space's body surface the space boundaries its source declares for it cover, through `BoundaryCoverageService`. The boundaries and their connection surfaces are source facts the host registers (with IFC, every `IfcRelSpaceBoundary` naming the space, with its `ConnectionGeometry`); the rule selects spaces, never boundaries.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `minimum_covered_share` | `number` | The least share of the surface, from 0 to 1, the boundaries must cover. |
+| `maximum_uncovered_area` | `quantity` | An area: the most of the surface the boundaries may leave uncovered. |
+| `maximum_overlap_area` | `quantity` | An area: the most of the surface two or more boundaries may cover together. |
+| `plane_tolerance` | `quantity` | A length: how far from a face plane of the body a boundary surface may lie and still count on it. Zero (on the plane, up to a micrometre) without it. |
+
+At least one of the three bounds is declared; each is its own finding on the space. A boundary lying on no face plane of the body covers nothing and is always a finding, relating the element it bounds against, whatever the bounds are: the coverage is measured without it, never silently. An overlap finding names the pairs of boundaries that surely overlap and relates their elements. Areas are intervals: a space turned off the coordinate axes measures within the rounding of its projection, a boundary with curved edges within its chord deviation, and a check whose interval straddles its bound is not evaluated. A space whose body is missing or curved, or with a boundary whose surface cannot be read (IFC: no connection geometry, a point, curve or volume connection, or a face surface, which is not lowered yet, openbimrs/ifc#155), is not evaluated.
 
 ## Adding a capability
 

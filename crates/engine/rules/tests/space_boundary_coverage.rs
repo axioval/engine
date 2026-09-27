@@ -1,0 +1,311 @@
+//! `space-boundary-coverage`: declared boundaries against each space's surface.
+#![allow(missing_docs, clippy::float_cmp)]
+
+mod common;
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use axioval_engine::{
+    BoundaryCoverage, BoundaryCoverageError, BoundaryCoverageRequest, BoundaryCoverageService,
+    BoundaryCoverageServiceHandle, BoundaryOverlap, BoundaryPlacement, CapabilityEvaluation,
+    CoverageAreas, MeasuredBoundary, SurfaceAreaInterval,
+};
+use axioval_ir::contract::ParameterValue;
+use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId};
+use axioval_rules::SpaceBoundaryCoverage;
+use common::{Model, findings, id, kind, number, rule, source, unevaluated};
+
+const ID: &str = "axioval:capability.space-boundary-coverage";
+
+/// One space's canned answer.
+#[derive(Clone)]
+struct Answer {
+    surface: (f64, f64),
+    uncovered: (f64, f64),
+    overlap: (f64, f64),
+    boundaries: Vec<MeasuredBoundary>,
+    overlaps: Vec<BoundaryOverlap>,
+}
+
+fn interval((lower, upper): (f64, f64)) -> SurfaceAreaInterval {
+    SurfaceAreaInterval::try_new(lower, upper).unwrap()
+}
+
+fn exact(surface: f64, uncovered: f64, overlap: f64) -> Answer {
+    Answer {
+        surface: (surface, surface),
+        uncovered: (uncovered, uncovered),
+        overlap: (overlap, overlap),
+        boundaries: Vec::new(),
+        overlaps: Vec::new(),
+    }
+}
+
+fn on(boundary: &str, element: &str, area: f64) -> MeasuredBoundary {
+    MeasuredBoundary::new(
+        id(boundary),
+        Some(id(element)),
+        BoundaryPlacement::OnSurface {
+            area: interval((area, area)),
+        },
+    )
+}
+
+/// Answers per space; a space without one is refused, and `seen` records
+/// each request's tolerance.
+#[derive(Default)]
+struct Coverages {
+    answers: BTreeMap<ObjectId, Answer>,
+    tolerance: std::sync::Mutex<Vec<f64>>,
+}
+
+impl Coverages {
+    fn with(mut self, space: &str, answer: Answer) -> Self {
+        self.answers.insert(id(space), answer);
+        self
+    }
+}
+
+impl BoundaryCoverageService for Coverages {
+    fn measure_boundary_coverage(
+        &self,
+        request: &BoundaryCoverageRequest,
+    ) -> Result<BoundaryCoverage, BoundaryCoverageError> {
+        self.tolerance
+            .lock()
+            .unwrap()
+            .push(request.plane_tolerance_metres());
+        let answer = self.answers.get(request.space()).ok_or_else(|| {
+            BoundaryCoverageError::Unavailable("a boundary surface is a face surface".into())
+        })?;
+        let (surface, uncovered) = (answer.surface, answer.uncovered);
+        let covered = (
+            (surface.0 - uncovered.1).max(0.0),
+            (surface.1 - uncovered.0).max(0.0),
+        );
+        let point = surface.0 == surface.1 && uncovered.0 == uncovered.1;
+        let mut evidence =
+            Evidence::exact(source(), format!("coverage:{}", request.space().local_id));
+        evidence.exact = point && answer.overlap.0 == answer.overlap.1;
+        BoundaryCoverage::try_new(
+            request.clone(),
+            CoverageAreas {
+                surface: interval(surface),
+                covered: interval(covered),
+                uncovered: interval(uncovered),
+                overlap: interval(answer.overlap),
+            },
+            answer.boundaries.clone(),
+            answer.overlaps.clone(),
+            evidence,
+        )
+    }
+}
+
+fn model() -> Model {
+    Model::default()
+        .object("whole", "space")
+        .object("gappy", "space")
+        .object("overlapping", "space")
+        .object("misplaced", "space")
+        .object("vague", "space")
+        .object("face-surface", "space")
+}
+
+fn coverages() -> Coverages {
+    let mut overlapping = exact(59.0, 0.0, 3.0);
+    overlapping.boundaries = vec![on("b1", "slab", 7.5), on("b2", "slab", 7.5)];
+    overlapping.overlaps =
+        vec![BoundaryOverlap::try_new(id("b2"), id("b1"), interval((3.0, 3.0))).unwrap()];
+    let mut misplaced = exact(59.0, 0.0, 0.0);
+    misplaced.boundaries = vec![
+        on("b3", "wall", 59.0),
+        MeasuredBoundary::new(id("b4"), Some(id("column")), BoundaryPlacement::OffSurface),
+    ];
+    let vague = Answer {
+        surface: (58.9, 59.1),
+        uncovered: (0.0, 0.2),
+        overlap: (0.0, 0.2),
+        boundaries: Vec::new(),
+        overlaps: Vec::new(),
+    };
+    Coverages::default()
+        .with("whole", exact(59.0, 0.0, 0.0))
+        .with("gappy", exact(59.0, 7.5, 0.0))
+        .with("overlapping", overlapping)
+        .with("misplaced", misplaced)
+        .with("vague", vague)
+}
+
+fn run(coverages: Coverages, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    model().evaluate_with(
+        &SpaceBoundaryCoverage,
+        &rule(ID, kind("space"), parameters),
+        |services| {
+            services
+                .register(BoundaryCoverageServiceHandle::new(Arc::new(coverages)))
+                .unwrap();
+        },
+    )
+}
+
+fn area(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "m2".into(),
+    }
+}
+
+fn metres(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "m".into(),
+    }
+}
+
+#[test]
+fn a_space_short_of_its_share_is_found_and_a_straddling_one_is_not_evaluated() {
+    let evaluation = run(coverages(), vec![("minimum_covered_share", number(0.999))]);
+    let found = findings(&evaluation);
+    assert!(
+        found.contains(&(
+            "gappy".into(),
+            "declared boundaries cover 87.29% of the 59 m² surface, leaving 7.5 m² uncovered; \
+         at least 99.9% required"
+                .into()
+        ))
+    );
+    assert!(found.contains(&(
+        "misplaced".into(),
+        format!(
+            "space boundary {} lies on no face of the space's body, so it covers nothing",
+            id("b4")
+        )
+    )));
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            (
+                "face-surface".into(),
+                NotEvaluatedReason::BackendUnavailable
+            ),
+            ("vague".into(), NotEvaluatedReason::IncompleteEvidence),
+        ]
+    );
+    let misplaced = evaluation
+        .findings()
+        .iter()
+        .find(|finding| finding.object_id() == Some(&id("misplaced")))
+        .unwrap();
+    assert_eq!(misplaced.related, vec![id("column")]);
+}
+
+#[test]
+fn gaps_and_overlaps_are_judged_against_their_maxima() {
+    let evaluation = run(
+        coverages(),
+        vec![
+            ("maximum_uncovered_area", area(1.0)),
+            ("maximum_overlap_area", area(0.5)),
+        ],
+    );
+    let found = findings(&evaluation);
+    assert!(
+        found.contains(&(
+            "gappy".into(),
+            "declared boundaries leave 7.5 m² of the 59 m² surface uncovered; at most 1 m² allowed"
+                .into()
+        ))
+    );
+    let overlap = format!(
+        "declared boundaries overlap over 3 m² of the surface (boundaries {} and {}); \
+         at most 0.5 m² allowed",
+        id("b1"),
+        id("b2")
+    );
+    assert!(
+        found.contains(&("overlapping".into(), overlap)),
+        "{found:?}"
+    );
+    let overlapping = evaluation
+        .findings()
+        .iter()
+        .find(|finding| finding.object_id() == Some(&id("overlapping")))
+        .unwrap();
+    assert_eq!(overlapping.related, vec![id("slab")]);
+    // The vague space's gap and overlap both lie within their maxima.
+    assert!(!found.iter().any(|(space, _)| space == "vague"));
+}
+
+#[test]
+fn the_plane_tolerance_is_sent_and_defaults_to_zero() {
+    let coverages = Arc::new(coverages());
+    let shared = Arc::clone(&coverages);
+    model().evaluate_with(
+        &SpaceBoundaryCoverage,
+        &rule(
+            ID,
+            kind("space"),
+            vec![
+                ("maximum_overlap_area", area(1.0)),
+                ("plane_tolerance", metres(0.005)),
+            ],
+        ),
+        |services| {
+            services
+                .register(BoundaryCoverageServiceHandle::new(shared))
+                .unwrap();
+        },
+    );
+    assert!(
+        coverages
+            .tolerance
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|t| *t == 0.005)
+    );
+
+    let coverages = Arc::new(Coverages::default());
+    let shared = Arc::clone(&coverages);
+    model().evaluate_with(
+        &SpaceBoundaryCoverage,
+        &rule(ID, kind("space"), vec![("maximum_overlap_area", area(1.0))]),
+        |services| {
+            services
+                .register(BoundaryCoverageServiceHandle::new(shared))
+                .unwrap();
+        },
+    );
+    let seen = coverages.tolerance.lock().unwrap();
+    assert!(!seen.is_empty() && seen.iter().all(|t| *t == 0.0));
+}
+
+#[test]
+fn bad_declarations_and_a_missing_service_judge_nothing() {
+    for parameters in [
+        vec![],
+        vec![("minimum_covered_share", number(1.5))],
+        vec![("maximum_uncovered_area", metres(1.0))],
+        vec![("maximum_overlap_area", area(-1.0))],
+        vec![
+            ("maximum_overlap_area", area(1.0)),
+            ("plane_tolerance", area(1.0)),
+        ],
+    ] {
+        assert_eq!(
+            unevaluated(&run(coverages(), parameters)),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+    let evaluation = model().evaluate(
+        &SpaceBoundaryCoverage,
+        &rule(ID, kind("space"), vec![("maximum_overlap_area", area(1.0))]),
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".into(), NotEvaluatedReason::MissingService)]
+    );
+}

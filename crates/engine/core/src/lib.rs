@@ -451,6 +451,7 @@ impl ExecutionPlan {
     }
 }
 
+mod boundary_coverage;
 mod circulation;
 mod classifications;
 mod compiler;
@@ -483,6 +484,11 @@ mod triangle_count;
 mod vertical_extent;
 mod walkability;
 mod walking_surface;
+pub use boundary_coverage::{
+    BoundaryCoverage, BoundaryCoverageError, BoundaryCoverageRequest, BoundaryCoverageService,
+    BoundaryCoverageServiceHandle, BoundaryOverlap, BoundaryPlacement, CoverageAreas,
+    MeasuredBoundary, ShareInterval, SurfaceAreaInterval,
+};
 pub use circulation::{
     CirculationContact, CirculationMap, CirculationNode, CirculationNodeKind, CirculationRequest,
 };

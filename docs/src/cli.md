@@ -326,7 +326,7 @@ axioval report result.json --object '#42' --evidence
 Semantic evidence (properties, relationships, classifications, the type
 hierarchy) is always available. `--geometry` also meshes the model, so
 geometric rules (clash, containment, distance, contact, space, plan-area, facade-area, slab-stack,
-storey-height, exit-separation, corridor-end-openings, escape-route, space-distance, counterpart-coverage, parking-bay, wall-spacing, accessible-route, body-extent, triangle-count, stair-geometry, ramp-geometry, component-clearance, component-visibility, effective-coverage, local-circulation and free-space checks) can run, and registers the walkability
+storey-height, exit-separation, corridor-end-openings, escape-route, space-distance, counterpart-coverage, parking-bay, wall-spacing, accessible-route, body-extent, triangle-count, space-boundary-coverage, stair-geometry, ramp-geometry, component-clearance, component-visibility, effective-coverage, local-circulation and free-space checks) can run, and registers the walkability
 and metric-routing services. It is off by default because meshing costs time a purely semantic ruleset
 does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
@@ -357,6 +357,15 @@ An element the file places twice, or anything under a structure aggregated
 twice, gets no storey rather than a guessed one. The slab and roof roles are
 only the default cap elements: a rule's `top_cap_elements` or
 `bottom_cap_elements` selector replaces them for that cap.
+
+Space-boundary coverage takes every `IfcSpace` and every `IfcRelSpaceBoundary`
+(and subtype) naming one. Each boundary's `ConnectionGeometry` surface is
+lowered in its own frame and placed by the space's placement under its body's
+representation context, exactly as the body is, then meshed; a curve-bounded
+plane with straight boundaries is exact. A boundary with no connection
+geometry, a point, curve or volume connection, a face surface (not lowered
+yet, openbimrs/ifc#155) or a surface the lowering or compiler refuses is
+unmeasured, and its space is not evaluated.
 
 The result's `geometry` field records the counts and every unmeasured object
 with its reason. The summary prints a `geometry:` line and groups unmeasured

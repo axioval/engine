@@ -5680,3 +5680,241 @@ fn with_geometry_rooms_are_judged_by_how_much_of_them_their_sprinklers_reach() {
         "{result:#}"
     );
 }
+
+/// STEP lines for space boundaries, numbered from 1000 up.
+struct Boundaries {
+    next: u32,
+    data: String,
+}
+
+/// Three coordinates as STEP writes them.
+fn triple(values: [f64; 3]) -> String {
+    format!("({:.1},{:.1},{:.1})", values[0], values[1], values[2])
+}
+
+impl Boundaries {
+    fn id(&mut self) -> u32 {
+        self.next += 1;
+        self.next
+    }
+
+    /// A closed 2D polyline through `points`.
+    fn ring(&mut self, points: &[[f64; 2]]) -> u32 {
+        let mut refs = Vec::new();
+        for point in points {
+            let entity = self.id();
+            writeln!(
+                self.data,
+                "#{entity}=IFCCARTESIANPOINT(({:.1},{:.1}));",
+                point[0], point[1]
+            )
+            .unwrap();
+            refs.push(format!("#{entity}"));
+        }
+        let polyline = self.id();
+        writeln!(
+            self.data,
+            "#{polyline}=IFCPOLYLINE(({},{}));",
+            refs.join(","),
+            refs[0]
+        )
+        .unwrap();
+        polyline
+    }
+
+    /// A boundary of `space` against wall #99: an `IfcCurveBoundedPlane`
+    /// over the plane at `location` with normal `axis` and first axis
+    /// `reference`, bounded by the `size` rectangle from its origin, less
+    /// `hole` (`[from u, from v, to u, to v]`).
+    fn add(
+        &mut self,
+        space: u32,
+        location: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        size: [f64; 2],
+        hole: Option<[f64; 4]>,
+    ) {
+        let [origin, normal, first, frame, plane] = [0; 5].map(|_| self.id());
+        writeln!(
+            self.data,
+            "#{origin}=IFCCARTESIANPOINT({});",
+            triple(location)
+        )
+        .unwrap();
+        writeln!(self.data, "#{normal}=IFCDIRECTION({});", triple(axis)).unwrap();
+        writeln!(self.data, "#{first}=IFCDIRECTION({});", triple(reference)).unwrap();
+        writeln!(
+            self.data,
+            "#{frame}=IFCAXIS2PLACEMENT3D(#{origin},#{normal},#{first});"
+        )
+        .unwrap();
+        writeln!(self.data, "#{plane}=IFCPLANE(#{frame});").unwrap();
+        let [width, height] = size;
+        let outer = self.ring(&[[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]]);
+        let inner = hole
+            .map(|[left, bottom, right, top]| {
+                let ring = self.ring(&[[left, bottom], [right, bottom], [right, top], [left, top]]);
+                format!("#{ring}")
+            })
+            .unwrap_or_default();
+        let [bounded, connection, relation] = [0; 3].map(|_| self.id());
+        writeln!(
+            self.data,
+            "#{bounded}=IFCCURVEBOUNDEDPLANE(#{plane},#{outer},({inner}));"
+        )
+        .unwrap();
+        writeln!(
+            self.data,
+            "#{connection}=IFCCONNECTIONSURFACEGEOMETRY(#{bounded},$);"
+        )
+        .unwrap();
+        writeln!(
+            self.data,
+            "#{relation}=IFCRELSPACEBOUNDARY('{relation:022}',$,$,$,#{space},#99,\
+             #{connection},.PHYSICAL.,.INTERNAL.);"
+        )
+        .unwrap();
+    }
+}
+
+/// A 4 x 3 x 2.5 m space box whose entities start at `first`, placed at
+/// (`x`, 5); the space itself is `first + 9`.
+fn placed_space(first: u32, x: f64) -> String {
+    let [
+        origin,
+        frame,
+        placement,
+        centre,
+        position,
+        profile,
+        solid,
+        shape,
+        definition,
+        space,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|offset| first + offset);
+    format!(
+        "#{origin}=IFCCARTESIANPOINT(({x:.1},5.,0.));\n\
+         #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+         #{centre}=IFCCARTESIANPOINT((2.,1.5));\n\
+         #{position}=IFCAXIS2PLACEMENT2D(#{centre},$);\n\
+         #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{position},4.,3.);\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,2.5);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{space}=IFCSPACE('{space:022}',$,$,$,$,#{placement},#{definition},$,.ELEMENT.,$,$);\n"
+    )
+}
+
+/// Space #39, placed at (10, 5), bounded by `IfcCurveBoundedPlane`
+/// connection surfaces stated in its own coordinates: a floor with a 1 m²
+/// hole, the ceiling and three walls; its east wall has no boundary. Space
+/// #69, placed at (20, 5), has one boundary given as a face surface. Every
+/// boundary bounds against wall #99.
+fn spaces_with_boundaries() -> String {
+    let mut boundaries = Boundaries {
+        next: 1000,
+        data: String::new(),
+    };
+    let (up, south, west) = ([0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]);
+    let (east, north) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let floor_hole = Some([1.0, 1.0, 2.0, 2.0]);
+    boundaries.add(39, [0.0; 3], up, east, [4.0, 3.0], floor_hole);
+    boundaries.add(39, [0.0, 0.0, 2.5], up, east, [4.0, 3.0], None);
+    boundaries.add(39, [0.0; 3], south, east, [4.0, 2.5], None);
+    boundaries.add(39, [0.0, 3.0, 0.0], south, east, [4.0, 2.5], None);
+    boundaries.add(39, [0.0; 3], west, north, [3.0, 2.5], None);
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}\
+         #80=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #81=IFCCARTESIANPOINT((4.,0.,0.));\n\
+         #82=IFCCARTESIANPOINT((4.,3.,0.));\n\
+         #83=IFCPOLYLOOP((#80,#81,#82));\n\
+         #84=IFCFACEOUTERBOUND(#83,.T.);\n\
+         #85=IFCPLANE(#2);\n\
+         #86=IFCFACESURFACE((#84),#85,.T.);\n\
+         #87=IFCCONNECTIONSURFACEGEOMETRY(#86,$);\n\
+         #88=IFCRELSPACEBOUNDARY('0000000000000000000088',$,$,$,#69,#99,#87,.PHYSICAL.,.INTERNAL.);\n\
+         {}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_space(30, 10.0),
+        placed_space(60, 20.0),
+        placed_box(
+            90,
+            [30.0, 0.0, 0.0],
+            [4.0, 0.2, 3.0],
+            "IFCWALL('GID',$,$,$,$,PL,REP,$,.STANDARD.)"
+        ),
+        boundaries.data,
+    )
+}
+
+#[test]
+fn with_geometry_space_boundaries_are_measured_against_the_space_surface() {
+    let case = Case::new("geometry-space-boundary-coverage");
+    let (output, result) = case.geometry_rule(
+        &spaces_with_boundaries(),
+        &[("space", "IfcSpace")],
+        "axioval:capability.space-boundary-coverage",
+        &registry_signature("axioval:capability.space-boundary-coverage"),
+        entity("space"),
+        json!({
+            "minimum_covered_share": {"type": "number", "value": 0.9},
+            "maximum_uncovered_area": {"type": "quantity", "value": 0.5, "unit": "m2"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The hole in the floor and the east wall stay uncovered: 1 + 7.5 m² of
+    // the 59 m² surface, measured exactly in the space's own placement.
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#39".to_owned(),
+                "declared boundaries cover 85.59% of the 59 m² surface, leaving 8.5 m² \
+                 uncovered; at least 90% required"
+                    .to_owned()
+            ),
+            (
+                "#39".to_owned(),
+                "declared boundaries leave 8.5 m² of the 59 m² surface uncovered; at most \
+                 0.5 m² allowed"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|finding| finding["evidence"][0]["exact"] == json!(true)),
+        "{result:#}"
+    );
+    // The face surface is not lowered, so the other space is not measured.
+    let unevaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(unevaluated.len(), 1, "{result:#}");
+    assert_eq!(
+        unevaluated[0]["object_id"]["local_id"],
+        json!("#69"),
+        "{result:#}"
+    );
+    assert!(
+        unevaluated[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("face surface"),
+        "{result:#}"
+    );
+}

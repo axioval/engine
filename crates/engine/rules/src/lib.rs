@@ -56,6 +56,7 @@ mod shelf_capacity;
 mod slab_contact;
 mod slab_stack;
 mod space_access;
+mod space_boundary_coverage;
 mod space_connection;
 mod space_distance;
 mod space_validation;
@@ -119,6 +120,7 @@ pub use same_container::SameContainer;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
 pub use slab_stack::SlabStackSpacing;
+pub use space_boundary_coverage::SpaceBoundaryCoverage;
 pub use space_connection::SpaceConnection;
 pub use space_distance::SpaceDistance;
 pub use space_validation::{SpaceCategory, SpaceValidation};
@@ -196,4 +198,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(EffectiveCoverage))
         .and_then(|registry| registry.register(LocalCirculation))
         .and_then(|registry| registry.register(CorridorEndOpenings))
+        .and_then(|registry| registry.register(SpaceBoundaryCoverage))
 }

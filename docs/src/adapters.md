@@ -425,6 +425,26 @@ unmeasured one or a mesh whose indices or positions cannot be read. Like the
 directional extent, each count cites the counted object's own source, so one
 geometry set can hold several files.
 
+`AxiolidBoundaryCoverageService` measures space-boundary coverage from boundary
+surfaces the host registers per space (`with_space`, then `with_boundary`,
+`with_tessellated_boundary` or `with_unmeasured_boundary`, keyed by space and
+boundary, in the coordinates of the space's body). The body's faces are
+grouped by oriented plane; each boundary triangle counts on the nearest face
+plane all its corners lie within the request's tolerance of, and a boundary
+with a triangle on no face plane is reported off the surface and covers
+nothing. Within each plane the faces and each boundary's part are projected
+into the plane and unioned as overlay regions: the uncovered area is the
+faces less the boundaries' union, measured directly, and the covered area
+the rest of the faces; the overlap accumulates what each boundary shares
+with the union so far, so a part three boundaries cover counts once. A plane
+along a coordinate axis projects by dropping that coordinate, without
+rounding; any other plane widens every area by a band of the projection's
+rounding and the overlay's grid snapping (axiolid/kernel#173) along the
+regions' boundaries, and a tessellated boundary by its chord deviation.
+Evidence is exact only when nothing widened and every boundary corner lies
+exactly on its plane. A curved (tessellated), unmeasured or bodiless space
+and an unmeasured boundary refuse.
+
 `AxiolidFacadeAreaService` measures facade areas. The host declares the
 spaces (`with_space`); the CLI declares every `IfcSpace`. A triangle counts
 when its normal lies within 45° of horizontal and, from each of four sample

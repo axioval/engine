@@ -35,31 +35,35 @@ use axiolid_contracts::ExecutionOptions;
 use axiolid_core::Tolerance;
 use axiolid_curve::{Curve2, Curve3};
 use axiolid_mesh_compile_contract::MeshCompiler;
-use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
+use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, SurfaceRelation};
 use axiolid_primitive::Primitive;
 use axiolid_profile::Profile;
 use axiolid_surface::Surface;
 use axioval::axiolid::{
-    AxiolidContactService, AxiolidDerivedRelationshipService, AxiolidEnvelopeMembershipService,
-    AxiolidFacadeAreaService, AxiolidFreeSpaceService, AxiolidGeometry, AxiolidGuardService,
-    AxiolidLinearQuantityService, AxiolidMetricRoutingService, AxiolidPlanAreaService,
-    AxiolidPlanSpanService, AxiolidProximityService, AxiolidSightService, AxiolidSpaceService,
-    AxiolidTriangleCountService, AxiolidVerticalExtentService, AxiolidWalkabilityService,
-    AxiolidWalkingSurfaceService,
+    AxiolidBoundaryCoverageService, AxiolidContactService, AxiolidDerivedRelationshipService,
+    AxiolidEnvelopeMembershipService, AxiolidFacadeAreaService, AxiolidFreeSpaceService,
+    AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService,
+    AxiolidMetricRoutingService, AxiolidPlanAreaService, AxiolidPlanSpanService,
+    AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
+    AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
 };
 use axioval::engine::{
-    ContactServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle,
-    EvidenceSession, FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
-    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
-    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
-    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
-    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    BoundaryCoverageServiceHandle, ContactServiceHandle, DerivedRelationshipServiceHandle,
+    EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
+    FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
+    MetricRoutingServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SightServiceHandle, SourceSnapshot, SpaceServiceHandle, TraversalDirection,
+    TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
+    WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, SourceId};
-use ifc_geometry::lower::{LoweringSession, lower_product_net};
-use ifc_model::{Codec, EntityId, Model};
+use ifc_geometry::constraint::ConnectionGeometry;
+use ifc_geometry::constraint::connection::ConnectionKind;
+use ifc_geometry::lower::{LoweringSession, lower_product_net, lower_representation_item};
+use ifc_geometry::{RepresentationPurpose, Transform};
+use ifc_model::{Codec, EntityId, Model, Value};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
 use ifc_step::StepCodec;
 use std::sync::Arc;
@@ -237,6 +241,7 @@ pub fn attach(
     let space = (
         space_service(&parsed, &geometry, &source, &kinds, &is_a),
         linear_service(&geometry, &voids),
+        boundary_service(&backend, &parsed, &geometry, &kinds, &is_a),
     );
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
     let derived = derived_service(&geometry, &kinds, &is_a, voids);
@@ -255,7 +260,11 @@ fn register(
     session: EvidenceSession,
     snapshots: &[SourceSnapshot],
     geometry: AxiolidGeometry,
-    (space, shelves): (AxiolidSpaceService, AxiolidLinearQuantityService),
+    (space, shelves, boundaries): (
+        AxiolidSpaceService,
+        AxiolidLinearQuantityService,
+        AxiolidBoundaryCoverageService,
+    ),
     envelope: AxiolidEnvelopeMembershipService,
     (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
 ) -> Result<EvidenceSession, Box<dyn Error>> {
@@ -278,6 +287,11 @@ fn register(
             bound,
         )?
         .with_host_service(SpaceServiceHandle::new(Arc::new(space)), bound)?
+        // Spaces and their declared boundaries are IFC facts.
+        .with_host_service(
+            BoundaryCoverageServiceHandle::new(Arc::new(boundaries)),
+            bound,
+        )?
         // Walking surfaces are the guard rule's selection, carried in each
         // request; the host declares none of its own.
         .with_host_service(
@@ -575,6 +589,150 @@ fn facade_service(
     )
 }
 
+/// Space-boundary coverage over every `IfcSpace` and the space boundaries
+/// the model declares for it (`IfcRelSpaceBoundary` and its subtypes).
+///
+/// Which boundaries a space has is an IFC fact, so every declared boundary
+/// is registered: with its connection surface meshed in the space body's
+/// coordinates, or unmeasured with the reason, so its space is refused
+/// rather than measured without it. A boundary stating no connection
+/// geometry, one that is not a surface, a face surface (openbimrs/ifc#155)
+/// and any surface the lowering or compiler refuses are unmeasured.
+fn boundary_service(
+    backend: &impl MeshCompiler,
+    parsed: &BTreeMap<SourceId, Parsed>,
+    geometry: &AxiolidGeometry,
+    kinds: &BTreeMap<ObjectId, String>,
+    is_a: &impl Fn(&ObjectId, &str) -> bool,
+) -> AxiolidBoundaryCoverageService {
+    let mut service = AxiolidBoundaryCoverageService::new(geometry.clone());
+    for id in kinds.keys().filter(|id| is_a(id, "IfcSpace")) {
+        service = service.with_space(id.clone());
+    }
+    for (source, Parsed { model, units }) in parsed {
+        let object = |entity: EntityId| ObjectId {
+            source: source.clone(),
+            local_id: entity.to_string(),
+        };
+        for boundary in ifc_spatial::relation::boundary::all(model) {
+            let Some(space) = boundary.space.map(object).filter(|id| is_a(id, "IfcSpace")) else {
+                continue;
+            };
+            let element = boundary
+                .element
+                .map(object)
+                .filter(|id| kinds.contains_key(id));
+            let id = object(boundary.id);
+            service = match boundary_surface(backend, model, units, boundary.id, &space) {
+                Ok((mesh, true)) => service.with_boundary(space, id, element, mesh),
+                Ok((mesh, false)) => service.with_tessellated_boundary(
+                    space,
+                    id,
+                    element,
+                    mesh,
+                    CHORD_DEVIATION_METRES,
+                ),
+                Err(reason) => service.with_unmeasured_boundary(space, id, element, reason),
+            };
+        }
+    }
+    service
+}
+
+/// `IfcRelSpaceBoundary.ConnectionGeometry`, the same slot in every subtype.
+const CONNECTION_GEOMETRY: usize = 6;
+
+/// One boundary's connection surface as a mesh in the coordinates of its
+/// space's body, and whether it is exact.
+///
+/// The surface is stated in the relating space's object coordinates, so it
+/// is lowered in its own frame and placed afterwards by the space's
+/// placement under its body's representation context, exactly as the body
+/// is: lowering it with the placement would also move a curve-bounded
+/// plane's boundaries, which lie in the plane's parameters.
+fn boundary_surface(
+    backend: &impl MeshCompiler,
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    boundary: EntityId,
+    space: &ObjectId,
+) -> Result<(axiolid_mesh::TriMesh, bool), String> {
+    let connection = match model
+        .get(boundary)
+        .and_then(|entity| entity.attribute(CONNECTION_GEOMETRY))
+    {
+        Some(Value::Ref(connection)) => *connection,
+        _ => return Err("the boundary states no connection geometry".into()),
+    };
+    let geometry = model
+        .get(connection)
+        .and_then(|entity| ConnectionGeometry::new(connection, entity))
+        .ok_or_else(|| format!("{connection} is not a connection geometry"))?;
+    if geometry.kind() != ConnectionKind::Surface {
+        return Err(format!(
+            "{connection} is a {:?} connection, not a surface",
+            geometry.kind()
+        ));
+    }
+    let surface = geometry.at_relating().map_err(|error| error.to_string())?;
+    let kind = model
+        .get(surface)
+        .map(|entity| entity.type_name.to_ascii_uppercase())
+        .unwrap_or_default();
+    if kind == "IFCFACESURFACE" || kind == "IFCADVANCEDFACE" {
+        return Err(format!(
+            "{surface} is a face surface, which is not lowered yet (openbimrs/ifc#155)"
+        ));
+    }
+    let frame = space_frame(model, units, space)?;
+    let mut session = LoweringSession::new(model, units);
+    let root = lower_representation_item(&mut session, surface, Transform::identity())
+        .map_err(|error| error.to_string())?;
+    let lowered = session.finish(root).map_err(|error| error.to_string())?;
+    let exact = planar(&lowered.graph, lowered.root, &mut NODE_BUDGET.clone());
+    let mut mesh = backend
+        .compile_mesh(
+            &lowered.graph,
+            lowered.root,
+            &ExecutionOptions::new(TOLERANCE),
+        )
+        .map_err(|error| format!("mesh compilation refused: {error}"))?;
+    if mesh.triangle_count() == 0 {
+        return Err("mesh compilation produced no triangles".into());
+    }
+    for position in &mut mesh.positions {
+        *position = axiolid_core::Point3::from_array(frame.apply(position.to_array()));
+    }
+    Ok((mesh, exact))
+}
+
+/// The frame a space's body is placed in: its placement under the world
+/// coordinate system of its body representation's context.
+fn space_frame(
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    space: &ObjectId,
+) -> Result<Transform, String> {
+    let entity = entity_id(space).ok_or("the space is not a STEP instance")?;
+    let placement = ifc_geometry::product_world_transform(model, units, entity)
+        .map_err(|error| error.to_string())?;
+    let context =
+        ifc_geometry::select_product_representation(model, entity, RepresentationPurpose::Body)
+            .map_err(|error| error.to_string())?
+            .and_then(|representation| ifc_geometry::context_of(model, representation))
+            .and_then(|context| context.world_coordinate_system(model));
+    let Some(system) = context else {
+        return Ok(placement);
+    };
+    let entity = model
+        .get(system)
+        .ok_or_else(|| format!("{system} does not exist"))?;
+    let world = ifc_geometry::resource::placement::axis_placement_transform(model, system, entity)
+        .map_err(|error| error.to_string())?
+        .to_metres(units);
+    Ok(world.compose(&placement))
+}
+
 fn entity_id(id: &ObjectId) -> Option<EntityId> {
     id.local_id.strip_prefix('#')?.parse().ok().map(EntityId)
 }
@@ -637,6 +795,24 @@ fn planar(graph: &GeometryGraph, id: NodeId, budget: &mut usize) -> bool {
             planar(graph, *left, budget) && planar(graph, *right, budget)
         }
         GeometryNode::Profile(profile) => polygonal(profile),
+        // A plane bounded by straight boundaries (a space boundary's
+        // connection surface): its triangles are the region.
+        GeometryNode::SurfaceRelation(SurfaceRelation::CurveBounded {
+            basis, boundaries, ..
+        }) => {
+            matches!(
+                graph.get(*basis),
+                Some(GeometryNode::Surface(Surface::Plane(_)))
+            ) && boundaries.iter().all(|boundary| {
+                matches!(
+                    graph.get(*boundary),
+                    Some(
+                        GeometryNode::Curve3(Curve3::Line(_) | Curve3::Polyline(_))
+                            | GeometryNode::Curve2(Curve2::Line(_) | Curve2::Polyline(_))
+                    )
+                )
+            })
+        }
         // A faceted B-rep: every face on a plane (or given only by its
         // polygon, which IFC requires to be planar) and every edge straight.
         GeometryNode::BRep(brep) => {

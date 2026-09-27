@@ -82,6 +82,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   `axiolid-route` 0.3.3 and resolves `axiolid-triangulate` and
   `axiolid-predicates` 0.3.1. `passing_spaces` judges any polyline in one
   space. (#78)
+- **Space-boundary coverage.** (Refs #74) `BoundaryCoverageService`
+  answers a `BoundaryCoverageRequest` (a space and a plane tolerance) with
+  a request-bound `BoundaryCoverage`: the space body's surface area, the
+  covered, uncovered and overlapping areas as `SurfaceAreaInterval`s,
+  every declared boundary as a `MeasuredBoundary` (`OnSurface` with its
+  area, or `OffSurface`) and the overlapping pairs (`BoundaryOverlap`).
+  The contract derives the covered share; evidence is exact only when
+  every interval is a point, and the method refuses by default.
+  `AxiolidBoundaryCoverageService` groups the body's faces by plane,
+  assigns boundary triangles to the face plane they lie on within the
+  tolerance, and bounds the areas with overlay `Region` union,
+  intersection and difference; a plane off the coordinate axes widens by
+  its projection's rounding and the overlay's grid snapping, a
+  tessellated boundary by its chord deviation, and a curved body or an
+  unreadable boundary refuses. The capability `space-boundary-coverage`
+  judges `minimum_covered_share`, `maximum_uncovered_area` and
+  `maximum_overlap_area` (with `plane_tolerance`) per space, and always
+  reports a boundary lying on no face of the body. With `--geometry` the
+  CLI lowers each `IfcRelSpaceBoundary` connection surface
+  (`IfcCurveBoundedPlane`, `IfcFaceBasedSurfaceModel`) in its space's
+  frame and meshes it; a face surface (openbimrs/ifc#155) leaves its
+  space not evaluated.
+
 - **Stair and ramp handrails, ramp end spaces and landing doors.** (Refs
   #85) `WalkingSurfaceService::measure_handrails` answers a
   `HandrailRequest` (subject, `WalkingStretch`, the rails a rule selects,
@@ -1621,6 +1644,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   walkable plans of walkability and metric routing go back to the overlay
   as they are instead of re-cut into trapezoids. Measurements, bounds and
   refusals are unchanged.
+- Dependencies: `axiolid-mesh-compile` 0.3.4 (curve-bounded planes,
+  axiolid/kernel#192) as a direct dependency of the CLI, and
+  `axiolid-overlay` 0.3.3.
+
 - **Breaking.** Semantic capability results are closer to what a reviewer
   acts on. `manual-issue` raises one finding per rule, against the first
   selected object and relating the others, instead of one per object.

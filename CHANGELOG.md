@@ -21,6 +21,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   number or another dimension) makes the object not evaluated instead of
   silently dropping it from the selection, `notEquals` included. A value
   that does not fit its operator is an invalid declaration.
+- **Findings about a source or the whole project.** A finding or
+  not-evaluated outcome now has a `Scope`: one object, one source, or the
+  project. "The model has no building" is a finding against the source
+  instead of nothing, which read as a pass. Scoped findings carry exact
+  evidence and related objects like object findings; the runtime orders
+  project, then sources, then objects. `CapabilityEvaluation` gains
+  `push_source_not_evaluated`, and an unbound concept, already reported once
+  per source, is now scoped to that source. **Breaking:** `Finding::object_id`
+  and `NotEvaluated::object_id` are replaced by `scope`, with `object_id()`
+  accessors; `Finding::new` and `with_evidence` build one. The serialized
+  form of object findings and rule-level outcomes is unchanged, but a report
+  with scoped entries (a finding without `object_id`, or with `source`) needs
+  a reader of this version.
+- **Existence and cardinality checks.** `object-count` requires the rule's
+  selection to hold between `minimum` and `maximum` objects (at least one
+  by default) per source, or in the project with `across_sources`, and
+  reports an empty selection as "no object matches the selection" against
+  that source or the project.
+- **Model-level BCF topics and CLI entries.** A source or project finding
+  becomes a BCF topic without a viewpoint or component, whose GUID does not
+  depend on the source's file name; object and rule-level topics keep their
+  GUIDs. `axioval report` lists such an entry with `scope` in place of
+  `object`, and `--object` accepts a source document name.
 - **Relative counts by group, for small counts and at table edges.**
   `relative-count` takes `group_property` to count per property value (a
   location code, say) instead of per anchor, within one source unless

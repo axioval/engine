@@ -18,7 +18,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use axioval::ir::{Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Severity};
+use axioval::ir::{
+    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Scope, Severity, SourceId,
+};
 use serde::{Deserialize, Serialize};
 
 /// Scheme of the GlobalId alias shown next to an object.
@@ -92,14 +94,14 @@ impl CheckOutput {
                 .flat_map(|g| g.unmeasured.iter().map(|u| &u.object)),
         );
         for finding in report.findings() {
-            named.insert(&finding.object_id);
+            named.extend(finding.object_id());
             named.extend(&finding.related);
         }
         named.extend(
             report
                 .not_evaluated()
                 .iter()
-                .filter_map(|n| n.object_id.as_ref()),
+                .filter_map(NotEvaluated::object_id),
         );
         let objects = named
             .into_iter()
@@ -125,7 +127,17 @@ impl CheckOutput {
     /// Whether the report spans more than one source document, in which case
     /// a bare local id like `#2` is ambiguous and is qualified.
     fn several_documents(&self) -> bool {
-        let mut documents = self.referenced().map(|id| &id.source);
+        let scoped = self
+            .report
+            .findings()
+            .iter()
+            .map(|f| &f.scope)
+            .chain(self.report.not_evaluated().iter().map(|n| &n.scope))
+            .filter_map(|scope| match scope {
+                Scope::Source(source) => Some(source),
+                Scope::Project | Scope::Object(_) => None,
+            });
+        let mut documents = self.referenced().map(|id| &id.source).chain(scoped);
         let first = documents.next();
         documents.any(|other| Some(other) != first)
     }
@@ -134,12 +146,12 @@ impl CheckOutput {
         self.report
             .findings()
             .iter()
-            .flat_map(|f| std::iter::once(&f.object_id).chain(&f.related))
+            .flat_map(|f| f.object_id().into_iter().chain(&f.related))
             .chain(
                 self.report
                     .not_evaluated()
                     .iter()
-                    .filter_map(|n| n.object_id.as_ref()),
+                    .filter_map(NotEvaluated::object_id),
             )
             .chain(
                 self.geometry
@@ -162,6 +174,16 @@ impl CheckOutput {
             }
         }
         text
+    }
+
+    /// What an entry is about: the object as [`Self::describe`] names it, or
+    /// `source <document>` or `project` for an entry about no single object.
+    fn subject(&self, scope: &Scope, qualify: bool) -> String {
+        match scope {
+            Scope::Object(id) => self.describe(id, qualify),
+            Scope::Source(source) => format!("source {}", source.document),
+            Scope::Project => "project".to_owned(),
+        }
     }
 
     /// Whether `query` names `id`: its full id, its local id, or its GlobalId.
@@ -357,7 +379,9 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
             .or_default()
             .add(
                 &finding.message,
-                Some(output.describe(&finding.object_id, qualify)),
+                // A source or project finding names its scope in its
+                // message; an example is always an object to drill into.
+                finding.object_id().map(|id| output.describe(id, qualify)),
             );
     }
     for outcome in output.report.not_evaluated() {
@@ -370,10 +394,7 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
             .or_default()
             .add(
                 &outcome.message,
-                outcome
-                    .object_id
-                    .as_ref()
-                    .map(|id| output.describe(id, qualify)),
+                outcome.object_id().map(|id| output.describe(id, qualify)),
             );
     }
     for record in &output.integrity {
@@ -593,6 +614,9 @@ pub struct Entry {
     pub level: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub object: Option<String>,
+    /// `source <document>` or `project` for an entry about no single object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<String>,
     pub message: String,
@@ -630,9 +654,12 @@ pub fn list(
             let findings = output.report.findings().iter().filter(|finding| {
                 rule_ok(&finding.rule_id.to_string())
                     && filter.object.as_deref().is_none_or(|query| {
-                        std::iter::once(&finding.object_id)
-                            .chain(&finding.related)
-                            .any(|id| output.names(id, query))
+                        names_source(&finding.scope, query)
+                            || finding
+                                .object_id()
+                                .into_iter()
+                                .chain(&finding.related)
+                                .any(|id| output.names(id, query))
                     })
             });
             matched.extend(findings.map(|f| finding_entry(output, f, qualify, evidence)));
@@ -641,10 +668,10 @@ pub fn list(
             let outcomes = output.report.not_evaluated().iter().filter(|outcome| {
                 rule_ok(&outcome.rule_id.to_string())
                     && filter.object.as_deref().is_none_or(|query| {
-                        outcome
-                            .object_id
-                            .as_ref()
-                            .is_some_and(|id| output.names(id, query))
+                        names_source(&outcome.scope, query)
+                            || outcome
+                                .object_id()
+                                .is_some_and(|id| output.names(id, query))
                     })
             });
             matched.extend(outcomes.map(|o| not_evaluated_entry(output, o, qualify)));
@@ -666,6 +693,7 @@ pub fn list(
             key: record.code.clone(),
             level: record.severity.clone(),
             object: None,
+            scope: None,
             related: vec![],
             message: record.message.trim().to_owned(),
             evidence: if evidence {
@@ -691,6 +719,7 @@ pub fn list(
             key: "unmeasured".to_owned(),
             level: "unmeasured".to_owned(),
             object: Some(output.describe(&u.object, qualify)),
+            scope: None,
             related: vec![],
             message: u.reason.clone(),
             evidence: vec![],
@@ -709,6 +738,30 @@ pub fn list(
     }
 }
 
+/// Whether `query` names the source a source-scoped entry is about, by its
+/// full id or its document.
+fn names_source(scope: &Scope, query: &str) -> bool {
+    match scope {
+        Scope::Source(SourceId { system, document }) => {
+            query == document || query == format!("{system}:{document}")
+        }
+        Scope::Project | Scope::Object(_) => false,
+    }
+}
+
+/// The `object` and `scope` fields of an entry about `scope`.
+fn subject_fields(
+    output: &CheckOutput,
+    scope: &Scope,
+    qualify: bool,
+) -> (Option<String>, Option<String>) {
+    let text = output.subject(scope, qualify);
+    match scope {
+        Scope::Object(_) => (Some(text), None),
+        Scope::Source(_) | Scope::Project => (None, Some(text)),
+    }
+}
+
 /// Whether `message` names `local` as a whole token: `#12` is not in `#123`.
 fn mentions(message: &str, local: &str) -> bool {
     message.match_indices(local).any(|(at, _)| {
@@ -719,11 +772,13 @@ fn mentions(message: &str, local: &str) -> bool {
 }
 
 fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidence: bool) -> Entry {
+    let (object, scope) = subject_fields(output, &finding.scope, qualify);
     Entry {
         section: Section::Findings,
         key: finding.rule_id.to_string(),
         level: severity(&finding.severity).to_owned(),
-        object: Some(output.describe(&finding.object_id, qualify)),
+        object,
+        scope,
         related: finding
             .related
             .iter()
@@ -746,14 +801,13 @@ fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidenc
 }
 
 fn not_evaluated_entry(output: &CheckOutput, outcome: &NotEvaluated, qualify: bool) -> Entry {
+    let (object, scope) = subject_fields(output, &outcome.scope, qualify);
     Entry {
         section: Section::NotEvaluated,
         key: outcome.rule_id.to_string(),
         level: reason(&outcome.reason).to_owned(),
-        object: outcome
-            .object_id
-            .as_ref()
-            .map(|id| output.describe(id, qualify)),
+        object,
+        scope,
         related: vec![],
         message: outcome.message.trim().to_owned(),
         evidence: vec![],
@@ -772,6 +826,9 @@ pub fn render_listing(listing: &Listing) -> String {
         );
         if let Some(object) = &entry.object {
             let _ = write!(out, "  {object}");
+        }
+        if let Some(scope) = &entry.scope {
+            let _ = write!(out, "  ({scope})");
         }
         let _ = writeln!(out, "\n    {}", entry.message);
         if !entry.related.is_empty() {

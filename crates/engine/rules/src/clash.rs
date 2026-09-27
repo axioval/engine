@@ -140,7 +140,7 @@ impl RuleCapability for Clash {
                 evaluation.push_finding(
                     Finding {
                         rule_id: rule.id.clone(),
-                        object_id: subject.clone(),
+                        scope: axioval_ir::Scope::Object(subject.clone()),
                         severity: severity(rule),
                         message,
                         related: Vec::new(),

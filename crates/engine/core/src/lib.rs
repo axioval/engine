@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
-use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId};
+use axioval_ir::{Finding, NotEvaluated, ObjectId, Project, Report, RuleId, Scope, SourceId};
 use thiserror::Error;
 
 mod session;
@@ -187,14 +187,20 @@ pub struct CapabilityEvaluation {
 /// A not-evaluated outcome before the runtime binds its compiled rule ID.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CapabilityNotEvaluated {
-    object_id: Option<ObjectId>,
+    scope: Scope,
     reason: NotEvaluatedReason,
     message: String,
 }
 impl CapabilityNotEvaluated {
+    /// The object that could not be evaluated, if the outcome is about one.
     #[must_use]
     pub fn object_id(&self) -> Option<&ObjectId> {
-        self.object_id.as_ref()
+        self.scope.object()
+    }
+    /// What could not be evaluated: an object, a source, or the whole rule.
+    #[must_use]
+    pub fn scope(&self) -> &Scope {
+        &self.scope
     }
     #[must_use]
     pub fn reason(&self) -> &NotEvaluatedReason {
@@ -232,13 +238,24 @@ impl CapabilityEvaluation {
         outcome.push_not_evaluated(reason, message);
         outcome
     }
-    /// Adds a conclusive finding.
+    /// Adds a conclusive finding, about an object, a source or the project
+    /// as its [`Scope`] says.
     pub fn push_finding(&mut self, finding: Finding) {
         self.findings.push(finding);
     }
     /// Adds a rule-level not-evaluated outcome.
     pub fn push_not_evaluated(&mut self, reason: NotEvaluatedReason, message: impl Into<String>) {
-        self.push_unavailable(None, reason, message);
+        self.push_unavailable(Scope::Project, reason, message);
+    }
+    /// Adds a not-evaluated outcome about one source as a whole, such as a
+    /// count over that source that undecided objects could still change.
+    pub fn push_source_not_evaluated(
+        &mut self,
+        source: SourceId,
+        reason: NotEvaluatedReason,
+        message: impl Into<String>,
+    ) {
+        self.push_unavailable(Scope::Source(source), reason, message);
     }
     /// Adds an object-specific not-evaluated outcome.
     pub fn push_object_not_evaluated(
@@ -247,16 +264,16 @@ impl CapabilityEvaluation {
         reason: NotEvaluatedReason,
         message: impl Into<String>,
     ) {
-        self.push_unavailable(Some(object_id), reason, message);
+        self.push_unavailable(Scope::Object(object_id), reason, message);
     }
     fn push_unavailable(
         &mut self,
-        object_id: Option<ObjectId>,
+        scope: Scope,
         reason: NotEvaluatedReason,
         message: impl Into<String>,
     ) {
         self.not_evaluated.push(CapabilityNotEvaluated {
-            object_id,
+            scope,
             reason,
             message: message.into(),
         });
@@ -442,21 +459,21 @@ pub use walkability::{
 /// object, so every object of that source fails identically. Listing each one
 /// buries the single cause under thousands of copies. Object-level outcomes
 /// with that reason are merged per source and message into one rule-level
-/// outcome that names the source, the count and a few examples. Every other
-/// outcome keeps its object.
+/// outcome scoped to that source, naming the count and a few examples. Every
+/// other outcome keeps its scope.
 fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> Vec<NotEvaluated> {
     const EXAMPLES: usize = 3;
     let mut merged: BTreeMap<(axioval_ir::SourceId, String), Vec<ObjectId>> = BTreeMap::new();
     let mut kept = Vec::new();
     for outcome in outcomes {
-        match (outcome.reason, outcome.object_id) {
-            (NotEvaluatedReason::UnboundConcept, Some(object)) => merged
+        match (outcome.reason, outcome.scope) {
+            (NotEvaluatedReason::UnboundConcept, Scope::Object(object)) => merged
                 .entry((object.source.clone(), outcome.message))
                 .or_default()
                 .push(object),
-            (reason, object_id) => kept.push(NotEvaluated {
+            (reason, scope) => kept.push(NotEvaluated {
                 rule_id: rule_id.clone(),
-                object_id,
+                scope,
                 reason,
                 message: outcome.message,
             }),
@@ -477,7 +494,7 @@ fn collapse_unbound(rule_id: &RuleId, outcomes: Vec<CapabilityNotEvaluated>) -> 
         };
         NotEvaluated {
             rule_id: rule_id.clone(),
-            object_id: None,
+            scope: Scope::Source(source.clone()),
             reason: NotEvaluatedReason::UnboundConcept,
             message: format!(
                 "{message}; {} object(s) of source `{source}` not evaluated (e.g. {}{tail})",
@@ -554,7 +571,7 @@ impl Runtime {
             .into_iter()
             .map(|rule| NotEvaluated {
                 rule_id: rule.id,
-                object_id: None,
+                scope: Scope::Project,
                 reason: NotEvaluatedReason::InvalidDeclaration,
                 message: rule.reason,
             })
@@ -572,7 +589,8 @@ impl Runtime {
         findings.sort_by(|a, b| {
             a.rule_id
                 .cmp(&b.rule_id)
-                .then_with(|| a.object_id.cmp(&b.object_id))
+                // Project, then sources, then objects, each by identity.
+                .then_with(|| a.scope.cmp(&b.scope))
                 .then_with(|| a.message.cmp(&b.message))
         });
         not_evaluated.sort();

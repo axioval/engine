@@ -99,7 +99,7 @@ impl RuleCapability for ShelfCapacity {
                     }
                     evaluation.push_finding(Finding {
                         rule_id: rule.id.clone(),
-                        object_id: object.id.clone(),
+                        scope: axioval_ir::Scope::Object(object.id.clone()),
                         severity: Severity::Warning,
                         related: Vec::new(),
                         message: format!(

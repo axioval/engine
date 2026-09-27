@@ -6,7 +6,10 @@ use axioval_engine::{
     NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime,
     ServiceRegistry, SnapshotBoundService, SourceSnapshot, compile,
 };
-use axioval_ir::{DefinitionPackage, Object, ObjectId, Project, RuleSetPackage, SourceId};
+use axioval_ir::{
+    DefinitionPackage, Finding, Object, ObjectId, Project, RuleSetPackage, Scope, Severity,
+    SourceId,
+};
 
 struct Stub;
 impl RuleCapability for Stub {
@@ -161,6 +164,63 @@ fn runtime_reports_capability_unavailability_without_false_pass() {
         report.not_evaluated()[0].rule_id.to_string(),
         "wall-reference-required"
     );
+}
+
+/// Pushes object, source and project outcomes in reverse of report order.
+struct Scoped;
+impl RuleCapability for Scoped {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-exists"
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        vec![ParameterDescriptor::required(
+            "property",
+            ParameterType::PropertyReference,
+        )]
+    }
+    fn evaluate(&self, _: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        let source = |document: &str| SourceId::new("test", document).unwrap();
+        let object = ObjectId::new(source("a"), "1").unwrap();
+        let finding = |scope: Scope| Finding::new(rule.id.clone(), scope, Severity::Error, "m");
+        let mut evaluation = CapabilityEvaluation::default();
+        evaluation.push_finding(finding(Scope::Object(object.clone())));
+        evaluation.push_finding(finding(Scope::Source(source("b"))));
+        evaluation.push_finding(finding(Scope::Source(source("a"))));
+        evaluation.push_finding(finding(Scope::Project));
+        evaluation.push_object_not_evaluated(object, NotEvaluatedReason::MissingService, "m");
+        evaluation.push_source_not_evaluated(
+            source("a"),
+            NotEvaluatedReason::IncompleteEvidence,
+            "m",
+        );
+        evaluation.push_not_evaluated(NotEvaluatedReason::MissingService, "m");
+        evaluation
+    }
+}
+
+#[test]
+fn source_and_project_outcomes_order_before_object_outcomes() {
+    let (definitions, rules) = packages();
+    let registry = CapabilityRegistry::new().register(Scoped).unwrap();
+    let plan = compile(&registry, &[definitions], &rules).unwrap();
+    let report = Runtime::new(registry)
+        .run(&Project::new(vec![]).unwrap(), plan)
+        .unwrap();
+    let scopes: Vec<String> = report
+        .findings()
+        .iter()
+        .map(|finding| finding.scope.to_string())
+        .collect();
+    assert_eq!(
+        scopes,
+        ["project", "source test:a", "source test:b", "test:a/1"]
+    );
+    let scopes: Vec<String> = report
+        .not_evaluated()
+        .iter()
+        .map(|outcome| outcome.scope.to_string())
+        .collect();
+    assert_eq!(scopes, ["project", "source test:a", "test:a/1"]);
 }
 
 #[test]

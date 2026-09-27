@@ -40,6 +40,14 @@ impl Model {
         self
     }
 
+    /// An object of another source document than [`source`].
+    pub fn object_in(mut self, document: &str, local: &str, kind: &str) -> Self {
+        let source = SourceId::new("test", document).unwrap();
+        self.objects
+            .push(Object::new(ObjectId::new(source, local).unwrap(), kind));
+        self
+    }
+
     pub fn value(mut self, local: &str, set: &str, name: &str, value: PropertyValue) -> Self {
         self.values
             .insert((id(local), set.into(), name.into()), value);
@@ -254,17 +262,23 @@ pub fn findings(evaluation: &CapabilityEvaluation) -> Vec<(String, String)> {
     evaluation
         .findings()
         .iter()
-        .map(|finding| (finding.object_id.local_id.clone(), finding.message.clone()))
+        .map(|finding| (subject(finding), finding.message.clone()))
         .collect()
+}
+
+/// A finding's object by local id, or `source` / `project` for a finding
+/// about no single object.
+pub fn subject(finding: &axioval_ir::Finding) -> String {
+    match &finding.scope {
+        axioval_ir::Scope::Object(object) => object.local_id.clone(),
+        axioval_ir::Scope::Source(_) => "source".to_owned(),
+        axioval_ir::Scope::Project => "project".to_owned(),
+    }
 }
 
 /// Objects of every finding, sorted.
 pub fn flagged(evaluation: &CapabilityEvaluation) -> Vec<String> {
-    let mut objects: Vec<String> = evaluation
-        .findings()
-        .iter()
-        .map(|finding| finding.object_id.local_id.clone())
-        .collect();
+    let mut objects: Vec<String> = evaluation.findings().iter().map(subject).collect();
     objects.sort();
     objects
 }

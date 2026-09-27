@@ -118,6 +118,21 @@ entries, `--limit` per page (default 20) from `--offset`. `--object` accepts a
 local id (`#42`), a full id, or a GlobalId. Evidence locators are long and
 rarely needed, so they appear only with `--evidence`.
 
+**Entries without an object.** A finding or not-evaluated outcome can be about
+a whole source ("the model has no space") or the whole project rather than one
+object; in the result it has a `source` and no `object_id`, or neither. A
+listing entry then carries `scope` (`source model.ifc` or `project`) instead of
+`object`, and the text listing prints it in parentheses:
+
+```text
+[finding] error spaces-exist  (source model.ifc)
+    no object matches the selection in source `ifc-step:model.ifc`; required at least 1
+```
+
+`--object` also accepts a source document name (`model.ifc`) and lists the
+entries about that source. The summary never gives such an entry as an example,
+since every example is an object to drill into; its message names the source.
+
 Both views end with the exact command for the next step: the largest group,
 an example object, the next page. Every suggested command is quoted for a POSIX
 shell and runs unchanged. `--json` prints either view as JSON. `report` exits 0

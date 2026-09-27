@@ -351,7 +351,7 @@ pub(crate) fn finding(
     evidence.dedup();
     Finding {
         rule_id: rule.id.clone(),
-        object_id: object.clone(),
+        scope: axioval_ir::Scope::Object(object.clone()),
         related: Vec::new(),
         severity: match rule.severity {
             axioval_ir::contract::Severity::Error => Severity::Error,

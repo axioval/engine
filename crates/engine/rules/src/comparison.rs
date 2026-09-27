@@ -304,7 +304,7 @@ impl ModelComparison {
         for (side, object) in &self.unidentified {
             not_evaluated.push(NotEvaluated {
                 rule_id: rule_id.clone(),
-                object_id: Some(object.clone()),
+                scope: axioval_ir::Scope::Object(object.clone()),
                 reason: NotEvaluatedReason::IncompleteEvidence,
                 message: format!(
                     "{side:?} object has no `{}` identity and cannot be matched",
@@ -316,7 +316,7 @@ impl ModelComparison {
             for object in &ambiguous.objects {
                 not_evaluated.push(NotEvaluated {
                     rule_id: rule_id.clone(),
-                    object_id: Some(object.clone()),
+                    scope: axioval_ir::Scope::Object(object.clone()),
                     reason: NotEvaluatedReason::InvalidEvidence,
                     message: format!(
                         "{:?} identity {}:{} is claimed by {} objects",
@@ -350,7 +350,7 @@ impl ModelComparison {
                 findings.push(
                     Finding {
                         rule_id: rule_id.clone(),
-                        object_id: object.clone(),
+                        scope: axioval_ir::Scope::Object(object.clone()),
                         severity: severity.clone(),
                         message,
                         related: Vec::new(),
@@ -397,7 +397,7 @@ impl ModelComparison {
                     for gap in unresolved {
                         not_evaluated.push(NotEvaluated {
                             rule_id: rule_id.clone(),
-                            object_id: Some(revised.clone()),
+                            scope: axioval_ir::Scope::Object(revised.clone()),
                             reason: NotEvaluatedReason::IncompleteEvidence,
                             message: format!("{} not compared: {}", gap.facet, gap.reason),
                         });
@@ -409,7 +409,7 @@ impl ModelComparison {
         findings.sort_by(|a, b| {
             a.rule_id
                 .cmp(&b.rule_id)
-                .then_with(|| a.object_id.cmp(&b.object_id))
+                .then_with(|| a.scope.cmp(&b.scope))
                 .then_with(|| a.message.cmp(&b.message))
         });
         not_evaluated.sort();

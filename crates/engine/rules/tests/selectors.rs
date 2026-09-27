@@ -26,7 +26,7 @@ fn select(model: Model, selector: Selector) -> (Vec<String>, Vec<(String, NotEva
     let mut chosen: Vec<String> = evaluation
         .findings()
         .iter()
-        .flat_map(|finding| std::iter::once(&finding.object_id).chain(&finding.related))
+        .flat_map(|finding| finding.object_id().into_iter().chain(&finding.related))
         .map(|id| id.local_id.clone())
         .collect();
     chosen.sort();

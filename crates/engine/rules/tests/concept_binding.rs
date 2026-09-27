@@ -411,8 +411,14 @@ fn an_unbound_concept_is_reported_once_per_source_not_per_object() {
     let outcome = &report.not_evaluated()[0];
     assert_eq!(outcome.reason, NotEvaluatedReason::UnboundConcept);
     assert_eq!(
-        outcome.object_id, None,
+        outcome.object_id(),
+        None,
         "a source-level cause names no object"
+    );
+    assert!(
+        matches!(outcome.scope, axioval_ir::Scope::Source(_)),
+        "it names its source: {:?}",
+        outcome.scope
     );
     assert!(
         outcome.message.contains("50 object(s) of source"),

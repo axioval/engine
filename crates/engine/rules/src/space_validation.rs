@@ -229,7 +229,7 @@ fn finding(
 ) -> Finding {
     Finding {
         rule_id: rule.id.clone(),
-        object_id,
+        scope: axioval_ir::Scope::Object(object_id),
         related: Vec::new(),
         severity,
         message,

@@ -82,7 +82,7 @@ mod unique_value {
             let finding = evaluation
                 .findings()
                 .iter()
-                .find(|finding| finding.object_id.local_id == object)
+                .find(|finding| finding.object_id().unwrap().local_id == object)
                 .unwrap();
             let mut related: Vec<String> = finding
                 .related

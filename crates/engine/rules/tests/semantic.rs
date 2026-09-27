@@ -199,7 +199,7 @@ mod unique {
         let s1 = evaluation
             .findings()
             .iter()
-            .find(|finding| finding.object_id.local_id == "s1")
+            .find(|finding| finding.object_id().unwrap().local_id == "s1")
             .unwrap();
         assert_eq!(
             s1.message,
@@ -270,7 +270,7 @@ mod consistent {
         let d3 = evaluation
             .findings()
             .iter()
-            .find(|finding| finding.object_id.local_id == "d3")
+            .find(|finding| finding.object_id().unwrap().local_id == "d3")
             .unwrap();
         assert_eq!(
             d3.message,
@@ -767,7 +767,7 @@ mod numbering {
             evaluation
                 .findings()
                 .iter()
-                .all(|finding| finding.object_id.local_id != "s3"),
+                .all(|finding| finding.object_id().unwrap().local_id != "s3"),
             "{:?}",
             findings(&evaluation)
         );

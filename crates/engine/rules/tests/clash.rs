@@ -215,7 +215,7 @@ fn penetration_beyond_tolerance_is_a_hard_clash_naming_the_counterpart() {
     let [finding] = outcome.findings() else {
         panic!("one clash expected: {:?}", outcome.findings());
     };
-    assert_eq!(finding.object_id, oid("pipe"));
+    assert_eq!(finding.object_id(), Some(&oid("pipe")));
     assert_eq!(finding.related, vec![oid("wall")]);
     assert!(
         finding.message.starts_with("hard clash"),
@@ -381,7 +381,7 @@ fn a_group_checked_against_itself_reports_each_pair_once() {
     );
     let outcome = run(&Clash, &project, stub, &rule);
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, oid("a"));
+    assert_eq!(outcome.findings()[0].object_id(), Some(&oid("a")));
 }
 
 #[test]

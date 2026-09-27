@@ -109,7 +109,7 @@ fn flagged(report: &Report) -> Vec<&str> {
     report
         .findings()
         .iter()
-        .map(|finding| finding.object_id.local_id.as_str())
+        .map(|finding| finding.object_id().unwrap().local_id.as_str())
         .collect()
 }
 

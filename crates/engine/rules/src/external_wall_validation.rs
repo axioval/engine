@@ -86,7 +86,7 @@ impl RuleCapability for ExternalWallValidation {
                 {
                     evaluation.push_finding(Finding {
                         rule_id: rule.id.clone(),
-                        object_id,
+                        scope: axioval_ir::Scope::Object(object_id),
                         severity: Severity::Warning,
                         related: Vec::new(),
                         message: format!(
@@ -103,7 +103,7 @@ impl RuleCapability for ExternalWallValidation {
                 {
                     evaluation.push_finding(Finding {
                         rule_id: rule.id.clone(),
-                        object_id,
+                        scope: axioval_ir::Scope::Object(object_id),
                         severity: Severity::Warning,
                         related: Vec::new(),
                         message: format!(

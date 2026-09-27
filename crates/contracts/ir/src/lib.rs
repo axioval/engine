@@ -532,27 +532,145 @@ pub enum Severity {
     Warning,
     Info,
 }
+/// What a finding or not-evaluated outcome is about.
+///
+/// Most outcomes are about one object. Some are about a whole source ("this
+/// model has no building") or the whole project ("no storey anywhere has a
+/// fire compartment"): there is no object to report them against, and
+/// reporting nothing would read as a pass.
+///
+/// Ordered project first, then sources, then objects, each by identity, so
+/// report ordering stays deterministic.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Scope {
+    /// The whole project, every source together.
+    Project,
+    /// One source as a whole.
+    Source(SourceId),
+    /// One object.
+    Object(ObjectId),
+}
+
+impl Scope {
+    /// The object this scope names, if it names one.
+    #[must_use]
+    pub fn object(&self) -> Option<&ObjectId> {
+        match self {
+            Self::Object(object) => Some(object),
+            Self::Project | Self::Source(_) => None,
+        }
+    }
+    /// The source this scope lies in: the named source, or the object's own
+    /// source. `None` for the project.
+    #[must_use]
+    pub fn source(&self) -> Option<&SourceId> {
+        match self {
+            Self::Project => None,
+            Self::Source(source) => Some(source),
+            Self::Object(object) => Some(&object.source),
+        }
+    }
+    /// Splits the scope into its wire fields, `object_id` and `source`; at
+    /// most one is set.
+    fn into_wire(self) -> (Option<ObjectId>, Option<SourceId>) {
+        match self {
+            Self::Project => (None, None),
+            Self::Source(source) => (None, Some(source)),
+            Self::Object(object) => (Some(object), None),
+        }
+    }
+    fn from_wire(object_id: Option<ObjectId>, source: Option<SourceId>) -> Result<Self, String> {
+        match (object_id, source) {
+            (None, None) => Ok(Self::Project),
+            (None, Some(source)) => Ok(Self::Source(source)),
+            (Some(object), None) => Ok(Self::Object(object)),
+            (Some(object), Some(source)) => Err(format!(
+                "outcome names both object {object} and source {source}; an object already names its source"
+            )),
+        }
+    }
+}
+
+impl From<ObjectId> for Scope {
+    fn from(object: ObjectId) -> Self {
+        Self::Object(object)
+    }
+}
+
+impl From<SourceId> for Scope {
+    fn from(source: SourceId) -> Self {
+        Self::Source(source)
+    }
+}
+
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Project => f.write_str("project"),
+            Self::Source(source) => write!(f, "source {source}"),
+            Self::Object(object) => object.fmt(f),
+        }
+    }
+}
+
 /// A deterministic, source-qualified validation outcome.
+///
+/// On the wire an object finding carries `object_id`, a source finding
+/// `source`, and a project finding neither; a record with both is rejected.
+/// An object finding therefore serializes exactly as before scopes existed.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "FindingWire", into = "FindingWire")]
 pub struct Finding {
     pub rule_id: RuleId,
-    /// The object the finding is reported against.
-    pub object_id: ObjectId,
+    /// What the finding is reported against: an object, a source, or the
+    /// project. Evidence rules do not depend on it: every finding carries
+    /// the exact source evidence that decided it.
+    pub scope: Scope,
     pub severity: Severity,
     pub message: String,
     /// Other objects that participate in the finding -- the slab a wall rests
-    /// on, the body a space intersects.
+    /// on, the body a space intersects, the objects a count found.
     ///
     /// A finding a reviewer cannot act on is a finding that gets ignored:
     /// "this wall has insufficient contact" is only useful alongside *what*
-    /// it fails to rest on. Empty when the object alone explains the finding.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// it fails to rest on. Empty when the subject alone explains the finding.
     pub related: Vec<ObjectId>,
     pub evidence: Vec<Evidence>,
 }
 
 impl Finding {
+    /// A finding with no related objects and no evidence yet.
+    #[must_use]
+    pub fn new(
+        rule_id: RuleId,
+        scope: impl Into<Scope>,
+        severity: Severity,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            rule_id,
+            scope: scope.into(),
+            severity,
+            message: message.into(),
+            related: Vec::new(),
+            evidence: Vec::new(),
+        }
+    }
+    /// The object the finding is reported against, if it is about one.
+    #[must_use]
+    pub fn object_id(&self) -> Option<&ObjectId> {
+        self.scope.object()
+    }
+    /// Attaches evidence, sorted by source and locator and deduplicated so
+    /// ordering never depends on evaluation order.
+    #[must_use]
+    pub fn with_evidence(mut self, evidence: impl IntoIterator<Item = Evidence>) -> Self {
+        self.evidence = evidence.into_iter().collect();
+        self.evidence
+            .sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
+        self.evidence.dedup();
+        self
+    }
     /// Attaches the other objects that participate in this finding, sorted and
     /// deduplicated so ordering never depends on adapter traversal order.
     #[must_use]
@@ -560,10 +678,58 @@ impl Finding {
         self.related = related.into_iter().collect();
         self.related.sort();
         self.related.dedup();
-        // The subject is already named by `object_id`; repeating it adds noise.
-        self.related
-            .retain(|candidate| candidate != &self.object_id);
+        // The subject is already named by the scope; repeating it adds noise.
+        if let Scope::Object(subject) = &self.scope {
+            let subject = subject.clone();
+            self.related.retain(|candidate| candidate != &subject);
+        }
         self
+    }
+}
+
+/// The serialized form of a [`Finding`], compatible with reports written
+/// before scopes existed.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FindingWire {
+    rule_id: RuleId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    object_id: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<SourceId>,
+    severity: Severity,
+    message: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    related: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
+}
+
+impl From<Finding> for FindingWire {
+    fn from(finding: Finding) -> Self {
+        let (object_id, source) = finding.scope.into_wire();
+        Self {
+            rule_id: finding.rule_id,
+            object_id,
+            source,
+            severity: finding.severity,
+            message: finding.message,
+            related: finding.related,
+            evidence: finding.evidence,
+        }
+    }
+}
+
+impl TryFrom<FindingWire> for Finding {
+    type Error = String;
+    fn try_from(wire: FindingWire) -> Result<Self, String> {
+        Ok(Self {
+            rule_id: wire.rule_id,
+            scope: Scope::from_wire(wire.object_id, wire.source)?,
+            severity: wire.severity,
+            message: wire.message,
+            related: wire.related,
+            evidence: wire.evidence,
+        })
     }
 }
 /// Why an object or rule instance could not be evaluated conclusively.
@@ -582,13 +748,64 @@ pub enum NotEvaluatedReason {
     UnboundConcept,
 }
 /// Explicit fail-closed evaluation outcome. This is not a compliance finding.
+///
+/// On the wire `object_id` is always written (`null` unless the outcome is
+/// about one object) and `source` only for a source-scoped outcome, so object-
+/// and rule-level outcomes serialize exactly as before scopes existed.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "NotEvaluatedWire", into = "NotEvaluatedWire")]
 pub struct NotEvaluated {
     pub rule_id: RuleId,
-    pub object_id: Option<ObjectId>,
+    /// What could not be evaluated: one object, one source, or the rule as a
+    /// whole (`Scope::Project`).
+    pub scope: Scope,
     pub reason: NotEvaluatedReason,
     pub message: String,
+}
+
+impl NotEvaluated {
+    /// The object that could not be evaluated, if the outcome is about one.
+    #[must_use]
+    pub fn object_id(&self) -> Option<&ObjectId> {
+        self.scope.object()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NotEvaluatedWire {
+    rule_id: RuleId,
+    #[serde(default)]
+    object_id: Option<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<SourceId>,
+    reason: NotEvaluatedReason,
+    message: String,
+}
+
+impl From<NotEvaluated> for NotEvaluatedWire {
+    fn from(outcome: NotEvaluated) -> Self {
+        let (object_id, source) = outcome.scope.into_wire();
+        Self {
+            rule_id: outcome.rule_id,
+            object_id,
+            source,
+            reason: outcome.reason,
+            message: outcome.message,
+        }
+    }
+}
+
+impl TryFrom<NotEvaluatedWire> for NotEvaluated {
+    type Error = String;
+    fn try_from(wire: NotEvaluatedWire) -> Result<Self, String> {
+        Ok(Self {
+            rule_id: wire.rule_id,
+            scope: Scope::from_wire(wire.object_id, wire.source)?,
+            reason: wire.reason,
+            message: wire.message,
+        })
+    }
 }
 /// Ordered report from a plan execution.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

@@ -182,7 +182,7 @@ impl RuleCapability for HorizontalGuard {
             related.dedup();
             evaluation.push_finding(Finding {
                 rule_id: rule.id.clone(),
-                object_id: surface,
+                scope: axioval_ir::Scope::Object(surface),
                 severity: Severity::Error,
                 related,
                 message: defect.code().to_string(),

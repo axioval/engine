@@ -150,3 +150,130 @@ fn a_property_carries_its_declared_data_type_only_when_reported() {
         .with_data_type(" ");
     assert!(matches!(blank, Err(IrError::Blank { .. })));
 }
+
+mod scope {
+    use axioval_ir::{
+        Evidence, Finding, NotEvaluated, NotEvaluatedReason, ObjectId, RuleId, Scope, Severity,
+        SourceId,
+    };
+    use serde_json::{Value, json};
+
+    fn source() -> SourceId {
+        SourceId::new("ifc-step", "model.ifc").unwrap()
+    }
+
+    fn finding(scope: Scope) -> Finding {
+        Finding::new(RuleId::new("r").unwrap(), scope, Severity::Error, "m").with_evidence([
+            Evidence::exact(source(), "b"),
+            Evidence::exact(source(), "a"),
+        ])
+    }
+
+    #[test]
+    fn an_object_finding_serializes_exactly_as_before_scopes() {
+        let object = ObjectId::new(source(), "#1").unwrap();
+        let value = serde_json::to_value(finding(Scope::Object(object))).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "rule_id": "r",
+                "object_id": {"source": {"system": "ifc-step", "document": "model.ifc"},
+                              "local_id": "#1"},
+                "severity": "error",
+                "message": "m",
+                "evidence": [
+                    {"source": {"system": "ifc-step", "document": "model.ifc"},
+                     "locator": "a", "exact": true},
+                    {"source": {"system": "ifc-step", "document": "model.ifc"},
+                     "locator": "b", "exact": true},
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn source_and_project_findings_round_trip() {
+        for scope in [Scope::Source(source()), Scope::Project] {
+            let original = finding(scope);
+            let value = serde_json::to_value(&original).unwrap();
+            assert!(value.get("object_id").is_none(), "{value}");
+            assert_eq!(
+                value.get("source").is_some(),
+                matches!(original.scope, Scope::Source(_))
+            );
+            let read: Finding = serde_json::from_value(value).unwrap();
+            assert_eq!(read, original);
+            assert_eq!(read.object_id(), None);
+        }
+    }
+
+    #[test]
+    fn a_record_naming_both_an_object_and_a_source_is_rejected() {
+        let object = ObjectId::new(source(), "#1").unwrap();
+        let mut value = serde_json::to_value(finding(Scope::Object(object))).unwrap();
+        value["source"] = serde_json::to_value(source()).unwrap();
+        let error = serde_json::from_value::<Finding>(value.clone()).unwrap_err();
+        assert!(error.to_string().contains("both object"), "{error}");
+
+        value["reason"] = json!("missing_service");
+        for field in ["severity", "evidence"] {
+            value.as_object_mut().unwrap().remove(field);
+        }
+        assert!(serde_json::from_value::<NotEvaluated>(value).is_err());
+    }
+
+    #[test]
+    fn a_rule_level_outcome_still_writes_a_null_object() {
+        let outcome = NotEvaluated {
+            rule_id: RuleId::new("r").unwrap(),
+            scope: Scope::Project,
+            reason: NotEvaluatedReason::MissingService,
+            message: "m".into(),
+        };
+        let value = serde_json::to_value(&outcome).unwrap();
+        assert_eq!(value["object_id"], Value::Null);
+        assert!(value.get("source").is_none());
+        let scoped = NotEvaluated {
+            scope: Scope::Source(source()),
+            ..outcome
+        };
+        let value = serde_json::to_value(&scoped).unwrap();
+        assert_eq!(value["source"]["document"], "model.ifc");
+        assert_eq!(
+            serde_json::from_value::<NotEvaluated>(value).unwrap(),
+            scoped
+        );
+    }
+
+    #[test]
+    fn scopes_order_project_then_sources_then_objects() {
+        let object = ObjectId::new(source(), "#1").unwrap();
+        let mut scopes = vec![
+            Scope::Object(object.clone()),
+            Scope::Source(source()),
+            Scope::Project,
+        ];
+        scopes.sort();
+        assert_eq!(
+            scopes,
+            [
+                Scope::Project,
+                Scope::Source(source()),
+                Scope::Object(object)
+            ]
+        );
+        assert_eq!(scopes[1].source(), Some(&source()));
+        assert_eq!(scopes[2].source(), Some(&source()));
+        assert_eq!(scopes[1].to_string(), "source ifc-step:model.ifc");
+    }
+
+    #[test]
+    fn an_object_finding_never_relates_its_subject() {
+        let object = ObjectId::new(source(), "#1").unwrap();
+        let other = ObjectId::new(source(), "#2").unwrap();
+        let scoped = finding(Scope::Source(source())).with_related([other.clone(), object.clone()]);
+        assert_eq!(scoped.related, [object.clone(), other.clone()]);
+        let own = finding(Scope::Object(object.clone())).with_related([other.clone(), object]);
+        assert_eq!(own.related, [other]);
+    }
+}

@@ -17,6 +17,14 @@
 //! description, and the object is listed in [`Export::unanchored`] so the
 //! host can say so rather than let the gap pass unnoticed.
 //!
+//! # Model-level topics
+//!
+//! A finding or outcome scoped to a source or the project (see
+//! [`Scope`]) names no subject, so its topic has no
+//! viewpoint and no component: selecting only the related objects would
+//! point the reviewer at the wrong thing. The description names the scope and
+//! lists the related objects instead.
+//!
 //! # Determinism
 //!
 //! The caller supplies the author and timestamp; nothing reads the clock.
@@ -32,7 +40,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use axioval_ir::{Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Severity};
+use axioval_ir::{
+    Finding, NotEvaluated, NotEvaluatedReason, ObjectId, Project, Report, Scope, Severity,
+};
 use openbim_bcf::Component;
 use openbim_bcf::write::{self, Document, TargetVersion, Topic, Viewpoint, WriteError};
 use thiserror::Error;
@@ -183,13 +193,18 @@ struct Entry {
 
 impl Entry {
     fn finding(finding: &Finding, project: &Project) -> Result<Self, ExportError> {
-        let mut objects = vec![&finding.object_id];
+        let subject = finding.object_id();
+        let mut objects: Vec<&ObjectId> = subject.into_iter().collect();
         objects.extend(&finding.related);
-        let resolved = Resolved::new(&objects, project)?;
+        let resolved = Resolved::new(&objects, subject.is_some(), &finding.scope, project)?;
         let mut description = vec![
             finding.message.trim().to_owned(),
             format!("Rule: {}", finding.rule_id),
-            format!("Object: {}", finding.object_id),
+            match &finding.scope {
+                Scope::Object(object) => format!("Object: {object}"),
+                Scope::Source(source) => format!("Source: {source}; no single object"),
+                Scope::Project => "Project: no single object or source".to_owned(),
+            },
         ];
         if !finding.related.is_empty() {
             description.push(format!("Related: {}", join(&finding.related)));
@@ -203,10 +218,22 @@ impl Entry {
             topic_type: severity(&finding.severity).to_owned(),
             label: finding.rule_id.to_string(),
             description: description.join("\n"),
-            key: format!(
-                "finding\n{}\n{}\n{}",
-                finding.rule_id, resolved.key, finding.message
-            ),
+            // An object finding's key is unchanged from before scopes
+            // existed, so its GUID is too. A scoped one is marked, never
+            // named by source: that would change with every file name.
+            key: match &finding.scope {
+                Scope::Object(_) => format!(
+                    "finding\n{}\n{}\n{}",
+                    finding.rule_id, resolved.key, finding.message
+                ),
+                Scope::Source(_) | Scope::Project => format!(
+                    "finding\n{}\n{}\n{}\n{}",
+                    finding.rule_id,
+                    scope_marker(&finding.scope),
+                    resolved.key,
+                    finding.message
+                ),
+            },
             sources: resolved.sources,
             selection: resolved.selection,
             unanchored: resolved.unanchored,
@@ -214,17 +241,22 @@ impl Entry {
     }
 
     fn not_evaluated(outcome: &NotEvaluated, project: &Project) -> Result<Self, ExportError> {
-        let objects: Vec<&ObjectId> = outcome.object_id.iter().collect();
-        let resolved = Resolved::new(&objects, project)?;
+        let objects: Vec<&ObjectId> = outcome.object_id().into_iter().collect();
+        let resolved = Resolved::new(&objects, true, &outcome.scope, project)?;
         let reason = reason(&outcome.reason);
         let mut description = vec![
             outcome.message.trim().to_owned(),
             format!("Rule: {}", outcome.rule_id),
             format!("Reason: {reason}"),
         ];
-        match &outcome.object_id {
-            Some(object) => description.push(format!("Object: {object}")),
-            None => description.push("Object: none; the whole rule was not evaluated".to_owned()),
+        match &outcome.scope {
+            Scope::Object(object) => description.push(format!("Object: {object}")),
+            Scope::Source(source) => description.push(format!(
+                "Source: {source}; the rule was not evaluated for this source"
+            )),
+            Scope::Project => {
+                description.push("Object: none; the whole rule was not evaluated".to_owned());
+            }
         }
         Ok(Self {
             title: title(&outcome.message, &outcome.rule_id.to_string()),
@@ -276,9 +308,17 @@ struct Resolved {
 }
 
 impl Resolved {
-    fn new(objects: &[&ObjectId], project: &Project) -> Result<Self, ExportError> {
+    /// `anchored` says whether `objects` starts with the subject. Without one
+    /// nothing is selected, and so nothing is reported unanchored either.
+    fn new(
+        objects: &[&ObjectId],
+        anchored: bool,
+        scope: &Scope,
+        project: &Project,
+    ) -> Result<Self, ExportError> {
         let mut keys = Vec::new();
         let mut sources = BTreeSet::new();
+        sources.extend(scope.source().map(ToString::to_string));
         let mut selection = Vec::new();
         let mut unanchored = Vec::new();
         for (index, id) in objects.iter().enumerate() {
@@ -290,12 +330,14 @@ impl Resolved {
                 keys.push(global_id.to_owned());
                 // A viewpoint of only the related objects would show the
                 // reviewer the slab, not the wall that fails to rest on it.
-                if index == 0 || !selection.is_empty() {
+                if anchored && (index == 0 || !selection.is_empty()) {
                     selection.push(Component::ifc(global_id));
                 }
             } else {
                 keys.push(id.to_string());
-                unanchored.push((*id).clone());
+                if anchored {
+                    unanchored.push((*id).clone());
+                }
             }
         }
         Ok(Self {
@@ -314,6 +356,15 @@ fn title(message: &str, rule: &str) -> String {
         rule.to_owned()
     } else {
         message.to_owned()
+    }
+}
+
+/// Marks a scoped finding's GUID key apart from any object's.
+fn scope_marker(scope: &Scope) -> &'static str {
+    match scope {
+        Scope::Project => "project",
+        Scope::Source(_) => "source",
+        Scope::Object(_) => "object",
     }
 }
 

@@ -643,7 +643,7 @@ fn the_selection_is_the_walking_surface_profile() {
         &rule(),
     );
     assert_eq!(outcome.findings().len(), 1, "{:?}", outcome.findings());
-    assert_eq!(outcome.findings()[0].object_id, oid("slab-1"));
+    assert_eq!(outcome.findings()[0].object_id(), Some(&oid("slab-1")));
     let not_evaluated = outcome.not_evaluated_outcomes();
     assert_eq!(not_evaluated.len(), 1);
     assert_eq!(not_evaluated[0].object_id(), Some(&oid("slab-2")));

@@ -286,7 +286,7 @@ mod plan_coverage {
         let straddling = evaluation
             .findings()
             .iter()
-            .find(|finding| finding.object_id.local_id == "straddling")
+            .find(|finding| finding.object_id().unwrap().local_id == "straddling")
             .unwrap();
         assert_eq!(
             straddling.message,
@@ -295,7 +295,7 @@ mod plan_coverage {
         let outside = evaluation
             .findings()
             .iter()
-            .find(|finding| finding.object_id.local_id == "outside")
+            .find(|finding| finding.object_id().unwrap().local_id == "outside")
             .unwrap();
         assert!(
             outside.message.starts_with("at most 0 of"),

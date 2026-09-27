@@ -1257,3 +1257,129 @@ fn with_geometry_slab_stack_spacing_measures_real_elevations() {
     assert_eq!(findings.len(), 1, "{result:#}");
     assert_eq!(findings[0]["object_id"]["local_id"], "#26", "{result:#}");
 }
+
+#[test]
+fn an_empty_selection_is_a_source_finding_in_json_summary_listing_and_bcf() {
+    let case = Case::new("object-count");
+    let (definitions, ruleset) = case.count_packages();
+    let model = case.write("model.ifc", &ifc("0000000000000000000002", true));
+    let saved = case.path("result.json");
+    let bcf = case.path("issues.bcfzip");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--summary", "--report", saved.to_str().unwrap()])
+        .args(["--bcf", bcf.to_str().unwrap()])
+        .env("SOURCE_DATE_EPOCH", "1790416800")
+        .output()
+        .unwrap();
+    // No space is not a pass: a finding against the model itself.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(findings[0].get("object_id").is_none(), "{result:#}");
+    assert_eq!(findings[0]["source"]["document"], "model.ifc");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("no object matches the selection in source"),
+        "{result:#}"
+    );
+
+    let summary = stdout(&output);
+    assert!(
+        summary.starts_with("status: findings · 1 finding(s)"),
+        "{summary}"
+    );
+    assert!(summary.contains("spaces-exist"), "{summary}");
+    assert!(
+        !summary.contains("e.g."),
+        "no object to give as an example: {summary}"
+    );
+
+    let saved = saved.to_str().unwrap();
+    let listing = report(&[saved, "--rule", "spaces-exist", "--json"]);
+    assert_eq!(listing.status.code(), Some(0), "{}", stderr(&listing));
+    let listing: Value = serde_json::from_slice(&listing.stdout).unwrap();
+    let entry = &listing["entries"][0];
+    assert!(entry.get("object").is_none(), "{listing:#}");
+    assert_eq!(entry["scope"], "source model.ifc");
+    let text = stdout(&report(&[saved, "--rule", "spaces-exist"]));
+    assert!(
+        text.contains("[finding] error spaces-exist  (source model.ifc)"),
+        "{text}"
+    );
+    let by_source = report(&[saved, "--object", "model.ifc", "--json"]);
+    let by_source: Value = serde_json::from_slice(&by_source.stdout).unwrap();
+    assert_eq!(by_source["total"], 1, "{by_source:#}");
+
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    assert!(
+        archive.diagnostics().is_empty(),
+        "{:?}",
+        archive.diagnostics()
+    );
+    let topic = &archive.topics().next().unwrap().topic;
+    assert_eq!(topic.labels, ["spaces-exist"]);
+    assert!(
+        topic
+            .description
+            .as_deref()
+            .unwrap()
+            .contains("Source: ifc-step:model.ifc; no single object"),
+        "{:?}",
+        topic.description
+    );
+}
+
+impl Case {
+    /// The fixture packages with the rule swapped for "the model has a space".
+    fn count_packages(&self) -> (PathBuf, PathBuf) {
+        let definitions = self.definitions(true);
+        let mut definitions: Value =
+            serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+        definitions["objectTypes"]["axioval:example.ifc.space"] = json!({
+            "id": "axioval:example.ifc.space",
+            "name": {"default": "Space", "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IfcSpace"}],
+            "citations": [],
+        });
+        let parameter = |id: &str, kind: &str| {
+            json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": false, "allowedValues": [], "citations": []})
+        };
+        definitions["definitions"]["axioval:example.count"] = json!({
+            "id": "axioval:example.count",
+            "name": {"default": "Object count", "translations": {}},
+            "description": {"default": "The model has spaces.", "translations": {}},
+            "capability": "axioval:capability.object-count",
+            "parameters": {
+                "minimum": parameter("minimum", "integer"),
+                "maximum": parameter("maximum", "integer"),
+                "across_sources": parameter("across_sources", "boolean"),
+            },
+            "citations": [],
+            "tags": [],
+        });
+        let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let rule = &mut ruleset["root"]["rules"][0];
+        rule["id"] = json!("spaces-exist");
+        rule["definitionId"] = json!("axioval:example.count");
+        rule["parameters"] = json!({});
+        rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+            json!("axioval:example.ifc.space");
+        (
+            self.write("definitions.json", &definitions.to_string()),
+            self.write("ruleset.json", &ruleset.to_string()),
+        )
+    }
+}

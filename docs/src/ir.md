@@ -51,7 +51,28 @@ Every imported fact and computed evidence can reference its source record, adapt
 
 ## Reports
 
-`Report` keeps conclusive `findings` separate from `not_evaluated` outcomes. Every not-evaluated record identifies its rule, optionally identifies the affected object, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist.
+`Report` keeps conclusive `findings` separate from `not_evaluated` outcomes. Every not-evaluated record identifies its rule and its scope, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist.
+
+### Scope
+
+Every finding and not-evaluated outcome has a `Scope`: what it is about.
+
+| Scope | Meaning | Example |
+|---|---|---|
+| `Scope::Object(ObjectId)` | one object | "wall `#42` has no fire rating" |
+| `Scope::Source(SourceId)` | one source as a whole | "this model has no building" |
+| `Scope::Project` | every source together; for a not-evaluated outcome, the rule as a whole | "no storey anywhere has a fire compartment" |
+
+A result about the whole model has no object to be reported against, and reporting nothing would read as a pass. Scoped findings follow the same evidence rules as object findings: they are conclusive, carry exact source evidence for what decided them (sorted by source and locator, deduplicated), and may name `related` objects, such as the objects a count found. `Finding::new(rule, scope, severity, message)` with `with_evidence` and `with_related` builds one; `Finding::object_id()` and `NotEvaluated::object_id()` return the object when there is one.
+
+The runtime orders findings by rule, then scope, then message, and not-evaluated outcomes by rule, scope, reason and message. Scopes order project first, then sources, then objects, each by identity.
+
+**Serialized form.** The scope is written as the fields reports have always had, so a report without scoped entries serializes byte for byte as before:
+
+- an object finding has `object_id`; a source finding has `source` instead; a project finding has neither;
+- a not-evaluated outcome always has `object_id` (`null` unless it is about one object), and `source` only when it is about one source.
+
+A record naming both an object and a source is rejected: an object id already names its source. Readers written before scopes existed reject a finding without `object_id` or with `source`, so a report containing scoped entries needs a reader of this version.
 
 ## No source leakage
 

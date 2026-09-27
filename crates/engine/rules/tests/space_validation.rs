@@ -348,7 +348,7 @@ fn storey_residual_above_the_allowance_is_reported_against_the_storey() {
         )]),
     );
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, oid("storey-1"));
+    assert_eq!(outcome.findings()[0].object_id(), Some(&oid("storey-1")));
 
     let within = evaluate(
         Stub {

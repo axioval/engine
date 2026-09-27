@@ -286,7 +286,7 @@ fn flagged<'a>(report: &'a Report, rule: &str) -> Vec<&'a str> {
         .findings()
         .iter()
         .filter(|finding| finding.rule_id.to_string() == rule)
-        .map(|finding| finding.object_id.local_id.as_str())
+        .map(|finding| finding.object_id().unwrap().local_id.as_str())
         .collect()
 }
 
@@ -314,7 +314,7 @@ fn storeys_are_ordered_by_their_elevation_in_si() {
         .filter(|finding| finding.rule_id.to_string() == "storey-names")
         .map(|finding| {
             (
-                finding.object_id.local_id.as_str(),
+                finding.object_id().unwrap().local_id.as_str(),
                 finding.message.as_str(),
             )
         })
@@ -342,7 +342,7 @@ fn numbering_gaps_are_found_per_scope() {
         .filter(|finding| finding.rule_id.to_string() == "storey-numbering")
         .map(|finding| {
             (
-                finding.object_id.local_id.as_str(),
+                finding.object_id().unwrap().local_id.as_str(),
                 finding.message.as_str(),
             )
         })

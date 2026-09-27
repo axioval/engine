@@ -294,7 +294,7 @@ fn finding(
 ) -> Finding {
     Finding {
         rule_id: rule.id.clone(),
-        object_id: object.id.clone(),
+        scope: axioval_ir::Scope::Object(object.id.clone()),
         related: Vec::new(),
         severity: match rule.severity {
             axioval_ir::contract::Severity::Error => Severity::Error,

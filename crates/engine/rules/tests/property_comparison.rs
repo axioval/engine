@@ -263,7 +263,7 @@ fn related_each_uses_target_factor_and_emits_one_checked_object_finding() {
         }),
     );
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, checked.id);
+    assert_eq!(outcome.findings()[0].object_id(), Some(&checked.id));
     assert!(outcome.findings()[0].message.contains("candidates/b"));
     assert_eq!(
         outcome.findings()[0]
@@ -368,7 +368,7 @@ fn exact_empty_existential_does_not_require_property_service() {
     );
     assert!(outcome.not_evaluated_outcomes().is_empty());
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, checked.id);
+    assert_eq!(outcome.findings()[0].object_id(), Some(&checked.id));
 }
 
 #[test]
@@ -391,7 +391,7 @@ fn empty_at_least_one_is_a_finding_backed_by_completeness_evidence() {
         }),
     );
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, checked.id);
+    assert_eq!(outcome.findings()[0].object_id(), Some(&checked.id));
     assert_eq!(outcome.findings()[0].evidence[0].locator, "complete");
 }
 
@@ -425,7 +425,7 @@ fn missing_candidate_property_is_its_own_existential_finding() {
     );
     assert!(outcome.not_evaluated_outcomes().is_empty());
     assert_eq!(outcome.findings().len(), 1);
-    assert_eq!(outcome.findings()[0].object_id, candidate.id);
+    assert_eq!(outcome.findings()[0].object_id(), Some(&candidate.id));
     assert!(outcome.findings()[0].message.contains("absent"));
 }
 

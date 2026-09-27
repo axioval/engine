@@ -111,19 +111,24 @@ fn disagreement_is_reported_per_element_in_both_directions() {
     let declared_only = outcome
         .findings()
         .iter()
-        .find(|f| f.object_id == oid("w1"))
+        .find(|f| f.object_id() == Some(&oid("w1")))
         .expect("w1 declared but not derived");
     assert!(declared_only.message.contains("not on the"));
 
     let derived_only = outcome
         .findings()
         .iter()
-        .find(|f| f.object_id == oid("w3"))
+        .find(|f| f.object_id() == Some(&oid("w3")))
         .expect("w3 derived but not declared");
     assert!(derived_only.message.contains("not declared"));
 
     // w2 agrees and must not be reported.
-    assert!(outcome.findings().iter().all(|f| f.object_id != oid("w2")));
+    assert!(
+        outcome
+            .findings()
+            .iter()
+            .all(|f| f.object_id() != Some(&oid("w2")))
+    );
 }
 
 /// A model declaring nothing external while geometry finds walls is a real

@@ -380,7 +380,7 @@ mod scope {
             self.outcome
                 .findings()
                 .iter()
-                .map(|finding| finding.object_id.local_id.clone())
+                .map(|finding| finding.object_id().unwrap().local_id.clone())
                 .collect()
         }
     }

@@ -1894,3 +1894,305 @@ fn with_geometry_a_malformed_derived_relationship_is_not_evaluated() {
     assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
+
+/// Declares a definition's parameters as `(id, kind, required)`.
+/// A capability's full parameter signature as the registry declares it, so a
+/// definition keeps compiling when the capability gains optional parameters.
+fn registry_signature(capability: &str) -> Value {
+    let registry = axioval::default_registry().unwrap();
+    registry
+        .get(capability)
+        .unwrap()
+        .parameters()
+        .into_iter()
+        .map(|parameter| {
+            let id = parameter.name.clone();
+            (
+                id.clone(),
+                json!({"id": id, "name": {"default": id, "translations": {}},
+                       "kind": parameter.parameter_type.package_kind(),
+                       "required": parameter.required, "allowedValues": [], "citations": []}),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+fn signature(parameters: &[(&str, &str, bool)]) -> Value {
+    parameters
+        .iter()
+        .map(|(id, kind, required)| {
+            (
+                (*id).to_owned(),
+                json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+                       "required": required, "allowedValues": [], "citations": []}),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+impl Case {
+    /// Runs one rule of `capability` with geometry over `model`: the
+    /// fixture packages with the rule swapped for it. `types` binds object
+    /// types by `(id suffix, IFC name)`; `IsExternal` is always bound.
+    fn geometry_rule(
+        &self,
+        model: &str,
+        types: &[(&str, &str)],
+        capability: &str,
+        signature: &Value,
+        applicability: Value,
+        parameters: Value,
+    ) -> (Output, Value) {
+        let definitions = self.definitions(true);
+        let mut definitions: Value =
+            serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+        for (id, name) in types {
+            definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
+                "id": format!("axioval:example.ifc.{id}"),
+                "name": {"default": name, "translations": {}},
+                "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+                "citations": [],
+            });
+        }
+        definitions["properties"]["axioval:example.ifc.is-external"] = json!({
+            "id": "axioval:example.ifc.is-external",
+            "name": {"default": "IsExternal", "translations": {}},
+            "valueKind": "boolean",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IsExternal"}],
+            "citations": [],
+        });
+        definitions["definitions"]["axioval:example.under-test"] = json!({
+            "id": "axioval:example.under-test",
+            "name": {"default": "Under test", "translations": {}},
+            "description": {"default": "The capability under test.", "translations": {}},
+            "capability": capability,
+            "parameters": signature,
+            "citations": [],
+            "tags": [],
+        });
+        let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+        let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let rule = &mut ruleset["root"]["rules"][0];
+        rule["id"] = json!("under-test");
+        rule["definitionId"] = json!("axioval:example.under-test");
+        rule["parameters"] = parameters;
+        rule["applicability"]["groups"]["walls"]["selector"] = applicability;
+        let model = self.write("model.ifc", model);
+        let definitions = self.write("definitions.json", &definitions.to_string());
+        let ruleset = self.write("ruleset.json", &ruleset.to_string());
+        let saved = self.path("result.json");
+        let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .arg("check")
+            .arg("--model")
+            .arg(model)
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(["--geometry", "--report", saved.to_str().unwrap()])
+            .output()
+            .unwrap();
+        let result = std::fs::read_to_string(&saved)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or(Value::Null);
+        (output, result)
+    }
+}
+
+fn entity(id: &str) -> Value {
+    json!({"kind": "entityType", "objectType": format!("axioval:example.ifc.{id}"),
+           "includeSubtypes": true})
+}
+
+/// Rooms #16 (x 0..4) and #26 (x 4.2..8.2), every product 4 m deep in y.
+/// Internal wall #200 holds door #66 between the rooms and door #96 past
+/// the east face of #26; external wall #201 holds window #76 in the west
+/// facade of #16 and window #106 far from any room; wall #202, declaring no
+/// `IsExternal`, holds door #116. The walls have no body. Each door and
+/// window fills an opening of its own shape, #126 to #166.
+fn walls_with_openings() -> String {
+    let gid = |n: u32| format!("{n:0>22}");
+    let product = |first: u32, x: f64, height: f64, entity: &str| {
+        body(
+            first,
+            x,
+            0.1,
+            height,
+            &entity.replace("GID", &gid(first + 6)),
+        )
+    };
+    let door = "IFCDOOR('GID',$,$,$,$,#3,REP,$,2.1,4.,$,$,$)";
+    let window = "IFCWINDOW('GID',$,$,$,$,#3,REP,$,1.2,4.,$,$,$)";
+    let opening = "IFCOPENINGELEMENT('GID',$,$,$,$,#3,REP,$,.OPENING.)";
+    let mut data = String::new();
+    for (first, x) in [(10, 2.0), (20, 6.2)] {
+        data.push_str(&body(
+            first,
+            x,
+            4.0,
+            3.0,
+            &format!(
+                "IFCSPACE('{}',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)",
+                gid(first + 6)
+            ),
+        ));
+    }
+    // (element, its opening, x, entity, wall)
+    for (first, void, x, entity, wall) in [
+        (60, 120, 4.1, door, 200),
+        (70, 130, -0.1, window, 201),
+        (90, 140, 8.3, door, 200),
+        (100, 150, 12.0, window, 201),
+        (110, 160, 4.1, door, 202),
+    ] {
+        let height = if entity == window { 1.2 } else { 2.1 };
+        data.push_str(&product(first, x, height, entity));
+        data.push_str(&product(void, x, height, opening));
+        let _ = writeln!(
+            data,
+            "#{}=IFCRELVOIDSELEMENT('{}',$,$,$,#{wall},#{});\n\
+             #{}=IFCRELFILLSELEMENT('{}',$,$,$,#{},#{});",
+            void + 7,
+            gid(void + 7),
+            void + 6,
+            void + 8,
+            gid(void + 8),
+            void + 6,
+            first + 6,
+        );
+    }
+    for (wall, external) in [(200, Some(".F.")), (201, Some(".T.")), (202, None)] {
+        let _ = writeln!(data, "#{wall}=IFCWALL('{}',$,$,$,$,#3,$,$,$);", gid(wall));
+        if let Some(value) = external {
+            let [single, set, rel] = [10, 20, 30].map(|offset| wall + offset);
+            let _ = writeln!(
+                data,
+                "#{single}=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({value}),$);\n\
+                 #{set}=IFCPROPERTYSET('{}',$,'Pset_WallCommon',$,(#{single}));\n\
+                 #{rel}=IFCRELDEFINESBYPROPERTIES('{}',$,$,$,(#{wall}),#{set});",
+                gid(set),
+                gid(rel),
+            );
+        }
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {data}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+#[test]
+fn with_geometry_doors_and_windows_connect_the_spaces_their_wall_calls_for() {
+    let case = Case::new("geometry-opening-spaces");
+    let (output, result) = case.geometry_rule(
+        &walls_with_openings(),
+        &[
+            ("door", "IfcDoor"),
+            ("window", "IfcWindow"),
+            ("space", "IfcSpace"),
+        ],
+        "axioval:capability.opening-spaces",
+        &signature(&[
+            ("host_path", "stringList", true),
+            ("host_selector", "selector", true),
+            ("external_property", "propertyReference", true),
+            ("space_path", "stringList", true),
+            ("space_selector", "selector", false),
+        ]),
+        json!({"kind": "anyOf", "operands": [entity("door"), entity("window")]}),
+        json!({
+            "host_path": {"type": "stringList",
+                          "value": ["IfcRelFillsElement:backward", "IfcRelVoidsElement:backward"]},
+            "host_selector": {"type": "selector", "value": entity("wall")},
+            "external_property": {"type": "propertyReference",
+                                  "property": "axioval:example.ifc.is-external",
+                                  "propertySet": "axioval:example.ifc.pset-wall-common"},
+            "space_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+            "space_selector": {"type": "selector", "value": entity("space")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #66 connects both rooms and #76 opens #16 to the outside. The internal
+    // door #96 reaches #26 only, and the external window #106 no room.
+    let mut flagged = finding_ids(&result);
+    flagged.sort();
+    assert_eq!(flagged, ["#106", "#96"], "{result:#}");
+    let message = |id: &str| {
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| finding["object_id"]["local_id"] == id)
+            .and_then(|finding| finding["message"].as_str())
+            .unwrap()
+            .to_owned()
+    };
+    assert!(
+        message("#96").starts_with(
+            "relates to 1 space(s) via axioval:derived.adjacent-space; in an internal wall (#200)"
+        ),
+        "{result:#}"
+    );
+    assert!(
+        message("#106").starts_with("relates to 0 space(s)")
+            && message("#106").contains("in an external wall (#201)"),
+        "{result:#}"
+    );
+    // #116's wall does not declare IsExternal: not evaluated, never guessed.
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(
+        not_evaluated[0]["object_id"]["local_id"], "#116",
+        "{result:#}"
+    );
+}
+
+#[test]
+fn with_geometry_property_comparison_finds_components_in_the_same_derived_space() {
+    // Issue #43: `same_space` climbs the declared relationship to the
+    // nearest container, so a derived containment serves as a stated one.
+    let case = Case::new("geometry-same-derived-space");
+    let (output, result) = case.geometry_rule(
+        &rooms_without_containment(),
+        &[("space", "IfcSpace"), ("furniture", "IfcFurnishingElement")],
+        "axioval:capability.property-comparison",
+        &registry_signature("axioval:capability.property-comparison"),
+        entity("furniture"),
+        json!({
+            "compared_selector": {"type": "selector", "value": entity("furniture")},
+            "component_mode": {"type": "string", "value": "same_space"},
+            "container_selector": {"type": "selector", "value": entity("space")},
+            "relationship": {"type": "string", "value": "axioval:derived.contained-in-space"},
+            "direction": {"type": "string", "value": "forward"},
+            "quantifier": {"type": "string", "value": "count"},
+            "operator": {"type": "string", "value": "greater_or_equal"},
+            "target_number": {"type": "number", "value": 1.0},
+            "factor": {"type": "number", "value": 1.0},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #36 and #46 share room #16; #56 is alone in #26.
+    assert_eq!(finding_ids(&result), ["#56"], "{result:#}");
+    assert!(
+        result["report"]["findings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("count of compared components is 0"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

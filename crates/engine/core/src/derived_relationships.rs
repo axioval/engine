@@ -23,6 +23,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use axioval_ir::ObjectId;
+
 use crate::relationships::{
     CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
@@ -181,6 +183,93 @@ impl fmt::Display for Derivation {
     }
 }
 
+/// The face of a door, window or opening an `adjacent-space` probe starts
+/// from: along the element's through-thickness normal (`+`) or against it
+/// (`-`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AdjacentSide {
+    /// Along the normal, written `+`.
+    Positive,
+    /// Against the normal, written `-`.
+    Negative,
+}
+
+impl AdjacentSide {
+    /// The sign the evidence writes for this side.
+    #[must_use]
+    pub fn symbol(self) -> char {
+        match self {
+            Self::Positive => '+',
+            Self::Negative => '-',
+        }
+    }
+
+    /// The other face.
+    #[must_use]
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Positive => Self::Negative,
+            Self::Negative => Self::Positive,
+        }
+    }
+
+    fn from_symbol(symbol: char) -> Option<Self> {
+        match symbol {
+            '+' => Some(Self::Positive),
+            '-' => Some(Self::Negative),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for AdjacentSide {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
+}
+
+/// The side an `axioval:derived.adjacent-space` evidence locator records.
+///
+/// A provider of the adjacency derivation cites every face it probed, in
+/// one of two forms after the canonical identity (the derivation's name and
+/// its `;key=value` tolerances) and a colon:
+///
+/// - `{subject}->{space}:side={+|-}…`: the probe from that face of
+///   `subject` first entered `space`;
+/// - `{subject}:side={+|-}…:outside…`: the probe from that face entered no
+///   space within reach.
+///
+/// Free detail (a normal, a distance) may follow the sign. With `space`,
+/// this returns the side of the edge from `subject` to `space`; without, a
+/// side `subject` records as outside. `None` when the locator is no such
+/// record. Capabilities use it to tell a door with a space on each face from
+/// one with two spaces on the same face.
+#[must_use]
+pub fn adjacent_side(
+    locator: &str,
+    subject: &ObjectId,
+    space: Option<&ObjectId>,
+) -> Option<AdjacentSide> {
+    let rest = locator
+        .strip_prefix(DERIVED_RELATIONSHIP_PREFIX)?
+        .strip_prefix(ADJACENT_SPACE)?;
+    // Tolerances are `;key=number` pairs and never hold a colon.
+    let (tolerances, record) = rest.split_once(':')?;
+    if !(tolerances.is_empty() || tolerances.starts_with(';')) {
+        return None;
+    }
+    let head = match space {
+        Some(space) => format!("{subject}->{space}:side="),
+        None => format!("{subject}:side="),
+    };
+    let tail = record.strip_prefix(&head)?;
+    let side = AdjacentSide::from_symbol(tail.chars().next()?)?;
+    if space.is_none() && !tail.contains(":outside") {
+        return None;
+    }
+    Some(side)
+}
+
 /// Trusted provider of relationships derived from geometry.
 ///
 /// It answers exactly what a [`RelationshipSelectionService`] answers for a
@@ -323,6 +412,38 @@ mod tests {
                 .to_string(),
             "axioval:derived.overlapping-group-space;ratio=0.9;vertical=0"
         );
+    }
+
+    #[test]
+    fn adjacency_locators_record_the_side_of_each_space_and_each_outside_face() {
+        let source = axioval_ir::SourceId::new("ifc-step", "model.ifc").unwrap();
+        let door = ObjectId::new(source.clone(), "#76").unwrap();
+        let room = ObjectId::new(source.clone(), "#16").unwrap();
+        let other = ObjectId::new(source, "#26").unwrap();
+        let identity = "axioval:derived.adjacent-space;reach=1";
+        // The forms the geometry adapter writes.
+        let edge = format!("{identity}:{door}->{room}:side=+(1.000000,0.000000):entered=0.000000");
+        let outside = format!("{identity}:{door}:side=-(1.000000,0.000000):outside:reach=1");
+        assert_eq!(
+            adjacent_side(&edge, &door, Some(&room)),
+            Some(AdjacentSide::Positive)
+        );
+        assert_eq!(adjacent_side(&edge, &door, Some(&other)), None);
+        assert_eq!(adjacent_side(&edge, &door, None), None);
+        assert_eq!(
+            adjacent_side(&outside, &door, None),
+            Some(AdjacentSide::Negative)
+        );
+        assert_eq!(adjacent_side(&outside, &door, Some(&room)), None);
+        assert_eq!(adjacent_side(&outside, &room, None), None);
+        // Another derivation, or a scan locator, records no side.
+        let contained = format!(
+            "axioval:derived.contained-in-space;horizontal=0;vertical=0:{door}->{room}:side=+"
+        );
+        assert_eq!(adjacent_side(&contained, &door, Some(&room)), None);
+        let scan = format!("{identity}:derived-from:{door}:2 space(s)");
+        assert_eq!(adjacent_side(&scan, &door, None), None);
+        assert_eq!(AdjacentSide::Positive.opposite(), AdjacentSide::Negative);
     }
 
     #[test]

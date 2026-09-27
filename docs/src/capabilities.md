@@ -208,6 +208,28 @@ A traversal is either one `relationship` (with `direction` and `follow_chain`) o
 
 Every traversal parameter also accepts a derived relationship identity, answered from geometry rather than from what the model states: `axioval:derived.contained-in-space` (an element to the space containing it, or the nearest within `horizontal` and `vertical` tolerances), `axioval:derived.adjacent-space` (a door, window or opening to the spaces on each side of it) and `axioval:derived.overlapping-group-space` (a space to the larger spaces covering at least `ratio` of its footprint). Tolerances follow the name, for example `axioval:derived.contained-in-space;horizontal=0.3;vertical=0.5`. Edges run from the element to the space, so counting components per space is `related-count` from each space `backward`. The service needs a geometry adapter; see [typed host services](./services.md). An undecided derivation leaves the anchor not evaluated, never counted as unrelated.
 
+A derived identity holds a colon of its own, so in a `path` step only a trailing `:forward`, `:backward` or `:either` is read as the direction: `axioval:derived.adjacent-space;reach=1.5:forward` is one step.
+
+`property-comparison` in `same_space` mode takes a derived containment as its container relationship: `relationship` `axioval:derived.contained-in-space` with `direction` `forward` and a space `container_selector` compares each component with the others standing in the same space, whether or not the model states where they stand.
+
+### Openings and the spaces they connect
+
+`opening-spaces` requires each selected door, window or opening to relate to the spaces its host wall calls for: two, one on each side, in an internal wall; one in an external wall, its other side outside. Which kinds are checked is the rule's selection, so openings, doors and windows are separate rules or one `anyOf`.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `host_path` | `stringList` | Steps from the element to its host wall, as in `path`. With IFC, `IfcRelFillsElement:backward` then `IfcRelVoidsElement:backward` from a door or window, `IfcRelVoidsElement:backward` from an opening. |
+| `host_selector` | `selector` | Which reached objects are host walls. |
+| `external_property` | `propertyReference` | The host's boolean exposure, such as `IsExternal` in `Pset_WallCommon`, resolved through the property service. |
+| `space_path` | `stringList` | Steps from the element to its spaces: a relationship the model states (with IFC, `IfcRelSpaceBoundary:backward`) or `axioval:derived.adjacent-space`. |
+| `space_selector` | `selector` | Which reached objects count as spaces; every object by default. Optional. |
+
+A stated relationship is judged by count: exactly two spaces for an internal host, exactly one for an external one. The derived adjacency is also judged by side, from its evidence: an internal host needs one space on each face and a different one on each, so two spaces on the same face are reported rather than counted as connected; an external host needs its one space on one face and the other face recorded outside. A space the evidence places on no side is invalid evidence. The derived adjacency must then be the only `space_path` step, forward, or the declaration is invalid, since the sides it records are the checked element's.
+
+The element is not evaluated, never guessed internal, when its host does not declare the property (absent or null) or states a non-boolean, when hosts disagree, when no host is reached, and when a reached host or space is undecided and could change the count. A finding names the host and relates it and the spaces found.
+
+Every source holding a selected element or a host wall is also checked as a whole: a source in which no host wall is declared external, including one with none at all, is a finding against the source, relating the walls examined. A wall that does not declare the property might be the external one, so the source is then not evaluated instead.
+
 `relative-count` also has a table mode. `table` lists rows `R:P`, meaning "from R required objects on, at least P provided". The row with the largest R not above the required count applies. Beyond the last row, `additional_required` / `additional_provided` add P for every further R. Below the first row the table sets no requirement: the anchor or group is skipped, not extrapolated from zero. A table of increments alone applies them from zero. Parameters have no table type, so rows are text, and a malformed row is a declaration error.
 
 In ratio mode, `small_required_below` n and `small_provided` k, declared together, replace the ratio for small counts: a required count from 1 up to but excluding n is judged as `provided operator k`. "With fewer than four workplaces, at least one washbasin" is n = 4, k = 1 with `at_least`; "below ten workplaces nothing is required" is n = 10, k = 0. A required count of zero is always judged by the ratio. Neither applies in table mode.

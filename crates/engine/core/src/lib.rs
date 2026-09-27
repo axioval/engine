@@ -151,6 +151,27 @@ pub enum ParameterType {
     Table(&'static [TableColumn]),
 }
 impl ParameterType {
+    /// The kind's spelling in a definition package.
+    #[must_use]
+    pub fn package_kind(self) -> &'static str {
+        match self {
+            Self::Boolean => "boolean",
+            Self::Integer => "integer",
+            Self::Number => "number",
+            Self::String => "string",
+            Self::Quantity => "quantity",
+            Self::Enum => "enum",
+            Self::Date => "date",
+            Self::DateTime => "dateTime",
+            Self::Reference => "reference",
+            Self::ObjectTypeReference => "objectTypeReference",
+            Self::PropertyReference => "propertyReference",
+            Self::Selector => "selector",
+            Self::StringList => "stringList",
+            Self::ReferenceList => "referenceList",
+            Self::Table(_) => "table",
+        }
+    }
     fn accepts(self, value: &schema::ParameterValue) -> bool {
         matches!(
             (self, value),
@@ -444,8 +465,8 @@ pub use contact::{
     ContactSide, ContactTolerance,
 };
 pub use derived_relationships::{
-    DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
-    DerivedRelationshipServiceHandle,
+    AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
+    DerivedRelationshipServiceHandle, adjacent_side,
 };
 pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,

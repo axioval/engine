@@ -32,6 +32,9 @@ pub struct Model {
     edges: BTreeMap<String, Vec<(ObjectId, ObjectId)>>,
     /// Objects whose properties the source cannot answer.
     unreadable: BTreeSet<ObjectId>,
+    /// relationship -> (anchor, locator): further evidence an answer from
+    /// that anchor cites.
+    citations: BTreeMap<String, Vec<(ObjectId, String)>>,
 }
 
 impl Model {
@@ -63,6 +66,15 @@ impl Model {
             .entry(relationship.into())
             .or_default()
             .push((id(relating), id(related)));
+        self
+    }
+
+    /// Cites `locator` in every answer about `relationship` from `anchor`.
+    pub fn cite(mut self, relationship: &str, anchor: &str, locator: &str) -> Self {
+        self.citations
+            .entry(relationship.into())
+            .or_default()
+            .push((id(anchor), locator.into()));
         self
     }
 
@@ -185,14 +197,19 @@ impl RelationshipSelectionService for Model {
                 candidate != request.anchor() && request.candidate_universe().contains(candidate)
             })
             .collect();
-        CompleteRelationshipSelection::try_new(
-            request.clone(),
-            candidates,
-            vec![Evidence::exact(
-                source(),
-                format!("scan:{}", relationship.as_str()),
-            )],
-        )
+        let mut evidence = vec![Evidence::exact(
+            source(),
+            format!("scan:{}", relationship.as_str()),
+        )];
+        evidence.extend(
+            self.citations
+                .get(relationship.as_str())
+                .into_iter()
+                .flatten()
+                .filter(|(anchor, _)| anchor == request.anchor())
+                .map(|(_, locator)| Evidence::exact(source(), locator.clone())),
+        );
+        CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
     }
 }
 

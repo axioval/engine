@@ -2,10 +2,10 @@
 //! the semantic capabilities.
 
 use axioval_engine::{
-    AbsentEndPolicy, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
-    RuleContext, SemanticRelationship, TraversalDirection,
+    AbsentEndPolicy, CompiledRule, DERIVED_RELATIONSHIP_PREFIX, NotEvaluatedReason,
+    ParameterDescriptor, ParameterType, PropertyResolution, PropertyResolutionServiceHandle,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, RuleContext, SemanticRelationship, TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{
@@ -283,13 +283,22 @@ fn direction(value: Option<&str>) -> Result<TraversalDirection, Unavailable> {
 }
 
 /// The steps of a `path`, each `Relationship` or `Relationship:direction`.
+///
+/// A derived identity (`axioval:derived.…`) holds a colon of its own, so
+/// only a colon followed by a direction word ends it.
 fn path_steps(path: &[String]) -> Result<Vec<Step<'_>>, Unavailable> {
     if path.is_empty() {
         return Err(invalid("`path` has no steps"));
     }
     path.iter()
         .map(|step| {
-            let (relationship, stated) = match step.split_once(':') {
+            let derived = step.trim_start().starts_with(DERIVED_RELATIONSHIP_PREFIX);
+            let (relationship, stated) = match step.rsplit_once(':') {
+                Some((_, stated))
+                    if derived && !matches!(stated.trim(), "forward" | "backward" | "either") =>
+                {
+                    (step.as_str(), None)
+                }
                 Some((relationship, stated)) => (relationship, Some(stated)),
                 None => (step.as_str(), None),
             };
@@ -337,6 +346,13 @@ impl Traversal<'_> {
     /// Whether the declaration asks to follow chains of one relationship.
     pub(crate) fn follows_chain(&self) -> bool {
         self.follow_chain
+    }
+
+    /// Each step's relationship and direction, in order.
+    pub(crate) fn steps(&self) -> impl Iterator<Item = (&str, TraversalDirection)> {
+        self.steps
+            .iter()
+            .map(|step| (step.relationship, step.direction))
     }
 
     /// Objects of `scope` one `step` away from `from`, with the service's evidence.

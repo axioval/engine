@@ -68,6 +68,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   that is missing or disagrees across reached objects, when a row testing
   it could apply, and rows tied for most specific are not evaluated.
 
+- **Doors, windows and openings connect the spaces their wall calls for.**
+  The new capability `opening-spaces` requires each selected element to
+  relate to two spaces, one on each side, when its host wall is internal,
+  and to one space with the other side outside when it is external. The host
+  is reached through `host_path` (fills and voids) among `host_selector`
+  objects, and its exposure is the boolean `external_property` (such as
+  `IsExternal`) resolved through the property service; an undeclared,
+  null or non-boolean value leaves the element not evaluated. The spaces are
+  reached through `space_path`, a stated relationship such as
+  `IfcRelSpaceBoundary` or the derived `axioval:derived.adjacent-space`,
+  whose recorded sides must be opposite: two spaces on the same face are a
+  finding. A source in which no host wall is declared external is reported
+  against the source. The engine exports `AdjacentSide` and
+  `adjacent_side`, which read the side an adjacency evidence locator
+  records, and documents that locator form as the provider contract.
 - **Selecting objects by related objects.** The new selector kind
   `related` follows a relationship `path` from each candidate (steps
   `Relationship` or `Relationship:direction`, as in the `path` parameter)
@@ -447,6 +462,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A derived relationship was unusable as a `path` step.** A step was split
+  at its first colon, so `axioval:derived.adjacent-space` read as the
+  relationship `axioval` with the direction `derived.adjacent-space` and was
+  an invalid declaration. A derived step now ends only at a trailing
+  `:forward`, `:backward` or `:either`.
 - **Tessellated parts were measured as exact.** Axiolid contact, envelope,
   free-space, guard and space evidence is exact by contract, but it was
   reported for curved parts registered as tessellations. Each service now

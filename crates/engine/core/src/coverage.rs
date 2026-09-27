@@ -16,6 +16,16 @@
 //! Travel and sight stay within the subject's **free region**: its footprint
 //! less the footprints of the blockers. Blockers the request marks uncertain
 //! narrow only the inner bounds, since they may be absent.
+//!
+//! A request may **continue effects into connected spaces**: the free region
+//! then also holds the footprints of the connected spaces and of the doors
+//! and openings (passages) joining them, so a sprinkler in the next room
+//! travels or sees through an open doorway into the subject. The covered
+//! area is still clipped to the subject's footprint. Connections the
+//! request marks uncertain widen only the outer bounds, since they may be
+//! absent; a connection that cannot be measured leaves the upper bound at
+//! the whole footprint. A grown effect ignores walls already, so it takes
+//! no connections.
 
 use axioval_ir::{Evidence, ObjectId};
 
@@ -82,6 +92,8 @@ pub struct CoverageRequest {
     range: f64,
     sources: Vec<Participant>,
     blockers: Vec<Participant>,
+    connected: Vec<Participant>,
+    passages: Vec<Participant>,
 }
 
 impl CoverageRequest {
@@ -133,7 +145,69 @@ impl CoverageRequest {
             range: range_metres,
             sources,
             blockers,
+            connected: Vec::new(),
+            passages: Vec::new(),
         })
+    }
+
+    /// Continues travel and sight into the `connected` spaces through the
+    /// `passages` (doors and openings) joining them to the subject: the free
+    /// region becomes the union of the subject's, the connected spaces' and
+    /// the passages' footprints, less the blockers. A service that cannot
+    /// continue effects refuses such a request; it never ignores the
+    /// connections.
+    ///
+    /// Both lists are sorted by object; an object listed twice keeps its
+    /// certain listing.
+    ///
+    /// # Errors
+    ///
+    /// [`PlanAreaError::Unavailable`] for a grown reach, which ignores walls
+    /// and has nothing to continue through, or a connected space or passage
+    /// that is also the subject, a source, a blocker, or both.
+    pub fn with_connections(
+        mut self,
+        connected: Vec<Participant>,
+        passages: Vec<Participant>,
+    ) -> Result<Self, PlanAreaError> {
+        if self.reach == EffectReach::Grown && !(connected.is_empty() && passages.is_empty()) {
+            return Err(PlanAreaError::Unavailable(
+                "a grown effect ignores walls, so it continues through no connection".into(),
+            ));
+        }
+        let connected = merged(connected);
+        let passages = merged(passages);
+        let taken = |object: &ObjectId| {
+            *object == self.subject
+                || self
+                    .sources
+                    .iter()
+                    .chain(&self.blockers)
+                    .any(|participant| participant.object() == object)
+        };
+        if let Some(clash) = connected
+            .iter()
+            .chain(&passages)
+            .find(|participant| taken(participant.object()))
+        {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{} cannot be a connection and the subject, a source or a blocker",
+                clash.object()
+            )));
+        }
+        if let Some(both) = connected.iter().find(|space| {
+            passages
+                .iter()
+                .any(|passage| passage.object() == space.object())
+        }) {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{} is both a connected space and a passage",
+                both.object()
+            )));
+        }
+        self.connected = connected;
+        self.passages = passages;
+        Ok(self)
     }
 
     /// The object whose footprint is covered.
@@ -164,6 +238,20 @@ impl CoverageRequest {
     #[must_use]
     pub fn blockers(&self) -> &[Participant] {
         &self.blockers
+    }
+
+    /// The spaces effects continue into, sorted by object; empty unless
+    /// [`Self::with_connections`] added them.
+    #[must_use]
+    pub fn connected(&self) -> &[Participant] {
+        &self.connected
+    }
+
+    /// The doors and openings joining the connected spaces to the subject,
+    /// sorted by object.
+    #[must_use]
+    pub fn passages(&self) -> &[Participant] {
+        &self.passages
     }
 }
 
@@ -332,6 +420,44 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn connections_are_merged_and_refused_where_they_overlap() {
+        let one = |local, certain| Participant::new(id(local), certain);
+        let request = || {
+            CoverageRequest::try_new(
+                id("s"),
+                EffectReach::Travel,
+                5.0,
+                vec![one("a", true)],
+                vec![one("w", true)],
+            )
+            .unwrap()
+        };
+        let joined = request()
+            .with_connections(vec![one("n", false), one("n", true)], vec![one("d", false)])
+            .unwrap();
+        assert_eq!(joined.connected(), [one("n", true)]);
+        assert_eq!(joined.passages(), [one("d", false)]);
+        assert!(request().connected().is_empty() && request().passages().is_empty());
+        for (connected, passages) in [
+            (vec![one("s", true)], vec![]),
+            (vec![one("a", true)], vec![]),
+            (vec![], vec![one("w", false)]),
+            (vec![one("n", true)], vec![one("n", true)]),
+        ] {
+            assert!(request().with_connections(connected, passages).is_err());
+        }
+        let grown =
+            CoverageRequest::try_new(id("s"), EffectReach::Grown, 1.0, vec![], vec![]).unwrap();
+        assert!(
+            grown
+                .clone()
+                .with_connections(vec![one("n", true)], vec![])
+                .is_err()
+        );
+        assert!(grown.with_connections(vec![], vec![]).is_ok());
     }
 
     #[test]

@@ -16,7 +16,9 @@ use axioval_engine::{
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
 use axioval_rules::EffectiveCoverage;
-use common::{Model, id, kind, number, property, rule, selector, source, string, unevaluated};
+use common::{
+    Model, id, kind, number, property, rule, selector, source, string, strings, unevaluated,
+};
 
 const ID: &str = "axioval:capability.effective-coverage";
 
@@ -27,6 +29,9 @@ const ID: &str = "axioval:capability.effective-coverage";
 struct Plan {
     rects: BTreeMap<ObjectId, [f64; 4]>,
     effects: BTreeMap<ObjectId, ([f64; 4], [f64; 4])>,
+    /// A source's effect through the request's passages: surely through a
+    /// certain one, at most through any.
+    through: BTreeMap<ObjectId, ([f64; 4], [f64; 4])>,
     asked: Mutex<Vec<CoverageRequest>>,
 }
 
@@ -41,6 +46,13 @@ impl Plan {
     fn source(mut self, local: &str, rect: [f64; 4], inner: [f64; 4], outer: [f64; 4]) -> Self {
         self.effects.insert(id(local), (inner, outer));
         self.with(local, rect)
+    }
+
+    /// A source whose effect reaches through a door: `inner` surely when
+    /// the door surely is one, `outer` at most.
+    fn through(mut self, local: &str, inner: [f64; 4], outer: [f64; 4]) -> Self {
+        self.through.insert(id(local), (inner, outer));
+        self
     }
 
     fn rect(&self, object: &ObjectId) -> Result<[f64; 4], PlanAreaError> {
@@ -104,8 +116,18 @@ impl PlanAreaService for Plan {
         let plan = self.rect(request.subject())?;
         let (mut inner, mut outer) = (Vec::new(), Vec::new());
         let mut effects = Vec::new();
+        let passing = request.passages().iter().any(Participant::is_certain);
+        let passable = !request.passages().is_empty();
         for source in request.sources() {
-            let (sure, most) = self.effects[source.object()];
+            let (mut sure, mut most) = self.effects[source.object()];
+            if let Some((inner, outer)) = self.through.get(source.object()) {
+                if passing {
+                    sure = *inner;
+                }
+                if passable {
+                    most = *outer;
+                }
+            }
             let meets = if covered(plan, &[sure]) > 0.0 {
                 EffectMeets::Surely
             } else if covered(plan, &[most]) > 0.0 {
@@ -432,15 +454,271 @@ fn capacity_compares_the_summed_property_times_the_multiplier_with_the_area() {
                 .to_owned()
         )]
     );
-    // A source stating no units leaves the capacity undecided.
+    // A source stating no units is a missing value of its own, and leaves
+    // the capacity undecided.
     let evaluation = run_with(
         model(&plan).value("a", "Pset", "Units", PropertyValue::Integer(2)),
-        plan,
+        plan.clone(),
         &capacity(15.0),
     );
     assert_eq!(
+        common::findings(&evaluation),
+        [(
+            "r".to_owned(),
+            format!("missing value: {}'s Pset.Units is not stated", id("b"))
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [id("b")]);
+    assert_eq!(
         unevaluated(&evaluation),
         [("r".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // A value of another kind is no missing value, only undecided.
+    let evaluation = run_with(
+        with_units(model(&plan)).text("b", "Pset", "Units", "many"),
+        plan,
+        &capacity(15.0),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("r".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn capacity_multiplies_each_source_by_its_own_multiplier() {
+    let capacity = coverage(
+        "grown",
+        vec![
+            ("capacity_property", property(Some("Pset"), "Units")),
+            (
+                "capacity_multiplier_property",
+                property(Some("Pset"), "Serves"),
+            ),
+        ],
+    );
+    let stated = |model: Model, serves: f64| {
+        model
+            .value("a", "Pset", "Units", PropertyValue::Integer(2))
+            .value("a", "Pset", "Serves", PropertyValue::Decimal(10.0))
+            .value("b", "Pset", "Units", PropertyValue::Integer(1))
+            .value("b", "Pset", "Serves", PropertyValue::Decimal(serves))
+    };
+    // 2 × 10 + 1 × 25 = 45 m² for 40.
+    let plan = Arc::new(plan());
+    let evaluation = run_with(stated(model(&plan), 25.0), plan.clone(), &capacity);
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert!(
+        evaluation.not_evaluated_outcomes().is_empty(),
+        "{evaluation:#?}"
+    );
+    // 2 × 10 + 1 × 10 = 30 m².
+    let evaluation = run_with(stated(model(&plan), 10.0), plan.clone(), &capacity);
+    assert_eq!(
+        common::findings(&evaluation),
+        [(
+            "r".to_owned(),
+            "capacity: Pset.Units times Pset.Serves summed over the sources reaching it is 30 m² \
+             for a footprint of 40 m²"
+                .to_owned()
+        )]
+    );
+    // A multiplier not stated is a missing value too.
+    let evaluation = run_with(
+        model(&plan)
+            .value("a", "Pset", "Units", PropertyValue::Integer(2))
+            .value("a", "Pset", "Serves", PropertyValue::Decimal(10.0))
+            .value("b", "Pset", "Units", PropertyValue::Integer(1)),
+        plan,
+        &capacity,
+    );
+    assert_eq!(
+        common::findings(&evaluation),
+        [(
+            "r".to_owned(),
+            format!("missing value: {}'s Pset.Serves is not stated", id("b"))
+        )]
+    );
+}
+
+#[test]
+fn the_area_may_be_read_from_a_property() {
+    let stated = coverage(
+        "grown",
+        vec![("area_property", property(Some("Pset"), "Area"))],
+    );
+    // `a` covers 20 m² of the footprint; the room states 20 m², all covered.
+    let plan = Arc::new(without(plan(), "b"));
+    let area = |value: f64| PropertyValue::Quantity {
+        value,
+        dimension: axioval_ir::QuantityDimension::Area,
+    };
+    let evaluation = run_with(
+        model(&plan).value("r", "Pset", "Area", area(20.0)),
+        plan.clone(),
+        &stated,
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert!(
+        evaluation.not_evaluated_outcomes().is_empty(),
+        "{evaluation:#?}"
+    );
+    // A stated 40 m² fails, and the message names it.
+    let evaluation = run_with(
+        model(&plan).value("r", "Pset", "Area", PropertyValue::Decimal(40.0)),
+        plan.clone(),
+        &stated,
+    );
+    assert_eq!(
+        common::findings(&evaluation),
+        [(
+            "r".to_owned(),
+            "0.5 of the stated area (Pset.Area) (20 of 40 m²) lies within the sources' effect \
+             areas (grown by 3 m); required at least 0.9"
+                .to_owned()
+        )]
+    );
+    // Not stated: a missing value, and nothing else checked.
+    let evaluation = run_with(model(&plan), plan.clone(), &stated);
+    assert_eq!(
+        common::findings(&evaluation),
+        [(
+            "r".to_owned(),
+            "missing value: its Pset.Area is not stated".to_owned()
+        )]
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+    // A length is no area.
+    let evaluation = run_with(
+        model(&plan).value(
+            "r",
+            "Pset",
+            "Area",
+            PropertyValue::Quantity {
+                value: 20.0,
+                dimension: axioval_ir::QuantityDimension::Length,
+            },
+        ),
+        plan,
+        &stated,
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("r".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// Room `r` and, east of it behind a 0.2 m wall, space `n` holding
+/// sprinkler `s`; door `d` joins them. Through the door, `s` covers the
+/// whole room.
+fn next_door() -> (Plan, Model) {
+    let plan = Plan::default()
+        .with("r", [0.0, 0.0, 10.0, 4.0])
+        .with("n", [10.2, 0.0, 20.0, 4.0])
+        .with("d", [10.0, 1.5, 10.2, 2.5])
+        .with("x", [8.0, 0.0, 8.2, 1.0])
+        .source(
+            "s",
+            [10.9, 1.9, 11.1, 2.1],
+            [11.0, 0.0, 12.0, 4.0],
+            [11.0, 0.0, 12.0, 4.0],
+        )
+        .through("s", [0.0, 0.0, 12.0, 4.0], [0.0, 0.0, 12.0, 4.0]);
+    let model = Model::default()
+        .object("r", "room")
+        .object("n", "space")
+        .object("d", "door")
+        .object("x", "wall")
+        .object("s", "device")
+        .edge("bounds", "d", "r")
+        .edge("bounds", "d", "n");
+    (plan, model)
+}
+
+fn propagating(mode: &str) -> CompiledRule {
+    coverage(
+        mode,
+        vec![
+            ("access_path", strings(&["bounds:forward"])),
+            ("door_selector", selector(kind("door"))),
+            ("blockers", selector(kind("wall"))),
+        ],
+    )
+}
+
+#[test]
+fn an_effect_propagates_through_a_door_into_the_next_room() {
+    // On its own the room holds no sprinkler.
+    let (plan, model) = next_door();
+    let evaluation = run_with(model, Arc::new(plan), &coverage("travel", vec![]));
+    assert_eq!(common::flagged(&evaluation), ["r"]);
+
+    // Through the door the sprinkler next door covers it.
+    let (plan, model) = next_door();
+    let plan = Arc::new(plan);
+    let evaluation = run_with(model, plan.clone(), &propagating("travel"));
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert!(
+        evaluation.not_evaluated_outcomes().is_empty(),
+        "{evaluation:#?}"
+    );
+    let asked = plan.asked.lock().unwrap();
+    assert_eq!(asked[0].connected(), [Participant::new(id("n"), true)]);
+    assert_eq!(asked[0].passages(), [Participant::new(id("d"), true)]);
+    // With connections, a blocker within range of the room is sent too.
+    assert_eq!(asked[0].blockers(), [Participant::new(id("x"), true)]);
+    drop(asked);
+
+    // A door that might not be one widens only the upper bound.
+    let (plan, model) = next_door();
+    let evaluation = run_with(model.unreadable("d"), Arc::new(plan), &{
+        coverage(
+            "visible",
+            vec![
+                ("access_path", strings(&["bounds:forward"])),
+                ("door_selector", selector(stated_or(kind("hatch"), "Door"))),
+                ("sources", selector(kind("device"))),
+            ],
+        )
+    });
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("r".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_door_whose_spaces_cannot_be_read_leaves_the_upper_bound_open() {
+    // `b` covers the east half surely; door `e`, whose adjacency records
+    // no face, might let more in.
+    let plan = without(plan(), "a");
+    let model = model(&plan)
+        .object("e", "door")
+        .edge("axioval:derived.adjacent-space", "e", "r");
+    let evaluation = run_with(
+        model,
+        Arc::new(plan),
+        &coverage(
+            "travel",
+            vec![
+                ("access_path", strings(&["axioval:derived.adjacent-space"])),
+                ("door_selector", selector(kind("door"))),
+            ],
+        ),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("r".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("a door or opening may join more spaces"),
+        "{evaluation:#?}"
     );
 }
 
@@ -452,6 +730,23 @@ fn a_bad_declaration_is_not_evaluated() {
         vec![("capacity_multiplier", number(2.0))],
         vec![("minimum_ratio", number(1.5))],
         vec![("mode", string("sideways"))],
+        vec![("access_path", strings(&["bounds:forward"]))],
+        vec![
+            ("access_path", strings(&["bounds:forward"])),
+            ("door_selector", selector(kind("door"))),
+        ],
+        vec![
+            ("capacity_property", property(Some("Pset"), "Units")),
+            ("capacity_multiplier", number(2.0)),
+            (
+                "capacity_multiplier_property",
+                property(Some("Pset"), "Serves"),
+            ),
+        ],
+        vec![(
+            "capacity_multiplier_property",
+            property(Some("Pset"), "Serves"),
+        )],
     ] {
         let evaluation = run(plan(), &coverage("grown", extra));
         assert_eq!(

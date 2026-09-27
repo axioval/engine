@@ -35,7 +35,10 @@
 //! outside the bands lies between the two. A band bounded by a tessellated
 //! footprint refuses; its hull is not bounded here.
 
+use std::collections::BTreeMap;
+
 use axiolid_core::Point2;
+use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Ring};
 use axioval_engine::{
     CoverageEvidence, CoverageRequest, GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService,
@@ -75,13 +78,45 @@ pub(crate) struct Footprint {
 pub struct AxiolidPlanAreaService {
     geometry: AxiolidGeometry,
     source: SourceId,
+    /// Exact voids of bodiless openings, or `None` when unmeasured.
+    voids: BTreeMap<ObjectId, Option<TriMesh>>,
 }
 
 impl AxiolidPlanAreaService {
     /// Creates a service over the supplied geometry.
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self { geometry, source }
+        Self {
+            geometry,
+            source,
+            voids: BTreeMap::new(),
+        }
+    }
+
+    /// The exact void of an opening the geometry declares bodiless, so an
+    /// effect can continue through it into a connected space.
+    #[must_use]
+    pub fn with_opening_void(mut self, opening: ObjectId, mesh: TriMesh) -> Self {
+        self.voids.insert(opening, Some(mesh));
+        self
+    }
+
+    /// An opening whose void has no exact mesh: an effect is never continued
+    /// through it, and a coverage it may widen keeps its upper bound at the
+    /// whole footprint.
+    #[must_use]
+    pub fn with_unmeasured_opening_void(mut self, opening: ObjectId) -> Self {
+        self.voids.insert(opening, None);
+        self
+    }
+
+    /// The exact void of a bodiless opening, or why there is none.
+    pub(crate) fn void(&self, opening: &ObjectId) -> Result<&TriMesh, String> {
+        match self.voids.get(opening) {
+            Some(Some(mesh)) => Ok(mesh),
+            Some(None) => Err(format!("the void of {opening} was not measured")),
+            None => Err(format!("{opening} has neither a body nor a void")),
+        }
     }
 
     /// Whether the host declared the object bodiless.

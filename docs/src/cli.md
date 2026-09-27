@@ -455,6 +455,13 @@ the void of every bodiless `IfcOpeningElement`, so a doorless opening's
 clearance is placed too. An opening whose void could not be meshed leaves the
 spaces it opens into not evaluated.
 
+Effective coverage continues effects through doors and openings the same
+way: the bridge hands the plan-area service the exact void of every bodiless
+`IfcOpeningElement`, so a sprinkler's travel or sight passes a doorless
+opening into the next room. A void that is not exact, or could not be
+meshed, is never passed through, and a coverage it might widen keeps its
+upper bound at the whole room.
+
 Facade areas (`measure: facade`) look for the interior in every `IfcSpace`:
 a face looking into a space is an inner face. A room the model does not
 represent by an `IfcSpace` looks like the outside, so facade areas are only as

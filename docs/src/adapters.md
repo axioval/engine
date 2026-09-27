@@ -394,6 +394,13 @@ distance less the radius exceeds it; other cells are split, up to seven
 times and 4096 queries per effect, and the rest count towards the outer
 bound only. The free region is the subject's footprint less the blockers'
 footprints: all of them for inner bounds, the certain ones for outer bounds.
+A request's connections join the free region first: the connected spaces'
+and passages' footprints (a bodiless opening's through the void the host
+registered with `with_opening_void`), the certain ones for inner bounds and
+all for outer bounds. Travel is then walked over the joined region but its
+cells are judged only on the subject's part of it. A connection that is
+tessellated, unmeasured or has neither body nor void is left out, and the
+covered area's upper bound stays at the whole footprint.
 A centre outside the free region reaches none of it; one on its boundary is
 unmeasured. A travel effect is the union of the cells in range. Effects are
 regions, united and clipped to the footprint by region operations; the

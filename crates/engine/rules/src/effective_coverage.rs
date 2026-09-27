@@ -17,7 +17,10 @@ use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 use crate::pairs::{reason as proximity_reason, refuse_all};
 use crate::plan_area::{Verdict, judge, shown, unavailable};
 use crate::selection::select_objects;
-use crate::support::{Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve};
+use crate::space_access::{AccessDeclaration, AccessIndex};
+use crate::support::{
+    Parameters, PropertyRef, Resolved, Unavailable, display, finding, invalid, resolve, undefined,
+};
 
 const NAME: &str = "effective-coverage";
 
@@ -38,22 +41,35 @@ const NAME: &str = "effective-coverage";
 ///
 /// The free region is the element's footprint less the footprints of the
 /// objects `blockers` picks (travel and sight only); a source whose centre
-/// lies outside it reaches none of it. The union of the effect areas,
-/// clipped to the footprint and divided by the footprint's area, must reach
+/// lies outside it reaches none of it. With `access_path` (and
+/// `door_selector`, `opening_selector`, `space_selector`, read as
+/// `space-connection` reads them), travel and sight continue into the
+/// spaces the element's doors and openings join it to: the free region
+/// also holds their footprints and the doors' and openings', so a
+/// sprinkler in the next room covers the element through an open doorway.
+/// The union of the effect areas, clipped to the footprint and divided by
+/// the footprint's area (or the area `area_property` states), must reach
 /// `minimum_ratio`.
 ///
-/// With `capacity_property` and `capacity_multiplier`, a second check
-/// compares the summed property of the sources whose effect meets the
-/// footprint, times the multiplier, with the footprint's area: extinguisher
-/// rating units times the floor area one unit serves must reach the room's
-/// area. A value is read as a number, or a quantity in its SI unit.
+/// With `capacity_property` and `capacity_multiplier` (a constant) or
+/// `capacity_multiplier_property` (read on each source), a second check
+/// compares the summed products of the sources whose effect meets the
+/// footprint with the element's area: extinguisher rating units times the
+/// floor area one unit serves must reach the room's area. A value is read
+/// as a number, or a quantity in its SI unit.
 ///
 /// Areas are intervals: the effect areas are bracketed between inner and
 /// outer bounds. A source whose selection or touch is undecided counts only
 /// towards the upper bound, a blocker whose selection is undecided only
 /// narrows the lower bound, and a source whose effect or extent cannot be
-/// measured leaves the upper bound at the whole footprint. A ratio
-/// straddling the minimum is not evaluated.
+/// measured leaves the upper bound at the whole footprint; so does a door
+/// or opening whose spaces cannot be read. A ratio straddling the minimum
+/// is not evaluated.
+///
+/// A value that is not stated (absent, null or blank) is a finding of its
+/// own, starting `missing value:`: the element's `area_property`, then
+/// checked no further, or the capacity or multiplier of a source that
+/// surely contributes. A value of another kind is not evaluated.
 pub struct EffectiveCoverage;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -83,6 +99,19 @@ impl Mode {
     }
 }
 
+/// What each source's capacity is multiplied by.
+#[derive(Clone, Copy)]
+enum Multiplier<'a> {
+    Constant(f64),
+    Property(PropertyRef<'a>),
+}
+
+#[derive(Clone, Copy)]
+struct Capacity<'a> {
+    property: PropertyRef<'a>,
+    multiplier: Multiplier<'a>,
+}
+
 struct Config<'a> {
     sources: &'a Selector,
     blockers: Option<&'a Selector>,
@@ -90,7 +119,9 @@ struct Config<'a> {
     range: f64,
     touch: f64,
     minimum: f64,
-    capacity: Option<(PropertyRef<'a>, f64)>,
+    capacity: Option<Capacity<'a>>,
+    area: Option<PropertyRef<'a>>,
+    access: Option<AccessDeclaration<'a>>,
 }
 
 impl RuleCapability for EffectiveCoverage {
@@ -108,6 +139,15 @@ impl RuleCapability for EffectiveCoverage {
             ParameterDescriptor::optional("touch_tolerance", ParameterType::Quantity),
             ParameterDescriptor::optional("capacity_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("capacity_multiplier", ParameterType::Number),
+            ParameterDescriptor::optional(
+                "capacity_multiplier_property",
+                ParameterType::PropertyReference,
+            ),
+            ParameterDescriptor::optional("area_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("access_path", ParameterType::StringList),
+            ParameterDescriptor::optional("door_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("space_selector", ParameterType::Selector),
         ]
     }
 
@@ -131,6 +171,7 @@ impl RuleCapability for EffectiveCoverage {
                 return refuse_all(&elements, evaluation, &reason, &message);
             }
         };
+        let index = config.access.as_ref().map(|access| access.index(context));
         let mut evaluation = evaluation;
         for element in elements {
             if let Some((reason, message)) = near.unbounded.get(&element.id) {
@@ -146,6 +187,7 @@ impl RuleCapability for EffectiveCoverage {
                 config: &config,
                 services: &services,
                 near: &near,
+                index: index.as_ref(),
                 object: element,
             }
             .checks();
@@ -205,23 +247,13 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
     if touch.is_some() && mode != Mode::Touching {
         return Err(invalid("touch_tolerance applies only to mode `touching`"));
     }
-    let capacity = match (
-        parameters.property("capacity_property")?,
-        parameters.number("capacity_multiplier")?,
-    ) {
-        (None, None) => None,
-        (Some(property), Some(multiplier)) if multiplier.is_finite() && multiplier > 0.0 => {
-            Some((property, multiplier))
-        }
-        (Some(_), Some(_)) => {
-            return Err(invalid("capacity_multiplier must be a positive number"));
-        }
-        _ => {
-            return Err(invalid(
-                "capacity_property and capacity_multiplier are declared together",
-            ));
-        }
-    };
+    let access = AccessDeclaration::parse(parameters)?;
+    if access.is_some() && matches!(mode, Mode::Grown | Mode::Touching) {
+        return Err(invalid(
+            "access_path applies only to modes `travel` and `visible`: a grown effect ignores \
+             walls already",
+        ));
+    }
     Ok(Config {
         sources: parameters.required_selector("sources")?,
         blockers,
@@ -229,8 +261,40 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
         range,
         touch: touch.unwrap_or(0.0),
         minimum,
-        capacity,
+        capacity: capacity(parameters)?,
+        area: parameters.property("area_property")?,
+        access,
     })
+}
+
+fn capacity<'a>(parameters: &Parameters<'a>) -> Result<Option<Capacity<'a>>, Unavailable> {
+    let property = parameters.property("capacity_property")?;
+    let constant = parameters.number("capacity_multiplier")?;
+    let per_source = parameters.property("capacity_multiplier_property")?;
+    let multiplier = match (constant, per_source) {
+        (None, None) => None,
+        (Some(multiplier), None) if multiplier.is_finite() && multiplier > 0.0 => {
+            Some(Multiplier::Constant(multiplier))
+        }
+        (Some(_), None) => return Err(invalid("capacity_multiplier must be a positive number")),
+        (None, Some(property)) => Some(Multiplier::Property(property)),
+        (Some(_), Some(_)) => {
+            return Err(invalid(
+                "declare capacity_multiplier or capacity_multiplier_property, not both",
+            ));
+        }
+    };
+    match (property, multiplier) {
+        (None, None) => Ok(None),
+        (Some(property), Some(multiplier)) => Ok(Some(Capacity {
+            property,
+            multiplier,
+        })),
+        _ => Err(invalid(
+            "capacity_property is declared together with capacity_multiplier or \
+             capacity_multiplier_property",
+        )),
+    }
 }
 
 struct Services<'a> {
@@ -267,7 +331,8 @@ struct Near {
     blockers: BTreeSet<ObjectId>,
     /// Sources within reach of each element, picked or undecided.
     reaching: BTreeMap<ObjectId, Vec<ObjectId>>,
-    /// Blockers overlapping each element in plan, picked or undecided.
+    /// Blockers that may matter to each element, picked or undecided: those
+    /// overlapping it in plan, or with connections those within range.
     blocking: BTreeMap<ObjectId, Vec<ObjectId>>,
     /// Sources whose extent cannot be read: they may reach any element.
     blind: BTreeSet<ObjectId>,
@@ -352,6 +417,13 @@ impl Near {
             Mode::Touching => config.touch,
             _ => config.range,
         };
+        // A walk or a sight line reaching the element within the range
+        // stays within the range of it, so only blockers there can cut it.
+        let blocker_margin = if config.access.is_some() {
+            config.range
+        } else {
+            0.0
+        };
         let pairs = |counterparts: &[ObjectBounds], margin: f64| {
             projected_candidate_pairs(
                 &element_bounds,
@@ -374,7 +446,7 @@ impl Near {
         };
         Ok(Self {
             reaching: pairs(&source_bounds, margin)?,
-            blocking: pairs(&blocker_bounds, 0.0)?,
+            blocking: pairs(&blocker_bounds, blocker_margin)?,
             sources,
             blockers,
             blind,
@@ -387,39 +459,97 @@ impl Near {
 /// The finding of one check, or `None` when it passes.
 type Check = Result<Option<(String, Vec<Evidence>, Vec<ObjectId>)>, Unavailable>;
 
+/// A value read from an object.
+enum Read {
+    Value(f64, Vec<Evidence>),
+    /// Not stated: absent, null or blank.
+    Missing(String, Vec<Evidence>),
+    Unknown(String),
+}
+
+/// The area the share and the capacity are measured against.
+struct Area {
+    lower: f64,
+    upper: f64,
+    /// How messages name it.
+    named: String,
+    evidence: Vec<Evidence>,
+}
+
+/// The coverage request, the connections' evidence, and why the covered
+/// area may be larger than measured.
+struct Asked {
+    request: CoverageRequest,
+    notes: Vec<String>,
+    /// Whether the upper bound must stay at the whole footprint.
+    open: bool,
+    evidence: Vec<Evidence>,
+}
+
 struct Element<'s, 'a> {
     context: &'s RuleContext<'a>,
     config: &'s Config<'s>,
     services: &'s Services<'a>,
     near: &'s Near,
+    index: Option<&'s AccessIndex>,
     object: &'s Object,
 }
 
 impl Element<'_, '_> {
     fn checks(&self) -> Vec<Check> {
-        let (request, mut notes) = match self.request() {
-            Ok(request) => request,
+        let stated = match self.config.area {
+            None => None,
+            Some(property) => match self.read(&self.object.id, property, true) {
+                Read::Value(value, evidence) => Some((property, value, evidence)),
+                Read::Missing(message, evidence) => {
+                    return vec![Ok(Some((message, evidence, Vec::new())))];
+                }
+                Read::Unknown(why) => {
+                    return vec![Err((NotEvaluatedReason::IncompleteEvidence, why))];
+                }
+            },
+        };
+        let asked = match self.request() {
+            Ok(asked) => asked,
             Err(error) => return vec![Err(error)],
         };
-        let measured = match self.services.areas.measure_coverage(&request) {
+        let measured = match self.services.areas.measure_coverage(&asked.request) {
             Ok(measured) => measured,
             Err(error) => return vec![Err(unavailable(error))],
         };
+        let mut asked = asked;
         for (source, meets) in measured.effects() {
             if let EffectMeets::Unmeasured(reason) = meets {
-                notes.push(format!("the effect of {source} is unmeasured: {reason}"));
+                asked
+                    .notes
+                    .push(format!("the effect of {source} is unmeasured: {reason}"));
             }
         }
-        let mut checks = vec![self.coverage(&request, &measured, &notes)];
-        if let Some((property, multiplier)) = self.config.capacity {
-            checks.push(self.capacity(&request, &measured, property, multiplier));
+        let area = if let Some((property, value, evidence)) = stated {
+            Area {
+                lower: value,
+                upper: value,
+                named: format!("the stated area ({property})"),
+                evidence,
+            }
+        } else {
+            let footprint = measured.footprint();
+            Area {
+                lower: footprint.lower_square_metres(),
+                upper: footprint.upper_square_metres(),
+                named: "the footprint".to_owned(),
+                evidence: vec![footprint.evidence().clone()],
+            }
+        };
+        let mut checks = vec![self.coverage(&asked, &measured, &area)];
+        if let Some(capacity) = self.config.capacity {
+            checks.extend(self.capacity(&asked, &measured, &area, capacity));
         }
         checks
     }
 
-    /// The coverage request, and why the covered area may be larger than
-    /// measured.
-    fn request(&self) -> Result<(CoverageRequest, Vec<String>), Unavailable> {
+    /// The coverage request, with the element's connections.
+    fn request(&self) -> Result<Asked, Unavailable> {
         let own = &self.object.id;
         let mut notes = Vec::new();
         let blind = self.near.blind.len();
@@ -452,7 +582,7 @@ impl Element<'_, '_> {
                 Participant::new(blocker, certain)
             })
             .collect();
-        let request = CoverageRequest::try_new(
+        let mut request = CoverageRequest::try_new(
             own.clone(),
             self.config.mode.reach(),
             self.config.range,
@@ -460,7 +590,36 @@ impl Element<'_, '_> {
             blockers,
         )
         .map_err(unavailable)?;
-        Ok((request, notes))
+        let mut open = !self.near.blind.is_empty();
+        let mut evidence = Vec::new();
+        if let Some(index) = self.index {
+            let (joined, unknown) = index.connections(own);
+            if !unknown.is_empty() {
+                open = true;
+                notes.extend(
+                    unknown
+                        .into_iter()
+                        .map(|why| format!("a door or opening may join more spaces: {why}")),
+                );
+            }
+            let (mut spaces, mut passages) = (Vec::new(), Vec::new());
+            for connection in joined {
+                if connection.certain {
+                    evidence.extend(connection.evidence);
+                }
+                spaces.push(Participant::new(connection.space, connection.certain));
+                passages.push(Participant::new(connection.via, connection.certain));
+            }
+            request = request
+                .with_connections(spaces, passages)
+                .map_err(unavailable)?;
+        }
+        Ok(Asked {
+            request,
+            notes,
+            open,
+            evidence,
+        })
     }
 
     /// Whether a source's footprint touches the element's: `None` when the
@@ -487,38 +646,34 @@ impl Element<'_, '_> {
         }
     }
 
-    fn coverage(
-        &self,
-        request: &CoverageRequest,
-        measured: &CoverageEvidence,
-        notes: &[String],
-    ) -> Check {
+    fn coverage(&self, asked: &Asked, measured: &CoverageEvidence, area: &Area) -> Check {
         let footprint = measured.footprint();
         let covered = measured.covered();
-        let whole = (
-            footprint.lower_square_metres(),
-            footprint.upper_square_metres(),
-        );
         let (lower, mut upper) = (covered.lower_square_metres(), covered.upper_square_metres());
-        if !self.near.blind.is_empty() {
-            upper = whole.1;
+        if asked.open {
+            upper = footprint.upper_square_metres();
         }
         let lower = if self.near.blind_blockers.is_empty() {
             lower
         } else {
             0.0
         };
-        let share = ratio((lower, upper), whole);
-        let evidence: Vec<Evidence> = measured.evidence().into_iter().cloned().collect();
+        let share = ratio((lower, upper), (area.lower, area.upper));
+        let mut evidence: Vec<Evidence> = measured.evidence().into_iter().cloned().collect();
+        if self.config.area.is_some() {
+            evidence.extend(area.evidence.iter().cloned());
+        }
+        evidence.extend(asked.evidence.iter().cloned());
         let what = format!(
-            "{} of the footprint ({} of {} m²) lies within the sources' effect areas ({} by {} m)",
+            "{} of {} ({} of {} m²) lies within the sources' effect areas ({} by {} m)",
             shown(share.0, share.1),
+            area.named,
             shown(lower, upper),
-            shown(whole.0, whole.1),
+            shown(area.lower, area.upper),
             self.config.mode.name(),
             self.config.range,
         );
-        let mut unknown = notes.to_vec();
+        let mut unknown = asked.notes.clone();
         if !self.near.blind_blockers.is_empty() {
             unknown.push(format!(
                 "{} blocker(s) have no readable extent, so they may block it",
@@ -529,13 +684,13 @@ impl Element<'_, '_> {
             Verdict::Pass => Ok(None),
             Verdict::Fail(bound) => {
                 let mut message = format!("{what}; required {bound}");
-                if request.sources().is_empty() {
+                if asked.request.sources().is_empty() {
                     message.push_str("; no source reaches it");
                 }
                 Ok(Some((
                     message,
                     evidence,
-                    contributing(request, measured, true),
+                    contributing(&asked.request, measured, true),
                 )))
             }
             Verdict::Undecided(bound) => {
@@ -549,54 +704,82 @@ impl Element<'_, '_> {
     }
 
     /// The summed capacity of the sources whose effect meets the footprint,
-    /// times the multiplier, against the footprint's area.
+    /// each times its multiplier, against the element's area; and a
+    /// missing-value finding per surely contributing source that states no
+    /// capacity or multiplier.
     fn capacity(
         &self,
-        request: &CoverageRequest,
+        asked: &Asked,
         measured: &CoverageEvidence,
-        property: PropertyRef<'_>,
-        multiplier: f64,
-    ) -> Check {
+        area: &Area,
+        capacity: Capacity<'_>,
+    ) -> Vec<Check> {
+        let mut checks = Vec::new();
         let mut lower = 0.0;
-        let mut upper = if self.near.blind.is_empty() {
-            0.0
-        } else {
-            f64::INFINITY
-        };
-        let mut evidence: Vec<Evidence> = vec![measured.footprint().evidence().clone()];
+        let mut upper = if asked.open { f64::INFINITY } else { 0.0 };
+        let mut evidence: Vec<Evidence> = area.evidence.clone();
         let mut unknown: Vec<String> = Vec::new();
-        let sure = contributing(request, measured, true);
-        for source in contributing(request, measured, false) {
+        let sure = contributing(&asked.request, measured, true);
+        for source in contributing(&asked.request, measured, false) {
             let certain = sure.contains(&source);
-            match self.value(&source, property) {
-                Ok((value, found)) => {
+            let factor = match capacity.multiplier {
+                Multiplier::Constant(multiplier) => Read::Value(multiplier, Vec::new()),
+                Multiplier::Property(property) => self.read(&source, property, false),
+            };
+            match (self.read(&source, capacity.property, false), factor) {
+                (Read::Value(value, found), Read::Value(factor, cited)) => {
                     evidence.extend(found);
-                    upper += value;
+                    evidence.extend(cited);
+                    upper += value * factor;
                     if certain {
-                        lower += value;
+                        lower += value * factor;
                     }
                 }
-                Err(why) => {
+                (value, factor) => {
                     upper = f64::INFINITY;
-                    unknown.push(why);
+                    for read in [value, factor] {
+                        match read {
+                            Read::Value(..) => {}
+                            Read::Missing(message, cited) => {
+                                if certain {
+                                    checks.push(Ok(Some((
+                                        message.clone(),
+                                        cited,
+                                        vec![source.clone()],
+                                    ))));
+                                }
+                                unknown.push(message);
+                            }
+                            Read::Unknown(why) => unknown.push(why),
+                        }
+                    }
                 }
             }
         }
-        let footprint = measured.footprint();
-        let (need_low, need_high) = (
-            footprint.lower_square_metres(),
-            footprint.upper_square_metres(),
-        );
-        let (supplied_low, supplied_high) = (lower * multiplier, upper * multiplier);
+        let (need_low, need_high) = (area.lower, area.upper);
+        let against = if self.config.area.is_some() {
+            area.named.as_str()
+        } else {
+            "a footprint"
+        };
+        let summed = match capacity.multiplier {
+            Multiplier::Constant(multiplier) => format!(
+                "{} summed over the sources reaching it, times {multiplier},",
+                capacity.property
+            ),
+            Multiplier::Property(multiplier) => format!(
+                "{} times {multiplier} summed over the sources reaching it",
+                capacity.property
+            ),
+        };
         let what = format!(
-            "capacity: {property} summed over the sources reaching it, times {multiplier}, is {} \
-             m² for a footprint of {} m²",
-            shown(supplied_low, supplied_high),
+            "capacity: {summed} is {} m² for {against} of {} m²",
+            shown(lower, upper),
             shown(need_low, need_high),
         );
-        if supplied_low >= need_high {
+        let check = if lower >= need_high {
             Ok(None)
-        } else if supplied_high < need_low {
+        } else if upper < need_low {
             Ok(Some((what, evidence, sure)))
         } else {
             let mut message = format!("{what}, which cannot be decided");
@@ -604,37 +787,58 @@ impl Element<'_, '_> {
                 let _ = write!(message, "; {note}");
             }
             Err((NotEvaluatedReason::IncompleteEvidence, message))
-        }
+        };
+        checks.insert(0, check);
+        checks
     }
 
-    /// A source's capacity as a non-negative number, with its evidence.
-    fn value(
-        &self,
-        source: &ObjectId,
-        property: PropertyRef<'_>,
-    ) -> Result<(f64, Vec<Evidence>), String> {
-        let object = self
-            .context
-            .project
-            .object(source)
-            .ok_or_else(|| format!("{source} is not in the project"))?;
-        let resolved = resolve(self.context, object, property)
-            .map_err(|(_, message)| format!("{property} of {source}: {message}"))?;
-        let value = match resolved.value() {
+    /// A non-negative number an object states: a number, or a quantity in
+    /// its SI unit, which must be an `area`.
+    fn read(&self, holder: &ObjectId, property: PropertyRef<'_>, area: bool) -> Read {
+        let Some(object) = self.context.project.object(holder) else {
+            return Read::Unknown(format!("{holder} is not in the project"));
+        };
+        let resolved = match resolve(self.context, object, property) {
+            Ok(resolved) => resolved,
+            Err((_, message)) => {
+                return Read::Unknown(format!("{property} of {holder}: {message}"));
+            }
+        };
+        let cited = resolved.evidence();
+        let value = match &resolved {
+            Resolved::Absent(_) => None,
+            Resolved::Present(stated) => Some(&stated.value),
+        };
+        if undefined(value) {
+            let what = if *holder == self.object.id {
+                "its".to_owned()
+            } else {
+                format!("{holder}'s")
+            };
+            return Read::Missing(
+                format!("missing value: {what} {property} is not stated"),
+                cited,
+            );
+        }
+        let number = match value {
             Some(PropertyValue::Integer(value)) => crate::support::exact_f64(*value),
-            Some(PropertyValue::Decimal(value) | PropertyValue::Quantity { value, .. }) => {
+            Some(PropertyValue::Decimal(value)) => Some(*value),
+            Some(PropertyValue::Quantity { value, dimension })
+                if !area || *dimension == QuantityDimension::Area =>
+            {
                 Some(*value)
             }
             _ => None,
         }
-        .filter(|value| value.is_finite() && *value >= 0.0)
-        .ok_or_else(|| {
-            format!(
-                "{source} states no non-negative {property} ({})",
-                display(resolved.value())
-            )
-        })?;
-        Ok((value, resolved.evidence()))
+        .filter(|value| value.is_finite() && *value >= 0.0);
+        match number {
+            Some(number) => Read::Value(number, cited),
+            None => Read::Unknown(format!(
+                "{holder} states no non-negative {}{property} ({})",
+                if area { "area " } else { "" },
+                display(value)
+            )),
+        }
     }
 }
 

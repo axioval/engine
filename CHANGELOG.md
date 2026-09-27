@@ -24,6 +24,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   finding (`PRIORITY_HIGH`, `PRIORITY_NORMAL`, `PRIORITY_LOW`). A
   not-evaluated outcome's topic has none: no severity was decided. Every
   archive with findings gains the element; GUIDs are unchanged.
+- **Effective coverage through connected spaces, per-source multipliers,
+  stated areas and missing values.** (#126) `effective-coverage` in
+  `travel` and `visible` takes `access_path` with `door_selector`,
+  `opening_selector` and `space_selector` (as `space-connection` reads
+  them): effects continue through the element's doors and openings into
+  the spaces they join, clipped to the element. `CoverageRequest` gains
+  `with_connections` (connected spaces and passages, each certain or not);
+  the Axiolid adapter joins their footprints, a bodiless opening's through
+  the void `AxiolidPlanAreaService::with_opening_void` registers, to the
+  free region, and the CLI registers the exact voids of opening elements.
+  A room covered only by a sprinkler in the next room through an open
+  doorway passes. `capacity_multiplier_property` reads each source's own
+  multiplier, `area_property` the element's area instead of its
+  footprint's, and a value not stated is a finding of its own starting
+  `missing value:`. **Breaking:** definitions bound to `effective-coverage`
+  must declare the six new optional parameters; a source stating no
+  capacity is now also a `missing value:` finding.
 - **Exit-separation flags read from several places in order.** (#121)
   `exit-separation` takes `flag_sources`, a table of property (with its
   set) and path rows read in order (the space, then its storey, then its

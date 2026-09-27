@@ -25,11 +25,21 @@
 //! certain ones for the outer. A source centre outside the free region
 //! covers none of it; one on its boundary is unmeasured.
 //!
+//! A request's connections join the free region: the footprints of the
+//! connected spaces and passages, the certain ones for the inner bounds and
+//! all for the outer, before the blockers are taken away. A bodiless
+//! passage joins through the void the host registered for it. A connection
+//! that is tessellated, unmeasured or has neither body nor void is left out
+//! of both, and the covered area's upper bound stays at the whole
+//! footprint, since it might have widened the reach.
+//!
 //! Only exact meshes are measured. A tessellated subject or blocker refuses
 //! the request; a tessellated or unmeasured source leaves its effect
 //! unmeasured, which keeps the covered area's upper bound at the whole
 //! footprint. The overlay snaps its output to a grid (axiolid/kernel#173),
 //! so areas carry that rounding, as every plan area here does.
+
+use std::fmt::Write as _;
 
 use axiolid_core::{Point2, Tolerance};
 use axiolid_overlay::{Polygon, Region, Ring, union_soup};
@@ -39,6 +49,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId};
 
+use crate::geometry::triangles;
 use crate::plan_area::{AxiolidPlanAreaService, tolerance};
 use crate::planar::{footprint_polygons, polygon_moments, ring_area};
 use crate::walkable::{Plan, trapezoids};
@@ -94,9 +105,13 @@ pub(crate) fn measure(
         return Err(unavailable(format!("{subject} has no plan footprint")));
     }
     let overlay = |error| unavailable(format!("the coverage of {subject}: {error:?}"));
+    let mut unmeasured = false;
     let (free_inner, free_outer) = match request.reach() {
         EffectReach::Grown => (Region::empty(), Region::empty()),
         EffectReach::Travel | EffectReach::Visible => {
+            let (joined_inner, joined_outer, cut) = joined(service, request, &footprint, tolerance)
+                .map_err(|error| unavailable(format!("the coverage of {subject}: {error}")))?;
+            unmeasured |= cut;
             let (mut all, mut certain) = (Region::empty(), Region::empty());
             for blocker in request.blockers() {
                 if service.has_no_body(blocker.object()) {
@@ -109,11 +124,26 @@ pub(crate) fn measure(
                 }
             }
             (
-                footprint.difference(&all, tolerance).map_err(overlay)?,
-                footprint.difference(&certain, tolerance).map_err(overlay)?,
+                joined_inner.difference(&all, tolerance).map_err(overlay)?,
+                joined_outer
+                    .difference(&certain, tolerance)
+                    .map_err(overlay)?,
             )
         }
     };
+    // With connections, travel is walked over the joined region but judged
+    // only on the subject's part of it, where the covered area is measured.
+    let connected = !(request.connected().is_empty() && request.passages().is_empty());
+    let judged = |free: &Region| -> Result<Option<Region>, PlanAreaError> {
+        if connected && request.reach() == EffectReach::Travel {
+            free.intersection(&footprint, tolerance)
+                .map(Some)
+                .map_err(overlay)
+        } else {
+            Ok(None)
+        }
+    };
+    let (judged_inner, judged_outer) = (judged(&free_inner)?, judged(&free_outer)?);
     let range = request.range_metres();
     let clipped = |effect: &Region| {
         effect
@@ -123,18 +153,27 @@ pub(crate) fn measure(
     };
     let mut inner_union = Region::empty();
     let mut outer_union = Region::empty();
-    let mut unmeasured = false;
     let mut effects = Vec::with_capacity(request.sources().len());
     for source in request.sources() {
         let object = source.object();
         let effect = match request.reach() {
             EffectReach::Grown => grown(service, object, range, tolerance),
             reach => centre(service, object, tolerance).and_then(|centre| {
-                let one = |free: &Region, inner: bool| match reach {
-                    EffectReach::Travel => travel(free, centre, range, inner, tolerance),
+                let one = |free: &Region, judged: Option<&Region>, inner: bool| match reach {
+                    EffectReach::Travel => travel(
+                        free,
+                        judged.unwrap_or(free),
+                        centre,
+                        range,
+                        inner,
+                        tolerance,
+                    ),
                     _ => visible(free, centre, range, inner, tolerance),
                 };
-                Ok((one(&free_inner, true)?, one(&free_outer, false)?))
+                Ok((
+                    one(&free_inner, judged_inner.as_ref(), true)?,
+                    one(&free_outer, judged_outer.as_ref(), false)?,
+                ))
             }),
         }
         .and_then(|(inner, outer)| {
@@ -177,16 +216,25 @@ pub(crate) fn measure(
     } else {
         union_area(&outer_union)?.clamp(lower, area)
     };
-    let locator = format!(
-        "coverage:{subject}:{}:{range}:{}",
-        request.reach().as_str(),
-        request
-            .sources()
-            .iter()
-            .map(|source| source.object().to_string())
+    let listed = |list: &[axioval_engine::Participant]| {
+        list.iter()
+            .map(|participant| participant.object().to_string())
             .collect::<Vec<_>>()
             .join(",")
+    };
+    let mut locator = format!(
+        "coverage:{subject}:{}:{range}:{}",
+        request.reach().as_str(),
+        listed(request.sources())
     );
+    if !(request.connected().is_empty() && request.passages().is_empty()) {
+        let _ = write!(
+            locator,
+            ":into={}:via={}",
+            listed(request.connected()),
+            listed(request.passages())
+        );
+    }
     #[allow(clippy::float_cmp)]
     let exact = lower == upper;
     let covered = PlanArea::try_new(
@@ -204,6 +252,48 @@ pub(crate) fn measure(
         Evidence::exact(subject.source.clone(), format!("footprint:{subject}")),
     )?;
     CoverageEvidence::try_new(subject.clone(), footprint, covered, effects)
+}
+
+/// The subject's footprint joined with its connections: with the certain
+/// ones (inner) and with every one (outer), and whether one could not be
+/// measured and was left out.
+fn joined(
+    service: &AxiolidPlanAreaService,
+    request: &CoverageRequest,
+    footprint: &Region,
+    tolerance: Tolerance,
+) -> Result<(Region, Region, bool), String> {
+    let (mut inner, mut outer) = (footprint.clone(), footprint.clone());
+    let mut cut = false;
+    for connection in request.connected().iter().chain(request.passages()) {
+        let Ok(region) = connection_region(service, connection.object(), tolerance) else {
+            cut = true;
+            continue;
+        };
+        let failed = |error| format!("joining {}: {error:?}", connection.object());
+        outer = outer.union(&region, tolerance).map_err(failed)?;
+        if connection.is_certain() {
+            inner = inner.union(&region, tolerance).map_err(failed)?;
+        }
+    }
+    Ok((inner, outer, cut))
+}
+
+/// A connected space's or passage's exact footprint: its body's, or for a
+/// bodiless opening the void the host registered.
+fn connection_region(
+    service: &AxiolidPlanAreaService,
+    object: &ObjectId,
+    tolerance: Tolerance,
+) -> Result<Region, String> {
+    if service.has_no_body(object) {
+        let mesh = service.void(object)?;
+        let polygons = footprint_polygons(&triangles(mesh), tolerance)
+            .ok_or_else(|| format!("the footprint of the void of {object} cannot be computed"))?;
+        return Region::new(polygons, tolerance)
+            .map_err(|error| format!("the void of {object}: {error:?}"));
+    }
+    source_region(service, object, tolerance)?.ok_or_else(|| format!("{object} has no body"))
 }
 
 /// A source's exact footprint as a region; `None` for a bodiless source.
@@ -365,10 +455,12 @@ fn visible(
         .map_err(|error| format!("the view within range: {error:?}"))
 }
 
-/// The part of the free region within `range` of travel from the centre:
-/// surely (`inner`) or possibly.
+/// The part of `judged`, a part of the free region, within `range` of
+/// travel from the centre through the free region: surely (`inner`) or
+/// possibly.
 fn travel(
     free: &Region,
+    judged: &Region,
     centre: Point2,
     range: f64,
     inner: bool,
@@ -380,7 +472,7 @@ fn travel(
     let map = distance_map(free.polygons(), &[], &[centre])
         .map_err(|error| format!("the travel distances from the centre: {error:?}"))?;
     let mut cells: Vec<([Point2; 3], u32)> = Vec::new();
-    for polygon in free.polygons() {
+    for polygon in judged.polygons() {
         for piece in trapezoids(&Plan::piece(polygon.clone())) {
             let points = &piece.outer.points;
             for index in 1..points.len().saturating_sub(1) {

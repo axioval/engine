@@ -1,8 +1,8 @@
 //! Direct access between spaces, and from a space to the outside, through
 //! the doors and openings on their boundaries.
 //!
-//! Shared by `space-connection` and `space-distance`. Each door or opening
-//! reaches the spaces it connects through `access_path`: a relationship the
+//! Shared by `space-connection`, `space-distance` and `effective-coverage`.
+//! Each door or opening reaches the spaces it connects through `access_path`: a relationship the
 //! model states (such as `IfcRelSpaceBoundary` backward, from the element to
 //! the spaces it bounds) or `axioval:derived.adjacent-space`, whose evidence
 //! records the face of the element each space lies on and which face opens
@@ -155,6 +155,15 @@ pub(crate) struct Entrances {
     pub(crate) sure: Vec<(ObjectId, Vec<Evidence>)>,
     /// Possibly an entrance, with why it is not sure.
     pub(crate) maybe: Vec<(ObjectId, String)>,
+}
+
+/// A door or opening joining a space to another.
+pub(crate) struct Connection {
+    pub(crate) via: ObjectId,
+    pub(crate) space: ObjectId,
+    /// Whether `via` is surely a door or opening.
+    pub(crate) certain: bool,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 /// Whether a space opens directly to the outside.
@@ -430,6 +439,48 @@ impl AccessIndex {
             }
         }
         Partners { linked, unknown }
+    }
+
+    /// Every door or opening joining `space` to another space, with that
+    /// space and whether the element surely is one, and why elements whose
+    /// spaces cannot be read might join more. Shared with
+    /// `effective-coverage`, whose effects continue through them.
+    pub(crate) fn connections(&self, space: &ObjectId) -> (Vec<Connection>, Vec<String>) {
+        let mut joined = Vec::new();
+        let mut unknown = Vec::new();
+        for element in &self.elements {
+            let member = element.member(AccessType::Any);
+            if member == Member::No {
+                continue;
+            }
+            let reach = match &element.reach {
+                Ok(reach) => reach,
+                Err(why) => {
+                    unknown.push(why.clone());
+                    continue;
+                }
+            };
+            let Some(side) = reach
+                .spaces
+                .iter()
+                .find(|(reached, _)| reached == space)
+                .map(|(_, side)| *side)
+            else {
+                continue;
+            };
+            for (other, other_side) in &reach.spaces {
+                if other == space || (self.sided && *other_side == side) {
+                    continue;
+                }
+                joined.push(Connection {
+                    via: element.id.clone(),
+                    space: other.clone(),
+                    certain: member == Member::Yes,
+                    evidence: reach.evidence.clone(),
+                });
+            }
+        }
+        (joined, unknown)
     }
 
     /// The doors and openings of the `access` type that reach `space`:

@@ -242,6 +242,7 @@ pub fn attach(
         space_service(&parsed, &geometry, &source, &kinds, &is_a),
         linear_service(&geometry, &voids),
         boundary_service(&backend, &parsed, &geometry, &kinds, &is_a),
+        plan_area_service(&geometry, &source, &voids),
     );
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
     let derived = derived_service(&geometry, &kinds, &is_a, voids);
@@ -260,10 +261,11 @@ fn register(
     session: EvidenceSession,
     snapshots: &[SourceSnapshot],
     geometry: AxiolidGeometry,
-    (space, shelves, boundaries): (
+    (space, shelves, boundaries, plan_areas): (
         AxiolidSpaceService,
         AxiolidLinearQuantityService,
         AxiolidBoundaryCoverageService,
+        AxiolidPlanAreaService,
     ),
     envelope: AxiolidEnvelopeMembershipService,
     (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
@@ -305,10 +307,8 @@ fn register(
         // request; the bridge hands over the voids of bodiless openings.
         .with_host_service(LinearQuantityServiceHandle::new(Arc::new(shelves)), bound)?
         .with_host_service(
-            PlanAreaServiceHandle::new(Arc::new(AxiolidPlanAreaService::new(
-                geometry.clone(),
-                source.clone(),
-            ))),
+            // Effects continue through the voids of bodiless openings.
+            PlanAreaServiceHandle::new(Arc::new(plan_areas)),
             bound,
         )?
         .with_host_service(
@@ -477,6 +477,22 @@ fn derived_service(
         };
     }
     service
+}
+
+/// Plan areas over `geometry`, with the exact voids of bodiless openings so
+/// an effect can continue through them; any other void is unmeasured.
+fn plan_area_service(
+    geometry: &AxiolidGeometry,
+    source: &SourceId,
+    voids: &[(ObjectId, Void)],
+) -> AxiolidPlanAreaService {
+    voids.iter().fold(
+        AxiolidPlanAreaService::new(geometry.clone(), source.clone()),
+        |service, (id, void)| match void {
+            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((_, false)) | Err(_) => service.with_unmeasured_opening_void(id.clone()),
+        },
+    )
 }
 
 /// Shelf lengths over `geometry`, with the voids of bodiless openings so a

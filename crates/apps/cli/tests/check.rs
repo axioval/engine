@@ -6762,6 +6762,61 @@ fn with_geometry_rooms_are_judged_by_how_much_of_them_their_sprinklers_reach() {
     );
 }
 
+/// Rooms #19 (x 0 to 4) and #29 (x 4.2 to 8.2), both 4 m deep, joined by
+/// the bodiless opening #39 at y 3 to 4, with sprinkler #49 in #29 at
+/// (6.2, 3.5).
+fn rooms_with_a_sprinkler_next_door() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let opening = "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)";
+    let sprinkler = "IFCFIRESUPPRESSIONTERMINAL('GID',$,$,$,$,PL,REP,$,.SPRINKLER.)";
+    ifc4_model(&format!(
+        "{}{}{}{}",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [6.2, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(30, [4.1, 3.5, 0.0], [0.2, 1.0, 2.1], opening),
+        placed_box(40, [6.2, 3.5, 2.6], [0.2, 0.2, 0.1], sprinkler),
+    ))
+}
+
+#[test]
+fn with_geometry_an_effect_continues_through_an_opening_into_the_next_room() {
+    let case = Case::new("geometry-effective-coverage-connected");
+    let types = [
+        ("space", "IfcSpace"),
+        ("opening", "IfcOpeningElement"),
+        ("sprinkler", "IfcFireSuppressionTerminal"),
+    ];
+    let signature = registry_signature("axioval:capability.effective-coverage");
+    let check = |parameters: serde_json::Value| {
+        case.geometry_rule(
+            &rooms_with_a_sprinkler_next_door(),
+            &types,
+            "axioval:capability.effective-coverage",
+            &signature,
+            entity("space"),
+            parameters,
+        )
+    };
+    let mut parameters = json!({
+        "sources": {"type": "selector", "value": entity("sprinkler")},
+        "mode": {"type": "string", "value": "travel"},
+        "range": {"type": "quantity", "value": 3, "unit": "m"},
+        "minimum_ratio": {"type": "number", "value": 0.05},
+    });
+    // On its own, #19 holds no sprinkler.
+    let (output, result) = check(parameters.clone());
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#19", "{result:#}");
+    // Through the opening, #49's travel reaches more than a twentieth of it.
+    parameters["access_path"] = json!({"type": "stringList",
+                                      "value": ["axioval:derived.adjacent-space"]});
+    parameters["opening_selector"] = json!({"type": "selector", "value": entity("opening")});
+    let (output, result) = check(parameters);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
 /// STEP lines for space boundaries, numbered from 1000 up.
 struct Boundaries {
     next: u32,

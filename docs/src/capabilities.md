@@ -1158,19 +1158,29 @@ The rule has no transparency threshold of its own: leave glazing and other see-t
 | `blockers` | `selector` | With `travel` and `visible`: objects whose footprints travel and sight go round. |
 | `touch_tolerance` | `quantity` | With `touching`: how far apart in plan a source may stand and still touch (default 0). |
 | `capacity_property`, `capacity_multiplier` | `propertyReference`, `number` | Together: also require the summed property of the sources reaching the element, times the multiplier, to reach its area. |
+| `capacity_multiplier_property` | `propertyReference` | Instead of `capacity_multiplier`: each source's own multiplier, read on it. |
+| `area_property` | `propertyReference` | The element's area, read on it, instead of its footprint's: a number in m² or an area quantity. |
+| `access_path`, `door_selector`, `opening_selector`, `space_selector` | | With `travel` and `visible`: continue effects into the spaces the element's doors and openings join it to, read as for `space-connection` (below). |
 
 - `grown`: a source's footprint grown by `range` in every plan direction.
 - `touching`: the same, counting only sources whose footprint touches the element's, within `touch_tolerance`.
 - `travel`: the points of the element's **free region** within `range` of travel from the centre of the source's footprint, going round blockers.
 - `visible`: the points of the free region the source's centre sees, no farther than `range`.
 
-The free region is the element's footprint less the blockers' footprints; a source whose centre lies outside it reaches none of it. The union of the effect areas, clipped to the footprint and divided by its area, must reach `minimum_ratio`: a finding says `0.5052 of the footprint (20.2083 of 40 m²) lies within the sources' effect areas (visible by 20 m); required at least 0.9` and relates the sources that surely reach the element.
+The free region is the element's footprint less the blockers' footprints; a source whose centre lies outside it reaches none of it. The union of the effect areas, clipped to the footprint and divided by its area (or the area `area_property` states), must reach `minimum_ratio`: a finding says `0.5052 of the footprint (20.2083 of 40 m²) lies within the sources' effect areas (visible by 20 m); required at least 0.9`, or `… of the stated area (Pset.NetFloorArea) (…)`, and relates the sources that surely reach the element.
+
+**Connected spaces.** With `access_path`, effects continue into connected spaces: each door or opening `door_selector` or `opening_selector` picks that reaches the element along `access_path` joins it to the other spaces it reaches (on its other face, with the derived adjacency). The free region then also holds the footprints of those spaces and of the doors and openings (for a bodiless opening, its void), less the blockers, so a sprinkler in the next room travels or sees through an open doorway into the element. The covered area is still clipped to the element's own footprint, space by space. A door or opening whose selection is undecided joins only the upper bound; one whose spaces cannot be read might join anything, and so might one the geometry cannot measure: either leaves the upper bound at the whole footprint. With connections, blockers within `range` of the element are sent, not only those overlapping it, since a walk or sight line reaching it within the range stays within the range of it. `grown` and `touching` take no `access_path`: a grown effect ignores walls already. Only one step is taken: an effect does not continue from a connected space into a third.
 
 The covered area is an interval. Effect areas are bracketed between an inner and an outer bound (a disc has no exact polygon, and travel distance is known cell by cell), a source whose selection or touch is undecided counts only towards the upper bound, a blocker whose selection is undecided only narrows the lower bound, and a source whose effect or extent cannot be measured leaves the upper bound at the whole footprint. A share straddling the minimum is not evaluated, with the reasons.
 
-The capacity check sums the property over the sources whose effect meets the footprint (surely for the lower sum, possibly for the upper), reading a number or a quantity in its SI unit: extinguisher rating units times the floor area one unit serves must reach the room's area. A source that states no non-negative value leaves the check undecided unless the other sources already settle it. It is its own finding (`capacity: …`) or not-evaluated outcome.
+The capacity check sums the property, each times the multiplier (the constant, or the source's own `capacity_multiplier_property`), over the sources whose effect meets the footprint (surely for the lower sum, possibly for the upper), reading a number or a quantity in its SI unit: extinguisher rating units times the floor area one unit serves must reach the room's area (the stated area with `area_property`). A source that states no usable value leaves the check undecided unless the other sources already settle it. It is its own finding (`capacity: …`) or not-evaluated outcome.
 
-Not decided yet (#72): effects that propagate into connected spaces, and the element's area taken from a property instead of its footprint.
+**Missing values** are findings of their own, starting `missing value:`, apart from the checks they keep from being decided:
+
+- `missing value: its Pset.NetFloorArea is not stated`: the element's `area_property` is absent, null or blank. Neither check runs.
+- `missing value: <source>'s Pset.Units is not stated`: a source that surely contributes (surely selected, its effect surely meeting the footprint) states no capacity or multiplier; the finding relates the source, and the capacity check is not evaluated unless the others settle it. A source that only possibly contributes is named in the not-evaluated reason instead.
+
+A value of another kind (text, a negative number, a length for an area) is not a missing value: it leaves its check not evaluated.
 
 ### Stairs and ramps
 

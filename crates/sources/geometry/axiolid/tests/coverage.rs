@@ -232,3 +232,136 @@ fn tessellated_sources_are_unmeasured_and_tessellated_subjects_refuse() {
     .unwrap();
     assert_eq!(meets(&evidence), [EffectMeets::Surely]);
 }
+
+/// Rooms `west` (x 0 to 5) and `east` (x 5.2 to 10.2), both 4 m deep, with
+/// the 0.2 m wall between them left out; door `door` fills the wall at y 1.5
+/// to 2.5, and opening `gap`, bodiless, at y 3 to 3.5. Sprinkler `sprinkler`
+/// hangs in the east room at (7, 2).
+fn rooms() -> AxiolidGeometry {
+    AxiolidGeometry::new()
+        .with_mesh(id("west"), cuboid([0.0, 0.0, 0.0], [5.0, 4.0, 3.0]))
+        .with_mesh(id("east"), cuboid([5.2, 0.0, 0.0], [10.2, 4.0, 3.0]))
+        .with_mesh(id("door"), cuboid([5.0, 1.5, 0.0], [5.2, 2.5, 2.1]))
+        .with_mesh(id("sprinkler"), cuboid([6.9, 1.9, 2.8], [7.1, 2.1, 2.9]))
+        .with_no_body(id("gap"))
+}
+
+fn through(
+    service: &AxiolidPlanAreaService,
+    reach: EffectReach,
+    range: f64,
+    connected: &[(&str, bool)],
+    passages: &[(&str, bool)],
+) -> Result<CoverageEvidence, PlanAreaError> {
+    let participants = |list: &[(&str, bool)]| {
+        list.iter()
+            .map(|(local, certain)| Participant::new(id(local), *certain))
+            .collect()
+    };
+    let request = CoverageRequest::try_new(
+        id("west"),
+        reach,
+        range,
+        vec![Participant::new(id("sprinkler"), true)],
+        Vec::new(),
+    )
+    .and_then(|request| request.with_connections(participants(connected), participants(passages)))
+    .expect("valid request");
+    service.measure_coverage(&request)
+}
+
+#[test]
+fn an_effect_continues_through_a_door_into_the_next_room() {
+    let service = AxiolidPlanAreaService::new(rooms(), source());
+    // On its own, the west room holds no sprinkler.
+    let alone = through(&service, EffectReach::Travel, 3.0, &[], &[]).unwrap();
+    assert_eq!(covered(&alone), (0.0, 0.0));
+    assert_eq!(meets(&alone), [EffectMeets::No]);
+
+    // Through the door, 1.2 m of travel is left past the doorway at x 5:
+    // at least the half disc of 1 m round (5, 2), at most the half disc of
+    // 1.2 m widened by the door's width.
+    let joined = through(
+        &service,
+        EffectReach::Travel,
+        3.0,
+        &[("east", true)],
+        &[("door", true)],
+    )
+    .unwrap();
+    let (lower, upper) = covered(&joined);
+    assert!(lower > 0.5 * std::f64::consts::PI, "{lower} {upper}");
+    assert!(
+        upper < 0.5 * std::f64::consts::PI * 1.44 + 1.2 + 0.2,
+        "{lower} {upper}"
+    );
+    assert_eq!(meets(&joined), [EffectMeets::Surely]);
+    let locator = &joined.covered().evidence().locator;
+    assert!(
+        locator.ends_with(&format!(":into={}:via={}", id("east"), id("door"))),
+        "{locator}"
+    );
+
+    // Sight passes the doorway too, but no farther than it reaches.
+    let seen = through(
+        &service,
+        EffectReach::Visible,
+        20.0,
+        &[("east", true)],
+        &[("door", true)],
+    )
+    .unwrap();
+    let (lower, upper) = covered(&seen);
+    assert!(lower > 1.0 && upper < 20.0, "{lower} {upper}");
+
+    // An uncertain door widens only the upper bound.
+    let maybe = through(
+        &service,
+        EffectReach::Travel,
+        3.0,
+        &[("east", true)],
+        &[("door", false)],
+    )
+    .unwrap();
+    let (lower, upper) = covered(&maybe);
+    assert!(
+        lower < 1e-6 && upper > 0.5 * std::f64::consts::PI,
+        "{lower} {upper}"
+    );
+    assert_eq!(meets(&maybe), [EffectMeets::Possibly]);
+}
+
+#[test]
+fn a_bodiless_opening_joins_through_its_void_or_leaves_the_bound_open() {
+    let with_void = AxiolidPlanAreaService::new(rooms(), source())
+        .with_opening_void(id("gap"), cuboid([5.0, 3.0, 0.0], [5.2, 3.5, 2.1]));
+    let evidence = through(
+        &with_void,
+        EffectReach::Travel,
+        3.0,
+        &[("east", true)],
+        &[("gap", true)],
+    )
+    .unwrap();
+    let (lower, upper) = covered(&evidence);
+    assert!(lower > 0.1 && upper < 20.0, "{lower} {upper}");
+
+    // Without a void the opening cannot be joined: the reach may be larger
+    // than measured, up to the whole room.
+    for service in [
+        AxiolidPlanAreaService::new(rooms(), source()),
+        AxiolidPlanAreaService::new(rooms(), source()).with_unmeasured_opening_void(id("gap")),
+    ] {
+        let evidence = through(
+            &service,
+            EffectReach::Travel,
+            3.0,
+            &[("east", true)],
+            &[("gap", true)],
+        )
+        .unwrap();
+        let (lower, upper) = covered(&evidence);
+        assert!(lower < 1e-6, "{lower} {upper}");
+        assert!((upper - 20.0).abs() < 1e-6, "{lower} {upper}");
+    }
+}

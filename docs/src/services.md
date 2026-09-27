@@ -25,4 +25,6 @@ Walkable-region topology is exposed through `WalkabilityServiceHandle`. A truste
 
 Plan-projected areas are exposed through `PlanAreaServiceHandle`: an object's footprint and the overlap of two footprints, each a `PlanArea` interval whose evidence is exact exactly when the bounds coincide. Capabilities decide from the whole interval; one straddling a bound is not evaluated.
 
+Vertical extents are exposed through `VerticalExtentServiceHandle`: the elevations of an object's lowest and highest points as `ElevationInterval`s, bound to the requested object. The evidence is exact exactly when both elevations are points; a tessellated body's elevations are intervals. An object without a body or with an unmeasured one has no extent, never zero.
+
 Pairwise proximity is exposed through `ProximityServiceHandle`: object extents with their geometry fidelity, and per-pair separation, plan overlap, witnessed penetration and containment. Evidence exactness must match fidelity, so a tessellation of curved faces is always approximate. The engine's `candidate_pairs` broad phase consumes the extents. See [Clash, interference and distance](./clash.md).

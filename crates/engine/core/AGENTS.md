@@ -20,4 +20,6 @@ Packages are untrusted data. Unknown definitions, capability/signature drift, un
 
 `proximity.rs` owns pairwise proximity contracts: extents with geometry fidelity, and separation, plan overlap, witnessed penetration and containment per pair. Evidence exactness must equal fidelity; a tessellation is never exact. Penetration is a lower bound and `None` only when neither body is a closed solid, never zero by default. No clash verdict crosses this seam.
 
+`vertical_extent.rs` owns bottom and top elevation intervals per object. Evidence is exact exactly when both are points, and the handle refuses an extent naming another object. No stacking or spacing verdict crosses this seam.
+
 `pairwise.rs` owns the broad-phase candidate search. It must stay complete: discard only by the gap between enclosing boxes (mesh extent grown by chord deviation), and keep it proven against the exhaustive search in its tests.

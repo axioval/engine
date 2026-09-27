@@ -16,6 +16,7 @@ pub mod plan_area;
 pub(crate) mod planar;
 pub mod proximity;
 pub mod space;
+pub mod vertical_extent;
 
 pub use contact::AxiolidContactService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
@@ -26,6 +27,7 @@ pub use linear_quantity::AxiolidLinearQuantityService;
 pub use plan_area::AxiolidPlanAreaService;
 pub use proximity::AxiolidProximityService;
 pub use space::AxiolidSpaceService;
+pub use vertical_extent::AxiolidVerticalExtentService;
 
 use std::collections::BTreeMap;
 

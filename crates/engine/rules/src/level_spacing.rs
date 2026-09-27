@@ -183,7 +183,7 @@ fn levels<'a>(
     Ok(levels)
 }
 
-fn metres(value: f64) -> String {
+pub(crate) fn metres(value: f64) -> String {
     format!("{} m", (value * 1e6).round() / 1e6)
 }
 
@@ -228,24 +228,8 @@ fn check(
     if !config.consistent || heights.len() < 2 {
         return;
     }
-    // Heights within the tolerance of one another count as one.
-    let step = config.tolerance.max(f64::EPSILON);
-    let mut counts: BTreeMap<i64, usize> = BTreeMap::new();
-    #[allow(clippy::cast_possible_truncation)]
-    let key = |height: f64| (height / step).round() as i64;
-    for (_, _, height, _) in &heights {
-        *counts.entry(key(*height)).or_default() += 1;
-    }
-    let prevailing = counts
-        .iter()
-        .max_by(|left, right| left.1.cmp(right.1).then_with(|| right.0.cmp(left.0)))
-        .map(|(key, _)| *key)
-        .expect("at least two heights were measured");
-    let reference = heights
-        .iter()
-        .find(|(_, _, height, _)| key(*height) == prevailing)
-        .map(|(_, _, height, _)| *height)
-        .expect("the prevailing height was measured");
+    let values: Vec<f64> = heights.iter().map(|(_, _, height, _)| *height).collect();
+    let reference = values[prevailing(&values, config.tolerance).expect("at least two heights")];
     for (level, above, height, evidence) in &heights {
         if (height - reference).abs() > config.tolerance {
             evaluation.push_finding(finding(
@@ -261,4 +245,22 @@ fn check(
             ));
         }
     }
+}
+
+/// The index of a value with the prevailing magnitude: the one most values
+/// share, counting values within `tolerance` of one another as one, and the
+/// lowest among equally common ones. `None` for no values.
+pub(crate) fn prevailing(values: &[f64], tolerance: f64) -> Option<usize> {
+    let step = tolerance.max(f64::EPSILON);
+    let mut counts: BTreeMap<i64, usize> = BTreeMap::new();
+    #[allow(clippy::cast_possible_truncation)]
+    let key = |value: f64| (value / step).round() as i64;
+    for value in values {
+        *counts.entry(key(*value)).or_default() += 1;
+    }
+    let prevailing = counts
+        .iter()
+        .max_by(|left, right| left.1.cmp(right.1).then_with(|| right.0.cmp(left.0)))
+        .map(|(key, _)| *key)?;
+    values.iter().position(|value| key(*value) == prevailing)
 }

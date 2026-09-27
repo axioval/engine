@@ -26,6 +26,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   objects within the tolerance of its own value. Findings state the
   tolerance used. **Breaking:** a definition bound to one of these
   capabilities must declare the three new optional parameters.
+- **Slab stack spacing.** `slab-stack-spacing` pairs slabs whose footprints
+  overlap by at least a declared share of the smaller one, orders each stack
+  by top elevation, and checks consecutive top-to-top, bottom-to-bottom and
+  top-to-underside distances against optional bands, optionally requiring
+  them equal within a tolerance. Elevations come from the new source-neutral
+  `VerticalExtentService` (bottom and top as intervals with evidence),
+  implemented by `AxiolidVerticalExtentService` and registered by
+  `axioval check --geometry`. A tessellated slab's elevations are never
+  exact; a distance, overlap or order its intervals leave open is not
+  evaluated.
 - **Numbering consistency.** `numbering-consistency` reads a number from
   each value through a pattern with one captured group and requires the
   numbers of one scope (a source, or a storey reached through a relationship)

@@ -29,7 +29,7 @@ use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidContactService, AxiolidEnvelopeMembershipService, AxiolidFreeSpaceService,
     AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService, AxiolidPlanAreaService,
-    AxiolidProximityService, AxiolidSpaceService,
+    AxiolidProximityService, AxiolidSpaceService, AxiolidVerticalExtentService,
 };
 use axioval::engine::{
     ContactServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession, FreeSpaceServiceHandle,
@@ -37,6 +37,7 @@ use axioval::engine::{
     PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
     RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
     SourceSnapshot, SpaceServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle,
 };
 use axioval::ir::{ATTRIBUTE_SET, ObjectId, PropertyValue, SourceId};
 use ifc_geometry::lower::{LoweringSession, lower_product_net};
@@ -226,6 +227,13 @@ fn register(
         )?
         .with_host_service(
             PlanAreaServiceHandle::new(Arc::new(AxiolidPlanAreaService::new(
+                geometry.clone(),
+                source.clone(),
+            ))),
+            bound,
+        )?
+        .with_host_service(
+            VerticalExtentServiceHandle::new(Arc::new(AxiolidVerticalExtentService::new(
                 geometry.clone(),
                 source.clone(),
             ))),

@@ -358,6 +358,7 @@ mod relationships;
 mod services;
 mod space;
 mod topology;
+mod vertical_extent;
 mod walkability;
 pub use classifications::{
     ClassificationAssignment, ClassificationError, ClassificationService,
@@ -424,6 +425,10 @@ pub use space::{
 };
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
+};
+pub use vertical_extent::{
+    ElevationInterval, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    VerticalExtentServiceHandle,
 };
 pub use walkability::{
     VerifiedWalkablePassage, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,

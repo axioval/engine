@@ -172,6 +172,11 @@ mesh with chord deviation `d` and footprint perimeter `P` measures within
 `2·P·d + π·d²`, the area of the band where the true and meshed boundaries can
 differ.
 
+`AxiolidVerticalExtentService` measures the lowest and highest points of a
+mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
+`d` reports each elevation as `[z - d, z + d]` with approximate evidence, even
+for a declared zero deviation. Bodiless and unmeasured objects are refused.
+
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
 
 ## ICDD

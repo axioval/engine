@@ -1146,3 +1146,114 @@ fn with_geometry_plan_coverage_measures_real_footprints() {
     assert_eq!(findings.len(), 1, "{result:#}");
     assert_eq!(findings[0]["object_id"]["local_id"], "#26", "{result:#}");
 }
+
+/// Slabs #16, #26 and #36, 0.2 m thick, stacked at 0, 3 and 6.5 m.
+fn stacked_slabs() -> String {
+    let slab = |first: u32, elevation: f64| {
+        let [
+            origin,
+            frame,
+            placement,
+            p,
+            pos,
+            profile,
+            solid,
+            shape,
+            definition,
+            object,
+        ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|offset| first + offset);
+        format!(
+            "#{origin}=IFCCARTESIANPOINT((0.,0.,{elevation:.1}));\n\
+             #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+             #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+             #{p}=IFCCARTESIANPOINT((5.,4.));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},10.,8.);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,0.2);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{object}=IFCSLAB('00000000000000000000{object:02}',$,$,$,$,#{placement},#{definition},$,.FLOOR.);\n",
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        slab(7, 0.0),
+        slab(17, 3.0),
+        slab(27, 6.5),
+    )
+}
+
+#[test]
+fn with_geometry_slab_stack_spacing_measures_real_elevations() {
+    let case = Case::new("geometry-slab-stack");
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    definitions["objectTypes"]["axioval:example.ifc.slab"] = json!({
+        "id": "axioval:example.ifc.slab",
+        "name": {"default": "IfcSlab", "translations": {}},
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "IfcSlab"}],
+        "citations": [],
+    });
+    let declare = |id: &str, kind: &str, required: bool| {
+        json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": required, "allowedValues": [], "citations": []})
+    };
+    definitions["definitions"]["axioval:example.slab-stack"] = json!({
+        "id": "axioval:example.slab-stack",
+        "name": {"default": "Slab stack", "translations": {}},
+        "description": {"default": "Storeys rise at most 3.2 m.", "translations": {}},
+        "capability": "axioval:capability.slab-stack-spacing",
+        "parameters": {
+            "minimum_overlap_ratio": declare("minimum_overlap_ratio", "number", true),
+            "top_to_top_minimum": declare("top_to_top_minimum", "quantity", false),
+            "top_to_top_maximum": declare("top_to_top_maximum", "quantity", false),
+            "bottom_to_bottom_minimum": declare("bottom_to_bottom_minimum", "quantity", false),
+            "bottom_to_bottom_maximum": declare("bottom_to_bottom_maximum", "quantity", false),
+            "top_to_bottom_minimum": declare("top_to_bottom_minimum", "quantity", false),
+            "top_to_bottom_maximum": declare("top_to_bottom_maximum", "quantity", false),
+            "consistent": declare("consistent", "stringList", false),
+            "tolerance": declare("tolerance", "quantity", false),
+        },
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("slab-stack");
+    rule["definitionId"] = json!("axioval:example.slab-stack");
+    rule["parameters"] = json!({
+        "minimum_overlap_ratio": {"type": "number", "value": 0.5},
+        "top_to_top_maximum": {"type": "quantity", "value": 3.2, "unit": "m"},
+    });
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!("axioval:example.ifc.slab");
+    let model = case.write("model.ifc", &stacked_slabs());
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#26", "{result:#}");
+}

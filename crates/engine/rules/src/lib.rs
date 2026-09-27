@@ -28,6 +28,7 @@ mod relative_count;
 mod selection;
 mod shelf_capacity;
 mod slab_contact;
+mod slab_stack;
 mod space_validation;
 mod support;
 mod unique_value;
@@ -61,6 +62,7 @@ pub use property_value::PropertyValueConstraint;
 pub use relative_count::RelativeCount;
 pub use shelf_capacity::ShelfCapacity;
 pub use slab_contact::SlabContact;
+pub use slab_stack::SlabStackSpacing;
 pub use space_validation::{SpaceCategory, SpaceValidation};
 pub use unique_value::UniqueValue;
 
@@ -98,4 +100,5 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(LevelSpacing))
         .and_then(|registry| registry.register(AreaRatio))
         .and_then(|registry| registry.register(PlanCoverage))
+        .and_then(|registry| registry.register(SlabStackSpacing))
 }

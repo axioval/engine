@@ -17,6 +17,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the envelope when its plan footprint meets a declared bounding space. The
   declared set is plain `ObjectId` data, so this stays a geometry adapter.
 - `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point.
+- `src/vertical_extent.rs` implements `VerticalExtentService`: bottom and top elevations of a mesh's used positions. A tessellation widens each by its chord deviation and is never exact, even at zero deviation.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`, measuring shelf

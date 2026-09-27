@@ -20,6 +20,8 @@ BCF 2.1 issue archives from a `Report` and the `Project` it was computed over.
   source, which would change with the file name; `tests/export.rs` pins the
   object and rule-level GUIDs. Changing `NAMESPACE` or the key layout changes every GUID a user
   has ever received; treat both as a compatibility contract.
+- A finding's `Priority` follows its severity; a not-evaluated outcome has
+  none, because no severity was decided. Never invent one for it.
 - Never read the clock or invent GUIDs; the caller supplies author and date.
 - 2.1 only until a host can supply a camera, which 3.0 requires.
 - Run `cargo test -p axioval-bcf` and `cargo test -p axioval --all-features`;

@@ -57,6 +57,13 @@ pub const IFC_GLOBAL_ID_SCHEME: &str = "ifc-globalid";
 /// `TopicType` of a topic made from a not-evaluated outcome.
 pub const NOT_EVALUATED_TOPIC_TYPE: &str = "Not evaluated";
 
+/// `Priority` of an error finding's topic.
+pub const PRIORITY_HIGH: &str = "High";
+/// `Priority` of a warning finding's topic.
+pub const PRIORITY_NORMAL: &str = "Normal";
+/// `Priority` of an info finding's topic.
+pub const PRIORITY_LOW: &str = "Low";
+
 /// Namespace of every GUID this crate derives. Changing it changes every GUID.
 const NAMESPACE: Uuid = Uuid::from_u128(0x6b1f_5a0e_2c3d_4e8f_9a71_0d2c_5e4b_8f13);
 
@@ -181,6 +188,7 @@ pub fn export(
 struct Entry {
     title: String,
     topic_type: String,
+    priority: Option<&'static str>,
     label: String,
     description: String,
     /// GUID input without source qualification.
@@ -216,6 +224,7 @@ impl Entry {
         Ok(Self {
             title: title(&finding.message, &finding.rule_id.to_string()),
             topic_type: severity(&finding.severity).to_owned(),
+            priority: Some(priority(&finding.severity)),
             label: finding.rule_id.to_string(),
             description: description.join("\n"),
             // An object finding's key is unchanged from before scopes
@@ -261,6 +270,8 @@ impl Entry {
         Ok(Self {
             title: title(&outcome.message, &outcome.rule_id.to_string()),
             topic_type: NOT_EVALUATED_TOPIC_TYPE.to_owned(),
+            // No severity was decided, so none is claimed.
+            priority: None,
             label: outcome.rule_id.to_string(),
             description: description.join("\n"),
             key: format!(
@@ -290,6 +301,7 @@ impl Entry {
             description: Some(self.description.clone()),
             topic_type: Some(self.topic_type.clone()),
             topic_status: Some(options.status.clone()),
+            priority: self.priority.map(str::to_owned),
             labels: vec![self.label.clone()],
             creation_date: options.date.clone(),
             creation_author: options.author.clone(),
@@ -373,6 +385,15 @@ fn severity(severity: &Severity) -> &'static str {
         Severity::Error => "Error",
         Severity::Warning => "Warning",
         Severity::Info => "Info",
+    }
+}
+
+/// `Priority` of a finding's topic, from its severity.
+fn priority(severity: &Severity) -> &'static str {
+    match severity {
+        Severity::Error => PRIORITY_HIGH,
+        Severity::Warning => PRIORITY_NORMAL,
+        Severity::Info => PRIORITY_LOW,
     }
 }
 

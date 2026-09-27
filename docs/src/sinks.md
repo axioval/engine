@@ -22,8 +22,8 @@ for object in &export.unanchored {
 
 | Report entry | Topic |
 |---|---|
-| Finding | `TopicType` is the severity (`Error`, `Warning`, `Info`); the label is the rule id |
-| Not-evaluated outcome | `TopicType` is `Not evaluated`; the description names the reason |
+| Finding | `TopicType` is the severity (`Error`, `Warning`, `Info`); `Priority` follows it (`High`, `Normal`, `Low`); the label is the rule id |
+| Not-evaluated outcome | `TopicType` is `Not evaluated`; no `Priority`, since no severity was decided; the description names the reason |
 
 Every topic's description repeats the message, the rule, the source-qualified
 object ids and each evidence locator with its exactness.

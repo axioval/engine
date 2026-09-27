@@ -3,7 +3,10 @@
 
 use std::io::{Cursor, Read};
 
-use axioval_bcf::{ExportError, IFC_GLOBAL_ID_SCHEME, NOT_EVALUATED_TOPIC_TYPE, Options, export};
+use axioval_bcf::{
+    ExportError, IFC_GLOBAL_ID_SCHEME, NOT_EVALUATED_TOPIC_TYPE, Options, PRIORITY_HIGH,
+    PRIORITY_NORMAL, export,
+};
 use axioval_ir::{
     Evidence, ExternalId, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, Project,
     QuantityDimension, Report, ReportColumn, ReportTable, ReportValue, RuleId, Scope, Severity,
@@ -117,6 +120,11 @@ fn every_report_entry_becomes_a_topic_that_reads_back_cleanly() {
     assert_eq!(wall.topic_type.as_deref(), Some("Error"));
     assert_eq!(wall.topic_status.as_deref(), Some("Open"));
     assert_eq!(wall.labels, ["slab-contact"]);
+    assert_eq!(wall.priority.as_deref(), Some(PRIORITY_HIGH));
+    assert_eq!(
+        by_title("FireRating is missing").priority.as_deref(),
+        Some(PRIORITY_NORMAL)
+    );
     let description = wall.description.as_deref().unwrap();
     assert!(
         description.contains("Evidence (exact): contact:wall"),
@@ -124,6 +132,8 @@ fn every_report_entry_becomes_a_topic_that_reads_back_cleanly() {
     );
 
     let skipped = by_title("no geometry service is registered");
+    // Nothing was decided about it, so no priority is claimed.
+    assert_eq!(skipped.priority, None);
     assert_eq!(
         skipped.topic_type.as_deref(),
         Some(NOT_EVALUATED_TOPIC_TYPE)

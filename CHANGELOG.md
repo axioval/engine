@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **BCF priority from severity.** (#109) A finding's topic carries
+  `Priority` `High`, `Normal` or `Low` for an error, warning or info
+  finding (`PRIORITY_HIGH`, `PRIORITY_NORMAL`, `PRIORITY_LOW`). A
+  not-evaluated outcome's topic has none: no severity was decided. Every
+  archive with findings gains the element; GUIDs are unchanged.
 - **Clash tolerance cases along the elements' own axes.** (#135)
   `ProximityService::measure_overlap_along` answers the extents of two
   bodies' intersection along stated directions (`OverlapAlongRequest`,

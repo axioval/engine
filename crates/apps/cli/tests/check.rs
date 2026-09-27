@@ -5810,8 +5810,8 @@ fn placed_space(first: u32, x: f64) -> String {
 /// Space #39, placed at (10, 5), bounded by `IfcCurveBoundedPlane`
 /// connection surfaces stated in its own coordinates: a floor with a 1 m²
 /// hole, the ceiling and three walls; its east wall has no boundary. Space
-/// #69, placed at (20, 5), has one boundary given as a face surface. Every
-/// boundary bounds against wall #99.
+/// #69, placed at (20, 5), has one boundary given as a face surface: a
+/// triangle of half its floor. Every boundary bounds against wall #99.
 fn spaces_with_boundaries() -> String {
     let mut boundaries = Boundaries {
         next: 1000,
@@ -5875,7 +5875,8 @@ fn with_geometry_space_boundaries_are_measured_against_the_space_surface() {
     );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     // The hole in the floor and the east wall stay uncovered: 1 + 7.5 m² of
-    // the 59 m² surface, measured exactly in the space's own placement.
+    // the 59 m² surface, measured exactly in the space's own placement. The
+    // face surface of #69 is measured too: its 6 m² triangle leaves 53 m².
     assert_eq!(
         finding_messages(&result),
         [
@@ -5891,6 +5892,18 @@ fn with_geometry_space_boundaries_are_measured_against_the_space_surface() {
                  0.5 m² allowed"
                     .to_owned()
             ),
+            (
+                "#69".to_owned(),
+                "declared boundaries cover 10.17% of the 59 m² surface, leaving 53 m² \
+                 uncovered; at least 90% required"
+                    .to_owned()
+            ),
+            (
+                "#69".to_owned(),
+                "declared boundaries leave 53 m² of the 59 m² surface uncovered; at most \
+                 0.5 m² allowed"
+                    .to_owned()
+            ),
         ],
         "{result:#}"
     );
@@ -5902,19 +5915,5 @@ fn with_geometry_space_boundaries_are_measured_against_the_space_surface() {
             .all(|finding| finding["evidence"][0]["exact"] == json!(true)),
         "{result:#}"
     );
-    // The face surface is not lowered, so the other space is not measured.
-    let unevaluated = result["report"]["not_evaluated"].as_array().unwrap();
-    assert_eq!(unevaluated.len(), 1, "{result:#}");
-    assert_eq!(
-        unevaluated[0]["object_id"]["local_id"],
-        json!("#69"),
-        "{result:#}"
-    );
-    assert!(
-        unevaluated[0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("face surface"),
-        "{result:#}"
-    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }

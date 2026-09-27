@@ -320,11 +320,8 @@ fn ifc2x3_styles_resolve_through_their_assignment_wrapper() {
     let read = |local| values_of(resolve_in("IFC2X3", IFC2X3, local).unwrap());
     assert_eq!(read("#1").unwrap(), [0.4]);
     assert_eq!(read("#2").unwrap(), [0.0]);
-    // The material fallback waits on ifc-material binding to IFC2X3.
-    assert!(matches!(
-        resolve_in("IFC2X3", IFC2X3, "#3"),
-        Err(PropertyResolutionError::Unavailable(message)) if message.contains("IFC2X3")
-    ));
+    // The unstyled item is drawn with its material's style.
+    assert_eq!(read("#3").unwrap(), [0.4]);
     // Without any styled material, an unstyled item needs no material.
     let unmaterialed: String = IFC2X3
         .lines()

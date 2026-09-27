@@ -1030,9 +1030,9 @@ checksum = "4804bdc1dc124eb7e1aa9e144ecc04096bcf787a10a15fa44af682b51f0f6cce"
 
 [[package]]
 name = "ifc-alignment"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8768cc947db987ff1767300814632cc5ba12c5b8b1c448590c7980835fe5789"
+checksum = "daed809b174b0127125e877ebd76830b88ca5fcf4408544d57624207c32f1787"
 dependencies = [
  "axiolid-core",
  "axiolid-curve",
@@ -1054,9 +1054,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "480e71127a7c99513760337dca5d60d2def367942a0f37c9161e6b69ea9a8eed"
+checksum = "f671bbeb8bdfb3d80519dbc889d83ed326bbb8fb82b3ca9ef65581e337935976"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",
@@ -1080,11 +1080,12 @@ dependencies = [
 
 [[package]]
 name = "ifc-material"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8813d289f7cdab4bf220d074270ea173c257b4880d0bd0abb2401145f5413ae9"
+checksum = "8d65a99550b2cdb70565f4d72b79ea8a15e920ae385c454d1655f1f00213b3f1"
 dependencies = [
  "ifc-model",
+ "ifc-schema",
  "thiserror",
 ]
 
@@ -1100,9 +1101,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-properties"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cfff0a7ab1a682366c1baeb41338dd7acf8ccbf8d3aa93327b6309b19eabec8"
+checksum = "b20c024d83f76cf88cf843a060a2950661bfb28233d80c5695a36a9237177afc"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1122,9 +1123,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-spatial"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4408e3e831f7edf33c3c59d35eebd8a336db249530e49e4b9c64de23128df14"
+checksum = "d9e8914977bb0f05732eb99124b55f20489c2461d043fa8be6f35e6929f59336"
 dependencies = [
  "ifc-model",
 ]

@@ -363,9 +363,10 @@ Space-boundary coverage takes every `IfcSpace` and every `IfcRelSpaceBoundary`
 lowered in its own frame and placed by the space's placement under its body's
 representation context, exactly as the body is, then meshed; a curve-bounded
 plane with straight boundaries is exact. A boundary with no connection
-geometry, a point, curve or volume connection, a face surface (not lowered
-yet, openbimrs/ifc#155) or a surface the lowering or compiler refuses is
-unmeasured, and its space is not evaluated.
+geometry, a point, curve or volume connection, or a surface the lowering or
+compiler refuses is unmeasured, and its space is not evaluated. Surfaces, face
+surfaces (`IfcFaceSurface`, `IfcAdvancedFace`) and face-based surface models
+are lowered through `ifc-geometry` (openbimrs/ifc#155).
 
 The result's `geometry` field records the counts and every unmeasured object
 with its reason. The summary prints a `geometry:` line and groups unmeasured

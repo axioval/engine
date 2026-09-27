@@ -221,17 +221,100 @@ fn a_layer_with_negative_thickness_is_refused() {
     }
 }
 
-#[test]
-fn ifc2x3_materials_are_refused_until_upstream_binds_the_release() {
-    let data = "\
+/// IFC2X3, millimetres. #1 has a layer set usage; #2 is one material. The
+/// IFC2X3 records are shorter: a material has only a name, a layer no name
+/// or category, a usage no reference extent.
+const IFC2X3: &str = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,$,#91);
 #20=IFCMATERIAL('Concrete');
+#21=IFCMATERIAL('Mineral wool');
+#30=IFCMATERIALLAYER(#21,100.,.F.);
+#31=IFCMATERIALLAYER(#20,200.,$);
+#35=IFCMATERIALLAYERSET((#30,#31),'WT-01');
+#36=IFCMATERIALLAYERSETUSAGE(#35,.AXIS2.,.POSITIVE.,0.);
 #1=IFCWALL('0000000000000000000001',$,'W1',$,$,$,$,$);
-#44=IFCRELASSOCIATESMATERIAL('0000000000000000000044',$,$,$,(#1),#20);
+#41=IFCRELASSOCIATESMATERIAL('0000000000000000000041',$,$,$,(#1),#36);
+#2=IFCSLAB('0000000000000000000002',$,'S1',$,$,$,$,$,$);
+#42=IFCRELASSOCIATESMATERIAL('0000000000000000000042',$,$,$,(#2),#20);
 ";
-    assert!(matches!(
-        resolve_in("IFC2X3", data, "#1", "Name"),
-        Err(PropertyResolutionError::Unavailable(message)) if message.contains("IFC2X3")
-    ));
+
+fn ifc2x3(local: &str, name: &str) -> Option<PropertyValue> {
+    match resolve_in("IFC2X3", IFC2X3, local, name).unwrap() {
+        PropertyResolution::Present(resolved) => Some(resolved.property().value.clone()),
+        PropertyResolution::Absent(_) => None,
+    }
+}
+
+fn ifc2x3_text(local: &str, name: &str) -> Option<String> {
+    ifc2x3(local, name).map(|value| match value {
+        PropertyValue::String(text) => text,
+        other => panic!("{name} is not text: {other:?}"),
+    })
+}
+
+fn ifc2x3_metres(local: &str, name: &str) -> f64 {
+    match ifc2x3(local, name) {
+        Some(PropertyValue::Quantity {
+            value,
+            dimension: QuantityDimension::Length,
+        }) => value,
+        other => panic!("{name} is not a length: {other:?}"),
+    }
+}
+
+#[test]
+fn an_ifc2x3_layer_set_usage_is_read_in_its_release() {
+    assert_eq!(ifc2x3_text("#1", "Kind").as_deref(), Some("layer-set"));
+    assert_eq!(ifc2x3_text("#1", "Name").as_deref(), Some("WT-01"));
+    assert_eq!(ifc2x3("#1", "Count"), Some(PropertyValue::Integer(2)));
+    assert!((ifc2x3_metres("#1", "TotalThickness") - 0.3).abs() < 1e-12);
+    assert!((ifc2x3_metres("#1", "Layer1.Thickness") - 0.1).abs() < 1e-12);
+    assert!((ifc2x3_metres("#1", "Layer2.Thickness") - 0.2).abs() < 1e-12);
+    assert_eq!(
+        ifc2x3_text("#1", "Layer1.Material").as_deref(),
+        Some("Mineral wool")
+    );
+    assert_eq!(
+        ifc2x3_text("#1", "Layer2.Material").as_deref(),
+        Some("Concrete")
+    );
+    // IFC2X3 layers have no name or category to state.
+    assert_eq!(ifc2x3("#1", "Layer1.Name"), None);
+    assert_eq!(ifc2x3("#1", "Layer1.Category"), None);
+    assert_eq!(
+        ifc2x3("#1", "Names"),
+        Some(PropertyValue::List(
+            ["Concrete", "Mineral wool", "WT-01"]
+                .map(|name| PropertyValue::String(name.into()))
+                .to_vec()
+        ))
+    );
+    let PropertyResolution::Present(resolved) =
+        resolve_in("IFC2X3", IFC2X3, "#1", "Layer2.Material").unwrap()
+    else {
+        panic!("the layer's material is absent");
+    };
+    let found = &resolved.property().evidence.as_ref().unwrap().locator;
+    assert!(
+        found.ends_with("material:#1:occurrence:#41:usage:#36:#31/#20"),
+        "{found}"
+    );
+}
+
+#[test]
+fn an_ifc2x3_material_is_named_without_a_category() {
+    assert_eq!(ifc2x3_text("#2", "Kind").as_deref(), Some("material"));
+    assert_eq!(ifc2x3_text("#2", "Name").as_deref(), Some("Concrete"));
+    // IFC2X3 `IfcMaterial` declares no category.
+    assert_eq!(ifc2x3("#2", "Category"), None);
+    assert_eq!(
+        ifc2x3("#2", "Names"),
+        Some(PropertyValue::List(vec![PropertyValue::String(
+            "Concrete".into()
+        )]))
+    );
 }
 
 #[test]

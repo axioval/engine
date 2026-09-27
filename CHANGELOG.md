@@ -101,9 +101,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   `maximum_overlap_area` (with `plane_tolerance`) per space, and always
   reports a boundary lying on no face of the body. With `--geometry` the
   CLI lowers each `IfcRelSpaceBoundary` connection surface
-  (`IfcCurveBoundedPlane`, `IfcFaceBasedSurfaceModel`) in its space's
-  frame and meshes it; a face surface (openbimrs/ifc#155) leaves its
-  space not evaluated.
+  (`IfcCurveBoundedPlane`, `IfcFaceSurface`, `IfcAdvancedFace`,
+  `IfcFaceBasedSurfaceModel`) in its space's frame and meshes it.
 
 - **Stair and ramp handrails, ramp end spaces and landing doors.** (Refs
   #85) `WalkingSurfaceService::measure_handrails` answers a
@@ -199,8 +198,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   material (`IfcMaterialDefinitionRepresentation`). An unset
   `Transparency` is opaque, as the schema states. An object without a
   styled surface is exactly absent; a surface style without shading, and
-  two styled items on one item, are refused; the material fallback in
-  IFC2X3 waits on openbimrs/ifc#77. (#71)
+  two styled items on one item, are refused. (#71)
 - **Footprints with their own axes.** `PlanSpanService::measure_rectangle`
   answers the rectangle of least area enclosing a footprint as a
   `PlanRectangle`: centre and radius, two unit axes and how far they may be
@@ -1243,13 +1241,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   by (`MATERIAL_NAMES`), which a selector with `quantifier: any` matches
   without enumerating members. Every property capability and selector
   reads them. The IFC adapter answers them from
-  `IfcRelAssociatesMaterial` through `ifc-material` 0.2.0, on the object or
+  `IfcRelAssociatesMaterial` through `ifc-material`, on the object or
   else its type object: single materials, layer sets (directly or through
   a usage), constituent sets, profile sets and material lists, thicknesses
   in metres with exact provenance; a unit the file does not resolve refuses
   that measure alone. An object without material is an exact absence; two
-  assignments conflict. IFC2X3 materials are refused until
-  `ifc-material` binds to the file's release (openbimrs/ifc#77).
+  assignments conflict.
 - **Property selectors on par with `property-predicate`.** Selectors take
   the operators `like` (wildcards `*` and `?`, `\` escapes), `contains`,
   `oneOf` and `noneOf` (a string list), and the options `caseSensitive`
@@ -1425,8 +1422,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 - **Quantity sets.** With `ifc-properties` 0.4.0, `IfcElementQuantity`
   members resolve like properties and convert to SI:
   `Qto_SpaceBaseQuantities.NetFloorArea` is an area quantity. Complex
-  quantities, predefined-set attributes, and a property set and a quantity
-  set sharing a name are refused, never answered as absent.
+  quantities, and a property set and a quantity set sharing a name, are
+  refused, never answered as absent.
 - **Measured values in SI.** `ifc-properties` 0.3.0 resolves a measure's
   effective unit exactly. The IFC adapter converts measure-typed property
   values and attributes to SI quantities, or refuses when no unit applies.
@@ -1502,6 +1499,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   reader. Of 22,392 real property assignments, every one is either resolved
   or refused for a stated reason; the 636 refusals are measure-typed values
   (`IFCAREAMEASURE`, `IFCENERGYMEASURE`, ...) the adapter does not yet map.
+- **IFC2X3 materials.** (Closes #38) `ifc-material` 0.3.0 reads every
+  material slot in the release the file declares (openbimrs/ifc#77), so the
+  IFC adapter answers `axioval:material` for IFC2X3 files as for IFC4
+  instead of refusing them: an `IfcMaterialLayerSetUsage`, a layer set, a
+  single material and a material list. An attribute IFC2X3 does not
+  declare (a material's category, a layer's name and category) is absent,
+  since the file cannot state it. The IFC2X3 transparency fallback to a
+  material's styles now answers as well.
+- **Predefined property sets.** With `ifc-properties` 0.4.1
+  (openbimrs/ifc#149), attributes of `IfcDoorLiningProperties`,
+  `IfcDoorPanelProperties`, their window counterparts and every other
+  predefined set resolve like properties, found by the set's `Name` or its
+  entity name, measures in SI: a door's `Lining.LiningDepth` is a length.
+  An unset, enumerated or referencing attribute is still refused, as are
+  the enumerated, list, bounded, table and reference values `ifc-properties`
+  now reads (openbimrs/ifc#150).
 
 ### Fixed
 
@@ -1635,6 +1648,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking.** The workspace requires `ifc-geometry` 0.4.0, `ifc-material`
+  0.3.0, `ifc-properties` 0.4.1 and `ifc-spatial` 0.2.2. The CLI reads a
+  space boundary's `ConnectionGeometry` through `ifc-spatial`'s
+  `SpaceBoundary::connection_geometry` (openbimrs/ifc#156) and lowers it
+  with `ifc-geometry`'s `lower_connection_surface`, so a face surface
+  (`IfcFaceSurface`, `IfcAdvancedFace`) is measured for space-boundary
+  coverage instead of leaving its space not evaluated (openbimrs/ifc#155).
+  Compiled bodies change with the new geometry release: a B-rep's voids
+  are meshed as cavities, every solid of a multi-solid B-rep is meshed,
+  and an `IfcBlock` sits at its `Position` corner rather than half its
+  size away. (Refs #74)
 - The workspace requires `axiolid-overlay` 0.3.3, which settles
   `union_soup` output and accepts holes touching their outer ring, so
   every overlay output is a valid operand again (axiolid/kernel#191).

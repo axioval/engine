@@ -35,11 +35,19 @@ invalid value (`PropertyResolutionError::InvalidValue`).
 
 Quantity sets (`IfcElementQuantity`) resolve like property sets
 (`ifc-properties` 0.4.0, openbimrs/ifc#66): `Qto_SpaceBaseQuantities.NetFloorArea`
-is an area quantity in SI. The request is refused, never answered as absent, when:
+is an area quantity in SI. So do the attributes of predefined property sets
+(`ifc-properties` 0.4.1, openbimrs/ifc#149) such as `IfcDoorLiningProperties`,
+`IfcDoorPanelProperties` and their window counterparts: a set is found by its
+`Name`, or by its entity name when it states none, and `LiningDepth` is a length
+in SI with its declared type (`IFCPOSITIVELENGTHMEASURE`). The request is
+refused, never answered as absent, when:
 - a complex quantity or two quantities carry the requested name;
 - a property set and a quantity set share the requested set name;
-- the requested name is an attribute of a predefined property set such as
-  `IfcDoorLiningProperties`, which is not read.
+- the requested attribute of a predefined set is unset, an enumeration or an
+  entity reference;
+- the value is an enumerated, list, bounded, table or reference value, which
+  `ifc-properties` reads (openbimrs/ifc#150) but the property contract cannot
+  carry as one value.
 
 Any other absence is exact.
 
@@ -155,15 +163,15 @@ The value lists every distinct transparency, ascending (`[0.2, 0.7]` for tinted 
 
 Refused rather than guessed:
 - a surface style without a shading element (only textures, lighting, refraction, or an externally defined style): it states no transparency;
-- two `IfcStyledItem`s on one item: a conflict;
-- a material fallback in IFC2X3, while `ifc-material` does not bind to that release (openbimrs/ifc#77); a model without any styled material needs no fallback and answers.
+- two `IfcStyledItem`s on one item: a conflict.
 
 An object whose styled glazing sits in an unstyled frame and has no styled material lists only the glazing: an unstyled item states nothing, and is not assumed opaque.
 
 ### Materials
 
 `axioval:material` is read from `IfcRelAssociatesMaterial` through
-`ifc-material` (0.2.0). An association on the object wins; without one, the
+`ifc-material` (0.3.0), in the release the file declares (IFC2X3 or IFC4).
+An association on the object wins; without one, the
 association of its `IfcRelDefinesByType` type object applies, so a wall
 without its own material takes the layer set of its wall type. The adapter
 reads:
@@ -193,9 +201,10 @@ with no association, directly or through its type, has no material.
 - A malformed material, a lone layer, constituent or profile associated
   directly, and an `IfcMaterialProfileSetUsageTapering` (two profile sets)
   are refused.
-- IFC2X3 materials are refused. `ifc-material` 0.2 reads IFC4 attribute
-  positions whatever release a file declares; IFC2X3 support waits for it to
-  bind to the file's release (openbimrs/ifc#77).
+- An attribute the file's release does not declare cannot be stated, so its
+  property is absent: an IFC2X3 `IfcMaterial` has no category, and an IFC2X3
+  `IfcMaterialLayer` no name or category. IFC2X3 has no constituent or
+  profile sets.
 
 ### Object frames
 
@@ -209,7 +218,7 @@ The IFC session registers an object-frame service (`ObjectFrameServiceHandle`; s
 
 The locator names the object and its placement chain from the object upwards: `placement:#33:#32<#24<#12`.
 
-Door and window leaves (hinge side, swing sector from `OperationType` and panel definitions) wait for upstream support (openbimrs/ifc#148).
+Door and window leaves (hinge side, swing sector from `OperationType` and panel definitions) are not read yet. Upstream reads them since openbimrs/ifc#148; the object-frame contract does not carry them.
 
 ### Coordinate system
 

@@ -20,8 +20,11 @@
 //! matches a material value: the material's or set's own, each member's, and
 //! each member's material's.
 //!
-//! IFC2X3 is refused: `ifc-material` 0.2 reads IFC4 slot positions whatever
-//! release the file declares (openbimrs/ifc#77).
+//! `ifc-material` reads every slot in the release the file declares, so
+//! IFC2X3 and IFC4 answer alike. An attribute the release does not declare
+//! (an IFC2X3 material's `Category`, an IFC2X3 layer's `Name` or `Category`)
+//! cannot be stated by the file, so its property is absent; an entity the
+//! release cannot instantiate is refused like any malformed material.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -104,13 +107,6 @@ impl Materials {
         model: &Model,
         object: EntityId,
     ) -> Result<Arc<Resolved>, PropertyResolutionError> {
-        if self.release.label != "IFC4" {
-            return Err(PropertyResolutionError::Unavailable(format!(
-                "materials are not read from {} files until ifc-material binds to the \
-                 file's release (openbimrs/ifc#77)",
-                self.release.label
-            )));
-        }
         let mut resolved = self.resolved.lock().unwrap_or_else(PoisonError::into_inner);
         resolved
             .entry(object)
@@ -255,7 +251,7 @@ fn compose(
             );
             writer.text(
                 MATERIAL_CATEGORY,
-                material.category().map_err(refusal)?,
+                stated(material.category())?,
                 material.id(),
             );
         }
@@ -342,16 +338,8 @@ fn layer_set(
                 let thickness =
                     writer.measure(model, "IfcMaterialLayer", "LayerThickness", thickness);
                 writer.put_measure(&format!("{member}.Thickness"), thickness, id);
-                writer.text(
-                    &format!("{member}.Name"),
-                    layer.name().map_err(refusal)?,
-                    id,
-                );
-                writer.text(
-                    &format!("{member}.Category"),
-                    layer.category().map_err(refusal)?,
-                    id,
-                );
+                writer.text(&format!("{member}.Name"), stated(layer.name())?, id);
+                writer.text(&format!("{member}.Category"), stated(layer.category())?, id);
                 layer.material_id().map_err(refusal)?
             }};
         }
@@ -506,23 +494,26 @@ fn material_list(
         );
         writer.text(
             &format!("{member}.Category"),
-            material.category().map_err(refusal)?,
+            stated(material.category())?,
             id,
         );
     }
     Ok(())
 }
 
-/// The `IfcMaterial` `holder` references as `id`.
+/// The `IfcMaterial` `holder` references as `id`, read in the model's release.
 fn material(
     view: MaterialView<'_>,
     holder: EntityId,
     id: EntityId,
 ) -> Result<Material<'_>, PropertyResolutionError> {
-    let entity = view.model().get(id).ok_or_else(|| {
-        PropertyResolutionError::Incomplete(format!("{holder} references missing {id}"))
-    })?;
-    Material::try_new(id, entity).map_err(|_| wrong(holder, id, "IfcMaterial"))
+    Material::try_from_view(view, id).map_err(|error| match error {
+        MaterialError::UnknownEntity { .. } => {
+            PropertyResolutionError::Incomplete(format!("{holder} references missing {id}"))
+        }
+        MaterialError::WrongEntityType { .. } => wrong(holder, id, "IfcMaterial"),
+        error => refusal(error),
+    })
 }
 
 fn material_name(
@@ -538,7 +529,18 @@ fn material_category(
     holder: EntityId,
     id: EntityId,
 ) -> Result<Option<&str>, PropertyResolutionError> {
-    material(view, holder, id)?.category().map_err(refusal)
+    stated(material(view, holder, id)?.category())
+}
+
+/// An optional attribute; one the file's release does not declare cannot be
+/// stated, so it is absent like an unset one.
+fn stated<T>(
+    value: Result<Option<T>, MaterialError>,
+) -> Result<Option<T>, PropertyResolutionError> {
+    match value {
+        Err(MaterialError::NotInSchema { .. }) => Ok(None),
+        value => value.map_err(refusal),
+    }
 }
 
 fn wrong(holder: EntityId, target: EntityId, expected: &str) -> PropertyResolutionError {

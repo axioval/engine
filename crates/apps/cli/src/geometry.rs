@@ -59,11 +59,10 @@ use axioval::engine::{
     WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, SourceId};
-use ifc_geometry::constraint::ConnectionGeometry;
-use ifc_geometry::constraint::connection::ConnectionKind;
-use ifc_geometry::lower::{LoweringSession, lower_product_net, lower_representation_item};
+use ifc_geometry::lower::{LoweringSession, lower_connection_surface, lower_product_net};
 use ifc_geometry::{RepresentationPurpose, Transform};
-use ifc_model::{Codec, EntityId, Model, Value};
+use ifc_model::{Codec, EntityId, Model};
+use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
 use ifc_step::StepCodec;
 use std::sync::Arc;
@@ -596,8 +595,8 @@ fn facade_service(
 /// is registered: with its connection surface meshed in the space body's
 /// coordinates, or unmeasured with the reason, so its space is refused
 /// rather than measured without it. A boundary stating no connection
-/// geometry, one that is not a surface, a face surface (openbimrs/ifc#155)
-/// and any surface the lowering or compiler refuses are unmeasured.
+/// geometry, one that is not a surface, and any surface the lowering or
+/// compiler refuses are unmeasured.
 fn boundary_service(
     backend: &impl MeshCompiler,
     parsed: &BTreeMap<SourceId, Parsed>,
@@ -623,7 +622,7 @@ fn boundary_service(
                 .map(object)
                 .filter(|id| kinds.contains_key(id));
             let id = object(boundary.id);
-            service = match boundary_surface(backend, model, units, boundary.id, &space) {
+            service = match boundary_surface(backend, model, units, &boundary, &space) {
                 Ok((mesh, true)) => service.with_boundary(space, id, element, mesh),
                 Ok((mesh, false)) => service.with_tessellated_boundary(
                     space,
@@ -639,54 +638,44 @@ fn boundary_service(
     service
 }
 
-/// `IfcRelSpaceBoundary.ConnectionGeometry`, the same slot in every subtype.
-const CONNECTION_GEOMETRY: usize = 6;
-
 /// One boundary's connection surface as a mesh in the coordinates of its
 /// space's body, and whether it is exact.
 ///
+/// `ifc-spatial` reads the boundary's `ConnectionGeometry` and `ifc-geometry`
+/// lowers its `SurfaceOnRelatingElement`: a surface, a face surface or a
+/// face-based surface model; point, curve and volume connections are refused.
 /// The surface is stated in the relating space's object coordinates, so it
 /// is lowered in its own frame and placed afterwards by the space's
 /// placement under its body's representation context, exactly as the body
 /// is: lowering it with the placement would also move a curve-bounded
-/// plane's boundaries, which lie in the plane's parameters.
+/// plane's boundaries, which lie in the plane's parameters
+/// (openbimrs/ifc#163), and the body's frame is rebuilt here until
+/// `ifc-geometry` exposes it (openbimrs/ifc#164).
 fn boundary_surface(
     backend: &impl MeshCompiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
-    boundary: EntityId,
+    boundary: &SpaceBoundary,
     space: &ObjectId,
 ) -> Result<(axiolid_mesh::TriMesh, bool), String> {
-    let connection = match model
-        .get(boundary)
-        .and_then(|entity| entity.attribute(CONNECTION_GEOMETRY))
-    {
-        Some(Value::Ref(connection)) => *connection,
-        _ => return Err("the boundary states no connection geometry".into()),
+    let connection = match boundary.connection_geometry(model) {
+        Ok(Some(connection)) => connection,
+        Ok(None) => return Err("the boundary states no connection geometry".into()),
+        Err(ConnectionGeometryAnomaly::Dangling { target, .. }) => {
+            return Err(format!("the connection geometry {target} does not exist"));
+        }
+        Err(ConnectionGeometryAnomaly::WrongKind {
+            target, type_name, ..
+        }) => {
+            return Err(format!(
+                "{target} is a {type_name}, not a connection geometry"
+            ));
+        }
+        Err(anomaly) => return Err(format!("unreadable connection geometry: {anomaly:?}")),
     };
-    let geometry = model
-        .get(connection)
-        .and_then(|entity| ConnectionGeometry::new(connection, entity))
-        .ok_or_else(|| format!("{connection} is not a connection geometry"))?;
-    if geometry.kind() != ConnectionKind::Surface {
-        return Err(format!(
-            "{connection} is a {:?} connection, not a surface",
-            geometry.kind()
-        ));
-    }
-    let surface = geometry.at_relating().map_err(|error| error.to_string())?;
-    let kind = model
-        .get(surface)
-        .map(|entity| entity.type_name.to_ascii_uppercase())
-        .unwrap_or_default();
-    if kind == "IFCFACESURFACE" || kind == "IFCADVANCEDFACE" {
-        return Err(format!(
-            "{surface} is a face surface, which is not lowered yet (openbimrs/ifc#155)"
-        ));
-    }
     let frame = space_frame(model, units, space)?;
     let mut session = LoweringSession::new(model, units);
-    let root = lower_representation_item(&mut session, surface, Transform::identity())
+    let root = lower_connection_surface(&mut session, connection, Transform::identity())
         .map_err(|error| error.to_string())?;
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
     let exact = planar(&lowered.graph, lowered.root, &mut NODE_BUDGET.clone());

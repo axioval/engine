@@ -9,7 +9,8 @@ use axioval_ir::{ObjectId, PropertyValue, QuantityDimension, SourceId};
 
 /// Millimetre lengths and square-metre areas. Space #1 carries base
 /// quantities, one with an explicit metre unit, a count, and a complex
-/// quantity; door #10 carries a predefined lining set; wall #20 has a
+/// quantity; door #10 carries a predefined lining set with one attribute
+/// stated; wall #20 has a
 /// property set and a quantity set of one name.
 const IFC4: &str = "ISO-10303-21;
 HEADER;
@@ -116,13 +117,29 @@ fn a_read_quantity_set_proves_absence() {
 }
 
 #[test]
+fn a_predefined_set_attribute_is_a_measure_in_si() {
+    // 100 mm, stated as an `IfcDoorLiningProperties` attribute.
+    for set in [Some("Lining"), None] {
+        let Ok(PropertyResolution::Present(resolved)) = resolve("#10", set, "LiningDepth") else {
+            panic!("{set:?}.LiningDepth is present");
+        };
+        let property = resolved.property();
+        let PropertyValue::Quantity { value, dimension } = property.value else {
+            panic!("{set:?}.LiningDepth is a quantity: {property:?}");
+        };
+        assert!((value - 0.1).abs() < 1e-12, "{value}");
+        assert_eq!(dimension, QuantityDimension::Length);
+        assert_eq!(property.property_set, "Lining");
+    }
+}
+
+#[test]
 fn what_is_not_read_is_refused_never_absent() {
     for (object, set, name) in [
         // A complex quantity of the requested name.
         ("#1", QTO, "Layer"),
-        // An attribute of a predefined property set.
-        ("#10", Some("Lining"), "LiningDepth"),
-        ("#10", None, "LiningDepth"),
+        // An attribute a predefined property set leaves unset.
+        ("#10", Some("Lining"), "LiningThickness"),
         // A property set and a quantity set of one name.
         ("#20", Some("Common"), "Width"),
     ] {

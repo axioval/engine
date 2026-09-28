@@ -4,11 +4,11 @@ use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationAssignment, ClassificationError,
     ClassificationServiceHandle, ConceptBindings, NameMatch, NamePattern, NotEvaluatedReason,
     PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, SourceDisciplines,
-    SourceMetadataIndex, TypeHierarchyError, TypeHierarchyServiceHandle,
+    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, RuleOutcomes,
+    SourceDisciplines, SourceMetadataIndex, TypeHierarchyError, TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{
-    ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, Selector,
+    ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, RuleOutcomeKind, Selector,
 };
 use axioval_ir::{
     Date, DateTime, Discipline, Evidence, Object, PropertyValue, QuantityDimension,
@@ -146,6 +146,29 @@ pub(crate) fn selector_matches(
         } => related_matches(context, object, path, *quantifier, selector, evidence),
         Selector::Discipline { value } => discipline_matches(context, object, value, evidence),
         source @ Selector::Source { .. } => source_matches(context, object, source),
+        Selector::RuleOutcome { rule, outcome } => {
+            rule_outcome_matches(context, object, rule, *outcome)
+        }
+    }
+}
+
+/// Whether the rule `rule` judged `object` as `outcome` asks, from the
+/// outcomes the runtime recorded.
+fn rule_outcome_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    rule: &str,
+    outcome: RuleOutcomeKind,
+) -> Selection {
+    let Some(outcomes) = context.services.get::<RuleOutcomes>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "no rule outcomes are available outside a run".into(),
+        );
+    };
+    match outcomes.selects(rule, outcome, object) {
+        Ok(matches) => verdict(matches),
+        Err((reason, message)) => Selection::NotEvaluated(reason, message),
     }
 }
 

@@ -467,6 +467,46 @@ fn rule_status_counts_the_checked_and_failed_objects_of_each_rule() {
 }
 
 #[test]
+fn a_gated_rule_checks_only_the_walls_its_parent_failed_or_is_skipped() {
+    let case = Case::new("rule-gates");
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let parent = ruleset["root"]["rules"][0].clone();
+    let mut failed = parent.clone();
+    failed["id"] = json!("a-recheck-failed-walls");
+    failed["gate"] = json!({"rule": "wall-reference-required", "condition": "failedObjects"});
+    let mut if_passed = parent.clone();
+    if_passed["id"] = json!("b-only-if-passed");
+    if_passed["gate"] = json!({"rule": "wall-reference-required", "condition": "allIfPassed"});
+    ruleset["root"]["rules"] = json!([parent, failed, if_passed]);
+    let ruleset = case.write("gated.json", &ruleset.to_string());
+    let model = case.write("model.ifc", &ten_walls_two_without_reference());
+    let definitions = case.definitions(true);
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .arg("--rule-status")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let rules = &result["report"]["rules"];
+    // The recheck selects only the two walls its parent failed.
+    assert_eq!(
+        rules[0],
+        json!({"rule_id": "a-recheck-failed-walls", "checked": 2, "failed": 2,
+                "not_evaluated": 0, "status": "failed"}),
+        "{result:#}"
+    );
+    assert_eq!(rules[1]["status"], "skipped", "{result:#}");
+}
+
+#[test]
 fn a_summary_without_a_saved_result_says_how_to_get_one() {
     let case = Case::new("summary-unsaved");
     let output = case.check(&many_walls(2), true, &["--summary"]);

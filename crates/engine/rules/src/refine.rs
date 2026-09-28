@@ -8,9 +8,9 @@
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, LocationPolicy, NotEvaluatedReason, OutcomeRefiner,
-    Refining, RuleContext, report_severity,
+    Refining, RuleContext, SelectorVerdict, report_severity,
 };
-use axioval_ir::contract::{CategoryLevel, SeverityOverride};
+use axioval_ir::contract::{CategoryLevel, Selector, SeverityOverride};
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope, Severity};
 
 use crate::location::Locator;
@@ -67,6 +67,20 @@ impl OutcomeRefiner for Refiner {
 
     fn selected(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> usize {
         select_objects(context, &rule.selector).0.len()
+    }
+
+    fn evaluate_selector(
+        &self,
+        context: &RuleContext<'_>,
+        selector: &Selector,
+        object: &Object,
+    ) -> SelectorVerdict {
+        let mut evidence = Vec::new();
+        match selector_matches(context, selector, object, &mut evidence) {
+            Selection::Match => SelectorVerdict::Match(evidence),
+            Selection::NoMatch => SelectorVerdict::NoMatch(evidence),
+            Selection::NotEvaluated(reason, message) => SelectorVerdict::Undecided(reason, message),
+        }
     }
 }
 

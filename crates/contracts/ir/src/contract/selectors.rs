@@ -158,6 +158,28 @@ pub enum Selector {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         quantifier: Option<Quantifier>,
     },
+    /// Objects by how another rule of the same ruleset judged them.
+    ///
+    /// `passed` holds for an object the rule `rule` selected and reported
+    /// nothing about; `failed` for an object it reported a finding about.
+    /// An object the other rule left not evaluated, or could not decide
+    /// whether it selected, is not evaluated, never a match or a non-match;
+    /// so is every object of a source or project the other rule reported
+    /// about as a whole. The plan runs `rule` first; a cycle of such
+    /// references fails compilation.
+    RuleOutcome {
+        rule: String,
+        outcome: RuleOutcomeKind,
+    },
+}
+/// Which judgement of another rule a `ruleOutcome` selector selects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RuleOutcomeKind {
+    /// Selected by the rule, and nothing found or left open about it.
+    Passed,
+    /// The subject of at least one of the rule's findings.
+    Failed,
 }
 /// A fact about a whole source that a `source` selector compares.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

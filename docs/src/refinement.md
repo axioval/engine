@@ -191,7 +191,8 @@ passed on 500 objects. A host may ask for one summary per rule
 - `status` is `failed` with any finding, else `not_evaluated` with any
   not-evaluated outcome (at any scope), else `nothing_selected` when nothing
   was checked, else `passed`. A rule compiled but not executable is
-  `not_evaluated` with nothing checked.
+  `not_evaluated` with nothing checked, and a rule whose gate was closed
+  ([Gated rules](./gates.md)) is `skipped`, with nothing checked.
 
 Counting a selection evaluates the selector, so it needs the outcome refiner
 (`OutcomeRefiner::selected`); without one the run fails. Without the option

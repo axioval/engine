@@ -6,10 +6,12 @@
 //! every capability that reports what refinement needs gets it without a
 //! parameter of its own.
 
-use axioval_ir::Severity;
-use axioval_ir::contract::{self as schema, CategoryLevel, SeverityBand, SeverityOverride};
+use axioval_ir::contract::{
+    self as schema, CategoryLevel, Selector, SeverityBand, SeverityOverride,
+};
+use axioval_ir::{NotEvaluatedReason, Object, Severity};
 
-use crate::{CapabilityEvaluation, CompiledRule, RuleContext};
+use crate::{CapabilityEvaluation, CompiledRule, RuleContext, SelectorVerdict};
 
 /// How far a measured value misses the bound it fails, relative to that
 /// bound, as an interval sure to hold the exact relative deviation.
@@ -155,6 +157,26 @@ pub trait OutcomeRefiner: Send + Sync {
     /// How many objects `rule`'s applicability selector surely selects;
     /// objects it cannot decide are not counted.
     fn selected(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> usize;
+
+    /// Whether `selector` selects `object`, for the runtime's own reads of
+    /// the model: the selection of a rule whose outcomes another rule reads
+    /// per object.
+    ///
+    /// The default decides nothing, so a refiner that does not evaluate
+    /// selectors leaves every such object undecided rather than selected or
+    /// not.
+    fn evaluate_selector(
+        &self,
+        context: &RuleContext<'_>,
+        selector: &Selector,
+        object: &Object,
+    ) -> SelectorVerdict {
+        let _ = (context, selector, object);
+        SelectorVerdict::Undecided(
+            NotEvaluatedReason::MissingService,
+            "the host's outcome refiner evaluates no selectors".into(),
+        )
+    }
 }
 
 /// What one call of an [`OutcomeRefiner`] applies: the rule's declarations

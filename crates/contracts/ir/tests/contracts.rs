@@ -573,3 +573,53 @@ mod tables {
         assert_eq!(ReportValue::measured(1.0, 2.0).to_string(), "1..2");
     }
 }
+
+#[test]
+fn gates_and_rule_outcome_selectors_read_and_write_their_package_form() {
+    use axioval_ir::contract::{
+        GateCondition, RuleFolder, RuleGate, RuleOutcomeKind, Selector as Schema,
+    };
+    use serde_json::json;
+
+    let selector: Schema = serde_json::from_value(
+        json!({"kind": "ruleOutcome", "rule": "door-type", "outcome": "failed"}),
+    )
+    .unwrap();
+    assert_eq!(
+        selector,
+        Schema::RuleOutcome {
+            rule: "door-type".into(),
+            outcome: RuleOutcomeKind::Failed
+        }
+    );
+    let folder: RuleFolder = serde_json::from_value(json!({
+        "id": "hardware",
+        "name": {"default": "Hardware", "translations": {}},
+        "description": null,
+        "gate": {"rule": "door-type", "condition": "failedObjects"},
+    }))
+    .unwrap();
+    assert_eq!(
+        folder.gate,
+        Some(RuleGate {
+            rule: "door-type".into(),
+            condition: GateCondition::FailedObjects
+        })
+    );
+    let written = serde_json::to_value(&folder).unwrap();
+    assert_eq!(written["gate"]["condition"], "failedObjects");
+    // An ungated folder writes no gate.
+    let ungated = RuleFolder {
+        gate: None,
+        ..folder
+    };
+    assert!(
+        serde_json::to_value(&ungated)
+            .unwrap()
+            .get("gate")
+            .is_none()
+    );
+    assert!(
+        serde_json::from_value::<RuleGate>(json!({"rule": "a", "condition": "sometimes"})).is_err()
+    );
+}

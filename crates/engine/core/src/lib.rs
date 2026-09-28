@@ -2,7 +2,10 @@
 #![forbid(unsafe_code)]
 #![allow(missing_docs, clippy::missing_errors_doc)]
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 pub use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract as schema;
@@ -113,6 +116,11 @@ pub enum EngineError {
     /// registered no outcome refiner to do so.
     #[error("{0} needs an outcome refiner, and the host registered none")]
     MissingRefiner(&'static str),
+    /// A rule's gate or `ruleOutcome` selector names no rule of its
+    /// ruleset, a cycle of rules depends on itself, or the host registered
+    /// no outcome refiner to read another rule's selection.
+    #[error("rule `{rule}`: {detail}")]
+    InvalidDependency { rule: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -560,9 +568,14 @@ pub struct ExecutionPlan {
     deferred: Vec<DeferredRule>,
     concepts: Arc<ConceptCatalog>,
     refinements: BTreeMap<RuleId, RuleRefinement>,
+    /// Whole-rule gates: each gated rule's parents and conditions.
+    gates: BTreeMap<RuleId, Vec<(RuleId, schema::GateCondition)>>,
+    /// Rules whose selection a dependent reads per object.
+    recorded: BTreeSet<RuleId>,
 }
 impl ExecutionPlan {
-    /// Rules ordered by stable rule ID.
+    /// Rules in execution order: every rule after the rules its gates and
+    /// `ruleOutcome` selectors read, and otherwise by stable rule ID.
     pub fn rules(&self) -> &[CompiledRule] {
         &self.rules
     }
@@ -577,6 +590,11 @@ impl ExecutionPlan {
     /// How `rule` refines its outcomes; `None` when it declares nothing.
     pub fn refinement(&self, rule: &RuleId) -> Option<&RuleRefinement> {
         self.refinements.get(rule)
+    }
+    /// The whole-rule gates of `rule`: each parent rule and the condition
+    /// on its outcome. Empty for an ungated rule.
+    pub fn gates(&self, rule: &RuleId) -> &[(RuleId, schema::GateCondition)] {
+        self.gates.get(rule).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -609,6 +627,7 @@ mod properties;
 mod proximity;
 mod refinement;
 mod relationships;
+mod rule_outcomes;
 mod services;
 mod side_distance;
 mod sight;
@@ -730,6 +749,7 @@ pub use relationships::{
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
     SemanticRelationship, TraversalDirection,
 };
+pub use rule_outcomes::{ObjectVerdict, RuleOutcomes, RuleRecord, RuleVerdict, SelectorVerdict};
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{
     EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
@@ -948,6 +968,31 @@ impl Runtime {
         )
     }
 
+    /// Evaluates `rule`, then grades and refines its outcomes.
+    fn evaluate(
+        &self,
+        context: &RuleContext<'_>,
+        capability: &dyn RuleCapability,
+        rule: &CompiledRule,
+        refinement: Option<&RuleRefinement>,
+    ) -> CapabilityEvaluation {
+        let mut evaluation = capability.evaluate(context, rule);
+        if let Some(refinement) = refinement {
+            evaluation.grade(&refinement.severity_bands);
+        }
+        if let Some(refiner) = self.registry.refiner()
+            && (refinement.is_some() || self.locations.is_some())
+        {
+            let unrefined = RuleRefinement::default();
+            let refining = Refining {
+                refinement: refinement.unwrap_or(&unrefined),
+                locations: self.locations.as_ref(),
+            };
+            refiner.refine(context, rule, &refining, &mut evaluation);
+        }
+        evaluation
+    }
+
     fn run_with_services(
         &self,
         project: &Project,
@@ -970,6 +1015,11 @@ impl Runtime {
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
         let refiner = self.registry.refiner();
+        if !plan.recorded.is_empty() && refiner.is_none() {
+            return Err(EngineError::MissingRefiner(
+                "reading another rule's outcomes per object",
+            ));
+        }
         if self.locations.is_some() && refiner.is_none() {
             return Err(EngineError::MissingRefiner("locating outcomes"));
         }
@@ -979,8 +1029,6 @@ impl Runtime {
             ));
         }
         let mut summaries: Vec<RuleSummary> = Vec::new();
-        let services = &services;
-        let context = RuleContext { project, services };
         let mut findings = Vec::new();
         let mut tables: Vec<ReportTable> = Vec::new();
         let mut not_evaluated: Vec<NotEvaluated> = plan
@@ -999,27 +1047,47 @@ impl Runtime {
                 location: None,
             })
             .collect();
+        // What every completed rule reported, for the rules that read it.
+        let mut outcomes = RuleOutcomes::default();
         for rule in plan.rules {
             let capability = self
                 .registry
                 .get(&rule.capability)
                 .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
             let rule_id = rule.id.clone();
-            let mut evaluation = capability.evaluate(&context, &rule);
-            let refinement = plan.refinements.get(&rule_id);
-            if let Some(refinement) = refinement {
-                evaluation.grade(&refinement.severity_bands);
-            }
-            if let Some(refiner) = refiner
-                && (refinement.is_some() || self.locations.is_some())
-            {
-                let unrefined = RuleRefinement::default();
-                let refining = Refining {
-                    refinement: refinement.unwrap_or(&unrefined),
-                    locations: self.locations.as_ref(),
-                };
-                refiner.refine(&context, &rule, &refining, &mut evaluation);
-            }
+            // A rule reads the outcomes of the rules the plan ran before it.
+            services.replace(outcomes.clone());
+            let context = RuleContext {
+                project,
+                services: &services,
+            };
+            let gates = plan.gates.get(&rule_id).map_or(&[][..], Vec::as_slice);
+            let mut evaluation = match outcomes.gate(gates) {
+                rule_outcomes::Gate::Closed => {
+                    outcomes.insert(rule_id.clone(), RuleRecord::skipped());
+                    if self.summaries {
+                        summaries.push(RuleSummary::skipped(rule_id));
+                    }
+                    continue;
+                }
+                rule_outcomes::Gate::Undecided(why) => {
+                    outcomes.insert(rule_id.clone(), RuleRecord::undecided(&why));
+                    CapabilityEvaluation::not_evaluated(NotEvaluatedReason::IncompleteEvidence, why)
+                }
+                rule_outcomes::Gate::Open => {
+                    let evaluation = self.evaluate(
+                        &context,
+                        capability.as_ref(),
+                        &rule,
+                        plan.refinements.get(&rule_id),
+                    );
+                    let selection = refiner
+                        .filter(|_| plan.recorded.contains(&rule_id))
+                        .map(|refiner| rule_outcomes::selection(refiner.as_ref(), &context, &rule));
+                    outcomes.insert(rule_id.clone(), RuleRecord::of(&evaluation, selection));
+                    evaluation
+                }
+            };
             if let Some(refiner) = refiner
                 && self.summaries
             {
@@ -1029,40 +1097,50 @@ impl Runtime {
                     &evaluation,
                 ));
             }
-            findings.extend(evaluation.findings);
+            findings.extend(std::mem::take(&mut evaluation.findings));
             // The compiled rule is the table's identity, whatever the capability named.
             tables.extend(
-                evaluation
-                    .tables
+                std::mem::take(&mut evaluation.tables)
                     .into_iter()
                     .map(|table| table.with_rule_id(rule_id.clone())),
             );
             not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
-        findings.sort_by(|a, b| {
-            a.rule_id
-                .cmp(&b.rule_id)
-                // Project, then sources, then objects, each by identity.
-                .then_with(|| a.scope.cmp(&b.scope))
-                .then_with(|| a.message.cmp(&b.message))
-        });
-        not_evaluated.sort();
-        tables.sort_by(|a, b| (a.rule_id(), a.name()).cmp(&(b.rule_id(), b.name())));
-        if let Some(pair) = tables
-            .windows(2)
-            .find(|pair| (pair[0].rule_id(), pair[0].name()) == (pair[1].rule_id(), pair[1].name()))
-        {
-            return Err(EngineError::DuplicateReportTable {
-                rule: pair[0].rule_id().to_string(),
-                table: pair[0].name().to_owned(),
-            });
-        }
-        summaries.sort();
-        Ok(Report {
-            findings,
-            not_evaluated,
-            tables,
-            rules: summaries,
-        })
+        assemble(findings, not_evaluated, tables, summaries)
     }
+}
+
+/// The report of every rule's outcomes, each part in its deterministic
+/// order; a rule reporting one table name twice fails the run.
+fn assemble(
+    mut findings: Vec<Finding>,
+    mut not_evaluated: Vec<NotEvaluated>,
+    mut tables: Vec<ReportTable>,
+    mut summaries: Vec<RuleSummary>,
+) -> Result<Report, EngineError> {
+    findings.sort_by(|a, b| {
+        a.rule_id
+            .cmp(&b.rule_id)
+            // Project, then sources, then objects, each by identity.
+            .then_with(|| a.scope.cmp(&b.scope))
+            .then_with(|| a.message.cmp(&b.message))
+    });
+    not_evaluated.sort();
+    tables.sort_by(|a, b| (a.rule_id(), a.name()).cmp(&(b.rule_id(), b.name())));
+    if let Some(pair) = tables
+        .windows(2)
+        .find(|pair| (pair[0].rule_id(), pair[0].name()) == (pair[1].rule_id(), pair[1].name()))
+    {
+        return Err(EngineError::DuplicateReportTable {
+            rule: pair[0].rule_id().to_string(),
+            table: pair[0].name().to_owned(),
+        });
+    }
+    summaries.sort();
+    Ok(Report {
+        findings,
+        not_evaluated,
+        tables,
+        rules: summaries,
+    })
 }

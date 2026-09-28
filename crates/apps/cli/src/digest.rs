@@ -577,6 +577,7 @@ fn rule_status(status: RuleStatus) -> &'static str {
         RuleStatus::NotEvaluated => "not evaluated",
         RuleStatus::NothingSelected => "nothing selected",
         RuleStatus::Passed => "passed",
+        RuleStatus::Skipped => "skipped",
     }
 }
 
@@ -590,6 +591,7 @@ fn rules_digest(report: &Report, top: usize) -> Option<RulesDigest> {
         RuleStatus::NotEvaluated => 1,
         RuleStatus::NothingSelected => 2,
         RuleStatus::Passed => 3,
+        RuleStatus::Skipped => 4,
     };
     let mut ordered: Vec<_> = report.rules().iter().collect();
     ordered.sort_by(|a, b| {

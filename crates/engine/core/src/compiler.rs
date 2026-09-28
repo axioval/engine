@@ -6,13 +6,14 @@ use std::{
 };
 
 use axioval_ir::contract::{
-    ColumnKind, ParameterKind, ParameterValue, RuleApplicability, RuleDefinition, RuleFolder,
-    RuleInstance, Selector, TableColumnDefinition, TableRow,
+    ColumnKind, GateCondition, ParameterKind, ParameterValue, RuleApplicability, RuleDefinition,
+    RuleFolder, RuleGate, RuleInstance, Selector, TableColumnDefinition, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
 use crate::concepts::{ConceptCatalog, ConceptKind};
 use crate::refinement::{RuleRefinement, validate_bands};
+use crate::rule_outcomes;
 use crate::{
     CapabilityRegistry, CompiledRule, DeferredRule, EngineError, ExecutionPlan,
     ParameterDescriptor, ParameterType, TableColumn,
@@ -37,13 +38,22 @@ pub fn compile(
     let catalog = definition_catalog(ruleset, &packages)?;
     let concepts = concept_catalog(ruleset, &packages)?;
     let mut authored = Vec::new();
-    flatten(&ruleset.root, &mut authored);
-    authored.sort_by(|left, right| left.id.cmp(&right.id));
+    flatten(&ruleset.root, &[], &mut authored);
+    authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
+    let known: BTreeSet<&str> = authored.iter().map(|(rule, _)| rule.id.as_str()).collect();
+    let disabled: BTreeSet<&str> = authored
+        .iter()
+        .filter(|(rule, _)| !rule.enabled)
+        .map(|(rule, _)| rule.id.as_str())
+        .collect();
     let mut ids = BTreeSet::new();
     let mut rules = Vec::new();
     let mut deferred = Vec::new();
     let mut refinements = BTreeMap::new();
-    for rule in authored.into_iter().filter(|rule| rule.enabled) {
+    let mut gates = BTreeMap::new();
+    let mut dependencies: BTreeMap<RuleId, BTreeSet<RuleId>> = BTreeMap::new();
+    let mut recorded = BTreeSet::new();
+    for (rule, folder_gates) in authored.into_iter().filter(|(rule, _)| rule.enabled) {
         if !ids.insert(rule.id.as_str()) {
             return Err(EngineError::DuplicateRule(rule.id.clone()));
         }
@@ -57,6 +67,12 @@ pub fn compile(
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
         let refinement = refinement(registry, &concepts, rule, &definition.capability)?;
+        let dependency = rule_dependencies(rule, &folder_gates, &parameters, &refinement, &known)?;
+        recorded.extend(dependency.per_object.iter().cloned());
+        if !dependency.whole.is_empty() {
+            gates.insert(id.clone(), dependency.whole);
+        }
+        dependencies.insert(id.clone(), dependency.all);
         if !refinement.is_empty() {
             refinements.insert(id.clone(), refinement);
         }
@@ -65,7 +81,7 @@ pub fn compile(
                 id,
                 capability: definition.capability.clone(),
                 severity: rule.severity.clone(),
-                selector: selector.clone(),
+                selector: gated(selector, dependency.narrowing),
                 parameters,
             }),
             Err(groups) => deferred.push(DeferredRule {
@@ -78,12 +94,188 @@ pub fn compile(
             }),
         }
     }
+    let rules = defer_dependents(rules, &mut deferred, &dependencies, &disabled);
+    deferred.sort_by(|left, right| left.id.cmp(&right.id));
+    let rules = ordered(registry, rules, &dependencies, &recorded)?;
     Ok(ExecutionPlan {
         rules,
         deferred,
         concepts: Arc::new(concepts),
         refinements,
+        gates,
+        recorded,
     })
+}
+
+/// `rules` in dependency order, refused when they form a cycle or read
+/// another rule per object without a refiner to record its selection.
+fn ordered(
+    registry: &CapabilityRegistry,
+    rules: Vec<CompiledRule>,
+    dependencies: &BTreeMap<RuleId, BTreeSet<RuleId>>,
+    recorded: &BTreeSet<RuleId>,
+) -> Result<Vec<CompiledRule>, EngineError> {
+    let rules = rule_outcomes::dependency_order(rules, dependencies).map_err(|cycle| {
+        EngineError::InvalidDependency {
+            rule: cycle[0].to_string(),
+            detail: format!(
+                "the rules {} depend on one another's outcomes in a cycle",
+                cycle
+                    .iter()
+                    .map(|id| format!("`{id}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    })?;
+    if let Some(reader) = rules.iter().find(|rule| {
+        dependencies[&rule.id]
+            .iter()
+            .any(|parent| recorded.contains(parent))
+    }) && registry.refiner().is_none()
+    {
+        return Err(EngineError::InvalidDependency {
+            rule: reader.id.to_string(),
+            detail: "the rule reads another rule's outcomes per object, and the host \
+                     registered no outcome refiner to record that rule's selection"
+                .into(),
+        });
+    }
+    Ok(rules)
+}
+
+/// What one rule reads of other rules' outcomes.
+struct RuleDependency {
+    /// Every rule it reads, as a whole or per object.
+    all: BTreeSet<RuleId>,
+    /// Rules it reads per object, whose selection must be recorded.
+    per_object: BTreeSet<RuleId>,
+    /// Whole-rule gates, parent and condition.
+    whole: Vec<(RuleId, GateCondition)>,
+    /// Selectors its object gates narrow its applicability by.
+    narrowing: Vec<Selector>,
+}
+
+/// The rules `rule` depends on through its folders' gates and its own, and
+/// through `ruleOutcome` selectors in its applicability, parameters and
+/// severity overrides. Every one must be a rule of the ruleset, and never
+/// the rule itself.
+fn rule_dependencies(
+    rule: &RuleInstance,
+    folder_gates: &[&RuleGate],
+    parameters: &BTreeMap<String, ParameterValue>,
+    refinement: &RuleRefinement,
+    known: &BTreeSet<&str>,
+) -> Result<RuleDependency, EngineError> {
+    let invalid = |detail: String| EngineError::InvalidDependency {
+        rule: rule.id.clone(),
+        detail,
+    };
+    let mut per_object: BTreeSet<&str> = BTreeSet::new();
+    match &rule.applicability {
+        RuleApplicability::Selector(selector) => {
+            rule_outcomes::selector_references(selector, &mut per_object);
+        }
+        RuleApplicability::Groups(groups) => {
+            for group in groups.groups.values() {
+                rule_outcomes::selector_references(&group.selector, &mut per_object);
+            }
+        }
+    }
+    for value in parameters.values() {
+        rule_outcomes::value_references(value, &mut per_object);
+    }
+    for entry in &refinement.severity_overrides {
+        rule_outcomes::selector_references(&entry.selector, &mut per_object);
+    }
+    let mut whole = Vec::new();
+    let mut narrowing = Vec::new();
+    for gate in folder_gates.iter().copied().chain(&rule.gate) {
+        match rule_outcomes::gate_selector(&gate.rule, gate.condition) {
+            Some(selector) => {
+                per_object.insert(&gate.rule);
+                narrowing.push(selector);
+            }
+            None => whole.push((gate.rule.as_str(), gate.condition)),
+        }
+    }
+    let rule_id = |name: &str| {
+        if name == rule.id {
+            return Err(invalid(
+                "the rule depends on its own outcome; a gate on a folder must name a rule \
+                 outside it"
+                    .into(),
+            ));
+        }
+        if !known.contains(name) {
+            return Err(invalid(format!(
+                "the rule depends on rule `{name}`, which the ruleset does not define"
+            )));
+        }
+        RuleId::new(name).map_err(|_| EngineError::InvalidRuleId(name.into()))
+    };
+    let per_object = per_object
+        .into_iter()
+        .map(rule_id)
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let whole = whole
+        .into_iter()
+        .map(|(name, condition)| Ok((rule_id(name)?, condition)))
+        .collect::<Result<Vec<_>, EngineError>>()?;
+    let mut all = per_object.clone();
+    all.extend(whole.iter().map(|(parent, _)| parent.clone()));
+    Ok(RuleDependency {
+        all,
+        per_object,
+        whole,
+        narrowing,
+    })
+}
+
+/// `selector` narrowed by an object gate's selectors, gates first.
+fn gated(selector: &Selector, narrowing: Vec<Selector>) -> Selector {
+    if narrowing.is_empty() {
+        return selector.clone();
+    }
+    let mut operands = narrowing;
+    operands.push(selector.clone());
+    Selector::AllOf { operands }
+}
+
+/// `rules` without those depending, directly or through other rules, on a
+/// disabled or deferred rule; those are deferred, since their parent never
+/// runs and their gate or selection could never be decided.
+fn defer_dependents(
+    mut rules: Vec<CompiledRule>,
+    deferred: &mut Vec<DeferredRule>,
+    dependencies: &BTreeMap<RuleId, BTreeSet<RuleId>>,
+    disabled: &BTreeSet<&str>,
+) -> Vec<CompiledRule> {
+    let blocking = |parent: &RuleId, deferred: &[DeferredRule]| {
+        disabled.contains(parent.to_string().as_str()) || deferred.iter().any(|d| d.id == *parent)
+    };
+    while let Some(index) = rules.iter().position(|rule| {
+        dependencies[&rule.id]
+            .iter()
+            .any(|parent| blocking(parent, deferred))
+    }) {
+        let rule = rules.remove(index);
+        let parents = dependencies[&rule.id]
+            .iter()
+            .filter(|parent| blocking(parent, deferred))
+            .map(|parent| format!("`{parent}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        deferred.push(DeferredRule {
+            id: rule.id,
+            capability: rule.capability,
+            reason: format!(
+                "the rule depends on the outcome of rule {parents}, which is disabled or \
+                 cannot run"
+            ),
+        });
+    }
+    rules
 }
 
 /// What `rule` asks of its outcomes, checked against the capability.
@@ -164,9 +356,11 @@ pub fn compile_rulesets(
     }
     let mut packages_seen = BTreeSet::new();
     let mut declared: Vec<&String> = Vec::new();
-    let mut rules = Vec::new();
+    let mut by_package: BTreeMap<&str, Vec<CompiledRule>> = BTreeMap::new();
     let mut deferred = Vec::new();
     let mut refinements = BTreeMap::new();
+    let mut gates = BTreeMap::new();
+    let mut recorded = BTreeSet::new();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -182,19 +376,41 @@ pub fn compile_rulesets(
             let qualified = format!("{package}{QUALIFIED_RULE_SEPARATOR}{id}");
             RuleId::new(qualified.clone()).map_err(|_| EngineError::InvalidRuleId(qualified))
         };
+        // A ruleset's rules read only its own rules' outcomes, by the same
+        // qualified ids.
+        let rename = |name: &str| format!("{package}{QUALIFIED_RULE_SEPARATOR}{name}");
         for mut rule in plan.rules {
             rule.id = qualify(&rule.id)?;
-            rules.push(rule);
+            rule_outcomes::rename_selector(&mut rule.selector, &rename);
+            for value in rule.parameters.values_mut() {
+                rule_outcomes::rename_value(value, &rename);
+            }
+            by_package.entry(package).or_default().push(rule);
         }
-        for (id, refinement) in plan.refinements {
+        for (id, mut refinement) in plan.refinements {
+            for entry in &mut refinement.severity_overrides {
+                rule_outcomes::rename_selector(&mut entry.selector, &rename);
+            }
             refinements.insert(qualify(&id)?, refinement);
+        }
+        for (id, parents) in plan.gates {
+            let parents = parents
+                .into_iter()
+                .map(|(parent, condition)| Ok((qualify(&parent)?, condition)))
+                .collect::<Result<Vec<_>, EngineError>>()?;
+            gates.insert(qualify(&id)?, parents);
+        }
+        for id in plan.recorded {
+            recorded.insert(qualify(&id)?);
         }
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
             deferred.push(rule);
         }
     }
-    rules.sort_by(|left, right| left.id.cmp(&right.id));
+    // Each ruleset's rules keep their dependency order; rulesets follow one
+    // another by package ID, as their qualified IDs sort.
+    let rules: Vec<CompiledRule> = by_package.into_values().flatten().collect();
     deferred.sort_by(|left, right| left.id.cmp(&right.id));
     let packages = collect_definition_packages(definitions)?;
     let concepts = concepts_of(declared.into_iter(), &packages)?;
@@ -203,6 +419,8 @@ pub fn compile_rulesets(
         deferred,
         concepts: Arc::new(concepts),
         refinements,
+        gates,
+        recorded,
     })
 }
 
@@ -410,7 +628,11 @@ fn validate_selector_concepts(
     selector: &Selector,
 ) -> Result<(), EngineError> {
     match selector {
-        Selector::All | Selector::Classification { .. } | Selector::Discipline { .. } => Ok(()),
+        // A rule reference is checked with the rule's dependencies.
+        Selector::All
+        | Selector::Classification { .. }
+        | Selector::Discipline { .. }
+        | Selector::RuleOutcome { .. } => Ok(()),
         Selector::EntityType { object_type, .. } => {
             require_concept(concepts, rule, ConceptKind::ObjectType, object_type)
         }
@@ -519,10 +741,18 @@ fn validate_schema_version(
     })
 }
 
-fn flatten<'a>(folder: &'a RuleFolder, out: &mut Vec<&'a RuleInstance>) {
-    out.extend(&folder.rules);
+/// Every rule in `folder` and its subfolders, each with the gates of the
+/// folders around it, outermost first.
+fn flatten<'a>(
+    folder: &'a RuleFolder,
+    outer: &[&'a RuleGate],
+    out: &mut Vec<(&'a RuleInstance, Vec<&'a RuleGate>)>,
+) {
+    let mut gates = outer.to_vec();
+    gates.extend(&folder.gate);
+    out.extend(folder.rules.iter().map(|rule| (rule, gates.clone())));
     for child in &folder.folders {
-        flatten(child, out);
+        flatten(child, &gates, out);
     }
 }
 

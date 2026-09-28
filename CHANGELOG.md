@@ -78,6 +78,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   is the leg spanning the whole height and `zone` `web` the height beside
   the notch, clear of the ledge; an opening through the web leaves the host
   where the web ends instead of crossing its outline.
+- **Rules gated on other rules' outcomes.** (#98) A rule instance or rule
+  folder declares a `gate`: another rule of its ruleset and `allIfPassed`,
+  `allIfFailed`, `passedObjects` or `failedObjects`. The new
+  `ruleOutcome` selector (`passed` or `failed`) selects by another rule's
+  per-object outcome anywhere a selector goes. The plan runs every rule after
+  the rules it reads (`ExecutionPlan::rules` is in dependency order, then
+  by id), and the runtime installs `RuleOutcomes` before each rule. What
+  the other rule left undecided stays undecided: an undecided status leaves
+  a whole-rule gate's rule not evaluated, an undecided object is not
+  evaluated by the gated rule. A closed gate skips its rule, reported as
+  `RuleStatus::Skipped`. Unknown references, self references and cycles
+  fail compilation (`EngineError::InvalidDependency`); a rule reading a
+  disabled rule is not evaluated. `OutcomeRefiner::evaluate_selector`
+  (default: undecided) records the other rule's selection. **Breaking:**
+  `Selector`, `RuleStatus` and `EngineError` gain variants, and
+  `RuleInstance` and `RuleFolder` gain `gate`.
+
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

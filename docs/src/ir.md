@@ -123,7 +123,8 @@ before.
 `Report::rules` holds one `RuleSummary` per rule when the host asked for
 them: the decided selection size (`checked`), the objects with findings
 (`failed`) and not evaluated, and a `RuleStatus` (`passed`, `failed`,
-`not_evaluated`, `nothing_selected`). See [Rule status](./refinement.md#rule-status).
+`not_evaluated`, `nothing_selected`, or `skipped` for a rule whose gate on another
+rule's outcome was closed). See [Rule status](./refinement.md#rule-status).
 The field is omitted when empty.
 
 ### Tables

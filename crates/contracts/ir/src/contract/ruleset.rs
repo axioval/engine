@@ -114,6 +114,45 @@ pub struct RuleInstance {
     /// serialized.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<CategoryLevel>,
+    /// Runs the rule only as another rule's outcome allows; see
+    /// [`RuleGate`]. Omitted when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<RuleGate>,
+}
+
+/// A rule's gate on another rule of the same ruleset: the rule runs, or
+/// selects, only as that rule's outcome allows.
+///
+/// A gate on a folder applies to every rule in it and its subfolders,
+/// together with each rule's own gate.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuleGate {
+    /// The id of the rule whose outcome gates.
+    pub rule: String,
+    pub condition: GateCondition,
+}
+
+/// When a gated rule runs, and on what.
+///
+/// The whole-rule conditions read the other rule's status: `passed` with
+/// no finding and nothing left not evaluated, `failed` with any finding.
+/// A gate that is not open skips the rule; a status that cannot be decided
+/// (no finding, but something not evaluated) leaves the gated rule not
+/// evaluated. The object conditions narrow the rule's applicability to the
+/// objects the other rule passed or failed, as a `ruleOutcome` selector
+/// does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GateCondition {
+    /// Every selected object, if the other rule passed.
+    AllIfPassed,
+    /// Every selected object, if the other rule failed.
+    AllIfFailed,
+    /// Only the objects the other rule passed.
+    PassedObjects,
+    /// Only the objects the other rule failed.
+    FailedObjects,
 }
 
 /// One level of a rule's `categories`: the value of `property` (in
@@ -174,6 +213,10 @@ pub struct RuleFolder {
     pub rules: Vec<RuleInstance>,
     #[serde(default)]
     pub folders: Vec<RuleFolder>,
+    /// A gate every rule in the folder and its subfolders takes; see
+    /// [`RuleGate`]. Omitted when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<RuleGate>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

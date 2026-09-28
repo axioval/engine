@@ -1193,6 +1193,9 @@ pub enum RuleStatus {
     /// The rule surely selected nothing and reported nothing: it passed
     /// vacuously, which a reader must be able to tell from a pass.
     NothingSelected,
+    /// The rule's gate on another rule's outcome was closed, so it did not
+    /// run; it reports nothing and checked nothing.
+    Skipped,
 }
 
 /// One rule's counts over the objects it checked.
@@ -1213,6 +1216,17 @@ pub struct RuleSummary {
 }
 
 impl RuleSummary {
+    /// The summary of a rule its gate skipped.
+    #[must_use]
+    pub fn skipped(rule_id: RuleId) -> Self {
+        Self {
+            rule_id,
+            checked: 0,
+            failed: 0,
+            not_evaluated: 0,
+            status: RuleStatus::Skipped,
+        }
+    }
     /// The summary of a rule with these counts, and whether it found
     /// anything or left anything not evaluated at any scope.
     #[must_use]

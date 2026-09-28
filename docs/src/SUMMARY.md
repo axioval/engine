@@ -13,6 +13,7 @@
 - [Concept binding](./concept-binding.md)
 - [Capabilities](./capabilities.md)
 - [Refining outcomes](./refinement.md)
+- [Gated rules](./gates.md)
 - [Connectivity and routes](./topology.md)
 - [Metric routing](./metric-routing.md)
 - [Free space and clearance](./free-space.md)

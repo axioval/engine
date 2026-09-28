@@ -1,16 +1,20 @@
 //! Which object definitions a session checks.
 //!
-//! Occurrences and, in IFC4, contexts such as `IfcProject` are session
-//! objects: both answer their properties exactly. A type object is not yet
-//! one, although its own property sets now resolve; a resource is not either.
+//! Occurrences, in IFC4 contexts such as `IfcProject`, and type objects are
+//! session objects: each answers its own properties exactly, a type object
+//! its own `HasPropertySets` (`ifc-properties` ≥ 0.5.1). A resource is not.
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    EvidenceSession, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionServiceHandle,
+    ClassificationAssignment, ClassificationServiceHandle, EvidenceSession, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    RelationshipQuery, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
+    SemanticRelationship, TraversalDirection, TypeHierarchyServiceHandle,
 };
 use axioval_ifc::import_ifc_session;
-use axioval_ir::{ATTRIBUTE_SET, ObjectId, PropertyValue, SourceId};
+use axioval_ir::{
+    ATTRIBUTE_SET, MATERIAL_SET, ObjectId, PropertyValue, SourceId, TYPE_ATTRIBUTE_SET,
+};
 
 const MODEL: &str = "ISO-10303-21;
 HEADER;
@@ -29,14 +33,23 @@ DATA;
 #12=IFCRELDEFINESBYTYPE('0000000000000000000012',$,$,$,(#11),#10);
 #13=IFCPROPERTYSET('0000000000000000000013',$,'Pset_WallCommon',$,(#14));
 #14=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('EI 60'),$);
+#20=IFCCLASSIFICATION($,$,$,'Uniclass',$,$,$);
+#21=IFCCLASSIFICATIONREFERENCE($,'EF_25',$,#20,$,$);
+#22=IFCRELASSOCIATESCLASSIFICATION('0000000000000000000022',$,$,$,(#10),#21);
 #30=IFCMATERIAL('Concrete',$,$);
 #31=IFCRELASSOCIATESMATERIAL('0000000000000000000031',$,$,$,(#11),#30);
+#32=IFCMATERIAL('Brick',$,$);
+#33=IFCRELASSOCIATESMATERIAL('0000000000000000000033',$,$,$,(#10),#32);
 ENDSEC;
 END-ISO-10303-21;
 ";
 
+fn source() -> SourceId {
+    SourceId::new("ifc-step", "model.ifc").unwrap()
+}
+
 fn id(local: &str) -> ObjectId {
-    ObjectId::new(SourceId::new("ifc-step", "model.ifc").unwrap(), local).unwrap()
+    ObjectId::new(source(), local).unwrap()
 }
 
 fn session() -> EvidenceSession {
@@ -62,8 +75,22 @@ fn value(resolution: Result<PropertyResolution, PropertyResolutionError>) -> Pro
     }
 }
 
+fn locator(resolution: Result<PropertyResolution, PropertyResolutionError>) -> String {
+    match resolution {
+        Ok(PropertyResolution::Present(resolved)) => {
+            resolved
+                .property()
+                .evidence
+                .clone()
+                .expect("exact evidence")
+                .locator
+        }
+        other => panic!("expected a value, got {other:?}"),
+    }
+}
+
 #[test]
-fn occurrences_and_contexts_are_objects_and_types_and_resources_are_not() {
+fn occurrences_contexts_and_types_are_objects_and_resources_are_not() {
     let session = session();
     let mut kinds: Vec<(String, String)> = session
         .project()
@@ -75,15 +102,35 @@ fn occurrences_and_contexts_are_objects_and_types_and_resources_are_not() {
         kinds,
         [
             ("#1".to_owned(), "IFCPROJECT".to_owned()),
+            ("#10".to_owned(), "IFCWALLTYPE".to_owned()),
             ("#11".to_owned(), "IFCWALL".to_owned()),
             ("#5".to_owned(), "IFCPROJECTLIBRARY".to_owned()),
         ]
     );
-    // A context keeps its source-qualified identity and GlobalId alias.
+    // A context and a type object keep their source-qualified identity and
+    // GlobalId alias.
     let project = session.project().object(&id("#1")).unwrap();
     assert_eq!(
         project.external_id("ifc-globalid"),
         Some("0000000000000000000001")
+    );
+    let wall_type = session.project().object(&id("#10")).unwrap();
+    assert_eq!(wall_type.id, id("#10"));
+    assert_eq!(
+        wall_type.external_id("ifc-globalid"),
+        Some("0000000000000000000010")
+    );
+    // Its kind is its own class, under IfcTypeObject and never IfcObject.
+    let hierarchy = session.service::<TypeHierarchyServiceHandle>().unwrap();
+    assert!(
+        hierarchy
+            .is_a(&source(), "IfcWallType", "IfcTypeObject")
+            .unwrap()
+    );
+    assert!(
+        !hierarchy
+            .is_a(&source(), "IfcWallType", "IfcObject")
+            .unwrap()
     );
 }
 
@@ -126,16 +173,84 @@ fn a_type_objects_own_property_sets_resolve_with_type_provenance() {
     );
 }
 
-fn locator(resolution: Result<PropertyResolution, PropertyResolutionError>) -> String {
-    match resolution {
-        Ok(PropertyResolution::Present(resolved)) => {
-            resolved
-                .property()
-                .evidence
-                .clone()
-                .expect("exact evidence")
-                .locator
-        }
-        other => panic!("expected a value, got {other:?}"),
-    }
+#[test]
+fn a_type_object_answers_its_own_attributes_and_has_no_type() {
+    let session = session();
+    assert_eq!(
+        value(resolve(&session, "#10", ATTRIBUTE_SET, "Name")),
+        PropertyValue::String("T".into())
+    );
+    assert_eq!(
+        value(resolve(&session, "#10", ATTRIBUTE_SET, "PredefinedType")),
+        PropertyValue::String("USERDEFINED".into())
+    );
+    assert_eq!(
+        value(resolve(&session, "#10", ATTRIBUTE_SET, "ElementType")),
+        PropertyValue::String("Custom".into())
+    );
+    // A type object is typed by nothing: its type attributes are absent.
+    assert!(matches!(
+        resolve(&session, "#10", TYPE_ATTRIBUTE_SET, "Name"),
+        Ok(PropertyResolution::Absent(_))
+    ));
+    // Its occurrence reads the same attribute through the type.
+    assert_eq!(
+        value(resolve(&session, "#11", TYPE_ATTRIBUTE_SET, "Name")),
+        PropertyValue::String("T".into())
+    );
+}
+
+#[test]
+fn a_type_object_answers_its_own_classifications_and_materials() {
+    let session = session();
+    let classifications = session.service::<ClassificationServiceHandle>().unwrap();
+    let uniclass = [ClassificationAssignment {
+        system: Some("Uniclass".into()),
+        codes: vec![Some("EF_25".into())],
+    }];
+    assert_eq!(
+        classifications.classifications(&id("#10")).unwrap(),
+        uniclass
+    );
+    // The occurrence inherits it.
+    assert_eq!(
+        classifications.classifications(&id("#11")).unwrap(),
+        uniclass
+    );
+    // The type's own material; the occurrence's own governs the occurrence.
+    assert_eq!(
+        value(resolve(&session, "#10", MATERIAL_SET, "Name")),
+        PropertyValue::String("Brick".into())
+    );
+    assert_eq!(
+        value(resolve(&session, "#11", MATERIAL_SET, "Name")),
+        PropertyValue::String("Concrete".into())
+    );
+}
+
+#[test]
+fn a_type_object_is_a_relationship_end() {
+    let session = session();
+    let objects = vec![id("#1"), id("#5"), id("#10"), id("#11")];
+    let select = |from: &str, direction| {
+        let request = RelationshipSelectionRequest::try_new(
+            id(from),
+            objects.clone(),
+            RelationshipQuery::Related {
+                relationship: SemanticRelationship::try_new("IfcRelDefinesByType").unwrap(),
+                direction,
+                follow_chain: false,
+            },
+        )
+        .unwrap();
+        session
+            .service::<RelationshipSelectionServiceHandle>()
+            .unwrap()
+            .select(&request)
+            .unwrap()
+            .candidates()
+            .to_vec()
+    };
+    assert_eq!(select("#10", TraversalDirection::Forward), [id("#11")]);
+    assert_eq!(select("#11", TraversalDirection::Backward), [id("#10")]);
 }

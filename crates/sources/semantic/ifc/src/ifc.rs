@@ -681,17 +681,13 @@ pub fn import_ifc_session(
     let global_ids = Arc::new(GlobalIds::read(release, &model));
     let objects = model
         .iter()
-        // Occurrences (`IfcObject`) and, in IFC4, contexts such as
-        // `IfcProject` (`IfcContext`, an `IfcObject` in IFC2X3) are checked:
-        // both answer their properties exactly. A type object is not: the
-        // IFC property library refuses its own property sets, so every
-        // property rule it fell under would leave it not evaluated.
-        // Resources carry no GlobalId and take part in no object
-        // relationship.
-        .filter(|(_, entity)| {
-            release.schema.is_a(&entity.type_name, "IFCOBJECT")
-                || release.schema.is_a(&entity.type_name, "IFCCONTEXT")
-        })
+        // Occurrences (`IfcObject`), in IFC4 contexts such as `IfcProject`
+        // (`IfcContext`, an `IfcObject` in IFC2X3), and type objects
+        // (`IfcTypeObject`, IFC2X3 `IfcDoorStyle` included) are checked:
+        // each answers its own properties exactly, a type object its own
+        // `HasPropertySets` (`ifc-properties` ≥ 0.5.1). Resources carry no
+        // GlobalId and take part in no object relationship.
+        .filter(|(_, entity)| is_object(release, &entity.type_name))
         .map(|(id, entity)| {
             let object = Object::new(
                 ObjectId::new(source.clone(), id.to_string())?,
@@ -758,6 +754,14 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(coordinates))
         .and_then(|session| session.with_source_metadata(&source, metadata))
         .map_err(|error| session_error(&error))
+}
+
+/// Whether a session makes an object of an instance of `type_name`: an
+/// occurrence, a context or a type object of the release.
+fn is_object(release: Release, type_name: &str) -> bool {
+    ["IFCOBJECT", "IFCCONTEXT", "IFCTYPEOBJECT"]
+        .iter()
+        .any(|ancestor| release.schema.is_a(type_name, ancestor))
 }
 
 fn session_error(error: &EvidenceSessionError) -> IfcSessionError {

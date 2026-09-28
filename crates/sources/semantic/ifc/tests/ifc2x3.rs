@@ -65,13 +65,17 @@ fn an_ifc2x3_source_declares_its_own_release_and_type_system() {
 fn objects_are_discovered_with_the_declared_release_ancestry() {
     // IfcElectricalCircuit exists only in IFC2X3, where it is an IfcObject.
     // Read with IFC4 ancestry, it would drop out of an IFC2X3 project. A type
-    // object and a resource such as a material are not objects.
+    // object is an object, IfcDoorStyle (an IfcTypeProduct only in IFC2X3)
+    // included; a resource such as a material is not.
     let data = "\
 #1=IFCPROJECT('000000000000000000000p',$,'P',$,$,$,$,$,$);
 #2=IFCELECTRICALCIRCUIT('000000000000000000000c',$,'Circuit',$,$);
 #3=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$);
 #4=IFCWALLTYPE('000000000000000000000t',$,'T',$,$,$,$,$,$,.STANDARD.);
 #5=IFCMATERIAL('Concrete');
+#6=IFCDOORSTYLE('00000000000000000000ds',$,'Style',$,$,(#8),$,$,.SINGLE_SWING_LEFT.,.WOOD.,.F.,.F.);
+#7=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('EI 30'),$);
+#8=IFCPROPERTYSET('00000000000000000000ps',$,'Pset_DoorCommon',$,(#7));
 ";
     let x3 = session("IFC2X3", data);
     let kinds = |session: &EvidenceSession| {
@@ -85,7 +89,26 @@ fn objects_are_discovered_with_the_declared_release_ancestry() {
     };
     assert_eq!(
         kinds(&x3),
-        ["IFCELECTRICALCIRCUIT", "IFCPROJECT", "IFCWALL"]
+        [
+            "IFCDOORSTYLE",
+            "IFCELECTRICALCIRCUIT",
+            "IFCPROJECT",
+            "IFCWALL",
+            "IFCWALLTYPE"
+        ]
+    );
+    // The door style answers its own HasPropertySets through the IFC2X3
+    // table.
+    let resolved = x3
+        .service::<PropertyResolutionServiceHandle>()
+        .unwrap()
+        .resolve(
+            &PropertyRequest::try_new(id("#6"), Some("Pset_DoorCommon".into()), "FireRating")
+                .unwrap(),
+        );
+    assert!(
+        matches!(&resolved, Ok(PropertyResolution::Present(p)) if *p.property().value() == PropertyValue::String("EI 30".into())),
+        "{resolved:?}"
     );
     // Under IFC4 the project is an IfcContext, checked all the same.
     let x4 = session(

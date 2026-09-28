@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Type objects are checked objects.** (Refs #116) An IFC session's
+  objects are now every `IfcObject`, every `IfcContext` and every
+  `IfcTypeObject` (`IfcWallType`, IFC2X3 `IfcDoorStyle`, ...), with their
+  source-qualified identity, their class as kind and their GlobalId alias.
+  A type object answers its own `HasPropertySets` with `type:` provenance
+  (`ifc-properties` 0.5.1), its own attributes, classifications and
+  materials, and is an end of `IfcRelDefinesByType` and the other
+  relationships it takes part in; its type attributes are absent, and door
+  and window leaves call it no door. The staging IDS importer checks type
+  object classes as themselves (their predefined type is their own, or
+  their element, process or resource type when user-defined) and treats
+  an abstract class, which has no instances, as matching nothing, so a
+  part-of whole given as a pattern no longer stops at
+  `IFCOBJECTDEFINITION`. **Breaking:** a rule over every object, or one
+  selecting only by a classification, a property, a material or a
+  relationship, now includes type objects, so it may report them, and
+  object counts, model comparisons and the geometry's bodiless objects
+  count them. Rules selecting an occurrence class are unchanged.
+
 - **IFC4X3 classifications.** (Refs #116) An IFC4X3 session answers
   classifications: `ifc-classification` 0.2.2 reads IFC4X3 with its own
   table (openbimrs/ifc#194), so the adapter no longer refuses them and a

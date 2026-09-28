@@ -245,6 +245,12 @@ fn what_the_source_does_not_state_is_refused_never_defaulted() {
         door.leaves_of("#23"),
         Err(DoorLeavesError::NotADoor(_))
     ));
+    // The door type is a session object, and no door: it has no leaves,
+    // never a failure to read them.
+    assert!(matches!(
+        door.leaves_of("#21"),
+        Err(DoorLeavesError::NotADoor(_))
+    ));
     assert!(matches!(
         door.leaves_of("#99"),
         Err(DoorLeavesError::UnknownObject(_))

@@ -289,6 +289,11 @@ fn an_ifc2x3_window_reads_its_partitioning_from_its_style() {
     let leaves = window.leaves();
     assert_eq!(leaves.operation(), "SINGLE_PANEL");
     assert_eq!(leaves.leaves()[0].hinge_side(), Some(HingeSide::Left));
+    // The IfcWindowStyle is a session object, and no window itself.
+    assert!(matches!(
+        window.leaves_of("#21"),
+        Err(DoorLeavesError::NotADoor(_))
+    ));
 }
 
 #[test]
@@ -329,6 +334,11 @@ fn what_the_source_does_not_state_is_refused_never_defaulted() {
     let window = Window::new("SINGLE_PANEL", vec![Panel("SIDEHUNGLEFTHAND", "MIDDLE")]);
     assert!(matches!(
         window.leaves_of("#23"),
+        Err(DoorLeavesError::NotADoor(_))
+    ));
+    // The window type is a session object, and neither door nor window.
+    assert!(matches!(
+        window.leaves_of("#21"),
         Err(DoorLeavesError::NotADoor(_))
     ));
     assert!(matches!(

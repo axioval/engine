@@ -13,17 +13,20 @@ snapshot registered by the session; mismatched service composition is rejected.
 Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
 unsupported values fail closed.
 
-The session's objects are every `IfcObject` occurrence and every `IfcContext`
+The session's objects are every `IfcObject` occurrence, every `IfcContext`
 (an IFC4 `IfcProject` or `IfcProjectLibrary`; in IFC2X3 `IfcProject` is an
-`IfcObject`), each with its entity name as kind and its GlobalId alias. Both
-answer their property sets, attributes, classifications and materials. A type
-object (`IfcWallType`) is not an object: `ifc-properties` refuses a type
-object's own `HasPropertySets` as a query (`InvalidQueryObject`), so every
-property rule a type fell under would leave it not evaluated; its sets still
-reach its occurrences, and a property request naming a type is refused as
-unavailable, never answered absent. Resources (`IfcMaterial`, `IfcTaskTime`,
-`IfcSurfaceStyleRefraction`) carry no GlobalId and take part in no object
-relationship, and are not objects either.
+`IfcObject`) and every `IfcTypeObject` (`IfcWallType`, IFC2X3 `IfcDoorStyle`),
+each with its entity name as kind and its GlobalId alias. Each answers its
+property sets, attributes, classifications and materials, and is an end of the
+relationships it takes part in. A type object answers its own
+`HasPropertySets` (`ifc-properties` 0.5.1, openbimrs/ifc#193), with the same
+`type:` provenance its occurrences report for those sets; it is typed by
+nothing, so its `axioval:type-attributes` are absent, and it has no placement,
+body or leaves (a door type is not a door). A rule selecting objects by a
+classification, a property or no class at all therefore checks type objects
+too. Resources (`IfcMaterial`, `IfcTaskTime`, `IfcSurfaceStyleRefraction`)
+carry no GlobalId and take part in no object relationship, and are not
+objects.
 
 A present property reports the IFC type its value was written with (`IFCLABEL`,
 `IFCBOOLEAN`, ...) as `Property::data_type`, upper case whatever the file used.

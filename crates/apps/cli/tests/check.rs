@@ -255,6 +255,56 @@ fn a_model_without_objects_is_checked_and_an_existence_rule_fails_on_it() {
 }
 
 #[test]
+fn a_type_object_is_checked_against_its_own_property_sets() {
+    // The example's wall concept bound to IfcWallType: the rule checks the
+    // type objects themselves, each against its own HasPropertySets. #10
+    // states the reference, #11 does not; the occurrence #20 inherits #10's
+    // set but is no IfcWallType, so it is not selected.
+    let case = Case::new("type-objects");
+    let model = case.write(
+        "model.ifc",
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('WT-1'),$);\n\
+         #2=IFCPROPERTYSET('0000000000000000000002',$,'Pset_WallCommon',$,(#1));\n\
+         #10=IFCWALLTYPE('0000000000000000000010',$,'A',$,$,(#2),$,$,$,.STANDARD.);\n\
+         #11=IFCWALLTYPE('0000000000000000000011',$,'B',$,$,$,$,$,$,.STANDARD.);\n\
+         #20=IFCWALL('0000000000000000000020',$,$,$,$,$,$,$,$);\n\
+         #21=IFCRELDEFINESBYTYPE('0000000000000000000021',$,$,$,(#20),#10);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+    );
+    let text = std::fs::read_to_string(case.definitions(true)).unwrap();
+    let mut definitions: Value = serde_json::from_str(&text).unwrap();
+    definitions["objectTypes"]["axioval:example.ifc.wall"]["externalNames"]
+        .as_array_mut()
+        .unwrap()
+        .last_mut()
+        .unwrap()["name"] = json!("IfcWallType");
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(format!("{FIXTURES}/ruleset.json"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#11", "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn integrity_issues_and_unselectable_objects_are_reported() {
     let case = Case::new("integrity");
     let bcf = case.path("issues.bcfzip");

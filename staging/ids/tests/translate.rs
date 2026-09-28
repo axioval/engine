@@ -285,13 +285,13 @@ fn only_classes_a_model_session_checks_are_applicable() {
             .find(|gap| matches!(gap.part, Part::Applicability { .. }))
             .map(|gap| (outcome.is_skipped(), gap.reason.clone()))
     };
-    // A type object is not an occurrence, so rules over it would select nothing.
-    assert_eq!(
-        gap("IFC4", "IFCWALLTYPE"),
-        Some((true, Reason::NotAnObject("IFCWALLTYPE".into())))
-    );
+    // A type object is checked as itself.
+    assert_eq!(gap("IFC4", "IFCWALLTYPE"), None);
+    assert_eq!(gap("IFC2X3", "IFCDOORSTYLE"), None);
+    // An abstract class has no instances, so it matches nothing, as in IDS.
+    assert_eq!(gap("IFC4", "IFCOBJECTDEFINITION"), None);
     // IfcProject is an IfcObject in IFC2X3 and an IfcContext in IFC4, both
-    // checked; a resource is neither.
+    // checked; a resource is none of these.
     assert_eq!(gap("IFC2X3", "IFCPROJECT"), None);
     assert_eq!(gap("IFC2X3 IFC4", "IFCPROJECT"), None);
     assert_eq!(
@@ -848,7 +848,8 @@ fn a_rule_for_another_release_is_not_evaluated_never_passed() {
 /// classified `EF_25_10` (under `EF_25`) in `Uniclass`, made of concrete and
 /// counting `1234`. `#11` is a user-defined `CUSTOM` wall named `W2`, also
 /// contained. `#12` is unnamed, its own type `NOTDEFINED` but typed by a
-/// partitioning wall type, and contained nowhere.
+/// partitioning wall type `#13`, and contained nowhere. `#13` holds `Count`
+/// in its own set `Q`; `#16` is a user-defined `CUSTOM` wall type.
 const PROJECT_MODEL: &str = "ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION((''),'2;1');
@@ -866,8 +867,9 @@ DATA;
 #10=IFCWALL('0000000000000000000020',$,'W1',$,$,$,$,$,.SHEAR.);
 #11=IFCWALL('0000000000000000000021',$,'W2',$,'CUSTOM',$,$,$,.USERDEFINED.);
 #12=IFCWALL('0000000000000000000022',$,$,$,$,$,$,$,.NOTDEFINED.);
-#13=IFCWALLTYPE('0000000000000000000023',$,'T',$,$,$,$,$,$,.PARTITIONING.);
+#13=IFCWALLTYPE('0000000000000000000023',$,'T',$,$,(#44),$,$,$,.PARTITIONING.);
 #14=IFCRELDEFINESBYTYPE('0000000000000000000024',$,$,$,(#12),#13);
+#16=IFCWALLTYPE('0000000000000000000030',$,'U',$,$,$,$,$,'CUSTOM',.USERDEFINED.);
 #15=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000025',$,$,$,(#10,#11),#4);
 #20=IFCCLASSIFICATION($,$,$,'Uniclass',$,$,$);
 #21=IFCCLASSIFICATIONREFERENCE($,'EF_25',$,#20,$,$);
@@ -878,6 +880,8 @@ DATA;
 #40=IFCPROPERTYSINGLEVALUE('Count',$,IFCINTEGER(1234),$);
 #41=IFCPROPERTYSET('0000000000000000000028',$,'P',$,(#40));
 #42=IFCRELDEFINESBYPROPERTIES('0000000000000000000029',$,$,$,(#10),#41);
+#43=IFCPROPERTYSINGLEVALUE('Count',$,IFCINTEGER(7),$);
+#44=IFCPROPERTYSET('0000000000000000000031',$,'Q',$,(#43));
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -935,6 +939,36 @@ fn an_ifc4_project_is_checked_as_a_context() {
         ["#1"]
     );
     assert!(flagged_in_project(OPTIONAL, project, &attribute("Name", "", Some("P"))).is_empty());
+}
+
+#[test]
+fn a_type_object_is_checked_as_itself() {
+    let wall_type = |predefined: &str| {
+        format!("<entity><name><simpleValue>IFCWALLTYPE</simpleValue></name>{predefined}</entity>")
+    };
+    // Its own property sets decide: #13 holds `Count`, #16 does not.
+    assert_eq!(
+        flagged_in_project(OPTIONAL, &wall_type(""), &property("Q", "Count", "")),
+        ["#16"]
+    );
+    // Its own predefined type, or its element type when user-defined.
+    let typed = |value: &str| {
+        flagged_in_project(
+            OPTIONAL,
+            &wall_type(&format!(
+                "<predefinedType><simpleValue>{value}</simpleValue></predefinedType>"
+            )),
+            &every_applicable(),
+        )
+    };
+    assert_eq!(typed("PARTITIONING"), ["#13"]);
+    assert_eq!(typed("CUSTOM"), ["#16"]);
+    assert_eq!(typed("USERDEFINED"), ["#16"]);
+    // Its attributes are its own.
+    assert_eq!(
+        flagged_in_project(OPTIONAL, &wall_type(""), &attribute("Name", "", Some("T"))),
+        ["#16"]
+    );
 }
 
 #[test]

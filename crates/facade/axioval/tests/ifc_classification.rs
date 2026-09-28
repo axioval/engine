@@ -220,7 +220,9 @@ fn a_notation_without_a_system_is_not_evaluated_never_unclassified() {
 #[test]
 fn a_type_classification_is_inherited_by_its_occurrences() {
     // Only the wall type carries 332; the occurrence #2 inherits it through
-    // IfcRelDefinesByType, as `ifc-classification` resolves it.
+    // IfcRelDefinesByType, as `ifc-classification` resolves it. The type #5
+    // is a checked object too: the selector names no class, so it selects
+    // the type, which lacks the reference as well.
     let typed = "\
 #1=IFCWALL('a',$,$,$,$,$,$,$,$);
 #2=IFCWALL('b',$,$,$,$,$,$,$,$);
@@ -237,7 +239,7 @@ fn a_type_classification_is_inherited_by_its_occurrences() {
         "{:?}",
         report.not_evaluated()
     );
-    assert_eq!(flagged(&report), ["#2"]);
+    assert_eq!(flagged(&report), ["#2", "#5"]);
 }
 
 #[test]

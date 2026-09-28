@@ -72,7 +72,9 @@
 //! own, or its element or process type when that is user-defined or unset,
 //! unless the result is empty or `NOTDEFINED`; otherwise the occurrence's
 //! own, or its object type when user-defined or unset. A literal
-//! `USERDEFINED` asks whether the type is user-defined at all.
+//! `USERDEFINED` asks whether the type is user-defined at all. A type
+//! object, typed by nothing, is checked as itself: its own predefined type,
+//! or its element, process or resource type when user-defined or unset.
 //!
 //! # Releases
 //!
@@ -267,7 +269,8 @@ pub enum Reason {
     /// An applicability without facets.
     EmptyApplicability,
     /// An applicability without an entity facet, which in IDS also covers
-    /// type objects and other entities a model session does not check.
+    /// resources (a material, a classification) a model session does not
+    /// check.
     WithoutEntity,
     /// An applicability class the release does not define.
     UnknownEntity {
@@ -277,7 +280,7 @@ pub enum Reason {
         release: IfcVersion,
     },
     /// An applicability or part-of class whose instances are neither
-    /// `IfcObject` occurrences nor `IfcContext`s (a type object, a
+    /// `IfcObject` occurrences, `IfcContext`s nor `IfcTypeObject`s (a
     /// resource), which an IFC session does not make project objects of.
     NotAnObject(String),
     /// An entity name that is not upper case, which IDS never matches.
@@ -342,14 +345,14 @@ impl fmt::Display for Reason {
             Reason::NoSupportedRelease => f.write_str("no listed IFC release is supported"),
             Reason::EmptyApplicability => f.write_str("the applicability has no facets"),
             Reason::WithoutEntity => f.write_str(
-                "an applicability without an entity facet also covers type objects, which a model session does not check",
+                "an applicability without an entity facet also covers resources, which a model session does not check",
             ),
             Reason::UnknownEntity { entity, release } => {
                 write!(f, "{release} defines no entity {entity}")
             }
             Reason::NotAnObject(entity) => write!(
                 f,
-                "{entity} is neither an IfcObject occurrence nor an IfcContext, which is all a model session checks"
+                "{entity} is neither an IfcObject occurrence, an IfcContext nor an IfcTypeObject, which is all a model session checks"
             ),
             Reason::EntityCase(name) => {
                 write!(
@@ -1121,16 +1124,28 @@ impl<'o> Writer<'o> {
         );
         let selector = match &entity.predefined_type {
             None => classes,
-            Some(value) => all_of(vec![classes, self.predefined_type(value, releases)?]),
+            Some(value) => {
+                let labels = user_defined_labels(&names, releases);
+                all_of(vec![
+                    classes,
+                    self.predefined_type(value, &labels, releases)?,
+                ])
+            }
         };
         Ok((selector, names))
     }
 
     /// Whether the object's predefined type, as IDS resolves it, meets
     /// `value`.
+    ///
+    /// `labels` are the attributes that state a user-defined type on the
+    /// checked object itself: `ObjectType` on an occurrence, `ElementType`,
+    /// `ProcessType` or `ResourceType` on a type object, which is typed by
+    /// nothing, so its type attributes are absent and its own decide.
     fn predefined_type(
         &mut self,
         value: &Value,
+        labels: &[&str],
         releases: &[IfcVersion],
     ) -> Result<Selector, Reason> {
         let mut slot = |set: &str, name: &str| (set.to_owned(), self.attribute(name, releases));
@@ -1138,7 +1153,10 @@ impl<'o> Writer<'o> {
         let type_element = slot(TYPE_ATTRIBUTE_SET, "ElementType");
         let type_process = slot(TYPE_ATTRIBUTE_SET, "ProcessType");
         let own = slot(ATTRIBUTE_SET, "PredefinedType");
-        let object = slot(ATTRIBUTE_SET, "ObjectType");
+        let labels: Vec<Slot> = labels
+            .iter()
+            .map(|label| slot(ATTRIBUTE_SET, label))
+            .collect();
         let type_user_defined = any_of(vec![is(&type_own, "USERDEFINED"), unset(&type_own)]);
         let type_label = any_of(vec![filled(&type_element), filled(&type_process)]);
         if value.as_simple() == Some("USERDEFINED") {
@@ -1153,7 +1171,10 @@ impl<'o> Writer<'o> {
                     falls_through,
                     any_of(vec![
                         is(&own, "USERDEFINED"),
-                        all_of(vec![unset(&own), filled(&object)]),
+                        all_of(vec![
+                            unset(&own),
+                            any_of(labels.iter().map(filled).collect()),
+                        ]),
                     ]),
                 ]),
             ]));
@@ -1190,7 +1211,7 @@ impl<'o> Writer<'o> {
             ]),
             all_of(vec![
                 any_of(vec![is(&own, "USERDEFINED"), unset(&own)]),
-                test(&object)?,
+                any_of(labels.iter().map(test).collect::<Result<_, _>>()?),
             ]),
         ]);
         Ok(any_of(vec![
@@ -1936,9 +1957,9 @@ fn occurrence(specification: &Specification) -> Option<Check> {
 
 /// Refuses a class whose instances are not checked objects.
 ///
-/// An IFC session makes a project object of every `IfcObject` occurrence and
-/// `IfcContext` (an IFC4 `IfcProject`) and of nothing else. A rule over a
-/// type object or a resource would select nothing and pass silently, so
+/// An IFC session makes a project object of every `IfcObject` occurrence,
+/// `IfcContext` (an IFC4 `IfcProject`) and `IfcTypeObject`, and of nothing
+/// else. A rule over a resource would select nothing and pass silently, so
 /// such a class, and one the release does not define, is a gap. A class a
 /// pattern matched need only exist in one release.
 fn occurrences(
@@ -1968,9 +1989,50 @@ fn occurrences(
     Ok(names)
 }
 
-/// Whether an IFC session makes project objects of `name`'s instances.
+/// Whether an IFC session makes project objects of `name`'s instances:
+/// occurrences, contexts and type objects.
+///
+/// An abstract class has no instances of its own, and IDS matches the named
+/// class only, so it matches nothing in any model, as its selector does
+/// (`IFCOBJECTDEFINITION`, which a pattern for a whole names).
 fn checked(schema: &Schema, name: &str) -> bool {
-    schema.is_a(name, "IFCOBJECT") || schema.is_a(name, "IFCCONTEXT")
+    ["IFCOBJECT", "IFCCONTEXT", "IFCTYPEOBJECT"]
+        .iter()
+        .any(|ancestor| schema.is_a(name, ancestor))
+        || schema.entity(name).is_some_and(|entity| entity.abstract_)
+}
+
+/// The attributes stating a user-defined type on objects of `names`
+/// themselves: `ObjectType` for an occurrence or a context, and for a type
+/// object its `ElementType`, `ProcessType` or `ResourceType`, whichever its
+/// class declares.
+fn user_defined_labels(names: &[String], releases: &[IfcVersion]) -> Vec<&'static str> {
+    let mut labels = Vec::new();
+    for schema in schemas(releases) {
+        for name in names {
+            if schema.entity(name).is_none() {
+                continue;
+            }
+            let candidates: &[&'static str] = if schema.is_a(name, "IFCTYPEOBJECT") {
+                &["ElementType", "ProcessType", "ResourceType"]
+            } else {
+                &["ObjectType"]
+            };
+            for label in candidates {
+                let declared = schema
+                    .attributes(name)
+                    .iter()
+                    .any(|attribute| attribute.name.eq_ignore_ascii_case(label));
+                if declared && !labels.contains(label) {
+                    labels.push(*label);
+                }
+            }
+        }
+    }
+    if labels.is_empty() {
+        labels.push("ObjectType");
+    }
+    labels
 }
 
 /// The classes a part-of whole names that can be the relating end of one
@@ -1978,7 +2040,8 @@ fn checked(schema: &Schema, name: &str) -> bool {
 ///
 /// A class that can never be the whole (a wall is never a spatial
 /// container) matches nothing, as in IDS, so a pattern drops it. A class
-/// that can be the whole but is no project object (a type object) would silently fail every part, so it is a gap.
+/// that can be the whole but is no project object (a resource) would
+/// silently fail every part, so it is a gap.
 fn whole_names(
     entity: &Entity,
     relationships: &[&str],

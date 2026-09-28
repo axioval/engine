@@ -293,15 +293,19 @@ reached level closed, every target placed, and no walk that is not proven
 apart.
 
 The **farthest point** (for a point only) weighs each landing on the
-region's level by the walk beyond it, bounded both ways by the graph. As
-`axiolid-route` 0.3.3 builds distance maps from unweighted targets only (axiolid/kernel#197), the
-bracket is assembled: from above, the least over the sources (the level's
-targets, each weighted landing) of that source's farthest distance plus its
-weight, and one map over all sources shifted by the largest weight; from
-below, that map's bracket shifted by the least weight, and the walk from
-every witness found to its nearest source plus its weight. With one source
-on the region's level (a room reached only by one stair) the bracket is the
-kernel's; with several it may not converge.
+region's level by the walk beyond it, bounded both ways by the graph.
+`axiolid-route` 0.3.4 seeds a distance map with a starting distance per
+target (axiolid/kernel#197), so the sources (the level's targets at no
+weight, each landing at the walk beyond it) share one map: seeded with the
+walks' lower bounds it brackets the largest walk from below (and proves a
+part of the region unreachable), seeded with their upper bounds (a landing
+without one left out) from above; where both agree one map does both. The
+walk from every witness found to its nearest source plus its weight may
+raise the lower bound. The bracket converges to the tolerance plus the gap
+between the walks' own bounds beyond the landings, however many sources
+the region's level holds; only if no weighted map can be built do the
+per-source maps bound it from above, their farthest distance plus their
+weight.
 
 ## Consumers
 

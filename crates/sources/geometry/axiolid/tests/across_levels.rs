@@ -368,3 +368,42 @@ fn a_ramp_is_walked_along_its_slope() {
     let expected = 0.999 + 6.002_f64.hypot(0.5) + 2.999;
     holds(walked.lower_metres(), walked.upper_metres(), expected);
 }
+
+#[test]
+fn the_farthest_point_between_an_exit_and_a_stair_converges() {
+    // Upstairs, an exit stands at the far end (9.5, 3.5); downstairs one
+    // stands just west of the stair's foot (1.5, 1.6). With the rise
+    // counting nothing, the stair costs its 3.602 m in plan. From the
+    // south-west corner (0, 0) the walk down the stair and on to the lower
+    // exit is shorter than the one to the upper exit, and the largest over
+    // the room.
+    let service = service(building());
+    let upper_exit = MetricPoint::try_new(id("upper"), [9.5, 3.5, 3.0]).unwrap();
+    let ground_exit = MetricPoint::try_new(id("ground"), [1.5, 1.6, 0.0]).unwrap();
+    let climb = ClimbLength::try_new(StairLength::Slope, 0.0).unwrap();
+    let request = FarthestPointRequest::try_new(
+        id("upper"),
+        vec![ground_exit, upper_exit],
+        walking(0.0),
+        0.01,
+    )
+    .unwrap()
+    .with_connectors(stairs(climb));
+    let outcome = service.farthest_point(&request).unwrap();
+    let FarthestPointOutcome::Bounded(bounded) = outcome else {
+        panic!("expected a bracket, got {outcome:?}");
+    };
+    let beyond = (UPPER[0] - LOWER[0]) + distance(LOWER, [1.5, 1.6]);
+    let expected = distance([0.0, 0.0], UPPER) + beyond;
+    assert!(expected < distance([0.0, 0.0], [9.5, 3.5]));
+    let bracket = bounded.distance();
+    assert!(
+        bracket.lower_metres() <= expected + SNAP && expected <= bracket.upper_metres() + SNAP,
+        "{bracket:?} misses {expected}"
+    );
+    // Two sources on the room's level, weighted apart by the walk beyond
+    // the stair: one weighted map brackets them to the tolerance.
+    assert!(bounded.converged(), "{bounded:?}");
+    let [x, y, _] = bounded.witness().coordinates_metres();
+    assert!(x < 0.1 && y < 0.1, "{bounded:?}");
+}

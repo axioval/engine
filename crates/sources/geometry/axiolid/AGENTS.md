@@ -222,10 +222,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   proves it on a closed level; an unclimbed requested connector opens every
   level it touches; a connector whose passability is undecided keeps its
   lower bound and loses its upper. Farthest points weigh each landing by
-  the walk beyond it and bracket with per-source maps and one map over all
-  sources (`axiolid-route` 0.3.3 has no weighted targets, axiolid/kernel#197); never report a
-  witness's value without taking the least over every source, straight
-  lines for a source the map cannot show.
+  the walk beyond it and bracket with weighted-target maps
+  (`distance_map_within_weighted`, axiolid/kernel#197): one seeded with the
+  walks beyond bounded from below for the lower bound and the unreachable
+  verdict, one seeded with those bounded from above (a source without one
+  left out) for the upper bound, one map when both agree; per-source maps
+  only decide which sources a map holds and bound from above when no
+  weighted map can be built. Never seed a lower-bound map with upper
+  weights, and never report a witness's value without taking the least over
+  every source, straight lines for a source the map cannot show.
 - `src/connector.rs` (internal) measures stairs and ramps for walks between
   levels: an exact straight flight whose first and last treads have sides,
   or an exact ramp of one run with sides; the walking line runs between the
@@ -374,10 +379,6 @@ an API.
   axiolid-route 0.3.3) and needs axiolid-triangulate 0.3.1 with the fix for
   axiolid/kernel#190; it calls the skeleton directly, without a worker,
   timeout or retry spacings.
-- axiolid/kernel#197: `axiolid-route` has no weighted targets (a `distance_map` seeded with a
-  starting distance per target) and hence no farthest point over one: the
-  farthest point across levels is assembled from per-source maps and may not
-  converge when a region's level holds several sources.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

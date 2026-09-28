@@ -23,13 +23,15 @@
 //! back to straight lines, and nothing is reported unreachable.
 //!
 //! The farthest point of a region weighs each landing on the region's
-//! level by the walk beyond it. `axiolid-route` 0.3.3 builds distance maps
-//! from unweighted targets only (axiolid/kernel#197), so the bracket comes from one map per
-//! source (its farthest distance plus its weight bounds the largest from
-//! above) and from one map over every source (its bracket shifted by the
-//! least and largest weight); the lower bound is also evaluated at every
-//! witness found. With one source on the level, the bracket is the
-//! kernel's.
+//! level by the walk beyond it. One distance map over every source, each
+//! point seeded with its source's weight (axiolid/kernel#197,
+//! `axiolid-route` 0.3.4), brackets the largest walk from below with the
+//! walks beyond bounded from below, and one seeded with the walks bounded
+//! from above (sources with no upper bound left out) brackets it from
+//! above; where both bounds agree one map does. The lower bound is also
+//! evaluated at every witness found. Only when a weighted map cannot be
+//! built do the per-source maps bound it from above, their farthest
+//! distance plus their weight.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -52,6 +54,10 @@ use crate::walkable::{
     ON_SURFACE, Obstacle, Plan, REACH, ROUTE_BUDGET, contains, crosses_mid_line, intersect,
     plan_gap, polygon, separated, witness,
 };
+
+/// A source of walks on the farthest point's level: its points, and the
+/// walk beyond them bounded from below and from above.
+type Source = (Vec<Point2>, f64, f64);
 
 /// A connector a walk may climb: measured, its landings placed.
 struct Link {
@@ -874,7 +880,7 @@ impl AxiolidMetricRoutingService {
         };
         // The sources on the region's level: its targets, at no weight,
         // and each landing with a walk beyond it.
-        let mut sources: Vec<(Vec<Point2>, f64, f64)> = Vec::new();
+        let mut sources: Vec<Source> = Vec::new();
         if !placed.on[0].is_empty() {
             sources.push((
                 placed.on[0]
@@ -915,16 +921,36 @@ impl AxiolidMetricRoutingService {
             }
             maps.push(map);
         }
-        let everything: Vec<Point2> = sources
-            .iter()
-            .zip(&maps)
-            .filter(|(_, map)| map.is_some())
-            .flat_map(|((points, _, _), _)| points.iter().copied())
-            .collect();
-        let combined = if everything.is_empty() {
+        // One map over every source the stage holds, each point starting
+        // at its source's weight (axiolid/kernel#197): the walk beyond it
+        // bounded from below, and, where that bound is not already the
+        // upper one, from above (a source with no upper bound left out,
+        // which only lengthens the walks).
+        let weighted = |weight: &dyn Fn(&Source) -> f64| {
+            let seeded: Vec<(Point2, f64)> = sources
+                .iter()
+                .zip(&maps)
+                .filter(|(source, map)| map.is_some() && weight(source).is_finite())
+                .flat_map(|(source, _)| source.0.iter().map(|point| (*point, weight(source))))
+                .collect();
+            if seeded.is_empty() {
+                return None;
+            }
+            axiolid_route::distance_map_within_weighted(
+                stage.domain.polygons(),
+                &stage.narrow.barriers,
+                &seeded,
+                ROUTE_BUDGET,
+            )
+            .ok()
+        };
+        #[allow(clippy::float_cmp)]
+        let settled = sources.iter().all(|(_, low, high)| low == high);
+        let least = weighted(&|(_, low, _)| *low);
+        let most = if settled {
             None
         } else {
-            Self::stage_map(stage, &everything)
+            weighted(&|(_, _, high)| *high)
         };
         let search = |map: &DistanceMap| -> Result<Result<(f64, f64, Point2), Point2>, String> {
             let mut best: Option<(f64, Point2)> = None;
@@ -970,24 +996,14 @@ impl AxiolidMetricRoutingService {
         let mut upper = f64::INFINITY;
         let mut candidates: Vec<Point2> = Vec::new();
         let mut floor_bound: Option<(f64, Point2)> = None;
-        if let Some(map) = &combined {
+        if let Some(map) = &least {
             match search(map)? {
                 Ok((lower, high, witness)) => {
                     candidates.push(witness);
-                    let least = sources
-                        .iter()
-                        .zip(&maps)
-                        .filter(|(_, map)| map.is_some())
-                        .map(|((_, low, _), _)| *low)
-                        .fold(f64::INFINITY, f64::min);
-                    let most = sources
-                        .iter()
-                        .zip(&maps)
-                        .filter(|(_, map)| map.is_some())
-                        .map(|((_, _, high), _)| *high)
-                        .fold(0.0_f64, f64::max);
-                    upper = upper.min(high + most);
-                    floor_bound = Some((lower + least, witness));
+                    if settled {
+                        upper = upper.min(high);
+                    }
+                    floor_bound = Some((lower, witness));
                 }
                 Err(point) => {
                     if closed {
@@ -1001,11 +1017,21 @@ impl AxiolidMetricRoutingService {
                 }
             }
         }
-        for ((_, _, high), map) in sources.iter().zip(&maps) {
-            let Some(map) = map else { continue };
-            if let Ok((_, far, witness)) = search(map)? {
-                upper = upper.min(far + high);
-                candidates.push(witness);
+        if let Some(map) = &most
+            && let Ok((_, far, witness)) = search(map)?
+        {
+            upper = upper.min(far);
+            candidates.push(witness);
+        }
+        if least.is_none() || (!settled && most.is_none()) {
+            // No weighted map: each source's own farthest distance plus
+            // its weight still bounds the largest from above.
+            for ((_, _, high), map) in sources.iter().zip(&maps) {
+                let Some(map) = map else { continue };
+                if let Ok((_, far, witness)) = search(map)? {
+                    upper = upper.min(far + high);
+                    candidates.push(witness);
+                }
             }
         }
         if upper.is_infinite() {

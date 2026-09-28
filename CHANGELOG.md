@@ -49,6 +49,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   keeps the earlier bounds. **Breaking:** `MetricRoutingError` gains
   `InvalidCostFactor`, and `NearestTargetRequest` and
   `FarthestPointRequest` gain costs, compared by `PartialEq`.
+- **Farthest points across levels converge with several sources.** (#117)
+  The Axiolid backend brackets the farthest point of a region whose level
+  holds several sources (its exits and stair landings, each weighted by the
+  walk beyond it) with `axiolid-route` 0.3.4's weighted-target maps
+  (axiolid/kernel#197): one map seeded with the walks' lower bounds for the
+  lower bound, one with their upper bounds for the upper bound. The bracket
+  is no longer the unweighted map's shifted by the least and largest
+  weights, so it converges to the tolerance.
 - **Stable finding identities and review decisions.** (#94) A finding may
   carry `id`, a `FindingId`: UUIDv5 over its rule, its objects' aliases in a
   host-named stable scheme and its message, the key the BCF sink has always

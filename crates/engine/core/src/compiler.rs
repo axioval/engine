@@ -56,6 +56,7 @@ pub fn compile(
     let mut gates = BTreeMap::new();
     let mut dependencies: BTreeMap<RuleId, BTreeSet<RuleId>> = BTreeMap::new();
     let mut recorded = BTreeSet::new();
+    let mut auxiliary = BTreeSet::new();
     for (rule, folder_gates) in authored.into_iter().filter(|(rule, _)| rule.enabled) {
         if !ids.insert(rule.id.as_str()) {
             return Err(EngineError::DuplicateRule(rule.id.clone()));
@@ -72,6 +73,9 @@ pub fn compile(
         let refinement = refinement(registry, &concepts, rule, &definition.capability)?;
         let dependency = rule_dependencies(rule, &folder_gates, &parameters, &refinement, &known)?;
         recorded.extend(dependency.per_object.iter().cloned());
+        if rule.auxiliary {
+            auxiliary.insert(id.clone());
+        }
         if !dependency.whole.is_empty() {
             gates.insert(id.clone(), dependency.whole);
         }
@@ -97,6 +101,19 @@ pub fn compile(
             }),
         }
     }
+    // An auxiliary rule reports only through the rules that read it, so
+    // one nothing reads would hide its outcome entirely.
+    if let Some(unread) = auxiliary
+        .iter()
+        .find(|id| !dependencies.values().any(|parents| parents.contains(*id)))
+    {
+        return Err(EngineError::InvalidDependency {
+            rule: unread.to_string(),
+            detail: "the rule is auxiliary, but no enabled rule reads its outcome, so it \
+                     would never be reported"
+                .into(),
+        });
+    }
     let rules = defer_dependents(rules, &mut deferred, &dependencies, &disabled);
     deferred.sort_by(|left, right| left.id.cmp(&right.id));
     let rules = ordered(registry, rules, &dependencies, &recorded)?;
@@ -107,6 +124,7 @@ pub fn compile(
         refinements,
         gates,
         recorded,
+        auxiliary,
         classifications,
     })
 }
@@ -462,6 +480,7 @@ pub fn compile_rulesets(
     let mut refinements = BTreeMap::new();
     let mut gates = BTreeMap::new();
     let mut recorded = BTreeSet::new();
+    let mut auxiliary = BTreeSet::new();
     let mut classifications: Vec<ClassificationDefinition> = Vec::new();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
@@ -505,6 +524,9 @@ pub fn compile_rulesets(
         for id in plan.recorded {
             recorded.insert(qualify(&id)?);
         }
+        for id in plan.auxiliary {
+            auxiliary.insert(qualify(&id)?);
+        }
         // One run derives one class per classification id, so rulesets
         // share a classification only when they declare it alike.
         for definition in plan.classifications {
@@ -541,6 +563,7 @@ pub fn compile_rulesets(
         refinements,
         gates,
         recorded,
+        auxiliary,
         classifications,
     })
 }

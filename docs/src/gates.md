@@ -66,6 +66,28 @@ severity override.
 
 `outcome` is `passed` or `failed`, judged as above.
 
+## Auxiliary rules
+
+A rule instance declaring `"auxiliary": true` runs only for the rules that
+read its outcome, through a gate or a `ruleOutcome` selector. It decides
+which objects they check, as any rule they read does, but reports nothing
+itself: no findings, tables, not-evaluated outcomes or rule summary. An
+object it failed is not a violation, only an object its readers leave out;
+an object it left undecided is not evaluated by its readers, so nothing it
+could not decide is lost.
+
+```json
+{"id": "counted", "definitionId": "property-value", "auxiliary": true, ...}
+{"id": "count-rated", "gate": {"rule": "counted", "condition": "passedObjects"}, ...}
+```
+
+This is how a population is chosen by a requirement a selector cannot state
+exactly, such as a property value cast to each property's own type, and how
+a requirement is prohibited: the prohibited rule selects the objects the
+auxiliary rule passed and fails every one. Compilation refuses an auxiliary
+rule that no enabled rule reads (`EngineError::InvalidDependency`), since its
+outcome would never reach the report.
+
 ## Order and compilation
 
 The plan runs every rule after the rules its gates and `ruleOutcome`

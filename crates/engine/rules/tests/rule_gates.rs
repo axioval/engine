@@ -450,3 +450,82 @@ mod compilation {
         );
     }
 }
+
+/// The parent, run only for the rules that read it.
+fn auxiliary(id: &str) -> Value {
+    let mut rule = parent(id);
+    rule["auxiliary"] = json!(true);
+    rule
+}
+
+#[test]
+fn an_auxiliary_rule_reports_only_through_the_rules_that_read_it() {
+    let report = check(
+        vec![
+            auxiliary("type"),
+            child("hardware", gate("type", "passedObjects")),
+        ],
+        doors(),
+    );
+    // The parent failed d2 and left d3 undecided, and reports neither.
+    assert!(found(&report, "type").is_empty());
+    assert!(open(&report, "type").is_empty());
+    assert!(
+        report
+            .rules()
+            .iter()
+            .all(|summary| summary.rule_id.to_string() != "type")
+    );
+    // Its outcome still chooses the child's doors, and what it left
+    // undecided stays undecided there.
+    assert_eq!(found(&report, "hardware"), ["d1"]);
+    assert_eq!(
+        open(&report, "hardware"),
+        [(
+            Scope::Object(id("d3")),
+            NotEvaluatedReason::IncompleteEvidence
+        )]
+    );
+    assert_eq!(status(&report, "hardware"), RuleStatus::Failed);
+}
+
+#[test]
+fn an_auxiliary_rule_read_through_a_selector_is_not_reported() {
+    let reader = rule(
+        "hardware",
+        EXISTS,
+        "error",
+        json!({ "kind": "allOf", "operands": [
+            entity("door"),
+            { "kind": "ruleOutcome", "rule": "type", "outcome": "failed" },
+        ] }),
+        property("Hardware"),
+        json!({}),
+    );
+    let report = check(vec![auxiliary("type"), reader], doors());
+    assert!(found(&report, "type").is_empty());
+    assert_eq!(found(&report, "hardware"), ["d2"]);
+}
+
+#[test]
+fn an_auxiliary_rule_nothing_reads_is_refused() {
+    let registry = registry();
+    let definitions = definitions(
+        &registry,
+        &[EXISTS],
+        &["door"],
+        &["Kind", "FireRating", "Hardware"],
+        &[],
+    );
+    let error = plan(
+        &registry,
+        &definitions,
+        vec![auxiliary("type"), child("hardware", json!({}))],
+    )
+    .unwrap_err();
+    assert!(
+        matches!(&error, EngineError::InvalidDependency { rule, detail }
+            if rule == "type" && detail.contains("auxiliary")),
+        "{error}"
+    );
+}

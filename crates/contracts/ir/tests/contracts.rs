@@ -646,3 +646,33 @@ fn a_measured_value_reads_and_writes_its_interval() {
     assert!(axioval_ir::is_derived_set(axioval_ir::MEASURED_SET));
     assert!(axioval_ir::is_reserved_set(axioval_ir::MEASURED_SET));
 }
+
+#[test]
+fn an_auxiliary_rule_reads_and_writes_its_flag_only_when_set() {
+    use axioval_ir::contract::RuleInstance;
+    use serde_json::json;
+
+    let written = json!({
+        "id": "door-type",
+        "definitionId": "d",
+        "name": {"default": "Door type", "translations": {}},
+        "description": null,
+        "message": null,
+        "auxiliary": true,
+    });
+    let rule: RuleInstance = serde_json::from_value(written).unwrap();
+    assert!(rule.auxiliary);
+    assert_eq!(serde_json::to_value(&rule).unwrap()["auxiliary"], true);
+    // A reported rule writes no flag, and reads as reported without one.
+    let reported = RuleInstance {
+        auxiliary: false,
+        ..rule
+    };
+    let value = serde_json::to_value(&reported).unwrap();
+    assert!(value.get("auxiliary").is_none());
+    assert!(
+        !serde_json::from_value::<RuleInstance>(value)
+            .unwrap()
+            .auxiliary
+    );
+}

@@ -11373,3 +11373,42 @@ fn a_revised_model_older_than_its_base_is_an_error_finding() {
         "{result:#}"
     );
 }
+
+#[test]
+fn an_auxiliary_rule_chooses_the_walls_another_checks_and_reports_nothing() {
+    let case = Case::new("auxiliary-rule");
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let mut parent = ruleset["root"]["rules"][0].clone();
+    parent["auxiliary"] = json!(true);
+    let mut passed = parent.clone();
+    passed["id"] = json!("a-recheck-passed-walls");
+    passed["auxiliary"] = json!(false);
+    passed["gate"] = json!({"rule": "wall-reference-required", "condition": "passedObjects"});
+    ruleset["root"]["rules"] = json!([parent, passed]);
+    let ruleset = case.write("auxiliary.json", &ruleset.to_string());
+    let model = case.write("model.ifc", &ten_walls_two_without_reference());
+    let definitions = case.definitions(true);
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .arg("--rule-status")
+        .output()
+        .unwrap();
+    // The two walls without a reference fail only the auxiliary rule,
+    // which reports nothing.
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        result["report"]["rules"],
+        json!([{"rule_id": "a-recheck-passed-walls", "checked": 8, "failed": 0,
+                "not_evaluated": 0, "status": "passed"}]),
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+}

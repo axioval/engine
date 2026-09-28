@@ -78,6 +78,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
   `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
   gives way to `matchers`.
+- **Auxiliary rules.** (Refs #116) A rule instance declares `auxiliary:
+  true` to run only for the rules that read its outcome through a gate or a
+  `ruleOutcome` selector: it chooses the objects they check, and reports no
+  findings, tables, not-evaluated outcomes or summary of its own. What it
+  leaves undecided stays not evaluated in its readers. Compilation refuses
+  an auxiliary rule no enabled rule reads (`InvalidDependency`), and
+  `ExecutionPlan::is_auxiliary` names them. This selects by a requirement
+  no selector states exactly, and prohibits one: select what the auxiliary
+  rule passed and fail every object.
 
 - **Accessible routes with tolerances, measured connectors and located
   blocks.** (#123) `accessible-route` takes `obstruction_depth_metres`

@@ -581,6 +581,8 @@ pub struct ExecutionPlan {
     gates: BTreeMap<RuleId, Vec<(RuleId, schema::GateCondition)>>,
     /// Rules whose selection a dependent reads per object.
     recorded: BTreeSet<RuleId>,
+    /// Rules reported only through the rules that read them.
+    auxiliary: BTreeSet<RuleId>,
     /// Classifications to derive before any rule runs, each after those
     /// its rows read.
     classifications: Vec<schema::ClassificationDefinition>,
@@ -611,6 +613,11 @@ impl ExecutionPlan {
     /// on its outcome. Empty for an ungated rule.
     pub fn gates(&self, rule: &RuleId) -> &[(RuleId, schema::GateCondition)] {
         self.gates.get(rule).map_or(&[], Vec::as_slice)
+    }
+    /// Whether `rule` is auxiliary: run for the rules that read its
+    /// outcome, and never reported itself.
+    pub fn is_auxiliary(&self, rule: &RuleId) -> bool {
+        self.auxiliary.contains(rule)
     }
 }
 
@@ -1109,6 +1116,9 @@ impl Runtime {
                 .get(&rule.capability)
                 .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
             let rule_id = rule.id.clone();
+            // An auxiliary rule's outcome is recorded for the rules that
+            // read it, and reported only through them.
+            let reported = !plan.auxiliary.contains(&rule_id);
             // A rule reads the outcomes of the rules the plan ran before it.
             services.replace(outcomes.clone());
             let context = RuleContext {
@@ -1119,7 +1129,7 @@ impl Runtime {
             let mut evaluation = match outcomes.gate(gates) {
                 rule_outcomes::Gate::Closed => {
                     outcomes.insert(rule_id.clone(), RuleRecord::skipped());
-                    if self.summaries {
+                    if self.summaries && reported {
                         summaries.push(RuleSummary::skipped(rule_id));
                     }
                     continue;
@@ -1142,6 +1152,9 @@ impl Runtime {
                     evaluation
                 }
             };
+            if !reported {
+                continue;
+            }
             if let Some(refiner) = refiner
                 && self.summaries
             {

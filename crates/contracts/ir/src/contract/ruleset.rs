@@ -118,6 +118,13 @@ pub struct RuleInstance {
     /// [`RuleGate`]. Omitted when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gate: Option<RuleGate>,
+    /// Runs the rule only for the rules that read its outcome through a
+    /// gate or a `ruleOutcome` selector: it decides which objects they
+    /// check, and its own findings, tables, not-evaluated outcomes and
+    /// summary are not reported. What it leaves undecided stays undecided
+    /// in the rules that read it. Omitted when false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub auxiliary: bool,
 }
 
 /// A rule's gate on another rule of the same ruleset: the rule runs, or
@@ -292,6 +299,10 @@ pub enum Severity {
 }
 const fn yes() -> bool {
     true
+}
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_false(value: &bool) -> bool {
+    !*value
 }
 fn severity() -> Severity {
     Severity::Error

@@ -109,6 +109,59 @@ impl Polygon {
         [self.range(1.0, 0.0), self.range(0.0, 1.0)]
     }
 
+    /// Where the region is an L: one ring of six vertices whose every edge
+    /// runs along X or Y. `None` for any other shape.
+    ///
+    /// The L leaves out one corner of the box around it, the notch. Its
+    /// leg running the whole height along Y is the web, and the part of
+    /// the height beside the notch is the web zone, clear of the leg
+    /// running along X (the flange, or a precast ledge), whatever the legs'
+    /// thicknesses.
+    pub(crate) fn l_shape(&self) -> Option<LShape> {
+        let [ring] = self.rings.as_slice() else {
+            return None;
+        };
+        if ring.len() != 6 {
+            return None;
+        }
+        let near = |a: f64, b: f64| (a - b).abs() <= ROUNDING;
+        if !ring
+            .iter()
+            .zip(ring.iter().cycle().skip(1))
+            .all(|(a, b)| near(a[0], b[0]) || near(a[1], b[1]))
+        {
+            return None;
+        }
+        let [(x0, x1), (y0, y1)] = self.bounds();
+        let inner: Vec<Point> = ring
+            .iter()
+            .copied()
+            .filter(|p| !(near(p[0], x0) || near(p[0], x1) || near(p[1], y0) || near(p[1], y1)))
+            .collect();
+        let [reflex] = inner.as_slice() else {
+            return None;
+        };
+        let missing: Vec<Point> = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+            .into_iter()
+            .filter(|corner| {
+                !ring
+                    .iter()
+                    .any(|p| near(p[0], corner[0]) && near(p[1], corner[1]))
+            })
+            .collect();
+        let [corner] = missing.as_slice() else {
+            return None;
+        };
+        Some(LShape {
+            web_zone: (reflex[1].min(corner[1]), reflex[1].max(corner[1])),
+            web: if near(corner[0], x1) {
+                (x0, reflex[0])
+            } else {
+                (reflex[0], x1)
+            },
+        })
+    }
+
     /// Whether `point` lies inside the region: inside the outline and
     /// outside every void.
     fn contains(&self, point: Point) -> bool {
@@ -158,6 +211,15 @@ impl Polygon {
         self.contains(centre)
             .then_some((low.max(0.0), high.max(0.0)))
     }
+}
+
+/// An L-shaped section in its profile's coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct LShape {
+    /// The part of Y beside the notch, clear of the leg along X.
+    pub(crate) web_zone: Span,
+    /// The span along X of the leg running the whole height.
+    pub(crate) web: Span,
 }
 
 fn ring_name(index: usize) -> String {
@@ -267,6 +329,46 @@ mod tests {
         assert!(wall.clearance([(5.3, 5.4), (0.0, 0.2)], 0).is_none());
         assert_eq!(wall.bounds(), [(0.0, 5.2), (0.0, 0.2)]);
         close(wall.area(), 1.02);
+    }
+
+    #[test]
+    fn an_l_has_its_web_beside_the_notch_whatever_the_leg_thicknesses() {
+        // A 0.3 m wide, 0.4 m deep L: web 0.12 m thick on the low X side,
+        // ledge 0.08 m thick at the bottom, the notch at the top right.
+        let l = Polygon::new(
+            vec![
+                [0.0, 0.0],
+                [0.3, 0.0],
+                [0.3, 0.08],
+                [0.12, 0.08],
+                [0.12, 0.4],
+                [0.0, 0.4],
+            ],
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            l.l_shape(),
+            Some(LShape {
+                web_zone: (0.08, 0.4),
+                web: (0.0, 0.12)
+            })
+        );
+        // Turned over, the ledge on top: the web zone lies below it.
+        let turned = Polygon::new(
+            vec![
+                [0.0, 0.0],
+                [0.12, 0.0],
+                [0.12, 0.32],
+                [0.3, 0.32],
+                [0.3, 0.4],
+                [0.0, 0.4],
+            ],
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(turned.l_shape().unwrap().web_zone, (0.0, 0.32));
+        assert!(mitred().l_shape().is_none());
     }
 
     #[test]

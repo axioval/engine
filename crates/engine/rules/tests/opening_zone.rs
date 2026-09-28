@@ -1340,3 +1340,107 @@ fn zones_measure_from_the_flanges_in_the_web_and_refuse_bad_rows() {
         );
     }
 }
+
+/// A model maker.
+type Beam = fn() -> Model;
+
+/// A 6 m L-beam `b` along world x, its profile's Y up: `family` with
+/// `dimensions`, or the free outline `ring`.
+fn l_beam(family: &str, dimensions: &[(&str, f64)], ring: &[[f64; 2]]) -> Model {
+    let model = extrusion(
+        Model::default(),
+        "b",
+        "beam",
+        [0.0; 3],
+        [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        6.0,
+        family,
+        dimensions,
+    );
+    if ring.is_empty() {
+        model
+    } else {
+        outlined(model, "b", ring)
+    }
+}
+
+/// Legs 0.1 m thick: the web zone runs from z = -0.1 to 0.2.
+fn uniform_l() -> Model {
+    l_beam(
+        "l-shape",
+        &[("Depth", 0.4), ("Width", 0.3), ("Thickness", 0.1)],
+        &[],
+    )
+}
+
+/// A 0.12 m web and a 0.08 m ledge, stated as a free outline.
+fn non_uniform_l() -> Model {
+    l_beam(
+        "arbitrary-closed",
+        &[],
+        &[
+            [-0.15, -0.2],
+            [0.15, -0.2],
+            [0.15, -0.12],
+            [-0.03, -0.12],
+            [-0.03, 0.2],
+            [-0.15, 0.2],
+        ],
+    )
+}
+
+/// Holes drilled across the whole width through an L-beam's web: in its
+/// web zone above the ledge they pass, reaching into the ledge they are
+/// found, and past the web they leave the host into the notch, not its
+/// outline.
+#[test]
+fn holes_through_the_web_of_an_l_beam_keep_clear_of_its_ledge() {
+    let circle = |model, local, z| hole(model, local, 3.0, z, "circle", &[("Radius", 0.05)]);
+    let beams: [(Beam, &str); 2] = [(uniform_l, "0.05"), (non_uniform_l, "0.03")];
+    for (l, reach) in beams {
+        let holes = || circle(circle(l(), "web", 0.05), "ledge", -0.1);
+        let evaluation = check(
+            holes(),
+            vec![("zone", string("web")), ("edge_distance", metres(0.02))],
+        );
+        assert_eq!(
+            sorted(&evaluation),
+            [(
+                "ledge".into(),
+                format!(
+                    "opening reaches {reach} m into the flanges of its host b; 0.02 m clear \
+                     required"
+                )
+            )]
+        );
+        assert!(
+            unevaluated(&evaluation).is_empty(),
+            "{:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+        // Across the whole section, both lie within the web's height.
+        let evaluation = check(holes(), vec![("edge_distance", metres(0.02))]);
+        assert!(
+            findings(&evaluation).is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+        assert!(unevaluated(&evaluation).is_empty());
+    }
+    // A rounded L is no polygon: only its box bounds it, with no web.
+    let rounded = l_beam(
+        "l-shape",
+        &[
+            ("Depth", 0.4),
+            ("Width", 0.3),
+            ("Thickness", 0.1),
+            ("FilletRadius", 0.01),
+        ],
+        &[],
+    );
+    let evaluation = check(circle(rounded, "web", 0.05), vec![("zone", string("web"))]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("web".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}

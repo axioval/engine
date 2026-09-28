@@ -50,6 +50,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   zone it misses least. `opening-zone` now grades its distance findings by
   severity bands. **Breaking:** the capability gains the optional `zones`,
   so a definition bound to it must declare it.
+- **L and non-uniform L hosts.** (#140) `opening-zone` reads an L section
+  as its polygon: a parameterised one with straight edges, or a free
+  outline of six axis-parallel vertices with legs of any thickness. Its web
+  is the leg spanning the whole height and `zone` `web` the height beside
+  the notch, clear of the ledge; an opening through the web leaves the host
+  where the web ends instead of crossing its outline.
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

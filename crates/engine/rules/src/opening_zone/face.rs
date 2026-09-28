@@ -141,6 +141,8 @@ pub(crate) struct Host {
     pub(crate) outline: Option<Rc<Polygon>>,
     /// The part of `ProfileY` between the flanges, where the family has one.
     pub(crate) web: Option<Span>,
+    /// Along `ProfileX`, the web of an L: the leg running the whole height.
+    leg: Option<Span>,
     pub(crate) family: String,
     pub(crate) evidence: Vec<Evidence>,
 }
@@ -163,6 +165,14 @@ impl Host {
     ) -> [Span; 2] {
         let across = |axis: Axis| {
             let bounds = self.bounds[axis.index()];
+            // Through an L's web, an opening leaves the host where the web
+            // ends: beyond lies the notch.
+            let bounds = match self.leg {
+                Some(leg) if axis == Axis::ProfileX && through.0 < leg.1 && through.1 > leg.0 => {
+                    leg
+                }
+                _ => bounds,
+            };
             let (low, high) = (through.0.max(bounds.0), through.1.min(bounds.1));
             if low < high { (low, high) } else { bounds }
         };
@@ -214,12 +224,24 @@ pub(crate) fn read_host(context: &RuleContext<'_>, id: &ObjectId) -> Result<Host
             ));
         }
         let family = family(&mut body)?;
-        let (bounds, web, outline) = if ARBITRARY.contains(&family.as_str()) {
-            let outline = polygon(&mut body, &family, "host")?;
-            (outline.bounds(), None, Some(Rc::new(outline)))
+        let outline = if ARBITRARY.contains(&family.as_str()) {
+            Some(polygon(&mut body, &family, "host")?)
+        } else if family == "l-shape" {
+            l_outline(&mut body)?
+        } else {
+            None
+        };
+        let (bounds, web, leg, outline) = if let Some(outline) = outline {
+            let l = outline.l_shape();
+            (
+                outline.bounds(),
+                l.map(|l| l.web_zone),
+                l.map(|l| l.web),
+                Some(Rc::new(outline)),
+            )
         } else {
             let ((half_x, half_y), web) = boxed_section(&mut body, &family, "host")?;
-            ([(-half_x, half_x), (-half_y, half_y)], web, None)
+            ([(-half_x, half_x), (-half_y, half_y)], web, None, None)
         };
         Ok(Host {
             origin: swept.origin,
@@ -227,6 +249,7 @@ pub(crate) fn read_host(context: &RuleContext<'_>, id: &ObjectId) -> Result<Host
             bounds: [(0.0, swept.depth), bounds[0], bounds[1]],
             outline,
             web,
+            leg,
             family,
             evidence: Vec::new(),
         })
@@ -588,6 +611,49 @@ fn boxed_section(
                 format!("the {role}'s `{other}` profile states no outline to bound it by"),
             ));
         }
+    })
+}
+
+/// The outline of an L section with straight edges, centred on its box:
+/// its legs along the low X and low Y sides, `Thickness` thick, `Width`
+/// (`Depth` when unstated) wide. `None` for one with a fillet, rounded edges
+/// or sloped legs, whose outline is not a polygon; it is bounded by its box.
+fn l_outline(body: &mut BodyFacts<'_>) -> Result<Option<Polygon>, Unavailable> {
+    for curved in ["FilletRadius", "EdgeRadius"] {
+        if body
+            .length(&format!("Profile.{curved}"))?
+            .is_some_and(|r| r != 0.0)
+        {
+            return Ok(None);
+        }
+    }
+    if body
+        .angle("Profile.LegSlope")?
+        .is_some_and(|slope| slope != 0.0)
+    {
+        return Ok(None);
+    }
+    let depth = required(body, "Depth")?;
+    let width = body.length("Profile.Width")?.unwrap_or(depth);
+    let thickness = required(body, "Thickness")?;
+    let (x, y) = (width / 2.0, depth / 2.0);
+    Polygon::new(
+        vec![
+            [-x, -y],
+            [x, -y],
+            [x, -y + thickness],
+            [-x + thickness, -y + thickness],
+            [-x + thickness, y],
+            [-x, y],
+        ],
+        Vec::new(),
+    )
+    .map(Some)
+    .map_err(|message| {
+        (
+            NotEvaluatedReason::InvalidEvidence,
+            format!("the host's L section is not one region: {message}"),
+        )
     })
 }
 

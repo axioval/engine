@@ -279,10 +279,6 @@ those of the [report](#reports) under the rule's id.
 - **Mesh difference.** A certified two-sided Hausdorff distance between two
   revisions of a body is axiolid/kernel#148. Until it is published, geometry
   compares bounds only.
-- **Mirroring of mapped items.** `ifc-geometry`'s body description does
-  not carry the mapping transform of a mapped item that is not a swept
-  solid, so the IFC adapter refuses `axioval:body.Mirrored` for such a body
-  and its `mirroring` is unresolved.
 - **Relationships of IFC sessions.** IFC relationships are answered on
   request through the relationship-selection service, not carried on the
   object, so the relationship facet compares nothing for them yet.

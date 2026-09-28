@@ -455,3 +455,68 @@ fn a_curved_outline_is_refused_and_the_rest_of_the_profile_stands() {
         Some(PropertyValue::Quantity { value, .. }) if (value - 0.2).abs() < 1e-12
     ));
 }
+
+/// A tetrahedron as a faceted B-rep, mapped into proxies #110, #120 and #130.
+/// IFC has no negative scale: #110's operator mirrors by an `Axis2` opposing
+/// `Axis3 × Axis1`; #120's operator is the identity; #130 places the B-rep
+/// once mirrored and once not.
+const MAPPED_BREPS: &str = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#61=IFCCARTESIANPOINT((1000.,0.,0.));
+#62=IFCCARTESIANPOINT((0.,1000.,0.));
+#63=IFCCARTESIANPOINT((0.,0.,1000.));
+#64=IFCPOLYLOOP((#1,#62,#61));
+#65=IFCPOLYLOOP((#1,#61,#63));
+#66=IFCPOLYLOOP((#1,#63,#62));
+#67=IFCPOLYLOOP((#61,#62,#63));
+#68=IFCFACEOUTERBOUND(#64,.T.);
+#69=IFCFACEOUTERBOUND(#65,.T.);
+#70=IFCFACEOUTERBOUND(#66,.T.);
+#71=IFCFACEOUTERBOUND(#67,.T.);
+#72=IFCFACE((#68));
+#73=IFCFACE((#69));
+#74=IFCFACE((#70));
+#75=IFCFACE((#71));
+#76=IFCCLOSEDSHELL((#72,#73,#74,#75));
+#77=IFCFACETEDBREP(#76);
+#78=IFCSHAPEREPRESENTATION(#5,'Body','Brep',(#77));
+#79=IFCREPRESENTATIONMAP(#2,#78);
+#81=IFCDIRECTION((1.,0.,0.));
+#82=IFCDIRECTION((0.,-1.,0.));
+#83=IFCDIRECTION((0.,0.,1.));
+#84=IFCCARTESIANTRANSFORMATIONOPERATOR3D(#81,#82,#1,$,#83);
+#85=IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,#1,$,$);
+#86=IFCMAPPEDITEM(#79,#84);
+#87=IFCMAPPEDITEM(#79,#85);
+#88=IFCLOCALPLACEMENT($,#2);
+#111=IFCSHAPEREPRESENTATION(#5,'Body','MappedRepresentation',(#86));
+#112=IFCPRODUCTDEFINITIONSHAPE($,$,(#111));
+#110=IFCBUILDINGELEMENTPROXY('0000000000000000000110',$,'M',$,$,#88,#112,$,$);
+#121=IFCSHAPEREPRESENTATION(#5,'Body','MappedRepresentation',(#87));
+#122=IFCPRODUCTDEFINITIONSHAPE($,$,(#121));
+#120=IFCBUILDINGELEMENTPROXY('0000000000000000000120',$,'N',$,$,#88,#122,$,$);
+#131=IFCSHAPEREPRESENTATION(#5,'Body','MappedRepresentation',(#86,#87));
+#132=IFCPRODUCTDEFINITIONSHAPE($,$,(#131));
+#130=IFCBUILDINGELEMENTPROXY('0000000000000000000130',$,'B',$,$,#88,#132,$,$);
+";
+
+#[test]
+fn a_mapping_states_whether_it_mirrors_any_item_kind() {
+    let mirrored = |local| value_in("IFC4", MAPPED_BREPS, local, "Mirrored");
+    assert_eq!(
+        value_in("IFC4", MAPPED_BREPS, "#110", "Mapped"),
+        Some(PropertyValue::Boolean(true))
+    );
+    assert_eq!(mirrored("#110"), Some(PropertyValue::Boolean(true)));
+    assert_eq!(mirrored("#120"), Some(PropertyValue::Boolean(false)));
+    // One body mirrored in part is neither.
+    assert!(matches!(
+        resolve_in("IFC4", MAPPED_BREPS, "#130", "Mirrored"),
+        Err(PropertyResolutionError::Conflicting(_))
+    ));
+}

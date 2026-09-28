@@ -2843,6 +2843,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Mirroring is read for mapped items of every kind.** (Refs #108) The IFC
+  adapter's `axioval:body.Mirrored` refused a body with a mapped item that
+  is not a swept solid, so model comparison left its `mirroring`
+  unresolved. It is now the sign of the determinant of each item's frame
+  (`ifc-geometry` 0.4.3 `BodyItem::item_world`, every mapping composed): a
+  mapped B-rep whose operator's `Axis2` opposes `Axis3 × Axis1` is
+  mirrored. A degenerate frame refuses the fact, and a body whose items are
+  mirrored in part is a conflict.
+
 - **The staging IDS importer no longer built.** (Refs #116) It wrote its
   rule definitions' parameters by hand, so the new `gate`, `classifications`
   and `property-requirements` columns left it uncompilable and its

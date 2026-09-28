@@ -430,24 +430,31 @@ fn write_swept(writer: &mut Writer<'_>, swept: &SweptSolid) {
 
 /// Whether the transform placing the body reverses its orientation.
 ///
-/// Placements are right-handed by construction, and so is the mapping of a
-/// swept solid (`ifc-geometry` refuses one that scales or mirrors it), so a
-/// body of such items is not mirrored. The mapping transform of any other
-/// mapped item is not described, so its mirroring is refused, never assumed.
+/// Each item's frame (`BodyItem::item_world`) composes the context, the
+/// product placement and every mapping it was reached through, so a mapping
+/// that mirrors any item kind shows as a negative determinant. Placements are
+/// right-handed by construction, so a body without a mirroring mapping is not
+/// mirrored. A degenerate frame, or items mirrored and not, leave the body's
+/// handedness undecided, never guessed.
 fn mirrored(body: &BodyDescription) -> Result<PropertyValue, PropertyResolutionError> {
-    if body
-        .items
-        .iter()
-        .all(|item| item.mapped_by.is_empty() || item.swept.is_some())
-    {
-        Ok(PropertyValue::Boolean(false))
-    } else {
-        Err(PropertyResolutionError::Unavailable(
-            "the mapping transform of a mapped item that is not a swept solid is not described, \
-             so whether it mirrors the body cannot be read"
-                .into(),
-        ))
+    let mut answer = None;
+    for item in &body.items {
+        let Some(mirrored) = item.is_mirrored() else {
+            return Err(PropertyResolutionError::Unavailable(format!(
+                "the frame of item {} is degenerate, so whether it mirrors the body cannot be read",
+                item.item
+            )));
+        };
+        match answer {
+            Some(earlier) if earlier != mirrored => {
+                return Err(PropertyResolutionError::Conflicting(
+                    "some items of the body are mirrored and others are not".into(),
+                ));
+            }
+            _ => answer = Some(mirrored),
+        }
     }
+    Ok(PropertyValue::Boolean(answer.unwrap_or(false)))
 }
 
 fn write_placement(writer: &mut Writer<'_>, placement: &Transform) {

@@ -304,6 +304,12 @@ fact the profile entity (`body:#10:#19:#18:profile:#14`).
   profile swept as a solid, a dangling reference, a mapping that scales or
   mirrors a swept solid, and a placement it cannot compose refuse the whole
   body.
+- `Mirrored` is the sign of the determinant of each item's frame
+  (`ifc-geometry` 0.4.3 `BodyItem::item_world`, openbimrs/ifc#185), every
+  `IfcMappedItem`'s `MappingTarget` composed, for every item kind: a B-rep
+  mapped by an operator whose `Axis2` opposes `Axis3 × Axis1` is mirrored.
+  A degenerate frame refuses it, and a body whose items disagree is a
+  conflict.
 - An optional attribute the file leaves unset is absent even where the
   schema defines a default; the adapter reports what the file states.
 

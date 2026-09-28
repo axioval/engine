@@ -533,6 +533,8 @@ fn finding(
     evidence: Vec<Evidence>,
 ) -> Finding {
     Finding {
+        id: None,
+        decision: None,
         rule_id: rule.id.clone(),
         scope: axioval_ir::Scope::Object(object.id.clone()),
         related: Vec::new(),

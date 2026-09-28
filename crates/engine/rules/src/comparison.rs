@@ -808,6 +808,8 @@ impl Projection<'_> {
         (source, identity): (&SourceId, &str),
     ) {
         let finding = Finding {
+            id: None,
+            decision: None,
             rule_id: self.rule(suffix),
             scope,
             severity: self.severity.clone(),
@@ -911,6 +913,7 @@ impl Projection<'_> {
         });
         self.not_evaluated.sort();
         Report {
+            stale_decisions: Vec::new(),
             findings: self.findings,
             not_evaluated: self.not_evaluated,
             tables: Vec::new(),

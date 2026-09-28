@@ -543,6 +543,8 @@ pub(crate) fn finding(
     evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
     evidence.dedup();
     Finding {
+        id: None,
+        decision: None,
         rule_id: rule.id.clone(),
         scope: axioval_ir::Scope::Object(object.clone()),
         related: Vec::new(),

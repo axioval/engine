@@ -41,6 +41,8 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
             related: vec![],
             evidence: vec![],
             location: None,
+            id: None,
+            decision: None,
             categories: Vec::new(),
         }
         .with_related([id(related)])
@@ -50,6 +52,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
         not_evaluated: vec![],
         tables: vec![],
         rules: Vec::new(),
+        stale_decisions: Vec::new(),
     };
 
     let export = export(

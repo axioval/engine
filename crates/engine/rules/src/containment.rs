@@ -599,6 +599,8 @@ impl Run<'_> {
     ) {
         self.evaluation.push_finding(
             Finding {
+                id: None,
+                decision: None,
                 rule_id: self.rule.id.clone(),
                 scope: Scope::Object(scope.clone()),
                 severity: severity(self.rule),

@@ -46,8 +46,11 @@ fn id(document: &str, local: u64) -> ObjectId {
 fn report(document: &str, first: u64) -> Report {
     let source = SourceId::new("ifc-step", document).unwrap();
     Report {
+        stale_decisions: Vec::new(),
         findings: vec![
             Finding {
+                id: None,
+                decision: None,
                 rule_id: RuleId::new("slab-contact").unwrap(),
                 scope: Scope::Object(id(document, first)),
                 severity: Severity::Error,
@@ -59,6 +62,8 @@ fn report(document: &str, first: u64) -> Report {
             }
             .with_related([id(document, first + 1)]),
             Finding {
+                id: None,
+                decision: None,
                 rule_id: RuleId::new("door-fire-rating").unwrap(),
                 scope: Scope::Object(id(document, first + 2)),
                 severity: Severity::Warning,
@@ -344,6 +349,8 @@ fn related_objects_alone_are_never_selected() {
     let mut report = report("a.ifc", 1);
     report.findings = vec![
         Finding {
+            id: None,
+            decision: None,
             rule_id: RuleId::new("door-in-wall").unwrap(),
             scope: Scope::Object(id("a.ifc", 3)),
             severity: Severity::Error,
@@ -365,6 +372,7 @@ fn related_objects_alone_are_never_selected() {
 fn scoped_report(document: &str, first: u64) -> Report {
     let source = SourceId::new("ifc-step", document).unwrap();
     Report {
+        stale_decisions: Vec::new(),
         findings: vec![
             Finding::new(
                 RuleId::new("building-exists").unwrap(),
@@ -440,6 +448,7 @@ fn a_source_or_project_outcome_is_a_model_level_topic_without_a_component() {
 #[test]
 fn a_project_finding_is_written_and_its_guid_is_stable() {
     let report = Report {
+        stale_decisions: Vec::new(),
         findings: vec![Finding::new(
             RuleId::new("fire-compartment-exists").unwrap(),
             Scope::Project,
@@ -861,5 +870,174 @@ mod labels {
                 .collect()
         };
         assert_eq!(guids(&export), guids(&plain));
+    }
+}
+
+/// Decisions carried over to a report become topic statuses and comments.
+mod decisions {
+    use super::{export, model, options, report};
+    use axioval_bcf::{
+        DECISION_CHANGED_LABEL, IFC_GLOBAL_ID_SCHEME, Options, STATUS_ACCEPTED, STATUS_REJECTED,
+    };
+    use axioval_ir::{Decision, DecisionStatus, Decisions, Report, Severity};
+
+    /// The wall finding accepted with a comment, the door finding rejected
+    /// without one, each recorded against the report as it is.
+    fn decided(report: &mut Report, date: &str) -> Decisions {
+        report
+            .identify_findings(&model("a.ifc", 1), IFC_GLOBAL_ID_SCHEME)
+            .unwrap();
+        let date = date.parse().unwrap();
+        let wall = &report.findings[0];
+        let door = &report.findings[1];
+        Decisions::new([
+            Decision::new(
+                wall.id.unwrap(),
+                DecisionStatus::Accepted,
+                "A. Reviewer",
+                date,
+            )
+            .unwrap()
+            .with_comment("  agreed with the structural engineer ")
+            .with_basis(wall),
+            Decision::new(
+                door.id.unwrap(),
+                DecisionStatus::Rejected,
+                "B. Reviewer",
+                date,
+            )
+            .unwrap()
+            .with_basis(door),
+        ])
+        .unwrap()
+    }
+
+    #[test]
+    fn topic_guids_are_the_finding_identities() {
+        let mut report = report("a.ifc", 1);
+        decided(&mut report, "2026-09-27T08:00:00Z");
+        let export = export(&report, &model("a.ifc", 1), &options()).unwrap();
+        for (finding, topic) in report.findings.iter().zip(&export.document.topics) {
+            assert_eq!(finding.id.unwrap().to_string(), topic.guid);
+        }
+    }
+
+    #[test]
+    fn a_decision_sets_the_topic_status_and_adds_its_comment() {
+        let mut report = report("a.ifc", 1);
+        let decisions = decided(&mut report, "2026-09-27T08:00:00+02:00");
+        report.apply_decisions(&decisions).unwrap();
+        let export = export(&report, &model("a.ifc", 1), &options()).unwrap();
+        let bytes = export.to_bytes().unwrap();
+        let archive = openbim_bcf::read_slice(&bytes).unwrap();
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        let markups: Vec<_> = archive.topics().collect();
+        let wall = markups
+            .iter()
+            .find(|markup| markup.topic.title.as_deref().unwrap().starts_with("Wall"))
+            .unwrap();
+        assert_eq!(wall.topic.topic_status.as_deref(), Some(STATUS_ACCEPTED));
+        assert_eq!(wall.comments.len(), 1);
+        let comment = &wall.comments[0];
+        assert_eq!(
+            comment.comment.as_deref(),
+            Some("Accepted: agreed with the structural engineer")
+        );
+        assert_eq!(comment.author.as_deref(), Some("A. Reviewer"));
+        assert_eq!(comment.date.as_deref(), Some("2026-09-27T08:00:00+02:00"));
+        // The comment GUID derives from the topic's, so it is reproduced.
+        let topic_guid: uuid::Uuid = wall.topic.guid.as_deref().unwrap().parse().unwrap();
+        assert_eq!(
+            comment.guid.as_deref(),
+            Some(
+                uuid::Uuid::new_v5(&topic_guid, b"decision")
+                    .to_string()
+                    .as_str()
+            )
+        );
+
+        let door = markups
+            .iter()
+            .find(|markup| markup.topic.title.as_deref() == Some("FireRating is missing"))
+            .unwrap();
+        assert_eq!(door.topic.topic_status.as_deref(), Some(STATUS_REJECTED));
+        assert_eq!(door.comments[0].comment.as_deref(), Some("Rejected"));
+
+        // A not-evaluated outcome is never decided: it stays open.
+        let skipped = markups
+            .iter()
+            .find(|markup| {
+                markup.topic.title.as_deref() == Some("no geometry service is registered")
+            })
+            .unwrap();
+        assert_eq!(skipped.topic.topic_status.as_deref(), Some("Open"));
+        assert!(skipped.comments.is_empty());
+    }
+
+    #[test]
+    fn a_changed_finding_is_labelled_and_its_comment_says_what_changed() {
+        let mut report = report("a.ifc", 1);
+        let decisions = decided(&mut report, "2026-09-27T08:00:00Z");
+        report.findings[0].severity = Severity::Warning;
+        report.apply_decisions(&decisions).unwrap();
+        let export = export(&report, &model("a.ifc", 1), &options()).unwrap();
+        let wall = &export.document.topics[0];
+        assert_eq!(wall.topic_status.as_deref(), Some(STATUS_ACCEPTED));
+        assert_eq!(
+            wall.labels,
+            ["slab-contact".to_owned(), DECISION_CHANGED_LABEL.to_owned()]
+        );
+        assert_eq!(
+            wall.comments[0].comment,
+            "Accepted: agreed with the structural engineer\nChanged since the decision: severity error -> warning"
+        );
+        export.to_bytes().unwrap();
+    }
+
+    #[test]
+    fn an_open_decision_keeps_the_hosts_status() {
+        let mut report = report("a.ifc", 1);
+        let mut decisions = decided(&mut report, "2026-09-27T08:00:00Z");
+        let wall = report.findings[0].id.unwrap();
+        let open = Decision::new(
+            wall,
+            DecisionStatus::Open,
+            "A. Reviewer",
+            "2026-09-28T08:00:00Z".parse().unwrap(),
+        )
+        .unwrap();
+        decisions.record(open).unwrap();
+        report.apply_decisions(&decisions).unwrap();
+        let options = Options {
+            status: "Active".to_owned(),
+            ..options()
+        };
+        let export = export(&report, &model("a.ifc", 1), &options).unwrap();
+        assert_eq!(
+            export.document.topics[0].topic_status.as_deref(),
+            Some("Active")
+        );
+        assert_eq!(export.document.topics[0].comments[0].comment, "Open");
+    }
+
+    #[test]
+    fn without_decisions_the_archive_is_byte_identical() {
+        let plain = report("a.ifc", 1);
+        let mut identified = plain.clone();
+        identified
+            .identify_findings(&model("a.ifc", 1), IFC_GLOBAL_ID_SCHEME)
+            .unwrap();
+        identified.apply_decisions(&Decisions::default()).unwrap();
+        let bytes = |report: &Report| {
+            export(report, &model("a.ifc", 1), &options())
+                .unwrap()
+                .to_bytes()
+                .unwrap()
+        };
+        assert_eq!(bytes(&plain), bytes(&identified));
     }
 }

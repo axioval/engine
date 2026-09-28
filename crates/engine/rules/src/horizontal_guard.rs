@@ -181,14 +181,14 @@ impl RuleCapability for HorizontalGuard {
             related.sort();
             related.dedup();
             evaluation.push_finding(Finding {
-                rule_id: rule.id.clone(),
-                scope: axioval_ir::Scope::Object(surface),
-                severity: Severity::Error,
                 related,
-                message: defect.code().to_string(),
                 evidence: vec![measured.evidence().clone()],
-                location: None,
-                categories: Vec::new(),
+                ..Finding::new(
+                    rule.id.clone(),
+                    surface,
+                    Severity::Error,
+                    defect.code().to_string(),
+                )
             });
         }
         evaluation

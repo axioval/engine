@@ -19,6 +19,17 @@ pub use contract::{DefinitionPackage, RuleSetPackage};
 pub mod temporal;
 pub use temporal::{Date, DateTime, TemporalError, TemporalPrecision};
 
+/// Stable identities of findings and not-evaluated outcomes.
+pub mod identity;
+pub use identity::{FindingId, IdentityError, finding_ids, not_evaluated_ids};
+
+/// Reviewers' decisions about findings, kept across re-checks.
+pub mod decision;
+pub use decision::{
+    ChangedFacet, Decision, DecisionBasis, DecisionChange, DecisionError, DecisionStatus,
+    Decisions, EvidenceCheck, FindingDecision,
+};
+
 /// Named tables of measured values reported beside findings.
 pub mod table;
 pub use table::{
@@ -1067,6 +1078,10 @@ impl Location {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "FindingWire", into = "FindingWire")]
 pub struct Finding {
+    /// The finding's stable identity, when the host derived it
+    /// ([`Report::identify_findings`]). `None` (and absent on the wire)
+    /// otherwise.
+    pub id: Option<FindingId>,
     pub rule_id: RuleId,
     /// What the finding is reported against: an object, a source, or the
     /// project. Evidence rules do not depend on it: every finding carries
@@ -1090,6 +1105,10 @@ pub struct Finding {
     /// `, `, `-` when none. The same levels head the message in brackets.
     /// Empty (and absent on the wire) when the rule declares none.
     pub categories: Vec<String>,
+    /// The reviewer's decision carried over to this finding
+    /// ([`Report::apply_decisions`]). `None` (and absent on the wire) when
+    /// undecided or when no decisions were applied.
+    pub decision: Option<FindingDecision>,
 }
 
 impl Finding {
@@ -1102,6 +1121,7 @@ impl Finding {
         message: impl Into<String>,
     ) -> Self {
         Self {
+            id: None,
             rule_id,
             scope: scope.into(),
             severity,
@@ -1110,6 +1130,7 @@ impl Finding {
             evidence: Vec::new(),
             location: None,
             categories: Vec::new(),
+            decision: None,
         }
     }
     /// The object the finding is reported against, if it is about one.
@@ -1148,6 +1169,8 @@ impl Finding {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FindingWire {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    id: Option<FindingId>,
     rule_id: RuleId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     object_id: Option<ObjectId>,
@@ -1162,12 +1185,15 @@ struct FindingWire {
     location: Option<Location>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     categories: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    decision: Option<FindingDecision>,
 }
 
 impl From<Finding> for FindingWire {
     fn from(finding: Finding) -> Self {
         let (object_id, source) = finding.scope.into_wire();
         Self {
+            id: finding.id,
             rule_id: finding.rule_id,
             object_id,
             source,
@@ -1177,6 +1203,7 @@ impl From<Finding> for FindingWire {
             evidence: finding.evidence,
             location: finding.location,
             categories: finding.categories,
+            decision: finding.decision,
         }
     }
 }
@@ -1185,6 +1212,7 @@ impl TryFrom<FindingWire> for Finding {
     type Error = String;
     fn try_from(wire: FindingWire) -> Result<Self, String> {
         Ok(Self {
+            id: wire.id,
             rule_id: wire.rule_id,
             scope: Scope::from_wire(wire.object_id, wire.source)?,
             severity: wire.severity,
@@ -1193,6 +1221,7 @@ impl TryFrom<FindingWire> for Finding {
             evidence: wire.evidence,
             location: wire.location,
             categories: wire.categories,
+            decision: wire.decision,
         })
     }
 }
@@ -1364,7 +1393,8 @@ impl RuleSummary {
 /// `tables` holds the measured values rules report beside their findings,
 /// ordered by rule and table name. It is omitted from the serialized form
 /// when empty, so a report without tables serializes byte for byte as
-/// before tables existed.
+/// before tables existed. So is `stale_decisions`, the decisions
+/// [`Report::apply_decisions`] found no finding for.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Report {
@@ -1377,6 +1407,9 @@ pub struct Report {
     /// omitted when empty, so a report without them serializes as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<RuleSummary>,
+    /// Decisions naming no finding of this report, by finding identity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stale_decisions: Vec<Decision>,
 }
 impl Report {
     /// Findings in deterministic order.
@@ -1394,6 +1427,28 @@ impl Report {
     /// Per-rule counts and status, by rule id; empty unless the host asked.
     pub fn rules(&self) -> &[RuleSummary] {
         &self.rules
+    }
+    /// Decisions [`Report::apply_decisions`] found no finding for.
+    pub fn stale_decisions(&self) -> &[Decision] {
+        &self.stale_decisions
+    }
+    /// Sets every finding's [`Finding::id`], keyed by the object aliases in
+    /// `stable_scheme` (see [`identity`]).
+    ///
+    /// # Errors
+    ///
+    /// [`IdentityError::UnknownObject`] when a finding names an object
+    /// `project` does not contain. Nothing is changed then.
+    pub fn identify_findings(
+        &mut self,
+        project: &Project,
+        stable_scheme: &str,
+    ) -> Result<(), IdentityError> {
+        let ids = finding_ids(self, project, stable_scheme)?;
+        for (finding, id) in self.findings.iter_mut().zip(ids) {
+            finding.id = Some(id);
+        }
+        Ok(())
     }
     /// The table `name` of `rule_id`, if the report has it.
     pub fn table(&self, rule_id: &RuleId, name: &str) -> Option<&ReportTable> {

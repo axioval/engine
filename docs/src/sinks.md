@@ -58,8 +58,11 @@ viewpoint and no component. Its description says `Source: <source>; no single
 object` or `Project: no single object or source`, and lists the related
 objects (for example the objects a count found) without selecting them.
 
-**GUIDs are stable across re-exports.** Topic and viewpoint GUIDs are UUIDv5
-over the rule, the objects' GlobalIds and the message, so rechecking a revised
+**GUIDs are stable across re-exports.** A finding's topic GUID is its
+[identity](./decisions.md#finding-identity) over the `ifc-globalid` scheme,
+`Finding::id` when the host identified the report with that scheme. Topic
+and viewpoint GUIDs are UUIDv5 over the rule, the objects' GlobalIds and the
+message, so rechecking a revised
 model reproduces the GUID of every issue still present, and BCF tools can
 track it. Objects without a GlobalId fall back to their STEP-numbered identity
 and cannot be tracked this way. When a federation holds two revisions that
@@ -72,6 +75,28 @@ topics keep the GUIDs they had before scopes existed.
 **Output is deterministic.** The caller supplies author and date, nothing reads
 the clock, and identical input writes identical bytes. Written archives are
 checked against the buildingSMART 2.1 schemas.
+
+## Decisions
+
+A finding carrying a reviewer's decision (see [Review decisions](./decisions.md))
+writes it into its topic:
+
+| Decision | Topic |
+|---|---|
+| `accepted` | `TopicStatus` `Accepted` (`STATUS_ACCEPTED`) |
+| `rejected` | `TopicStatus` `Rejected` (`STATUS_REJECTED`) |
+| `open` | the host's `Options::status`, as undecided |
+
+Every decided topic gets one comment: the status, then `: ` and the
+decision's comment when it has one (`Accepted: agreed with the engineer`),
+by the decision's author at its date. When the finding changed since the
+decision, the comment adds a line `Changed since the decision: severity
+warning -> error` and the topic gets the label `Decision changed`
+(`DECISION_CHANGED_LABEL`), so a reviewer can filter what to look at again.
+The comment's GUID is UUIDv5 of `decision` in the topic GUID's namespace, so
+a re-export reproduces it. Not-evaluated outcomes are never decided, and
+stale decisions write no topic. A report without decisions writes the same
+archive as before.
 
 ## Cameras
 

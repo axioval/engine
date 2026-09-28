@@ -6,6 +6,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Stable finding identities and review decisions.** (#94) A finding may
+  carry `id`, a `FindingId`: UUIDv5 over its rule, its objects' aliases in a
+  host-named stable scheme and its message, the key the BCF sink has always
+  derived its topic GUIDs from (`axioval_ir::finding_ids`,
+  `Report::identify_findings`). `Decisions` record, per finding identity, a
+  status (`accepted`, `rejected`, `open`), author, date, comment and the
+  finding's basis (rule, message, severity, evidence counts).
+  `Report::apply_decisions` marks each finding a decision names
+  (`Finding::decision`), flags one whose severity or evidence counts changed
+  since (`evidence: changed` with each change; `unknown` without a basis;
+  evidence locators are not compared, since they renumber on every export),
+  and lists decisions naming no finding in `Report::stale_decisions`.
+  Decisions never remove a finding, change a severity or touch a
+  not-evaluated outcome. The BCF sink takes its GUIDs from these identities
+  and writes a decided finding's topic with status `Accepted` or `Rejected`,
+  the decision as a comment, and the label `Decision changed` when it
+  changed (#109). Unset, all three fields are absent, so reports and
+  archives are byte-identical. **Breaking:** `Finding` gains `id` and
+  `decision` and `Report` gains `stale_decisions`, so struct literals must
+  set them.
 - **Accessible routes with tolerances, measured connectors and located
   blocks.** (#123) `accessible-route` takes `obstruction_depth_metres`
   (obstacles within that depth of a route space's boundary, a 5 mm

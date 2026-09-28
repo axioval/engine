@@ -355,6 +355,7 @@ mod tables {
 
     fn report(tables: Vec<ReportTable>) -> Report {
         Report {
+            stale_decisions: Vec::new(),
             findings: vec![Finding::new(
                 RuleId::new("r").unwrap(),
                 object("#1"),

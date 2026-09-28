@@ -1211,6 +1211,7 @@ fn assemble(
     }
     summaries.sort();
     Ok(Report {
+        stale_decisions: Vec::new(),
         findings,
         not_evaluated,
         tables,

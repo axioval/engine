@@ -122,6 +122,15 @@ A finding carries `categories`, the nested category levels its rule's
 the wire when the rule declares none, so a report serializes exactly as
 before.
 
+### Identity and decisions
+
+A finding may carry `id`, its stable `FindingId`, when the host derived it
+(`Report::identify_findings`), and `decision`, the reviewer's decision
+carried over to it (`Report::apply_decisions`); `Report::stale_decisions`
+lists decisions whose finding is gone. All three are absent on the wire
+unless set, so a report serializes exactly as before. See
+[Review decisions](./decisions.md).
+
 ### Rule status
 
 `Report::rules` holds one `RuleSummary` per rule when the host asked for

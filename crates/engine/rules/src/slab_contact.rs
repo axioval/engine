@@ -436,6 +436,8 @@ fn judge(
             };
             evaluation.push_finding(
                 Finding {
+                    id: None,
+                    decision: None,
                     rule_id: rule.id.clone(),
                     scope: axioval_ir::Scope::Object(subject.clone()),
                     severity,

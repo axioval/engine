@@ -31,7 +31,16 @@
 //! Topic and viewpoint GUIDs are UUIDv5 over the rule, the objects' GlobalIds
 //! (source-qualified ids where there is none), and the message. Because a
 //! GlobalId survives re-export, rechecking a revised model reproduces the
-//! GUIDs of issues that are still there, and a BCF tool can track them.
+//! GUIDs of issues that are still there, and a BCF tool can track them. A
+//! finding's topic GUID is its [`FindingId`](axioval_ir::FindingId) over
+//! [`IFC_GLOBAL_ID_SCHEME`], the identity a host records decisions against.
+//!
+//! # Decisions
+//!
+//! A finding carrying a reviewer's decision writes it into its topic: status
+//! [`STATUS_ACCEPTED`] or [`STATUS_REJECTED`] (an open decision keeps
+//! [`Options::status`]), one comment by the decision's author at its date,
+//! and [`DECISION_CHANGED_LABEL`] when the finding changed since.
 //!
 //! # Cameras
 //!
@@ -52,12 +61,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_ir::contract::{RuleFolder, RuleSetPackage};
 use axioval_ir::{
-    Finding, Location, NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report, Scope,
-    Severity,
+    DecisionStatus, EvidenceCheck, Finding, FindingDecision, IdentityError, Location, NotEvaluated,
+    NotEvaluatedReason, ObjectId, Place, Project, Report, Scope, Severity, finding_ids,
+    not_evaluated_ids,
 };
 use openbim_bcf::Component;
 use openbim_bcf::write::{
-    self, Camera, Document, Projection, TargetVersion, Topic, Vector3, Viewpoint, WriteError,
+    self, Camera, Comment, Document, Projection, TargetVersion, Topic, Vector3, Viewpoint,
+    WriteError,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -78,8 +89,13 @@ pub const PRIORITY_NORMAL: &str = "Normal";
 /// `Priority` of an info finding's topic.
 pub const PRIORITY_LOW: &str = "Low";
 
-/// Namespace of every GUID this crate derives. Changing it changes every GUID.
-const NAMESPACE: Uuid = Uuid::from_u128(0x6b1f_5a0e_2c3d_4e8f_9a71_0d2c_5e4b_8f13);
+/// `TopicStatus` of a finding's topic when the finding was accepted.
+pub const STATUS_ACCEPTED: &str = "Accepted";
+/// `TopicStatus` of a finding's topic when the finding was rejected.
+pub const STATUS_REJECTED: &str = "Rejected";
+/// Label of a decided finding's topic whose evidence changed since the
+/// decision, so a reviewer can filter what to look at again.
+pub const DECISION_CHANGED_LABEL: &str = "Decision changed";
 
 /// Vertical field of view of every perspective camera, in degrees: the
 /// widest BCF 2.1 allows, and valid in 3.0.
@@ -265,39 +281,26 @@ pub fn export(
     project: &Project,
     options: &Options,
 ) -> Result<Export, ExportError> {
+    // Topic GUIDs are the outcomes' stable identities over GlobalIds: the
+    // identities a host records decisions against.
     let mut entries = Vec::new();
-    for finding in report.findings() {
-        entries.push(Entry::finding(finding, project)?);
+    let ids = finding_ids(report, project, IFC_GLOBAL_ID_SCHEME).map_err(unknown)?;
+    for (finding, id) in report.findings().iter().zip(ids) {
+        entries.push((Entry::finding(finding, project)?, id.uuid()));
     }
     if options.include_not_evaluated {
-        for outcome in report.not_evaluated() {
-            entries.push(Entry::not_evaluated(outcome, project)?);
+        let ids = not_evaluated_ids(report, project, IFC_GLOBAL_ID_SCHEME).map_err(unknown)?;
+        for (outcome, id) in report.not_evaluated().iter().zip(ids) {
+            entries.push((Entry::not_evaluated(outcome, project)?, id));
         }
     }
-
-    // A key made only of GlobalIds can repeat across sources, e.g. two
-    // revisions of one model federated in one project. Those keys, and only
-    // those, are qualified by source so every GUID stays unique.
-    let mut uses: BTreeMap<&str, usize> = BTreeMap::new();
-    for entry in &entries {
-        *uses.entry(entry.key.as_str()).or_default() += 1;
-    }
-    let qualified: Vec<bool> = entries
-        .iter()
-        .map(|entry| uses[entry.key.as_str()] > 1)
-        .collect();
 
     let mut unanchored = BTreeSet::new();
     let mut unframed = BTreeSet::new();
     let mut topics = Vec::with_capacity(entries.len());
-    for (entry, qualified) in entries.iter().zip(qualified) {
-        let key = if qualified {
-            format!("{}\n{}", entry.key, entry.sources)
-        } else {
-            entry.key.clone()
-        };
+    for (entry, guid) in &entries {
         unanchored.extend(entry.unanchored.iter().cloned());
-        let (topic, uncamered) = entry.topic(&key, options);
+        let (topic, uncamered) = entry.topic(*guid, options);
         match uncamered {
             Uncamered::No => {}
             Uncamered::NoBounds if options.version == Version::V2_1 => {}
@@ -323,6 +326,14 @@ pub fn export(
     })
 }
 
+fn unknown(error: IdentityError) -> ExportError {
+    match error {
+        IdentityError::UnknownObject(object) => ExportError::UnknownObject(object),
+        // Identities are derived here, never parsed.
+        IdentityError::NotAnIdentity(text) => unreachable!("parsed no identity: {text}"),
+    }
+}
+
 /// One report entry, resolved against the project.
 struct Entry {
     title: String,
@@ -331,10 +342,8 @@ struct Entry {
     /// The rule id, then the location's storeys and spaces.
     labels: Vec<String>,
     description: String,
-    /// GUID input without source qualification.
-    key: String,
-    /// Every source the entry touches, for disambiguating a repeated key.
-    sources: String,
+    /// The reviewer's decision, for a decided finding.
+    decision: Option<FindingDecision>,
     selection: Vec<Component>,
     /// Every object a camera frames: the subject and related objects.
     framed: Vec<ObjectId>,
@@ -356,7 +365,7 @@ impl Entry {
         let subject = finding.object_id();
         let mut objects: Vec<&ObjectId> = subject.into_iter().collect();
         objects.extend(&finding.related);
-        let resolved = Resolved::new(&objects, subject.is_some(), &finding.scope, project)?;
+        let resolved = Resolved::new(&objects, subject.is_some(), project)?;
         let mut description = vec![
             finding.message.trim().to_owned(),
             format!("Rule: {}", finding.rule_id),
@@ -386,23 +395,7 @@ impl Entry {
                 labels
             },
             description: description.join("\n"),
-            // An object finding's key is unchanged from before scopes
-            // existed, so its GUID is too. A scoped one is marked, never
-            // named by source: that would change with every file name.
-            key: match &finding.scope {
-                Scope::Object(_) => format!(
-                    "finding\n{}\n{}\n{}",
-                    finding.rule_id, resolved.key, finding.message
-                ),
-                Scope::Source(_) | Scope::Project => format!(
-                    "finding\n{}\n{}\n{}\n{}",
-                    finding.rule_id,
-                    scope_marker(&finding.scope),
-                    resolved.key,
-                    finding.message
-                ),
-            },
-            sources: resolved.sources,
+            decision: finding.decision.clone(),
             selection: resolved.selection,
             framed: objects.into_iter().cloned().collect(),
             unanchored: resolved.unanchored,
@@ -411,7 +404,7 @@ impl Entry {
 
     fn not_evaluated(outcome: &NotEvaluated, project: &Project) -> Result<Self, ExportError> {
         let objects: Vec<&ObjectId> = outcome.object_id().into_iter().collect();
-        let resolved = Resolved::new(&objects, true, &outcome.scope, project)?;
+        let resolved = Resolved::new(&objects, true, project)?;
         let reason = reason(&outcome.reason);
         let mut description = vec![
             outcome.message.trim().to_owned(),
@@ -434,11 +427,7 @@ impl Entry {
             priority: None,
             labels: labels(&outcome.rule_id.to_string(), outcome.location.as_ref()),
             description: description.join("\n"),
-            key: format!(
-                "not-evaluated\n{}\n{}\n{reason}\n{}",
-                outcome.rule_id, resolved.key, outcome.message
-            ),
-            sources: resolved.sources,
+            decision: None,
             selection: resolved.selection,
             framed: objects.into_iter().cloned().collect(),
             unanchored: resolved.unanchored,
@@ -446,8 +435,7 @@ impl Entry {
     }
 
     /// The topic, and whether a viewpoint of it has no camera.
-    fn topic(&self, key: &str, options: &Options) -> (Topic, Uncamered) {
-        let guid = Uuid::new_v5(&NAMESPACE, key.as_bytes());
+    fn topic(&self, guid: Uuid, options: &Options) -> (Topic, Uncamered) {
         let mut uncamered = Uncamered::No;
         let viewpoints = if self.selection.is_empty() {
             vec![]
@@ -471,18 +459,32 @@ impl Entry {
                 }
             }
         };
+        let mut labels = merged_labels(&self.labels, &options.rule_labels);
+        let mut status = options.status.clone();
+        let mut comments = Vec::new();
+        if let Some(decision) = &self.decision {
+            match decision.status {
+                DecisionStatus::Open => {}
+                DecisionStatus::Accepted => STATUS_ACCEPTED.clone_into(&mut status),
+                DecisionStatus::Rejected => STATUS_REJECTED.clone_into(&mut status),
+            }
+            if decision.evidence == EvidenceCheck::Changed {
+                labels.push(DECISION_CHANGED_LABEL.to_owned());
+            }
+            comments.push(decision_comment(decision, guid));
+        }
         let topic = Topic {
             guid: guid.to_string(),
             title: self.title.clone(),
             description: Some(self.description.clone()),
             topic_type: Some(self.topic_type.clone()),
-            topic_status: Some(options.status.clone()),
+            topic_status: Some(status),
             priority: self.priority.map(str::to_owned),
-            labels: merged_labels(&self.labels, &options.rule_labels),
+            labels,
             creation_date: options.date.clone(),
             creation_author: options.author.clone(),
+            comments,
             viewpoints,
-            ..Topic::default()
         };
         (topic, uncamered)
     }
@@ -572,10 +574,46 @@ fn round(value: f64) -> f64 {
     (value * DECIMALS).round() / DECIMALS + 0.0
 }
 
+/// The comment a decided finding's topic carries: the decision's status and
+/// comment, by its author at its date, then what changed since, if anything.
+/// Its GUID derives from the topic's, so re-exporting reproduces it.
+fn decision_comment(decision: &FindingDecision, topic: Uuid) -> Comment {
+    let status = match decision.status {
+        DecisionStatus::Open => "Open",
+        DecisionStatus::Accepted => "Accepted",
+        DecisionStatus::Rejected => "Rejected",
+    };
+    let mut text = match decision.comment.trim() {
+        "" => status.to_owned(),
+        comment => format!("{status}: {comment}"),
+    };
+    if !decision.changes.is_empty() {
+        let changes: Vec<String> = decision
+            .changes
+            .iter()
+            .map(|change| {
+                format!(
+                    "{} {} -> {}",
+                    change.facet.as_str(),
+                    change.decided,
+                    change.now
+                )
+            })
+            .collect();
+        text.push_str("\nChanged since the decision: ");
+        text.push_str(&changes.join("; "));
+    }
+    Comment {
+        guid: Uuid::new_v5(&topic, b"decision").to_string(),
+        date: decision.date.to_string(),
+        author: decision.author.trim().to_owned(),
+        comment: text,
+        viewpoint: None,
+    }
+}
+
 /// The objects of one entry, subject first, mapped to BCF components.
 struct Resolved {
-    key: String,
-    sources: String,
     selection: Vec<Component>,
     unanchored: Vec<ObjectId>,
 }
@@ -583,39 +621,24 @@ struct Resolved {
 impl Resolved {
     /// `anchored` says whether `objects` starts with the subject. Without one
     /// nothing is selected, and so nothing is reported unanchored either.
-    fn new(
-        objects: &[&ObjectId],
-        anchored: bool,
-        scope: &Scope,
-        project: &Project,
-    ) -> Result<Self, ExportError> {
-        let mut keys = Vec::new();
-        let mut sources = BTreeSet::new();
-        sources.extend(scope.source().map(ToString::to_string));
+    fn new(objects: &[&ObjectId], anchored: bool, project: &Project) -> Result<Self, ExportError> {
         let mut selection = Vec::new();
         let mut unanchored = Vec::new();
         for (index, id) in objects.iter().enumerate() {
             let object = project
                 .object(id)
                 .ok_or_else(|| ExportError::UnknownObject((*id).clone()))?;
-            sources.insert(id.source.to_string());
             if let Some(global_id) = object.external_id(IFC_GLOBAL_ID_SCHEME) {
-                keys.push(global_id.to_owned());
                 // A viewpoint of only the related objects would show the
                 // reviewer the slab, not the wall that fails to rest on it.
                 if anchored && (index == 0 || !selection.is_empty()) {
                     selection.push(Component::ifc(global_id));
                 }
-            } else {
-                keys.push(id.to_string());
-                if anchored {
-                    unanchored.push((*id).clone());
-                }
+            } else if anchored {
+                unanchored.push((*id).clone());
             }
         }
         Ok(Self {
-            key: keys.join("\n"),
-            sources: sources.into_iter().collect::<Vec<_>>().join("\n"),
             selection,
             unanchored,
         })
@@ -719,15 +742,6 @@ fn title(message: &str, rule: &str) -> String {
         rule.to_owned()
     } else {
         message.to_owned()
-    }
-}
-
-/// Marks a scoped finding's GUID key apart from any object's.
-fn scope_marker(scope: &Scope) -> &'static str {
-    match scope {
-        Scope::Project => "project",
-        Scope::Source(_) => "source",
-        Scope::Object(_) => "object",
     }
 }
 

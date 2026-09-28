@@ -164,8 +164,9 @@ may be incomplete; readers filtering by location keep such an outcome.
 Locating needs the registry's outcome refiner; without one the run fails
 (`EngineError::MissingRefiner`).
 
-Locations are not part of a finding's identity: the BCF sink's GUID key
-ignores them, so a finding keeps its GUID whether or not it was located.
+Locations are not part of a finding's identity (see
+[Review decisions](./decisions.md#finding-identity)): a finding keeps its id,
+its BCF GUID and any decision about it whether or not it was located.
 
 ## Rule status
 

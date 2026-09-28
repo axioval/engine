@@ -234,6 +234,8 @@ pub(crate) fn evaluate(
         match ground.judge(space) {
             Ok(None) => {}
             Ok(Some(absent)) => evaluation.push_finding(Finding {
+                id: None,
+                decision: None,
                 rule_id: rule.id.clone(),
                 scope: axioval_ir::Scope::Object(space.id.clone()),
                 severity: severity(rule),

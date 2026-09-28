@@ -16,10 +16,19 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
 - A source- or project-scoped entry has no subject, so its topic has no
   viewpoint and no component, and nothing in it is `unanchored`.
 - GUIDs are UUIDv5 over rule, GlobalIds and message, so they survive
-  re-export. A scoped finding's key marks its scope kind but never names the
-  source, which would change with the file name; `tests/export.rs` pins the
-  object and rule-level GUIDs. Changing `NAMESPACE` or the key layout changes every GUID a user
-  has ever received; treat both as a compatibility contract.
+  re-export. The key is derived by `axioval_ir::finding_ids` and
+  `not_evaluated_ids` over `IFC_GLOBAL_ID_SCHEME`, the same identity a host
+  records decisions against; never build a key here. A scoped finding's key
+  marks its scope kind but never names the source, which would change with
+  the file name; `tests/export.rs` pins the object and rule-level GUIDs.
+  Changing `axioval_ir::identity::NAMESPACE` or the key layout changes every
+  GUID and decision key a user has ever received; treat both as a
+  compatibility contract.
+- A finding's `decision` sets the topic status (`Accepted`, `Rejected`; an
+  open decision keeps `Options::status`) and adds one comment by the
+  decision's author at its date, GUID `v5(topic, "decision")`; a changed one
+  adds the `Decision changed` label. Not-evaluated outcomes are never
+  decided. Without decisions the archive is byte-identical.
 - A finding's `Priority` follows its severity; a not-evaluated outcome has
   none, because no severity was decided. Never invent one for it.
 - Labels are the rule id first, then the host's `rule_labels` for that

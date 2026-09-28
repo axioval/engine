@@ -138,6 +138,8 @@ fn finding(
     evidence: Vec<Evidence>,
 ) -> Finding {
     Finding {
+        id: None,
+        decision: None,
         rule_id: rule.id.clone(),
         scope,
         severity,

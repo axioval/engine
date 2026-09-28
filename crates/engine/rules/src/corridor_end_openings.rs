@@ -104,7 +104,7 @@ impl RuleCapability for CorridorEndOpenings {
                 Ok(outcomes) => {
                     for outcome in outcomes {
                         match outcome {
-                            Outcome::Found(found) => evaluation.push_finding(found),
+                            Outcome::Found(found) => evaluation.push_finding(*found),
                             Outcome::Unknown(opening, reason, message) => {
                                 evaluation.push_object_not_evaluated(opening, reason, message);
                             }
@@ -138,7 +138,7 @@ fn candidates<'a>(
 }
 
 enum Outcome {
-    Found(axioval_ir::Finding),
+    Found(Box<axioval_ir::Finding>),
     Unknown(ObjectId, NotEvaluatedReason, String),
 }
 
@@ -214,7 +214,7 @@ fn check(
                         ),
                     ));
                 }
-                outcomes.push(Outcome::Found(finding(
+                outcomes.push(Outcome::Found(Box::new(finding(
                     rule,
                     opening,
                     format!(
@@ -224,7 +224,7 @@ fn check(
                     ),
                     evidence,
                     vec![space.id.clone()],
-                )));
+                ))));
             }
             (Judged::In(_), Some(why)) => outcomes.push(Outcome::Unknown(
                 opening.clone(),

@@ -5,6 +5,7 @@ resolver = "2"
 #   engine/     capability execution over those contracts
 #   sources/    adapters that feed the engine, one directory per port kind
 #   sinks/      writers that turn a finished report into an exchange format
+#   packages/   importers that write rule packages from other rule formats
 #   facade/     batteries-included re-export surface
 #   apps/       executables
 # A new geometry backend (CGAL, manifold3d) is a sibling under
@@ -14,6 +15,7 @@ members = [
     "crates/engine/*",
     "crates/sources/*/*",
     "crates/sinks/*",
+    "crates/packages/*",
     "crates/facade/*",
     "crates/apps/*",
 ]
@@ -38,6 +40,7 @@ axioval-ifc = { path = "crates/sources/semantic/ifc", version = "0.2.0" }
 axioval-axiolid = { path = "crates/sources/geometry/axiolid", version = "0.2.0" }
 axioval-icdd = { path = "crates/sources/assembly/icdd", version = "0.2.0" }
 axioval-bcf = { path = "crates/sinks/bcf", version = "0.2.0" }
+axioval-ids = { path = "crates/packages/ids", version = "0.2.0" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"
@@ -63,6 +66,7 @@ axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"
 openbim-bcf = "0.4.0"
+openbim-ids = "0.1.3"
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.

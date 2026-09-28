@@ -1,0 +1,35 @@
+[package]
+name = "axioval-ids"
+description = "Axioval rule packages from buildingSMART IDS documents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# A package importer writes definition packages and rulesets and never reads a
+# model: it adapts no source, so it depends on no source adapter.
+[dependencies]
+# The package contracts this importer writes.
+axioval-ir.workspace = true
+# The parameters each capability declares, which definitions must match.
+axioval-engine.workspace = true
+# XML Schema patterns in the syntax property selectors match with, and the
+# trusted capabilities rules select.
+axioval-rules.workspace = true
+regex.workspace = true
+openbim-ids.workspace = true
+# Which IDS classes are IfcObject occurrences, per release.
+ifc-schema.workspace = true
+thiserror.workspace = true
+
+# The facade runs translated rules through the IFC adapter in tests only. A
+# path-only dev-dependency is left out of the published manifest.
+[dev-dependencies]
+axioval = { path = "../../facade/axioval", features = ["ifc"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

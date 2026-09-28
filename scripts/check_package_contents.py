@@ -17,6 +17,7 @@ EXPECTED = {
     "axioval-cli",
     "axioval-engine",
     "axioval-icdd",
+    "axioval-ids",
     "axioval-ifc",
     "axioval-ir",
     "axioval-rules",

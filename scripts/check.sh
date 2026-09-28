@@ -9,7 +9,7 @@
 #
 #   deny   dependency policy (cargo-deny)
 #   lint   architecture and packaging self-tests, formatting, clippy
-#   test   workspace tests
+#   test   workspace tests, and the IDS corpus when IDS_TEST_CASES is set
 #   docs   rustdoc and the mdBook
 set -euo pipefail
 
@@ -40,6 +40,12 @@ check_lint() {
 
 check_test() {
   cargo test --workspace --all-features
+  # The buildingSMART IDS corpus is CC BY-ND 4.0 and is not vendored, so its
+  # conformance test is ignored by default and runs only where a maintainer
+  # points IDS_TEST_CASES at a checkout of it.
+  if [[ -n "${IDS_TEST_CASES:-}" ]]; then
+    cargo test -p axioval-ids -- --ignored corpus
+  fi
 }
 
 check_docs() {

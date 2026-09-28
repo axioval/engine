@@ -9,6 +9,7 @@ contracts/   source-neutral vocabulary — depends on nothing else in this tree
 engine/      capability execution over those contracts
 sources/     adapters that feed the engine, one directory per port kind
 sinks/       writers that turn a finished report into an exchange format
+packages/    importers that write rule packages from other rule formats
 facade/      feature-gated re-export surface
 apps/        executables
 ```
@@ -43,6 +44,16 @@ projects only: never the engine, never a source adapter. It must not depend on
 an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
 
 - `bcf` (`axioval-bcf`) — BCF 2.1 issue archives.
+
+## packages/
+
+One subdirectory per rule format a package is imported from. An importer
+writes `axioval-ir` definition packages and rulesets and never reads a model,
+so it adapts no source and depends on no adapter. It is core to the
+architecture gate: only the libraries named for it in `PERMITTED_COUPLINGS`
+of `scripts/architecture.py` are exempted, and only for that crate.
+
+- `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents.
 
 ## facade/ and apps/
 

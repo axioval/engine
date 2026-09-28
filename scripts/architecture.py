@@ -26,6 +26,19 @@ ADAPTER_CRATES = frozenset(
     }
 )
 
+# Narrow, per-crate allowances for a core crate that must read one external
+# format without adapting any source. Each entry names the exact dependencies
+# the crate may take; every other forbidden coupling still fails it, and the
+# listed crates stay forbidden to every other core crate.
+#
+# `axioval-ids` writes rule packages from buildingSMART IDS documents: it
+# parses IDS with `openbim-ids` and asks `ifc-schema` which IDS classes are
+# occurrences. It never reads a model, so it is a package importer, not an
+# adapter, and keeps every other core boundary.
+PERMITTED_COUPLINGS: dict[str, frozenset[str]] = {
+    "axioval-ids": frozenset({"openbim-ids", "ifc-schema"}),
+}
+
 # Crates live in category directories (`contracts/`, `engine/`, `sources/…`),
 # so the tree depth varies and a fixed `crates/*/Cargo.toml` glob would silently
 # return nothing -- a green gate that checks no crate at all. Discovery is
@@ -269,16 +282,33 @@ def dependency_names(manifest: str) -> set[str]:
     return names
 
 
-def manifest_violations(manifest: str) -> list[str]:
+def manifest_violations(manifest: str, permitted: frozenset[str] = frozenset()) -> list[str]:
     return sorted(
         name
         for name in dependency_names(manifest)
-        if any(token in name.casefold() for token in FORBIDDEN_DEPENDENCIES)
+        if name not in permitted
+        and any(token in name.casefold() for token in FORBIDDEN_DEPENDENCIES)
     )
 
 
-def source_violations(source: str) -> list[str]:
+def without_permitted_paths(code: str, permitted: frozenset[str]) -> str:
+    """Remove imports from, and paths into, the permitted crates only.
+
+    A `use` of a permitted crate is dropped whole, so the items it imports
+    (an `IfcVersion` enum of the IDS reader) do not trip the import pattern;
+    any other `use` naming a forbidden crate in the same file still does.
+    """
+    roots = sorted(name.replace("-", "_") for name in permitted)
+    if not roots:
+        return code
+    alternation = "|".join(re.escape(root) for root in roots)
+    code = re.sub(rf"\buse\s+(?:{alternation})\s*::[^;]*;", "", code)
+    return re.sub(rf"\b(?:{alternation})\s*::", "", code)
+
+
+def source_violations(source: str, permitted: frozenset[str] = frozenset()) -> list[str]:
     code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("//"))
+    code = without_permitted_paths(code, permitted)
     return [pattern.pattern for pattern in FORBIDDEN_SOURCE if pattern.search(code)]
 
 
@@ -319,6 +349,26 @@ def self_test() -> None:
         "- env:\n    AXIOVAL_DEPENDENCY_AUDIT_COMPLETE: '1'\n"
     )
     assert not manifest_violations('[dependencies]\nserde = "1"\n')
+    # A permitted coupling is exempt by exact name, for its crate alone.
+    ids = PERMITTED_COUPLINGS["axioval-ids"]
+    assert not manifest_violations(
+        '[dependencies]\nopenbim-ids = "0.1"\nifc-schema = "0.2"\n', ids
+    )
+    assert manifest_violations(
+        '[dependencies]\nopenbim-ids = "0.1"\nopenbim-ifc = "0.8"\n', ids
+    ) == ["openbim-ifc"]
+    assert manifest_violations('[dependencies]\nopenbim-ids = "0.1"\n') == ["openbim-ids"]
+    assert not source_violations(
+        "use ifc_schema::{Schema, TypeKind};\n"
+        "use openbim_ids::{Ids, IfcVersion};\n"
+        "fn f() -> ifc_schema::Schema { openbim_ids::read(x) }\n",
+        ids,
+    )
+    assert source_violations("use openbim_ids::{Ids, IfcVersion};\nuse openbim_ifc::Model;", ids)
+    assert source_violations("fn leak(m: openbim_ifc::Model) {}", ids)
+    assert source_violations("fn leak(_: IfcModel<'_>) {}", ids)
+    assert source_violations("use openbim_ids::Ids;")
+    assert "axioval-ids" not in ADAPTER_CRATES
     assert not source_violations("/// IFC is an adapter, not the IR.\npub struct Project;")
     vocabulary = '{"stems": ["StairRule", "free_floor_space"]}'
     stems = rule_stems(vocabulary)
@@ -554,11 +604,12 @@ def check(root: Path) -> list[str]:
     stems = rule_stems((root / "scripts" / "rule_vocabulary.json").read_text(encoding="utf-8"))
     for crate, crate_root in core_crates(root):
         manifest = crate_root / "Cargo.toml"
-        for dependency in manifest_violations(manifest.read_text(encoding="utf-8")):
+        permitted = PERMITTED_COUPLINGS.get(crate, frozenset())
+        for dependency in manifest_violations(manifest.read_text(encoding="utf-8"), permitted):
             failures.append(f"{manifest.relative_to(root)}: forbidden dependency {dependency!r}")
         for source in sorted((crate_root / "src").rglob("*.rs")):
             text = source.read_text(encoding="utf-8")
-            for pattern in source_violations(text):
+            for pattern in source_violations(text, permitted):
                 failures.append(f"{source.relative_to(root)}: forbidden source coupling matching {pattern!r}")
             for detail in service_seam_violations(text, stems):
                 failures.append(f"{source.relative_to(root)}: {detail}")

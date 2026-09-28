@@ -1,6 +1,6 @@
 # IDS import
 
-`axioval-ids` translates a buildingSMART IDS 1.0 document into a definition package and a ruleset that select the built-in capabilities. It lives in `staging/ids`: it reads IDS through the `openbim-ids` reader, which is merged but not yet released, and is neither a workspace member nor published (see [Publishing](#publishing)). It is a package importer, not a source adapter; it never reads a model.
+`axioval-ids` translates a buildingSMART IDS 1.0 document into a definition package and a ruleset that select the built-in capabilities. It lives in `crates/packages/ids`, reads IDS through the `openbim-ids` reader, and is published with the workspace (see [Publishing](#publishing)). It is a package importer, not a source adapter; it never reads a model.
 
 ## Exact or not at all
 
@@ -40,7 +40,7 @@ These parts stay explicit gaps:
 - requirements on a prohibited specification, which IDS declares invalid;
 - entities that are neither `IfcObject` occurrences, `IfcContext`s nor `IfcTypeObject`s: resources, which a session does not check. A type object is checked as itself: its own property sets, attributes, classifications and materials, and its predefined type is its own, or its `ElementType`, `ProcessType` or `ResourceType` when user-defined. An abstract class has no instances and matches nothing, as in IDS;
 
-A property set that holds no property is malformed IFC (`HasProperties` and `Quantities` are `SET [1:?]`), and the IFC adapter refuses every property answer about an object carrying one, resolved or enumerated, as incomplete. A property facet on such an object is therefore not evaluated, never absent and never passed, where IDS would fail a required facet. This is not reported as a gap, since the translation is exact wherever the source can answer; deciding it needs the adapter to list such a set with no members, which the IFC property library does not yet offer in a released version.
+A property set that holds no property is malformed IFC (`HasProperties` and `Quantities` are `SET [1:?]`), but IDS still judges it: a required property in a matching set that is empty fails. The IFC adapter lists such a set with no members (`empty_sets` of the enumeration), a property named in it is absent, and `property-value` and `property-requirements` count it among the sets that need a match, so a required facet on it is a finding, as IDS requires. Only an empty set sharing its name with a set that holds members stays refused, and a facet on such an object is not evaluated, never passed.
 
 A specification's `ifcVersion` is metadata that never changes a verdict, as the buildingSMART case "specification version is purely metadata" requires: every concept is named in the IFC adapter's type systems of all three releases IDS names, so an `IFC2X3` specification checks an `IFC4` or `IFC4X3_ADD2` model too. A class some release lacks (`IFCWALLSTANDARDCASE` in IFC4X3) matches nothing in its models, as in IDS; a class no release defines is a gap. The IFC2X3 type mapping therefore applies to every specification, in IFC2X3 sources only.
 
@@ -48,10 +48,14 @@ A specification's `ifcVersion` is metadata that never changes a verdict, as the 
 
 ## Conformance corpus
 
-`IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -- --ignored corpus` runs every buildingSMART test case through the IFC adapter and the engine. It asserts that no translated rule fails a `pass-` case and that every `fail-` case either produces a finding or is explained by a reported gap. `IDS_CORPUS_VERBOSE=1` lists every case with its findings.
+`IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -p axioval-ids -- --ignored corpus` runs every buildingSMART test case through the IFC adapter and the engine. It asserts that no translated rule fails a `pass-` case and that every `fail-` case either produces a finding or is explained by a reported gap. `IDS_CORPUS_VERBOSE=1` lists every case with its findings.
 
 Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` referencing an entity, or a complex property, which the adapter refuses (one referencing nothing is no value, and fails a required facet as IDS requires); and a measure whose unit the model does not resolve.
 
 ## Publishing
 
-The importer moves into the workspace, as `crates/packages/ids`, once a crates.io release of `openbim-ids` carries the reader (`openbim_ids::read`, `from_str`, `from_slice`); the latest release, 0.1.2, predates it. Until then it cannot be a member: the gate's `cargo deny` refuses every git source (`unknown-git = "deny"`, no `allow-git`), `cargo package` refuses a dependency without a registry version, and a path or git dependency cannot be published. Moving it then takes a version requirement for `openbim-ids`; workspace dependencies in place of the paths, the workspace package fields and lints, and no `publish = false`; the member in the workspace `Cargo.toml` (`crates/packages/*`); `EXPECTED_MEMBERS` in `scripts/staging_isolation.py`; the crate in `EXPECTED` of `scripts/check_package_contents.py`, which `scripts/package.sh` verifies; and an exemption in `scripts/architecture.py`, whose core crates must not depend on IFC while the importer reads `ifc-schema` and names IFC releases. The release itself stays with the maintainer's release run.
+`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with `openbim-ids` 0.1.3 or later, the first release carrying the reader (`openbim_ids::read`, `from_str`, `from_slice`). `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
+
+It is a package importer, not a source adapter, so the architecture gate treats it as core: it may not depend on any source adapter, format library or geometry kernel, with one narrow exemption in `scripts/architecture.py` (`PERMITTED_COUPLINGS`). The importer alone may depend on `openbim-ids`, to parse IDS, and `ifc-schema`, to ask which IDS classes are occurrences in each IFC release, and may use `openbim_ids::` and `ifc_schema::` paths; every other coupling still fails it, and both crates stay forbidden to every other core crate.
+
+Its tests run the translated rules through the facade's IFC adapter. The facade is a path-only dev-dependency, which is left out of the published manifest; `cargo deny` permits it through `allow-wildcard-paths`, which exempts dev-dependencies only. `./scripts/check.sh test` runs the [conformance corpus](#conformance-corpus) too when `IDS_TEST_CASES` is set, and skips it otherwise.

@@ -64,3 +64,5 @@ The gate has four sections, `deny`, `lint`, `test` and `docs`;
 section as its own parallel job (with the package check beside them), and its
 `check` job passes only when every one does. Pages does not re-run the gate:
 it requires CI to have passed on the commit and builds only `docs`.
+With `IDS_TEST_CASES` pointing at the buildingSMART IDS test cases (not
+vendored), `test` also runs the `axioval-ids` conformance corpus.

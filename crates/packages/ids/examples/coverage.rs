@@ -1,7 +1,7 @@
 //! Reports how much of each IDS document translates, and why the rest does not.
 //!
 //! ```text
-//! cargo run --example coverage -- a.ids b.ids ...
+//! cargo run -p axioval-ids --example coverage -- a.ids b.ids ...
 //! ```
 #![allow(missing_docs)]
 

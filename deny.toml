@@ -48,6 +48,12 @@ registries = []
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Exempts path-only dev-dependencies (and path dependencies of private
+# crates, of which there are none). A published crate's normal dependencies
+# still need a version. `axioval-ids` tests translated rules through the
+# facade: a versioned dev-dependency on a sibling would be written into its
+# published manifest, while a path-only one is left out of it.
+allow-wildcard-paths = true
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"

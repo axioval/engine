@@ -17,7 +17,8 @@
 //! The corpus is CC BY-ND 4.0 and is not vendored: point `IDS_TEST_CASES` at
 //! `Documentation/ImplementersDocumentation/TestCases` of
 //! <https://github.com/buildingSMART/IDS> and run
-//! `cargo test -- --ignored corpus`. `IDS_CORPUS_VERBOSE` lists every case.
+//! `cargo test -p axioval-ids -- --ignored corpus`. `IDS_CORPUS_VERBOSE` lists
+//! every case.
 #![allow(missing_docs, clippy::doc_markdown)]
 
 use std::collections::BTreeMap;

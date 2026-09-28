@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **`axioval-ids` is published.** (Refs #116) The IDS package importer
+  graduates from `staging/ids` to `crates/packages/ids`, a workspace member
+  published at the workspace version, now that `openbim-ids` 0.1.3 carries
+  the reader (`openbim_ids::read`). It reads it from crates.io instead of a
+  pinned git revision. The architecture gate treats it as a core crate with
+  one narrow exemption (`PERMITTED_COUPLINGS`): it alone may depend on
+  `openbim-ids` and `ifc-schema`. `cargo deny` allows path-only
+  dev-dependencies (`allow-wildcard-paths`), so its tests keep running
+  translated rules through the facade, and `./scripts/check.sh test` runs
+  the buildingSMART conformance corpus when `IDS_TEST_CASES` is set.
+
 - **Table column types.** (Refs #116) `Property` gains `column_types`
   (`PropertyColumnTypes`, `with_column_types`, `column_types()`): a table
   value's defining and defined column types as the source declares them,

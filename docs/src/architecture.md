@@ -13,6 +13,7 @@ crates/
   sources/geometry/axiolid     one adapter per kernel
   sources/assembly/icdd        one adapter per container
   sinks/bcf                    one writer per exchange format
+  packages/ids                 one importer per rule format
   facade/axioval               feature-gated re-exports
   apps/cli                     executables
 ```
@@ -36,6 +37,8 @@ engine/core  <-  engine/rules
         facade/axioval
 
 contracts/ir  <-  sinks/bcf
+
+contracts/ir, engine/core, engine/rules  <-  packages/ids
 ```
 
 A host composes adapters. The CLI, for instance, meshes IFC bodies with
@@ -45,6 +48,10 @@ depend on the other.
 
 A sink reads finished reports. It depends on the IR alone, so any host can
 write BCF from any source's report without linking the engine or an adapter.
+
+A package importer writes definition packages and rulesets from another rule
+format. It reads the engine's capability descriptors so its definitions match
+them, and never a model, so it links no source adapter.
 
 `axioval-ir`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
 

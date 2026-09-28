@@ -563,6 +563,13 @@ fn typed_property(
             None => property,
         }
     });
+    typed_evaluation(property, expected)
+}
+
+fn typed_evaluation(
+    property: Option<axioval_ir::Property>,
+    expected: &str,
+) -> axioval_engine::CapabilityEvaluation {
     let project = Project::new(vec![object()]).unwrap();
     let mut services = ServiceRegistry::new();
     services
@@ -648,6 +655,31 @@ fn an_unreported_data_type_is_not_evaluated_never_matched() {
     let evaluation = typed_property(Some(PropertyValue::String("x".into())), None, "IFCLABEL");
     assert!(evaluation.findings().is_empty());
     assert_eq!(evaluation.not_evaluated_outcomes().len(), 1);
+}
+
+#[test]
+fn a_table_whose_columns_differ_has_the_type_of_either_column() {
+    let table = exact_property(
+        "Pset.Typed",
+        "Code",
+        PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+            defining: PropertyValue::String("X".into()),
+            defined: PropertyValue::Integer(1),
+        }]),
+    )
+    .with_column_types("IFCLABEL", "IFCINTEGER")
+    .unwrap();
+    for expected in ["IFCLABEL", "IFCINTEGER"] {
+        let evaluation = typed_evaluation(Some(table.clone()), expected);
+        assert!(evaluation.findings().is_empty(), "{expected}");
+        assert!(evaluation.not_evaluated_outcomes().is_empty(), "{expected}");
+    }
+    let evaluation = typed_evaluation(Some(table), "IFCREAL");
+    assert_eq!(evaluation.findings().len(), 1);
+    assert_eq!(
+        evaluation.findings()[0].message,
+        "property Code has no column of type IFCREAL"
+    );
 }
 
 #[test]

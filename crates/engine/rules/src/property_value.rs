@@ -494,13 +494,24 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
     if !constraints.optional && is_empty(value) {
         return Verdict::Fails(format!("missing required property {name}"));
     }
+    let typed;
+    let mut value = value;
     if let Some(expected) = constraints.data_type {
-        match property.data_type() {
-            Some(actual) if actual.eq_ignore_ascii_case(expected) => {}
-            Some(actual) => {
+        match (property.data_type(), typed_cells(property, expected)) {
+            (Some(actual), _) if actual.eq_ignore_ascii_case(expected) => {}
+            (Some(actual), _) => {
                 return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
             }
-            None => {
+            // A table whose columns differ: the cells of the expected type
+            // are its values.
+            (None, Some(cells)) if cells.is_empty() => {
+                return Verdict::Fails(format!("property {name} has no column of type {expected}"));
+            }
+            (None, Some(cells)) => {
+                typed = PropertyValue::List(cells.into_iter().cloned().collect());
+                value = &typed;
+            }
+            (None, None) => {
                 return Verdict::Inapplicable(
                     NotEvaluatedReason::IncompleteEvidence,
                     format!("the source does not report the type of property {name}"),
@@ -515,6 +526,31 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
         }
         Verdict::Meets => Verdict::Meets,
     }
+}
+
+/// The cells of a table value's columns declared `expected`, when the
+/// source reports its column types; `None` for any other value.
+pub(crate) fn typed_cells<'p>(
+    property: &'p Property,
+    expected: &str,
+) -> Option<Vec<&'p PropertyValue>> {
+    let (PropertyValue::Table(rows), Some(types)) = (&property.value, property.column_types())
+    else {
+        return None;
+    };
+    let defining = types.defining.eq_ignore_ascii_case(expected);
+    let defined = types.defined.eq_ignore_ascii_case(expected);
+    Some(
+        rows.iter()
+            .flat_map(|row| {
+                [
+                    defining.then_some(&row.defining),
+                    defined.then_some(&row.defined),
+                ]
+            })
+            .flatten()
+            .collect(),
+    )
 }
 
 fn is_empty(value: &PropertyValue) -> bool {

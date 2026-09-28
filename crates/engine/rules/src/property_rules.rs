@@ -259,15 +259,25 @@ impl RuleCapability for PropertyDataType {
                             evidence,
                         ));
                     } else {
-                        match property.data_type() {
-                            Some(actual) if actual.eq_ignore_ascii_case(expected) => {}
-                            Some(actual) => evaluation.push_finding(finding(
+                        let cells = crate::property_value::typed_cells(property, expected);
+                        match (property.data_type(), cells) {
+                            (Some(actual), _) if actual.eq_ignore_ascii_case(expected) => {}
+                            (Some(actual), _) => evaluation.push_finding(finding(
                                 rule,
                                 object,
                                 format!("property {name} is {actual}, not {expected}"),
                                 evidence,
                             )),
-                            None => evaluation.push_object_not_evaluated(
+                            // A table whose columns differ has the type of
+                            // either column.
+                            (None, Some(cells)) if !cells.is_empty() => {}
+                            (None, Some(_)) => evaluation.push_finding(finding(
+                                rule,
+                                object,
+                                format!("property {name} has no column of type {expected}"),
+                                evidence,
+                            )),
+                            (None, None) => evaluation.push_object_not_evaluated(
                                 object.id.clone(),
                                 NotEvaluatedReason::IncompleteEvidence,
                                 format!("the source does not report the type of property {name}"),

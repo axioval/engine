@@ -8668,6 +8668,72 @@ fn enumerated_bounded_and_table_values_are_checked_value_by_value() {
 }
 
 #[test]
+fn a_table_whose_columns_differ_is_checked_by_the_cells_of_the_declared_type() {
+    let case = Case::new("property-table-columns");
+    let reference = json!({"type": "propertyReference", "property": "axioval:example.ifc.Load",
+                           "propertySet": "axioval:example.ifc.Pset_Kinds"});
+    let string = |value: &str| json!({"type": "string", "value": value});
+    let optional = json!({"type": "boolean", "value": true});
+    let packages = property_packages(
+        &case,
+        &[
+            (
+                "load-label",
+                "property-value",
+                json!({"property": reference, "data_type": string("IFCLABEL"),
+                       "values": {"type": "stringList", "value": ["B"]},
+                       "quantifier": string("any"), "optional": optional}),
+            ),
+            (
+                "load-length",
+                "property-value",
+                json!({"property": reference, "data_type": string("IFCLENGTHMEASURE"),
+                       "values": {"type": "stringList", "value": ["3"]},
+                       "quantifier": string("any"), "optional": optional,
+                       "si_units": {"type": "boolean", "value": true}}),
+            ),
+            (
+                "load-real",
+                "property-data-type",
+                json!({"property": reference, "data_type": string("IFCREAL")}),
+            ),
+        ],
+    );
+    let model = PROPERTY_KINDS.replace(
+        "#8=IFCPROPERTYTABLEVALUE('Load',$,(IFCREAL(1.),IFCREAL(2.)),(IFCREAL(10.),IFCREAL(20.)),$,$,$,$);",
+        "#8=IFCPROPERTYTABLEVALUE('Load',$,(IFCLABEL('A'),IFCLABEL('B')),(IFCLENGTHMEASURE(1000.),IFCLENGTHMEASURE(2000.)),$,$,$,$);",
+    );
+    let (output, result) = check_packages(&case, &model, packages);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // `B` is a label of #1's table, 3 m none of its lengths, and no column
+    // is a real; #2 has no table.
+    assert_eq!(
+        rule_findings(&result),
+        [
+            (
+                "load-length".to_owned(),
+                "#1".to_owned(),
+                "property axioval:example.ifc.Load is [1 m, 2 m], and none of its values \
+                 meets the constraints"
+                    .to_owned()
+            ),
+            (
+                "load-real".to_owned(),
+                "#1".to_owned(),
+                "property axioval:example.ifc.Load has no column of type IFCREAL".to_owned()
+            ),
+            (
+                "load-real".to_owned(),
+                "#2".to_owned(),
+                "missing required property axioval:example.ifc.Load".to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
 fn property_sets_and_properties_named_by_pattern_are_enumerated() {
     let case = Case::new("property-patterns");
     let string = |value: &str| json!({"type": "string", "value": value});

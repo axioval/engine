@@ -70,6 +70,10 @@ fn check(
             None => property,
         }
     });
+    check_property(property, parameters)
+}
+
+fn check_property(property: Option<Property>, parameters: &[(&str, ParameterValue)]) -> Outcome {
     let project = Project::new(vec![object()]).unwrap();
     let mut services = ServiceRegistry::new();
     services
@@ -545,5 +549,42 @@ fn a_table_is_judged_by_its_defining_and_defined_values() {
             ]
         ),
         Outcome::NotEvaluated(NotEvaluatedReason::IncompleteEvidence)
+    ));
+}
+
+#[test]
+fn a_table_with_column_types_is_judged_by_the_cells_of_the_declared_type() {
+    let table = Property::new(
+        "P",
+        "Code",
+        PropertyValue::Table(vec![axioval_ir::PropertyTableRow {
+            defining: PropertyValue::String("X".into()),
+            defined: metres(1.0),
+        }]),
+    )
+    .unwrap()
+    .with_column_types("IFCLABEL", "IFCLENGTHMEASURE")
+    .unwrap()
+    .with_evidence(Evidence::exact(source(), "native P.Code"));
+    let typed = |data_type: &str, literal: &str| {
+        check_property(
+            Some(table.clone()),
+            &[
+                text("data_type", data_type),
+                values(&[literal]),
+                quantifier("any"),
+                si(),
+            ],
+        )
+    };
+    assert!(meets(&typed("IFCLABEL", "X")));
+    assert!(meets(&typed("IfcLengthMeasure", "1")));
+    assert!(fails(&typed("IFCLABEL", "Y")));
+    // Only the defined length is compared: a label is no length.
+    assert!(fails(&typed("IFCLENGTHMEASURE", "2")));
+    // No column declares the type.
+    assert!(matches!(
+        typed("IFCREAL", "1"),
+        Outcome::Fails(message) if message.contains("no column of type IFCREAL")
     ));
 }

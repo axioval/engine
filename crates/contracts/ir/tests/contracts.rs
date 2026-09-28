@@ -3,7 +3,7 @@
 
 use axioval_ir::{
     Classification, Evidence, ExternalId, ExternalIdClash, IrError, Object, ObjectId, Project,
-    Property, PropertyValue, Selector, SourceId,
+    Property, PropertyColumnTypes, PropertyTableRow, PropertyValue, Selector, SourceId,
 };
 
 #[test]
@@ -148,6 +148,40 @@ fn a_property_carries_its_declared_data_type_only_when_reported() {
     let blank = Property::new("Pset", "Code", PropertyValue::Null)
         .unwrap()
         .with_data_type(" ");
+    assert!(matches!(blank, Err(IrError::Blank { .. })));
+}
+
+#[test]
+fn a_table_carries_its_column_types_only_when_reported() {
+    let table = Property::new(
+        "Pset",
+        "Curve",
+        PropertyValue::Table(vec![PropertyTableRow {
+            defining: PropertyValue::String("X".into()),
+            defined: PropertyValue::Integer(1),
+        }]),
+    )
+    .unwrap();
+    let json = serde_json::to_string(&table).unwrap();
+    assert!(!json.contains("column_types"), "{json}");
+    assert_eq!(table.column_types(), None);
+
+    let typed = table.with_column_types("IFCLABEL", "IFCINTEGER").unwrap();
+    let back: Property = serde_json::from_str(&serde_json::to_string(&typed).unwrap()).unwrap();
+    assert_eq!(
+        back.column_types(),
+        Some(&PropertyColumnTypes {
+            defining: "IFCLABEL".into(),
+            defined: "IFCINTEGER".into(),
+        })
+    );
+    assert_eq!(back, typed);
+
+    let scalar = Property::new("Pset", "Code", PropertyValue::Integer(1))
+        .unwrap()
+        .with_column_types("IFCLABEL", "IFCINTEGER");
+    assert_eq!(scalar, Err(IrError::ColumnTypesWithoutTable));
+    let blank = typed.with_column_types("IFCLABEL", " ");
     assert!(matches!(blank, Err(IrError::Blank { .. })));
 }
 

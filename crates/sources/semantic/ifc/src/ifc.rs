@@ -125,6 +125,18 @@ impl IfcPropertyService {
                 .with_data_type(data_type)
                 .map_err(|_| PropertyResolutionError::InexactEvidence)?;
         }
+        // Each column of a table declares one type (the library checks
+        // it), which the table's own type cannot state when they differ.
+        if let (ExactValue::Table(table), PropertyValue::Table(_)) = (&exact.value, &property.value)
+            && let Some(row) = table.rows.first()
+        {
+            property = property
+                .with_column_types(
+                    row.defining.value_type.to_ascii_uppercase(),
+                    row.defined.value_type.to_ascii_uppercase(),
+                )
+                .map_err(|_| PropertyResolutionError::InexactEvidence)?;
+        }
         Ok(property.with_evidence(Evidence::exact(
             self.snapshots[0].source().clone(),
             self.locator(format_args!(

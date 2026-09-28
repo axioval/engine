@@ -56,6 +56,9 @@ pub enum IrError {
         "invalid discipline `{0}`: use 1 to 64 lowercase ASCII letters, digits, `-` or `_`, starting with a letter or digit"
     )]
     InvalidDiscipline(String),
+    /// Column types were given for a property value that is no table.
+    #[error("column types describe a table value only")]
+    ColumnTypesWithoutTable,
 }
 
 /// Two objects of one source claiming one external id, in identity order.
@@ -726,7 +729,23 @@ pub struct Property {
     /// which is never evidence of any particular type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_type: Option<String>,
+    /// A table value's column types as the source declares them, which
+    /// `data_type` cannot state when the columns differ. `None` when the
+    /// value is no table or the adapter does not report them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_types: Option<PropertyColumnTypes>,
     pub evidence: Option<Evidence>,
+}
+
+/// The declared types of a table value's two columns, in the source's own
+/// vocabulary (an IFC table value: `IFCLABEL` and `IFCLENGTHMEASURE`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PropertyColumnTypes {
+    /// The type of every defining value.
+    pub defining: String,
+    /// The type of every defined value.
+    pub defined: String,
 }
 impl Property {
     /// Creates a property without provenance.
@@ -740,6 +759,7 @@ impl Property {
             name: required(name, "property name")?,
             value,
             data_type: None,
+            column_types: None,
             evidence: None,
         })
     }
@@ -752,10 +772,34 @@ impl Property {
         self.data_type = Some(required(data_type, "property data type")?);
         Ok(self)
     }
+    /// Records the declared types of a table value's columns.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the value is not a table or a type is blank.
+    pub fn with_column_types(
+        mut self,
+        defining: impl Into<String>,
+        defined: impl Into<String>,
+    ) -> Result<Self, IrError> {
+        if !matches!(self.value, PropertyValue::Table(_)) {
+            return Err(IrError::ColumnTypesWithoutTable);
+        }
+        self.column_types = Some(PropertyColumnTypes {
+            defining: required(defining, "property column type")?,
+            defined: required(defined, "property column type")?,
+        });
+        Ok(self)
+    }
     /// Attaches source evidence.
     pub fn with_evidence(mut self, evidence: Evidence) -> Self {
         self.evidence = Some(evidence);
         self
+    }
+    /// A table value's column types as the source declares them, if
+    /// reported.
+    pub fn column_types(&self) -> Option<&PropertyColumnTypes> {
+        self.column_types.as_ref()
     }
     /// The value's type as the source declares it, if reported.
     pub fn data_type(&self) -> Option<&str> {

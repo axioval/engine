@@ -162,6 +162,12 @@ fn a_table_value_keeps_its_rows_and_a_type_only_when_both_columns_share_it() {
         ])
     );
     assert_eq!(table.data_type(), None);
+    // Each column's own type is reported instead.
+    let columns = table.column_types().unwrap();
+    assert_eq!(
+        (columns.defining.as_str(), columns.defined.as_str()),
+        ("IFCLABEL", "IFCLENGTHMEASURE")
+    );
     let ratios = property("Ratios");
     assert_eq!(ratios.data_type(), Some("IFCREAL"));
     assert_eq!(

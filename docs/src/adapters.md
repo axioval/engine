@@ -73,7 +73,8 @@ value of its declared type, with the unit the kind states for it:
   since IFC4) references nothing and is `null` with no declared type.
 
 The declared type is the one every scalar of the value declares; a table
-whose columns declare two types reports none. The request is refused, never
+whose columns declare two types reports none, and every table reports its
+columns' types as `Property::column_types`. The request is refused, never
 answered as absent, when:
 - a complex quantity or two quantities carry the requested name;
 - a property set and a quantity set share the requested set name;

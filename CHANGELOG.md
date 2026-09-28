@@ -6,6 +6,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Table column types.** (Refs #116) `Property` gains `column_types`
+  (`PropertyColumnTypes`, `with_column_types`, `column_types()`): a table
+  value's defining and defined column types as the source declares them,
+  which `data_type` cannot state when they differ. The IFC adapter reports
+  them for every `IfcPropertyTableValue`. `property-value` with a
+  `data_type` judges only the cells of the columns declaring it, and
+  `property-data-type` accepts either column's type, so an IDS `dataType`
+  on such a table is decided (the buildingSMART "any matching value in a
+  table property" cases) instead of not evaluated; no column of the type
+  is a finding. **Breaking:** `Property` gains a public field, and
+  `IrError` the variant `ColumnTypesWithoutTable`; the wire format is
+  unchanged when no column types are reported.
+
 - **IFC2X3 classes of the IDS type mapping table.** (Refs #116) The staging
   IDS importer translates an IFC2X3 class the IDS IFC2X3 occurrence and
   type mapping table renames (`IFCAIRTERMINAL`) instead of reporting a

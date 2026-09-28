@@ -472,3 +472,35 @@ fn unreadable_input_and_bad_tolerances_exit_1() {
     let output = case.compare(&before, &before, &["--bcf-date", "2026-01-01T00:00:00Z"]);
     assert_eq!(output.status.code(), Some(2), "BCF options need --bcf");
 }
+
+#[test]
+fn every_property_set_is_listed_and_compared_on_request() {
+    let case = Case::new("revisions-property-sets");
+    let before = case.write("r1/model.ifc", &base());
+    let after = case.write("r2/model.ifc", &revised());
+    let saved = case.path("comparison.json");
+    let run = |extra: &[&str]| {
+        let mut args = vec!["--report", saved.to_str().unwrap()];
+        args.extend_from_slice(extra);
+        let output = case.compare(&before, &after, &args);
+        let result: Value =
+            serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+        (output, result)
+    };
+    for extra in [
+        &["--all-property-sets"][..],
+        &["--property-set", "Pset_WallCommon"],
+    ] {
+        let (output, result) = run(extra);
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+        let rated = object(&result["comparison"], RATED);
+        assert_eq!(rated["state"], "changed", "{result:#}");
+        assert!(
+            rated["changes"][0]["detail"]
+                .as_str()
+                .unwrap()
+                .contains("Pset_WallCommon.FireRating"),
+            "{result:#}"
+        );
+    }
+}

@@ -35,6 +35,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   with each finding's basis. `report` prints ids and decisions, counts them
   in the summary, lists `--section stale-decisions` and filters by
   `--decision`. The exit status is unchanged by decisions.
+- **Model comparison as a rule.** (#107) The `model-comparison` capability
+  compares the two models of a run named by the disciplines `base` and
+  `revised` (`--model a.ifc:base --model b.ifc:revised`), so a comparison
+  runs in a ruleset beside other rules and reports its added, removed and
+  changed objects as the rule's findings. The rule's selector restricts the
+  objects compared; objects are matched by `identity_scheme`, by
+  `identity_property` (read as `revised_identity_property` on the revised
+  model), or both in the order `match_by` names. `properties`,
+  `property_sets` and `all_property_sets` compare named properties and whole
+  sets, the sets listed through property enumeration. `ComparisonRequest`
+  gains `matching` with `Matcher::Scheme` and `Matcher::Property`,
+  `with_property_set` and `with_all_property_sets`, and `axioval compare`
+  `--property-set` and `--all-property-sets`. A property identity that
+  cannot be read leaves its object and every object it may match undecided
+  (`ModelComparison::undecided`), never added or removed. **Breaking:**
+  `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
+  `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
+  gives way to `matchers`.
+
 - **Accessible routes with tolerances, measured connectors and located
   blocks.** (#123) `accessible-route` takes `obstruction_depth_metres`
   (obstacles within that depth of a route space's boundary, a 5 mm

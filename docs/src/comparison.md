@@ -1,29 +1,37 @@
 # Model comparison
 
-`axioval_rules::compare_sessions(base, revised, request)` compares two
-evidence sessions object by object. The semantic facets are always compared;
-placement, geometry and coordinate systems are compared when the request asks
-for them, each with a tolerance, through typed host services only.
+A comparison sets two revisions of a model side by side, object by object.
+The semantic facets are always compared; placement, geometry and coordinate
+systems are compared when the request asks for them, each with a tolerance,
+through typed host services only. It runs two ways:
 
-`axioval compare` runs it over two IFC revisions (see
-[Command line](./cli.md#axioval-compare)).
-
-## A host entry point, not a capability
-
-A capability evaluates one rule over one session. A comparison needs two
-sessions, each with its own snapshots and services, so it is not a registered
-capability and has no rule definition to bind: it is a host entry point, like
-`axioval compare`. Its result is projected into an ordinary `Report`, so
-everything that reads reports (the saved result, `axioval report`, the BCF
-sink) reads a comparison too.
+- `axioval_rules::compare_sessions(base, revised, request)` compares two
+  evidence sessions. It is a host entry point: `axioval compare` runs it over
+  two IFC revisions (see [Command line](./cli.md#axioval-compare)), and
+  projects the result into an ordinary `Report`, so everything that reads
+  reports (the saved result, `axioval report`, the BCF sink) reads a
+  comparison too.
+- The `model-comparison` capability compares two sources of one session,
+  named by their disciplines, as a rule beside other rules (see
+  [The comparison as a rule](#the-comparison-as-a-rule)).
 
 ## Matching
 
-Objects are matched by an external identity scheme, never by `ObjectId`. A
+Objects are matched by an ordered chain of matchers, never by `ObjectId`. A
 local id is whatever the source file numbered an object, and every re-export
-renumbers. `ComparisonRequest::new(scheme)` names the scheme. The engine
-attaches no meaning to it: an IFC session supplies `GlobalId`s under the IFC
-adapter's scheme, and another source supplies its own.
+renumbers. `ComparisonRequest::new(scheme)` matches by one external identity
+scheme; `ComparisonRequest::matching(matchers)` by several in turn, each
+over the objects the ones before it left unmatched:
+
+- `Matcher::Scheme(scheme)`: the same identity in an external identity
+  scheme. The engine attaches no meaning to it: an IFC session supplies
+  `GlobalId`s under the IFC adapter's scheme, and another source supplies
+  its own.
+- `Matcher::Property { base, revised }`: the same value of a property, read
+  as `base` on the base revision and as `revised` on the revised one (a door
+  number, for instance, when a re-export regenerates every `GlobalId`).
+  Values are compared exactly; an absent, null or blank value is no key, and
+  a measured interval is refused, since it identifies nothing exactly.
 
 Each identity ends up in one of three states:
 
@@ -32,6 +40,15 @@ Each identity ends up in one of three states:
 - **Matched**: it is held by both. The pair then carries its differences, any
   facets that could not be compared, and any undetermined measures. It is
   unchanged when all three lists are empty.
+
+Matching fails closed. An identity held by several objects of one revision
+matches nothing (see [Nothing is dropped](#nothing-is-dropped)). An identity
+that cannot be read (a property resolver error) leaves its object
+**undecided**, and with it every object of the other revision the same
+matcher keyed but left unpaired, since it may be that object's partner; none
+of them is matched further, reported added or removed. An object keyed by
+some matcher but paired by none is added or removed, named by its first key;
+one no matcher could key is unidentified.
 
 ## Semantic facets
 
@@ -46,9 +63,15 @@ Each identity ends up in one of three states:
 - **Requested properties.** `ComparisonRequest::with_property(set, name)`
   names a property to resolve through each session's
   `PropertyResolutionServiceHandle`. Sources such as the IFC adapter answer
-  properties only on request, so there is no way to list what they hold. Exact
+  properties only on request rather than carrying them on the object. Exact
   absence counts as a value. A resolver error, or a session without a resolver,
   leaves the property unresolved.
+- **Property sets.** `ComparisonRequest::with_property_set(set)` compares
+  every property of a set, and `with_all_property_sets()` every property of
+  every set, listed on both sides through the resolver's property
+  enumeration. A property present on one side only appeared or disappeared.
+  An enumeration the resolver refuses leaves that set unresolved; a property
+  also named with `with_property` is compared through resolution alone.
 - **Relationships.** Targets are named by their identity in the scheme, so a
   renumbered target is not a change. A target without a unique identity leaves
   that relationship unresolved.
@@ -131,16 +154,18 @@ exactly.
 
 ## Nothing is dropped
 
-- An object without an identity in the scheme is **unidentified**: it cannot
-  be matched, and it may be the one that changed.
+- An object no matcher can key is **unidentified**: it cannot be matched,
+  and it may be the one that changed.
 - An identity claimed by several objects of one session is **ambiguous**. This
   can happen across sources, for example with a federated copy. The identity
   matches nothing on the other side, and the object it leaves unmatched there
   is reported with the ambiguity.
+- An object whose identity cannot be read, or that may match such an object,
+  is **undecided** (`ModelComparison::undecided`).
 
 `is_identical()` is true only when every identity matched and every compared
-facet agreed, with nothing unidentified, ambiguous, unresolved, undetermined
-or unpaired.
+facet agreed, with nothing unidentified, ambiguous, undecided, unresolved,
+undetermined or unpaired.
 
 ## Reports
 
@@ -155,19 +180,51 @@ id is `rule_id` and a suffix naming what it is about:
 | `RULE.<facet>` | finding per changed facet on the revised object, its base object in `related`; the message lists that facet's differences |
 | `RULE.coordinate-system` | finding scoped to the revised source when its coordinate system changed |
 | `RULE.<facet>` | not evaluated: a facet not compared, or an undetermined measure |
-| `RULE.identity` | not evaluated: an unidentified object or an ambiguous identity |
+| `RULE.identity` | not evaluated: an unidentified, ambiguous or undecided object |
 
 Findings are sorted by rule id, scope and message, and not-evaluated outcomes
 by their full content, so the same two sessions give the same report.
+
+## The comparison as a rule
+
+`axioval:capability.model-comparison` compares two models of one run, so a
+comparison travels in a ruleset beside other rules and its findings in the
+same report. The models are sources of the session, named by the discipline
+each declares: `axioval check --model a.ifc:base --model b.ifc:revised`
+with `base: base` and `revised: revised`. Exactly one source must declare
+each discipline; none (with some declaring nothing), none at all, or several
+leave the rule not evaluated, and `base` equal to `revised` is an invalid
+declaration.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `base`, `revised` | `string` | Required. The disciplines of the base and the revised model. |
+| `identity_scheme` | `string` | Match by this external identity scheme (`ifc-globalid` for IFC). |
+| `identity_property` | `propertyReference` | Match by this property's value, such as a door number. |
+| `revised_identity_property` | `propertyReference` | The property read on the revised model instead, when it states the identity elsewhere. Needs `identity_property`. |
+| `match_by` | `stringList` | The order of the matchers: `identity` (the scheme) and `property`. By default the scheme, then the property, whichever are declared. At least one matcher is required. |
+| `properties` | `table` | Rows of `property_set` (optional) and `property`: properties compared through resolution. |
+| `property_sets` | `table` | Rows of `property_set`: sets compared whole through enumeration. |
+| `all_property_sets` | `boolean` | Compare every set whole. |
+| `compare_placement`, `compare_geometry`, `compare_coordinate_systems` | `boolean` | The spatial facets, as above. |
+| `length_tolerance` | `number` | Metres; default 0. |
+| `angle_tolerance` | `number` | Degrees; default 0. |
+
+The rule's selector restricts the objects compared, on both sides. An object
+the selector cannot decide is compared all the same; a change involving only
+such objects (an added or removed one, or a pair of two) is not evaluated,
+never reported, while a pair with a selected object is reported. Findings
+carry the rule's own id and severity and name what they are about in the
+message: `added (MATCHER:IDENTITY)` on the revised object,
+`removed (MATCHER:IDENTITY)` on the base object, and `<facet> changed: …`
+on the revised object relating its base object. Not-evaluated outcomes are
+those of the [report](#reports) under the rule's id.
 
 ## Open
 
 - **Mesh difference.** A certified two-sided Hausdorff distance between two
   revisions of a body is axiolid/kernel#148. Until it is published, geometry
   compares bounds only.
-- **Listing properties.** The IFC adapter cannot enumerate an object's
-  properties (openbimrs/ifc#78), so only named properties are compared on IFC
-  sessions.
 - **Relationships of IFC sessions.** IFC relationships are answered on
   request through the relationship-selection service, not carried on the
   object, so the relationship facet compares nothing for them yet.

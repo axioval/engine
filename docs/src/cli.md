@@ -254,7 +254,8 @@ nothing is written.
 
 ```bash
 axioval compare --base r1/model.ifc --revised r2/model.ifc \
-  [--property SET.NAME ...] [--geometry] \
+  [--property SET.NAME ...] [--property-set SET ...] [--all-property-sets] \
+  [--geometry] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
@@ -271,8 +272,9 @@ Compared facets:
 
 - kind, classifications and relationships, always;
 - each `--property`, as `SET.NAME` (split at the first `.`, so
-  `Pset_WallCommon.FireRating` or `axioval:attributes.Name`) or a bare `NAME`.
-  IFC properties cannot be listed, so only named properties are compared;
+  `Pset_WallCommon.FireRating` or `axioval:attributes.Name`) or a bare `NAME`;
+- every property of each `--property-set`, or with `--all-property-sets` of
+  every set, listed on both sides through property enumeration;
 - placement (origin distance and axis rotation of each object frame), always;
 - the coordinate system of the two files (world frame, true north, map
   conversion), always;

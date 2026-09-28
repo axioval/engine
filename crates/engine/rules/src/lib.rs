@@ -93,9 +93,10 @@ pub use clash::Clash;
 pub use clash_matrix::ClashMatrix;
 pub use classification_requirement::ClassificationRequirement;
 pub use comparison::{
-    AmbiguousIdentity, ComparedObject, ComparedProperty, ComparisonError, ComparisonRequest,
-    ComparisonTolerance, Difference, Facet, Measure, Measurement, ModelComparison, ObjectChange,
-    Side, SourceComparison, Unresolved, compare_sessions,
+    AmbiguousIdentity, CompareModels, ComparedObject, ComparedProperty, ComparisonError,
+    ComparisonRequest, ComparisonTolerance, Difference, Facet, Matcher, Measure, Measurement,
+    ModelComparison, ObjectChange, Side, SourceComparison, UndecidedMatch, Unresolved,
+    compare_sessions,
 };
 pub use component_clearance::ComponentClearance;
 pub use component_visibility::ComponentVisibility;
@@ -199,6 +200,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(NameSequence))
         .and_then(|registry| registry.register(NumberingConsistency))
         .and_then(|registry| registry.register(ManualIssue))
+        .and_then(|registry| registry.register(CompareModels))
         .and_then(|registry| registry.register(LevelSpacing))
         .and_then(|registry| registry.register(AreaRatio))
         .and_then(|registry| registry.register(PlanCoverage))

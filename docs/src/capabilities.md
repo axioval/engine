@@ -1815,6 +1815,16 @@ declare leaves the rule not evaluated. Any other check keys on the class
 itself, read as the property `<id>` in `axioval:classification` (see
 [Derived properties](./derived.md)).
 
+### Model comparison
+
+`axioval:capability.model-comparison` compares the model of discipline
+`base` with the model of discipline `revised`, both sources of the run, and
+reports what was added, removed and changed as the rule's findings. Objects
+are matched by an identity scheme, a property (a door number, when a
+re-export regenerates identities) or both in a declared order; whole
+property sets are compared through property enumeration. See [The
+comparison as a rule](./comparison.md#the-comparison-as-a-rule).
+
 ## Adding a capability
 
 1. Define or reuse canonical schema concepts and parameters.

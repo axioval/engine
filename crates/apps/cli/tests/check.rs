@@ -11175,3 +11175,112 @@ fn revision_two_carries_revision_ones_decisions_and_lists_stale_ones() {
     assert!(result["report"]["findings"][0].get("decision").is_none());
     assert!(result["report"].get("stale_decisions").is_none());
 }
+
+/// Doors, each with a `Pset_DoorCommon` holding its number (`Reference`) and
+/// fire rating, and a wall no rule selects. `first` offsets every entity
+/// number, so each export numbers its entities and generates its
+/// `GlobalId`s afresh.
+fn door_export(first: u32, doors: &[(&str, &str)]) -> String {
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    let mut data = placed_box(
+        first,
+        [0.0, -1.0, 0.0],
+        [8.0, 0.2, 3.0],
+        "IFCWALL('GID',$,$,$,$,PL,REP,$,$)",
+    );
+    for (index, (number, rating)) in doors.iter().enumerate() {
+        let index = u32::try_from(index).unwrap();
+        let base = first + 20 * (index + 1);
+        data.push_str(&placed_box(
+            base,
+            [2.0 * f64::from(index), 0.0, 0.0],
+            [1.0, 0.1, 2.1],
+            door,
+        ));
+        let (object, reference, fire, set, relation) =
+            (base + 9, base + 10, base + 11, base + 12, base + 13);
+        let _ = write!(
+            data,
+            "#{reference}=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('{number}'),$);\n\
+             #{fire}=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('{rating}'),$);\n\
+             #{set}=IFCPROPERTYSET('{set:022}',$,'Pset_DoorCommon',$,(#{reference},#{fire}));\n\
+             #{relation}=IFCRELDEFINESBYPROPERTIES('{relation:022}',$,$,$,(#{object}),#{set});\n"
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+#[test]
+fn a_model_comparison_rule_matches_regenerated_doors_by_number() {
+    let case = Case::new("model-comparison-rule");
+    case.write(
+        "base.ifc",
+        &door_export(100, &[("D1", "EI30"), ("D2", "EI30"), ("D3", "EI30")]),
+    );
+    // Every GlobalId is new; D1's fire rating changed, D3 is gone, D4 new.
+    case.write(
+        "revised.ifc",
+        &door_export(500, &[("D1", "EI60"), ("D2", "EI30"), ("D4", "EI30")]),
+    );
+    let (output, result) = case.geometry_rule_over(
+        &["base.ifc:base", "revised.ifc:revised"],
+        &[("door", "IfcDoor")],
+        "axioval:capability.model-comparison",
+        &registry_signature("axioval:capability.model-comparison"),
+        entity("door"),
+        json!({
+            "base": {"type": "string", "value": "base"},
+            "revised": {"type": "string", "value": "revised"},
+            "identity_property": {"type": "propertyReference",
+                                  "property": "axioval:example.ifc.reference"},
+            "all_property_sets": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let mut findings: Vec<(String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            (
+                finding["object_id"]["source"]["document"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+                finding["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    findings.sort();
+    assert_eq!(
+        findings,
+        vec![
+            (
+                "base.ifc".to_owned(),
+                "removed (property axioval:example.ifc.reference:D3)".to_owned()
+            ),
+            (
+                "revised.ifc".to_owned(),
+                "added (property axioval:example.ifc.reference:D4)".to_owned()
+            ),
+            (
+                "revised.ifc".to_owned(),
+                "property changed: property Pset_DoorCommon.FireRating \"EI30\" -> \"EI60\""
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}

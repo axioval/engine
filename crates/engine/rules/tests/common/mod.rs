@@ -137,6 +137,25 @@ impl Model {
         self
     }
 
+    /// An object of any source whose properties cannot be answered.
+    pub fn unreadable_object(mut self, object: ObjectId) -> Self {
+        self.unreadable.insert(object);
+        self
+    }
+
+    /// Gives objects of any source their external identities.
+    pub fn with_external_ids(mut self, ids: &[(ObjectId, axioval_ir::ExternalId)]) -> Self {
+        for (object, external) in ids {
+            let held = self
+                .objects
+                .iter_mut()
+                .find(|held| &held.id == object)
+                .expect("the object is in the model");
+            *held = held.clone().with_external_id(external.clone());
+        }
+        self
+    }
+
     pub fn evaluate(
         self,
         capability: &dyn RuleCapability,
@@ -228,13 +247,19 @@ impl PropertyResolutionService for Model {
             .map(|((object, set, name), value)| {
                 Property::new(set.clone(), name.clone(), value.clone())
                     .unwrap()
-                    .with_evidence(Evidence::exact(source(), format!("{object}:{set}.{name}")))
+                    .with_evidence(Evidence::exact(
+                        object.source.clone(),
+                        format!("{object}:{set}.{name}"),
+                    ))
             })
             .collect();
         PropertyEnumeration::try_new(
             request.clone(),
             properties,
-            Evidence::exact(source(), format!("enumerated:{}", request.object_id())),
+            Evidence::exact(
+                request.object_id().source.clone(),
+                format!("enumerated:{}", request.object_id()),
+            ),
         )
     }
 }

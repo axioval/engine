@@ -22,8 +22,8 @@ use axioval_ir::{
     PropertyValue, RuleId, Scope, Severity, SourceId,
 };
 use axioval_rules::{
-    ComparisonRequest, ComparisonTolerance, Difference, Facet, ModelComparison, ObjectChange, Side,
-    compare_sessions,
+    ComparedProperty, ComparisonRequest, ComparisonTolerance, Difference, Facet, Matcher,
+    ModelComparison, ObjectChange, Side, compare_sessions,
 };
 
 const SCHEME: &str = "guid";
@@ -353,6 +353,62 @@ fn blank_declarations_are_refused() {
     assert!(ComparisonRequest::new(" ").is_err());
     assert!(request().with_property(Some(""), "x").is_err());
     assert!(request().with_property(None, " ").is_err());
+    assert!(request().with_property_set(" ").is_err());
+    assert!(ComparisonRequest::matching(Vec::new()).is_err());
+    assert!(ComparisonRequest::matching(vec![Matcher::Scheme(String::new())]).is_err());
+}
+
+#[test]
+fn a_property_matches_what_the_scheme_leaves_and_an_unreadable_one_decides_nothing() {
+    // A keeps its guid; B's was regenerated and matches by its rating, a
+    // stand-in for any identifying property. C's rating cannot be read, so
+    // D, rated and unmatched, may be C and is neither added nor removed.
+    let base = with_ratings(
+        &base_source(),
+        vec![
+            object(&base_source(), "#1", Some("A"), "wall"),
+            object(&base_source(), "#2", Some("B"), "wall"),
+            object(&base_source(), "#3", None, "wall"),
+        ],
+        &[("#1", "EI30"), ("#2", "EI60")],
+        &["#3"],
+    );
+    let revised = with_ratings(
+        &revised_source(),
+        vec![
+            object(&revised_source(), "#7", Some("A"), "wall"),
+            object(&revised_source(), "#8", Some("B-new"), "wall"),
+            object(&revised_source(), "#9", None, "wall"),
+        ],
+        &[("#7", "EI30"), ("#8", "EI60"), ("#9", "EI90")],
+        &[],
+    );
+    let rating = ComparedProperty::new(Some("Pset_Common"), "FireRating").unwrap();
+    let request = ComparisonRequest::matching(vec![
+        Matcher::Scheme(SCHEME.into()),
+        Matcher::Property {
+            base: rating.clone(),
+            revised: rating,
+        },
+    ])
+    .unwrap();
+    let comparison = compare_sessions(&base, &revised, &request);
+    let summary: Vec<(&str, &str)> = comparison
+        .objects()
+        .iter()
+        .map(|compared| (compared.identity.as_str(), compared.matcher.as_str()))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![("A", "guid"), ("EI60", "property Pset_Common.FireRating")]
+    );
+    let undecided: Vec<(Side, &str)> = comparison
+        .undecided()
+        .iter()
+        .map(|entry| (entry.side, entry.object.local_id.as_str()))
+        .collect();
+    assert_eq!(undecided, vec![(Side::Base, "#3"), (Side::Revised, "#9")]);
+    assert!(!comparison.is_identical());
 }
 
 // ---------------------------------------------------------------------------

@@ -1,13 +1,19 @@
-//! Comparison of two evidence sessions.
+//! Comparison of two revisions of a model.
 //!
-//! Objects are matched across sessions by an external identity scheme, never
-//! by [`ObjectId`]: an object's local id is whatever its source file numbered
-//! it, and a re-export renumbers everything. The scheme is a parameter because
-//! the engine attaches no meaning to it; an IFC session supplies `GlobalId`s
-//! under its adapter's scheme, another source its own.
+//! Two sessions are compared through [`compare_sessions`], a host entry
+//! point; two sources of one session through the `model-comparison`
+//! capability ([`CompareModels`]), which runs beside other rules.
+//!
+//! Objects are matched across revisions by an ordered chain of
+//! [`Matcher`]s, never by [`ObjectId`]: an object's local id is whatever its
+//! source file numbered it, and a re-export renumbers everything. A matcher
+//! is an external identity scheme, or a property each side states; the
+//! engine attaches no meaning to a scheme, so an IFC session supplies
+//! `GlobalId`s under its adapter's scheme, another source its own.
 //!
 //! The semantic facets (kind, classifications, properties, relationships) are
-//! always compared. The spatial facets are opt-in, each with its tolerance,
+//! always compared; whole property sets are listed through each revision's
+//! property enumeration when the request names them. The spatial facets are opt-in, each with its tolerance,
 //! and read typed host services only:
 //!
 //! - **placement** compares object frames ([`ObjectFrameServiceHandle`]): the
@@ -22,9 +28,11 @@
 //! above the tolerance, unchanged when its whole interval lies within it, and
 //! otherwise **undetermined**, never rounded either way.
 //!
-//! Nothing is silently dropped. An object without an identity in the scheme
-//! cannot be matched and is reported as unidentified. An identity held by two
-//! objects of one session is ambiguous and matches nothing. A facet that
+//! Nothing is silently dropped. An object no matcher can key cannot be
+//! matched and is reported as unidentified. An identity held by two objects
+//! of one revision is ambiguous and matches nothing, and an identity that
+//! cannot be read leaves its object, and every object it might match,
+//! undecided. A facet that
 //! cannot be read exactly on both sides -- a property resolver error, a
 //! relationship target without an identity, a missing service or an
 //! unmeasured body -- is reported unresolved rather than compared as if it
@@ -32,16 +40,17 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use axioval_engine::{
-    ClassificationServiceHandle, CoordinateFrame, CoordinateSystemServiceHandle, EvidenceSession,
-    MetricDirection, ObjectFrameError, ObjectFrameServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, ProximityError, ProximityServiceHandle,
-    SourceCoordinateSystem,
-};
+use axioval_engine::{EvidenceSession, RuleContext};
 use axioval_ir::{
     Evidence, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, PropertyValue, Report,
     RuleId, Scope, Severity, SourceId,
 };
+
+mod capability;
+mod facets;
+mod matching;
+
+pub use capability::CompareModels;
 
 /// A declaration the comparison cannot run with.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -55,6 +64,9 @@ pub enum ComparisonError {
     /// A tolerance is negative or not finite.
     #[error("comparison tolerances must be finite and non-negative")]
     InvalidTolerance,
+    /// No matcher is given.
+    #[error("a comparison needs at least one matcher")]
+    NoMatcher,
 }
 
 /// How far a spatial facet may move before it counts as changed.
@@ -100,6 +112,20 @@ pub struct ComparedProperty {
 }
 
 impl ComparedProperty {
+    /// A property by name, optionally within a set.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the name or a given set is blank.
+    pub fn new(property_set: Option<&str>, name: &str) -> Result<Self, ComparisonError> {
+        if name.trim().is_empty() || property_set.is_some_and(|set| set.trim().is_empty()) {
+            return Err(ComparisonError::BlankProperty);
+        }
+        Ok(Self {
+            property_set: property_set.map(str::to_owned),
+            name: name.to_owned(),
+        })
+    }
     /// Property set, or `None` for a property unambiguous by name.
     pub fn property_set(&self) -> Option<&str> {
         self.property_set.as_deref()
@@ -119,11 +145,44 @@ impl std::fmt::Display for ComparedProperty {
     }
 }
 
+/// One way of telling that an object of the base revision and one of the
+/// revised revision are the same object.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Matcher {
+    /// The same identity in an external identity scheme, such as the IFC
+    /// adapter's `GlobalId` scheme.
+    Scheme(String),
+    /// The same value of a property: `base` read on the base revision,
+    /// `revised` on the revised one, such as a door number. Values are
+    /// compared exactly; an absent, null or blank value is no key.
+    Property {
+        /// The property read on the base revision.
+        base: ComparedProperty,
+        /// The property read on the revised revision.
+        revised: ComparedProperty,
+    },
+}
+
+impl Matcher {
+    /// How reports name the matcher: the scheme, or `property` and the
+    /// property (both, when they differ).
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            Self::Scheme(scheme) => scheme.clone(),
+            Self::Property { base, revised } if base == revised => format!("property {base}"),
+            Self::Property { base, revised } => format!("property {base}/{revised}"),
+        }
+    }
+}
+
 /// What to compare and how to match objects.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComparisonRequest {
-    scheme: String,
+    matchers: Vec<Matcher>,
     properties: BTreeSet<ComparedProperty>,
+    property_sets: BTreeSet<String>,
+    all_property_sets: bool,
     placement: Option<ComparisonTolerance>,
     geometry: Option<ComparisonTolerance>,
     coordinate_systems: Option<ComparisonTolerance>,
@@ -136,13 +195,31 @@ impl ComparisonRequest {
     ///
     /// Returns an error when `scheme` is blank.
     pub fn new(scheme: impl Into<String>) -> Result<Self, ComparisonError> {
-        let scheme = scheme.into();
-        if scheme.trim().is_empty() {
-            return Err(ComparisonError::BlankScheme);
+        Self::matching(vec![Matcher::Scheme(scheme.into())])
+    }
+
+    /// Matches objects by each of `matchers` in turn, each over the objects
+    /// the ones before it left unmatched.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `matchers` is empty or a scheme is blank.
+    pub fn matching(matchers: Vec<Matcher>) -> Result<Self, ComparisonError> {
+        if matchers.is_empty() {
+            return Err(ComparisonError::NoMatcher);
+        }
+        for matcher in &matchers {
+            if let Matcher::Scheme(scheme) = matcher
+                && scheme.trim().is_empty()
+            {
+                return Err(ComparisonError::BlankScheme);
+            }
         }
         Ok(Self {
-            scheme,
+            matchers,
             properties: BTreeSet::new(),
+            property_sets: BTreeSet::new(),
+            all_property_sets: false,
             placement: None,
             geometry: None,
             coordinate_systems: None,
@@ -152,8 +229,8 @@ impl ComparisonRequest {
     /// Also compares one property, resolved through each session's resolver.
     ///
     /// Sources that answer properties only on request, rather than carrying
-    /// them on the object, need this: there is no way to list what such a
-    /// source holds, so the properties that matter are named.
+    /// them on the object, need this or a property set
+    /// ([`Self::with_property_set`]).
     ///
     /// # Errors
     ///
@@ -163,14 +240,31 @@ impl ComparisonRequest {
         property_set: Option<&str>,
         name: &str,
     ) -> Result<Self, ComparisonError> {
-        if name.trim().is_empty() || property_set.is_some_and(|set| set.trim().is_empty()) {
+        self.properties
+            .insert(ComparedProperty::new(property_set, name)?);
+        Ok(self)
+    }
+
+    /// Also compares every property of a set, listed through each session's
+    /// property enumeration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the set is blank.
+    pub fn with_property_set(mut self, property_set: &str) -> Result<Self, ComparisonError> {
+        if property_set.trim().is_empty() {
             return Err(ComparisonError::BlankProperty);
         }
-        self.properties.insert(ComparedProperty {
-            property_set: property_set.map(str::to_owned),
-            name: name.to_owned(),
-        });
+        self.property_sets.insert(property_set.to_owned());
         Ok(self)
+    }
+
+    /// Also compares every property of every set, listed through each
+    /// session's property enumeration.
+    #[must_use]
+    pub fn with_all_property_sets(mut self) -> Self {
+        self.all_property_sets = true;
+        self
     }
 
     /// Also compares each matched object's placement frame: the distance
@@ -197,9 +291,22 @@ impl ComparisonRequest {
         self
     }
 
-    /// The identity scheme objects are matched by.
-    pub fn scheme(&self) -> &str {
-        &self.scheme
+    /// The matchers objects are matched by, in order.
+    pub fn matchers(&self) -> &[Matcher] {
+        &self.matchers
+    }
+    /// The property sets compared whole, unless every set is.
+    pub fn property_sets(&self) -> impl Iterator<Item = &str> {
+        self.property_sets.iter().map(String::as_str)
+    }
+    /// Whether every property set is compared whole.
+    #[must_use]
+    pub fn compares_all_property_sets(&self) -> bool {
+        self.all_property_sets
+    }
+    /// Whether the sources of each side are paired and compared.
+    fn compares_sources(&self) -> bool {
+        self.coordinate_systems.is_some()
     }
     /// The placement tolerance, when placement is compared.
     #[must_use]
@@ -218,13 +325,24 @@ impl ComparisonRequest {
     }
 }
 
-/// Which session an object belongs to.
+/// Which revision an object belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Side {
-    /// The earlier session.
+    /// The earlier revision.
     Base,
-    /// The later session.
+    /// The later revision.
     Revised,
+}
+
+impl Side {
+    /// `base` or `revised`.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Base => "base",
+            Self::Revised => "revised",
+        }
+    }
 }
 
 /// What a difference, a gap or a measurement is about.
@@ -613,35 +731,54 @@ pub enum ObjectChange {
     },
 }
 
-/// One external identity and what happened to it.
+/// One identity and what happened to it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComparedObject {
-    /// The identity's value in the comparison scheme.
+    /// The identity: its value in the scheme, or the value of the matched
+    /// property. An added or removed object is named by its first key.
     pub identity: String,
+    /// The label of the matcher the identity is read by ([`Matcher::label`]).
+    pub matcher: String,
     /// What happened to it.
     pub change: ObjectChange,
 }
 
-/// Several objects of one session claiming one identity.
+/// Several objects of one revision claiming one identity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AmbiguousIdentity {
-    /// The session holding the claims.
+    /// The revision holding the claims.
     pub side: Side,
     /// The contested identity value.
     pub identity: String,
+    /// The label of the matcher that read it.
+    pub matcher: String,
     /// The claimants, or the one object on the other side the ambiguity
     /// left unmatched.
     pub objects: Vec<ObjectId>,
 }
 
-/// The coordinate systems of one base source and its revised counterpart.
+/// An object whose match cannot be decided: its identity cannot be read, or
+/// it may match an object whose identity cannot be.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UndecidedMatch {
+    /// The revision holding the object.
+    pub side: Side,
+    /// The object.
+    pub object: ObjectId,
+    /// Why it is undecided.
+    pub reason: NotEvaluatedReason,
+    /// What could not be read.
+    pub message: String,
+}
+
+/// What one base source and its revised counterpart state about themselves.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceComparison {
     /// The base source.
     pub base: SourceId,
     /// The revised source.
     pub revised: SourceId,
-    /// Coordinate-system differences.
+    /// Differences between the two sources' statements.
     pub differences: Vec<Difference>,
     /// Statements that could not be compared.
     pub unresolved: Vec<Unresolved>,
@@ -656,12 +793,13 @@ pub struct ModelComparison {
     objects: Vec<ComparedObject>,
     unidentified: Vec<(Side, ObjectId)>,
     ambiguous: Vec<AmbiguousIdentity>,
+    undecided: Vec<UndecidedMatch>,
     sources: Vec<SourceComparison>,
     unpaired_sources: Vec<(Side, SourceId)>,
 }
 
 impl ModelComparison {
-    /// The identity scheme objects were matched by.
+    /// The labels of the matchers objects were matched by, joined by `, `.
     pub fn scheme(&self) -> &str {
         &self.scheme
     }
@@ -673,11 +811,15 @@ impl ModelComparison {
     pub fn unidentified(&self) -> &[(Side, ObjectId)] {
         &self.unidentified
     }
-    /// Identities claimed by more than one object of a session.
+    /// Identities claimed by more than one object of a revision.
     pub fn ambiguous(&self) -> &[AmbiguousIdentity] {
         &self.ambiguous
     }
-    /// Coordinate-system comparisons, one per paired source, when requested.
+    /// Objects whose match could not be decided.
+    pub fn undecided(&self) -> &[UndecidedMatch] {
+        &self.undecided
+    }
+    /// Source comparisons, one per paired source, when requested.
     pub fn sources(&self) -> &[SourceComparison] {
         &self.sources
     }
@@ -689,6 +831,7 @@ impl ModelComparison {
     pub fn is_identical(&self) -> bool {
         self.unidentified.is_empty()
             && self.ambiguous.is_empty()
+            && self.undecided.is_empty()
             && self.unpaired_sources.is_empty()
             && self.sources.iter().all(|source| {
                 source.differences.is_empty()
@@ -725,13 +868,25 @@ impl ModelComparison {
                     message: format!(
                         "{:?} identity {}:{} is claimed by {} objects",
                         ambiguous.side,
-                        self.scheme,
+                        ambiguous.matcher,
                         ambiguous.identity,
                         ambiguous.objects.len()
                     ),
                     location: None,
                 });
             }
+        }
+        for undecided in &self.undecided {
+            not_evaluated.push(NotEvaluated {
+                rule_id: rule_id.clone(),
+                scope: Scope::Object(undecided.object.clone()),
+                reason: undecided.reason.clone(),
+                message: format!(
+                    "{:?} object cannot be matched: {}",
+                    undecided.side, undecided.message
+                ),
+                location: None,
+            });
         }
         not_evaluated
     }
@@ -751,15 +906,40 @@ impl ModelComparison {
     /// undetermined measurement may be a move.
     #[must_use]
     pub fn report(&self, rule_id: &RuleId, severity: &Severity) -> Report {
+        self.project(Naming::Suffixed(rule_id), severity, |_| None)
+    }
+
+    /// Projects the comparison into report entries named as `naming` says.
+    ///
+    /// `out_of_scope` names the compared objects whose outcome the caller
+    /// cannot stand behind, with why: they become one not-evaluated outcome
+    /// on their object instead.
+    fn project(
+        &self,
+        naming: Naming<'_>,
+        severity: &Severity,
+        out_of_scope: impl Fn(&ComparedObject) -> Option<(ObjectId, NotEvaluatedReason, String)>,
+    ) -> Report {
         let mut projection = Projection {
             scheme: &self.scheme,
-            rule_id,
+            naming,
             severity,
             findings: Vec::new(),
             not_evaluated: Vec::new(),
         };
         for compared in &self.objects {
-            projection.object(compared);
+            match out_of_scope(compared) {
+                Some((object, reason, message)) => {
+                    projection.not_evaluated.push(NotEvaluated {
+                        rule_id: projection.rule("identity"),
+                        scope: Scope::Object(object),
+                        reason,
+                        message,
+                        location: None,
+                    });
+                }
+                None => projection.object(compared),
+            }
         }
         for source in &self.sources {
             projection.source(source);
@@ -785,10 +965,20 @@ impl ModelComparison {
     }
 }
 
+/// How report entries name what they are about.
+#[derive(Clone, Copy)]
+enum Naming<'a> {
+    /// In the rule id: `RULE.added`, `RULE.<facet>`, as `axioval compare`
+    /// reports.
+    Suffixed(&'a RuleId),
+    /// In the message, under the rule's own id, as a capability reports.
+    Prefixed(&'a RuleId),
+}
+
 /// Builds a comparison's report, entry by entry.
 struct Projection<'a> {
     scheme: &'a str,
-    rule_id: &'a RuleId,
+    naming: Naming<'a>,
     severity: &'a Severity,
     findings: Vec<Finding>,
     not_evaluated: Vec<NotEvaluated>,
@@ -796,7 +986,21 @@ struct Projection<'a> {
 
 impl Projection<'_> {
     fn rule(&self, suffix: &str) -> RuleId {
-        RuleId::new(format!("{}.{suffix}", self.rule_id)).unwrap_or_else(|_| self.rule_id.clone())
+        match self.naming {
+            Naming::Suffixed(rule_id) => {
+                RuleId::new(format!("{rule_id}.{suffix}")).unwrap_or_else(|_| rule_id.clone())
+            }
+            Naming::Prefixed(rule_id) => rule_id.clone(),
+        }
+    }
+
+    /// The message of a change of `facet`: the facet is named in the
+    /// message only where the rule id does not name it.
+    fn changed(&self, facet: Facet, rest: &str) -> String {
+        match self.naming {
+            Naming::Suffixed(_) => format!("changed{rest}"),
+            Naming::Prefixed(_) => format!("{} changed{rest}", facet.name()),
+        }
     }
 
     fn finding(
@@ -805,7 +1009,7 @@ impl Projection<'_> {
         scope: Scope,
         related: Option<&ObjectId>,
         message: String,
-        (source, identity): (&SourceId, &str),
+        (source, matcher, identity): (&SourceId, &str, &str),
     ) {
         let finding = Finding {
             id: None,
@@ -817,7 +1021,7 @@ impl Projection<'_> {
             related: Vec::new(),
             evidence: vec![Evidence {
                 source: source.clone(),
-                locator: format!("comparison:{}:{identity}", self.scheme),
+                locator: format!("comparison:{matcher}:{identity}"),
                 exact: true,
             }],
             location: None,
@@ -852,21 +1056,21 @@ impl Projection<'_> {
 
     fn object(&mut self, compared: &ComparedObject) {
         let identity = compared.identity.as_str();
-        let scheme = self.scheme;
+        let matcher = compared.matcher.as_str();
         match &compared.change {
             ObjectChange::Added { revised } => self.finding(
                 "added",
                 Scope::Object(revised.clone()),
                 None,
-                format!("added ({scheme}:{identity})"),
-                (&revised.source, identity),
+                format!("added ({matcher}:{identity})"),
+                (&revised.source, matcher, identity),
             ),
             ObjectChange::Removed { base } => self.finding(
                 "removed",
                 Scope::Object(base.clone()),
                 None,
-                format!("removed ({scheme}:{identity})"),
-                (&base.source, identity),
+                format!("removed ({matcher}:{identity})"),
+                (&base.source, matcher, identity),
             ),
             ObjectChange::Matched {
                 base,
@@ -876,12 +1080,13 @@ impl Projection<'_> {
                 undetermined,
             } => {
                 for (facet, changes) in by_facet(differences) {
+                    let message = self.changed(facet, &format!(": {}", changes.join("; ")));
                     self.finding(
                         facet.name(),
                         Scope::Object(revised.clone()),
                         Some(base),
-                        format!("changed: {}", changes.join("; ")),
-                        (&revised.source, identity),
+                        message,
+                        (&revised.source, matcher, identity),
                     );
                 }
                 self.gaps(&Scope::Object(revised.clone()), unresolved, undetermined);
@@ -892,13 +1097,15 @@ impl Projection<'_> {
     fn source(&mut self, source: &SourceComparison) {
         let scope = Scope::Source(source.revised.clone());
         let base = source.base.to_string();
-        for (_, changes) in by_facet(&source.differences) {
+        for (facet, changes) in by_facet(&source.differences) {
+            let message = self.changed(facet, &format!(" from `{base}`: {}", changes.join("; ")));
+            let scheme = self.scheme;
             self.finding(
-                Facet::CoordinateSystem.name(),
+                facet.name(),
                 scope.clone(),
                 None,
-                format!("changed from `{base}`: {}", changes.join("; ")),
-                (&source.revised, &base),
+                message,
+                (&source.revised, scheme, &base),
             );
         }
         self.gaps(&scope, &source.unresolved, &source.undetermined);
@@ -934,562 +1141,38 @@ fn by_facet(differences: &[Difference]) -> BTreeMap<Facet, Vec<String>> {
     grouped
 }
 
-/// One session, indexed by identity.
-struct Indexed<'a> {
-    session: &'a EvidenceSession,
-    by_identity: BTreeMap<&'a str, &'a Object>,
-    identity_of: BTreeMap<&'a ObjectId, &'a str>,
+/// One side of a comparison: the objects compared and where to read about
+/// them.
+pub(crate) struct Revision<'a> {
+    /// The project and services the revision's objects are read through.
+    pub(crate) context: RuleContext<'a>,
+    /// The objects compared.
+    pub(crate) candidates: Vec<&'a Object>,
+    /// Every object of the revision's sources, compared or not: relationship
+    /// targets are named among them.
+    pub(crate) objects: Vec<&'a Object>,
 }
 
-fn index<'a>(
-    session: &'a EvidenceSession,
-    side: Side,
-    scheme: &str,
-    unidentified: &mut Vec<(Side, ObjectId)>,
-    ambiguous: &mut Vec<AmbiguousIdentity>,
-) -> Indexed<'a> {
-    let mut claims: BTreeMap<&str, Vec<&Object>> = BTreeMap::new();
-    for object in session.project().objects() {
-        match object.external_id(scheme) {
-            Some(identity) => claims.entry(identity).or_default().push(object),
-            None => unidentified.push((side, object.id.clone())),
-        }
-    }
-    let mut by_identity = BTreeMap::new();
-    let mut identity_of = BTreeMap::new();
-    for (identity, objects) in claims {
-        // `Project` rejects this within one source; a multi-source session
-        // can still hold one identity twice, for instance a federated copy.
-        if let [object] = objects[..] {
-            by_identity.insert(identity, object);
-            identity_of.insert(&object.id, identity);
-        } else {
-            ambiguous.push(AmbiguousIdentity {
-                side,
-                identity: identity.to_owned(),
-                objects: objects.iter().map(|object| object.id.clone()).collect(),
-            });
-        }
-    }
-    Indexed {
-        session,
-        by_identity,
-        identity_of,
-    }
-}
-
-/// Where a session's classification statements come from.
-enum ClassificationBasis<'a> {
-    Service(&'a ClassificationServiceHandle),
-    Carried,
-}
-
-impl<'a> ClassificationBasis<'a> {
+impl<'a> Revision<'a> {
+    /// Every object of `session`, compared.
     fn of(session: &'a EvidenceSession) -> Self {
-        session
-            .service::<ClassificationServiceHandle>()
-            .map_or(Self::Carried, Self::Service)
-    }
-
-    fn statements(&self, object: &Object) -> Result<BTreeSet<String>, String> {
-        match self {
-            Self::Carried => Ok(object
-                .classifications
-                .iter()
-                .map(|c| format!("{}:{}", c.system, c.code))
-                .collect()),
-            Self::Service(service) => service
-                .classifications(&object.id)
-                .map(|assignments| {
-                    assignments
-                        .iter()
-                        .map(|assignment| {
-                            let codes: Vec<&str> = assignment
-                                .codes
-                                .iter()
-                                .map(|code| code.as_deref().unwrap_or("?"))
-                                .collect();
-                            format!(
-                                "{}:{}",
-                                assignment.system.as_deref().unwrap_or("?"),
-                                codes.join("/")
-                            )
-                        })
-                        .collect()
-                })
-                .map_err(|error| error.to_string()),
+        let objects: Vec<&Object> = session.project().objects().collect();
+        Self {
+            context: RuleContext {
+                project: session.project(),
+                services: session.services(),
+            },
+            candidates: objects.clone(),
+            objects,
         }
     }
 }
 
-/// Differences, gaps and undetermined measures collected for one pair.
-#[derive(Default)]
-struct Outcome {
-    differences: Vec<Difference>,
-    unresolved: Vec<Unresolved>,
-    undetermined: Vec<Measurement>,
-}
-
-impl Outcome {
-    fn unresolved(&mut self, facet: Facet, subject: impl Into<String>, reason: impl Into<String>) {
-        self.unresolved.push(Unresolved {
-            facet,
-            subject: subject.into(),
-            reason: reason.into(),
-        });
-    }
-
-    fn stated(&mut self, facet: Facet, subject: &str, base: &str, revised: &str) {
-        self.differences.push(Difference::Stated {
-            facet,
-            subject: subject.to_owned(),
-            base: base.to_owned(),
-            revised: revised.to_owned(),
-        });
-    }
-
-    /// Judges a difference known to lie in `[lower, upper]`: changed when
-    /// all of it exceeds the tolerance, unchanged when none of it does,
-    /// otherwise undetermined.
-    fn measured(&mut self, measure: Measure, lower: f64, upper: f64, tolerance: f64) {
-        let measurement = Measurement {
-            measure,
-            lower,
-            upper,
-            tolerance,
-        };
-        if lower > tolerance {
-            self.differences.push(Difference::Measured(measurement));
-        } else if upper > tolerance {
-            self.undetermined.push(measurement);
-        }
-    }
-
-    /// Judges an exactly known difference.
-    fn exact(&mut self, measure: Measure, value: f64, tolerance: f64) {
-        self.measured(measure, value, value, tolerance);
-    }
-}
-
-struct Pair<'a> {
-    base: &'a Indexed<'a>,
-    revised: &'a Indexed<'a>,
-    request: &'a ComparisonRequest,
-    outcome: Outcome,
-}
-
-impl Pair<'_> {
-    fn unresolved(&mut self, facet: Facet, subject: impl Into<String>, reason: impl Into<String>) {
-        self.outcome.unresolved(facet, subject, reason);
-    }
-
-    fn differ(&mut self, difference: Difference) {
-        self.outcome.differences.push(difference);
-    }
-
-    fn classifications(&mut self, base: &Object, revised: &Object) {
-        let (base_basis, revised_basis) = (
-            ClassificationBasis::of(self.base.session),
-            ClassificationBasis::of(self.revised.session),
-        );
-        if matches!(base_basis, ClassificationBasis::Service(_))
-            != matches!(revised_basis, ClassificationBasis::Service(_))
-        {
-            // One side resolves inherited chains, the other lists what the
-            // object carries: every difference would be an artefact.
-            self.unresolved(
-                Facet::Classifications,
-                "",
-                "the sessions state classifications through different services",
-            );
-            return;
-        }
-        match (
-            base_basis.statements(base),
-            revised_basis.statements(revised),
-        ) {
-            (Ok(before), Ok(after)) if before != after => {
-                self.differ(Difference::Classifications {
-                    removed: before.difference(&after).cloned().collect(),
-                    added: after.difference(&before).cloned().collect(),
-                });
-            }
-            (Ok(_), Ok(_)) => {}
-            (Err(reason), _) | (_, Err(reason)) => {
-                self.unresolved(Facet::Classifications, "", reason);
-            }
-        }
-    }
-
-    fn carried_properties(&mut self, base: &Object, revised: &Object) {
-        let collect = |object: &Object| {
-            let mut values: BTreeMap<ComparedProperty, Vec<PropertyValue>> = BTreeMap::new();
-            for property in &object.properties {
-                values
-                    .entry(ComparedProperty {
-                        property_set: Some(property.property_set.clone()),
-                        name: property.name.clone(),
-                    })
-                    .or_default()
-                    .push(property.value.clone());
-            }
-            values
-        };
-        let (before, after) = (collect(base), collect(revised));
-        let keys: BTreeSet<&ComparedProperty> = before.keys().chain(after.keys()).collect();
-        for key in keys {
-            // Named properties are compared through the resolvers instead.
-            if self.request.properties.contains(key) {
-                continue;
-            }
-            let (Ok(old), Ok(new)) = (single(before.get(key)), single(after.get(key))) else {
-                self.unresolved(Facet::Property, key.to_string(), "stated more than once");
-                continue;
-            };
-            if !same_optional(old, new) {
-                self.differ(Difference::Property {
-                    property: key.clone(),
-                    base: old.cloned(),
-                    revised: new.cloned(),
-                });
-            }
-        }
-    }
-
-    fn requested_properties(&mut self, base: &Object, revised: &Object) {
-        let resolvers = (
-            self.base
-                .session
-                .service::<PropertyResolutionServiceHandle>(),
-            self.revised
-                .session
-                .service::<PropertyResolutionServiceHandle>(),
-        );
-        for property in &self.request.properties.clone() {
-            let (Some(base_resolver), Some(revised_resolver)) = resolvers else {
-                self.unresolved(
-                    Facet::Property,
-                    property.to_string(),
-                    "a session has no property resolver",
-                );
-                continue;
-            };
-            match (
-                resolve(base_resolver, base, property),
-                resolve(revised_resolver, revised, property),
-            ) {
-                (Ok(old), Ok(new)) => {
-                    if !same_optional(old.as_ref(), new.as_ref()) {
-                        self.differ(Difference::Property {
-                            property: property.clone(),
-                            base: old,
-                            revised: new,
-                        });
-                    }
-                }
-                (Err(reason), _) | (_, Err(reason)) => {
-                    self.unresolved(Facet::Property, property.to_string(), reason);
-                }
-            }
-        }
-    }
-
-    fn relationships(&mut self, base: &Object, revised: &Object) {
-        let names: BTreeSet<&String> = base
-            .relationships
-            .keys()
-            .chain(revised.relationships.keys())
-            .collect();
-        for name in names {
-            let targets = |indexed: &Indexed<'_>, object: &Object| -> Option<BTreeSet<String>> {
-                object
-                    .relationships
-                    .get(name)
-                    .into_iter()
-                    .flatten()
-                    .map(|target| indexed.identity_of.get(target).map(|id| (*id).to_owned()))
-                    .collect()
-            };
-            match (targets(self.base, base), targets(self.revised, revised)) {
-                (Some(before), Some(after)) => {
-                    if before != after {
-                        self.differ(Difference::Relationship {
-                            name: name.clone(),
-                            removed: before.difference(&after).cloned().collect(),
-                            added: after.difference(&before).cloned().collect(),
-                        });
-                    }
-                }
-                _ => self.unresolved(
-                    Facet::Relationship,
-                    name.clone(),
-                    "a target has no unique identity in the scheme",
-                ),
-            }
-        }
-    }
-
-    /// Placement frames: origin distance and axis rotation, both exact.
-    fn placement(&mut self, base: &Object, revised: &Object, tolerance: ComparisonTolerance) {
-        let (Some(base_frames), Some(revised_frames)) = (
-            self.base.session.service::<ObjectFrameServiceHandle>(),
-            self.revised.session.service::<ObjectFrameServiceHandle>(),
-        ) else {
-            self.unresolved(
-                Facet::Placement,
-                "",
-                "a session has no object-frame service",
-            );
-            return;
-        };
-        match (
-            base_frames.object_frame(&base.id),
-            revised_frames.object_frame(&revised.id),
-        ) {
-            (Err(ObjectFrameError::NotPlaced(_)), Err(ObjectFrameError::NotPlaced(_))) => {}
-            (Ok(_), Err(ObjectFrameError::NotPlaced(_))) => {
-                self.outcome
-                    .stated(Facet::Placement, "placement", "placed", "not placed");
-            }
-            (Err(ObjectFrameError::NotPlaced(_)), Ok(_)) => {
-                self.outcome
-                    .stated(Facet::Placement, "placement", "not placed", "placed");
-            }
-            (Ok(before), Ok(after)) => {
-                let (before, after) = (before.frame(), after.frame());
-                let axes = |frame: &axioval_engine::MetricFrame| {
-                    [frame.right(), frame.forward(), frame.up()]
-                };
-                self.outcome.exact(
-                    Measure::Origin,
-                    distance(
-                        before.origin().coordinates_metres(),
-                        after.origin().coordinates_metres(),
-                    ),
-                    tolerance.length_metres,
-                );
-                self.outcome.exact(
-                    Measure::Orientation,
-                    rotation(axes(before), axes(after)),
-                    tolerance.angle_radians,
-                );
-            }
-            (Err(error), _) | (_, Err(error)) => {
-                self.unresolved(Facet::Placement, "", error.to_string());
-            }
-        }
-    }
-
-    /// Measured bounds: the largest shift of any bound, widened by both
-    /// tessellations' chord deviations.
-    fn geometry(&mut self, base: &Object, revised: &Object, tolerance: ComparisonTolerance) {
-        let (Some(base_bodies), Some(revised_bodies)) = (
-            self.base.session.service::<ProximityServiceHandle>(),
-            self.revised.session.service::<ProximityServiceHandle>(),
-        ) else {
-            self.unresolved(Facet::Geometry, "", "a session has no geometry service");
-            return;
-        };
-        match (
-            base_bodies.bounds(&base.id),
-            revised_bodies.bounds(&revised.id),
-        ) {
-            (Err(ProximityError::NoBody), Err(ProximityError::NoBody)) => {}
-            (Ok(_), Err(ProximityError::NoBody)) => {
-                self.outcome
-                    .stated(Facet::Geometry, "body", "present", "none");
-            }
-            (Err(ProximityError::NoBody), Ok(_)) => {
-                self.outcome
-                    .stated(Facet::Geometry, "body", "none", "present");
-            }
-            (Ok(before), Ok(after)) => {
-                let (a, b) = (before.bounds(), after.bounds());
-                let shift = (0..3)
-                    .flat_map(|axis| {
-                        [
-                            (a.min()[axis] - b.min()[axis]).abs(),
-                            (a.max()[axis] - b.max()[axis]).abs(),
-                        ]
-                    })
-                    .fold(0.0_f64, f64::max);
-                // Each true bound lies within its body's chord deviation of
-                // the measured one, so the true shift lies within their sum.
-                let widening =
-                    before.fidelity().deviation_metres() + after.fidelity().deviation_metres();
-                self.outcome.measured(
-                    Measure::Bounds,
-                    (shift - widening).max(0.0),
-                    shift + widening,
-                    tolerance.length_metres,
-                );
-            }
-            (Err(error), _) | (_, Err(error)) => {
-                self.unresolved(Facet::Geometry, "", error.to_string());
-            }
-        }
-    }
-}
-
-fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
-    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
-}
-
-/// The rotation angle between two orthonormal axis triples.
-///
-/// For a rotation by θ, the Frobenius norm of the difference of the two
-/// rotation matrices is `2·√2·sin(θ/2)`; unlike the trace formula this stays
-/// accurate for the small angles a tolerance is about.
-fn rotation(a: [MetricDirection; 3], b: [MetricDirection; 3]) -> f64 {
-    let squared: f64 = a
-        .iter()
-        .zip(&b)
-        .map(|(x, y)| {
-            let (x, y) = (x.components(), y.components());
-            (x[0] - y[0]).powi(2) + (x[1] - y[1]).powi(2) + (x[2] - y[2]).powi(2)
-        })
-        .sum();
-    2.0 * (squared.sqrt() / (2.0 * std::f64::consts::SQRT_2))
-        .min(1.0)
-        .asin()
-}
-
-/// The angle between two unit plan directions.
-fn plan_angle(a: [f64; 2], b: [f64; 2]) -> f64 {
-    let cross = a[0] * b[1] - a[1] * b[0];
-    let dot = a[0] * b[0] + a[1] * b[1];
-    cross.abs().atan2(dot)
-}
-
-fn stated(value: bool) -> &'static str {
-    if value { "stated" } else { "not stated" }
-}
-
-/// Compares the coordinate systems of two sources.
-fn coordinate_systems(
-    base: (&EvidenceSession, &SourceId),
-    revised: (&EvidenceSession, &SourceId),
-    tolerance: ComparisonTolerance,
-) -> SourceComparison {
-    let mut outcome = Outcome::default();
-    let facet = Facet::CoordinateSystem;
-    match (
-        base.0.service::<CoordinateSystemServiceHandle>(),
-        revised.0.service::<CoordinateSystemServiceHandle>(),
-    ) {
-        (Some(before), Some(after)) => {
-            match (
-                before.coordinate_system(base.1),
-                after.coordinate_system(revised.1),
-            ) {
-                (Ok(before), Ok(after)) => {
-                    compare_systems(&before, &after, tolerance, &mut outcome);
-                }
-                (Err(error), _) | (_, Err(error)) => {
-                    outcome.unresolved(facet, "", error.to_string());
-                }
-            }
-        }
-        _ => outcome.unresolved(facet, "", "a session has no coordinate-system service"),
-    }
-    SourceComparison {
-        base: base.1.clone(),
-        revised: revised.1.clone(),
-        differences: outcome.differences,
-        unresolved: outcome.unresolved,
-        undetermined: outcome.undetermined,
-    }
-}
-
-fn compare_systems(
-    before: &SourceCoordinateSystem,
-    after: &SourceCoordinateSystem,
-    tolerance: ComparisonTolerance,
-    outcome: &mut Outcome,
-) {
-    let facet = Facet::CoordinateSystem;
-    let frame_axes = |frame: &CoordinateFrame| frame.axes();
-    match (before.world(), after.world()) {
-        (Some(a), Some(b)) => {
-            outcome.exact(
-                Measure::WorldOrigin,
-                distance(a.origin_metres(), b.origin_metres()),
-                tolerance.length_metres,
-            );
-            outcome.exact(
-                Measure::WorldOrientation,
-                rotation(frame_axes(a), frame_axes(b)),
-                tolerance.angle_radians,
-            );
-        }
-        (None, None) => {}
-        (a, b) => outcome.stated(
-            facet,
-            "world frame",
-            stated(a.is_some()),
-            stated(b.is_some()),
-        ),
-    }
-    match (before.true_north(), after.true_north()) {
-        (Some(a), Some(b)) => {
-            outcome.exact(
-                Measure::TrueNorth,
-                plan_angle(a, b),
-                tolerance.angle_radians,
-            );
-        }
-        (None, None) => {}
-        (a, b) => outcome.stated(
-            facet,
-            "true north",
-            stated(a.is_some()),
-            stated(b.is_some()),
-        ),
-    }
-    match (before.map(), after.map()) {
-        (Some(a), Some(b)) => {
-            let name = |map: &axioval_engine::MapConversion| {
-                map.target().unwrap_or("(unnamed)").to_owned()
-            };
-            if a.target() != b.target() {
-                outcome.stated(facet, "map target", &name(a), &name(b));
-            }
-            match (a.offset_metres(), b.offset_metres()) {
-                (Some(x), Some(y)) => {
-                    outcome.exact(Measure::MapOffset, distance(x, y), tolerance.length_metres);
-                }
-                // Equal statements in one unit are equal whatever the unit.
-                #[allow(clippy::float_cmp)] // Identical statements, not measurements.
-                _ if a.offset() == b.offset()
-                    && a.metres_per_map_unit() == b.metres_per_map_unit() => {}
-                _ => outcome.unresolved(
-                    facet,
-                    "map offset",
-                    "the map unit is not stated exactly, so the offsets cannot be measured in metres",
-                ),
-            }
-            outcome.exact(
-                Measure::MapRotation,
-                plan_angle(a.x_axis(), b.x_axis()),
-                tolerance.angle_radians,
-            );
-            outcome.exact(Measure::MapScale, (a.scale() - b.scale()).abs(), 0.0);
-        }
-        (None, None) => {}
-        (a, b) => outcome.stated(
-            facet,
-            "map conversion",
-            stated(a.is_some()),
-            stated(b.is_some()),
-        ),
-    }
-}
-
-/// Pairs each base source with its revised counterpart: the only source of
-/// each side, or else the one source of each side declaring a discipline.
 /// Paired base and revised sources, and the sources left without a pair.
 type SourcePairs = (Vec<(SourceId, SourceId)>, Vec<(Side, SourceId)>);
 
+/// Pairs each base source with its revised counterpart: the only source of
+/// each side, or else the one source of each side declaring a discipline.
 fn pair_sources(base: &EvidenceSession, revised: &EvidenceSession) -> SourcePairs {
     let sources = |session: &EvidenceSession| -> Vec<SourceId> {
         session
@@ -1539,193 +1222,132 @@ fn pair_sources(base: &EvidenceSession, revised: &EvidenceSession) -> SourcePair
     (pairs, unpaired)
 }
 
-fn single(values: Option<&Vec<PropertyValue>>) -> Result<Option<&PropertyValue>, ()> {
-    match values.map(Vec::as_slice) {
-        None | Some([]) => Ok(None),
-        Some([value]) => Ok(Some(value)),
-        Some(_) => Err(()),
-    }
-}
-
-fn resolve(
-    resolver: &PropertyResolutionServiceHandle,
-    object: &Object,
-    property: &ComparedProperty,
-) -> Result<Option<PropertyValue>, String> {
-    let request = PropertyRequest::try_new(
-        object.id.clone(),
-        property.property_set.clone(),
-        property.name.clone(),
-    )
-    .map_err(|error| error.to_string())?;
-    match resolver.resolve(&request) {
-        Ok(PropertyResolution::Present(present)) => Ok(Some(present.property().value.clone())),
-        Ok(PropertyResolution::Absent(_)) => Ok(None),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-/// Value equality in which a value equals itself, NaN included, and the two
-/// zeros are equal: a comparison must not report a property as changed
-/// against its own unchanged value.
-fn same_value(a: &PropertyValue, b: &PropertyValue) -> bool {
-    #[allow(clippy::float_cmp)] // Exact equality is the question asked.
-    let same = |x: f64, y: f64| x == y || (x.is_nan() && y.is_nan());
-    match (a, b) {
-        (PropertyValue::Decimal(x), PropertyValue::Decimal(y)) => same(*x, *y),
-        (
-            PropertyValue::Quantity {
-                value: x,
-                dimension: dx,
-            },
-            PropertyValue::Quantity {
-                value: y,
-                dimension: dy,
-            },
-        ) => dx == dy && same(*x, *y),
-        _ => a == b,
-    }
-}
-
-fn same_optional(a: Option<&PropertyValue>, b: Option<&PropertyValue>) -> bool {
-    match (a, b) {
-        (None, None) => true,
-        (Some(a), Some(b)) => same_value(a, b),
-        _ => false,
-    }
-}
-
-/// Compares one matched pair on every requested facet.
-fn matched(
-    base: &Indexed<'_>,
-    revised: &Indexed<'_>,
+/// Names relationship targets: a matched object by its pair's identity, any
+/// other by its identity in the first scheme the request matches by, when no
+/// other object of its revision claims it.
+fn target_names<'a>(
+    (base, revised): (&Revision<'a>, &Revision<'a>),
     request: &ComparisonRequest,
-    old: &Object,
-    new: &Object,
-) -> ObjectChange {
-    let mut pair = Pair {
-        base,
-        revised,
-        request,
-        outcome: Outcome::default(),
+    matching: &matching::Matching<'a>,
+) -> facets::TargetNames<'a> {
+    let mut names = facets::TargetNames {
+        base: BTreeMap::new(),
+        revised: BTreeMap::new(),
     };
-    if old.kind != new.kind {
-        pair.differ(Difference::Kind {
-            base: old.kind.clone(),
-            revised: new.kind.clone(),
-        });
+    for pair in &matching.pairs {
+        names.base.insert(&pair.base.id, pair.identity.clone());
+        names
+            .revised
+            .insert(&pair.revised.id, pair.identity.clone());
     }
-    pair.classifications(old, new);
-    pair.carried_properties(old, new);
-    pair.requested_properties(old, new);
-    pair.relationships(old, new);
-    if let Some(tolerance) = request.placement {
-        pair.placement(old, new, tolerance);
+    let scheme = request.matchers.iter().find_map(|matcher| match matcher {
+        Matcher::Scheme(scheme) => Some(scheme.as_str()),
+        Matcher::Property { .. } => None,
+    });
+    if let Some(scheme) = scheme {
+        for (revision, named) in [(base, &mut names.base), (revised, &mut names.revised)] {
+            let mut claims: BTreeMap<&str, Vec<&'a ObjectId>> = BTreeMap::new();
+            for object in &revision.objects {
+                if let Some(identity) = object.external_id(scheme) {
+                    claims.entry(identity).or_default().push(&object.id);
+                }
+            }
+            for (identity, objects) in claims {
+                if let [object] = objects[..] {
+                    named.entry(object).or_insert_with(|| identity.to_owned());
+                }
+            }
+        }
     }
-    if let Some(tolerance) = request.geometry {
-        pair.geometry(old, new, tolerance);
-    }
-    ObjectChange::Matched {
-        base: old.id.clone(),
-        revised: new.id.clone(),
-        differences: pair.outcome.differences,
-        unresolved: pair.outcome.unresolved,
-        undetermined: pair.outcome.undetermined,
-    }
+    names
 }
 
-/// Compares two sessions object by object, matched by `request`'s scheme.
+/// Compares two sessions object by object, matched by `request`'s matchers.
 #[must_use]
 pub fn compare_sessions(
     base: &EvidenceSession,
     revised: &EvidenceSession,
     request: &ComparisonRequest,
 ) -> ModelComparison {
-    let mut unidentified = Vec::new();
-    let mut ambiguous = Vec::new();
-    let base_index = index(
-        base,
-        Side::Base,
-        &request.scheme,
-        &mut unidentified,
-        &mut ambiguous,
-    );
-    let revised_index = index(
-        revised,
-        Side::Revised,
-        &request.scheme,
-        &mut unidentified,
-        &mut ambiguous,
-    );
-    // An identity ambiguous on either side matches nothing on the other.
-    let blocked: BTreeSet<String> = ambiguous
-        .iter()
-        .map(|entry| entry.identity.clone())
-        .collect();
+    let sources = if request.compares_sources() {
+        pair_sources(base, revised)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    compare(
+        &Revision::of(base),
+        &Revision::of(revised),
+        request,
+        sources,
+    )
+}
 
-    let identities: BTreeSet<&str> = base_index
-        .by_identity
-        .keys()
-        .chain(revised_index.by_identity.keys())
-        .copied()
-        .filter(|identity| !blocked.contains(*identity))
-        .collect();
-    let mut objects = Vec::new();
-    for identity in identities {
-        let change = match (
-            base_index.by_identity.get(identity),
-            revised_index.by_identity.get(identity),
-        ) {
-            (Some(old), Some(new)) => matched(&base_index, &revised_index, request, old, new),
-            (Some(old), None) => ObjectChange::Removed {
-                base: old.id.clone(),
-            },
-            (None, Some(new)) => ObjectChange::Added {
-                revised: new.id.clone(),
-            },
-            (None, None) => continue,
-        };
+/// Compares two revisions: matches their candidates, compares every pair
+/// and every paired source.
+fn compare<'a>(
+    base: &Revision<'a>,
+    revised: &Revision<'a>,
+    request: &ComparisonRequest,
+    (pairs, unpaired_sources): SourcePairs,
+) -> ModelComparison {
+    let matching = matching::match_objects(base, revised, &request.matchers);
+    let names = target_names((base, revised), request, &matching);
+    let mut objects: Vec<ComparedObject> = Vec::new();
+    for pair in &matching.pairs {
         objects.push(ComparedObject {
-            identity: identity.to_owned(),
-            change,
+            identity: pair.identity.clone(),
+            matcher: pair.matcher.clone(),
+            change: facets::matched((base, revised), request, &names, pair.base, pair.revised),
         });
     }
-    // Objects blocked by an ambiguity on the other side are not silently lost:
-    // they are reported with the ambiguity itself.
-    for side_index in [(&base_index, Side::Base), (&revised_index, Side::Revised)] {
-        let (indexed, side) = side_index;
-        for (identity, object) in &indexed.by_identity {
-            if blocked.contains(*identity) {
-                ambiguous.push(AmbiguousIdentity {
-                    side,
-                    identity: (*identity).to_owned(),
-                    objects: vec![object.id.clone()],
-                });
-            }
-        }
+    for single in &matching.removed {
+        objects.push(ComparedObject {
+            identity: single.identity.clone(),
+            matcher: single.matcher.clone(),
+            change: ObjectChange::Removed {
+                base: single.object.id.clone(),
+            },
+        });
     }
-    unidentified.sort();
-    ambiguous.sort_by(|a, b| {
-        a.identity
-            .cmp(&b.identity)
-            .then_with(|| a.side.cmp(&b.side))
-    });
-    let (sources, unpaired_sources) = match request.coordinate_systems {
-        Some(tolerance) => {
-            let (pairs, unpaired) = pair_sources(base, revised);
-            let compared = pairs
-                .iter()
-                .map(|(a, b)| coordinate_systems((base, a), (revised, b), tolerance))
-                .collect();
-            (compared, unpaired)
-        }
-        None => (Vec::new(), Vec::new()),
+    for single in &matching.added {
+        objects.push(ComparedObject {
+            identity: single.identity.clone(),
+            matcher: single.matcher.clone(),
+            change: ObjectChange::Added {
+                revised: single.object.id.clone(),
+            },
+        });
+    }
+    let subject = |compared: &ComparedObject| match &compared.change {
+        ObjectChange::Removed { base } | ObjectChange::Matched { base, .. } => base.clone(),
+        ObjectChange::Added { revised } => revised.clone(),
     };
+    objects.sort_by(|a, b| {
+        (&a.identity, &a.matcher)
+            .cmp(&(&b.identity, &b.matcher))
+            .then_with(|| subject(a).cmp(&subject(b)))
+    });
+    let sources = pairs
+        .iter()
+        .map(|(a, b)| facets::sources((base, a), (revised, b), request))
+        .collect();
+    let matching::Matching {
+        unidentified,
+        ambiguous,
+        undecided,
+        ..
+    } = matching;
     ModelComparison {
-        scheme: request.scheme.clone(),
+        scheme: request
+            .matchers
+            .iter()
+            .map(Matcher::label)
+            .collect::<Vec<_>>()
+            .join(", "),
         objects,
         unidentified,
         ambiguous,
+        undecided,
         sources,
         unpaired_sources,
     }

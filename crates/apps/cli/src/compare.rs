@@ -38,10 +38,16 @@ pub struct CompareArgs {
     #[arg(long, value_name = "PATH")]
     revised: PathBuf,
     /// Also compare a property, as `SET.NAME` (split at the first `.`) or a
-    /// bare `NAME`, resolved exactly on both sides. Repeat for several. IFC
-    /// properties cannot be listed, so only named ones are compared.
+    /// bare `NAME`, resolved exactly on both sides. Repeat for several.
     #[arg(long = "property", value_name = "SET.NAME")]
     properties: Vec<String>,
+    /// Also compare every property of a set, listed on both sides. Repeat
+    /// for several.
+    #[arg(long = "property-set", value_name = "SET")]
+    property_sets: Vec<String>,
+    /// Also compare every property of every set, listed on both sides.
+    #[arg(long)]
+    all_property_sets: bool,
     /// Also mesh both revisions and compare each object's measured bounds.
     #[arg(long)]
     geometry: bool,
@@ -64,6 +70,14 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
         .with_coordinate_systems(tolerance);
     if args.geometry {
         request = request.with_geometry(tolerance);
+    }
+    for set in &args.property_sets {
+        request = request
+            .with_property_set(set)
+            .map_err(|error| format!("--property-set `{set}`: {error}"))?;
+    }
+    if args.all_property_sets {
+        request = request.with_all_property_sets();
     }
     for property in &args.properties {
         let (set, name) = match property.split_once('.') {

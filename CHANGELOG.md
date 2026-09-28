@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Logical property values.** (Refs #116) The IFC adapter reads an
+  `IFCLOGICAL` property: true and false are booleans, and the unknown
+  (`.U.`), which states no truth value, is a present property holding no
+  value (null) with its declared type `IFCLOGICAL`, exactly as `$` and as
+  an attribute's `.U.`, which is an exact absence. All three were refused
+  as inexact before. An unknown inside a list, bounded or table value
+  stays refused. The buildingSMART case
+  `fail-a_logical_unknown_is_considered_false_and_will_not_pass` is
+  caught.
+
 - **Dates with a time zone.** (Refs #116) `Date` may carry the time zone
   it was stated in, as the `xs:date` lexical space allows: `2022-01-01Z`,
   `2022-01-01+01:00` (`Date::with_offset`, `Date::offset_minutes`,

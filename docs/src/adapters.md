@@ -37,6 +37,14 @@ loss: every `STRING`-based type (`IfcLabel`, `IfcDuration`, ...),
 `IfcBoolean`, and `IfcReal` or dimensionless `NUMBER` reals. Other real-valued
 measures are converted to SI through their unit (see *Measures*).
 
+An `IfcLogical` true or false is a boolean. Its unknown (`.U.`) states no
+truth value, so the property holds no value: it is present and null, exactly
+as a property written `$`, with its declared type `IFCLOGICAL`, just as an
+attribute's `.U.` is an exact absence (below). A required property or an
+IDS facet with a value is therefore not met by it, and a prohibited one is.
+An unknown inside a list, bounded or table value is refused, since an
+element of a composite value is never null.
+
 Date and time types are read as dates, in property sets and attributes alike, and
 keep their declared type and the same evidence locator as any other value:
 - `IfcDate` (`YYYY-MM-DD`, an `xs:date`) is a `Date`, keeping a time zone it

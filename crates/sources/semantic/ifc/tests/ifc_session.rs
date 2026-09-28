@@ -88,7 +88,7 @@ fn unsupported_source_neutral_scalars_fail_closed() {
         .get::<PropertyResolutionServiceHandle>()
         .unwrap();
 
-    for name in ["Logical", "Bits", "UnitReal"] {
+    for name in ["Bits", "UnitReal"] {
         assert_eq!(
             service.resolve(&request(name)),
             Err(PropertyResolutionError::InexactEvidence)

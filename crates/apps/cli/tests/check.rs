@@ -460,6 +460,28 @@ fn a_date_stating_a_time_zone_is_not_the_unzoned_date() {
 }
 
 #[test]
+fn a_logical_unknown_holds_no_value() {
+    // `.U.` states no truth value, so the property holds none, as `$`; a
+    // logical true or false is a boolean of the declared type.
+    let case = Case::new("logical-unknown");
+    let (output, result) = case.geometry_rule(
+        &walls_with_references(&["IFCLOGICAL(.U.)", "IFCLOGICAL(.T.)", "IFCLOGICAL(.F.)"]),
+        &[],
+        "axioval:capability.property-data-type",
+        &registry_signature("axioval:capability.property-data-type"),
+        entity("wall"),
+        json!({"property": {"type": "propertyReference",
+                            "property": "axioval:example.ifc.reference",
+                            "propertySet": "axioval:example.ifc.pset-wall-common"},
+               "data_type": {"type": "string", "value": "IFCLOGICAL"}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#1"], "{result:#}");
+    assert!(open.is_empty(), "{result:#}");
+}
+
+#[test]
 fn integrity_issues_and_unselectable_objects_are_reported() {
     let case = Case::new("integrity");
     let bcf = case.path("issues.bcfzip");

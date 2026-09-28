@@ -14,7 +14,7 @@ use axioval_ir::{
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
-    ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactTableValue,
+    ExactLogical, ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactTableValue,
     ExactTypedValue, ExactValue, exact_properties_where, exact_property, exact_property_sets_where,
 };
 use ifc_step::StepCodec;
@@ -285,6 +285,16 @@ impl IfcPropertyService {
             ExactValue::Reference(_) | ExactValue::Entity(_) => {
                 return Err(PropertyResolutionError::InexactEvidence);
             }
+            // A logical unknown states no truth value: the property holds
+            // no value, exactly as `$` (and as an attribute's `.U.`), with
+            // its declared type. An element of a composite value cannot be
+            // null, so there `scalar_value` refuses it.
+            ExactValue::Logical(ExactLogical::Unknown) if exact.unit_id.is_none() => {
+                return Ok((
+                    PropertyValue::Null,
+                    exact.value_type.as_deref().map(str::to_ascii_uppercase),
+                ));
+            }
             scalar => {
                 let value =
                     self.scalar_value(scalar, exact.value_type.as_deref(), exact.unit_id)?;
@@ -343,7 +353,9 @@ impl IfcPropertyService {
     /// A value its declared type carries exactly (see `carries_exactly`) is
     /// read as stated and must carry no unit; a date or time type is read as
     /// a date or date-time (see `temporal`); `$` of a predefined set's
-    /// optional attribute is null. Any other number must be a measure whose
+    /// optional attribute is null; an `IfcLogical` true or false is a
+    /// boolean, and its unknown is refused here (a single value reads it as
+    /// null in `pset_value`). Any other number must be a measure whose
     /// effective unit resolves exactly.
     fn scalar_value(
         &self,
@@ -367,6 +379,8 @@ impl IfcPropertyService {
         }
         let plain = match (value, value_type) {
             (ExactValue::Null, _) => Some(PropertyValue::Null),
+            (ExactValue::Logical(ExactLogical::True), _) => Some(PropertyValue::Boolean(true)),
+            (ExactValue::Logical(ExactLogical::False), _) => Some(PropertyValue::Boolean(false)),
             (value, Some(value_type)) if self.carries_exactly(value, value_type) => match value {
                 ExactValue::Bool(value) => Some(PropertyValue::Boolean(*value)),
                 ExactValue::Integer(value) => Some(PropertyValue::Integer(*value)),

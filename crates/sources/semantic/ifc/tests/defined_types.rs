@@ -20,7 +20,7 @@ DATA;
 #4=IFCPROPERTYSINGLEVALUE('Stamp',$,IFCTIMESTAMP(1700000000),$);
 #5=IFCPROPERTYSINGLEVALUE('Length',$,IFCLENGTHMEASURE(2.5),$);
 #6=IFCPROPERTYSINGLEVALUE('Duration',$,IFCDURATION('P1D'),$);
-#7=IFCPROPERTYSET('0000000000000000000002',$,'P',$,(#2,#3,#4,#5,#6,#9,#10,#11,#12,#13,#15,#16));
+#7=IFCPROPERTYSET('0000000000000000000002',$,'P',$,(#2,#3,#4,#5,#6,#9,#10,#11,#12,#13,#15,#16,#18,#19,#20,#21));
 #8=IFCRELDEFINESBYPROPERTIES('0000000000000000000003',$,$,$,(#1),#7);
 #9=IFCPROPERTYSINGLEVALUE('Inspected',$,IFCDATETIME('2026-09-27T10:30:00.25+02:00'),$);
 #10=IFCPROPERTYSINGLEVALUE('Local',$,IFCDATETIME('2026-09-27T10:30:00'),$);
@@ -31,6 +31,10 @@ DATA;
 #15=IFCPROPERTYSINGLEVALUE('ZonedDate',$,IFCDATE('2022-01-01+00:00'),$);
 #16=IFCPROPERTYSINGLEVALUE('FarZone',$,IFCDATE('2022-01-01+14:30'),$);
 #17=IFCCLASSIFICATION($,$,'2022-01-01-05:00','Name',$,$,$);
+#18=IFCPROPERTYSINGLEVALUE('True',$,IFCLOGICAL(.T.),$);
+#19=IFCPROPERTYSINGLEVALUE('False',$,IFCLOGICAL(.F.),$);
+#20=IFCPROPERTYSINGLEVALUE('Unknown',$,IFCLOGICAL(.U.),$);
+#21=IFCPROPERTYLISTVALUE('Unknowns',$,(IFCLOGICAL(.T.),IFCLOGICAL(.U.)),$);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -153,6 +157,25 @@ fn text_that_is_not_the_declared_date_form_is_an_invalid_value() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn a_logical_is_a_boolean_and_its_unknown_holds_no_value() {
+    for (name, expected) in [
+        ("True", PropertyValue::Boolean(true)),
+        ("False", PropertyValue::Boolean(false)),
+        // `.U.` states no truth value: present, with no value, as `$`.
+        ("Unknown", PropertyValue::Null),
+    ] {
+        let (value, declared, _) = present("#1", "P", name);
+        assert_eq!(value, expected, "{name}");
+        assert_eq!(declared.as_deref(), Some("IFCLOGICAL"), "{name}");
+    }
+    // A list element is a value, so an unknown in a list is refused.
+    assert_eq!(
+        resolve("Unknowns").err(),
+        Some(PropertyResolutionError::InexactEvidence)
+    );
 }
 
 #[test]

@@ -31,6 +31,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   erosions and dilations, and joins the pieces of a split surface by such
   located stretches instead of passages of width zero. **Breaking:**
   `WalkabilityError` gains `InvalidTolerance` and `InvalidStretch`.
+- **Penetrations without voids.** (#140) The derived relationship
+  `axioval:derived.intersects` runs both ways between two bodies sharing
+  volume, so a duct reaches the beam or wall it passes through when no
+  opening is modelled. The Axiolid adapter decides it pair by pair from
+  its proximity measurement: containment, a witness deeper than the chord
+  deviations or a certified shared volume; bodies that only touch share
+  nothing, and an unmeasured body or an undecided pair refuses the answer.
+  `opening-zone` places an element in every host it reaches and judges it
+  in each, so with `host_path: ["axioval:derived.intersects"]` a duct is
+  checked in every beam it crosses; an element reaching several hosts is no
+  longer not evaluated. **Breaking:** `Derivation` gains `Intersects`.
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

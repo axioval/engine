@@ -520,8 +520,9 @@ evaluated, never measure the group as zero.
 Relationships the model does not state can be derived from geometry. With
 `--geometry`, every relationship capability accepts the identities
 `axioval:derived.contained-in-space`, `axioval:derived.adjacent-space`,
-`axioval:derived.overlapping-group-space` and `axioval:derived.spans-level`
-(see [typed host services](./services.md)) as its `relationship` or as a
+`axioval:derived.overlapping-group-space`, `axioval:derived.spans-level` and
+`axioval:derived.intersects` (see [typed host services](./services.md)) as its
+`relationship` or as a
 `path` step; every other identity still goes to the IFC relationship service.
 Every `IfcSpace` is a space, and every `IfcDoor`, `IfcWindow` and
 `IfcOpeningElement` an opening. Every `IfcBuildingStorey` is a level whose
@@ -530,7 +531,9 @@ parent; a storey whose placement cannot be read or is tilted, or that shares
 its height with a sibling, has no band, and a request it could answer
 refuses. With `relationship: axioval:derived.spans-level` and `direction:
 backward` from each storey, a storey's `plan-area` or `area-ratio` counts a
-two-storey atrium in both storeys. An opening element has no body, so the CLI
+two-storey atrium in both storeys. With `host_path:
+["axioval:derived.intersects"]`, `opening-zone` judges a duct or pipe in every
+beam or wall its body passes through, with no void modelled. An opening element has no body, so the CLI
 meshes its void separately for the derivation alone; a void that cannot be
 meshed makes the derivation refuse for it. For example, `related-count` with
 `relationship: axioval:derived.contained-in-space` and `direction: backward`

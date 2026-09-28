@@ -1,5 +1,6 @@
 //! Relationships derived from geometry: element to space, opening to space,
-//! space to group space, space to the levels it spans.
+//! space to group space, space to the levels it spans, and between two
+//! bodies sharing volume.
 //!
 //! ADR 0004: this module measures which spaces an object lies in, borders or
 //! falls within; whether a count or a comparison over them passes is a
@@ -13,20 +14,22 @@
 //! lying on a space's boundary, where inside and outside are undecided.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use axiolid_core::{Point2, Point3, Ray3, Tolerance, Vec2, Vec3};
 use axiolid_measure::{WindingMesh, closest_point_on_triangle};
 use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axioval_engine::{
-    CompleteRelationshipSelection, Derivation, DerivedRelationshipService, RelationshipQuery,
-    RelationshipSelectionError, RelationshipSelectionRequest, TraversalDirection,
+    CompleteRelationshipSelection, Derivation, DerivedRelationshipService, ProximityError,
+    ProximityRequest, ProximityService, RelationshipQuery, RelationshipSelectionError,
+    RelationshipSelectionRequest, TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::planar::{footprint_measure, plan_overlap_area};
+use crate::proximity::AxiolidProximityService;
 
 /// Distance below which a point is taken to lie on a surface, and the
 /// tolerance handed to the kernel's predicates.
@@ -38,6 +41,10 @@ const PROBE_OFFSET: f64 = 1e-6;
 
 /// A point is inside a closed body when its winding number reaches one half.
 const INSIDE_WINDING: f64 = 0.5;
+
+/// A shared volume no larger than this, in cubic metres, is the rounding of
+/// two bodies that only touch.
+const TOUCHING_VOLUME: f64 = 1e-12;
 
 /// One derived edge from a subject to a space, and how it was found.
 #[derive(Clone, Debug)]
@@ -55,6 +62,10 @@ struct Derived {
 }
 
 type Cached = Result<Arc<Derived>, String>;
+
+/// Whether two bodies share volume: the note citing how, `None` when they
+/// do not, or why it is undecided.
+type Pair = Result<Option<String>, String>;
 
 /// A shape the host supplied for an opening that has no material body.
 #[derive(Clone, Debug)]
@@ -94,6 +105,10 @@ pub struct AxiolidDerivedRelationshipService {
     openings: BTreeSet<ObjectId>,
     voids: BTreeMap<ObjectId, Void>,
     cache: Mutex<BTreeMap<(String, ObjectId), Cached>>,
+    /// The proximity measurements `intersects` reads, built on first use.
+    proximity: OnceLock<AxiolidProximityService>,
+    /// Each pair `intersects` decided, the lesser identity first.
+    pairs: Mutex<BTreeMap<(ObjectId, ObjectId), Pair>>,
 }
 
 impl AxiolidDerivedRelationshipService {
@@ -107,6 +122,8 @@ impl AxiolidDerivedRelationshipService {
             openings: BTreeSet::new(),
             voids: BTreeMap::new(),
             cache: Mutex::new(BTreeMap::new()),
+            proximity: OnceLock::new(),
+            pairs: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -195,6 +212,8 @@ impl AxiolidDerivedRelationshipService {
             Derivation::OverlappingGroupSpace { .. } | Derivation::SpansLevel { .. } => {
                 self.spaces.contains(object)
             }
+            // Answered pair by pair in `Walk::step`, never from edge lists.
+            Derivation::Intersects => false,
         }
     }
 
@@ -304,7 +323,9 @@ impl AxiolidDerivedRelationshipService {
                     minimum_ratio,
                     vertical_metres,
                 } => Self::group(subject, spaces, *minimum_ratio, *vertical_metres),
-                Derivation::SpansLevel { .. } => unreachable!("levels are derived above"),
+                Derivation::SpansLevel { .. } | Derivation::Intersects => {
+                    unreachable!("levels are derived above, intersections pair by pair")
+                }
             }
             .map(Arc::new)
         } else {
@@ -573,6 +594,116 @@ impl AxiolidDerivedRelationshipService {
         Ok(derived)
     }
 
+    /// Whether the bodies of `a` and `b` share volume, decided once per
+    /// pair from the proximity measurement: one inside the other, a witness
+    /// point deeper inside than the chord deviations allow, or a certified
+    /// shared volume above rounding. Bodies apart at the surface, or sharing
+    /// no more than rounding, only touch. A bodiless object shares nothing;
+    /// an unmeasured one, two open surfaces, or a volume that may be either
+    /// is undecided.
+    fn intersects(&self, a: &ObjectId, b: &ObjectId) -> Pair {
+        if a == b {
+            return Ok(None);
+        }
+        let key = if a < b {
+            (a.clone(), b.clone())
+        } else {
+            (b.clone(), a.clone())
+        };
+        if let Some(known) = self.pairs.lock().map_err(|_| poisoned())?.get(&key) {
+            return known.clone();
+        }
+        let decided = self.measure_intersection(&key.0, &key.1);
+        self.pairs
+            .lock()
+            .map_err(|_| poisoned())?
+            .insert(key, decided.clone());
+        decided
+    }
+
+    fn measure_intersection(&self, a: &ObjectId, b: &ObjectId) -> Pair {
+        let (Some(first), Some(second)) = (self.body_extent(a)?, self.body_extent(b)?) else {
+            // Declared bodiless: it occupies no place.
+            return Ok(None);
+        };
+        let deviation = |object: &ObjectId| {
+            self.geometry
+                .fidelity(object)
+                .map(|fidelity| fidelity.deviation_metres())
+                .map_err(|error| format!("the fidelity of {object} is unknown: {error:?}"))
+        };
+        let slack = deviation(a)? + deviation(b)?;
+        if extent_gap(&first, &second, false) > slack + ON_SURFACE {
+            return Ok(None);
+        }
+        let proximity = self
+            .proximity
+            .get_or_init(|| AxiolidProximityService::new(self.geometry.clone()));
+        let request = ProximityRequest::try_new(a.clone(), b.clone())
+            .map_err(|error| format!("{a} and {b} cannot be measured: {error:?}"))?;
+        let measured = match proximity.measure_proximity(&request) {
+            Ok(measured) => measured,
+            Err(ProximityError::NoBody) => return Ok(None),
+            Err(error) => {
+                return Err(format!(
+                    "whether {a} and {b} share volume is undecided: {error:?}"
+                ));
+            }
+        };
+        let separation = measured.separation_metres();
+        if let Some(containment) = measured.containment() {
+            return Ok(Some(format!(
+                "contained={containment:?}:separation={separation:.6}"
+            )));
+        }
+        if measured.separation_interval_metres().0 > ON_SURFACE {
+            return Ok(None);
+        }
+        let Some(depth) = measured.penetration_metres() else {
+            return Err(format!(
+                "neither {a} nor {b} is a closed solid, so whether they share volume is \
+                 undecided"
+            ));
+        };
+        if depth > slack + ON_SURFACE {
+            return Ok(Some(format!(
+                "separation={separation:.6}:penetration={depth:.6}"
+            )));
+        }
+        match measured.intersection_volume() {
+            Some(volume) if volume.shared().lower_cubic_metres() > TOUCHING_VOLUME => {
+                Ok(Some(format!(
+                    "separation={separation:.6}:shared-volume={:.9}",
+                    volume.shared().lower_cubic_metres()
+                )))
+            }
+            Some(volume) if volume.shared().upper_cubic_metres() <= TOUCHING_VOLUME => Ok(None),
+            _ => Err(format!(
+                "whether {a} and {b} share volume or only touch is undecided: they meet, \
+                 the deepest witness reaches {depth:.9} m and the shared volume is not \
+                 bounded away from rounding"
+            )),
+        }
+    }
+
+    /// An object's extent: `None` when the host declared it bodiless.
+    fn body_extent(&self, object: &ObjectId) -> Result<Option<Extent>, String> {
+        if self.geometry.has_no_body(object) {
+            return Ok(None);
+        }
+        if let Some(mesh) = self.geometry.mesh(object) {
+            return mesh_extent(mesh)
+                .map(Some)
+                .ok_or_else(|| format!("{object} has an empty mesh"));
+        }
+        if let Some((_, reason)) = self.geometry.unmeasured().find(|(id, _)| *id == object) {
+            return Err(format!(
+                "{object} has a body that was not measured: {reason}"
+            ));
+        }
+        Err(format!("{object} has no described geometry"))
+    }
+
     /// The larger spaces covering at least `ratio` of a space's footprint.
     fn group(
         subject: &ObjectId,
@@ -671,6 +802,18 @@ impl Walk<'_> {
         domain: &BTreeSet<&ObjectId>,
     ) -> Result<Vec<ObjectId>, String> {
         let mut found = Vec::new();
+        if matches!(self.derivation, Derivation::Intersects) {
+            // Symmetric: every direction reaches the same bodies.
+            for other in domain {
+                if let Some(note) = self.service.intersects(current, other)? {
+                    let identity = &self.identity;
+                    self.cited
+                        .insert(format!("{identity}:{current}->{other}:{note}"));
+                    found.push((*other).clone());
+                }
+            }
+            return Ok(found);
+        }
         if matches!(
             direction,
             TraversalDirection::Forward | TraversalDirection::Either
@@ -735,6 +878,11 @@ impl Walk<'_> {
                     frontier = next;
                 }
             }
+            RelationshipQuery::SharedGroup { .. }
+                if matches!(self.derivation, Derivation::Intersects) =>
+            {
+                return Err("`intersects` relates bodies, not groups".into());
+            }
             RelationshipQuery::SharedGroup { .. } => {
                 let own = self.edges(anchor)?;
                 self.cite(anchor, &own, None);
@@ -789,10 +937,12 @@ impl DerivedRelationshipService for AxiolidDerivedRelationshipService {
         // Cited under the anchor's source: in a set over several sources the
         // derivation is about the anchor.
         let cite = |locator| Evidence::exact(anchor.source.clone(), locator);
-        let mut evidence = vec![cite(format!(
-            "{identity}:derived-from:{anchor}:{} space(s)",
-            self.spaces.len()
-        ))];
+        let scanned = if matches!(derivation, Derivation::Intersects) {
+            format!("{} candidate(s)", universe.len())
+        } else {
+            format!("{} space(s)", self.spaces.len())
+        };
+        let mut evidence = vec![cite(format!("{identity}:derived-from:{anchor}:{scanned}"))];
         evidence.extend(walk.cited.into_iter().map(cite));
         CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
     }

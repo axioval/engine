@@ -19,7 +19,9 @@
 //!
 //! Edges always run from a subject to a space (a level, for `spans-level`),
 //! so `forward` from an element reaches its spaces and `backward` from a
-//! space reaches its subjects.
+//! space reaches its subjects. `intersects` is symmetric: it runs both ways
+//! between two bodies sharing volume, so either direction reaches the same
+//! objects.
 
 use std::fmt;
 use std::sync::Arc;
@@ -76,12 +78,22 @@ pub enum Derivation {
         /// Smallest vertical overlap with a level's band, in metres.
         overlap_metres: f64,
     },
+    /// `axioval:derived.intersects`: an element to every object of the
+    /// request's universe whose body shares volume with its own, such as a
+    /// duct to the beam or wall it passes through with no void modelled.
+    /// It takes no parameters and runs both ways.
+    ///
+    /// Bodies that only touch share no volume. A pair the geometry cannot
+    /// decide (an unmeasured body, a tessellation within its chord
+    /// deviation of the other body, two open surfaces) refuses the answer.
+    Intersects,
 }
 
 const CONTAINED_IN_SPACE: &str = "contained-in-space";
 const ADJACENT_SPACE: &str = "adjacent-space";
 const OVERLAPPING_GROUP_SPACE: &str = "overlapping-group-space";
 const SPANS_LEVEL: &str = "spans-level";
+const INTERSECTS: &str = "intersects";
 
 impl Derivation {
     /// The derivation a relationship identity names, `None` for an identity
@@ -123,6 +135,7 @@ impl Derivation {
             ADJACENT_SPACE => &["reach"],
             OVERLAPPING_GROUP_SPACE => &["ratio", "vertical"],
             SPANS_LEVEL => &["overlap"],
+            INTERSECTS => &[],
             _ => return Err(RelationshipSelectionError::InvalidRequest),
         };
         if parameters.iter().any(|(key, _)| !allowed.contains(key)) {
@@ -145,6 +158,7 @@ impl Derivation {
             SPANS_LEVEL => Self::SpansLevel {
                 overlap_metres: get("overlap", 1.0),
             },
+            INTERSECTS => Self::Intersects,
             _ => Self::OverlappingGroupSpace {
                 minimum_ratio: get("ratio", 0.5),
                 vertical_metres: get("vertical", 0.0),
@@ -176,6 +190,7 @@ impl Derivation {
             Self::AdjacentSpace { .. } => ADJACENT_SPACE,
             Self::OverlappingGroupSpace { .. } => OVERLAPPING_GROUP_SPACE,
             Self::SpansLevel { .. } => SPANS_LEVEL,
+            Self::Intersects => INTERSECTS,
         };
         format!("{DERIVED_RELATIONSHIP_PREFIX}{name}")
     }
@@ -199,6 +214,7 @@ impl fmt::Display for Derivation {
                 vertical_metres,
             } => write!(f, ";ratio={minimum_ratio};vertical={vertical_metres}"),
             Self::SpansLevel { overlap_metres } => write!(f, ";overlap={overlap_metres}"),
+            Self::Intersects => Ok(()),
         }
     }
 }
@@ -564,6 +580,14 @@ mod tests {
         );
         assert_eq!(
             parse("axioval:derived.spans-level;reach=1"),
+            Err(RelationshipSelectionError::InvalidRequest)
+        );
+        let intersects = parse("axioval:derived.intersects").unwrap().unwrap();
+        assert_eq!(intersects, Derivation::Intersects);
+        assert_eq!(intersects.to_string(), "axioval:derived.intersects");
+        assert_eq!(intersects.name(), "axioval:derived.intersects");
+        assert_eq!(
+            parse("axioval:derived.intersects;depth=0.1"),
             Err(RelationshipSelectionError::InvalidRequest)
         );
     }

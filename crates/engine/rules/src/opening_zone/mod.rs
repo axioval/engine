@@ -35,8 +35,11 @@ use supports::{Opening, SupportConfig, Supports};
 ///
 /// The host is what `host_path` reaches from the opening among the
 /// `host_selector` objects (with IFC, `IfcRelVoidsElement` backward). An
-/// opening reaching no such host is not checked; one reaching several, or
-/// an object whose selection is undecided, is not evaluated.
+/// opening reaching no such host is not checked; one reaching an object
+/// whose selection is undecided is not evaluated. An element reaching
+/// several hosts is placed and judged in each: with the derived
+/// `axioval:derived.intersects`, a duct or pipe with no void modelled is
+/// judged in every beam or wall it passes through.
 ///
 /// Both bodies are read from the reserved body set (`axioval:body`), never
 /// from a mesh: the host must be one straight extrusion perpendicular to its
@@ -233,7 +236,7 @@ impl RuleCapability for OpeningZone {
     }
 }
 
-/// An opening placed in its host's face.
+/// An opening placed in one of its hosts' faces.
 struct Placed {
     host: ObjectId,
     /// Extents along the length and height axes, from the host's section
@@ -257,8 +260,10 @@ impl Placed {
     }
 }
 
-/// Where an opening is: in a checked host, in none, or unknown.
-type Placement = Result<Option<Placed>, Unavailable>;
+/// Where an opening is: in each checked host it reaches (none when it
+/// reaches none), each placement known or not; unknown altogether when its
+/// hosts are.
+type Placement = Result<Vec<Result<Placed, Unavailable>>, Unavailable>;
 
 struct Judge<'r, 'c> {
     context: &'r RuleContext<'c>,
@@ -270,14 +275,14 @@ struct Judge<'r, 'c> {
     supports: Option<Supports<'r, 'c>>,
 }
 
-/// The one host `traversal` reaches from `object` among `hosts`, `None`
-/// when it reaches none.
-pub(crate) fn host_of(
+/// The hosts `traversal` reaches from `object` among `hosts`, none when it
+/// reaches none.
+pub(crate) fn hosts_of(
     context: &RuleContext<'_>,
     traversal: &Traversal<'_>,
     hosts: &Population,
     object: &Object,
-) -> Result<(Option<ObjectId>, Vec<Evidence>), Unavailable> {
+) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
     let universe: Vec<&Object> = context
         .project
         .objects()
@@ -290,18 +295,7 @@ pub(crate) fn host_of(
             format!("whether {undecided} is a checked host is undecided"),
         ));
     }
-    match reached.as_slice() {
-        [] => Ok((None, evidence)),
-        [host] => Ok((Some(host.clone()), evidence)),
-        several => Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "it has {} hosts ({}); an opening belongs to one",
-                several.len(),
-                list(several)
-            ),
-        )),
-    }
+    Ok((reached, evidence))
 }
 
 pub(crate) fn list(ids: &[ObjectId]) -> String {
@@ -322,12 +316,28 @@ impl Judge<'_, '_> {
     }
 
     fn place(&mut self, opening: &Object) -> Placement {
-        let (host, mut evidence) = host_of(self.context, &self.config.hosts, self.hosts, opening)?;
-        let Some(host) = host else {
-            return Ok(None);
-        };
+        let (hosts, evidence) = hosts_of(self.context, &self.config.hosts, self.hosts, opening)?;
+        if hosts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let solid = Solid::opening(self.context, opening).map(Rc::new);
+        Ok(hosts
+            .into_iter()
+            .map(|host| {
+                let solid = solid.clone()?;
+                self.place_in(host, &solid, evidence.clone())
+            })
+            .collect())
+    }
+
+    /// Places an opening's solid in one host's face.
+    fn place_in(
+        &mut self,
+        host: ObjectId,
+        solid: &Solid,
+        mut evidence: Vec<Evidence>,
+    ) -> Result<Placed, Unavailable> {
         let face = self.host_body(&host)?;
-        let solid = Solid::opening(self.context, opening)?;
         let (length_axis, _) = face.axis(self.config.axes.length);
         let (height_axis, _) = face.axis(self.config.axes.height);
         let (through, _) = face.axis(self.config.axes.through());
@@ -340,9 +350,9 @@ impl Judge<'_, '_> {
         // it keeps one extent along the face's profile axis at every depth.
         let section_exact = exact
             || (self.config.axes.through() != Axis::Extrusion && solid.direction_along(through));
-        evidence.extend(solid.evidence);
+        evidence.extend(solid.evidence.iter().cloned());
         evidence.extend(face.evidence.iter().cloned());
-        Ok(Some(Placed {
+        Ok(Placed {
             host,
             length,
             height,
@@ -350,7 +360,7 @@ impl Judge<'_, '_> {
             exact,
             section_exact,
             evidence,
-        }))
+        })
     }
 
     fn judge(
@@ -359,9 +369,8 @@ impl Judge<'_, '_> {
         openings: &Population,
         evaluation: &mut CapabilityEvaluation,
     ) {
-        let placed = match self.placed.get(&opening.id) {
-            Some(Ok(Some(placed))) => placed,
-            Some(Ok(None)) => return,
+        let placements = match self.placed.get(&opening.id) {
+            Some(Ok(placements)) => placements,
             Some(Err((reason, message))) => {
                 evaluation.push_object_not_evaluated(
                     opening.id.clone(),
@@ -379,6 +388,26 @@ impl Judge<'_, '_> {
                 return;
             }
         };
+        for placed in placements {
+            match placed {
+                Ok(placed) => self.judge_in(opening, placed, openings, evaluation),
+                Err((reason, message)) => evaluation.push_object_not_evaluated(
+                    opening.id.clone(),
+                    reason.clone(),
+                    message.clone(),
+                ),
+            }
+        }
+    }
+
+    /// Judges an opening placed in one of its hosts.
+    fn judge_in(
+        &self,
+        opening: &Object,
+        placed: &Placed,
+        openings: &Population,
+        evaluation: &mut CapabilityEvaluation,
+    ) {
         // Placing the opening read its host.
         let Some(Ok(host)) = self.bodies.get(&placed.host).cloned() else {
             return;
@@ -674,6 +703,36 @@ impl Judge<'_, '_> {
         ))
     }
 
+    /// The other openings that are or may be placed in `placed`'s host:
+    /// each placement there, or `None` for one whose placement is unknown.
+    fn neighbours<'p>(
+        &'p self,
+        opening: &Object,
+        placed: &Placed,
+    ) -> Vec<(&'p ObjectId, Option<&'p Placed>)> {
+        let mut neighbours = Vec::new();
+        for (other, state) in &self.placed {
+            if *other == opening.id {
+                continue;
+            }
+            match state {
+                Ok(placements) => {
+                    for placement in placements {
+                        match placement {
+                            Ok(neighbour) if neighbour.host == placed.host => {
+                                neighbours.push((other, Some(neighbour)));
+                            }
+                            Ok(_) => {}
+                            Err(_) => neighbours.push((other, None)),
+                        }
+                    }
+                }
+                Err(_) => neighbours.push((other, None)),
+            }
+        }
+        neighbours
+    }
+
     /// Judges the clear distance to the other openings of the same host and
     /// records every finding of `opening`.
     fn spacing(
@@ -689,18 +748,11 @@ impl Judge<'_, '_> {
         if let Some(required) = self.config.spacing {
             let mut sure = Vec::new();
             let mut unknown = Vec::new();
-            for (other, state) in &self.placed {
-                if *other == opening.id {
+            for (other, neighbour) in self.neighbours(opening, placed) {
+                // Its host is unknown: it may be this one's.
+                let Some(neighbour) = neighbour else {
+                    unknown.push(other.clone());
                     continue;
-                }
-                let neighbour = match state {
-                    Ok(Some(neighbour)) if neighbour.host == placed.host => neighbour,
-                    Ok(_) => continue,
-                    // Its host is unknown: it may be this one's.
-                    Err(_) => {
-                        unknown.push(other.clone());
-                        continue;
-                    }
                 };
                 let clear = gap(placed.length, neighbour.length)
                     .hypot(gap(placed.height, neighbour.height));

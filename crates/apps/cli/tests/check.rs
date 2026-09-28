@@ -7974,6 +7974,91 @@ fn beam_holes_are_checked_against_the_web_zone_and_the_beams_ends() {
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
+/// A 0.3 m square beam #50 running 6 m along x at 3 m, and 0.1 m square
+/// ducts extruded 2 m along +y across it with no void modelled: #100 at
+/// x = 3 m, #200 at x = 0.2 m, and #300 beside the beam's end. The beam is
+/// rectangular: I-shaped sections are not meshed yet (axiolid/kernel#193).
+fn beam_with_ducts() -> String {
+    let duct = |id: u32, x: f64| {
+        format!(
+            "#{a}=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,0.1,0.1);\n\
+             #{b}=IFCCARTESIANPOINT(({x},-1.,3.));\n\
+             #{c}=IFCAXIS2PLACEMENT3D(#{b},#8,#7);\n\
+             #{d}=IFCEXTRUDEDAREASOLID(#{a},#{c},#4,2.);\n\
+             #{e}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{d}));\n\
+             #{f}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{e}));\n\
+             #{id}=IFCDUCTSEGMENT('{id:022}',$,$,$,$,#3,#{f},$,.RIGIDSEGMENT.);\n",
+            a = id + 1,
+            b = id + 2,
+            c = id + 3,
+            d = id + 4,
+            e = id + 5,
+            f = id + 6,
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #7=IFCDIRECTION((1.,0.,0.));\n\
+         #8=IFCDIRECTION((0.,1.,0.));\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #22=IFCUNITASSIGNMENT((#20,#21));\n\
+         #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
+         #51=IFCRECTANGLEPROFILEDEF(.AREA.,'R300',$,0.3,0.3);\n\
+         #52=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #55=IFCAXIS2PLACEMENT3D(#52,#7,#8);\n\
+         #56=IFCEXTRUDEDAREASOLID(#51,#55,#4,6.);\n\
+         #57=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#56));\n\
+         #58=IFCPRODUCTDEFINITIONSHAPE($,$,(#57));\n\
+         #50=IFCBEAM('0000000000000000000050',$,$,$,$,#3,#58,$,.BEAM.);\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        duct(100, 3.0),
+        duct(200, 0.2),
+        duct(300, 6.5),
+    )
+}
+
+#[test]
+fn with_geometry_ducts_through_a_beam_without_voids_are_checked_in_the_beam() {
+    let case = Case::new("opening-zone-penetration");
+    let (output, result) = case.geometry_rule(
+        &beam_with_ducts(),
+        &[("duct", "IfcDuctSegment"), ("beam", "IfcBeam")],
+        "axioval:capability.opening-zone",
+        &registry_signature("axioval:capability.opening-zone"),
+        entity("duct"),
+        json!({
+            "host_path": {"type": "stringList", "value": ["axioval:derived.intersects"]},
+            "host_selector": {"type": "selector", "value": entity("beam")},
+            "length_axis": {"type": "string", "value": "extrusion"},
+            "height_axis": {"type": "string", "value": "profile-y"},
+            "end_distance": {"type": "quantity", "value": 0.3, "unit": "m"},
+            "edge_distance": {"type": "quantity", "value": 0.05, "unit": "m"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#200".to_owned(),
+            "opening is 0.15 m from an end of its host #50; 0.3 m required".to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    let cited = result.to_string();
+    assert!(
+        cited.contains("axioval:derived.intersects:"),
+        "the derivation is cited: {result:#}"
+    );
+}
+
 /// Walls #1 and #2 with an enumerated `Status`, a bounded `Span` in
 /// millimetres and a table `Load` in `Pset_Kinds`, and a `Pset_Checks`
 /// with `CheckA`/`CheckB`; wall #2 also has a `Pset_Draft`.

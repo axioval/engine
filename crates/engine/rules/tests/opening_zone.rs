@@ -1096,3 +1096,116 @@ fn a_window_head_too_far_below_the_wall_top_is_found() {
         );
     }
 }
+
+const INTERSECTS: &str = "axioval:derived.intersects";
+
+/// A 0.1 m square duct running along world y from -1 m to 1 m at `(x, z)`,
+/// with no opening modelled: it reaches each beam it passes through by the
+/// derived relationship.
+fn duct(model: Model, local: &str, x: f64, z: f64, beams: &[&str]) -> Model {
+    let mut model = extrusion(
+        model,
+        local,
+        "duct",
+        [x, -1.0, z],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+        2.0,
+        "rectangle",
+        &[("XDim", 0.1), ("YDim", 0.1)],
+    );
+    for beam in beams {
+        model = model.edge(INTERSECTS, local, beam);
+    }
+    model
+}
+
+fn penetrations(model: Model) -> CapabilityEvaluation {
+    model.evaluate(
+        &OpeningZone,
+        &rule(
+            ID,
+            kind("duct"),
+            vec![
+                ("host_path", strings(&[INTERSECTS])),
+                ("host_selector", selector(kind("beam"))),
+                ("length_axis", string("extrusion")),
+                ("height_axis", string("profile-y")),
+                ("end_distance", metres(0.3)),
+                ("zone", string("web")),
+            ],
+        ),
+    )
+}
+
+/// A duct crossing a beam with no void modelled is judged in every beam it
+/// passes through: inside the web zone it passes, near an end or in a
+/// flange it is found, once per beam.
+#[test]
+fn a_duct_through_beams_without_a_void_is_judged_in_each_beam() {
+    let second = extrusion(
+        beam(),
+        "b2",
+        "beam",
+        [0.0, 0.8, 0.0],
+        [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        6.0,
+        "i-shape",
+        &[
+            ("OverallWidth", 0.3),
+            ("OverallDepth", 0.3),
+            ("WebThickness", 0.01),
+            ("FlangeThickness", 0.02),
+        ],
+    );
+    let model = duct(second, "inside", 3.0, 0.0, &["b", "b2"]);
+    let model = duct(model, "near-end", 0.2, 0.0, &["b", "b2"]);
+    let model = duct(model, "in-flange", 4.5, 0.1, &["b"]);
+    // Running past both beams, it reaches none and is not checked.
+    let model = duct(model, "beside", 5.0, 1.0, &[]);
+    let evaluation = penetrations(model);
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "in-flange".into(),
+                "opening reaches 0.02 m into the flanges of its host b; 0 m clear required".into()
+            ),
+            (
+                "near-end".into(),
+                "opening is 0.15 m from an end of its host b2; 0.3 m required".into()
+            ),
+            (
+                "near-end".into(),
+                "opening is 0.15 m from an end of its host b; 0.3 m required".into()
+            ),
+        ]
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    // A host whose body cannot be read leaves only that placement open.
+    let unreadable = extrusion(
+        beam(),
+        "b2",
+        "beam",
+        [0.0, 0.8, 0.0],
+        [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        6.0,
+        "i-shape",
+        &[("OverallWidth", 0.3)],
+    );
+    let evaluation = penetrations(duct(unreadable, "near-end", 0.2, 0.0, &["b", "b2"]));
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "near-end".into(),
+            "opening is 0.15 m from an end of its host b; 0.3 m required".into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("near-end".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}

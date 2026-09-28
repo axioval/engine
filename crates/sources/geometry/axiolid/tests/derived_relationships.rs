@@ -604,3 +604,129 @@ fn a_straddling_extent_or_an_unmeasured_level_refuses() {
         Err(RelationshipSelectionError::Unavailable(_))
     ));
 }
+
+const INTERSECTS: &str = "axioval:derived.intersects";
+
+/// A 0.3 m square beam `beam` 6 m along x; a duct `through` crossing it
+/// along y, one `resting` on its top, one `apart` beside it, and a duct
+/// `inside` wholly within it.
+fn members() -> AxiolidGeometry {
+    AxiolidGeometry::new()
+        .with_mesh(id("beam"), cuboid([0.0, -0.15, 2.7], [6.0, 0.15, 3.0]))
+        .with_mesh(id("through"), cuboid([2.9, -1.0, 2.8], [3.1, 1.0, 2.9]))
+        .with_mesh(id("resting"), cuboid([4.0, -1.0, 3.0], [4.2, 1.0, 3.1]))
+        .with_mesh(id("apart"), cuboid([1.0, 0.5, 2.8], [1.2, 1.5, 2.9]))
+        .with_mesh(id("inside"), cuboid([5.0, -0.05, 2.8], [5.1, 0.05, 2.9]))
+        .with_no_body(id("storey"))
+}
+
+const DUCTS: &[&str] = &["through", "resting", "apart", "inside", "storey"];
+
+#[test]
+fn a_duct_intersects_the_beam_it_passes_through_both_ways() {
+    let handle = handle(AxiolidDerivedRelationshipService::new(members()));
+    for direction in [
+        TraversalDirection::Backward,
+        TraversalDirection::Forward,
+        TraversalDirection::Either,
+    ] {
+        let (reached, evidence) = select(&handle, "beam", DUCTS, INTERSECTS, direction).unwrap();
+        assert_eq!(reached, ["inside", "through"], "{direction:?}");
+        assert!(
+            evidence
+                .iter()
+                .all(|locator| locator.starts_with(INTERSECTS)),
+            "{evidence:?}"
+        );
+        assert!(
+            evidence
+                .iter()
+                .any(|locator| locator.contains("/beam->cad:model/through:")
+                    && locator.contains("penetration=")),
+            "{evidence:?}"
+        );
+        assert!(
+            evidence
+                .iter()
+                .any(|locator| locator.contains("5 candidate(s)")),
+            "{evidence:?}"
+        );
+    }
+    let (hosts, _) = select(
+        &handle,
+        "through",
+        &["beam"],
+        INTERSECTS,
+        TraversalDirection::Forward,
+    )
+    .unwrap();
+    assert_eq!(hosts, ["beam"]);
+    // Resting on the beam is touching, not passing through.
+    let (hosts, _) = select(
+        &handle,
+        "resting",
+        &["beam"],
+        INTERSECTS,
+        TraversalDirection::Forward,
+    )
+    .unwrap();
+    assert!(hosts.is_empty());
+}
+
+#[test]
+fn an_unmeasured_or_nearly_touching_tessellated_body_refuses_intersects() {
+    let unmeasured = handle(AxiolidDerivedRelationshipService::new(
+        members().with_unmeasured(id("pipe"), "not meshed"),
+    ));
+    assert!(
+        refusal(select(
+            &unmeasured,
+            "beam",
+            &["through", "pipe"],
+            INTERSECTS,
+            TraversalDirection::Backward,
+        ))
+        .contains("not measured")
+    );
+    // A tessellated duct 0.5 mm above the beam, meshed to within 1 mm.
+    let near = handle(AxiolidDerivedRelationshipService::new(
+        members().with_tessellated_mesh(
+            id("round"),
+            cuboid([2.0, -1.0, 3.0005], [2.2, 1.0, 3.2]),
+            0.001,
+        ),
+    ));
+    assert!(
+        refusal(select(
+            &near,
+            "beam",
+            &["round"],
+            INTERSECTS,
+            TraversalDirection::Backward,
+        ))
+        .contains("undecided")
+    );
+    // Far from every candidate it is decided without measuring.
+    let (reached, _) = select(
+        &near,
+        "apart",
+        &["round", "beam"],
+        INTERSECTS,
+        TraversalDirection::Forward,
+    )
+    .unwrap();
+    assert!(reached.is_empty());
+    // It relates bodies, not groups.
+    let shared = RelationshipSelectionRequest::try_new(
+        id("beam"),
+        vec![id("through")],
+        RelationshipQuery::SharedGroup {
+            relationship: SemanticRelationship::try_new(INTERSECTS).unwrap(),
+        },
+    )
+    .unwrap();
+    assert!(matches!(
+        near.select(&shared),
+        Err(RelationshipSelectionError::Unavailable(_))
+    ));
+}

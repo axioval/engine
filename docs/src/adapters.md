@@ -634,8 +634,21 @@ be closed solids, since containment is a winding-number test.
   deviation at both ends, and a level it may or may not span refuses the
   answer: this derivation alone accepts tessellated spaces, since it reads
   only their extents.
+- **intersects.** Symmetric and pairwise, needing no declaration: each
+  object of the request's universe is compared with the anchor (and, when
+  walking on, with each object reached). Bodies whose mesh extents lie
+  farther apart than their chord deviations share nothing; otherwise the
+  pair is measured by the proximity service over the same geometry. One
+  body inside the other, a witness point deeper inside the other than the
+  combined chord deviation, or a certified shared volume above 1e-12 m³
+  shares volume; bodies apart at the surface beyond rounding, or sharing
+  no more than that volume, only touch. A bodiless object shares nothing.
+  An unmeasured body, two open surfaces, or a pair meeting with neither a
+  deep witness nor a volume bounded away from rounding refuses the answer.
+  Each pair is decided once; tessellated bodies are measured, not refused,
+  and decided only beyond their deviations.
 
-Every derivation compares exact planar bodies: a tessellated subject refuses,
+Every other derivation compares exact planar bodies: a tessellated subject refuses,
 as does a tessellated space whose enclosing extent comes within the
 derivation's reach of the question. A curved space elsewhere blocks nothing.
 Answers are cached per derivation and subject, so counting per space measures

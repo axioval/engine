@@ -363,9 +363,10 @@ fn discipline_rule(value: &str) -> Result<DisciplineRule, String> {
         "fileName" => SourceField::FileName,
         "project" => SourceField::Project,
         "schema" => SourceField::Schema,
+        "timestamp" => SourceField::Timestamp,
         other => {
             return Err(format!(
-                "`{other}` is not `application`, `fileName`, `project` or `schema`"
+                "`{other}` is not `application`, `fileName`, `project`, `schema` or `timestamp`"
             ));
         }
     };

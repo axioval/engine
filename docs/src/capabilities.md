@@ -273,6 +273,7 @@ A `source` selector selects the objects of the sources whose metadata satisfies 
 | `application` | every application the source states wrote it | `ApplicationFullName` of each `IfcOwnerHistory.OwningApplication` |
 | `schema` | the schema the source declares | `IFC2X3` or `IFC4`, from the snapshot |
 | `project` | the name of every project the source describes | `IfcProject.Name` |
+| `timestamp` | when the source states it was written, as written | `FILE_NAME.time_stamp` of the header |
 
 The field is compared as a property selector compares a value, with the same `operator`, `value`, `caseSensitive`, `trim` and `quantifier`: one value as a scalar, several (a model written by two applications) as a list that needs a `quantifier`. Every object of a source matches or none does. A field the source states it lacks, such as the application of a file without owner histories, matches no operator, as an absent property does. A field that was never read, because the adapter does not read it or could not read it exactly (an owner history naming no `IfcApplication`), is not evaluated, reported once per rule and source (`not-recorded`), never a non-match. The engine installs the metadata per run as `SourceMetadataIndex`: adapters and hosts state it with `EvidenceSession::with_source_metadata`, field by field, and a field stated twice with other values is refused. Metadata is not part of a snapshot's identity. A selector whose `value` does not fit its operator is an invalid declaration, as for property selectors.
 
@@ -1822,7 +1823,9 @@ itself, read as the property `<id>` in `axioval:classification` (see
 reports what was added, removed and changed as the rule's findings. Objects
 are matched by an identity scheme, a property (a door number, when a
 re-export regenerates identities) or both in a declared order; whole
-property sets are compared through property enumeration. See [The
+property sets are compared through property enumeration. Objects without
+stable identities are matched by their bodies or a related object, and a
+revised model older than its base is an error finding. See [The
 comparison as a rule](./comparison.md#the-comparison-as-a-rule).
 
 ## Adding a capability

@@ -124,9 +124,6 @@ impl CheckRuleSpec {
         if let CheckSemantics::Stair { plan } = &self.semantics {
             return plan.validate();
         }
-        if let CheckSemantics::ModelComparison { plan } = &self.semantics {
-            return plan.validate();
-        }
         if let CheckSemantics::ConditionalPresence { plan } = &self.semantics {
             return plan.validate();
         }

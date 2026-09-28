@@ -176,6 +176,10 @@ fn an_i_beam_states_its_section_and_extrusion_in_si() {
     assert_eq!(text("#10", "Kind"), "extrusion");
     assert_eq!(text("#10", "item1.kind"), "extrusion");
     assert_eq!(value("#10", "Mapped"), Some(PropertyValue::Boolean(false)));
+    assert_eq!(
+        value("#10", "Mirrored"),
+        Some(PropertyValue::Boolean(false))
+    );
     assert_eq!(text("#10", "Profile.Type"), "i-shape");
     assert_eq!(text("#10", "Profile.Name"), "HEA300");
     close(metres("#10", "Profile.OverallWidth"), 0.3);
@@ -209,6 +213,11 @@ fn an_i_beam_states_its_section_and_extrusion_in_si() {
 #[test]
 fn a_mapped_column_reads_as_if_authored_in_place() {
     assert_eq!(value("#30", "Mapped"), Some(PropertyValue::Boolean(true)));
+    // A mapped swept solid is placed rigidly: it cannot be mirrored.
+    assert_eq!(
+        value("#30", "Mirrored"),
+        Some(PropertyValue::Boolean(false))
+    );
     assert_eq!(text("#30", "Profile.Type"), "rectangle");
     assert_eq!(text("#30", "Profile.Name"), "C300x400");
     close(metres("#30", "Profile.XDim"), 0.3);

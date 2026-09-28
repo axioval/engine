@@ -31,7 +31,33 @@ over the objects the ones before it left unmatched:
   as `base` on the base revision and as `revised` on the revised one (a door
   number, for instance, when a re-export regenerates every `GlobalId`).
   Values are compared exactly; an absent, null or blank value is no key, and
-  a measured interval is refused, since it identifies nothing exactly.
+  a measured interval is refused, since it identifies nothing exactly. A
+  rule selecting storeys matches them with each other this way, by `Name`
+  or `Elevation`.
+
+Re-exported models often carry fresh identities. When both revisions are
+sources of one session, so their bodies can be measured together, four
+pairwise matchers fall back on the objects themselves, each only between
+objects of the same kind:
+
+- `Matcher::Geometry { tolerance_metres }`: the same body, the certified
+  Hausdorff distance between the two surfaces within the tolerance (the
+  same mapped geometry or boundary representation at the same place).
+- `Matcher::Placement { tolerance }`: the same body placed alike: frame
+  origins and axes within the tolerance, or both unplaced.
+- `Matcher::Overlap { minimum_ratio }`: a certified shared volume of at
+  least that share of the larger body's volume.
+- `Matcher::Related { path, tolerance_metres }`: each reaches exactly one
+  object along the relationship `path` (a door its opening), and the two
+  reached objects are already matched or their surfaces coincide.
+
+A pairwise match needs each object to be the other's one sure candidate,
+with no undecided one: a candidate the measurement cannot decide (a
+straddling interval, a refused measurement) or several sure ones leave
+every object involved undecided, never guessed. An object whose body
+cannot be measured leaves every object of its kind on the other side
+undecided. Across two sessions a pairwise matcher leaves every object it
+would judge undecided.
 
 Each identity ends up in one of three states:
 
@@ -69,7 +95,9 @@ one no matcher could key is unidentified.
 - **Property sets.** `ComparisonRequest::with_property_set(set)` compares
   every property of a set, and `with_all_property_sets()` every property of
   every set, listed on both sides through the resolver's property
-  enumeration. A property present on one side only appeared or disappeared.
+  enumeration. A property present on one side only appeared or disappeared,
+  and a set present on one side only is one difference, `property set NAME
+  added` or `removed`, not one per property.
   An enumeration the resolver refuses leaves that set unresolved; a property
   also named with `with_property` is compared through resolution alone.
 - **Relationships.** Targets are named by their identity in the scheme, so a
@@ -114,6 +142,14 @@ A frame is the object's placement as its source states it (see
 on one side only is a `placement` difference; any other refusal (an
 unsupported placement, an unreadable unit) leaves the facet unresolved.
 
+The placement's differences tell the kind of move apart: `origin` is a
+move, `orientation` a rotation, and `mirroring` a mirroring. A frame is
+right-handed by contract, so no rotation mirrors; a mirroring is the sign of
+the determinant of the transform placing the body, which the body facts
+state as `axioval:body.Mirrored` (see [IR](./ir.md)). An object without body
+facts is not mirrored; a refused or missing fact leaves `mirroring`
+unresolved.
+
 ### Geometry
 
 Geometry compares the extent of each object's measured body. An exact mesh is
@@ -151,6 +187,17 @@ A statement made on one side only is a difference. The map offset is compared
 in metres only when both map units are known exactly; otherwise equal
 statements agree and different ones are unresolved. The scale is compared
 exactly.
+
+### Timestamps
+
+`ComparisonRequest::with_timestamps()` compares each pair of sources' header
+timestamps, the `timestamp` source metadata (for IFC `FILE_NAME.time_stamp`).
+A revised source written surely before its base is a `timestamp` finding of
+severity error, whatever the rule's severity: the two may have been swapped.
+A timestamp without a UTC offset may lie in any zone, so it stands for every
+instant fourteen hours either side; two that may be in either order, a
+timestamp not read, missing, stated twice or not a date-time leave the facet
+unresolved.
 
 ## Nothing is dropped
 
@@ -206,7 +253,14 @@ declaration.
 | `properties` | `table` | Rows of `property_set` (optional) and `property`: properties compared through resolution. |
 | `property_sets` | `table` | Rows of `property_set`: sets compared whole through enumeration. |
 | `all_property_sets` | `boolean` | Compare every set whole. |
+| `match_by` values `geometry`, `placement`, `overlap`, `related` | | The pairwise matchers, named in `match_by` only. |
+| `match_length_tolerance` | `number` | Metres, for `geometry`, `placement` and `related`; default 0.001. |
+| `match_angle_tolerance` | `number` | Degrees, for `placement`; default 0.01. |
+| `minimum_overlap_ratio` | `number` | Required with `overlap`: above 0, at most 1. |
+| `match_path` | `stringList` | Required with `related`: the relationship steps, as a traversal `path` names them, such as `IfcRelFillsElement:forward`. |
+| `revised_selector` | `selector` | Restricts the revised model instead of the rule's selector. |
 | `compare_placement`, `compare_geometry`, `compare_coordinate_systems` | `boolean` | The spatial facets, as above. |
+| `compare_timestamps` | `boolean` | The header timestamps, as above. |
 | `length_tolerance` | `number` | Metres; default 0. |
 | `angle_tolerance` | `number` | Degrees; default 0. |
 
@@ -225,6 +279,10 @@ those of the [report](#reports) under the rule's id.
 - **Mesh difference.** A certified two-sided Hausdorff distance between two
   revisions of a body is axiolid/kernel#148. Until it is published, geometry
   compares bounds only.
+- **Mirroring of mapped items.** `ifc-geometry`'s body description does
+  not carry the mapping transform of a mapped item that is not a swept
+  solid, so the IFC adapter refuses `axioval:body.Mirrored` for such a body
+  and its `mirroring` is unresolved.
 - **Relationships of IFC sessions.** IFC relationships are answered on
   request through the relationship-selection service, not carried on the
   object, so the relationship facet compares nothing for them yet.

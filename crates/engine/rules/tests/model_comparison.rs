@@ -7,11 +7,22 @@
 
 mod common;
 
-use axioval_engine::{CapabilityEvaluation, SourceDisciplines};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use axioval_engine::{
+    Bounds3, CapabilityEvaluation, GeometryFidelity, IntersectionVolume, LengthInterval,
+    ObjectBounds, ProximityError, ProximityEvidence, ProximityRequest, ProximityService,
+    ProximityServiceHandle, SourceDisciplines, SourceMetadata, SourceMetadataIndex, VolumeInterval,
+};
+use axioval_ir::contract::SourceField;
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
-use axioval_ir::{Discipline, ExternalId, NotEvaluatedReason, ObjectId, PropertyValue, SourceId};
+use axioval_ir::{
+    Discipline, Evidence, ExternalId, NotEvaluatedReason, ObjectId, PropertyValue, Scope, Severity,
+    SourceId,
+};
 use axioval_rules::CompareModels;
-use common::{Model, boolean, kind, property, rule, string, strings, unevaluated};
+use common::{Model, boolean, kind, number, property, rule, string, strings, unevaluated};
 
 const ID: &str = "axioval:capability.model-comparison";
 
@@ -372,5 +383,301 @@ fn a_declaration_without_a_matcher_is_invalid() {
     assert_eq!(
         unevaluated(&evaluation),
         vec![("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Objects without stable identities, timestamps and whole sets.
+// ---------------------------------------------------------------------------
+
+/// Exact boxes per object. Between two boxes: their separation, the volume
+/// they share and, standing in for the Hausdorff distance, the largest shift
+/// of any face.
+/// A box: its least and greatest corner.
+type Box3 = ([f64; 3], [f64; 3]);
+
+struct Boxes(BTreeMap<ObjectId, Box3>);
+
+impl ProximityService for Boxes {
+    fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        let (min, max) = self.0.get(object).ok_or(ProximityError::NoBody)?;
+        ObjectBounds::try_new(
+            object.clone(),
+            Bounds3::try_new(*min, *max)?,
+            GeometryFidelity::Exact,
+        )
+    }
+
+    fn measure_proximity(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProximityEvidence, ProximityError> {
+        let (a, b) = (&self.0[request.subject()], &self.0[request.counterpart()]);
+        let mut gaps = 0.0;
+        let mut shared = 1.0;
+        let mut depth = f64::INFINITY;
+        let mut shift: f64 = 0.0;
+        for axis in 0..3 {
+            let gap = (a.0[axis] - b.1[axis]).max(b.0[axis] - a.1[axis]).max(0.0);
+            gaps += gap * gap;
+            let overlap = (a.1[axis].min(b.1[axis]) - a.0[axis].max(b.0[axis])).max(0.0);
+            shared *= overlap;
+            depth = depth.min(overlap);
+            shift = shift
+                .max((a.0[axis] - b.0[axis]).abs())
+                .max((a.1[axis] - b.1[axis]).abs());
+        }
+        let separation = f64::sqrt(gaps);
+        let volume = |(min, max): &Box3| (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]);
+        ProximityEvidence::try_new(
+            request.clone(),
+            separation,
+            Some(if separation > 0.0 { 0.0 } else { depth }),
+            0.0,
+            None,
+            GeometryFidelity::Exact,
+            Evidence::exact(request.subject().source.clone(), "boxes"),
+        )?
+        .with_hausdorff(LengthInterval::exact(shift.max(separation)).unwrap())?
+        .with_intersection_volume(IntersectionVolume::try_new(
+            VolumeInterval::exact(shared)?,
+            VolumeInterval::exact(volume(a))?,
+            VolumeInterval::exact(volume(b))?,
+        )?)
+    }
+}
+
+/// A door-sized box at `x`.
+fn at(x: f64) -> Box3 {
+    ([x, 0.0, 0.0], [x + 1.0, 0.1, 2.1])
+}
+
+fn compare_with(
+    model: Model,
+    boxes: &[(ObjectId, Box3)],
+    parameters: Vec<(&str, ParameterValue)>,
+    stamps: Option<(&str, &str)>,
+) -> CapabilityEvaluation {
+    let mut parameters = parameters;
+    parameters.extend([("base", string("base")), ("revised", string("revised"))]);
+    let boxes = Boxes(boxes.iter().cloned().collect());
+    model.evaluate_with(
+        &CompareModels,
+        &rule(ID, kind("door"), parameters),
+        |services| {
+            services.register(disciplines()).unwrap();
+            services
+                .register(ProximityServiceHandle::new(Arc::new(boxes)))
+                .unwrap();
+            if let Some((base, revised)) = stamps {
+                let stamp =
+                    |value: &str| SourceMetadata::new().with(SourceField::Timestamp, [value]);
+                services
+                    .register(SourceMetadataIndex::new([
+                        (document("base"), stamp(base)),
+                        (document("revised"), stamp(revised)),
+                    ]))
+                    .unwrap();
+            }
+        },
+    )
+}
+
+/// Every door of [`doors`] where its number says: `D1` at 0, `D2` at 2, `D3`
+/// at 4 in the base, `D4` at 6 in the revision.
+fn door_boxes() -> Vec<(ObjectId, Box3)> {
+    vec![
+        (in_base("#10"), at(0.0)),
+        (in_base("#11"), at(2.0)),
+        (in_base("#12"), at(4.0)),
+        (in_revised("#90"), at(0.0)),
+        (in_revised("#91"), at(2.0)),
+        (in_revised("#92"), at(6.0)),
+    ]
+}
+
+#[test]
+fn two_exports_with_fresh_identities_match_by_geometry() {
+    let evaluation = compare_with(
+        doors(),
+        &door_boxes(),
+        vec![
+            ("match_by", strings(&["geometry"])),
+            ("all_property_sets", boolean(true)),
+        ],
+        None,
+    );
+    let found = found(&evaluation);
+    assert_eq!(found.len(), 3, "{found:?}");
+    assert_eq!(
+        found[0],
+        ("#12".to_owned(), "removed (geometry:#12)".to_owned())
+    );
+    assert!(
+        found[1].0 == "#90" && found[1].1.contains("FireRating"),
+        "{found:?}"
+    );
+    assert_eq!(
+        found[2],
+        ("#92".to_owned(), "added (geometry:#92)".to_owned())
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+}
+
+#[test]
+fn a_body_coinciding_with_two_matches_neither() {
+    let mut boxes = door_boxes();
+    boxes.push((in_revised("#94"), at(0.0)));
+    let model = doors().object_in("revised", "#94", "door");
+    let evaluation = compare_with(
+        model,
+        &boxes,
+        vec![("match_by", strings(&["geometry"]))],
+        None,
+    );
+    let mut undecided = unevaluated(&evaluation);
+    undecided.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        undecided,
+        vec![
+            ("#10".to_owned(), NotEvaluatedReason::InvalidEvidence),
+            ("#90".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ("#94".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+        ]
+    );
+    assert!(
+        !found(&evaluation)
+            .iter()
+            .any(|(door, _)| ["#10", "#90", "#94"].contains(&door.as_str())),
+        "{evaluation:?}"
+    );
+}
+
+#[test]
+fn a_moved_body_matches_by_its_overlap_with_the_larger_one() {
+    // D2 moved 0.2 m: not the same geometry, but 80 % of it overlaps.
+    let mut boxes = door_boxes();
+    boxes[4] = (in_revised("#91"), at(2.2));
+    let run = |ratio: f64| {
+        compare_with(
+            doors(),
+            &boxes,
+            vec![
+                ("match_by", strings(&["geometry", "overlap"])),
+                ("minimum_overlap_ratio", number(ratio)),
+            ],
+            None,
+        )
+    };
+    let matched = found(&run(0.75));
+    assert!(
+        !matched
+            .iter()
+            .any(|(door, _)| door == "#91" || door == "#11"),
+        "{matched:?}"
+    );
+    let unmatched = found(&run(0.9));
+    assert!(
+        unmatched
+            .iter()
+            .any(|(door, message)| door == "#91" && message.starts_with("added"))
+    );
+}
+
+#[test]
+fn a_door_matches_through_its_matched_opening() {
+    // The doors changed shape; their openings did not.
+    let model = doors()
+        .object_in("base", "#40", "opening")
+        .object_in("revised", "#80", "opening")
+        .edge_of("fills", in_base("#10"), in_base("#40"))
+        .edge_of("fills", in_revised("#90"), in_revised("#80"));
+    let boxes = vec![
+        (in_base("#10"), at(0.0)),
+        (in_revised("#90"), ([0.0, 0.0, 0.0], [0.9, 0.1, 2.0])),
+        (in_base("#40"), at(0.0)),
+        (in_revised("#80"), at(0.0)),
+    ];
+    let evaluation = compare_with(
+        model,
+        &boxes,
+        vec![
+            ("match_by", strings(&["related"])),
+            ("match_path", strings(&["fills:forward"])),
+            ("all_property_sets", boolean(true)),
+        ],
+        None,
+    );
+    let found = found(&evaluation);
+    assert!(
+        found
+            .iter()
+            .any(|(door, message)| door == "#90" && message.contains("FireRating")),
+        "{found:?}"
+    );
+    assert!(!found.iter().any(|(door, _)| door == "#10"), "{found:?}");
+}
+
+#[test]
+fn a_revision_older_than_its_base_is_an_error_finding() {
+    let run = |stamps: (&str, &str)| {
+        compare_with(
+            doors(),
+            &door_boxes(),
+            vec![by_door_number(), ("compare_timestamps", boolean(true))],
+            Some(stamps),
+        )
+    };
+    let swapped = run(("2024-05-01T10:00:00", "2024-01-01T10:00:00"));
+    let older: Vec<_> = swapped
+        .findings()
+        .iter()
+        .filter(|finding| finding.message.starts_with("timestamp changed"))
+        .collect();
+    assert_eq!(older.len(), 1, "{swapped:?}");
+    assert_eq!(older[0].scope, Scope::Source(document("revised")));
+    assert_eq!(older[0].severity, Severity::Error);
+
+    let in_order = run(("2024-01-01T10:00:00Z", "2024-05-01T10:00:00+02:00"));
+    assert!(
+        !in_order
+            .findings()
+            .iter()
+            .any(|finding| finding.message.starts_with("timestamp")),
+        "{in_order:?}"
+    );
+    // Hours apart without offsets: either may be the earlier.
+    let close = run(("2024-05-01T12:00:00", "2024-05-01T10:00:00"));
+    assert!(
+        close
+            .not_evaluated_outcomes()
+            .iter()
+            .any(|outcome| outcome.message().contains("either order")),
+        "{close:?}"
+    );
+}
+
+#[test]
+fn a_set_on_one_side_only_is_added_or_removed_whole() {
+    let model = Model::default()
+        .object_in("base", "#1", "door")
+        .object_in("revised", "#2", "door")
+        .value_of(in_base("#1"), "Pset_DoorCommon", "Reference", text("D1"))
+        .value_of(in_base("#1"), "Pset_Old", "A", text("x"))
+        .value_of(in_base("#1"), "Pset_Old", "B", text("y"))
+        .value_of(in_revised("#2"), "Pset_DoorCommon", "Reference", text("D1"))
+        .value_of(in_revised("#2"), "Pset_New", "C", text("z"));
+    let evaluation = compare(
+        model,
+        kind("door"),
+        vec![by_door_number(), ("all_property_sets", boolean(true))],
+    );
+    assert_eq!(
+        found(&evaluation),
+        vec![(
+            "#2".to_owned(),
+            "property changed: property set Pset_New added; property set Pset_Old removed"
+                .to_owned()
+        )]
     );
 }

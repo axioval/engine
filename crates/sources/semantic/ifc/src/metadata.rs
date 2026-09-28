@@ -1,5 +1,8 @@
 //! What an IFC file states about itself as a whole: the applications that
-//! wrote it and the project it describes.
+//! wrote it, the project it describes and when it was written.
+//!
+//! The time is the header's `FILE_NAME.time_stamp`, as written; a blank one
+//! states none.
 //!
 //! The authoring application is `IfcOwnerHistory.OwningApplication`, an
 //! `IfcApplication` whose `ApplicationFullName` names it; the project is
@@ -19,7 +22,8 @@ use crate::release::Release;
 
 /// The metadata the file states: every field it reads exactly.
 pub(crate) fn read(release: Release, model: &Model) -> SourceMetadata {
-    let mut metadata = SourceMetadata::new();
+    let mut metadata =
+        SourceMetadata::new().with(SourceField::Timestamp, [model.header().time_stamp.clone()]);
     if let Some(applications) = applications(release, model) {
         metadata = metadata.with(SourceField::Application, applications);
     }

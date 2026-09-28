@@ -255,7 +255,7 @@ nothing is written.
 ```bash
 axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--property SET.NAME ...] [--property-set SET ...] [--all-property-sets] \
-  [--geometry] \
+  [--geometry] [--timestamps] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
@@ -278,6 +278,8 @@ Compared facets:
 - placement (origin distance and axis rotation of each object frame), always;
 - the coordinate system of the two files (world frame, true north, map
   conversion), always;
+- with `--timestamps`, the header timestamps: a revised file written before
+  the base is an error finding;
 - with `--geometry`, both revisions are meshed as for `check --geometry` and
   each object's measured bounds are compared.
 

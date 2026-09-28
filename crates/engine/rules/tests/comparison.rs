@@ -499,6 +499,51 @@ fn spatial(
     objects: &[(&str, Option<Frame>, Option<Body>)],
     crs: Option<SourceCoordinateSystem>,
 ) -> EvidenceSession {
+    spatial_mirroring(source, objects, crs, &[])
+}
+
+/// Answers `axioval:body.Mirrored`: true for the listed local ids, absent
+/// (no body facts) for every other object.
+struct Mirrors(Vec<String>, Vec<SourceSnapshot>);
+
+impl PropertyResolutionService for Mirrors {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.1
+    }
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        let object = request.object_id();
+        let evidence = Evidence::exact(object.source.clone(), format!("{object}:body"));
+        if request.property_set() == Some(axioval_ir::BODY_SET)
+            && request.property() == "Mirrored"
+            && self.0.contains(&object.local_id)
+        {
+            return Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                request.clone(),
+                Property::new(
+                    axioval_ir::BODY_SET,
+                    "Mirrored",
+                    PropertyValue::Boolean(true),
+                )
+                .unwrap()
+                .with_evidence(evidence),
+            )?));
+        }
+        Ok(PropertyResolution::Absent(
+            CompletePropertyAbsenceEvidence::try_new(request.clone(), evidence)?,
+        ))
+    }
+}
+
+/// As [`spatial`], the bodies of `mirrored` placed mirrored.
+fn spatial_mirroring(
+    source: &SourceId,
+    objects: &[(&str, Option<Frame>, Option<Body>)],
+    crs: Option<SourceCoordinateSystem>,
+    mirrored: &[&str],
+) -> EvidenceSession {
     let snapshot = SourceSnapshot::try_new(source.clone(), "r", "sha256:fixture").unwrap();
     let project = Project::new(
         objects
@@ -528,6 +573,11 @@ fn spatial(
             ProximityServiceHandle::new(Arc::new(bodies)),
             std::slice::from_ref(&snapshot),
         )
+        .unwrap()
+        .with_service(PropertyResolutionServiceHandle::new(Arc::new(Mirrors(
+            mirrored.iter().map(|guid| format!("#{guid}")).collect(),
+            vec![snapshot.clone()],
+        ))))
         .unwrap();
     if let Some(crs) = crs {
         session = session
@@ -620,6 +670,72 @@ fn placement_compares_origins_and_axes_against_the_tolerance() {
         outcome(&comparison, "GRID"),
         vec!["unresolved placement not compared: object placement unsupported: grid placement"]
     );
+}
+
+#[test]
+fn a_mirrored_body_is_told_from_a_rotated_one() {
+    let frame = Some(Some(([0.0; 3], 0.0)));
+    let base = spatial(
+        &base_source(),
+        &[("FLIPPED", frame, None), ("TURNED", frame, None)],
+        None,
+    );
+    let revised = spatial_mirroring(
+        &revised_source(),
+        &[
+            ("FLIPPED", frame, None),
+            ("TURNED", Some(Some(([0.0; 3], 180.0))), None),
+        ],
+        None,
+        &["FLIPPED"],
+    );
+    let comparison = compare_sessions(&base, &revised, &request().with_placement(tolerance()));
+    assert_eq!(
+        outcome(&comparison, "FLIPPED"),
+        vec!["changed placement mirroring not mirrored -> mirrored"]
+    );
+    assert_eq!(
+        outcome(&comparison, "TURNED"),
+        vec!["changed placement orientation differs by 180.000° (tolerance 0.010°)"]
+    );
+}
+
+#[test]
+fn a_revision_older_than_its_base_is_found_and_pairwise_matchers_need_one_session() {
+    let stamped = |source: &SourceId, stamp: &str| {
+        session(source, vec![object(source, "#1", Some("A"), "wall")])
+            .with_source_metadata(
+                source,
+                axioval_engine::SourceMetadata::new()
+                    .with(axioval_ir::contract::SourceField::Timestamp, [stamp]),
+            )
+            .unwrap()
+    };
+    let base = stamped(&base_source(), "2024-05-01T10:00:00Z");
+    let revised = stamped(&revised_source(), "2024-01-01T10:00:00Z");
+    let comparison = compare_sessions(&base, &revised, &request().with_timestamps());
+    let report = comparison.report(&RuleId::new("cmp").unwrap(), &Severity::Info);
+    assert_eq!(report.findings.len(), 1, "{report:?}");
+    assert_eq!(report.findings[0].rule_id.to_string(), "cmp.timestamp");
+    assert_eq!(report.findings[0].severity, Severity::Error);
+    assert_eq!(report.findings[0].scope, Scope::Source(revised_source()));
+
+    let geometry = ComparisonRequest::matching(vec![Matcher::Geometry {
+        tolerance_metres: 0.001,
+    }])
+    .unwrap();
+    let comparison = compare_sessions(&base, &revised, &geometry);
+    assert!(comparison.objects().is_empty());
+    assert!(
+        comparison
+            .undecided()
+            .iter()
+            .all(|entry| entry.reason == NotEvaluatedReason::InvalidDeclaration),
+        "{:?}",
+        comparison.undecided()
+    );
+    assert_eq!(comparison.undecided().len(), 2);
+    assert!(ComparisonRequest::matching(vec![Matcher::Overlap { minimum_ratio: 0.0 }]).is_err());
 }
 
 #[test]

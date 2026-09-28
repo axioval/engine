@@ -316,6 +316,7 @@ impl Facts {
                 body.items.iter().any(|item| !item.mapped_by.is_empty()),
             )),
         );
+        root.put("Mirrored", mirrored(body));
         let mut kinds: Vec<&str> = Vec::new();
         let mut unknown = None;
         for item in &body.items {
@@ -424,6 +425,28 @@ fn write_swept(writer: &mut Writer<'_>, swept: &SweptSolid) {
         }
         // A directrix is a curve; the body states no scalar path facts for it.
         _ => {}
+    }
+}
+
+/// Whether the transform placing the body reverses its orientation.
+///
+/// Placements are right-handed by construction, and so is the mapping of a
+/// swept solid (`ifc-geometry` refuses one that scales or mirrors it), so a
+/// body of such items is not mirrored. The mapping transform of any other
+/// mapped item is not described, so its mirroring is refused, never assumed.
+fn mirrored(body: &BodyDescription) -> Result<PropertyValue, PropertyResolutionError> {
+    if body
+        .items
+        .iter()
+        .all(|item| item.mapped_by.is_empty() || item.swept.is_some())
+    {
+        Ok(PropertyValue::Boolean(false))
+    } else {
+        Err(PropertyResolutionError::Unavailable(
+            "the mapping transform of a mapped item that is not a swept solid is not described, \
+             so whether it mirrors the body cannot be read"
+                .into(),
+        ))
     }
 }
 

@@ -85,3 +85,26 @@ fn an_unreadable_application_leaves_the_field_unread() {
     assert_eq!(metadata.values(SourceField::Application), None);
     assert_eq!(values(&metadata, SourceField::Project), Some(vec![]));
 }
+
+#[test]
+fn the_header_time_stamp_is_read_as_written() {
+    // The fixture header's time stamp is `t`, not a date-time: still read.
+    let metadata = metadata("IFC4", "").unwrap();
+    assert_eq!(values(&metadata, SourceField::Timestamp), Some(vec!["t"]));
+    let session = import_ifc_session(
+        "m.ifc",
+        &String::from_utf8(file("IFC4", ""))
+            .unwrap()
+            .replace("'n','t'", "'n','2024-01-15T10:20:30'")
+            .into_bytes(),
+    )
+    .unwrap();
+    let source = SourceId::new("ifc-step", "m.ifc").unwrap();
+    assert_eq!(
+        values(
+            session.source_metadata(&source).unwrap(),
+            SourceField::Timestamp
+        ),
+        Some(vec!["2024-01-15T10:20:30"])
+    );
+}

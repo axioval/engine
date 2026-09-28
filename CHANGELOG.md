@@ -35,6 +35,31 @@ All notable changes are documented here. This project follows Semantic Versionin
   with each finding's basis. `report` prints ids and decisions, counts them
   in the summary, lists `--section stale-decisions` and filters by
   `--decision`. The exit status is unchanged by decisions.
+- **Model comparison without stable identities, with timestamps and kinds
+  of move.** (#108) `Matcher` gains the pairwise `Geometry` (coinciding
+  surfaces by the certified Hausdorff distance), `Placement` (and placed
+  alike), `Overlap` (a shared volume of the larger body) and `Related` (a
+  door through its matched or coinciding opening), for two sources of one
+  session; `model-comparison` names them in `match_by` with
+  `match_length_tolerance`, `match_angle_tolerance`,
+  `minimum_overlap_ratio` and `match_path`, and restricts the revised model
+  with `revised_selector`. A candidate a measurement cannot decide, or
+  several sure ones, leave every object involved undecided. The header
+  timestamp is the source fact `timestamp` (`SourceField::Timestamp`; the
+  IFC adapter reads `FILE_NAME.time_stamp`), and `compare_timestamps`
+  (`with_timestamps`, `axioval compare --timestamps`) reports a revised
+  model written before its base as an error finding. The placement facet
+  tells a mirroring from a rotation by the body fact `axioval:body.Mirrored`,
+  and a property set on one side only is one `property set … added` or
+  `removed` difference. **Breaking:** `model-comparison` gains six optional
+  parameters, so a definition bound to it must declare them; `Difference`
+  gains `PropertySet` and `OlderTimestamp`, `Facet` `Timestamp`,
+  `ComparisonError` `InvalidRatio` and `EmptyPath`, `SourceField`
+  `Timestamp`; the placement facet reads `axioval:body.Mirrored` through
+  the property resolver, so a session without one leaves `mirroring`
+  unresolved; and `axioval-spec` drops `ModelComparisonPlanSpec` and its
+  `CheckSemantics::ModelComparison` variant.
+
 - **Model comparison as a rule.** (#107) The `model-comparison` capability
   compares the two models of a run named by the disciplines `base` and
   `revised` (`--model a.ifc:base --model b.ifc:revised`), so a comparison

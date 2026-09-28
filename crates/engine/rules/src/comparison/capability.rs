@@ -4,15 +4,20 @@
 //! declares (`--model a.ifc:base --model b.ifc:revised`), so a comparison
 //! runs in a ruleset beside other rules and its findings travel in the same
 //! report. The rule's selector restricts the objects compared, on both
-//! sides; an object the selector cannot decide is compared all the same, and
-//! whatever depends on it alone is not evaluated rather than reported.
+//! sides unless `revised_selector` restricts the revised model; an object
+//! the selector cannot decide is compared all the same, and whatever depends
+//! on it alone is not evaluated rather than reported. With both models in
+//! one session, objects without stable identities can be matched by their
+//! bodies (`geometry`, `placement`, `overlap`) or through a related object
+//! (`related`: a door through its opening).
 
 use std::collections::BTreeMap;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext, SourceDisciplines, TableColumn,
+    RuleCapability, RuleContext, SourceDisciplines, SourceMetadataIndex, TableColumn,
 };
+use axioval_ir::contract::SourceField;
 use axioval_ir::contract::{ColumnKind, Selector};
 use axioval_ir::{Object, ObjectId, SourceId};
 
@@ -29,7 +34,11 @@ use crate::support::{Parameters, PropertyRef, Unavailable, invalid};
 ///
 /// Objects are matched by `identity_scheme`, then by `identity_property`
 /// (read as `revised_identity_property` on the revised model when given), or
-/// in the order `match_by` names them. Compared are the kind, the
+/// in the order `match_by` names them, which may add the body matchers
+/// `geometry`, `placement` and `overlap` (within `match_length_tolerance`,
+/// `match_angle_tolerance` and `minimum_overlap_ratio`) and `related`
+/// (along `match_path`). With `compare_timestamps`, a revised model written
+/// before its base is an error finding. Compared are the kind, the
 /// classifications, the carried properties and relationships, the named
 /// `properties`, the `property_sets` (or, with `all_property_sets`, every
 /// set) listed through property enumeration, and, when asked, placement,
@@ -48,6 +57,7 @@ const PROPERTY_SETS: &[TableColumn] = &[TableColumn::required("property_set", Co
 struct Declaration<'a> {
     base: &'a str,
     revised: &'a str,
+    revised_selector: Option<&'a Selector>,
     request: ComparisonRequest,
 }
 
@@ -72,6 +82,7 @@ impl<'a> Declaration<'a> {
         Ok(Self {
             base,
             revised,
+            revised_selector: parameters.selector("revised_selector")?,
             request,
         })
     }
@@ -100,6 +111,15 @@ impl<'a> Declaration<'a> {
         let Some(order) = parameters.strings("match_by")? else {
             return Ok(scheme_matcher.into_iter().chain(property_matcher).collect());
         };
+        let length = parameters
+            .number("match_length_tolerance")?
+            .unwrap_or(0.001);
+        let angle = parameters
+            .number("match_angle_tolerance")?
+            .unwrap_or(0.01)
+            .to_radians();
+        let tolerance = ComparisonTolerance::try_new(length, angle)
+            .map_err(|error| invalid(format!("`match_*_tolerance`: {error}")))?;
         let mut matchers = Vec::new();
         for name in order {
             let matcher = match name.as_str() {
@@ -109,9 +129,31 @@ impl<'a> Declaration<'a> {
                 "property" => property_matcher.clone().ok_or_else(|| {
                     invalid("`match_by` names `property`, which needs `identity_property`")
                 })?,
+                "geometry" => Matcher::Geometry {
+                    tolerance_metres: length,
+                },
+                "placement" => Matcher::Placement { tolerance },
+                "overlap" => Matcher::Overlap {
+                    minimum_ratio: parameters.number("minimum_overlap_ratio")?.ok_or_else(
+                        || {
+                            invalid(
+                                "`match_by` names `overlap`, which needs `minimum_overlap_ratio`",
+                            )
+                        },
+                    )?,
+                },
+                "related" => Matcher::Related {
+                    path: parameters
+                        .strings("match_path")?
+                        .ok_or_else(|| {
+                            invalid("`match_by` names `related`, which needs `match_path`")
+                        })?
+                        .to_vec(),
+                    tolerance_metres: length,
+                },
                 other => {
                     return Err(invalid(format!(
-                        "`match_by` names `{other}`; the matchers are `identity` and `property`"
+                        "`match_by` names `{other}`; the matchers are `identity`, `property`, `geometry`, `placement`, `overlap` and `related`"
                     )));
                 }
             };
@@ -165,6 +207,9 @@ impl<'a> Declaration<'a> {
             .unwrap_or(false)
         {
             request = request.with_coordinate_systems(tolerance);
+        }
+        if parameters.boolean("compare_timestamps")?.unwrap_or(false) {
+            request = request.with_timestamps();
         }
         Ok(request)
     }
@@ -225,6 +270,11 @@ fn select<'a>(context: &RuleContext<'a>, selector: &Selector, source: &SourceId)
         .objects()
         .filter(|object| &object.id.source == source)
         .collect();
+    let timestamps = context
+        .services
+        .get::<SourceMetadataIndex>()
+        .and_then(|metadata| metadata.values(source, SourceField::Timestamp))
+        .map(<[String]>::to_vec);
     let mut candidates = Vec::new();
     let mut undecided = BTreeMap::new();
     for object in &objects {
@@ -245,6 +295,7 @@ fn select<'a>(context: &RuleContext<'a>, selector: &Selector, source: &SourceId)
             },
             candidates,
             objects,
+            timestamps: BTreeMap::from([(source.clone(), timestamps)]),
         },
         undecided,
     }
@@ -274,6 +325,12 @@ impl RuleCapability for CompareModels {
             ParameterDescriptor::optional("compare_coordinate_systems", ParameterType::Boolean),
             ParameterDescriptor::optional("length_tolerance", ParameterType::Number),
             ParameterDescriptor::optional("angle_tolerance", ParameterType::Number),
+            ParameterDescriptor::optional("revised_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("match_length_tolerance", ParameterType::Number),
+            ParameterDescriptor::optional("match_angle_tolerance", ParameterType::Number),
+            ParameterDescriptor::optional("minimum_overlap_ratio", ParameterType::Number),
+            ParameterDescriptor::optional("match_path", ParameterType::StringList),
+            ParameterDescriptor::optional("compare_timestamps", ParameterType::Boolean),
         ]
     }
 
@@ -292,7 +349,11 @@ impl RuleCapability for CompareModels {
             }
         };
         let base = select(context, &rule.selector, &base_source);
-        let revised = select(context, &rule.selector, &revised_source);
+        let revised = select(
+            context,
+            declaration.revised_selector.unwrap_or(&rule.selector),
+            &revised_source,
+        );
         let pairs = if declaration.request.compares_sources() {
             vec![(base_source, revised_source)]
         } else {

@@ -41,6 +41,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{EvidenceSession, RuleContext};
+use axioval_ir::contract::SourceField;
 use axioval_ir::{
     Evidence, Finding, NotEvaluated, NotEvaluatedReason, Object, ObjectId, PropertyValue, Report,
     RuleId, Scope, Severity, SourceId,
@@ -67,6 +68,12 @@ pub enum ComparisonError {
     /// No matcher is given.
     #[error("a comparison needs at least one matcher")]
     NoMatcher,
+    /// An overlap ratio is not above zero and at most one.
+    #[error("an overlap ratio must lie above 0 and at most 1")]
+    InvalidRatio,
+    /// A related matcher names no relationship path.
+    #[error("a related matcher needs a relationship path")]
+    EmptyPath,
 }
 
 /// How far a spatial facet may move before it counts as changed.
@@ -161,6 +168,35 @@ pub enum Matcher {
         /// The property read on the revised revision.
         revised: ComparedProperty,
     },
+    /// The same kind and the same body: the certified Hausdorff distance
+    /// between the two surfaces within `tolerance_metres`. Needs both
+    /// revisions in one session, so their bodies can be measured together.
+    Geometry {
+        /// The largest distance between the surfaces, in metres.
+        tolerance_metres: f64,
+    },
+    /// As [`Matcher::Geometry`], and placed alike: frame origins within the
+    /// length tolerance and axes within the angle tolerance, or both
+    /// unplaced.
+    Placement {
+        /// The tolerance for the frames and, in length, the surfaces.
+        tolerance: ComparisonTolerance,
+    },
+    /// The same kind and a shared volume at least `minimum_ratio` of the
+    /// larger body's, certified.
+    Overlap {
+        /// The least share of the larger body's volume, above 0, at most 1.
+        minimum_ratio: f64,
+    },
+    /// The same kind, each reaching exactly one object along `path` (a door
+    /// its opening), the two reached objects already matched or their
+    /// surfaces coinciding within `tolerance_metres`.
+    Related {
+        /// The relationship steps, as a traversal `path` names them.
+        path: Vec<String>,
+        /// The largest distance between the reached objects' surfaces.
+        tolerance_metres: f64,
+    },
 }
 
 impl Matcher {
@@ -172,6 +208,37 @@ impl Matcher {
             Self::Scheme(scheme) => scheme.clone(),
             Self::Property { base, revised } if base == revised => format!("property {base}"),
             Self::Property { base, revised } => format!("property {base}/{revised}"),
+            Self::Geometry { .. } => "geometry".to_owned(),
+            Self::Placement { .. } => "placement".to_owned(),
+            Self::Overlap { .. } => "overlap".to_owned(),
+            Self::Related { path, .. } => format!("related {}", path.join(" > ")),
+        }
+    }
+
+    fn validate(&self) -> Result<(), ComparisonError> {
+        let path_given = |matcher: &Self| match matcher {
+            Self::Related { path, .. } => path.iter().any(|step| !step.trim().is_empty()),
+            _ => true,
+        };
+        let length = |value: f64| {
+            if value.is_finite() && value >= 0.0 {
+                Ok(())
+            } else {
+                Err(ComparisonError::InvalidTolerance)
+            }
+        };
+        match self {
+            Self::Scheme(scheme) if scheme.trim().is_empty() => Err(ComparisonError::BlankScheme),
+            Self::Scheme(_) | Self::Property { .. } | Self::Placement { .. } => Ok(()),
+            Self::Geometry { tolerance_metres }
+            | Self::Related {
+                tolerance_metres, ..
+            } if path_given(self) => length(*tolerance_metres),
+            Self::Overlap { minimum_ratio } if *minimum_ratio > 0.0 && *minimum_ratio <= 1.0 => {
+                Ok(())
+            }
+            Self::Overlap { .. } => Err(ComparisonError::InvalidRatio),
+            Self::Geometry { .. } | Self::Related { .. } => Err(ComparisonError::EmptyPath),
         }
     }
 }
@@ -183,6 +250,7 @@ pub struct ComparisonRequest {
     properties: BTreeSet<ComparedProperty>,
     property_sets: BTreeSet<String>,
     all_property_sets: bool,
+    timestamps: bool,
     placement: Option<ComparisonTolerance>,
     geometry: Option<ComparisonTolerance>,
     coordinate_systems: Option<ComparisonTolerance>,
@@ -203,23 +271,22 @@ impl ComparisonRequest {
     ///
     /// # Errors
     ///
-    /// Returns an error when `matchers` is empty or a scheme is blank.
+    /// Returns an error when `matchers` is empty, a scheme is blank, a
+    /// tolerance negative or not finite, an overlap ratio not in `(0, 1]`,
+    /// or a relationship path empty.
     pub fn matching(matchers: Vec<Matcher>) -> Result<Self, ComparisonError> {
         if matchers.is_empty() {
             return Err(ComparisonError::NoMatcher);
         }
         for matcher in &matchers {
-            if let Matcher::Scheme(scheme) = matcher
-                && scheme.trim().is_empty()
-            {
-                return Err(ComparisonError::BlankScheme);
-            }
+            matcher.validate()?;
         }
         Ok(Self {
             matchers,
             properties: BTreeSet::new(),
             property_sets: BTreeSet::new(),
             all_property_sets: false,
+            timestamps: false,
             placement: None,
             geometry: None,
             coordinate_systems: None,
@@ -284,6 +351,20 @@ impl ComparisonRequest {
         self
     }
 
+    /// Also compares the header timestamps of each pair of sources: a
+    /// revised source written before its base source is a finding.
+    #[must_use]
+    pub fn with_timestamps(mut self) -> Self {
+        self.timestamps = true;
+        self
+    }
+
+    /// Whether the header timestamps of each pair of sources are compared.
+    #[must_use]
+    pub fn compares_timestamps(&self) -> bool {
+        self.timestamps
+    }
+
     /// Also compares the coordinate systems of each pair of sources.
     #[must_use]
     pub fn with_coordinate_systems(mut self, tolerance: ComparisonTolerance) -> Self {
@@ -306,7 +387,7 @@ impl ComparisonRequest {
     }
     /// Whether the sources of each side are paired and compared.
     fn compares_sources(&self) -> bool {
-        self.coordinate_systems.is_some()
+        self.coordinate_systems.is_some() || self.timestamps
     }
     /// The placement tolerance, when placement is compared.
     #[must_use]
@@ -362,6 +443,8 @@ pub enum Facet {
     Geometry,
     /// A source's coordinate system.
     CoordinateSystem,
+    /// A source's header timestamp.
+    Timestamp,
 }
 
 impl Facet {
@@ -376,6 +459,7 @@ impl Facet {
             Self::Placement => "placement",
             Self::Geometry => "geometry",
             Self::CoordinateSystem => "coordinate-system",
+            Self::Timestamp => "timestamp",
         }
     }
 }
@@ -548,6 +632,22 @@ pub enum Difference {
         /// Value in the revised session.
         revised: Option<PropertyValue>,
     },
+    /// A property set present on one side only: every property in it
+    /// appeared or disappeared with it.
+    PropertySet {
+        /// The set's name.
+        property_set: String,
+        /// Whether the revised object holds it (added) or the base object
+        /// (removed).
+        added: bool,
+    },
+    /// The revised source states it was written before the base source.
+    OlderTimestamp {
+        /// The base source's timestamp, as written.
+        base: String,
+        /// The revised source's timestamp, as written.
+        revised: String,
+    },
     /// Relationship targets, named by their external identity, present on
     /// one side only.
     Relationship {
@@ -582,7 +682,8 @@ impl Difference {
         match self {
             Self::Kind { .. } => Facet::Kind,
             Self::Classifications { .. } => Facet::Classifications,
-            Self::Property { .. } => Facet::Property,
+            Self::Property { .. } | Self::PropertySet { .. } => Facet::Property,
+            Self::OlderTimestamp { .. } => Facet::Timestamp,
             Self::Relationship { .. } => Facet::Relationship,
             Self::Measured(measurement) => measurement.measure.facet(),
             Self::Stated { facet, .. } => *facet,
@@ -607,6 +708,18 @@ impl std::fmt::Display for Difference {
                 "property {property} {} -> {}",
                 display_value(base.as_ref()),
                 display_value(revised.as_ref())
+            ),
+            Self::PropertySet {
+                property_set,
+                added,
+            } => write!(
+                f,
+                "property set {property_set} {}",
+                if *added { "added" } else { "removed" }
+            ),
+            Self::OlderTimestamp { base, revised } => write!(
+                f,
+                "the revised file is older than the base: written {revised}, the base {base}"
             ),
             Self::Relationship {
                 name,
@@ -1011,12 +1124,18 @@ impl Projection<'_> {
         message: String,
         (source, matcher, identity): (&SourceId, &str, &str),
     ) {
+        // A revision older than its base inverts the whole comparison.
+        let severity = if suffix == Facet::Timestamp.name() {
+            Severity::Error
+        } else {
+            self.severity.clone()
+        };
         let finding = Finding {
             id: None,
             decision: None,
             rule_id: self.rule(suffix),
             scope,
-            severity: self.severity.clone(),
+            severity,
             message,
             related: Vec::new(),
             evidence: vec![Evidence {
@@ -1151,6 +1270,8 @@ pub(crate) struct Revision<'a> {
     /// Every object of the revision's sources, compared or not: relationship
     /// targets are named among them.
     pub(crate) objects: Vec<&'a Object>,
+    /// Each source's header timestamps as written; `None` when unread.
+    pub(crate) timestamps: BTreeMap<SourceId, Option<Vec<String>>>,
 }
 
 impl<'a> Revision<'a> {
@@ -1164,6 +1285,17 @@ impl<'a> Revision<'a> {
             },
             candidates: objects.clone(),
             objects,
+            timestamps: session
+                .snapshots()
+                .map(|snapshot| {
+                    let source = snapshot.source();
+                    let values = session
+                        .source_metadata(source)
+                        .and_then(|metadata| metadata.values(SourceField::Timestamp))
+                        .map(<[String]>::to_vec);
+                    (source.clone(), values)
+                })
+                .collect(),
         }
     }
 }
@@ -1242,7 +1374,7 @@ fn target_names<'a>(
     }
     let scheme = request.matchers.iter().find_map(|matcher| match matcher {
         Matcher::Scheme(scheme) => Some(scheme.as_str()),
-        Matcher::Property { .. } => None,
+        _ => None,
     });
     if let Some(scheme) = scheme {
         for (revision, named) in [(base, &mut names.base), (revised, &mut names.revised)] {

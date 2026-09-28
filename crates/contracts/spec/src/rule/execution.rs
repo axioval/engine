@@ -24,7 +24,6 @@ use super::free_floor_space::FreeFloorSpacePlanSpec;
 use super::front_clearance::FrontClearancePlanSpec;
 use super::horizontal_guard::HorizontalGuardPlanSpec;
 use super::local_circulation::LocalCirculationPlanSpec;
-use super::model_comparison::ModelComparisonPlanSpec;
 use super::opening_sill::OpeningSillPlanSpec;
 use super::parking::ParkingPlanSpec;
 use super::profile::AllowedProfilePlanSpec;
@@ -290,9 +289,6 @@ pub enum CheckSemantics {
     },
     Stair {
         plan: StairPlanSpec,
-    },
-    ModelComparison {
-        plan: ModelComparisonPlanSpec,
     },
 
     ClashMatrix {

@@ -7,14 +7,15 @@ use axioval_engine::{
     ObjectFrameError, ObjectFrameServiceHandle, PropertyResolutionServiceHandle, ProximityError,
     ProximityServiceHandle, SourceCoordinateSystem,
 };
-use axioval_ir::{Object, ObjectId, Property, PropertyValue, SourceId};
+use axioval_ir::{DateTime, Object, ObjectId, Property, PropertyValue, SourceId};
 
 use super::{
     ComparedProperty, ComparisonRequest, ComparisonTolerance, Difference, Facet, Measure,
     Measurement, ObjectChange, Revision, SourceComparison, Unresolved,
 };
+use crate::body_facts::BodyFacts;
 use crate::selection::{NameSpec, enumerate};
-use crate::support::{PropertyRef, resolve};
+use crate::support::{PropertyRef, display, resolve};
 
 /// Where a revision's classification statements come from.
 enum ClassificationBasis<'a> {
@@ -313,10 +314,29 @@ impl Pair<'_, '_> {
             values
         };
         let (before, after) = (collect(before), collect(after));
+        let sets = |values: &BTreeMap<ComparedProperty, Vec<PropertyValue>>| -> BTreeSet<String> {
+            values
+                .keys()
+                .filter_map(|key| key.property_set.clone())
+                .collect()
+        };
+        let (sets_before, sets_after) = (sets(&before), sets(&after));
+        // A set on one side only is one difference, not one per property.
+        for set in sets_before.symmetric_difference(&sets_after) {
+            self.differ(Difference::PropertySet {
+                property_set: set.clone(),
+                added: sets_after.contains(set),
+            });
+        }
         let keys: BTreeSet<&ComparedProperty> = before.keys().chain(after.keys()).collect();
         for key in keys {
             // A property also named is compared through the resolver alone.
-            if self.request.properties.contains(key) {
+            if self.request.properties.contains(key)
+                || key
+                    .property_set
+                    .as_ref()
+                    .is_some_and(|set| sets_before.contains(set) != sets_after.contains(set))
+            {
                 continue;
             }
             let (Ok(old), Ok(new)) = (single(before.get(key)), single(after.get(key))) else {
@@ -420,9 +440,28 @@ impl Pair<'_, '_> {
                     rotation(axes(before), axes(after)),
                     tolerance.angle_radians,
                 );
+                self.mirroring(base, revised);
             }
             (Err(error), _) | (_, Err(error)) => {
                 self.unresolved(Facet::Placement, "", error.to_string());
+            }
+        }
+    }
+
+    /// Mirrored against rotated: the sign of the determinant of the
+    /// transform placing each body, as the body facts state it. A frame is
+    /// right-handed by contract, so a mirroring is the body's, never the
+    /// frame's; a rotation cannot turn one into the other.
+    fn mirroring(&mut self, base: &Object, revised: &Object) {
+        let word = |mirrored: bool| if mirrored { "mirrored" } else { "not mirrored" };
+        match (mirrored(self.base, base), mirrored(self.revised, revised)) {
+            (Ok(before), Ok(after)) if before != after => {
+                self.outcome
+                    .stated(Facet::Placement, "mirroring", word(before), word(after));
+            }
+            (Ok(_), Ok(_)) => {}
+            (Err(reason), _) | (_, Err(reason)) => {
+                self.unresolved(Facet::Placement, "mirroring", reason);
             }
         }
     }
@@ -470,6 +509,21 @@ impl Pair<'_, '_> {
                 self.unresolved(Facet::Geometry, "", error.to_string());
             }
         }
+    }
+}
+
+/// Whether the transform placing `object`'s body mirrors it
+/// (`axioval:body.Mirrored`); an object without body facts has no body to
+/// mirror.
+fn mirrored(revision: &Revision<'_>, object: &Object) -> Result<bool, String> {
+    let mut facts = BodyFacts::of(&revision.context, object).map_err(|(_, message)| message)?;
+    match facts.value("Mirrored").map_err(|(_, message)| message)? {
+        None => Ok(false),
+        Some(PropertyValue::Boolean(mirrored)) => Ok(mirrored),
+        Some(other) => Err(format!(
+            "`axioval:body.Mirrored` is {}, not a boolean",
+            display(Some(&other))
+        )),
     }
 }
 
@@ -530,12 +584,85 @@ pub(super) fn sources(
     if let Some(tolerance) = request.coordinate_systems {
         coordinate_systems(base, revised, tolerance, &mut outcome);
     }
+    if request.timestamps {
+        timestamps(base, revised, &mut outcome);
+    }
     SourceComparison {
         base: base.1.clone(),
         revised: revised.1.clone(),
         differences: outcome.differences,
         unresolved: outcome.unresolved,
         undetermined: outcome.undetermined,
+    }
+}
+
+/// A header timestamp as the nanoseconds since 1970 it may state: one
+/// instant with a UTC offset, or, without one, every instant the local time
+/// may be in any zone (offsets run to 14 hours either way).
+fn instants(written: &str) -> Option<(i128, i128)> {
+    let nanoseconds = |instant: DateTime| {
+        let (seconds, nanoseconds) = instant.unix_instant();
+        i128::from(seconds) * 1_000_000_000 + i128::from(nanoseconds)
+    };
+    if let Ok(instant) = written.parse::<DateTime>() {
+        let at = nanoseconds(instant);
+        return Some((at, at));
+    }
+    let local = nanoseconds(format!("{written}Z").parse::<DateTime>().ok()?);
+    let zones = 14 * 3600 * 1_000_000_000_i128;
+    Some((local - zones, local + zones))
+}
+
+/// The one timestamp a source states, as written, with its instants.
+fn timestamp(
+    revision: &Revision<'_>,
+    source: &SourceId,
+    side: &str,
+) -> Result<(String, (i128, i128)), String> {
+    let Some(Some(values)) = revision.timestamps.get(source) else {
+        return Err(format!("the {side} source's timestamp was not read"));
+    };
+    let [written] = values.as_slice() else {
+        return Err(if values.is_empty() {
+            format!("the {side} source states no timestamp")
+        } else {
+            format!("the {side} source states {} timestamps", values.len())
+        });
+    };
+    let instants = instants(written)
+        .ok_or_else(|| format!("the {side} source's timestamp `{written}` is no date-time"))?;
+    Ok((written.clone(), instants))
+}
+
+/// A revised source written surely before its base source is a
+/// difference; one that may have been is unresolved.
+fn timestamps(
+    base: (&Revision<'_>, &SourceId),
+    revised: (&Revision<'_>, &SourceId),
+    outcome: &mut Outcome,
+) {
+    let facet = Facet::Timestamp;
+    match (
+        timestamp(base.0, base.1, "base"),
+        timestamp(revised.0, revised.1, "revised"),
+    ) {
+        (Ok((before, (base_lower, base_upper))), Ok((after, (revised_lower, revised_upper)))) => {
+            if revised_upper < base_lower {
+                outcome.differences.push(Difference::OlderTimestamp {
+                    base: before,
+                    revised: after,
+                });
+            } else if revised_lower < base_upper {
+                outcome.unresolved(
+                    facet,
+                    "",
+                    format!(
+                        "`{after}` and `{before}` may be in either order: a timestamp without a UTC offset may be in any zone"
+                    ),
+                );
+            }
+        }
+        (Err(reason), _) | (_, Err(reason)) => outcome.unresolved(facet, "", reason),
     }
 }
 

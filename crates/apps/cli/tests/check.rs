@@ -11181,6 +11181,11 @@ fn revision_two_carries_revision_ones_decisions_and_lists_stale_ones() {
 /// number, so each export numbers its entities and generates its
 /// `GlobalId`s afresh.
 fn door_export(first: u32, doors: &[(&str, &str)]) -> String {
+    door_export_at(first, doors, "t")
+}
+
+/// As [`door_export`], its header stamped `stamp`.
+fn door_export_at(first: u32, doors: &[(&str, &str)], stamp: &str) -> String {
     let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
     let mut data = placed_box(
         first,
@@ -11208,7 +11213,7 @@ fn door_export(first: u32, doors: &[(&str, &str)]) -> String {
         );
     }
     format!(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','{stamp}',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
          #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
          #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
          #3=IFCLOCALPLACEMENT($,#2);\n\
@@ -11283,4 +11288,88 @@ fn a_model_comparison_rule_matches_regenerated_doors_by_number() {
         "{result:#}"
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+/// Runs `model-comparison` over `base.ifc:base` and `revised.ifc:revised`
+/// with `parameters` beside the two disciplines.
+fn door_comparison(case: &Case, parameters: Value) -> (Output, Value) {
+    let mut parameters = parameters;
+    parameters["base"] = json!({"type": "string", "value": "base"});
+    parameters["revised"] = json!({"type": "string", "value": "revised"});
+    case.geometry_rule_over(
+        &["base.ifc:base", "revised.ifc:revised"],
+        &[("door", "IfcDoor")],
+        "axioval:capability.model-comparison",
+        &registry_signature("axioval:capability.model-comparison"),
+        entity("door"),
+        parameters,
+    )
+}
+
+#[test]
+fn with_geometry_doors_with_fresh_identities_match_by_their_bodies() {
+    let case = Case::new("model-comparison-geometry");
+    case.write(
+        "base.ifc",
+        &door_export(100, &[("D1", "EI30"), ("D2", "EI30"), ("D3", "EI30")]),
+    );
+    // The third door is renumbered where the old one stood.
+    case.write(
+        "revised.ifc",
+        &door_export(500, &[("D1", "EI60"), ("D2", "EI30"), ("D4", "EI30")]),
+    );
+    let (output, result) = door_comparison(
+        &case,
+        json!({
+            "match_by": {"type": "stringList", "value": ["geometry"]},
+            "all_property_sets": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let messages: Vec<String> = finding_messages(&result)
+        .into_iter()
+        .map(|(_, message)| message)
+        .collect();
+    assert_eq!(
+        messages,
+        vec![
+            "property changed: property Pset_DoorCommon.FireRating \"EI30\" -> \"EI60\"",
+            "property changed: property Pset_DoorCommon.Reference \"D3\" -> \"D4\"",
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn a_revised_model_older_than_its_base_is_an_error_finding() {
+    let case = Case::new("model-comparison-timestamps");
+    let doors = [("D1", "EI30")];
+    case.write(
+        "base.ifc",
+        &door_export_at(100, &doors, "2024-05-01T10:00:00"),
+    );
+    case.write(
+        "revised.ifc",
+        &door_export_at(500, &doors, "2024-01-01T10:00:00"),
+    );
+    let (output, result) = door_comparison(
+        &case,
+        json!({
+            "identity_property": {"type": "propertyReference",
+                                  "property": "axioval:example.ifc.reference"},
+            "compare_timestamps": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["severity"], "error", "{result:#}");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("timestamp changed from `ifc-step:base.ifc`: the revised file is older"),
+        "{result:#}"
+    );
 }

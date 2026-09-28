@@ -193,6 +193,9 @@ pub enum SourceField {
     Schema,
     /// The name of the project the source describes.
     Project,
+    /// When the source states it was written, as written: for IFC the
+    /// header's `FILE_NAME.time_stamp`.
+    Timestamp,
 }
 impl SourceField {
     /// The field's spelling in a package.
@@ -203,6 +206,7 @@ impl SourceField {
             Self::Application => "application",
             Self::Schema => "schema",
             Self::Project => "project",
+            Self::Timestamp => "timestamp",
         }
     }
 }

@@ -32,7 +32,6 @@ pub mod horizontal_guard;
 pub mod instance;
 pub mod local_circulation;
 pub mod model;
-pub mod model_comparison;
 pub mod opening;
 pub mod opening_sill;
 pub mod param;

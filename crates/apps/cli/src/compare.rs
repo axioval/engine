@@ -48,6 +48,10 @@ pub struct CompareArgs {
     /// Also compare every property of every set, listed on both sides.
     #[arg(long)]
     all_property_sets: bool,
+    /// Also compare the header timestamps: a revised file written before
+    /// the base is an error finding.
+    #[arg(long)]
+    timestamps: bool,
     /// Also mesh both revisions and compare each object's measured bounds.
     #[arg(long)]
     geometry: bool,
@@ -78,6 +82,9 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     if args.all_property_sets {
         request = request.with_all_property_sets();
+    }
+    if args.timestamps {
+        request = request.with_timestamps();
     }
     for property in &args.properties {
         let (set, name) = match property.split_once('.') {
@@ -331,6 +338,9 @@ fn facets(request: &ComparisonRequest) -> Vec<String> {
         if requested.is_some() {
             facets.push(facet);
         }
+    }
+    if request.compares_timestamps() {
+        facets.push(Facet::Timestamp);
     }
     facets
         .into_iter()

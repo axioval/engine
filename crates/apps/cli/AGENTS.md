@@ -21,6 +21,7 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
 - Walkability takes every role from its request; metric routing takes surfaces (`IfcSpace`), portals (`IfcDoor`, opening voids) and connectors (stairs, ramps, transport elements) from IFC classes. Never declare a door clear width from `OverallWidth`: it includes the lining, and an overstated clear width turns an undecided route into a false pass.
 - BCF cameras come from `geometry::bounds`: the proximity service's enclosing extent of each object the report names, only with `--geometry`. An unmeasured object is left out, never estimated; without `--geometry` pass `None` so the archive stays byte-identical. `--bcf-version 3.0` fails (status 1, nothing written) when a viewpoint has no camera.
 - BCF colouring is on with `--geometry` or when `--bcf-subject-color`/`--bcf-related-color` is given, off with `--bcf-no-color`; without any of them and without `--geometry` pass `colors: None` so the archive stays byte-identical.
+- `--bcf-isolate` sets `Options::isolate`; it is never on by default.
 - `tests/check.rs` runs the real binary; keep a case for every exit status. Update `docs/src/cli.md` with any change to arguments, output or status.
 - `check --locate` builds the IFC `LocationPolicy` (`IfcBuildingStorey`, `IfcSpace`, containment and aggregation, `Name`); `none` must leave the result byte-identical. `report --location` keeps outcomes whose location is unresolved.
 - `check` identifies every finding with `Report::identify_findings` over

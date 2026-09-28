@@ -59,6 +59,13 @@
 //! The defaults are [`SUBJECT_COLOR`] and [`RELATED_COLOR`]. `None`, the
 //! default, writes no colouring, exactly as before.
 //!
+//! # Visibility
+//!
+//! With [`Options::isolate`], every viewpoint hides the whole model except
+//! the objects it selects: `DefaultVisibility` false, with the subject and
+//! related objects as exceptions. Off by default, which shows everything,
+//! as before.
+//!
 //! # Version
 //!
 //! BCF 2.1 by default. BCF 3.0 ([`Version::V3_0`]) requires a camera on every
@@ -78,7 +85,7 @@ use axioval_ir::{
 use openbim_bcf::Component;
 use openbim_bcf::write::{
     self, Camera, Coloring, Comment, Document, Projection, TargetVersion, Topic, Vector3,
-    Viewpoint, WriteError,
+    Viewpoint, Visibility, WriteError,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -294,6 +301,10 @@ pub struct Options {
     /// Colours of the subject and the related objects in every viewpoint.
     /// `None` writes no colouring, exactly as before colouring existed.
     pub colors: Option<Colors>,
+    /// Whether every viewpoint shows only the objects it selects, the
+    /// subject and related objects, hiding the rest of the model. `false`
+    /// shows everything, exactly as before visibility existed.
+    pub isolate: bool,
 }
 
 impl Options {
@@ -308,6 +319,7 @@ impl Options {
             bounds: None,
             rule_labels: BTreeMap::new(),
             colors: None,
+            isolate: false,
         }
     }
 }
@@ -537,6 +549,10 @@ impl Entry {
                     .colors
                     .map(|colors| self.coloring(colors))
                     .unwrap_or_default(),
+                visibility: options.isolate.then(|| Visibility {
+                    default_visibility: false,
+                    exceptions: self.selection.clone(),
+                }),
                 ..Viewpoint::default()
             };
             match self.frame(options.bounds.as_ref()) {

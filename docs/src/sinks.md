@@ -151,6 +151,14 @@ let options = axioval_bcf::Options {
 };
 ```
 
+## Visibility
+
+`Options::isolate` hides everything but the objects a viewpoint selects:
+it writes `DefaultVisibility="false"` with the subject and related objects
+as exceptions, so a viewer shows the finding alone. Off by default: every
+viewpoint shows the whole model (`DefaultVisibility="true"`, no
+exceptions), as before. A topic without a viewpoint stays without one.
+
 ## BCF 3.0
 
 `Options::version` selects `Version::V2_1` (default) or `Version::V3_0`.
@@ -163,6 +171,6 @@ topics use, and each camera an aspect ratio of 1.
 
 ## Not written yet
 
-Visibility (everything hidden but the involved objects) and clipping
-planes are not written yet: every viewpoint shows the whole model.
-Snapshots are rendering and out of scope.
+Clipping planes are not written yet: every viewpoint shows the whole
+model or, isolated, its objects in full. Snapshots are rendering and out
+of scope.

@@ -250,6 +250,10 @@ struct OutputArgs {
         conflicts_with_all = ["bcf_subject_color", "bcf_related_color"]
     )]
     bcf_no_color: bool,
+    /// Show only the involved objects in each BCF viewpoint, hiding the
+    /// rest of the model.
+    #[arg(long, requires = "bcf")]
+    bcf_isolate: bool,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -657,6 +661,7 @@ pub(crate) fn emit(
             let options = bcf::Options {
                 version: args.bcf_version.into(),
                 colors,
+                isolate: args.bcf_isolate,
                 bounds,
                 rule_labels,
                 ..bcf::Options::new(args.bcf_author, date)

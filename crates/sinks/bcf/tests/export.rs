@@ -1168,3 +1168,74 @@ mod coloring {
         }
     }
 }
+
+mod visibility {
+    use axioval_bcf::{Options, Version, export};
+    use openbim_bcf::Component;
+    use openbim_bcf::write::Visibility;
+
+    use super::{SLAB, WALL, model, options, report, viewpoints};
+
+    #[test]
+    fn isolated_viewpoints_hide_everything_but_the_involved_objects() {
+        for version in [Version::V2_1, Version::V3_0] {
+            let options = Options {
+                version,
+                isolate: true,
+                bounds: Some(super::cameras::bounds()),
+                ..options()
+            };
+            let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+            let topic = &export.document.topics[0];
+            assert_eq!(topic.viewpoints.len(), 2);
+            for view in &topic.viewpoints {
+                assert_eq!(
+                    view.visibility,
+                    Some(Visibility {
+                        default_visibility: false,
+                        exceptions: vec![Component::ifc(WALL), Component::ifc(SLAB)],
+                    })
+                );
+            }
+            let bytes = export.to_bytes().unwrap();
+            let archive = openbim_bcf::read_slice(&bytes).unwrap();
+            assert!(
+                archive.diagnostics().is_empty(),
+                "{:?}",
+                archive.diagnostics()
+            );
+            for view in viewpoints(&bytes) {
+                assert!(
+                    view.contains("DefaultVisibility=\"false\"") && view.contains("<Exceptions>"),
+                    "{view}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn by_default_the_whole_model_stays_visible() {
+        assert!(!options().isolate);
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+        assert_eq!(export.document.topics[0].viewpoints[0].visibility, None);
+        let views = viewpoints(&export.to_bytes().unwrap());
+        assert!(
+            views[0].contains("<Visibility DefaultVisibility=\"true\"/>")
+                && !views[0].contains("Exceptions"),
+            "{}",
+            views[0]
+        );
+    }
+
+    #[test]
+    fn a_topic_without_a_viewpoint_stays_without_one_when_isolated() {
+        let options = Options {
+            isolate: true,
+            ..options()
+        };
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+        // The door has no GlobalId and the project outcome no subject.
+        assert!(export.document.topics[1].viewpoints.is_empty());
+        assert!(export.document.topics[2].viewpoints.is_empty());
+    }
+}

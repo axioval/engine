@@ -47,6 +47,10 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
   objects apart in every viewpoint; `None` (the default) writes no
   colouring and the archive is byte-identical. `Color` always writes 8
   uppercase hex digits: BCF 2.1's schema refuses lowercase.
+- `Options::isolate` writes `DefaultVisibility` false with the whole
+  selection as exceptions; off (the default) keeps today's everything-visible
+  output. Never isolate by default: a viewer would hide context the host
+  did not ask to hide.
 - Visibility and clipping planes are written through `openbim-bcf`'s
   `Viewpoint` fields only; never post-process the writer's XML.
 - Run `cargo test -p axioval-bcf` and `cargo test -p axioval --all-features`;

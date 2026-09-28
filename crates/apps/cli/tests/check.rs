@@ -10339,6 +10339,30 @@ fn bcf_colours_are_configurable_and_can_be_left_out() {
 }
 
 #[test]
+fn bcf_isolate_hides_everything_but_the_clashing_pair() {
+    let case = Case::new("bcf-isolate");
+    let bcf = case.path("issues.bcfzip");
+    let output = case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        bcf.to_str().unwrap(),
+        "--bcf-isolate",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let views = bcf_viewpoints(&bcf);
+    assert_eq!(views.len(), 2, "{views:?}");
+    for view in &views {
+        let exceptions = &view[view.find("<Exceptions>").expect(view)..];
+        assert!(
+            view.contains("DefaultVisibility=\"false\"")
+                && exceptions.contains("0000000000000000000016")
+                && exceptions.contains("0000000000000000000026"),
+            "{view}"
+        );
+    }
+}
+
+#[test]
 fn bcf_3_without_geometry_writes_nothing_and_fails_with_status_1() {
     let case = Case::new("bcf-3-without-bounds");
     let bcf = case.path("issues.bcfzip");

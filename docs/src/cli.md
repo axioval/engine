@@ -23,7 +23,8 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
-  [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color]
+  [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
+  [--bcf-isolate]
 ```
 
 Runs the ruleset over one or more IFC2X3 or IFC4 STEP models. Each model is
@@ -179,6 +180,10 @@ and its related objects blue. `--bcf-subject-color` and
 digits, and colour viewpoints without `--geometry` too; `--bcf-no-color`
 writes no colouring at all.
 
+`--bcf-isolate` shows only the involved objects in each viewpoint: the rest
+of the model is hidden (`DefaultVisibility` false, with the subject and
+related objects as exceptions). Without it the whole model stays visible.
+
 `--bcf-version` is `2.1` (default) or `3.0`. BCF 3.0 requires a camera on
 every viewpoint, so it needs `--geometry` and bounds for every selected
 object; otherwise the run fails with status 1 and nothing is written.
@@ -266,7 +271,8 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
-  [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color]
+  [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
+  [--bcf-isolate]
 ```
 
 Compares two revisions of one IFC2X3 or IFC4 model object by object (see

@@ -16,6 +16,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   `--bcf-subject-color` and `--bcf-related-color` (which colour without
   geometry too) and `--bcf-no-color`. The sink now builds on
   `openbim-bcf` 0.4. **Breaking:** `Options` gains a field.
+- **BCF isolated viewpoints.** (#109) `axioval_bcf::Options` gains
+  `isolate`: every viewpoint then hides the model but the objects it
+  selects (`DefaultVisibility` false, subject and related objects as
+  exceptions). Off by default, so the whole model stays visible as before.
+  `check` and `compare` take `--bcf-isolate`. **Breaking:** `Options` gains
+  a field.
 
 - **Stable finding identities and review decisions.** (#94) A finding may
   carry `id`, a `FindingId`: UUIDv5 over its rule, its objects' aliases in a

@@ -159,6 +159,18 @@ as exceptions, so a viewer shows the finding alone. Off by default: every
 viewpoint shows the whole model (`DefaultVisibility="true"`, no
 exceptions), as before. A topic without a viewpoint stays without one.
 
+## Section box
+
+`Options::section_box` cuts every viewpoint that has a fitted camera by six
+clipping planes: a box around the union of the topic's objects' bounds,
+grown by `SECTION_BOX_MARGIN_METRES` (0.5 m) on every side, so the walls
+and slabs around a finding no longer hide it. Each plane passes through the
+middle of its box face and points outwards (a plane clips what lies on the
+side its direction points to), written low then high side of x, y and z,
+rounded to micrometres. A viewpoint without a camera has no bounds to box
+and is never clipped, never cut by a guessed box. Off by default: no
+clipping planes, as before.
+
 ## BCF 3.0
 
 `Options::version` selects `Version::V2_1` (default) or `Version::V3_0`.
@@ -169,8 +181,6 @@ subjects without a GlobalId) need none. A 3.0 archive carries an
 `extensions.xml` listing the types, statuses, priorities and labels its
 topics use, and each camera an aspect ratio of 1.
 
-## Not written yet
+## Not written
 
-Clipping planes are not written yet: every viewpoint shows the whole
-model or, isolated, its objects in full. Snapshots are rendering and out
-of scope.
+Snapshots are rendering and out of scope.

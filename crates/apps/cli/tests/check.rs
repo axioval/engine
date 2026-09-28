@@ -10363,6 +10363,39 @@ fn bcf_isolate_hides_everything_but_the_clashing_pair() {
 }
 
 #[test]
+fn bcf_section_box_cuts_framed_viewpoints_only() {
+    let case = Case::new("bcf-section-box");
+    let bcf = case.path("boxed.bcfzip");
+    let output = case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        bcf.to_str().unwrap(),
+        "--bcf-version",
+        "3.0",
+        "--bcf-section-box",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let views = bcf_viewpoints(&bcf);
+    assert_eq!(views.len(), 2, "{views:?}");
+    for view in &views {
+        assert_eq!(view.matches("<ClippingPlane>").count(), 6, "{view}");
+    }
+
+    let bcf = case.path("unmeasured.bcfzip");
+    let output = case.check(
+        &ifc("0000000000000000000002", false),
+        true,
+        &["--bcf", bcf.to_str().unwrap(), "--bcf-section-box"],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let views = bcf_viewpoints(&bcf);
+    assert!(
+        !views.is_empty() && views.iter().all(|view| !view.contains("ClippingPlane")),
+        "{views:?}"
+    );
+}
+
+#[test]
 fn bcf_3_without_geometry_writes_nothing_and_fails_with_status_1() {
     let case = Case::new("bcf-3-without-bounds");
     let bcf = case.path("issues.bcfzip");

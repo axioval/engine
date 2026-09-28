@@ -51,8 +51,12 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
   selection as exceptions; off (the default) keeps today's everything-visible
   output. Never isolate by default: a viewer would hide context the host
   did not ask to hide.
-- Visibility and clipping planes are written through `openbim-bcf`'s
-  `Viewpoint` fields only; never post-process the writer's XML.
+- `Options::section_box` clips only viewpoints with a fitted camera, by a
+  box around the same union of bounds the camera frames; a viewpoint
+  without bounds is never clipped by a guessed box. Planes point outwards.
+- Colouring, visibility and clipping planes are written through
+  `openbim-bcf`'s `Viewpoint` fields only; never post-process the writer's
+  XML.
 - Run `cargo test -p axioval-bcf` and `cargo test -p axioval --all-features`;
   `tests/export.rs` is the contract and reads every archive back.
 - A located entry's topic is labelled `Storey: <name>` and `Space: <name>`

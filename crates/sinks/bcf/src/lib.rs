@@ -66,6 +66,14 @@
 //! related objects as exceptions. Off by default, which shows everything,
 //! as before.
 //!
+//! # Section box
+//!
+//! With [`Options::section_box`], a viewpoint with a fitted camera is also
+//! cut by six clipping planes: a box around the union of its objects'
+//! bounds, grown by [`SECTION_BOX_MARGIN_METRES`] on every side, so walls
+//! and slabs around the finding no longer hide it. A viewpoint without a
+//! camera has no bounds to box and is never clipped.
+//!
 //! # Version
 //!
 //! BCF 2.1 by default. BCF 3.0 ([`Version::V3_0`]) requires a camera on every
@@ -84,8 +92,8 @@ use axioval_ir::{
 };
 use openbim_bcf::Component;
 use openbim_bcf::write::{
-    self, Camera, Coloring, Comment, Document, Projection, TargetVersion, Topic, Vector3,
-    Viewpoint, Visibility, WriteError,
+    self, Camera, ClippingPlane, Coloring, Comment, Document, Projection, TargetVersion, Topic,
+    Vector3, Viewpoint, Visibility, WriteError,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -138,6 +146,11 @@ pub const SUBJECT_COLOR: Color = Color::argb(0xFFFF_0000);
 /// Default colour of the objects a finding relates its subject to: opaque
 /// blue.
 pub const RELATED_COLOR: Color = Color::argb(0xFF00_00FF);
+
+/// How far a section box reaches beyond the objects' bounds on every side,
+/// in metres, so the objects are shown with their immediate surroundings
+/// and never cut themselves.
+pub const SECTION_BOX_MARGIN_METRES: f64 = 0.5;
 
 /// Coordinates of fitted cameras are rounded to micrometres, so written
 /// numbers stay short and stable.
@@ -305,6 +318,11 @@ pub struct Options {
     /// subject and related objects, hiding the rest of the model. `false`
     /// shows everything, exactly as before visibility existed.
     pub isolate: bool,
+    /// Whether every viewpoint with a fitted camera is cut by a section box
+    /// around its objects' bounds (see [`SECTION_BOX_MARGIN_METRES`]).
+    /// Without bounds no viewpoint is clipped. `false` writes no clipping
+    /// planes, exactly as before.
+    pub section_box: bool,
 }
 
 impl Options {
@@ -320,6 +338,7 @@ impl Options {
             rule_labels: BTreeMap::new(),
             colors: None,
             isolate: false,
+            section_box: false,
         }
     }
 }
@@ -541,7 +560,7 @@ impl Entry {
         let viewpoints = if self.selection.is_empty() {
             vec![]
         } else {
-            let viewpoint = |name: &[u8], camera| Viewpoint {
+            let viewpoint = |name: &[u8], camera, clipping_planes| Viewpoint {
                 guid: Uuid::new_v5(&guid, name).to_string(),
                 selection: self.selection.clone(),
                 camera,
@@ -553,19 +572,31 @@ impl Entry {
                     default_visibility: false,
                     exceptions: self.selection.clone(),
                 }),
-                ..Viewpoint::default()
+                clipping_planes,
             };
             match self.frame(options.bounds.as_ref()) {
-                Ok(frame) => vec![
-                    viewpoint(b"viewpoint", Some(frame.perspective(options.version))),
-                    viewpoint(
-                        b"viewpoint-orthogonal",
-                        Some(frame.orthogonal(options.version)),
-                    ),
-                ],
+                Ok(frame) => {
+                    let planes = if options.section_box {
+                        frame.section_box()
+                    } else {
+                        Vec::new()
+                    };
+                    vec![
+                        viewpoint(
+                            b"viewpoint",
+                            Some(frame.perspective(options.version)),
+                            planes.clone(),
+                        ),
+                        viewpoint(
+                            b"viewpoint-orthogonal",
+                            Some(frame.orthogonal(options.version)),
+                            planes,
+                        ),
+                    ]
+                }
                 Err(why) => {
                     uncamered = why;
-                    vec![viewpoint(b"viewpoint", None)]
+                    vec![viewpoint(b"viewpoint", None, Vec::new())]
                 }
             }
         };
@@ -635,6 +666,8 @@ impl Entry {
 
 /// A sphere to fit cameras to.
 struct Frame {
+    /// The union of the framed objects' bounds.
+    bounds: Bounds,
     centre: [f64; 3],
     radius: f64,
 }
@@ -652,6 +685,7 @@ impl Frame {
             .sum::<f64>()
             .sqrt();
         Self {
+            bounds,
             centre,
             radius: (diagonal / 2.0 * FRAME_MARGIN).max(MIN_FRAME_RADIUS_METRES),
         }
@@ -673,6 +707,27 @@ impl Frame {
             up_vector: vector(unit(Self::UP)),
             aspect_ratio: (version == Version::V3_0).then_some(ASPECT_RATIO),
         }
+    }
+
+    /// Six planes boxing [`Self::bounds`] grown by
+    /// [`SECTION_BOX_MARGIN_METRES`], each pointing outwards, since a plane
+    /// clips what lies on the side its direction points to: the low then
+    /// the high side of x, y and z.
+    fn section_box(&self) -> Vec<ClippingPlane> {
+        let mut planes = Vec::with_capacity(6);
+        for axis in 0..3 {
+            for (corner, sign) in [(self.bounds.min, -1.0), (self.bounds.max, 1.0)] {
+                let mut location = self.centre;
+                location[axis] = corner[axis] + sign * SECTION_BOX_MARGIN_METRES;
+                let mut direction = [0.0; 3];
+                direction[axis] = sign;
+                planes.push(ClippingPlane {
+                    location: vector(location),
+                    direction: vector(direction),
+                });
+            }
+        }
+        planes
     }
 
     fn perspective(&self, version: Version) -> Camera {

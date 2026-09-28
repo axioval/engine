@@ -1239,3 +1239,98 @@ mod visibility {
         assert!(export.document.topics[2].viewpoints.is_empty());
     }
 }
+
+mod section_box {
+    use axioval_bcf::{Options, Version, export};
+    use openbim_bcf::write::{ClippingPlane, Vector3};
+
+    use super::{id, model, options, report, viewpoints};
+
+    fn boxed(version: Version) -> Options {
+        Options {
+            version,
+            section_box: true,
+            bounds: Some(super::cameras::bounds()),
+            ..options()
+        }
+    }
+
+    fn plane(location: [f64; 3], direction: [f64; 3]) -> ClippingPlane {
+        ClippingPlane {
+            location: Vector3::new(location[0], location[1], location[2]),
+            direction: Vector3::new(direction[0], direction[1], direction[2]),
+        }
+    }
+
+    #[test]
+    fn a_framed_viewpoint_is_cut_by_a_box_around_its_objects() {
+        for version in [Version::V2_1, Version::V3_0] {
+            let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &boxed(version)).unwrap();
+            let topic = &export.document.topics[0];
+            assert_eq!(topic.viewpoints.len(), 2);
+            // The union spans 0..4 x 0..2 x -0.2..3; the box reaches half a
+            // metre beyond it, each plane pointing outwards.
+            let expected = [
+                plane([-0.5, 1.0, 1.4], [-1.0, 0.0, 0.0]),
+                plane([4.5, 1.0, 1.4], [1.0, 0.0, 0.0]),
+                plane([2.0, -0.5, 1.4], [0.0, -1.0, 0.0]),
+                plane([2.0, 2.5, 1.4], [0.0, 1.0, 0.0]),
+                plane([2.0, 1.0, -0.7], [0.0, 0.0, -1.0]),
+                plane([2.0, 1.0, 3.5], [0.0, 0.0, 1.0]),
+            ];
+            for view in &topic.viewpoints {
+                assert_eq!(view.clipping_planes, expected);
+            }
+            let bytes = export.to_bytes().unwrap();
+            let archive = openbim_bcf::read_slice(&bytes).unwrap();
+            assert!(
+                archive.diagnostics().is_empty(),
+                "{:?}",
+                archive.diagnostics()
+            );
+            assert!(
+                viewpoints(&bytes)
+                    .iter()
+                    .all(|view| view.matches("<ClippingPlane>").count() == 6),
+            );
+            assert_eq!(bytes, export.to_bytes().unwrap());
+        }
+    }
+
+    #[test]
+    fn a_viewpoint_without_a_camera_is_never_clipped() {
+        let unmeasured = Options {
+            section_box: true,
+            ..options()
+        };
+        let unframed = export(&report("a.ifc", 1), &model("a.ifc", 1), &unmeasured).unwrap();
+        assert!(
+            unframed.document.topics[0].viewpoints[0]
+                .clipping_planes
+                .is_empty()
+        );
+
+        let mut partial = super::cameras::bounds();
+        partial.remove(&id("a.ifc", 2));
+        let options = Options {
+            bounds: Some(partial),
+            ..boxed(Version::V2_1)
+        };
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+        let view = &export.document.topics[0].viewpoints[0];
+        assert_eq!(view.camera, None);
+        assert!(view.clipping_planes.is_empty());
+    }
+
+    #[test]
+    fn without_a_section_box_nothing_is_clipped() {
+        assert!(!options().section_box);
+        let options = Options {
+            section_box: false,
+            ..boxed(Version::V2_1)
+        };
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+        let views = viewpoints(&export.to_bytes().unwrap());
+        assert!(views.iter().all(|view| !view.contains("ClippingPlanes")));
+    }
+}

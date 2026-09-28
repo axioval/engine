@@ -22,6 +22,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   exceptions). Off by default, so the whole model stays visible as before.
   `check` and `compare` take `--bcf-isolate`. **Breaking:** `Options` gains
   a field.
+- **BCF section boxes.** (#109) `axioval_bcf::Options` gains
+  `section_box`: every viewpoint with a fitted camera is cut by six
+  outward clipping planes boxing its objects' bounds, grown by
+  `SECTION_BOX_MARGIN_METRES` (0.5 m). A viewpoint without a camera is
+  never clipped. Off by default. `check` and `compare` take
+  `--bcf-section-box`, effective with `--geometry`. **Breaking:** `Options`
+  gains a field.
 
 - **Stable finding identities and review decisions.** (#94) A finding may
   carry `id`, a `FindingId`: UUIDv5 over its rule, its objects' aliases in a

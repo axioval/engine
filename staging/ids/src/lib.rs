@@ -316,6 +316,17 @@ pub enum Reason {
     /// A value literal a selector cannot compare exactly (a boolean other
     /// than `true`/`false`, an integer written with a fraction).
     ValueLiteral(String),
+    /// An IFC4 class the IDS IFC2X3 type mapping table renames: in IFC2X3
+    /// it is an `occurrence` typed by a `type_object` of that class, and a
+    /// type object's class is no fact a model session checks.
+    TypeMapped {
+        /// The class as the facet names it (`IFCAIRTERMINAL`).
+        entity: String,
+        /// The IFC2X3 occurrence class (`IFCFLOWTERMINAL`).
+        occurrence: &'static str,
+        /// The IFC2X3 type object class (`IFCAIRTERMINALTYPE`).
+        type_object: &'static str,
+    },
     /// Requirements on a prohibited specification, which IDS declares
     /// invalid: no applicable object may exist at all.
     ProhibitedRequirements,
@@ -373,6 +384,14 @@ impl fmt::Display for Reason {
             Reason::ValueLiteral(literal) => {
                 write!(f, "value {literal:?} cannot be compared exactly by a selector")
             }
+            Reason::TypeMapped {
+                entity,
+                occurrence,
+                type_object,
+            } => write!(
+                f,
+                "in IFC2X3 {entity} is an {occurrence} typed by an {type_object}, and a type object's class is not checked"
+            ),
             Reason::ProhibitedRequirements => f.write_str(
                 "a prohibited specification takes no requirements; IDS declares them invalid",
             ),
@@ -2044,8 +2063,241 @@ fn entity_names(entity: &Entity, releases: &[IfcVersion]) -> Result<Vec<String>,
     {
         return Err(Reason::EntityCase(name.clone()));
     }
+    type_mapped(&names, releases)?;
     Ok(names)
 }
+
+/// Refuses a class the IDS IFC2X3 type mapping table renames, when IFC2X3
+/// is among `releases` and does not define it: IDS matches an occurrence
+/// of the mapped class typed by the mapped type object, and without the
+/// type object's class as a checked fact, a selector for the name would
+/// match nothing in IFC2X3, silently narrowing an applicability and failing
+/// every object of a requirement.
+fn type_mapped(names: &[String], releases: &[IfcVersion]) -> Result<(), Reason> {
+    if !releases.contains(&IfcVersion::Ifc2x3) {
+        return Ok(());
+    }
+    let ifc2x3 = ifc_schema::ifc2x3();
+    for name in names {
+        if ifc2x3.entity(name).is_some() {
+            continue;
+        }
+        // A class whose occurrence class is named too (a pattern matching
+        // both) adds only objects that class already covers.
+        if let Some((_, occurrence, type_object)) = IFC2X3_TYPE_MAPPING
+            .iter()
+            .find(|(mapped, _, _)| mapped == name)
+            .filter(|(_, occurrence, _)| !names.iter().any(|named| named == occurrence))
+        {
+            return Err(Reason::TypeMapped {
+                entity: name.clone(),
+                occurrence,
+                type_object,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The IDS IFC2X3 occurrence and type mapping table
+/// (`Documentation/ImplementersDocumentation/ifc2x3-occurrence-type-mapping-table.md`):
+/// the class an IDS facet names, and the IFC2X3 occurrence and type object
+/// classes it stands for.
+const IFC2X3_TYPE_MAPPING: &[(&str, &str, &str)] = &[
+    ("IFCFURNITURE", "IFCFURNISHINGELEMENT", "IFCFURNITURETYPE"),
+    (
+        "IFCSYSTEMFURNITUREELEMENT",
+        "IFCFURNISHINGELEMENT",
+        "IFCSYSTEMFURNITUREELEMENTTYPE",
+    ),
+    (
+        "IFCACTUATOR",
+        "IFCDISTRIBUTIONCONTROLELEMENT",
+        "IFCACTUATORTYPE",
+    ),
+    ("IFCALARM", "IFCDISTRIBUTIONCONTROLELEMENT", "IFCALARMTYPE"),
+    (
+        "IFCCONTROLLER",
+        "IFCDISTRIBUTIONCONTROLELEMENT",
+        "IFCCONTROLLERTYPE",
+    ),
+    (
+        "IFCFLOWINSTRUMENT",
+        "IFCDISTRIBUTIONCONTROLELEMENT",
+        "IFCFLOWINSTRUMENTTYPE",
+    ),
+    (
+        "IFCSENSOR",
+        "IFCDISTRIBUTIONCONTROLELEMENT",
+        "IFCSENSORTYPE",
+    ),
+    (
+        "IFCAIRTOAIRHEATRECOVERY",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCAIRTOAIRHEATRECOVERYTYPE",
+    ),
+    ("IFCBOILER", "IFCENERGYCONVERSIONDEVICE", "IFCBOILERTYPE"),
+    ("IFCCHILLER", "IFCENERGYCONVERSIONDEVICE", "IFCCHILLERTYPE"),
+    ("IFCCOIL", "IFCENERGYCONVERSIONDEVICE", "IFCCOILTYPE"),
+    (
+        "IFCCONDENSER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCCONDENSERTYPE",
+    ),
+    (
+        "IFCCOOLEDBEAM",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCCOOLEDBEAMTYPE",
+    ),
+    (
+        "IFCCOOLINGTOWER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCCOOLINGTOWERTYPE",
+    ),
+    (
+        "IFCELECTRICGENERATOR",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCELECTRICGENERATORTYPE",
+    ),
+    (
+        "IFCELECTRICMOTOR",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCELECTRICMOTORTYPE",
+    ),
+    (
+        "IFCEVAPORATIVECOOLER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCEVAPORATIVECOOLERTYPE",
+    ),
+    (
+        "IFCEVAPORATOR",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCEVAPORATORTYPE",
+    ),
+    (
+        "IFCHEATEXCHANGER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCHEATEXCHANGERTYPE",
+    ),
+    (
+        "IFCHUMIDIFIER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCHUMIDIFIERTYPE",
+    ),
+    (
+        "IFCMOTORCONNECTION",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCMOTORCONNECTIONTYPE",
+    ),
+    (
+        "IFCSPACEHEATER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCSPACEHEATERTYPE",
+    ),
+    (
+        "IFCTRANSFORMER",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCTRANSFORMERTYPE",
+    ),
+    (
+        "IFCTUBEBUNDLE",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCTUBEBUNDLETYPE",
+    ),
+    (
+        "IFCUNITARYEQUIPMENT",
+        "IFCENERGYCONVERSIONDEVICE",
+        "IFCUNITARYEQUIPMENTTYPE",
+    ),
+    (
+        "IFCAIRTERMINALBOX",
+        "IFCFLOWCONTROLLER",
+        "IFCAIRTERMINALBOXTYPE",
+    ),
+    ("IFCDAMPER", "IFCFLOWCONTROLLER", "IFCDAMPERTYPE"),
+    (
+        "IFCELECTRICTIMECONTROL",
+        "IFCFLOWCONTROLLER",
+        "IFCELECTRICTIMECONTROLTYPE",
+    ),
+    ("IFCFLOWMETER", "IFCFLOWCONTROLLER", "IFCFLOWMETERTYPE"),
+    (
+        "IFCPROTECTIVEDEVICE",
+        "IFCFLOWCONTROLLER",
+        "IFCPROTECTIVEDEVICETYPE",
+    ),
+    (
+        "IFCSWITCHINGDEVICE",
+        "IFCFLOWCONTROLLER",
+        "IFCSWITCHINGDEVICETYPE",
+    ),
+    ("IFCVALVE", "IFCFLOWCONTROLLER", "IFCVALVETYPE"),
+    (
+        "IFCCABLECARRIERFITTING",
+        "IFCFLOWFITTING",
+        "IFCCABLECARRIERFITTINGTYPE",
+    ),
+    ("IFCDUCTFITTING", "IFCFLOWFITTING", "IFCDUCTFITTINGTYPE"),
+    ("IFCJUNCTIONBOX", "IFCFLOWFITTING", "IFCJUNCTIONBOXTYPE"),
+    ("IFCPIPEFITTING", "IFCFLOWFITTING", "IFCPIPEFITTINGTYPE"),
+    ("IFCCOMPRESSOR", "IFCFLOWMOVINGDEVICE", "IFCCOMPRESSORTYPE"),
+    ("IFCFAN", "IFCFLOWMOVINGDEVICE", "IFCFANTYPE"),
+    ("IFCPUMP", "IFCFLOWMOVINGDEVICE", "IFCPUMPTYPE"),
+    (
+        "IFCCABLECARRIERSEGMENT",
+        "IFCFLOWSEGMENT",
+        "IFCCABLECARRIERSEGMENTTYPE",
+    ),
+    ("IFCCABLESEGMENT", "IFCFLOWSEGMENT", "IFCCABLESEGMENTTYPE"),
+    ("IFCDUCTSEGMENT", "IFCFLOWSEGMENT", "IFCDUCTSEGMENTTYPE"),
+    ("IFCPIPESEGMENT", "IFCFLOWSEGMENT", "IFCPIPESEGMENTTYPE"),
+    (
+        "IFCELECTRICFLOWSTORAGEDEVICE",
+        "IFCFLOWSTORAGEDEVICE",
+        "IFCELECTRICFLOWSTORAGEDEVICETYPE",
+    ),
+    ("IFCTANK", "IFCFLOWSTORAGEDEVICE", "IFCTANKTYPE"),
+    ("IFCAIRTERMINAL", "IFCFLOWTERMINAL", "IFCAIRTERMINALTYPE"),
+    (
+        "IFCELECTRICAPPLIANCE",
+        "IFCFLOWTERMINAL",
+        "IFCELECTRICAPPLIANCETYPE",
+    ),
+    (
+        "IFCFIRESUPPRESSIONTERMINAL",
+        "IFCFLOWTERMINAL",
+        "IFCFIRESUPPRESSIONTERMINALTYPE",
+    ),
+    ("IFCLAMP", "IFCFLOWTERMINAL", "IFCLAMPTYPE"),
+    ("IFCLIGHTFIXTURE", "IFCFLOWTERMINAL", "IFCLIGHTFIXTURETYPE"),
+    ("IFCOUTLET", "IFCFLOWTERMINAL", "IFCOUTLETTYPE"),
+    (
+        "IFCSANITARYTERMINAL",
+        "IFCFLOWTERMINAL",
+        "IFCSANITARYTERMINALTYPE",
+    ),
+    (
+        "IFCSTACKTERMINAL",
+        "IFCFLOWTERMINAL",
+        "IFCSTACKTERMINALTYPE",
+    ),
+    (
+        "IFCWASTETERMINAL",
+        "IFCFLOWTERMINAL",
+        "IFCWASTETERMINALTYPE",
+    ),
+    (
+        "IFCDUCTSILENCER",
+        "IFCFLOWTREATMENTDEVICE",
+        "IFCDUCTSILENCERTYPE",
+    ),
+    ("IFCFILTER", "IFCFLOWTREATMENTDEVICE", "IFCFILTERTYPE"),
+    (
+        "IFCVIBRATIONISOLATOR",
+        "IFCEQUIPMENTELEMENT",
+        "IFCVIBRATIONISOLATORTYPE",
+    ),
+];
 
 /// Refuses a name restriction with facets other than an enumeration and
 /// patterns.

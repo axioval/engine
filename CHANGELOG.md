@@ -78,6 +78,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
   `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
   gives way to `matchers`.
+- **IFC2X3 type-mapped classes in IDS.** (Refs #116) The staging IDS
+  importer carries the IDS IFC2X3 occurrence and type mapping table and
+  reports a facet naming one of its classes for IFC2X3 (`IFCAIRTERMINAL`,
+  an `IfcFlowTerminal` typed by an `IfcAirTerminalType`) as a
+  `TypeMapped` gap, in the applicability and as a requirement. It
+  previously refused such an applicability as an unknown class, and would
+  have failed every object of such an entity requirement. The corpus stays
+  at 143 exact passes, 35 sound passes, 89 caught fails, 22 unjudged fails
+  and 18 not evaluated, with no mismatch.
+
 - **IFC4X3 ADD2 models.** (Refs #116) The IFC adapter no longer refuses
   `IFC4X3_ADD2` files: `ifc-properties` 0.4.1 resolves their properties
   exactly. A session binds to the IFC4X3 table and declares

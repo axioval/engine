@@ -442,7 +442,7 @@ fn refuse_all(
 /// the one reached, or why it cannot be told.
 fn reached(
     revision: &Revision<'_>,
-    traversal: &Traversal<'_>,
+    traversal: &Traversal,
     object: &Object,
 ) -> Result<Option<ObjectId>, String> {
     let (reached, _) = traversal

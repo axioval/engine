@@ -311,6 +311,49 @@ fn only_classes_a_model_session_checks_are_applicable() {
 }
 
 #[test]
+fn ifc2x3_classes_the_type_mapping_table_renames_are_gaps() {
+    let entity =
+        |name: &str| format!("<entity><name><simpleValue>{name}</simpleValue></name></entity>");
+    let mapped = Reason::TypeMapped {
+        entity: "IFCAIRTERMINAL".into(),
+        occurrence: "IFCFLOWTERMINAL",
+        type_object: "IFCAIRTERMINALTYPE",
+    };
+    // As the applicability: the whole specification.
+    let translation = one(
+        "IFC2X3",
+        OPTIONAL,
+        &entity("IFCAIRTERMINAL"),
+        &property("P", "N", ""),
+    );
+    assert!(translation.specifications[0].is_skipped());
+    assert_eq!(
+        reasons(&translation),
+        [(Part::Applicability { facet: 1 }, mapped.clone())]
+    );
+    // As a requirement: never a rule failing every flow terminal.
+    let translation = one(
+        "IFC2X3 IFC4",
+        OPTIONAL,
+        &entity("IFCFLOWTERMINAL"),
+        &entity("IFCAIRTERMINAL"),
+    );
+    assert_eq!(
+        reasons(&translation),
+        [(Part::Requirement { facet: 1 }, mapped)]
+    );
+    assert!(translation.specifications[0].rules.is_empty());
+    // IFC4 defines the class itself.
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &entity("IFCAIRTERMINAL"),
+        &property("P", "N", ""),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+}
+
+#[test]
 fn an_entity_enumeration_selects_any_of_its_classes() {
     let translation = one(
         "IFC4",

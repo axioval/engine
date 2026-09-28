@@ -16,7 +16,7 @@ doc = false
 
 [dependencies]
 # The CLI is the host that composes a source adapter with a report sink.
-axioval = { path = "../../facade/axioval", version = "0.2.0", features = ["ifc", "bcf", "axiolid"] }
+axioval = { path = "../../facade/axioval", version = "0.3.0", features = ["ifc", "bcf", "axiolid"] }
 # `--geometry`: the CLI meshes IFC bodies itself and hands the meshes to the
 # Axiolid services. Neither adapter may depend on the other, so this bridge
 # lives in the host.

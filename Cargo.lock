@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "axioval"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axiolid-core",
  "axiolid-mesh",
@@ -569,7 +569,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-axiolid"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axiolid-core",
  "axiolid-inspect",
@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-bcf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axioval-ir",
  "openbim-bcf",
@@ -598,7 +598,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axiolid-contracts",
  "axiolid-core",
@@ -624,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-engine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axioval-ir",
  "indexmap",
@@ -638,14 +638,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-icdd"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-ids"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axioval",
  "axioval-engine",
@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-ifc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -680,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-ir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "serde",
@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-rules"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-spec"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",

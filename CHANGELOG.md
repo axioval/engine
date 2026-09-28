@@ -4,6 +4,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-28
+
 ### Added
 
 - A manual `Release` workflow publishes the workspace to crates.io by trusted
@@ -3784,7 +3786,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/axioval/engine/compare/v0.1.2...v0.3.0
 [0.1.2]: https://github.com/axioval/engine/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/axioval/engine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/axioval/engine/releases/tag/v0.1.0

@@ -21,7 +21,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.88"
 license = "AGPL-3.0-or-later"
@@ -32,15 +32,15 @@ keywords = ["bim", "validation", "rules", "geometry", "ifc"]
 categories = ["development-tools", "parser-implementations"]
 
 [workspace.dependencies]
-axioval-spec = { path = "crates/contracts/spec", version = "0.2.0" }
-axioval-ir = { path = "crates/contracts/ir", version = "0.2.0" }
-axioval-engine = { path = "crates/engine/core", version = "0.2.0" }
-axioval-rules = { path = "crates/engine/rules", version = "0.2.0" }
-axioval-ifc = { path = "crates/sources/semantic/ifc", version = "0.2.0" }
-axioval-axiolid = { path = "crates/sources/geometry/axiolid", version = "0.2.0" }
-axioval-icdd = { path = "crates/sources/assembly/icdd", version = "0.2.0" }
-axioval-bcf = { path = "crates/sinks/bcf", version = "0.2.0" }
-axioval-ids = { path = "crates/packages/ids", version = "0.2.0" }
+axioval-spec = { path = "crates/contracts/spec", version = "0.3.0" }
+axioval-ir = { path = "crates/contracts/ir", version = "0.3.0" }
+axioval-engine = { path = "crates/engine/core", version = "0.3.0" }
+axioval-rules = { path = "crates/engine/rules", version = "0.3.0" }
+axioval-ifc = { path = "crates/sources/semantic/ifc", version = "0.3.0" }
+axioval-axiolid = { path = "crates/sources/geometry/axiolid", version = "0.3.0" }
+axioval-icdd = { path = "crates/sources/assembly/icdd", version = "0.3.0" }
+axioval-bcf = { path = "crates/sinks/bcf", version = "0.3.0" }
+axioval-ids = { path = "crates/packages/ids", version = "0.3.0" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"

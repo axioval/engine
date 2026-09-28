@@ -294,13 +294,12 @@ fn only_classes_a_model_session_checks_are_applicable() {
     // An abstract class has no instances, so it matches nothing, as in IDS.
     assert_eq!(gap("IFC4", "IFCOBJECTDEFINITION"), None);
     // IfcProject is an IfcObject in IFC2X3 and an IfcContext in IFC4, both
-    // checked; a resource is none of these.
+    // checked; a resource is none of these, and is checked as a resource
+    // object its class names.
     assert_eq!(gap("IFC2X3", "IFCPROJECT"), None);
     assert_eq!(gap("IFC2X3 IFC4", "IFCPROJECT"), None);
-    assert_eq!(
-        gap("IFC4", "IFCMATERIAL"),
-        Some((true, Reason::NotAnObject("IFCMATERIAL".into())))
-    );
+    assert_eq!(gap("IFC4", "IFCMATERIAL"), None);
+    assert_eq!(gap("IFC2X3 IFC4", "IFCRELCONNECTSPATHELEMENTS"), None);
     assert_eq!(
         gap("IFC4", "IFCNOSUCHTHING"),
         Some((true, Reason::UnknownEntity("IFCNOSUCHTHING".into())))

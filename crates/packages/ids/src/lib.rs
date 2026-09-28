@@ -279,9 +279,9 @@ pub enum Reason {
     WithoutEntity,
     /// A class no IFC release IDS names defines.
     UnknownEntity(String),
-    /// An applicability or part-of class whose instances are neither
-    /// `IfcObject` occurrences, `IfcContext`s nor `IfcTypeObject`s (a
-    /// resource), which an IFC session does not make project objects of.
+    /// A part-of whole whose instances are neither `IfcObject` occurrences,
+    /// `IfcContext`s nor `IfcTypeObject`s (a resource object), which no
+    /// relationship traversal reaches.
     NotAnObject(String),
     /// An entity name that is not upper case, which IDS never matches.
     EntityCase(String),
@@ -341,7 +341,7 @@ impl fmt::Display for Reason {
             }
             Reason::NotAnObject(entity) => write!(
                 f,
-                "{entity} is neither an IfcObject occurrence, an IfcContext nor an IfcTypeObject, which is all a model session checks"
+                "{entity} is neither an IfcObject occurrence, an IfcContext nor an IfcTypeObject, so no part-of relation reaches it"
             ),
             Reason::EntityCase(name) => {
                 write!(
@@ -1977,13 +1977,14 @@ fn occurrence(specification: &Specification) -> Option<Check> {
     (minimum.is_some() || maximum.is_some()).then_some(Check::Count { minimum, maximum })
 }
 
-/// Refuses a class whose instances are not checked objects.
+/// Refuses a class no release defines.
 ///
 /// An IFC session makes a project object of every `IfcObject` occurrence,
-/// `IfcContext` (an IFC4 `IfcProject`) and `IfcTypeObject`, and of nothing
-/// else. A rule over a resource would select nothing and pass silently, so
-/// such a class is a gap, and so is one no release defines. A class some
-/// release lacks matches nothing in its models, as in IDS.
+/// `IfcContext` (an IFC4 `IfcProject`) and `IfcTypeObject`; every other
+/// instance (a material, a classification, a relationship) is a resource
+/// object, which an `entityType` selector naming its class selects as
+/// exactly. A class some release lacks matches nothing in its models, as in
+/// IDS.
 fn occurrences(
     names: Vec<String>,
     releases: &[IfcVersion],
@@ -1992,20 +1993,6 @@ fn occurrences(
     if !matched {
         if let Some(unknown) = names.iter().find(|name| !defined(name, &names, releases)) {
             return Err(Reason::UnknownEntity(unknown.clone()));
-        }
-    }
-    for release in releases {
-        let Some(schema) = schema(*release) else {
-            continue;
-        };
-        for name in &names {
-            let name = in_release(name, &names, releases, *release);
-            if schema.entity(name).is_none() {
-                continue;
-            }
-            if !checked(schema, name) {
-                return Err(Reason::NotAnObject(name.to_owned()));
-            }
         }
     }
     Ok(names)

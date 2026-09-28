@@ -13,6 +13,10 @@ every facet.
   specification's rules select through `ruleOutcome`; a prohibited facet no
   capability negates by an auxiliary rule and a rule failing what it passed;
   a facet no capability decides exactly is a gap.
+- An entity facet naming a class whose instances are no session objects
+  (`IFCMATERIAL`, a relationship) translates to its `entityType` selector,
+  which selects the model's resource objects of that class; only a part-of
+  whole no traversal reaches stays a `NotAnObject` gap.
 - Depends on `axioval-ir` (the package contracts), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),

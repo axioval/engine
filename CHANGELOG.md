@@ -17,6 +17,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   translated rules through the facade, and `./scripts/check.sh test` runs
   the buildingSMART conformance corpus when `IDS_TEST_CASES` is set.
 
+- **IDS applicabilities on resources.** (Refs #116) The IDS importer
+  translates an entity facet naming a class whose instances are no
+  objects (`IFCMATERIAL`, `IFCTASKTIME`, `IFCSURFACESTYLEREFRACTION`,
+  `IFCRELCONNECTSPATHELEMENTS`) into its `entityType` selector, which
+  selects the model's resource objects of that class, instead of reporting
+  `NotAnObject`. `Reason::NotAnObject` now names only a part-of whole no
+  traversal reaches. The buildingSMART corpus checks 185 cases exactly and
+  catches 115 failures, without a gap.
+
 - **Resource objects.** (Refs #116) A source's instances that are not its
   objects (in IFC every instance that is no occurrence, context or type
   object: materials, classifications, relationships, task times, surface

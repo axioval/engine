@@ -563,6 +563,135 @@ mod tables {
         );
     }
 
+    fn takeoff() -> ReportTable {
+        ReportTable::grouped(
+            RuleId::new("walls").unwrap(),
+            "takeoff",
+            vec!["type".into(), "storey".into()],
+            vec![
+                ReportColumn::number("count"),
+                ReportColumn::quantity("sum_area", QuantityDimension::Area),
+            ],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn grouped_rows_round_trip_in_scope_and_group_order() {
+        let mut table = takeoff();
+        let group = |values: &[&str]| values.iter().map(|&value| value.to_owned()).collect();
+        let row = |count: f64, area: ReportValue| vec![ReportValue::exact(count), area];
+        table
+            .push_group_row(
+                Scope::Project,
+                group(&["W2", "L1"]),
+                row(1.0, ReportValue::Unknown),
+            )
+            .unwrap();
+        table
+            .push_group_row(
+                Scope::Project,
+                group(&["W1", "L2"]),
+                row(2.0, ReportValue::measured(9.5, 10.5)),
+            )
+            .unwrap();
+        table
+            .push_group_row(
+                Scope::Project,
+                group(&["W1", "L1"]),
+                row(3.0, ReportValue::exact(12.0)),
+            )
+            .unwrap();
+        let groups: Vec<_> = table
+            .rows()
+            .iter()
+            .map(|row| row.group().to_vec())
+            .collect();
+        assert_eq!(
+            groups,
+            [
+                group(&["W1", "L1"]),
+                group(&["W1", "L2"]),
+                group(&["W2", "L1"])
+            ]
+        );
+        let value = serde_json::to_value(&table).unwrap();
+        assert_eq!(value["group_by"], json!(["type", "storey"]));
+        assert_eq!(
+            value["rows"][0],
+            json!({"group": ["W1", "L1"],
+                   "values": [{"type": "exact", "value": 3.0}, {"type": "exact", "value": 12.0}]})
+        );
+        let read: ReportTable = serde_json::from_value(value).unwrap();
+        assert_eq!(read, table);
+        assert_eq!(
+            read.group_row(&Scope::Project, &group(&["W1", "L2"]))
+                .unwrap()
+                .values()[1],
+            ReportValue::measured(9.5, 10.5)
+        );
+        assert!(read.row(&Scope::Project).is_none());
+        assert_eq!(read.group_by(), ["type", "storey"]);
+
+        // An ungrouped table writes neither `group_by` nor `group`.
+        let mut plain = levels();
+        plain
+            .push_row(Scope::Project, vec![ReportValue::Unknown; 3])
+            .unwrap();
+        let text = serde_json::to_string(&plain).unwrap();
+        assert!(!text.contains("group"), "{text}");
+    }
+
+    #[test]
+    fn grouped_tables_refuse_misfit_groups() {
+        let rule = RuleId::new("walls").unwrap();
+        let columns = || vec![ReportColumn::number("count")];
+        assert!(matches!(
+            ReportTable::grouped(rule.clone(), "t", vec!["Type".into()], columns()),
+            Err(ReportTableError::InvalidName { .. })
+        ));
+        assert!(matches!(
+            ReportTable::grouped(rule.clone(), "t", vec!["count".into()], columns()),
+            Err(ReportTableError::DuplicateColumn { .. })
+        ));
+        assert!(matches!(
+            ReportTable::grouped(rule, "t", vec!["a".into(), "a".into()], columns()),
+            Err(ReportTableError::DuplicateColumn { .. })
+        ));
+        let mut table = takeoff();
+        let values = || vec![ReportValue::exact(1.0), ReportValue::Unknown];
+        let error = table
+            .push_row(Scope::Project, values())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("0 group value(s) for 2"), "{error}");
+        table
+            .push_group_row(Scope::Project, vec!["W1".into(), "-".into()], values())
+            .unwrap();
+        let error = table
+            .push_group_row(Scope::Project, vec!["W1".into(), "-".into()], values())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("project [W1] [-]"), "{error}");
+        assert!(error.contains("exists already"), "{error}");
+        let mut plain = levels();
+        assert!(
+            plain
+                .push_group_row(
+                    Scope::Project,
+                    vec!["W1".into()],
+                    vec![ReportValue::Unknown; 3]
+                )
+                .is_err()
+        );
+        let row_without_group = json!({
+            "rule_id": "r", "name": "t", "group_by": ["type"],
+            "columns": [{"id": "count", "kind": "number"}],
+            "rows": [{"values": [{"type": "exact", "value": 1.0}]}],
+        });
+        assert!(serde_json::from_value::<ReportTable>(row_without_group).is_err());
+    }
+
     #[test]
     fn measured_values_are_exact_only_as_points() {
         assert_eq!(

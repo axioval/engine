@@ -108,6 +108,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   no selector states exactly, and prohibits one: select what the auxiliary
   rule passed and fail every object.
 
+- **Report-table rows keyed by a group.** (#106) `ReportTable::grouped`
+  declares group columns and keys each row by its scope and its group, one
+  text value per group column (`push_group_row`, `group_row`,
+  `ReportRow::group`); rows are ordered by scope, then group. On the wire a
+  grouped table writes `group_by` and each row its `group`; ungrouped
+  tables serialize byte for byte as before, and readers written before
+  groups existed reject a grouped table.
 - **Accessible routes with tolerances, measured connectors and located
   blocks.** (#123) `accessible-route` takes `obstruction_depth_metres`
   (obstacles within that depth of a route space's boundary, a 5 mm

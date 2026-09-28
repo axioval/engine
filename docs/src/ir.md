@@ -147,8 +147,9 @@ A finding says what is wrong; a table says what was measured, whether it passed 
 
 - **Columns** have a lowercase id (1 to 64 ASCII letters, digits, `-` or `_`) unique in the table and a kind: `quantity` with a `QuantityDimension` (values in its coherent SI unit, as for properties), `number` (dimensionless, such as a ratio) or `text`.
 - **Rows** are keyed by `Scope`, at most one per scope, and hold one value per column: `exact` (a finite number), `interval` (`lower < upper`, finite, sure to hold the exact value), `text`, or `unknown`. A measured interval is exact exactly when it is a point; `ReportValue::measured` writes a point as `exact` and non-finite bounds as `unknown`.
-- **Ordering.** The runtime sorts tables by rule, then name; rows are always in scope order (project, sources, objects), whatever order they were added or read in. Rows of several rules' tables join on their scope.
-- **Validation.** Names, row widths, value kinds, finiteness and duplicate scopes are checked when a table is built and when it is read. A capability adds tables with `CapabilityEvaluation::push_table`; a table without rows is dropped, the runtime binds each table to the compiled rule, and a rule reporting one name twice fails the run.
+- **Groups.** A grouped table (`ReportTable::grouped`, such as a takeoff) declares group columns, ids like column ids and distinct from them, and keys each row by its scope and its `group`: one text value per group column, in their order (a type name and a storey, say). At most one row per scope and group (`push_group_row`, `group_row`).
+- **Ordering.** The runtime sorts tables by rule, then name; rows are always in scope order (project, sources, objects), then by group, whatever order they were added or read in. Rows of several rules' tables join on their scope.
+- **Validation.** Names, row widths, group widths, value kinds, finiteness and duplicate keys are checked when a table is built and when it is read. A capability adds tables with `CapabilityEvaluation::push_table`; a table without rows is dropped, the runtime binds each table to the compiled rule, and a rule reporting one name twice fails the run.
 
 Tables are informative: they never stand in for a finding or a not-evaluated outcome, and sinks that write issues (BCF) ignore them.
 
@@ -164,6 +165,17 @@ Tables are informative: they never stand in for a finding or a not-evaluated out
 ```
 
 A row names its scope as a finding does: `object_id`, `source`, or neither for the project. The `tables` field is omitted when empty, so a report without tables serializes byte for byte as before; readers written before tables existed reject a report containing them.
+
+A grouped table writes its group column ids as `group_by` and each row's group values as `group`; an ungrouped table writes neither, as before groups existed, and readers written before groups existed reject a grouped table:
+
+```json
+{"rule_id": "wall-takeoff", "name": "takeoff", "group_by": ["group_1", "group_2"],
+ "columns": [{"id": "count", "kind": "number"},
+             {"id": "sum_net_side_area", "kind": "quantity", "dimension": "area"}],
+ "rows": [{"group": ["Basic Wall 200", "Level 1"],
+           "values": [{"type": "exact", "value": 3.0}, {"type": "exact", "value": 36.5}]}]}
+```
+
 
 ## No source leakage
 

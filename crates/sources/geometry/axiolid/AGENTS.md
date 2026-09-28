@@ -147,8 +147,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   so a crossing is definite only for a bodiless opening or a stated clear
   width (`with_clear_width`, or the request's
   `with_stated_clear_widths`; the narrower of the two counts, and a stated
-  width bounds a void's crossing from above). Connector passages are never
-  definite. Swept sectors (`Ground`): hubs stand clear of every
+  width bounds a void's crossing from above). A connector passage is
+  definite only as `climbs` measures it: a stair or ramp from
+  `connector.rs` between the surfaces its landings stand on, with its width
+  admitting the body, headroom (`connector::Climb::passable`) against the
+  request's obstacles clearing the band, and sweeps hub to lower landing and
+  upper landing to hub proven; a lift (`rides`, exact bodies only) between
+  two surfaces when the body at the first hub lies in the lift's plan and a
+  sweep from there to the second hub is proven. Every other connector pair
+  stays possible without a lower bound; never make one definite without a
+  sweep from a hub. Swept sectors (`Ground`): hubs stand clear of every
   circumscribed swing, a portal's landings, spokes and crossing clear of
   every swing but its own (`Ground::past`); mid-line bounds ignore swings.
   A surface touching no other and joined by no connector is split into

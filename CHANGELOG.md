@@ -141,6 +141,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   connector too narrow or too low for the body is no way, and one it cannot
   measure or prove passable leaves routes through it undecided. **Breaking:**
   `MetricRoutingError` gains `InvalidClimb` and `ConflictingConnector`.
+- **Definite climbs and rides in walkability.** (#117) The Axiolid
+  walkability service makes a stair or ramp passage definite between the
+  surfaces its landings stand on when the flight or run is wide enough for
+  the body, the headroom above it clears the band, and the sweeps from and
+  to both hubs are proven; its width is the flight's or run's. A lift
+  carries a body between two surfaces within its height range when the
+  body at the first one's hub lies inside the lift's plan and the walk on
+  from there to the second hub is proven.
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

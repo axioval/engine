@@ -29,9 +29,14 @@
 //!   between their hubs is proven.
 //! - A selected vertical connector joins every pair of surfaces whose floor
 //!   lies within 1 m of its height range and whose plan lies within 1 m of
-//!   its plan. The climb itself is not measured, so these
-//!   passages are never definite and bound no width; forbidding the kind
-//!   removes them.
+//!   its plan; forbidding the kind removes them. A stair or ramp measured
+//!   as for metric routing (`crate::connector`) bounds the passage between
+//!   the surfaces its landings stand on by its width, and makes it definite
+//!   when it admits the body, its headroom clears the band and the sweeps
+//!   hub to landing and landing to hub are proven. A lift makes a passage
+//!   definite between two surfaces when the body at the first hub stands
+//!   inside its plan and a sweep from there to the second hub is proven.
+//!   Every other connector passage bounds no width.
 //!
 //! Every definite passage ends at the position the next one starts from, so
 //! a definite route concatenates proven sweeps. Every width bound is a chord
@@ -63,11 +68,12 @@ use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Region, Ring};
 use axioval_engine::{
     LengthInterval, StretchLimit, SweptDoor, VerifiedWalkablePassage, VerticalConnector,
-    WalkabilityError, WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest,
-    WalkabilityService, WalkabilitySnapshot, WalkableStretch,
+    VerticalConnectorKind, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
+    WalkabilityRequest, WalkabilityService, WalkabilitySnapshot, WalkableStretch,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
+use crate::connector::Passable;
 use crate::free_space::swept_rings;
 use crate::geometry::AxiolidGeometry;
 use crate::placement;
@@ -77,6 +83,7 @@ use crate::walkable::{
     intersect, join, landing, mid_line_width, obstacles, obstruction, obstructions, plan_gap,
     sides, subtract, sweep, sweep_inside, touching, trapezoids, union, within, witness,
 };
+use crate::walking_surface::LANDING_REACH;
 
 /// Walkable regions and passages from supplied geometry.
 ///
@@ -145,6 +152,24 @@ impl AxiolidWalkabilityService {
     fn evidence(&self, locator: String) -> Evidence {
         Evidence::exact(self.source.clone(), locator)
     }
+}
+
+/// What a request's connectors are measured against.
+struct Scene<'s> {
+    floors: &'s [Floor],
+    grounds: &'s [Ground],
+    hubs: &'s [Option<Point2>],
+    obstacles: &'s [ObjectId],
+    radius: f64,
+    band: Option<LengthInterval>,
+}
+
+/// A passage a connector is measured to give between two surfaces.
+struct Climbed {
+    pair: (usize, usize),
+    lower: f64,
+    upper: f64,
+    note: String,
 }
 
 /// A portal measured for one request.
@@ -1285,20 +1310,46 @@ impl AxiolidWalkabilityService {
             }
         }
 
-        // Vertical connectors.
+        // Vertical connectors: a measured climb or ride between two hubs,
+        // or a possible passage between every pair the connector may join.
+        let above: Vec<ObjectId> = request
+            .obstacles()
+            .iter()
+            .filter(|object| {
+                request.surfaces().binary_search(object).is_err()
+                    && request.entrances().binary_search(object).is_err()
+            })
+            .cloned()
+            .collect();
+        let scene = Scene {
+            floors: &floors,
+            grounds: &grounds,
+            hubs: &hubs,
+            obstacles: &above,
+            radius,
+            band,
+        };
         for (connector, joined) in &connected {
+            let measured = self.climbs(connector, joined, &scene)?;
             for (i, a) in joined.iter().enumerate() {
                 for b in joined.iter().skip(i + 1) {
+                    let found = measured
+                        .iter()
+                        .find(|climb| climb.pair == (*a, *b) || climb.pair == (*b, *a));
+                    let (lower, upper, note) = found.map_or_else(
+                        || (0.0, UNBOUNDED, "climb=unmeasured".to_owned()),
+                        |climb| (climb.lower, climb.upper, climb.note.clone()),
+                    );
                     passages.push(
                         passage(
                             connector.object(),
                             surface_region(&floors[*a].id),
                             surface_region(&floors[*b].id),
                             None,
-                            0.0,
-                            UNBOUNDED,
+                            lower,
+                            upper,
                             format!(
-                                "connector:{}:{}:{}<->{}:climb=unmeasured",
+                                "connector:{}:{}:{}<->{}:{note}",
                                 connector.kind().as_str(),
                                 connector.object(),
                                 floors[*a].id,
@@ -1328,6 +1379,148 @@ impl AxiolidWalkabilityService {
         ));
         WalkabilitySnapshot::try_new(request.clone(), regions, passages, evidence)
             .map_err(|e| e.to_string())
+    }
+
+    /// The passages a connector is measured to give: for a stair or ramp,
+    /// the climb between the surfaces its landings stand on; for a lift,
+    /// the ride between every two surfaces whose hubs its car holds.
+    fn climbs(
+        &self,
+        connector: &VerticalConnector,
+        joined: &[usize],
+        scene: &Scene<'_>,
+    ) -> Result<Vec<Climbed>, String> {
+        if connector.kind() == VerticalConnectorKind::Lift {
+            return self.rides(connector.object(), joined, scene);
+        }
+        let Ok(climb) = crate::connector::measure(&self.geometry, connector) else {
+            return Ok(Vec::new());
+        };
+        let Scene {
+            floors,
+            grounds,
+            hubs,
+            radius,
+            ..
+        } = *scene;
+        let required = 2.0 * radius;
+        let landings = [climb.landing(0, radius), climb.landing(1, radius)];
+        let on = |end: usize| -> Option<usize> {
+            let held: Vec<usize> = joined
+                .iter()
+                .copied()
+                .filter(|index| {
+                    let floor = &floors[*index];
+                    (floor.z0 - climb.ends[end].z).abs() <= LANDING_REACH
+                        && contains(&floor.footprint, landings[end])
+                })
+                .collect();
+            match held.as_slice() {
+                [single] => Some(*single),
+                _ => None,
+            }
+        };
+        let (Some(below), Some(above)) = (on(0), on(1)) else {
+            return Ok(Vec::new());
+        };
+        if below == above {
+            return Ok(Vec::new());
+        }
+        let height = scene
+            .band
+            .map_or(floors[below].top - floors[below].z0, |band| {
+                band.upper_metres()
+            });
+        let passable = climb.passable(
+            &self.geometry,
+            scene
+                .obstacles
+                .iter()
+                .filter(|object| *object != connector.object())
+                .cloned(),
+            required,
+            height,
+        );
+        let swept = match (hubs[below], hubs[above]) {
+            (Some(from), Some(to)) => {
+                witness(&grounds[below].free, from, landings[0], radius)?.is_some()
+                    && witness(&grounds[above].free, landings[1], to, radius)?.is_some()
+            }
+            _ => false,
+        };
+        let (lower, upper, state) = match &passable {
+            Passable::Refused(_) => (0.0, 0.0, "refused"),
+            Passable::Proven if swept => (climb.width.0, climb.width.1, "proven"),
+            _ => (0.0, climb.width.1, "unproven"),
+        };
+        Ok(vec![Climbed {
+            pair: (below, above),
+            lower,
+            upper,
+            note: format!(
+                "climb={state}:rise={:.6}:width={:.6}..{:.6}:sweep={}",
+                climb.rise(),
+                climb.width.0,
+                climb.width.1,
+                if swept { "proven" } else { "unproven" }
+            ),
+        }])
+    }
+
+    /// The rides a lift gives: between two surfaces within its height range
+    /// when the body standing at the first one's hub lies inside the lift's
+    /// plan (exact bodies only), and walks from there on the second surface
+    /// to its hub.
+    fn rides(
+        &self,
+        lift: &ObjectId,
+        joined: &[usize],
+        scene: &Scene<'_>,
+    ) -> Result<Vec<Climbed>, String> {
+        let Scene {
+            floors,
+            grounds,
+            hubs,
+            radius,
+            ..
+        } = *scene;
+        if self.geometry.is_tessellated(lift) {
+            return Ok(Vec::new());
+        }
+        let mesh = crate::walkable::body(&self.geometry, lift, "lift")?;
+        let Some((low, high)) = self.geometry.enclosing_extent(lift) else {
+            return Ok(Vec::new());
+        };
+        let car = union(crate::planar::projected_polygons(
+            &crate::geometry::triangles(mesh),
+        ))?;
+        let mut rides = Vec::new();
+        for (i, a) in joined.iter().enumerate() {
+            for b in joined.iter().skip(i + 1) {
+                let served = |index: usize| {
+                    floors[index].z0 >= low[2] - LANDING_REACH && floors[index].z0 < high[2]
+                };
+                if !served(*a) || !served(*b) {
+                    continue;
+                }
+                let proven = match (hubs[*a], hubs[*b]) {
+                    (Some(from), Some(to)) => {
+                        sweep_inside(&car, &[from], radius)?
+                            && witness(&grounds[*b].free, from, to, radius)?.is_some()
+                    }
+                    _ => false,
+                };
+                if proven {
+                    rides.push(Climbed {
+                        pair: (*a, *b),
+                        lower: 2.0 * radius,
+                        upper: UNBOUNDED,
+                        note: "ride=proven".to_owned(),
+                    });
+                }
+            }
+        }
+        Ok(rides)
     }
 
     /// The surfaces a vertical connector may join: floors within [`REACH`]

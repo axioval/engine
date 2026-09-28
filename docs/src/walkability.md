@@ -114,8 +114,23 @@ counts, and a stated width bounds even an opening's void from above.
   body covers a chord of its own diameter there, and at most a stated clear
   width. Surfaces and portal faces that touch in plan at overlapping heights
   are joined without a width bound, and a connector joins every pair of
-  surfaces whose floor lies within 1 m of its height range and plan. Climbs
-  are not measured, so connector passages are never definite.
+  surfaces whose floor lies within 1 m of its height range and plan.
+- **Climbs and rides.** A stair or ramp is measured as for metric routing
+  (see [Across levels in the Axiolid backend](./metric-routing.md#across-levels-in-the-axiolid-backend)):
+  an exact straight flight or one-run ramp whose ends fill a rectangle,
+  its landings half the width plus 1 mm outside its walking line's ends,
+  each on the one joined surface whose footprint holds it and whose floor
+  lies at the end's elevation (within 1 µm). The passage between those two
+  surfaces is bounded above by the flight's or run's narrowest width, and
+  from below by it when the width admits the body, the walking-surface
+  headroom above it against the request's obstacles clears the band's top
+  (the lower surface's own height without a band), and the sweeps from the
+  lower hub to the lower landing and from the upper landing to the upper
+  hub are proven. Headroom surely too low bounds it at zero. A lift rides
+  between two joined surfaces within its height range when the body at
+  the first one's hub lies inside the lift's exact plan and a sweep from
+  that point to the second one's hub is proven on it: a definite passage
+  of the request width. Every other connector passage has no lower bound.
 - **Definite passages.** A passage's lower bound is the request width only
   when the sweep of the body along a witness path (hub to landing, or
   landing to mid-line to landing) is proven inside the free region, and, for
@@ -201,7 +216,7 @@ Verdicts available today: `Reachable` wherever a sweep is proven;
 (geometrically or by a stated clear width), a forbidden connector kind, or
 nothing joins the surfaces at all; `Indeterminate` otherwise, notably for a
 door whose clear width is not stated, a crossing whose landing is obstructed,
-and any route through a connector. A gap narrower than the width inside a
+and a route through a connector that is not measured as above. A gap narrower than the width inside a
 surface that touches no other surface splits it into pieces, so a route
 needing that gap is `Unreachable`, its cut the located stretch between the
 pieces (or, in front of a face where the body fits nowhere, the stretch

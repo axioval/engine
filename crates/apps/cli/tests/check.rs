@@ -507,6 +507,62 @@ fn a_gated_rule_checks_only_the_walls_its_parent_failed_or_is_skipped() {
 }
 
 #[test]
+fn walls_a_derived_classification_leaves_unclassified_are_reported() {
+    let case = Case::new("classifications");
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    definitions["definitions"]["axioval:example.unclassified"] = json!({
+        "id": "axioval:example.unclassified",
+        "name": {"default": "Unclassified objects", "translations": {}},
+        "capability": "axioval:capability.unclassified-object",
+        "parameters": registry_signature("axioval:capability.unclassified-object"),
+        "citations": [],
+        "tags": [],
+    });
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("walls-classified");
+    rule["definitionId"] = json!("axioval:example.unclassified");
+    rule["parameters"] = json!({"classification": {"type": "string", "value": "wall-kind"}});
+    ruleset["classifications"] = json!({"wall-kind": {
+        "id": "wall-kind",
+        "name": {"default": "Wall kind", "translations": {}},
+        "rows": [{
+            "selector": {"kind": "property",
+                         "propertySet": "axioval:example.ifc.pset-wall-common",
+                         "property": "axioval:example.ifc.reference", "operator": "exists"},
+            "class": "referenced",
+        }],
+    }});
+    let ruleset = case.write("classified.json", &ruleset.to_string());
+    let model = case.write("model.ifc", &ten_walls_two_without_reference());
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert!(
+        findings.iter().all(|finding| finding["message"]
+            .as_str()
+            .unwrap()
+            .contains("unclassified")),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn a_summary_without_a_saved_result_says_how_to_get_one() {
     let case = Case::new("summary-unsaved");
     let output = case.check(&many_walls(2), true, &["--summary"]);

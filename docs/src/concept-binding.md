@@ -59,6 +59,12 @@ presentation layer in `clash`, the body in `allowed-profile`,
 `opening-zone`, `opening-area` and `empty-host`) ask by the engine's own names, never
 through binding.
 
+The derived sets (`axioval_ir::is_derived_set`) go further: the property
+inside them is no concept either. In `axioval:classification` it is the id
+of a classification the ruleset declares ([Derived
+properties](./derived.md)); compilation checks it against those ids, and
+evaluation passes it through unchanged.
+
 ## Name patterns
 
 A property set or property named by a pattern (a `propertyPattern`

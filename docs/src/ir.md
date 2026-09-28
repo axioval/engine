@@ -67,6 +67,8 @@ Some facts about an object are not in any property set but in fields of the obje
 
   An object without a body has none of them (an exact absence), and neither has an item of another kind, a parameter its family does not have, or one the source leaves unset, even where the schema defines a default: an equal-leg angle that states no `Width` has none, not its `Depth`. A body the source states but that cannot be read exactly (an item or profile family not read, a dangling reference, a mapping that scales a swept solid) is refused as a whole, never absent and never read in part.
 
+- `CLASSIFICATION_SET` (`axioval:classification`) holds the classes a ruleset's classifications derive, one property per classification id: a string for a first-match classification, a list of strings for an all-match one, none for an object no row matches. The engine answers it, never a source; see [Derived properties](./derived.md). `is_derived_set` names the sets the engine derives.
+
 These sets are engine vocabulary. They name no property set of any source, a package cannot redeclare them, and concept binding passes them through unchanged, while the property name inside them is still bound per source. A request without a set never searches attributes.
 
 ## Views and layers

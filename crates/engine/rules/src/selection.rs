@@ -399,6 +399,12 @@ pub(crate) fn bound_property_request(
     set: Option<&str>,
     name: &str,
 ) -> Result<PropertyRequest, (NotEvaluatedReason, String)> {
+    // A derived set's names are the engine's or the ruleset's own, the same
+    // in every source.
+    if let Some(derived) = set.filter(|set| axioval_ir::is_derived_set(set)) {
+        return PropertyRequest::try_new(object.id.clone(), Some(derived.to_owned()), name)
+            .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()));
+    }
     let (property_set, property) = match vocabulary(context) {
         Vocabulary::Native => (set.map(ToOwned::to_owned), name),
         Vocabulary::Package(bindings) => {

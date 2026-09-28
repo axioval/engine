@@ -14,6 +14,7 @@
 - [Capabilities](./capabilities.md)
 - [Refining outcomes](./refinement.md)
 - [Gated rules](./gates.md)
+- [Derived properties](./derived.md)
 - [Connectivity and routes](./topology.md)
 - [Metric routing](./metric-routing.md)
 - [Free space and clearance](./free-space.md)

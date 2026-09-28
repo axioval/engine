@@ -588,6 +588,16 @@ pub const BODY_PROFILE_OUTLINE_Y: &str = "Profile.OutlineY";
 /// [`BODY_KIND`] of a straight extrusion.
 pub const BODY_KIND_EXTRUSION: &str = "extrusion";
 
+/// Property set that names the classes a ruleset's classifications derive.
+///
+/// The property name is the id of a classification the ruleset declares
+/// (`contract::ClassificationDefinition`); the engine answers it, never a
+/// source. A first-match classification's value is a string, an all-match
+/// one's a list of strings; an object no row matches has none (an exact
+/// absence). Names are the ruleset's own and bind to no concept. Reserved
+/// like [`ATTRIBUTE_SET`].
+pub const CLASSIFICATION_SET: &str = "axioval:classification";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
@@ -596,6 +606,15 @@ pub fn is_reserved_set(set: &str) -> bool {
         || set == PRESENTATION_SET
         || set == MATERIAL_SET
         || set == BODY_SET
+        || is_derived_set(set)
+}
+
+/// Whether `set` is a reserved set the engine derives rather than a source
+/// states: its property names are engine or ruleset vocabulary and bind to
+/// no concept.
+#[must_use]
+pub fn is_derived_set(set: &str) -> bool {
+    set == CLASSIFICATION_SET
 }
 
 /// A named semantic property.

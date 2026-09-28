@@ -227,6 +227,60 @@ pub struct RuleSetPackage {
     pub sources: BTreeMap<String, Source>,
     pub definition_packages: Vec<String>,
     pub root: RuleFolder,
+    /// Classifications the ruleset derives, by id; see
+    /// [`ClassificationDefinition`]. Omitted when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub classifications: BTreeMap<String, ClassificationDefinition>,
+}
+
+/// A named classification of objects the ruleset derives: ordered rows,
+/// each a selector and the class name it assigns.
+///
+/// Every selector and property reference reads it as the property `id` in
+/// the reserved set `axioval:classification`: a first-match
+/// classification's value is the class of the first row that matches, once
+/// every row before it surely does not; an all-match classification's is
+/// the list of every matching row's class, distinct, in row order, once
+/// every row is decided. An object no row matches has no value (an exact
+/// absence). An object whose deciding rows cannot be decided cannot be
+/// read, never unclassified.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClassificationDefinition {
+    pub id: String,
+    pub name: LocalizedText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<LocalizedText>,
+    /// First match (the default, omitted when serialized) or all match.
+    #[serde(default, skip_serializing_if = "ClassificationMode::is_first_match")]
+    pub mode: ClassificationMode,
+    pub rows: Vec<ClassificationRow>,
+}
+
+/// One row of a [`ClassificationDefinition`]: objects `selector` selects
+/// take `class`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClassificationRow {
+    pub selector: Selector,
+    pub class: String,
+}
+
+/// How a classification's rows assign classes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClassificationMode {
+    /// The first matching row's class.
+    #[default]
+    FirstMatch,
+    /// Every matching row's class.
+    AllMatch,
+}
+impl ClassificationMode {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_first_match(&self) -> bool {
+        matches!(self, Self::FirstMatch)
+    }
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

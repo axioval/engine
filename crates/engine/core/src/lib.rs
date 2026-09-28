@@ -121,6 +121,15 @@ pub enum EngineError {
     /// no outcome refiner to read another rule's selection.
     #[error("rule `{rule}`: {detail}")]
     InvalidDependency { rule: String, detail: String },
+    /// A classification the ruleset derives is malformed, reads a rule's
+    /// outcome, depends on itself through other classifications, is declared
+    /// twice with different rows, or the host registered no outcome refiner
+    /// to evaluate its rows.
+    #[error("classification `{classification}`: {detail}")]
+    InvalidClassification {
+        classification: String,
+        detail: String,
+    },
 }
 
 pub use schema::ColumnKind;
@@ -572,6 +581,9 @@ pub struct ExecutionPlan {
     gates: BTreeMap<RuleId, Vec<(RuleId, schema::GateCondition)>>,
     /// Rules whose selection a dependent reads per object.
     recorded: BTreeSet<RuleId>,
+    /// Classifications to derive before any rule runs, each after those
+    /// its rows read.
+    classifications: Vec<schema::ClassificationDefinition>,
 }
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
@@ -591,6 +603,10 @@ impl ExecutionPlan {
     pub fn refinement(&self, rule: &RuleId) -> Option<&RuleRefinement> {
         self.refinements.get(rule)
     }
+    /// The classifications the plan derives, in the order they are derived.
+    pub fn classifications(&self) -> &[schema::ClassificationDefinition] {
+        &self.classifications
+    }
     /// The whole-rule gates of `rule`: each parent rule and the condition
     /// on its outcome. Empty for an ungated rule.
     pub fn gates(&self, rule: &RuleId) -> &[(RuleId, schema::GateCondition)] {
@@ -607,6 +623,7 @@ mod contact;
 mod coordinate_system;
 mod corridor_end;
 mod coverage;
+mod derived;
 mod derived_relationships;
 mod discipline_map;
 mod door_leaves;
@@ -665,6 +682,7 @@ pub use coordinate_system::{
 };
 pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, WallContact};
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
+pub use derived::{ClassOutcome, Classifications};
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
     DerivedRelationshipServiceHandle, LevelFacts, LevelMatch, adjacent_side,
@@ -968,6 +986,35 @@ impl Runtime {
         )
     }
 
+    /// The registry's outcome refiner, refused missing when the plan or
+    /// the host's options need one.
+    fn refiner_for(
+        &self,
+        plan: &ExecutionPlan,
+    ) -> Result<Option<&Arc<dyn OutcomeRefiner>>, EngineError> {
+        let refiner = self.registry.refiner();
+        if refiner.is_some() {
+            return Ok(refiner);
+        }
+        if !plan.recorded.is_empty() {
+            return Err(EngineError::MissingRefiner(
+                "reading another rule's outcomes per object",
+            ));
+        }
+        if !plan.classifications.is_empty() {
+            return Err(EngineError::MissingRefiner("deriving classifications"));
+        }
+        if self.locations.is_some() {
+            return Err(EngineError::MissingRefiner("locating outcomes"));
+        }
+        if self.summaries {
+            return Err(EngineError::MissingRefiner(
+                "counting each rule's selection",
+            ));
+        }
+        Ok(None)
+    }
+
     /// Evaluates `rule`, then grades and refines its outcomes.
     fn evaluate(
         &self,
@@ -1014,20 +1061,7 @@ impl Runtime {
         services.replace(metadata);
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
-        let refiner = self.registry.refiner();
-        if !plan.recorded.is_empty() && refiner.is_none() {
-            return Err(EngineError::MissingRefiner(
-                "reading another rule's outcomes per object",
-            ));
-        }
-        if self.locations.is_some() && refiner.is_none() {
-            return Err(EngineError::MissingRefiner("locating outcomes"));
-        }
-        if self.summaries && refiner.is_none() {
-            return Err(EngineError::MissingRefiner(
-                "counting each rule's selection",
-            ));
-        }
+        let refiner = self.refiner_for(&plan)?;
         let mut summaries: Vec<RuleSummary> = Vec::new();
         let mut findings = Vec::new();
         let mut tables: Vec<ReportTable> = Vec::new();
@@ -1047,6 +1081,14 @@ impl Runtime {
                 location: None,
             })
             .collect();
+        if let Some(refiner) = refiner.filter(|_| !plan.classifications.is_empty()) {
+            derive_classifications(
+                refiner.as_ref(),
+                project,
+                &mut services,
+                &plan.classifications,
+            );
+        }
         // What every completed rule reported, for the rules that read it.
         let mut outcomes = RuleOutcomes::default();
         for rule in plan.rules {
@@ -1108,6 +1150,25 @@ impl Runtime {
         }
         assemble(findings, not_evaluated, tables, summaries)
     }
+}
+
+/// Classifies every object by each of `definitions`, in order, and installs
+/// the run's property resolver answering the classification set: each
+/// classification's rows read the ones derived before it.
+fn derive_classifications(
+    refiner: &dyn OutcomeRefiner,
+    project: &Project,
+    services: &mut ServiceRegistry,
+    definitions: &[schema::ClassificationDefinition],
+) {
+    let host = services.get::<PropertyResolutionServiceHandle>().cloned();
+    let mut derived = Classifications::default();
+    for definition in definitions {
+        derived::install(services, host.as_ref(), Arc::new(derived.clone()));
+        let context = RuleContext { project, services };
+        derived.classify(refiner, &context, definition);
+    }
+    derived::install(services, host.as_ref(), Arc::new(derived));
 }
 
 /// The report of every rule's outcomes, each part in its deterministic

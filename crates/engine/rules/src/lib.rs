@@ -78,6 +78,7 @@ mod stair_geometry;
 mod support;
 mod table_allocation;
 mod triangle_count;
+mod unclassified;
 mod unique_value;
 mod wall_sides;
 mod wall_spacing;
@@ -149,6 +150,7 @@ pub use space_validation::{SpaceCategory, SpaceValidation};
 pub use stair_geometry::{RampGeometryCheck, StairGeometryCheck};
 pub use table_allocation::TableAllocation;
 pub use triangle_count::TriangleCountLimit;
+pub use unclassified::UnclassifiedObject;
 pub use unique_value::UniqueValue;
 pub use wall_spacing::WallSpacing;
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`
@@ -229,5 +231,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(OpeningZone))
         .and_then(|registry| registry.register(OpeningArea))
         .and_then(|registry| registry.register(EmptyHost))
+        .and_then(|registry| registry.register(UnclassifiedObject))
         .map(|registry| registry.with_refiner(Refiner))
 }

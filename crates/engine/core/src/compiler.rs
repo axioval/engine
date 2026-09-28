@@ -6,8 +6,9 @@ use std::{
 };
 
 use axioval_ir::contract::{
-    ColumnKind, GateCondition, ParameterKind, ParameterValue, RuleApplicability, RuleDefinition,
-    RuleFolder, RuleGate, RuleInstance, Selector, TableColumnDefinition, TableRow,
+    ClassificationDefinition, ColumnKind, GateCondition, ParameterKind, ParameterValue,
+    RuleApplicability, RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector,
+    TableColumnDefinition, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
@@ -36,7 +37,9 @@ pub fn compile(
         }
     }
     let catalog = definition_catalog(ruleset, &packages)?;
-    let concepts = concept_catalog(ruleset, &packages)?;
+    let mut concepts = concept_catalog(ruleset, &packages)?;
+    concepts.declare_classifications(ruleset.classifications.keys().map(String::as_str));
+    let classifications = classifications(registry, &concepts, ruleset)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
     authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
@@ -104,7 +107,103 @@ pub fn compile(
         refinements,
         gates,
         recorded,
+        classifications,
     })
+}
+
+/// The ruleset's classifications, checked and ordered so each follows the
+/// classifications its rows read.
+fn classifications(
+    registry: &CapabilityRegistry,
+    concepts: &ConceptCatalog,
+    ruleset: &RuleSetPackage,
+) -> Result<Vec<ClassificationDefinition>, EngineError> {
+    let mut read_by: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    for (key, definition) in &ruleset.classifications {
+        let invalid = |detail: String| EngineError::InvalidClassification {
+            classification: key.clone(),
+            detail,
+        };
+        if *key != definition.id {
+            return Err(invalid(format!(
+                "is declared under the key `{key}`, not its id"
+            )));
+        }
+        if definition.id.trim().is_empty() {
+            return Err(invalid("its id is blank".into()));
+        }
+        if definition.rows.is_empty() {
+            return Err(invalid("it has no rows".into()));
+        }
+        if registry.refiner().is_none() {
+            return Err(invalid(
+                "the host registered no outcome refiner to evaluate its rows".into(),
+            ));
+        }
+        let mut read = BTreeSet::new();
+        for (index, row) in definition.rows.iter().enumerate() {
+            if row.class.trim().is_empty() {
+                return Err(invalid(format!("row {index} assigns a blank class")));
+            }
+            let context = format!("{}#{index}", definition.id);
+            validate_selector_concepts(concepts, &context, &row.selector)?;
+            let mut rules = BTreeSet::new();
+            rule_outcomes::selector_references(&row.selector, &mut rules);
+            if !rules.is_empty() {
+                return Err(invalid(format!(
+                    "row {index} reads a rule's outcome; classes are derived before any rule runs"
+                )));
+            }
+            classifications_read(&row.selector, &mut read);
+        }
+        read_by.insert(definition.id.as_str(), read);
+    }
+    let mut ordered: Vec<ClassificationDefinition> = Vec::new();
+    let mut pending: BTreeSet<&str> = read_by.keys().copied().collect();
+    while !pending.is_empty() {
+        let next = pending
+            .iter()
+            .copied()
+            .find(|id| read_by[id].iter().all(|needed| !pending.contains(needed)));
+        let Some(next) = next else {
+            let first = pending.iter().next().copied().unwrap_or_default();
+            return Err(EngineError::InvalidClassification {
+                classification: first.to_owned(),
+                detail: format!(
+                    "the classifications {} read one another in a cycle",
+                    pending
+                        .iter()
+                        .map(|id| format!("`{id}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            });
+        };
+        pending.remove(next);
+        ordered.push(ruleset.classifications[next].clone());
+    }
+    Ok(ordered)
+}
+
+/// Every classification a property selector in `selector` reads.
+fn classifications_read<'a>(selector: &'a Selector, out: &mut BTreeSet<&'a str>) {
+    match selector {
+        Selector::Property {
+            property_set: Some(set),
+            property,
+            ..
+        } if set == axioval_ir::CLASSIFICATION_SET => {
+            out.insert(property);
+        }
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            for operand in operands {
+                classifications_read(operand, out);
+            }
+        }
+        Selector::Not { operand } => classifications_read(operand, out),
+        Selector::Related { selector, .. } => classifications_read(selector, out),
+        _ => {}
+    }
 }
 
 /// `rules` in dependency order, refused when they form a cycle or read
@@ -304,10 +403,12 @@ fn refinement(
         validate_selector_concepts(concepts, &rule.id, &entry.selector)?;
     }
     for level in &rule.categories {
-        require_concept(concepts, &rule.id, ConceptKind::Property, &level.property)?;
-        if let Some(set) = &level.property_set {
-            require_set_concept(concepts, &rule.id, set)?;
-        }
+        require_property(
+            concepts,
+            &rule.id,
+            level.property_set.as_deref(),
+            &level.property,
+        )?;
     }
     let refinement = RuleRefinement {
         severity_bands: rule.severity_bands.clone(),
@@ -361,6 +462,7 @@ pub fn compile_rulesets(
     let mut refinements = BTreeMap::new();
     let mut gates = BTreeMap::new();
     let mut recorded = BTreeSet::new();
+    let mut classifications: Vec<ClassificationDefinition> = Vec::new();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -403,6 +505,23 @@ pub fn compile_rulesets(
         for id in plan.recorded {
             recorded.insert(qualify(&id)?);
         }
+        // One run derives one class per classification id, so rulesets
+        // share a classification only when they declare it alike.
+        for definition in plan.classifications {
+            match classifications
+                .iter()
+                .find(|known| known.id == definition.id)
+            {
+                Some(known) if *known == definition => {}
+                Some(_) => {
+                    return Err(EngineError::InvalidClassification {
+                        classification: definition.id,
+                        detail: "two rulesets declare it with different rows".into(),
+                    });
+                }
+                None => classifications.push(definition),
+            }
+        }
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
             deferred.push(rule);
@@ -413,7 +532,8 @@ pub fn compile_rulesets(
     let rules: Vec<CompiledRule> = by_package.into_values().flatten().collect();
     deferred.sort_by(|left, right| left.id.cmp(&right.id));
     let packages = collect_definition_packages(definitions)?;
-    let concepts = concepts_of(declared.into_iter(), &packages)?;
+    let mut concepts = concepts_of(declared.into_iter(), &packages)?;
+    concepts.declare_classifications(classifications.iter().map(|c| c.id.as_str()));
     Ok(ExecutionPlan {
         rules,
         deferred,
@@ -421,6 +541,7 @@ pub fn compile_rulesets(
         refinements,
         gates,
         recorded,
+        classifications,
     })
 }
 
@@ -622,6 +743,30 @@ fn require_set_concept(
     require_concept(concepts, rule, ConceptKind::PropertySet, set)
 }
 
+/// A property reference: a declared property concept in a declared set or
+/// a reserved one, or, in a derived set, a name the engine derives there.
+fn require_property(
+    concepts: &ConceptCatalog,
+    rule: &str,
+    set: Option<&str>,
+    property: &str,
+) -> Result<(), EngineError> {
+    if let Some(set) = set {
+        match concepts.derives(set, property) {
+            Some(true) => return Ok(()),
+            Some(false) => {
+                return Err(EngineError::UnknownConcept {
+                    rule: rule.into(),
+                    kind: set.into(),
+                    concept: property.into(),
+                });
+            }
+            None => require_set_concept(concepts, rule, set)?,
+        }
+    }
+    require_concept(concepts, rule, ConceptKind::Property, property)
+}
+
 fn validate_selector_concepts(
     concepts: &ConceptCatalog,
     rule: &str,
@@ -642,10 +787,7 @@ fn validate_selector_concepts(
             value,
             ..
         } => {
-            require_concept(concepts, rule, ConceptKind::Property, property)?;
-            if let Some(set) = property_set {
-                require_set_concept(concepts, rule, set)?;
-            }
+            require_property(concepts, rule, property_set.as_deref(), property)?;
             value
                 .iter()
                 .try_for_each(|value| validate_parameter_concepts(concepts, rule, value))
@@ -674,12 +816,7 @@ fn validate_parameter_concepts(
         ParameterValue::PropertyReference {
             property,
             property_set,
-        } => {
-            require_concept(concepts, rule, ConceptKind::Property, property)?;
-            property_set
-                .iter()
-                .try_for_each(|set| require_set_concept(concepts, rule, set))
-        }
+        } => require_property(concepts, rule, property_set.as_deref(), property),
         ParameterValue::Selector { value } => validate_selector_concepts(concepts, rule, value),
         ParameterValue::Table { value: rows } => rows
             .iter()

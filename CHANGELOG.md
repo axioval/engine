@@ -78,6 +78,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   is the leg spanning the whole height and `zone` `web` the height beside
   the notch, clear of the ledge; an opening through the web leaves the host
   where the web ends instead of crossing its outline.
+- **Classifications derived by a ruleset.** (#99) A ruleset declares
+  `classifications`: ordered rows of a selector and a class name, first
+  match (the default) or all match. Every selector, property reference,
+  table key and category reads an object's class as the property `<id>` in
+  the reserved set `axioval:classification` (`CLASSIFICATION_SET`,
+  `is_derived_set`): a string, a list for all match, an exact absence for an
+  object no row matches, and not evaluated when a deciding row is
+  undecided. The runtime classifies every object before any rule runs,
+  through the outcome refiner, and answers the set through the property
+  resolver (`Classifications`, `ClassOutcome`). The new capability
+  `unclassified-object` reports objects a classification leaves
+  unclassified. Malformed or cyclic classifications fail compilation
+  (`EngineError::InvalidClassification`), and so does a reference to an
+  undeclared one. **Breaking:** `RuleSetPackage` gains `classifications`,
+  `EngineError` a variant, and `is_reserved_set` covers the derived sets.
+
 - **Rules gated on other rules' outcomes.** (#98) A rule instance or rule
   folder declares a `gate`: another rule of its ruleset and `allIfPassed`,
   `allIfFailed`, `passedObjects` or `failedObjects`. The new

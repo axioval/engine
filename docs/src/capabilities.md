@@ -1794,6 +1794,16 @@ A container is always on its own level, and two containers of one source never s
 
 At least one of the three bounds is declared; each is its own finding on the space. A boundary lying on no face plane of the body covers nothing and is always a finding, relating the element it bounds against, whatever the bounds are: the coverage is measured without it, never silently. An overlap finding names the pairs of boundaries that surely overlap and relates their elements. Areas are intervals: a space turned off the coordinate axes measures within the rounding of its projection, a boundary with curved edges within its chord deviation, and a check whose interval straddles its bound is not evaluated. A space whose body is missing or curved, or with a boundary whose surface cannot be read (IFC: no connection geometry, or a point, curve or volume connection), is not evaluated.
 
+### Classifications
+
+`axioval:capability.unclassified-object` reports every selected object that
+the ruleset's classification `classification` (a string, its id) assigns no
+class: every row surely does not match. An object whose deciding row cannot
+be decided is not evaluated, and a classification the ruleset does not
+declare leaves the rule not evaluated. Any other check keys on the class
+itself, read as the property `<id>` in `axioval:classification` (see
+[Derived properties](./derived.md)).
+
 ## Adding a capability
 
 1. Define or reuse canonical schema concepts and parameters.

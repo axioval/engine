@@ -10,7 +10,10 @@
 //! module a wall selector over an IFC model selected nothing and the rule
 //! reported a clean pass.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use axioval_ir::SourceId;
 use axioval_ir::contract::ExternalName;
@@ -82,6 +85,8 @@ pub enum BindingError {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ConceptCatalog {
     entries: BTreeMap<(ConceptKind, String), Vec<ExternalName>>,
+    /// The ids of the classifications the ruleset derives.
+    classifications: BTreeSet<String>,
 }
 
 impl ConceptCatalog {
@@ -98,6 +103,20 @@ impl ConceptCatalog {
         }
         self.entries.insert(key, names.to_vec());
         Ok(())
+    }
+
+    /// Declares the classifications the ruleset derives, so references to
+    /// them in the reserved classification set resolve.
+    pub(crate) fn declare_classifications<'a>(&mut self, ids: impl IntoIterator<Item = &'a str>) {
+        self.classifications
+            .extend(ids.into_iter().map(ToOwned::to_owned));
+    }
+
+    /// Whether `name` names something the engine derives in the reserved
+    /// set `set`; `None` when `set` is not a derived set.
+    #[must_use]
+    pub fn derives(&self, set: &str, name: &str) -> Option<bool> {
+        (set == axioval_ir::CLASSIFICATION_SET).then(|| self.classifications.contains(name))
     }
 
     /// Whether a concept of this kind is declared.

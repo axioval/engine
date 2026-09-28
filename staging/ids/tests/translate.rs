@@ -198,20 +198,8 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             Reason::Restriction,
         ),
         (
-            format!("{WALL}{}", property("P", "N", "")),
-            Reason::PropertyApplicability,
-        ),
-        (
-            format!("{WALL}<material><value><xs:restriction base=\"xs:string\"><xs:enumeration value=\"Steel\"/><xs:pattern value=\"S.*\"/></xs:restriction></value></material>"),
-            Reason::MaterialValue,
-        ),
-        (
             format!("{WALL}<partOf><entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity></partOf>"),
             Reason::PartOfRelation(None),
-        ),
-        (
-            format!("{WALL}<classification><system><simpleValue>Uniclass</simpleValue></system></classification>"),
-            Reason::ClassificationSystem,
         ),
         (
             "<material/>".to_owned(),
@@ -310,6 +298,7 @@ fn an_entity_enumeration_selects_any_of_its_classes() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn requirement_gaps_leave_the_other_requirements_translated() {
     let requirements = [
         valued_with("P", "Banned", "cardinality=\"prohibited\"", "X"),
@@ -336,7 +325,6 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     assert_eq!(
         reasons(&translation),
         [
-            (requirement(1), Reason::ProhibitedValue),
             (requirement(2), Reason::EmptyRestriction),
             (
                 requirement(12),
@@ -348,6 +336,10 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     assert_eq!(
         translation.specifications[0].rules,
         [
+            // The prohibited value: the facet as required, run for the
+            // rule that fails every object it passes.
+            "spec1.facet1.required",
+            "spec1.facet1",
             "spec1.facet3",
             "spec1.facet5",
             "spec1.facet6",
@@ -368,6 +360,24 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
             .capability
             .clone()
     };
+    assert_eq!(
+        capability("spec1.facet1.required"),
+        "axioval:capability.property-value"
+    );
+    assert_eq!(
+        capability("spec1.facet1"),
+        "axioval:capability.selector-conformance"
+    );
+    let auxiliary = |id: &str| {
+        translation.ruleset.root.folders[0]
+            .rules
+            .iter()
+            .find(|rule| rule.id == id)
+            .unwrap()
+            .auxiliary
+    };
+    assert!(auxiliary("spec1.facet1.required"));
+    assert!(!auxiliary("spec1.facet1"));
     assert_eq!(
         capability("spec1.facet3"),
         "axioval:capability.property-requirements"
@@ -1235,5 +1245,154 @@ fn a_range_on_a_property_holds_for_all_its_values_and_measures_read_in_si() {
     assert_eq!(
         rules[0].1["si_units"],
         ParameterValue::Boolean { value: true }
+    );
+}
+
+#[test]
+fn property_facets_in_the_applicability_select_what_they_pass() {
+    let count = |value: &str| valued_with("P", "Count", "", value);
+    // Only #10 counts 1234; the auxiliary rule's findings about the other
+    // walls are never reported.
+    for value in [
+        "1234",
+        "<xs:restriction base=\"xs:integer\"><xs:minInclusive value=\"1000\"/></xs:restriction>",
+    ] {
+        assert_eq!(
+            flagged_in_project(
+                OPTIONAL,
+                &format!("{WALL}{}", count(value)),
+                &every_applicable()
+            ),
+            ["#10"],
+            "{value}"
+        );
+    }
+    assert!(
+        flagged_in_project(
+            OPTIONAL,
+            &format!("{WALL}{}", count("99")),
+            &every_applicable()
+        )
+        .is_empty()
+    );
+    // Without a value: the walls holding the property.
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            &format!("{WALL}{}", property("P", "Count", "")),
+            &every_applicable()
+        ),
+        ["#10"]
+    );
+    // The applicability's rule is auxiliary, and read by the requirement.
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &format!("{WALL}{}", count("1234")),
+        &every_applicable(),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let rules = &translation.ruleset.root.folders[0].rules;
+    assert_eq!(rules[0].id, "spec1.applicability2");
+    assert!(rules[0].auxiliary);
+    let RuleApplicability::Selector(Selector::AllOf { operands }) = &rules[1].applicability else {
+        panic!("{:?}", rules[1].applicability)
+    };
+    assert!(operands.iter().any(|operand| matches!(
+        operand,
+        Selector::RuleOutcome { rule, .. } if rule == "spec1.applicability2"
+    )));
+    // A required specification counts only the applicable walls.
+    let required = flagged_in_project(
+        r#"maxOccurs="unbounded""#,
+        &format!("{WALL}{}", count("99")),
+        "",
+    );
+    assert_eq!(required.len(), 1);
+    assert!(required[0].contains("model.ifc"), "{required:?}");
+}
+
+#[test]
+fn prohibited_values_fail_the_objects_that_would_meet_them() {
+    let prohibited = |value: &str| valued_with("P", "Count", "cardinality=\"prohibited\"", value);
+    assert_eq!(
+        flagged_in_project(OPTIONAL, WALL, &prohibited("1234")),
+        ["#10"]
+    );
+    assert!(flagged_in_project(OPTIONAL, WALL, &prohibited("99")).is_empty());
+    // A data type alone.
+    let typed = "<property dataType=\"IFCINTEGER\" cardinality=\"prohibited\"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>Count</simpleValue></baseName></property>";
+    assert_eq!(flagged_in_project(OPTIONAL, WALL, typed), ["#10"]);
+}
+
+#[test]
+fn classification_systems_and_code_patterns_select_in_the_applicability() {
+    let applicable = |classification: &str| {
+        flagged_in_project(
+            OPTIONAL,
+            &format!("{WALL}{classification}"),
+            &every_applicable(),
+        )
+    };
+    let system = "<system><simpleValue>Uniclass</simpleValue></system>";
+    let pattern = |pattern: &str| {
+        format!(
+            "<value><xs:restriction base=\"xs:string\"><xs:pattern value=\"{pattern}\"/></xs:restriction></value>"
+        )
+    };
+    assert_eq!(
+        applicable(&format!("<classification>{system}</classification>")),
+        ["#10"]
+    );
+    // A pattern matches the assigned code or an ancestor's.
+    assert_eq!(
+        applicable(&format!(
+            "<classification>{}{system}</classification>",
+            pattern("EF_2[0-9]")
+        )),
+        ["#10"]
+    );
+    assert!(
+        applicable(&format!(
+            "<classification>{}{system}</classification>",
+            pattern("SS_.*")
+        ))
+        .is_empty()
+    );
+    // A system pattern is checked by an auxiliary classification rule.
+    assert_eq!(
+        applicable(
+            "<classification><system><xs:restriction base=\"xs:string\"><xs:pattern value=\"Uni.*\"/></xs:restriction></system></classification>"
+        ),
+        ["#10"]
+    );
+}
+
+#[test]
+fn material_values_restricted_by_several_facets_check_one_name() {
+    let value = "<value><xs:restriction base=\"xs:string\"><xs:enumeration value=\"Concrete\"/><xs:enumeration value=\"Steel\"/><xs:pattern value=\"C.*\"/></xs:restriction></value>";
+    let material = |attributes: &str| format!("<material {attributes}>{value}</material>");
+    assert_eq!(
+        flagged_in_project(OPTIONAL, WALL, &material("")),
+        ["#11", "#12"]
+    );
+    assert!(flagged_in_project(OPTIONAL, WALL, &material("cardinality=\"optional\"")).is_empty());
+    assert_eq!(
+        flagged_in_project(OPTIONAL, WALL, &material("cardinality=\"prohibited\"")),
+        ["#10"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            &format!("{WALL}{}", material("")),
+            &every_applicable()
+        ),
+        ["#10"]
+    );
+    // No name meets both facets: steel is enumerated, but shorter than 9.
+    let steel = "<material><value><xs:restriction base=\"xs:string\"><xs:enumeration value=\"Steel\"/><xs:enumeration value=\"Concrete\"/><xs:minLength value=\"9\"/></xs:restriction></value></material>";
+    assert_eq!(
+        flagged_in_project(OPTIONAL, WALL, steel),
+        ["#10", "#11", "#12"]
     );
 }

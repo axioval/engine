@@ -67,7 +67,11 @@ All four scenarios were verified to fail the gate before it was trusted.
   dropping it. An untranslatable applicability facet leaves its whole
   specification without rules, because dropping it would widen the checked
   population. Facets lower onto existing capabilities and selectors only
-  (see `docs/src/ids.md`); a facet no capability decides exactly is a gap.
+  (see `docs/src/ids.md`); a facet no selector states exactly is checked by
+  an auxiliary rule the specification's rules select through `ruleOutcome`,
+  a prohibited facet no capability negates by an auxiliary rule and a rule
+  failing what it passed, and a facet no capability decides exactly is a
+  gap.
   Depends on `axioval-ir`,
   `axioval-rules` (XML Schema pattern translation only) and the
   `openbim-ids` reader, which is merged (openbimrs/ids#5) but
@@ -83,4 +87,9 @@ All four scenarios were verified to fail the gate before it was trusted.
   `cargo run --example coverage -- *.ids` ranks the gaps of real documents.
   When the reader is published, switch to a version requirement, move the
   crate to `crates/packages/ids/` (it produces packages and adapts no
-  source), and add it to the gate lists.
+  source), and add it to the gate lists: the workspace members,
+  `EXPECTED_MEMBERS` in `scripts/staging_isolation.py`, `EXPECTED` in
+  `scripts/check_package_contents.py`, and an exemption in
+  `scripts/architecture.py` (it reads `ifc-schema`). Until then `cargo
+  deny` refuses its git source and `cargo package` its unversioned
+  dependency, so it cannot join the workspace.

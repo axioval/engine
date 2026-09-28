@@ -1,6 +1,6 @@
 # IDS import
 
-`axioval-ids` translates a buildingSMART IDS 1.0 document into a definition package and a ruleset that select the built-in capabilities. It lives in `staging/ids`: it reads IDS through the unreleased `openbim-ids` reader and is neither a workspace member nor published. It is a package importer, not a source adapter; it never reads a model.
+`axioval-ids` translates a buildingSMART IDS 1.0 document into a definition package and a ruleset that select the built-in capabilities. It lives in `staging/ids`: it reads IDS through the `openbim-ids` reader, which is merged but not yet released, and is neither a workspace member nor published (see [Publishing](#publishing)). It is a package importer, not a source adapter; it never reads a model.
 
 ## Exact or not at all
 
@@ -8,41 +8,46 @@ A facet becomes a rule only when a capability decides it exactly as IDS does. An
 
 ## What each facet becomes
 
-The applicability is one selector: the entity's classes (never their subclasses), its predefined type, and a selector for every other facet, all of which must hold. Requirements become rules over that selector.
+The applicability is one selector: the entity's classes (never their subclasses), its predefined type, and a selector for every other facet a selector states exactly, all of which must hold. A facet no selector states exactly is checked as a requirement by an [auxiliary rule](./gates.md#auxiliary-rules) (`spec<n>.applicability<k>`) over the rest of the applicability, and the applicable objects are those it passed: every rule of the specification selects `ruleOutcome` `passed` of it. The auxiliary rule reports nothing itself; an object it could not decide is not evaluated by every rule of the specification, never applicable and never left out. Requirements become rules over that selector.
 
 | IDS | Applicability | Requirement |
 |---|---|---|
 | entity | `entityType` per class, `includeSubtypes: false`; an enumeration or pattern is matched against the release's classes | `selector-conformance`; the applicability's own entity needs no rule |
 | predefined type | property selectors over `axioval:type-attributes` and `axioval:attributes`, resolved as below | as the entity |
-| attribute | property selectors in `axioval:attributes`, typed by the attribute's declared type | `property-required` or `property-value` in `axioval:attributes`; prohibited without a value: a `property-requirements` row excluding `not-empty`; prohibited with a value, or a restricted name: `selector-conformance` |
-| property | gap | `property-required`, `property-data-type`, `property-value` (with `quantifier` and `si_units`); a set or name given as a pattern or an enumeration of several: `property-value` with `property_set_pattern`/`property_pattern`, or a required `property-requirements` row with the pattern columns; prohibited without a value: `property-requirements` rows excluding `not-empty`, one per enumerated set and name, or one pattern row |
-| classification | `classification` selectors with `includeDescendants` | `classification`: systems and codes as literals or patterns, a system alone, `optional` or `prohibited` |
+| attribute | property selectors in `axioval:attributes`, typed by the attribute's declared type; an attribute declared as a real, a measure, a date, a select, a reference or an aggregate: an auxiliary rule checking it as required | `property-required` or `property-value` in `axioval:attributes`; prohibited without a value: a `property-requirements` row excluding `not-empty`; prohibited with a value, or a restricted name: `selector-conformance`, or the prohibited value's negation (below) when no selector compares it |
+| property | an auxiliary rule checking it as required | `property-required`, `property-data-type`, `property-value` (with `quantifier` and `si_units`); a set or name given as a pattern or an enumeration of several: `property-value` with `property_set_pattern`/`property_pattern`, or a required `property-requirements` row with the pattern columns; prohibited without a value: `property-requirements` rows excluding `not-empty`, one per enumerated set and name, or one pattern row; prohibited with a value or a data type: the negation (below) |
+| classification | `classification` selectors: a literal or enumerated system with a code (`includeDescendants`), a `codePattern` per pattern (`includeDescendants`), or neither for the system alone; a system given as a pattern: an auxiliary `classification` rule | `classification`: systems and codes as literals or patterns, a system alone, `optional` or `prohibited` |
 | material without a value | `exists` on `axioval:material.Kind` | `selector-conformance`, negated when prohibited |
-| material with a value | the value against `axioval:material.Names` with `quantifier: any` | `selector-conformance`, negated when prohibited; optional: no material, or one going by the value |
+| material with a value | the value against `axioval:material.Names` with `quantifier: any`; restricted by several facets one name must meet together: an auxiliary rule checking it as required | `selector-conformance`, negated when prohibited; optional: no material, or one going by the value; restricted by several facets: `property-value` over `axioval:material.Names` with `quantifier: any` (`optional` when optional), and the negation when prohibited |
 | part of | `related` with `Relationship:backward+` to the whole's entity selector | `selector-conformance`, negated when prohibited |
 | `minOccurs`/`maxOccurs` | — | `object-count` per source: required reports a model without applicable objects, prohibited a model with any |
+
+A prohibited facet no capability negates is written as two rules: an auxiliary rule `spec<n>.facet<k>.required` checking the facet as required over the applicability, and `spec<n>.facet<k>`, a `selector-conformance` rule over the objects that auxiliary rule passed, which fails every one of them: meeting the facet breaks the prohibition. An object the auxiliary rule could not decide is not evaluated.
 
 The predefined type follows IDS: the type object's own, or its element or process type when that is user-defined or unset, unless the result is empty or `NOTDEFINED`; otherwise the occurrence's own, or its object type when user-defined or unset. A literal `USERDEFINED` asks whether the type is user-defined at all. A classification requirement is met by one assignment in a matching system whose code, or an ancestor's, matches; an optional one holds for an object with no classification at all and must be met by one with any. A material value is matched against every name and category the material goes by (the set's, each member's, each member material's), as `axioval:material.Names` lists them. A part-of relation is followed from the part to its wholes one or more times, and only that relation; a pattern for the whole drops classes that can never be the relation's relating end.
 
 A property value is judged as IDS judges list, bounded, table and enumerated values: `quantifier` `any` (one of its values) for a literal, an enumeration or a pattern, and `all` for a range restriction, so a bounded value must lie within the range as a whole. `si_units` reads the literal of a measure in SI, the unit IDS states measures in. A set or property named by an `xs:pattern`, or by an enumeration of several names (written as an escaped alternation), is enumerated through the property service: one property must match in every set the set name matches, and every matching property must satisfy the facet, as the buildingSMART cases require. An enumeration narrowed by patterns is the names that match them. A matching set that holds no property at all cannot be seen by enumeration, so a required facet does not fail on it; IDS would.
 
-Values keep IDS casting where a capability casts: `property-value` casts literals to the resolved value's kind, including `totalDigits` and `fractionDigits`. A selector compares one declared type, so an attribute value in a selector is translated only when every applicable class declares the attribute as text, an enumeration, a boolean or an integer; XML Schema patterns go through `axioval_rules::translate_xsd_pattern`, which refuses what it cannot map exactly.
+Values keep IDS casting where a capability casts: `property-value` casts literals to the resolved value's kind, including `totalDigits` and `fractionDigits`, which is why a property facet in the applicability is decided by an auxiliary `property-value` rule rather than a selector, which compares one declared type. An attribute value in a selector is translated only when every applicable class declares the attribute as text, an enumeration, a boolean or an integer; XML Schema patterns go through `axioval_rules::translate_xsd_pattern`, which refuses what it cannot map exactly.
 
 ## Gaps
 
 These parts stay explicit gaps:
 
-- a property facet in the applicability: IDS casts its literal to each property's own type, and a selector compares one declared type and cannot tell null or blank from a value without it;
-- a prohibited property facet with a value or a data type;
-- an attribute declared as a real, a measure, a date, a select, a reference or an aggregate, in a selector;
-- in the applicability, a classification without a value (the system alone) and a classification pattern: the classification selector states both now (a selector without `code`, and `codePattern`), but the importer does not translate them yet;
-- a material value restricted by several facets at once (an enumeration and patterns, a length), which one name must meet together;
-- part of without a relation (every relation, mixed along the chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`;
+- part of without a relation (every relation, mixed along the chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`: a `related` path step names one relationship, so a chain alternating relationships cannot be followed;
+- an attribute facet whose name is a restriction, with a value or a cardinality other than required, and one whose named attributes a selector cannot compare;
 - requirements on a prohibited specification, which IDS declares invalid;
-- entities that are not `IfcObject` occurrences, which a model session does not check, and `IFC4X3_ADD2`.
+- entities that are not `IfcObject` occurrences (type objects, resources, an IFC4 `IfcProject`), which a model session does not check, and IFC2X3 classes the IDS type mapping table renames (`IFCAIRTERMINAL`);
+- `IFC4X3_ADD2`, for which the IFC adapter declares no type system: it refuses IFC4X3 models until their properties resolve exactly.
+
+A required facet on a property set that holds no property does not fail as IDS says it would: the property service enumerates properties, so an empty set is invisible to it. This is not reported as a gap, since the translation is exact wherever the source can answer.
 
 ## Conformance corpus
 
 `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -- --ignored corpus` runs every buildingSMART test case through the IFC adapter and the engine. It asserts that no translated rule fails a `pass-` case and that every `fail-` case either produces a finding or is explained by a reported gap. `IDS_CORPUS_VERBOSE=1` lists every case with its findings.
 
 Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` or a complex property, which the adapter refuses; a table value checked with a `dataType`, since a table whose columns differ in type reports none; and a measure whose unit the model does not resolve.
+
+## Publishing
+
+The importer moves into the workspace, as `crates/packages/ids`, once a crates.io release of `openbim-ids` carries the reader (`openbim_ids::read`, `from_str`, `from_slice`); the latest release, 0.1.2, predates it. Until then it cannot be a member: the gate's `cargo deny` refuses every git source (`unknown-git = "deny"`, no `allow-git`), `cargo package` refuses a dependency without a registry version, and a path or git dependency cannot be published. Moving it then takes a version requirement for `openbim-ids`; workspace dependencies in place of the paths, the workspace package fields and lints, and no `publish = false`; the member in the workspace `Cargo.toml` (`crates/packages/*`); `EXPECTED_MEMBERS` in `scripts/staging_isolation.py`; the crate in `EXPECTED` of `scripts/check_package_contents.py`, which `scripts/package.sh` verifies; and an exemption in `scripts/architecture.py`, whose core crates must not depend on IFC while the importer reads `ifc-schema` and names IFC releases. The release itself stays with the maintainer's release run.

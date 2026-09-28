@@ -78,6 +78,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
   `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
   gives way to `matchers`.
+- **IDS property, classification, material and attribute facets in the
+  applicability, and prohibited values.** (Refs #116) The staging IDS
+  importer checks a facet no selector states exactly with an auxiliary
+  rule over the rest of the applicability, and applies the
+  specification's rules to the objects it passed: a property facet (its
+  literal cast to each property's type by `property-value`), an attribute
+  a selector cannot compare (a real, a measure, a date, a select, a
+  reference, an aggregate), a classification system given as a pattern,
+  and a material value restricted by several facets. A classification
+  with a literal system becomes a `classification` selector with a code, a
+  `codePattern`, or the system alone. A prohibited property with a value
+  or a data type, and any prohibited facet no capability negates, becomes
+  an auxiliary rule checking it as required and a rule failing every
+  object that one passed. A material value restricted by several facets
+  one name must meet together becomes `property-value` over
+  `axioval:material.Names` with `quantifier` `any`. The corpus is
+  unchanged at 141 exact passes, 37 sound passes, 88 caught fails, 23
+  unjudged fails and 18 not evaluated, with no mismatch: its remaining
+  gaps are type objects and resources a model session does not check.
+
 - **Auxiliary rules.** (Refs #116) A rule instance declares `auxiliary:
   true` to run only for the rules that read its outcome through a gate or a
   `ruleOutcome` selector: it chooses the objects they check, and reports no

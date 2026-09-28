@@ -25,12 +25,23 @@
 //! # What becomes what
 //!
 //! - The applicability is one selector: the entity's classes (never their
-//!   subclasses), its predefined type, and a selector for every other facet.
+//!   subclasses), its predefined type, and a selector for every other facet
+//!   a selector states exactly. A facet none does (a property, an attribute
+//!   a selector cannot compare as IDS does, a classification system given
+//!   as a pattern, a material value restricted by several facets) is
+//!   checked as a requirement by an auxiliary rule over the rest of the
+//!   applicability, and the applicable objects are those it passed
+//!   (`ruleOutcome`). The auxiliary rule reports nothing itself; what it
+//!   leaves undecided is not evaluated by every rule of the specification.
 //! - A property requirement becomes `property-required`,
 //!   `property-data-type` or `property-value`; an attribute requirement the
 //!   same in the reserved attribute set. A prohibited property or attribute
 //!   without a value becomes an excluded `not-empty` row of
-//!   `property-requirements`. A property value is judged under `quantifier`
+//!   `property-requirements`. A prohibited facet no capability negates (a
+//!   property with a value or a data type, an attribute value a selector
+//!   cannot compare, a material value restricted by several facets) becomes
+//!   an auxiliary rule checking it as required and a `selector-conformance`
+//!   rule failing every object that rule passed. A property value is judged under `quantifier`
 //!   `any` (one value of a list, bounded, table or enumerated value), or
 //!   `all` for a range restriction, with `si_units`, as IDS states measures
 //!   in SI.
@@ -45,9 +56,14 @@
 //! - Entity, material, part-of and name-restricted attribute requirements
 //!   become `selector-conformance` with the facet's selector, negated when
 //!   prohibited. A material value is tested against the material set's
-//!   `Names` list, every name and category the material goes by.
+//!   `Names` list, every name and category the material goes by; one
+//!   restricted by several facets that one name must meet together becomes
+//!   `property-value` over that list with `quantifier` `any`.
 //! - A classification requirement becomes `classification`: systems and
 //!   codes as literals or patterns, a system alone, optional or prohibited.
+//!   In the applicability a literal or enumerated system becomes
+//!   `classification` selectors, with a code, a `codePattern`, or neither
+//!   for the system alone.
 //! - The applicability's `minOccurs`/`maxOccurs` become `object-count` in
 //!   each source: a required specification reports a model with no
 //!   applicable object, a prohibited one a model with any.
@@ -74,7 +90,7 @@ use axioval_ir::contract::{
     ComparisonOperator, DefinitionPackage, ExternalName, LocalizedText, ObjectTypeDefinition,
     PackageMetadata, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
     PropertySetDefinition, PropertyValueKind, Quantifier, RelatedQuantifier, RuleApplicability,
-    RuleDefinition, RuleFolder, RuleInstance, RuleSetPackage, Selector, Severity,
+    RuleDefinition, RuleFolder, RuleInstance, RuleOutcomeKind, RuleSetPackage, Selector, Severity,
     TableColumnDefinition, TableRow,
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
@@ -277,13 +293,6 @@ pub enum Reason {
         /// Why it cannot be translated.
         why: String,
     },
-    /// A property facet in the applicability. IDS casts its value to each
-    /// property's own type; a property selector compares one declared type,
-    /// and without it cannot tell a null or blank value from a present one.
-    PropertyApplicability,
-    /// A prohibited property facet with a value or a data type: no capability
-    /// negates `property-value`.
-    ProhibitedValue,
     /// An attribute whose declared type a selector cannot compare as IDS
     /// does (a real, a measure, a date, a select, a reference, an aggregate,
     /// or different types across the applicable classes).
@@ -303,17 +312,6 @@ pub enum Reason {
     /// A value literal a selector cannot compare exactly (a boolean other
     /// than `true`/`false`, an integer written with a fraction).
     ValueLiteral(String),
-    /// An applicability classification facet without a value, which asks
-    /// for the system alone; the classification selector names a code. A
-    /// requirement translates through the `classification` capability.
-    ClassificationSystem,
-    /// An applicability classification system or value given as a pattern.
-    /// A requirement translates through the `classification` capability.
-    ClassificationPattern,
-    /// A material value restricted by several facets (an enumeration and
-    /// patterns together, or a length), which one of the material's names
-    /// must meet at once; separate tests over the name list cannot say so.
-    MaterialValue,
     /// A part-of facet without a relation (every relation, mixed along the
     /// chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`.
     PartOfRelation(Option<Relation>),
@@ -357,12 +355,6 @@ impl fmt::Display for Reason {
             Reason::Pattern { pattern, why } => {
                 write!(f, "pattern {pattern:?} cannot be translated exactly: {why}")
             }
-            Reason::PropertyApplicability => f.write_str(
-                "an applicability property facet casts its value to each property's own type, which a property selector cannot",
-            ),
-            Reason::ProhibitedValue => f.write_str(
-                "a prohibited property facet with a value or data type has no negated property-value",
-            ),
             Reason::AttributeType {
                 attribute,
                 declared,
@@ -380,15 +372,6 @@ impl fmt::Display for Reason {
             Reason::ValueLiteral(literal) => {
                 write!(f, "value {literal:?} cannot be compared exactly by a selector")
             }
-            Reason::ClassificationSystem => f.write_str(
-                "an applicability classification without a value asks for the system alone, which no selector names",
-            ),
-            Reason::ClassificationPattern => f.write_str(
-                "an applicability classification system or value pattern has no selector",
-            ),
-            Reason::MaterialValue => f.write_str(
-                "a material value restricted by several facets must hold for one name at once",
-            ),
             Reason::PartOfRelation(None) => f.write_str(
                 "a part-of facet without a relation mixes every relation along the chain",
             ),
@@ -548,9 +531,9 @@ impl<'o> Writer<'o> {
             releases: &releases,
             classes: applicability
                 .as_ref()
-                .map(|(_, classes, _)| classes.clone())
+                .map(|applicable| applicable.classes.clone())
                 .unwrap_or_default(),
-            entity: applicability.as_ref().map(|(_, _, entity)| *entity),
+            entity: applicability.as_ref().map(|applicable| applicable.entity),
         };
         let prohibited = specification.applicability.max_occurs == Some(0);
         let facets: &[Requirement] = specification
@@ -565,7 +548,9 @@ impl<'o> Writer<'o> {
             });
         } else {
             for (index, requirement) in facets.iter().enumerate() {
-                match self.attempt(|writer| writer.requirement(requirement, &scope)) {
+                match self.attempt(|writer| {
+                    writer.requirement(&requirement.facet, requirement.occurrence, &scope)
+                }) {
                     Ok(Some(check)) => checks.push((index + 1, requirement, check)),
                     Ok(None) => {}
                     Err(reason) => gaps.push(Gap {
@@ -576,29 +561,65 @@ impl<'o> Writer<'o> {
             }
         }
         let skipped = gaps.iter().any(Gap::skips);
-        let Some((selector, ..)) = applicability.filter(|_| !skipped) else {
+        let Some(applicable) = applicability.filter(|_| !skipped) else {
             // Nothing is written, so nothing it would have named is either.
             self.concepts = saved;
             return (Vec::new(), gaps);
         };
         let mut rules = Vec::new();
+        // A facet no selector states is checked by an auxiliary rule over
+        // the rest of the applicability; the objects it passes are
+        // applicable.
+        let mut operands = vec![applicable.selector.clone()];
+        for (facet, check) in applicable.checked {
+            let id = format!("spec{number}.applicability{facet}");
+            operands.push(passed(&id));
+            rules.push(self.rule(id, specification, None, check, &applicable.selector, true));
+        }
+        let selector = all_of(operands);
         if let Some(check) = occurrence(specification) {
-            rules.push(self.rule(number, None, specification, None, check, &selector));
+            let id = format!("spec{number}.occurrence");
+            rules.push(self.rule(id, specification, None, check, &selector, false));
         }
         for (facet, requirement, check) in checks {
+            let id = format!("spec{number}.facet{facet}");
+            let Check::Negated { required, holds } = check else {
+                rules.push(self.rule(
+                    id,
+                    specification,
+                    Some(requirement),
+                    check,
+                    &selector,
+                    false,
+                ));
+                continue;
+            };
+            // The facet as required, run for this rule alone: every object
+            // it passes breaks the prohibition.
+            let required_id = format!("{id}.required");
+            let breaks = all_of(vec![selector.clone(), passed(&required_id)]);
             rules.push(self.rule(
-                number,
-                Some(facet),
+                required_id,
                 specification,
                 Some(requirement),
-                check,
+                *required,
                 &selector,
+                true,
+            ));
+            rules.push(self.rule(
+                id,
+                specification,
+                Some(requirement),
+                breaking(&holds),
+                &breaks,
+                false,
             ));
         }
         (rules, gaps)
     }
 
-    /// The applicability's selector, classes and entity facet.
+    /// The applicability's selector, classes, entity facet, and the facets
+    /// only a rule can check.
     ///
     /// `None` when any facet is untranslatable; the gaps say which.
     fn applicability<'s>(
@@ -606,7 +627,7 @@ impl<'o> Writer<'o> {
         specification: &'s Specification,
         releases: &[IfcVersion],
         gaps: &mut Vec<Gap>,
-    ) -> Option<(Selector, Vec<String>, &'s Entity)> {
+    ) -> Option<Applicable<'s>> {
         let facets = &specification.applicability.facets;
         if facets.is_empty() {
             gaps.push(Gap {
@@ -653,13 +674,23 @@ impl<'o> Writer<'o> {
                 .unwrap_or_default(),
             entity: entity.as_ref().map(|(_, facet)| *facet),
         };
+        let mut checked = Vec::new();
         for (index, facet) in facets.iter().enumerate() {
             if matches!(facet, Facet::Entity(_)) {
                 continue;
             }
             // Being applicable means meeting the facet as a requirement would.
-            match self.attempt(|writer| writer.facet_selector(facet, &scope)) {
-                Ok(selector) => operands.push(selector),
+            let translated = self.attempt(|writer| match writer.facet_selector(facet, &scope)? {
+                Some(selector) => Ok(Ok(selector)),
+                None => writer
+                    .requirement(facet, Occurrence::Required, &scope)
+                    .map(Err),
+            });
+            match translated {
+                Ok(Ok(selector)) => operands.push(selector),
+                Ok(Err(Some(check))) => checked.push((index + 1, check)),
+                // Met by every object.
+                Ok(Err(None)) => {}
                 Err(reason) => {
                     failed = true;
                     gaps.push(Gap {
@@ -673,31 +704,69 @@ impl<'o> Writer<'o> {
             return None;
         }
         let (classes, facet) = entity?;
-        Some((all_of(operands), classes, facet))
+        Some(Applicable {
+            selector: all_of(operands),
+            classes,
+            entity: facet,
+            checked,
+        })
     }
 
-    /// The selector a facet other than the entity stands for, as required.
-    fn facet_selector(&mut self, facet: &Facet, scope: &Scope<'_>) -> Result<Selector, Reason> {
+    /// The selector a facet other than the entity stands for, as required;
+    /// `None` when no selector states it as IDS decides it, so a rule
+    /// checks it.
+    fn facet_selector(
+        &mut self,
+        facet: &Facet,
+        scope: &Scope<'_>,
+    ) -> Result<Option<Selector>, Reason> {
         match facet {
-            Facet::Entity(entity) => Ok(self.entity_selector(entity, scope.releases)?.0),
-            Facet::Attribute(attribute) => self.attribute_selector(attribute, scope),
+            Facet::Entity(entity) => Ok(Some(self.entity_selector(entity, scope.releases)?.0)),
+            Facet::Attribute(attribute) => match self.attribute_selector(attribute, scope) {
+                Ok(selector) => Ok(Some(selector)),
+                // Compared by `property-value`, which casts as IDS does.
+                Err(Reason::AttributeType { .. }) if matches!(attribute.name, Value::Simple(_)) => {
+                    Ok(None)
+                }
+                Err(reason) => Err(reason),
+            },
             Facet::Classification(classification) => classification_selector(classification),
             Facet::Material(material) => self.material_selector(material, scope.releases),
-            Facet::PartOf(part_of) => self.part_of_selector(part_of, scope.releases),
-            Facet::Property(_) => Err(Reason::PropertyApplicability),
+            Facet::PartOf(part_of) => Ok(Some(self.part_of_selector(part_of, scope.releases)?)),
+            // IDS casts a property's literal to the property's own type,
+            // which `property-value` does and a selector does not.
+            Facet::Property(_) => Ok(None),
         }
     }
 
-    /// The exact check for a requirement, `None` when it always holds.
+    /// The exact check for a facet with `occurrence`, `None` when it always
+    /// holds.
     fn requirement(
         &mut self,
-        requirement: &Requirement,
+        facet: &Facet,
+        occurrence: Occurrence,
         scope: &Scope<'_>,
     ) -> Result<Option<Check>, Reason> {
-        let occurrence = requirement.occurrence;
-        match &requirement.facet {
-            Facet::Property(property) => self.property_check(property, occurrence, scope),
-            Facet::Attribute(attribute) => self.attribute_check(attribute, occurrence, scope),
+        match facet {
+            Facet::Property(property) => {
+                if occurrence == Occurrence::Prohibited
+                    && (property.value.is_some() || property.data_type.is_some())
+                {
+                    return self.negated(facet, scope);
+                }
+                self.property_check(property, occurrence, scope)
+            }
+            Facet::Attribute(attribute) => {
+                match self.attempt(|writer| writer.attribute_check(attribute, occurrence, scope)) {
+                    Err(Reason::AttributeType { .. })
+                        if occurrence == Occurrence::Prohibited
+                            && matches!(attribute.name, Value::Simple(_)) =>
+                    {
+                        self.negated(facet, scope)
+                    }
+                    other => other,
+                }
+            }
             Facet::Entity(entity) => {
                 // Requiring the class the applicability already selected
                 // always holds.
@@ -714,31 +783,7 @@ impl<'o> Writer<'o> {
             Facet::Classification(classification) => {
                 classification_check(classification, occurrence).map(Some)
             }
-            Facet::Material(material) => {
-                let selector = self.material_selector(material, scope.releases)?;
-                let holds = match &material.value {
-                    Some(value) => format!("has a material named {}", shown_value(value)),
-                    None => "has a material".to_owned(),
-                };
-                if occurrence == Occurrence::Optional {
-                    let Some(value) = &material.value else {
-                        // Without a value: any material, or none.
-                        return Ok(None);
-                    };
-                    // No material at all, or one going by the name.
-                    let kind = (
-                        MATERIAL_SET.to_owned(),
-                        self.attribute(MATERIAL_KIND, scope.releases),
-                    );
-                    let selector = any_of(vec![unset(&kind), selector]);
-                    return Ok(Some(conformance(
-                        selector,
-                        occurrence,
-                        &format!("has no material or one named {}", shown_value(value)),
-                    )));
-                }
-                Ok(Some(conformance(selector, occurrence, &holds)))
-            }
+            Facet::Material(material) => self.material_check(facet, material, occurrence, scope),
             Facet::PartOf(part_of) => {
                 let selector = self.part_of_selector(part_of, scope.releases)?;
                 if occurrence == Occurrence::Optional {
@@ -756,6 +801,88 @@ impl<'o> Writer<'o> {
         }
     }
 
+    /// A prohibited facet no capability negates: the facet as required,
+    /// whose every pass breaks the prohibition.
+    fn negated(&mut self, facet: &Facet, scope: &Scope<'_>) -> Result<Option<Check>, Reason> {
+        let holds = holds(facet);
+        Ok(Some(
+            match self.requirement(facet, Occurrence::Required, scope)? {
+                Some(required) => Check::Negated {
+                    required: Box::new(required),
+                    holds,
+                },
+                // Met by every object, so broken by every one.
+                None => breaking(&holds),
+            },
+        ))
+    }
+
+    fn material_check(
+        &mut self,
+        facet: &Facet,
+        material: &Material,
+        occurrence: Occurrence,
+        scope: &Scope<'_>,
+    ) -> Result<Option<Check>, Reason> {
+        let Some(selector) = self.material_selector(material, scope.releases)? else {
+            // Several facets one name must meet together: `property-value`
+            // over the names the material goes by, any of which may.
+            if occurrence == Occurrence::Prohibited {
+                return self.negated(facet, scope);
+            }
+            let Some(value) = &material.value else {
+                unreachable!("a material without a value has a selector");
+            };
+            let mut parameters = BTreeMap::new();
+            value_parameters(value, &mut parameters)?;
+            parameters.insert("quantifier".to_owned(), string("any"));
+            let optional = occurrence == Occurrence::Optional;
+            if optional {
+                parameters.insert(
+                    "optional".to_owned(),
+                    ParameterValue::Boolean { value: true },
+                );
+            }
+            parameters.insert(
+                "property".to_owned(),
+                ParameterValue::PropertyReference {
+                    property: self.attribute(MATERIAL_NAMES, scope.releases),
+                    property_set: Some(MATERIAL_SET.to_owned()),
+                },
+            );
+            return Ok(Some(Check::Capability {
+                kind: Kind::Value,
+                title: Kind::Value.title(
+                    &format!("a material named {}", shown_value(value)),
+                    optional,
+                ),
+                parameters,
+            }));
+        };
+        let holds = match &material.value {
+            Some(value) => format!("has a material named {}", shown_value(value)),
+            None => "has a material".to_owned(),
+        };
+        if occurrence == Occurrence::Optional {
+            let Some(value) = &material.value else {
+                // Without a value: any material, or none.
+                return Ok(None);
+            };
+            // No material at all, or one going by the name.
+            let kind = (
+                MATERIAL_SET.to_owned(),
+                self.attribute(MATERIAL_KIND, scope.releases),
+            );
+            let selector = any_of(vec![unset(&kind), selector]);
+            return Ok(Some(conformance(
+                selector,
+                occurrence,
+                &format!("has no material or one named {}", shown_value(value)),
+            )));
+        }
+        Ok(Some(conformance(selector, occurrence, &holds)))
+    }
+
     fn property_check(
         &mut self,
         property: &Property,
@@ -766,9 +893,8 @@ impl<'o> Writer<'o> {
         let names = Names::of(&property.base_name)?;
         let shown = format!("{}.{}", sets.shown(), names.shown());
         if occurrence == Occurrence::Prohibited {
-            if property.value.is_some() || property.data_type.is_some() {
-                return Err(Reason::ProhibitedValue);
-            }
+            // With a value or a data type, `requirement` negates the
+            // required facet instead.
             return Ok(Some(self.prohibited_property(&sets, &names, &shown, scope)));
         }
         let optional = occurrence == Occurrence::Optional;
@@ -1106,18 +1232,21 @@ impl<'o> Writer<'o> {
         Ok(all_of(operands))
     }
 
+    /// The selector a material facet stands for; `None` for a value
+    /// restricted by several facets one name must meet together, which
+    /// separate tests over the name list cannot require.
     fn material_selector(
         &mut self,
         material: &Material,
         releases: &[IfcVersion],
-    ) -> Result<Selector, Reason> {
+    ) -> Result<Option<Selector>, Reason> {
         let Some(value) = &material.value else {
             // Every material states its composition.
             let kind = (
                 MATERIAL_SET.to_owned(),
                 self.attribute(MATERIAL_KIND, releases),
             );
-            return Ok(exists(&kind));
+            return Ok(Some(exists(&kind)));
         };
         // IDS matches the value against every name and category the
         // material goes by, members' and their materials' included; one of
@@ -1154,13 +1283,11 @@ impl<'o> Writer<'o> {
                         })
                         .collect::<Result<_, Reason>>()?
                 } else {
-                    // Several facets must hold for one name, which
-                    // separate tests over the list cannot require.
-                    return Err(Reason::MaterialValue);
+                    return Ok(None);
                 }
             }
         };
-        Ok(any_of(tests.into_iter().map(any_element).collect()))
+        Ok(Some(any_of(tests.into_iter().map(any_element).collect())))
     }
 
     fn part_of_selector(
@@ -1188,14 +1315,16 @@ impl<'o> Writer<'o> {
         })
     }
 
+    /// A rule with `id` checking `check` over `selector`; an auxiliary one
+    /// only serves the rules that read its outcome.
     fn rule(
         &mut self,
-        number: usize,
-        facet: Option<usize>,
+        id: String,
         specification: &Specification,
         requirement: Option<&Requirement>,
         check: Check,
         selector: &Selector,
+        auxiliary: bool,
     ) -> RuleInstance {
         let (kind, title, parameters) = check.lower();
         let definition_id = self.definition(kind);
@@ -1204,10 +1333,7 @@ impl<'o> Writer<'o> {
             .or(specification.instructions.as_deref())
             .map(LocalizedText::plain);
         RuleInstance {
-            id: match facet {
-                Some(facet) => format!("spec{number}.facet{facet}"),
-                None => format!("spec{number}.occurrence"),
-            },
+            id,
             definition_id,
             name: LocalizedText::plain(title),
             description,
@@ -1220,6 +1346,7 @@ impl<'o> Writer<'o> {
             citations: Vec::new(),
             parameter_citations: Vec::new(),
             gate: None,
+            auxiliary,
             explanatory_images: Vec::new(),
             tags: vec!["ids".to_owned()],
             severity_bands: Vec::new(),
@@ -1380,6 +1507,10 @@ enum Check {
         minimum: Option<u32>,
         maximum: Option<u32>,
     },
+    /// A prohibited facet as the negation of `required`: an auxiliary rule
+    /// checks it as required, and every object that rule passes breaks the
+    /// prohibition. `holds` says what the facet states.
+    Negated { required: Box<Check>, holds: String },
 }
 
 impl Check {
@@ -1438,7 +1569,79 @@ impl Check {
                 };
                 (Kind::Count, title, parameters)
             }
+            Check::Negated { .. } => unreachable!("a negated check is written as two rules"),
         }
+    }
+}
+
+/// What an applicability selects: the facets a selector states, the
+/// entity's classes and facet, and the facets only a rule checks, by their
+/// position.
+struct Applicable<'s> {
+    selector: Selector,
+    classes: Vec<String>,
+    entity: &'s Entity,
+    checked: Vec<(usize, Check)>,
+}
+
+/// The objects the rule `id` passed.
+fn passed(id: &str) -> Selector {
+    Selector::RuleOutcome {
+        rule: id.to_owned(),
+        outcome: RuleOutcomeKind::Passed,
+    }
+}
+
+/// A `selector-conformance` check every selected object fails: each breaks
+/// the prohibition that it `holds`.
+fn breaking(holds: &str) -> Check {
+    Check::Conforms {
+        requirement: not(Selector::All),
+        title: format!("prohibited: {holds}"),
+        message: format!("{holds}, which IDS prohibits"),
+    }
+}
+
+/// What a facet states of an object, as required.
+fn holds(facet: &Facet) -> String {
+    match facet {
+        Facet::Entity(entity) => format!("is a {}", shown_entity(entity)),
+        Facet::Attribute(attribute) => match &attribute.value {
+            Some(value) => format!(
+                "has attribute {} {}",
+                shown_value(&attribute.name),
+                shown_value(value)
+            ),
+            None => format!("has attribute {}", shown_value(&attribute.name)),
+        },
+        Facet::Property(property) => {
+            let mut shown = format!(
+                "has {}.{}",
+                shown_value(&property.property_set),
+                shown_value(&property.base_name)
+            );
+            if let Some(data_type) = &property.data_type {
+                shown.push_str(" of type ");
+                shown.push_str(data_type);
+            }
+            if let Some(value) = &property.value {
+                shown.push_str(" = ");
+                shown.push_str(&shown_value(value));
+            }
+            shown
+        }
+        Facet::Classification(classification) => {
+            format!("is classified {}", shown_classification(classification))
+        }
+        Facet::Material(material) => match &material.value {
+            Some(value) => format!("has a material named {}", shown_value(value)),
+            None => "has a material".to_owned(),
+        },
+        Facet::PartOf(part_of) => format!(
+            "is part of {} through {}",
+            shown_entity(&part_of.entity),
+            part_of.relation.map_or("any relation", Relation::as_str)
+        ),
     }
 }
 
@@ -2312,36 +2515,57 @@ fn parse_integer(literal: &str) -> Option<i64> {
     literal.strip_prefix('+').unwrap_or(literal).parse().ok()
 }
 
-/// A classification facet with a literal or enumerated system and value.
+/// A classification facet as a selector: literal or enumerated systems, and
+/// a literal, enumerated or patterned code, or none for the system alone.
 ///
 /// A reference matches its own code and every ancestor's, so a value names a
 /// class and all its subclasses, as IDS reads full classifications. The
-/// system and the code are matched on the same reference.
-fn classification_selector(classification: &Classification) -> Result<Selector, Reason> {
-    let literals = |value: &Value| match value {
-        Value::Simple(literal) => Ok(vec![literal.clone()]),
+/// system and the code are matched on the same reference. A system given
+/// as a pattern has no selector (`None`); the `classification` capability
+/// checks it.
+fn classification_selector(classification: &Classification) -> Result<Option<Selector>, Reason> {
+    let systems = match &classification.system {
+        Value::Simple(literal) => vec![literal.clone()],
         Value::Restriction(restriction) if only_enumeration(restriction) => {
-            Ok(restriction.enumeration.clone())
+            restriction.enumeration.clone()
         }
-        Value::Restriction(_) => Err(Reason::ClassificationPattern),
+        Value::Restriction(restriction) => {
+            only_names(restriction)?;
+            for pattern in &restriction.patterns {
+                translated(pattern)?;
+            }
+            return Ok(None);
+        }
     };
-    let systems = literals(&classification.system)?;
-    let Some(value) = &classification.value else {
-        return Err(Reason::ClassificationSystem);
+    // (code, pattern) alternatives; neither for the system alone.
+    let codes: Vec<(Option<String>, Option<String>)> = match &classification.value {
+        None => vec![(None, None)],
+        Some(Value::Simple(code)) => vec![(Some(code.clone()), None)],
+        Some(Value::Restriction(restriction)) => {
+            match Names::of(&Value::Restriction(restriction.clone()))? {
+                Names::Literals(codes) => {
+                    codes.into_iter().map(|code| (Some(code), None)).collect()
+                }
+                Names::Patterns(patterns) => patterns
+                    .into_iter()
+                    .map(|pattern| (None, Some(pattern)))
+                    .collect(),
+            }
+        }
     };
-    let codes = literals(value)?;
     let mut operands = Vec::new();
     for system in &systems {
-        for code in &codes {
+        for (code, code_pattern) in &codes {
             operands.push(Selector::Classification {
                 system: system.clone(),
-                code: Some(code.clone()),
-                code_pattern: None,
-                include_descendants: true,
+                code: code.clone(),
+                code_pattern: code_pattern.clone(),
+                // Only a code or a pattern names a class to descend from.
+                include_descendants: code.is_some() || code_pattern.is_some(),
             });
         }
     }
-    Ok(any_of(operands))
+    Ok(Some(any_of(operands)))
 }
 
 /// A property selector over a list value, holding when any element does.

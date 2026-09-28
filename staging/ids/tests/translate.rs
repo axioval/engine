@@ -310,47 +310,136 @@ fn only_classes_a_model_session_checks_are_applicable() {
     );
 }
 
-#[test]
-fn ifc2x3_classes_the_type_mapping_table_renames_are_gaps() {
-    let entity =
-        |name: &str| format!("<entity><name><simpleValue>{name}</simpleValue></name></entity>");
-    let mapped = Reason::TypeMapped {
-        entity: "IFCAIRTERMINAL".into(),
-        occurrence: "IFCFLOWTERMINAL",
-        type_object: "IFCAIRTERMINALTYPE",
-    };
-    // As the applicability: the whole specification.
-    let translation = one(
-        "IFC2X3",
-        OPTIONAL,
-        &entity("IFCAIRTERMINAL"),
-        &property("P", "N", ""),
-    );
-    assert!(translation.specifications[0].is_skipped());
-    assert_eq!(
-        reasons(&translation),
-        [(Part::Applicability { facet: 1 }, mapped.clone())]
-    );
-    // As a requirement: never a rule failing every flow terminal.
-    let translation = one(
-        "IFC2X3 IFC4",
-        OPTIONAL,
-        &entity("IFCFLOWTERMINAL"),
-        &entity("IFCAIRTERMINAL"),
-    );
-    assert_eq!(
-        reasons(&translation),
-        [(Part::Requirement { facet: 1 }, mapped)]
-    );
-    assert!(translation.specifications[0].rules.is_empty());
-    // IFC4 defines the class itself.
-    let translation = one(
-        "IFC4",
-        OPTIONAL,
-        &entity("IFCAIRTERMINAL"),
-        &property("P", "N", ""),
-    );
+/// IFC2X3 flow terminals: #1 typed by a `DIFFUSER` air terminal type, #3
+/// by a sanitary terminal type, #5 untyped, #6 by a user-defined `JET` air
+/// terminal type. None states a `Description`.
+const IFC2X3_TERMINALS: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#1=IFCFLOWTERMINAL('0000000000000000000001',$,'A',$,$,$,$,$);
+#2=IFCAIRTERMINALTYPE('0000000000000000000002',$,'AT',$,$,$,$,$,$,.DIFFUSER.);
+#3=IFCFLOWTERMINAL('0000000000000000000003',$,'S',$,$,$,$,$);
+#4=IFCSANITARYTERMINALTYPE('0000000000000000000004',$,'ST',$,$,$,$,$,$,.WASHHANDBASIN.);
+#5=IFCFLOWTERMINAL('0000000000000000000005',$,'U',$,$,$,$,$);
+#6=IFCFLOWTERMINAL('0000000000000000000006',$,'J',$,$,$,$,$);
+#7=IFCAIRTERMINALTYPE('0000000000000000000007',$,'JT',$,$,$,$,$,'JET',.USERDEFINED.);
+#10=IFCRELDEFINESBYTYPE('0000000000000000000010',$,$,$,(#1),#2);
+#11=IFCRELDEFINESBYTYPE('0000000000000000000011',$,$,$,(#3),#4);
+#12=IFCRELDEFINESBYTYPE('0000000000000000000012',$,$,$,(#6),#7);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// An IFC4 air terminal #1, and a flow terminal #2 typed by an air
+/// terminal type, which IFC4 does not call an air terminal.
+const IFC4_TERMINALS: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCAIRTERMINAL('0000000000000000000001',$,'A',$,$,$,$,$,.DIFFUSER.);
+#2=IFCFLOWTERMINAL('0000000000000000000002',$,'F',$,$,$,$,$);
+#3=IFCAIRTERMINALTYPE('0000000000000000000003',$,'AT',$,$,$,$,$,$,.DIFFUSER.);
+#4=IFCRELDEFINESBYTYPE('0000000000000000000004',$,$,$,(#2),#3);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// The objects a complete translation flags in `model`, with nothing left
+/// not evaluated.
+fn flagged_in(model: &str, releases: &str, applicability: &str, requirements: &str) -> Vec<String> {
+    let translation = one(releases, OPTIONAL, applicability, requirements);
     assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let report = run(&translation, model);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let mut flagged: Vec<String> = report
+        .findings()
+        .iter()
+        .filter_map(|finding| finding.object_id().map(|id| id.local_id.clone()))
+        .collect();
+    flagged.sort();
+    flagged
+}
+
+#[test]
+fn ifc2x3_classes_the_type_mapping_table_renames_are_translated() {
+    let entity = |name: &str, predefined: &str| {
+        let predefined = if predefined.is_empty() {
+            String::new()
+        } else {
+            format!("<predefinedType><simpleValue>{predefined}</simpleValue></predefinedType>")
+        };
+        format!("<entity><name><simpleValue>{name}</simpleValue></name>{predefined}</entity>")
+    };
+    let description = "<attribute><name><simpleValue>Description</simpleValue></name></attribute>";
+    // As the applicability: a flow terminal typed by an air terminal type.
+    for releases in ["IFC2X3", "IFC2X3 IFC4"] {
+        assert_eq!(
+            flagged_in(
+                IFC2X3_TERMINALS,
+                releases,
+                &entity("IFCAIRTERMINAL", ""),
+                description
+            ),
+            ["#1", "#6"],
+            "{releases}"
+        );
+    }
+    // Its predefined type is its type object's, or the element type when
+    // user-defined.
+    let typed = |predefined: &str| {
+        flagged_in(
+            IFC2X3_TERMINALS,
+            "IFC2X3",
+            &entity("IFCAIRTERMINAL", predefined),
+            description,
+        )
+    };
+    assert_eq!(typed("DIFFUSER"), ["#1"]);
+    assert_eq!(typed("JET"), ["#6"]);
+    assert_eq!(typed("USERDEFINED"), ["#6"]);
+    // As a requirement: every other flow terminal fails it.
+    assert_eq!(
+        flagged_in(
+            IFC2X3_TERMINALS,
+            "IFC2X3",
+            &entity("IFCFLOWTERMINAL", ""),
+            &entity("IFCAIRTERMINAL", "")
+        ),
+        ["#3", "#5"]
+    );
+    // In an IFC4 model of a specification for both releases, the class is
+    // IFC4's own; a flow terminal typed by an air terminal type is none.
+    assert_eq!(
+        flagged_in(
+            IFC4_TERMINALS,
+            "IFC2X3 IFC4",
+            &entity("IFCAIRTERMINAL", ""),
+            description
+        ),
+        ["#1"]
+    );
+    // A pattern also matching the occurrence class needs no mapping: every
+    // IFC2X3 flow terminal matches it.
+    assert_eq!(
+        flagged_in(
+            IFC2X3_TERMINALS,
+            "IFC2X3 IFC4",
+            "<entity><name><xs:restriction base=\"xs:string\"><xs:pattern value=\"IFC(AIR|FLOW)TERMINAL\"/></xs:restriction></name></entity>",
+            description
+        ),
+        ["#1", "#3", "#5", "#6"]
+    );
 }
 
 #[test]

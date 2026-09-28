@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **IFC2X3 classes of the IDS type mapping table.** (Refs #116) The staging
+  IDS importer translates an IFC2X3 class the IDS IFC2X3 occurrence and
+  type mapping table renames (`IFCAIRTERMINAL`) instead of reporting a
+  `TypeMapped` gap: it selects its occurrence class typed, through
+  `IfcRelDefinesByType`, by a type object of its type class
+  (`IfcFlowTerminal` by `IfcAirTerminalType`), both exactly, now that type
+  objects are session objects. The predefined type is the type object's.
+  A specification listing another release too matches the class itself
+  there and the mapped objects only in an IFC2X3 source. `ApplicableOccurrence`
+  is never read. `Reason::TypeMapped` is gone.
+
 - **Type objects are checked objects.** (Refs #116) An IFC session's
   objects are now every `IfcObject`, every `IfcContext` and every
   `IfcTypeObject` (`IfcWallType`, IFC2X3 `IfcDoorStyle`, ...), with their

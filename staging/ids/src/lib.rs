@@ -53,6 +53,10 @@
 //!   `property-requirements` row with the pattern columns, required, or
 //!   excluded `not-empty` when prohibited. An enumeration narrowed by
 //!   patterns is the names that match them.
+//! - In IFC2X3 a class the IDS type mapping table renames (`IFCAIRTERMINAL`)
+//!   is its occurrence class typed, through `IfcRelDefinesByType`, by a type
+//!   object of its type class (`IFCFLOWTERMINAL` by `IFCAIRTERMINALTYPE`);
+//!   with another release listed too, only in an IFC2X3 source.
 //! - Entity, material, part-of and name-restricted attribute requirements
 //!   become `selector-conformance` with the facet's selector, negated when
 //!   prohibited. A material value is tested against the material set's
@@ -93,7 +97,7 @@ use axioval_ir::contract::{
     PackageMetadata, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
     PropertySetDefinition, PropertyValueKind, Quantifier, RelatedQuantifier, RuleApplicability,
     RuleDefinition, RuleFolder, RuleInstance, RuleOutcomeKind, RuleSetPackage, Selector, Severity,
-    TableColumnDefinition, TableRow,
+    SourceField, TableColumnDefinition, TableRow,
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use ifc_schema::{Schema, TypeKind};
@@ -319,17 +323,6 @@ pub enum Reason {
     /// A value literal a selector cannot compare exactly (a boolean other
     /// than `true`/`false`, an integer written with a fraction).
     ValueLiteral(String),
-    /// An IFC4 class the IDS IFC2X3 type mapping table renames: in IFC2X3
-    /// it is an `occurrence` typed by a `type_object` of that class, and a
-    /// type object's class is no fact a model session checks.
-    TypeMapped {
-        /// The class as the facet names it (`IFCAIRTERMINAL`).
-        entity: String,
-        /// The IFC2X3 occurrence class (`IFCFLOWTERMINAL`).
-        occurrence: &'static str,
-        /// The IFC2X3 type object class (`IFCAIRTERMINALTYPE`).
-        type_object: &'static str,
-    },
     /// Requirements on a prohibited specification, which IDS declares
     /// invalid: no applicable object may exist at all.
     ProhibitedRequirements,
@@ -387,14 +380,6 @@ impl fmt::Display for Reason {
             Reason::ValueLiteral(literal) => {
                 write!(f, "value {literal:?} cannot be compared exactly by a selector")
             }
-            Reason::TypeMapped {
-                entity,
-                occurrence,
-                type_object,
-            } => write!(
-                f,
-                "in IFC2X3 {entity} is an {occurrence} typed by an {type_object}, and a type object's class is not checked"
-            ),
             Reason::ProhibitedRequirements => f.write_str(
                 "a prohibited specification takes no requirements; IDS declares them invalid",
             ),
@@ -1092,7 +1077,7 @@ impl<'o> Writer<'o> {
     ) -> Result<(Selector, Vec<String>), Reason> {
         let names = entity_names(entity, releases)?;
         let names = occurrences(names, releases, pattern_named(entity))?;
-        self.classes_selector(entity, names, releases)
+        self.classes_selector(entity, &names, releases)
     }
 
     /// The selector for an entity requirement: an object of another class,
@@ -1103,36 +1088,70 @@ impl<'o> Writer<'o> {
         releases: &[IfcVersion],
     ) -> Result<(Selector, Vec<String>), Reason> {
         let names = entity_names(entity, releases)?;
-        self.classes_selector(entity, names, releases)
+        self.classes_selector(entity, &names, releases)
     }
 
     fn classes_selector(
         &mut self,
         entity: &Entity,
-        names: Vec<String>,
+        names: &[String],
         releases: &[IfcVersion],
     ) -> Result<(Selector, Vec<String>), Reason> {
-        let classes = any_of(
-            names
-                .iter()
-                .map(|name| Selector::EntityType {
-                    object_type: self.object_type(name, releases),
-                    // IDS matches the named class only, never its subclasses.
-                    include_subtypes: false,
-                })
-                .collect(),
-        );
+        let mut operands = Vec::new();
+        let mut classes = names.to_vec();
+        for name in names {
+            // IDS matches the named class only, never its subclasses.
+            let own = self.class(name, releases);
+            let Some((occurrence, type_object)) = mapped(name, names, releases) else {
+                operands.push(own);
+                continue;
+            };
+            // In IFC2X3 the class is an occurrence typed by a type object.
+            let typed = all_of(vec![
+                self.class(occurrence, releases),
+                Selector::Related {
+                    path: vec!["IfcRelDefinesByType:backward".to_owned()],
+                    quantifier: RelatedQuantifier::Any,
+                    selector: Box::new(self.class(type_object, releases)),
+                },
+            ]);
+            if releases == [IfcVersion::Ifc2x3] {
+                operands.push(typed);
+            } else {
+                // Another release defines the class itself, and there the
+                // occurrence class is no such object: the mapping holds for
+                // IFC2X3 models only.
+                operands.push(own);
+                operands.push(all_of(vec![
+                    Selector::Source {
+                        field: SourceField::Schema,
+                        operator: ComparisonOperator::Equals,
+                        value: Some(ParameterValue::String {
+                            value: "IFC2X3".to_owned(),
+                        }),
+                        case_sensitive: true,
+                        trim: false,
+                        quantifier: None,
+                    },
+                    typed,
+                ]));
+            }
+            if !classes.iter().any(|class| class == occurrence) {
+                classes.push(occurrence.to_owned());
+            }
+        }
+        let classes_selector = any_of(operands);
         let selector = match &entity.predefined_type {
-            None => classes,
+            None => classes_selector,
             Some(value) => {
-                let labels = user_defined_labels(&names, releases);
+                let labels = user_defined_labels(&classes, releases);
                 all_of(vec![
-                    classes,
+                    classes_selector,
                     self.predefined_type(value, &labels, releases)?,
                 ])
             }
         };
-        Ok((selector, names))
+        Ok((selector, classes))
     }
 
     /// Whether the object's predefined type, as IDS resolves it, meets
@@ -1350,7 +1369,7 @@ impl<'o> Writer<'o> {
             ],
         };
         let names = whole_names(&part_of.entity, relationships, releases)?;
-        let (whole, _) = self.classes_selector(&part_of.entity, names, releases)?;
+        let (whole, _) = self.classes_selector(&part_of.entity, &names, releases)?;
         // IDS follows the relations recursively from the part up to its
         // wholes, the relating ends, one step taking any of them.
         Ok(Selector::Related {
@@ -1443,6 +1462,14 @@ impl<'o> Writer<'o> {
         let id = format!("{}.{kind}-{}", self.options.package_id, count + 1);
         self.concepts.ids.insert(key, id.clone());
         (id, true)
+    }
+
+    /// Objects of exactly the class `entity`, never of its subclasses.
+    fn class(&mut self, entity: &str, releases: &[IfcVersion]) -> Selector {
+        Selector::EntityType {
+            object_type: self.object_type(entity, releases),
+            include_subtypes: false,
+        }
     }
 
     fn object_type(&mut self, entity: &str, releases: &[IfcVersion]) -> String {
@@ -1972,21 +1999,36 @@ fn occurrences(
             continue;
         };
         for name in &names {
+            let name = in_release(name, &names, releases, *release);
             if schema.entity(name).is_none() {
                 if matched {
                     continue;
                 }
                 return Err(Reason::UnknownEntity {
-                    entity: name.clone(),
+                    entity: name.to_owned(),
                     release: *release,
                 });
             }
             if !checked(schema, name) {
-                return Err(Reason::NotAnObject(name.clone()));
+                return Err(Reason::NotAnObject(name.to_owned()));
             }
         }
     }
     Ok(names)
+}
+
+/// The class `name` stands for in `release`: its IFC2X3 occurrence class
+/// when the type mapping table maps it there, else itself.
+fn in_release<'a>(
+    name: &'a str,
+    names: &[String],
+    releases: &[IfcVersion],
+    release: IfcVersion,
+) -> &'a str {
+    match mapped(name, names, releases) {
+        Some((occurrence, _)) if release == IfcVersion::Ifc2x3 => occurrence,
+        _ => name,
+    }
 }
 
 /// Whether an IFC session makes project objects of `name`'s instances:
@@ -2049,12 +2091,13 @@ fn whole_names(
 ) -> Result<Vec<String>, Reason> {
     let names = entity_names(entity, releases)?;
     let mut wholes = Vec::new();
-    for name in names {
+    for named in &names {
         let mut relating = false;
         for release in releases {
             let Some(schema) = schema(*release) else {
                 continue;
             };
+            let name = in_release(named, &names, releases, *release).to_owned();
             if schema.entity(&name).is_none() {
                 if pattern_named(entity) {
                     continue;
@@ -2082,7 +2125,7 @@ fn whole_names(
             }
         }
         if relating || !pattern_named(entity) {
-            wholes.push(name);
+            wholes.push(named.clone());
         }
     }
     Ok(wholes)
@@ -2126,40 +2169,31 @@ fn entity_names(entity: &Entity, releases: &[IfcVersion]) -> Result<Vec<String>,
     {
         return Err(Reason::EntityCase(name.clone()));
     }
-    type_mapped(&names, releases)?;
     Ok(names)
 }
 
-/// Refuses a class the IDS IFC2X3 type mapping table renames, when IFC2X3
-/// is among `releases` and does not define it: IDS matches an occurrence
-/// of the mapped class typed by the mapped type object, and without the
-/// type object's class as a checked fact, a selector for the name would
-/// match nothing in IFC2X3, silently narrowing an applicability and failing
-/// every object of a requirement.
-fn type_mapped(names: &[String], releases: &[IfcVersion]) -> Result<(), Reason> {
-    if !releases.contains(&IfcVersion::Ifc2x3) {
-        return Ok(());
+/// The IFC2X3 occurrence and type object classes the IDS IFC2X3 type
+/// mapping table gives `name`, when IFC2X3 is among `releases` and does not
+/// define `name` itself: IDS then matches an occurrence of that class typed
+/// by a type object of that class. `None` also when `names` names the
+/// occurrence class too (a pattern matching both), whose objects already
+/// cover the mapped ones.
+///
+/// The mapping reads the occurrence's class and its `IfcRelDefinesByType`
+/// type object's class only, never `IfcTypeObject.ApplicableOccurrence`.
+fn mapped(
+    name: &str,
+    names: &[String],
+    releases: &[IfcVersion],
+) -> Option<(&'static str, &'static str)> {
+    if !releases.contains(&IfcVersion::Ifc2x3) || ifc_schema::ifc2x3().entity(name).is_some() {
+        return None;
     }
-    let ifc2x3 = ifc_schema::ifc2x3();
-    for name in names {
-        if ifc2x3.entity(name).is_some() {
-            continue;
-        }
-        // A class whose occurrence class is named too (a pattern matching
-        // both) adds only objects that class already covers.
-        if let Some((_, occurrence, type_object)) = IFC2X3_TYPE_MAPPING
-            .iter()
-            .find(|(mapped, _, _)| mapped == name)
-            .filter(|(_, occurrence, _)| !names.iter().any(|named| named == occurrence))
-        {
-            return Err(Reason::TypeMapped {
-                entity: name.clone(),
-                occurrence,
-                type_object,
-            });
-        }
-    }
-    Ok(())
+    IFC2X3_TYPE_MAPPING
+        .iter()
+        .find(|(mapped, _, _)| *mapped == name)
+        .filter(|(_, occurrence, _)| !names.iter().any(|named| named == occurrence))
+        .map(|(_, occurrence, type_object)| (*occurrence, *type_object))
 }
 
 /// The IDS IFC2X3 occurrence and type mapping table

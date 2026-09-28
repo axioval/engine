@@ -37,6 +37,11 @@ allow = [
   # through tiny-keccak <- const-random <- ahash, which both Axiolid 0.3 and
   # the IFC 0.2 crates pull in.
   "CC0-1.0",
+  # Permissive, OSI-approved and GPL-compatible; its conditions (no
+  # misrepresented origin, altered sources marked, notice kept in source)
+  # bind only source redistribution. Reached through zlib-rs, the deflate
+  # backend of zip 8 (test-only here) and of openbim-bcf from 0.5.
+  "Zlib",
 ]
 confidence-threshold = 0.93
 exceptions = []

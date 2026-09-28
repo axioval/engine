@@ -758,9 +758,10 @@ pub use vertical_extent::{
     VerticalExtentService, VerticalExtentServiceHandle,
 };
 pub use walkability::{
-    PassageAdmission, VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind,
-    WalkabilityError, WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest,
-    WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle, WalkabilitySnapshot,
+    PassageAdmission, StretchLimit, VerifiedWalkablePassage, VerticalConnector,
+    VerticalConnectorKind, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
+    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
+    WalkabilitySnapshot, WalkableStretch,
 };
 pub use walking_surface::{
     ClearWidthEvidence, ClearWidthRequest, ClearanceBelow, ClearanceBelowRequest, HandrailEvidence,

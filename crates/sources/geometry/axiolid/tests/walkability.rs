@@ -12,9 +12,10 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkabilityService};
 use axioval_engine::{
-    LengthInterval, MetricDirection, PassageAdmission, SweptDoor, SwingSector, VerticalConnector,
-    VerticalConnectorKind, WalkabilityError, WalkabilityRegionId, WalkabilityRequest,
-    WalkabilityRouteOutcome, WalkabilityServiceHandle, WalkabilitySnapshot,
+    LengthInterval, MetricDirection, PassageAdmission, StretchLimit, SweptDoor, SwingSector,
+    VerticalConnector, VerticalConnectorKind, WalkabilityError, WalkabilityRegionId,
+    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle, WalkabilitySnapshot,
+    WalkableStretch,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -381,6 +382,297 @@ fn a_swing_closing_a_corridor_cuts_off_the_room_beyond() {
     };
     assert_eq!(pieces(&open), 1);
     assert_eq!(pieces(&closed), 2);
+    // Floor joins the two pieces under the swing: that stretch is located
+    // there and depends on the hatch and the walls it closes the corridor
+    // against.
+    let stretches = stretches(&closed);
+    assert_eq!(stretches.len(), 1, "{stretches:#?}");
+    let (stretch, upper) = &stretches[0];
+    assert_eq!(stretch.surface(), &id("b"));
+    assert_eq!(stretch.limit(), StretchLimit::Obstructed);
+    assert_eq!(stretch.obstacles(), [id("hatch"), id("north"), id("south")]);
+    let [x, y, z] = stretch.at();
+    assert!(
+        (6.0..=6.9).contains(&x) && (1.0..=2.2).contains(&y),
+        "{x} {y}"
+    );
+    assert!(z.abs() < 1e-9);
+    assert!(*upper < 0.8);
+    assert!(stretches_of(&open).is_empty());
+}
+
+/// Every passage marking a stretch, with its upper width bound.
+fn stretches(snapshot: &WalkabilitySnapshot) -> Vec<(WalkableStretch, f64)> {
+    snapshot
+        .passages()
+        .iter()
+        .filter(|passage| passage.portal().is_none() && passage.connector().is_none())
+        .filter_map(|passage| {
+            passage
+                .stretch()
+                .map(|stretch| (stretch.clone(), passage.clear_width().upper_metres()))
+        })
+        .filter(|(_, upper)| *upper > 0.0)
+        .collect()
+}
+
+fn stretches_of(snapshot: &WalkabilitySnapshot) -> Vec<WalkableStretch> {
+    snapshot
+        .passages()
+        .iter()
+        .filter_map(|passage| passage.stretch().cloned())
+        .collect()
+}
+
+/// A closed, outward-oriented prism over a counter-clockwise `outline`
+/// whose top is cut into the counter-clockwise triangles `caps`.
+fn prism(outline: &[[f64; 2]], caps: &[[u32; 3]], z0: f64, z1: f64) -> TriMesh {
+    let count = u32::try_from(outline.len()).unwrap();
+    let mut points: Vec<Point3> = outline
+        .iter()
+        .map(|[x, y]| Point3::new(*x, *y, z0))
+        .collect();
+    points.extend(outline.iter().map(|[x, y]| Point3::new(*x, *y, z1)));
+    let mut indices = Vec::new();
+    for [a, b, c] in caps {
+        indices.extend([*a, *c, *b]);
+        indices.extend([count + a, count + b, count + c]);
+    }
+    for i in 0..count {
+        let j = (i + 1) % count;
+        indices.extend([i, j, count + j, i, count + j, count + i]);
+    }
+    TriMesh::new(points, indices)
+}
+
+/// `b` as two blocks (x 4.2..5.8 and 6.4..8) joined by a neck 0.4 m wide
+/// (y 1.8..2.2).
+fn dumbbell() -> TriMesh {
+    prism(
+        &[
+            [4.2, 0.0],
+            [5.8, 0.0],
+            [5.8, 1.8],
+            [6.4, 1.8],
+            [6.4, 0.0],
+            [8.0, 0.0],
+            [8.0, 4.0],
+            [6.4, 4.0],
+            [6.4, 2.2],
+            [5.8, 2.2],
+            [5.8, 4.0],
+            [4.2, 4.0],
+        ],
+        &[
+            [0, 1, 2],
+            [0, 2, 9],
+            [0, 9, 11],
+            [9, 10, 11],
+            [2, 3, 8],
+            [2, 8, 9],
+            [3, 4, 5],
+            [3, 5, 6],
+            [3, 6, 8],
+            [8, 6, 7],
+        ],
+        0.0,
+        3.0,
+    )
+}
+
+#[test]
+fn a_pinch_inside_a_room_is_a_located_narrow_stretch() {
+    let geometry = model(0.9).with_mesh(id("b"), dumbbell());
+    let service =
+        AxiolidWalkabilityService::new(geometry, source()).with_clear_width(id("door"), 0.85);
+    let snapshot = snapshot(service, &request(0.8)).unwrap();
+    // `b`'s west block is still reached through the door.
+    assert!(matches!(
+        snapshot.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    let stretches = stretches(&snapshot);
+    assert_eq!(stretches.len(), 1, "{stretches:#?}");
+    let (stretch, upper) = &stretches[0];
+    assert_eq!(stretch.surface(), &id("b"));
+    assert_eq!(stretch.limit(), StretchLimit::Narrow);
+    assert!(stretch.obstacles().is_empty());
+    let [x, y, _] = stretch.at();
+    // In the neck.
+    assert!(
+        (5.8..=6.4).contains(&x) && (1.8..=2.2).contains(&y),
+        "{x} {y}"
+    );
+    assert!(*upper < 0.8);
+    let locator = snapshot
+        .passages()
+        .iter()
+        .find(|passage| passage.stretch().is_some())
+        .map(|passage| passage.evidence().locator.clone())
+        .unwrap();
+    assert!(
+        locator.starts_with("axiolid:walkability:stretch:cad:model/b:narrow:at=6.1"),
+        "{locator}"
+    );
+}
+
+/// `b` cut down to a corridor 1.2 m wide (y 1..2.2) by walls north and
+/// south of it.
+fn corridor_geometry() -> (AxiolidGeometry, Vec<ObjectId>) {
+    let geometry = model(0.9)
+        .with_mesh(id("south"), cuboid([4.2, 0.0, 0.0], [8.0, 1.0, 3.0]))
+        .with_mesh(id("north"), cuboid([4.2, 2.2, 0.0], [8.0, 4.0, 3.0]));
+    let mut obstacles: Vec<ObjectId> = WALLS.iter().map(|local| id(local)).collect();
+    obstacles.extend([id("south"), id("north")]);
+    (geometry, obstacles)
+}
+
+#[test]
+fn a_beam_below_the_headroom_is_a_located_low_stretch() {
+    // A beam across the corridor at x 6..6.3, its underside 1.8 m up.
+    let (geometry, mut obstacles) = corridor_geometry();
+    let geometry = geometry.with_mesh(id("beam"), cuboid([6.0, 1.0, 1.8], [6.3, 2.2, 2.0]));
+    obstacles.push(id("beam"));
+    let service = || {
+        AxiolidWalkabilityService::new(geometry.clone(), source())
+            .with_clear_width(id("door"), 0.85)
+    };
+    let request = |height: f64| {
+        WalkabilityRequest::try_new(
+            vec![id("a"), id("b")],
+            vec![id("door")],
+            obstacles.clone(),
+            0.8,
+            Some(LengthInterval::try_new(0.0, height).unwrap()),
+            true,
+            false,
+        )
+        .unwrap()
+    };
+    // Under a 1.7 m band the beam is above the body.
+    assert!(stretches_of(&snapshot_of(service(), &request(1.7))).is_empty());
+    let stretches = stretches(&snapshot_of(service(), &request(2.1)));
+    assert_eq!(stretches.len(), 1, "{stretches:#?}");
+    let (stretch, _) = &stretches[0];
+    assert_eq!(stretch.limit(), StretchLimit::Low);
+    assert_eq!(stretch.obstacles(), [id("beam")]);
+    let headroom = stretch.headroom().unwrap();
+    assert!((headroom.upper_metres() - 1.8).abs() < 1e-9, "{headroom:?}");
+    let [x, _, _] = stretch.at();
+    assert!((5.9..=6.4).contains(&x), "{x}");
+}
+
+/// Lobby `a` (x 0..4), corridor `n` (x 4..8, 0.81 m wide at y 1.6..2.41)
+/// and room `f` (x 8..12), touching in a row, with 5 mm skirtings along
+/// both corridor walls.
+fn skirted() -> (AxiolidWalkabilityService, WalkabilityRequest) {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 3.0]))
+        .with_mesh(id("n"), cuboid([4.0, 1.6, 0.0], [8.0, 2.41, 3.0]))
+        .with_mesh(id("f"), cuboid([8.0, 0.0, 0.0], [12.0, 4.0, 3.0]))
+        .with_mesh(id("skirt-s"), cuboid([4.0, 1.6, 0.0], [8.0, 1.605, 0.06]))
+        .with_mesh(id("skirt-n"), cuboid([4.0, 2.405, 0.0], [8.0, 2.41, 0.06]));
+    let request = WalkabilityRequest::try_new(
+        vec![id("a"), id("n"), id("f")],
+        vec![],
+        vec![id("skirt-s"), id("skirt-n")],
+        0.8,
+        None,
+        true,
+        false,
+    )
+    .unwrap();
+    (AxiolidWalkabilityService::new(geometry, source()), request)
+}
+
+#[test]
+fn a_skirting_within_the_obstruction_depth_does_not_narrow_a_corridor() {
+    // The skirtings leave 0.8 m between them: no witness for a 0.8 m body.
+    let (service, request) = skirted();
+    assert_eq!(
+        snapshot(service, &request)
+            .unwrap()
+            .route_between(&id("a"), &id("f"))
+            .unwrap(),
+        WalkabilityRouteOutcome::Indeterminate
+    );
+    // Tolerated up to 1 cm from the walls, the corridor is 0.81 m wide.
+    let (service, request) = skirted();
+    let request = request.with_obstruction_depth(0.01).unwrap();
+    let snapshot = snapshot(service, &request).unwrap();
+    assert!(matches!(
+        snapshot.route_between(&id("a"), &id("f")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    // A depth short of the skirting tolerates none of it.
+    let (service, request) = skirted();
+    let request = request.with_obstruction_depth(0.004).unwrap();
+    assert_eq!(
+        snapshot_of(service, &request)
+            .route_between(&id("a"), &id("f"))
+            .unwrap(),
+        WalkabilityRouteOutcome::Indeterminate
+    );
+}
+
+fn snapshot_of(
+    service: AxiolidWalkabilityService,
+    request: &WalkabilityRequest,
+) -> WalkabilitySnapshot {
+    snapshot(service, request).unwrap()
+}
+
+#[test]
+fn surfaces_within_the_surface_gap_are_joined_across_it() {
+    // `a` (x 0..4) and `g` (x 4.02..8): 2 cm apart, no door between.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 3.0]))
+        .with_mesh(id("g"), cuboid([4.02, 0.0, 0.0], [8.0, 4.0, 3.0]))
+        .with_mesh(id("post"), cuboid([3.9, 0.0, 0.0], [4.1, 4.0, 3.0]));
+    let request = |gap: f64, obstacles: Vec<ObjectId>| {
+        WalkabilityRequest::try_new(
+            vec![id("a"), id("g")],
+            vec![],
+            obstacles,
+            0.8,
+            None,
+            true,
+            false,
+        )
+        .unwrap()
+        .with_surface_gap(gap)
+        .unwrap()
+    };
+    let route = |gap: f64, obstacles: Vec<ObjectId>| {
+        snapshot_of(
+            AxiolidWalkabilityService::new(geometry.clone(), source()),
+            &request(gap, obstacles),
+        )
+        .route_between(&id("a"), &id("g"))
+        .unwrap()
+    };
+    assert_eq!(route(0.0, vec![]), WalkabilityRouteOutcome::Unreachable);
+    assert_eq!(route(0.01, vec![]), WalkabilityRouteOutcome::Unreachable);
+    let joined = snapshot_of(
+        AxiolidWalkabilityService::new(geometry.clone(), source()),
+        &request(0.05, vec![]),
+    );
+    assert!(matches!(
+        joined.route_between(&id("a"), &id("g")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+    assert!(
+        joined
+            .passages()
+            .iter()
+            .any(|passage| passage.evidence().locator.contains(":gap<=0.050000:")),
+        "{joined:#?}"
+    );
+    // A wall along the gap still obstructs it: joined, but never proven.
+    assert_eq!(
+        route(0.05, vec![id("post")]),
+        WalkabilityRouteOutcome::Indeterminate
+    );
 }
 
 #[test]

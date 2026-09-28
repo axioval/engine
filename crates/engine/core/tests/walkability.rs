@@ -1,9 +1,9 @@
 //! Walkability topology contract tests.
 use axioval_engine::{
-    LengthInterval, PassageAdmission, ServiceRegistry, VerifiedWalkablePassage, VerticalConnector,
-    VerticalConnectorKind, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
-    WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService, WalkabilityServiceHandle,
-    WalkabilitySnapshot,
+    LengthInterval, PassageAdmission, ServiceRegistry, StretchLimit, VerifiedWalkablePassage,
+    VerticalConnector, VerticalConnectorKind, WalkabilityError, WalkabilityRegion,
+    WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityService,
+    WalkabilityServiceHandle, WalkabilitySnapshot, WalkableStretch,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -462,4 +462,126 @@ fn nothing_blocks_a_region_nothing_joins() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn tolerances_default_to_zero_and_must_be_finite_and_non_negative() {
+    let request = req("cad");
+    assert!(request.obstruction_depth_metres().abs() < f64::EPSILON);
+    assert!(request.surface_gap_metres().abs() < f64::EPSILON);
+    let request = request
+        .with_obstruction_depth(0.01)
+        .and_then(|request| request.with_surface_gap(0.05))
+        .unwrap();
+    assert!((request.obstruction_depth_metres() - 0.01).abs() < f64::EPSILON);
+    assert!((request.surface_gap_metres() - 0.05).abs() < f64::EPSILON);
+    assert_ne!(request, req("cad"));
+    for bad in [-0.01, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            req("cad").with_obstruction_depth(bad),
+            Err(WalkabilityError::InvalidTolerance)
+        );
+        assert_eq!(
+            req("cad").with_surface_gap(bad),
+            Err(WalkabilityError::InvalidTolerance)
+        );
+    }
+}
+
+#[test]
+fn a_stretch_must_be_too_narrow_and_name_requested_objects() {
+    let space = oid("cad", "space");
+    let stretch = |obstacles: Vec<ObjectId>| {
+        WalkableStretch::try_new(
+            space.clone(),
+            StretchLimit::Obstructed,
+            [1.0, 2.0, 0.0],
+            obstacles,
+        )
+        .unwrap()
+    };
+    let located = |lo: f64, hi: f64, stretch: WalkableStretch| {
+        edge("a", "b", lo, hi).with_stretch(stretch).unwrap()
+    };
+    // Too narrow for the 0.9 m body, and the wall is a requested obstacle.
+    let accepted = snapshot(vec![located(0.0, 0.8, stretch(vec![oid("cad", "wall")]))]);
+    let found = accepted.passages()[0].stretch().unwrap();
+    assert_eq!(found.surface(), &space);
+    assert_eq!(found.limit(), StretchLimit::Obstructed);
+    assert!(
+        found
+            .at()
+            .iter()
+            .zip([1.0, 2.0, 0.0])
+            .all(|(at, expected)| (at - expected).abs() < f64::EPSILON)
+    );
+    assert_eq!(found.obstacles(), [oid("cad", "wall")]);
+    assert_eq!(found.headroom(), None);
+    let refused = |passage: VerifiedWalkablePassage| {
+        WalkabilitySnapshot::try_new(
+            req("cad"),
+            vec![
+                region("a", vec![oid("cad", "space")]),
+                region("b", vec![oid("cad", "door")]),
+            ],
+            vec![passage],
+            ev("complete"),
+        )
+    };
+    // Wide enough for the body: not a stretch it cannot pass.
+    assert_eq!(
+        refused(located(0.0, 0.9, stretch(vec![]))),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    // An obstacle the request never named.
+    assert_eq!(
+        refused(located(0.0, 0.5, stretch(vec![oid("cad", "chair")]))),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    // A surface the request never named.
+    let elsewhere =
+        WalkableStretch::try_new(oid("cad", "hall"), StretchLimit::Narrow, [0.0; 3], vec![])
+            .unwrap();
+    assert_eq!(
+        refused(located(0.0, 0.5, elsewhere)),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    // Never on a portal or a climb, and never unplaced.
+    let portal = VerifiedWalkablePassage::try_new(
+        rid("a"),
+        rid("b"),
+        Some(oid("cad", "door")),
+        LengthInterval::try_new(0.0, 0.5).unwrap(),
+        ev("crossing"),
+    )
+    .unwrap();
+    assert_eq!(
+        portal.with_stretch(stretch(vec![])),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    assert_eq!(
+        located(0.0, 0.5, stretch(vec![])).with_connector(stair()),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    assert_eq!(
+        WalkableStretch::try_new(
+            space.clone(),
+            StretchLimit::Narrow,
+            [f64::NAN, 0.0, 0.0],
+            vec![]
+        ),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    // Only a low stretch states a headroom.
+    let headroom = LengthInterval::try_new(1.8, 1.8).unwrap();
+    assert_eq!(
+        stretch(vec![]).with_headroom(headroom),
+        Err(WalkabilityError::InvalidStretch)
+    );
+    let low = WalkableStretch::try_new(space, StretchLimit::Low, [0.0; 3], vec![])
+        .unwrap()
+        .with_headroom(headroom)
+        .unwrap();
+    assert_eq!(low.headroom(), Some(headroom));
+    assert_eq!(StretchLimit::Low.as_str(), "low");
 }

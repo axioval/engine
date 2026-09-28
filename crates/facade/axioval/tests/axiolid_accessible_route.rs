@@ -506,11 +506,14 @@ fn a_corridor_narrowed_by_an_open_leaf_blocks_the_room_beyond() {
             .starts_with("no accessible route reaches cad:model/f for a body 0.8 m wide"),
         "{found:#?}"
     );
+    // The block is the corridor's floor under the swing, located there.
     assert!(
         outcome.findings()[0]
             .evidence
             .iter()
-            .any(|evidence| evidence.locator.contains(":separated")),
+            .any(|evidence| evidence
+                .locator
+                .starts_with("axiolid:walkability:stretch:cad:model/e:obstructed:at=")),
         "{outcome:#?}"
     );
 }

@@ -152,6 +152,22 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   with width zero when out of reach, and faces whose zones meet are joined.
   Never split a surface that touches another or a connector joins: a body
   may stand across the shared boundary.
+  Pieces in one footprint polygon are joined by a stretch passage (upper
+  bound the width less `2·MARGIN`, a `WalkableStretch` located in the
+  footprint left uncovered by both pieces' `dilate_outer` by the radius,
+  else at their closest points); its limit comes from re-splitting without
+  overhead obstacles (`Low`), then without any obstacle or swing
+  (`Obstructed`), else `Narrow`. Such a pair's hub gets no zero-width
+  spoke; a face reaching no piece keeps it, with a stretch in front of the
+  face. The limit and relations only word the block; the separation is the
+  proof. The obstruction depth tolerates obstacles only against the
+  floor's footprint, bracketed by `erode_outer` (`Ground::plain`, witnesses)
+  and `erode_inner` (`Ground::wide` and `sure`: mid-line bounds and
+  pieces); never swap the two. Surfaces within the surface gap are joined
+  like touching ones (and never split), the witness crossing the gap
+  through the intersection of both footprints' `dilate_inner`, less
+  `Ground::raw` (untolerated obstacles over the floor grown by the gap)
+  and circumscribed swings.
 - `src/metric_routing.rs` implements `MetricRoutingService` on the origin's
   level. `Blocked` needs complete evidence (every declared surface and portal
   measured, no connector touching the level) and a separation of the free

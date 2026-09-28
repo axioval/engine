@@ -6,6 +6,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Walkability tolerances and located stretches.** (#123)
+  `WalkabilityRequest` takes an obstruction depth
+  (`with_obstruction_depth`: obstacles within that distance of a surface's
+  boundary, a skirting say, do not obstruct it) and a surface gap
+  (`with_surface_gap`: surfaces at most that far apart are joined across
+  the gap). A passage inside one surface that no body of the width passes
+  may carry a `WalkableStretch`: where it lies, and whether the surface is
+  too narrow there, obstructed, or too low under overhead obstacles
+  (`StretchLimit`), with the obstacles it depends on and, when low, the
+  headroom. The Axiolid backend honours both tolerances with one-sided
+  erosions and dilations, and joins the pieces of a split surface by such
+  located stretches instead of passages of width zero. **Breaking:**
+  `WalkabilityError` gains `InvalidTolerance` and `InvalidStretch`.
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

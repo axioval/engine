@@ -19,7 +19,16 @@ The request supplies deterministic source-qualified sets of:
   refused (`InvalidStatedClearWidth`);
 - optionally, swept doors (`WalkabilityRequest::with_swept_doors`): the
   doors whose leaves' swing sectors are obstacles (see
-  [Door swings as obstacles](./free-space.md#door-swings-as-obstacles)).
+  [Door swings as obstacles](./free-space.md#door-swings-as-obstacles));
+- optionally, an obstruction depth (`with_obstruction_depth`, metres):
+  whatever an obstacle occupies within that distance of a surface's plan
+  boundary does not obstruct it, so a skirting or a pipe along the wall
+  leaves the width between the walls;
+- optionally, a surface gap (`with_surface_gap`, metres): surfaces whose
+  plans lie at most that far apart at overlapping heights are joined as if
+  they touched, the gap walkable unless an obstacle fills it. Both
+  tolerances default to zero and must be finite and non-negative
+  (`InvalidTolerance`).
 
 Semantic selectors run before this service. IFC placements, meshes, B-reps, and native kernel types never enter the request.
 
@@ -28,6 +37,19 @@ Semantic selectors run before this service. IFC placements, meshes, B-reps, and 
 A `WalkabilitySnapshot` is accepted only when it carries complete exact provenance. Every passage must have exact reviewable evidence, declared endpoints, and a conservative clear-width interval. Duplicate passages, unrequested object mappings, and portals outside the request policy are rejected.
 
 Object-to-region membership lets reusable capabilities ask whether selected spaces, entrances, or components share traversable free space without exposing backend cells as model objects.
+
+A passage inside one surface that no body of the request's width can pass
+may carry a `WalkableStretch` (`VerifiedWalkablePassage::with_stretch`):
+the surface, a position (plan coordinates and the floor's elevation, in the
+model's coordinates), what limits it (`StretchLimit`: `Narrow` when the
+surface's own shape does, `Obstructed` when obstacles standing on the floor
+or swung doors do, `Low` when obstacles hanging in the headroom band do),
+the obstacles found there that the limit depends on, and for a low stretch
+the headroom they leave. The snapshot accepts a stretch only on a passage
+that names no portal or connector, whose upper width bound lies below the
+request's width, on a requested surface, relating requested obstacles or
+swept doors (`InvalidStretch`). The position locates the stretch for a
+reviewer; it is never a measurement.
 
 ## Three-valued routes
 
@@ -138,6 +160,36 @@ counts, and a stated width bounds even an opening's void from above.
   since a body may pass between them without standing wholly on the
   surface. A surface touching another, or joined by a connector, stays one
   region.
+- **Stretches.** Two pieces lying in one polygon of the surface's footprint
+  are joined by floor too narrow for the body. Each such pair is joined by
+  a passage with an upper width bound of the width less 0.2 mm (the pieces
+  are separated at half the width less 0.1 mm) and a stretch: where the
+  footprint that bodies centred in neither piece cover (each piece grown
+  from outside by half the width) comes next to both pieces, or, failing
+  that, where the pieces come closest. The limit is `Low` when the pieces
+  merge once the obstacles hanging above the floor are left out, else
+  `Obstructed` when they merge without any obstacle or swing, else
+  `Narrow`; the stretch relates the obstacles (and, when obstructed, the
+  swung doors) of that kind meeting its area, and a low one the headroom
+  under the lowest of them. The hub's piece is then joined to a portal face
+  only through the stretches, not by a passage of width zero. A face whose
+  zone reaches no piece at all keeps its passage of width zero to the hub's
+  piece, with a stretch in front of the face classified the same way
+  (`:separated:<limit>` in its locator).
+- **Obstruction depth.** An obstacle's band footprint counts on a surface
+  only beyond the depth from the footprint's boundary. Where that lies is
+  bracketed by the one-sided erosions of the footprint: witnesses are
+  proven against what lies beyond `erode_outer` (tolerating less than the
+  exact depth), while mid-line width bounds and possible pieces use what
+  lies beyond `erode_inner` (tolerating more). Portal corridors are not
+  tolerated.
+- **Surface gap.** Surfaces within the gap of each other at overlapping
+  heights are joined as touching surfaces are, and stay whole. The points
+  within the gap of both footprints (`dilate_inner` of each, intersected)
+  are floor for the witness between their hubs, less what any obstacle
+  occupies there (obstacles are gathered over each floor grown by the gap,
+  nothing tolerated) and every circumscribed swing; the passage's locator
+  says `gap<=`.
 - **Refusals.** `WalkabilityError::Unavailable` for moving envelopes (use
   swept doors instead), unmeasured or undescribed obstacles, tessellated
   surfaces, portals or obstacles inside a band, surfaces that are not closed
@@ -151,9 +203,10 @@ nothing joins the surfaces at all; `Indeterminate` otherwise, notably for a
 door whose clear width is not stated, a crossing whose landing is obstructed,
 and any route through a connector. A gap narrower than the width inside a
 surface that touches no other surface splits it into pieces, so a route
-needing that gap is `Unreachable`, its cut the face-to-piece passages of
-width zero; inside surfaces that touch, such a gap is still not detected
-and can only make a route `Indeterminate`.
+needing that gap is `Unreachable`, its cut the located stretch between the
+pieces (or, in front of a face where the body fits nowhere, the stretch
+there); inside surfaces that touch, or that the surface gap joins, such a
+gap is still not detected and can only make a route `Indeterminate`.
 
 The `accessible-route` capability (see [capabilities](./capabilities.md#accessible-route)) is built on this contract: one snapshot for its mobility profile, its own admission per passage, and the blocking passages as the related elements of a finding.
 

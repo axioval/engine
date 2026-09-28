@@ -46,6 +46,13 @@ pub enum WalkabilityError {
     /// One door is given twice with different swept sectors.
     #[error("a swept door is given twice with different sectors")]
     ConflictingSweptDoors,
+    /// An obstruction depth or surface gap is not finite and non-negative.
+    #[error("a walkability tolerance must be finite and non-negative")]
+    InvalidTolerance,
+    /// A stretch lies on a portal or connector passage, is not narrower
+    /// than the request's width, or names an object the request does not.
+    #[error("a narrow stretch does not fit its passage or the request")]
+    InvalidStretch,
     /// The backend refused: evidence it would need is missing, approximate
     /// or outside what it can measure. Never a negative verdict.
     #[error("walkability unavailable: {0}")]
@@ -101,6 +108,8 @@ pub struct WalkabilityRequest {
     connectors: Vec<VerticalConnector>,
     stated_clear_widths: BTreeMap<ObjectId, f64>,
     swept: Vec<SweptDoor>,
+    obstruction_depth: f64,
+    surface_gap: f64,
 }
 impl WalkabilityRequest {
     pub fn try_new(
@@ -132,7 +141,44 @@ impl WalkabilityRequest {
             connectors: Vec::new(),
             stated_clear_widths: BTreeMap::new(),
             swept: Vec::new(),
+            obstruction_depth: 0.0,
+            surface_gap: 0.0,
         })
+    }
+    /// Tolerates obstacles intruding up to `metres` into a surface from its
+    /// boundary: whatever an obstacle occupies within that distance of the
+    /// surface's plan boundary (a skirting, a pipe along the wall) does not
+    /// obstruct it. Zero, the default, tolerates nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::InvalidTolerance`] when `metres` is not finite
+    /// and non-negative.
+    pub fn with_obstruction_depth(mut self, metres: f64) -> Result<Self, WalkabilityError> {
+        self.obstruction_depth = tolerance(metres)?;
+        Ok(self)
+    }
+    /// The depth, in metres, up to which obstacles may intrude.
+    pub fn obstruction_depth_metres(&self) -> f64 {
+        self.obstruction_depth
+    }
+    /// Joins surfaces whose plans lie at most `metres` apart at overlapping
+    /// heights as if they touched, with the gap between them walkable: a
+    /// modelling gap between two spaces does not cut a route. Obstacles in
+    /// the gap still obstruct. Zero, the default, joins only surfaces that
+    /// touch.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::InvalidTolerance`] when `metres` is not finite
+    /// and non-negative.
+    pub fn with_surface_gap(mut self, metres: f64) -> Result<Self, WalkabilityError> {
+        self.surface_gap = tolerance(metres)?;
+        Ok(self)
+    }
+    /// The widest gap, in metres, joined between surfaces.
+    pub fn surface_gap_metres(&self) -> f64 {
+        self.surface_gap
     }
     /// Counts the sectors `swept` doors sweep as obstacles on the surfaces
     /// they stand on (see [`SweptDoor`]): a definite passage stays clear of
@@ -235,6 +281,107 @@ impl WalkabilityRequest {
         self.include_motion_envelopes
     }
 }
+fn tolerance(metres: f64) -> Result<f64, WalkabilityError> {
+    if metres.is_finite() && metres >= 0.0 {
+        Ok(metres)
+    } else {
+        Err(WalkabilityError::InvalidTolerance)
+    }
+}
+/// What keeps a body from passing a stretch of one surface.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum StretchLimit {
+    /// The surface itself is too narrow there: its boundary alone stops the
+    /// body.
+    Narrow,
+    /// Obstacles standing on the floor, or swung doors, stop the body; the
+    /// surface alone would not.
+    Obstructed,
+    /// Obstacles hanging above the floor, inside the headroom band, stop
+    /// the body: without them it would not be stopped there.
+    Low,
+}
+impl StretchLimit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Narrow => "narrow",
+            Self::Obstructed => "obstructed",
+            Self::Low => "low",
+        }
+    }
+}
+/// Where, inside one walkable surface, a body of the request's width cannot
+/// pass, and why.
+///
+/// The backend proves the passage it marks too narrow; the position only
+/// locates it for a reviewer (where the parts it separates come closest, in
+/// the model's coordinates, at the floor's elevation) and is never a
+/// measurement. The obstacles are those found there that the limit depends
+/// on, possibly none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WalkableStretch {
+    surface: ObjectId,
+    limit: StretchLimit,
+    at: [f64; 3],
+    obstacles: Vec<ObjectId>,
+    headroom: Option<LengthInterval>,
+}
+impl WalkableStretch {
+    /// A stretch of `surface` at `at`.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::InvalidStretch`] when a coordinate is not finite.
+    pub fn try_new(
+        surface: ObjectId,
+        limit: StretchLimit,
+        at: [f64; 3],
+        mut obstacles: Vec<ObjectId>,
+    ) -> Result<Self, WalkabilityError> {
+        if at.iter().any(|value| !value.is_finite()) {
+            return Err(WalkabilityError::InvalidStretch);
+        }
+        obstacles.sort();
+        obstacles.dedup();
+        Ok(Self {
+            surface,
+            limit,
+            at,
+            obstacles,
+            headroom: None,
+        })
+    }
+    /// The headroom the obstacles of a [`StretchLimit::Low`] stretch leave
+    /// above the floor.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::InvalidStretch`] for any other limit.
+    pub fn with_headroom(mut self, headroom: LengthInterval) -> Result<Self, WalkabilityError> {
+        if self.limit != StretchLimit::Low {
+            return Err(WalkabilityError::InvalidStretch);
+        }
+        self.headroom = Some(headroom);
+        Ok(self)
+    }
+    pub fn surface(&self) -> &ObjectId {
+        &self.surface
+    }
+    pub fn limit(&self) -> StretchLimit {
+        self.limit
+    }
+    /// Where the stretch lies: plan position and floor elevation, metres.
+    pub fn at(&self) -> [f64; 3] {
+        self.at
+    }
+    /// The obstacles (or swept doors) the limit depends on, sorted.
+    pub fn obstacles(&self) -> &[ObjectId] {
+        &self.obstacles
+    }
+    pub fn headroom(&self) -> Option<LengthInterval> {
+        self.headroom
+    }
+}
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct WalkabilityRegionId(String);
 impl WalkabilityRegionId {
@@ -274,6 +421,7 @@ pub struct VerifiedWalkablePassage {
     b: WalkabilityRegionId,
     portal: Option<ObjectId>,
     connector: Option<VerticalConnector>,
+    stretch: Option<WalkableStretch>,
     clear_width: LengthInterval,
     evidence: Evidence,
 }
@@ -299,6 +447,7 @@ impl VerifiedWalkablePassage {
             b,
             portal,
             connector: None,
+            stretch: None,
             clear_width,
             evidence,
         })
@@ -316,8 +465,30 @@ impl VerifiedWalkablePassage {
         if self.portal.is_some() {
             return Err(WalkabilityError::PortalConnectorPassage);
         }
+        if self.stretch.is_some() {
+            return Err(WalkabilityError::InvalidStretch);
+        }
         self.connector = Some(connector);
         Ok(self)
+    }
+    /// Marks this passage as a stretch of one surface no body of the
+    /// request's width passes, located by `stretch`. The snapshot accepts
+    /// it only with an upper width bound below the request's width.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::InvalidStretch`] when the passage crosses a
+    /// portal or climbs a connector.
+    pub fn with_stretch(mut self, stretch: WalkableStretch) -> Result<Self, WalkabilityError> {
+        if self.portal.is_some() || self.connector.is_some() {
+            return Err(WalkabilityError::InvalidStretch);
+        }
+        self.stretch = Some(stretch);
+        Ok(self)
+    }
+    /// Where this passage is too narrow inside a surface, when it is.
+    pub fn stretch(&self) -> Option<&WalkableStretch> {
+        self.stretch.as_ref()
     }
     pub fn connector(&self) -> Option<&VerticalConnector> {
         self.connector.as_ref()
@@ -394,6 +565,18 @@ impl WalkabilitySnapshot {
                 .is_some_and(|connector| request.connectors.binary_search(connector).is_err())
         }) {
             return Err(WalkabilityError::ForbiddenConnectorPassage);
+        }
+        let swept: BTreeSet<&ObjectId> = request.swept.iter().map(SweptDoor::door).collect();
+        if passages.iter().any(|passage| {
+            passage.stretch.as_ref().is_some_and(|stretch| {
+                passage.clear_width.upper_metres() >= request.minimum_width
+                    || request.surfaces.binary_search(&stretch.surface).is_err()
+                    || stretch.obstacles.iter().any(|object| {
+                        request.obstacles.binary_search(object).is_err() && !swept.contains(object)
+                    })
+            })
+        }) {
+            return Err(WalkabilityError::InvalidStretch);
         }
         let key = |p: &VerifiedWalkablePassage| {
             (

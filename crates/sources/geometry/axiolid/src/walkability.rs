@@ -62,9 +62,9 @@ use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Region, Ring};
 use axioval_engine::{
-    LengthInterval, SweptDoor, VerifiedWalkablePassage, VerticalConnector, WalkabilityError,
-    WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest, WalkabilityService,
-    WalkabilitySnapshot,
+    LengthInterval, StretchLimit, SweptDoor, VerifiedWalkablePassage, VerticalConnector,
+    WalkabilityError, WalkabilityRegion, WalkabilityRegionId, WalkabilityRequest,
+    WalkabilityService, WalkabilitySnapshot, WalkableStretch,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -72,9 +72,10 @@ use crate::free_space::swept_rings;
 use crate::geometry::AxiolidGeometry;
 use crate::placement;
 use crate::walkable::{
-    Clearance, Floor, MARGIN, ON_SURFACE, Plan, PortalFacts, PortalFrame, REACH, Side, UNBOUNDED,
-    band_limits, centroid, contains, corridor, floor, join, landing, mid_line_width, obstacles,
-    obstruction, plan_gap, sides, subtract, sweep_inside, touching, trapezoids, union, witness,
+    Blocker, Clearance, Floor, MARGIN, ON_SURFACE, Plan, PortalFacts, PortalFrame, REACH, Side,
+    UNBOUNDED, band_limits, centroid, closest, contains, corridor, floor, grown, inner_point,
+    intersect, join, landing, mid_line_width, obstacles, obstruction, obstructions, plan_gap,
+    sides, subtract, sweep, sweep_inside, touching, trapezoids, union, within, witness,
 };
 
 /// Walkable regions and passages from supplied geometry.
@@ -176,13 +177,28 @@ fn width(lower: f64, upper: f64) -> Result<LengthInterval, WalkabilityError> {
 }
 
 /// One surface's free region, with and without the swept sectors on it.
+///
+/// With an obstruction depth, what an obstacle occupies within that depth
+/// of the floor's boundary is tolerated. Where exactly that band ends is
+/// bracketed by the one-sided erosions of the footprint, so the free region
+/// a witness is proven in (`plain`) tolerates less than the exact one, and
+/// the one width bounds and separations are measured in (`wide`, `sure`)
+/// more.
 struct Ground {
-    /// The floor less what the obstacles occupy in the band.
+    /// The floor less what the obstacles occupy in the band, less the part
+    /// surely within the obstruction depth of its boundary.
     plain: Plan,
+    /// The floor less what the obstacles surely occupy beyond the depth:
+    /// it contains the exact free region, so chords across it bound widths.
+    wide: Plan,
     /// `plain` less every swept sector's circumscribed polygon.
     free: Plan,
-    /// What the obstacles occupy in the band.
-    blocked: Plan,
+    /// What the obstacles occupy in the band over the floor grown by the
+    /// surface gap, nothing tolerated: a gap to another surface is no
+    /// boundary.
+    raw: Plan,
+    /// Per obstacle, what it surely occupies beyond the depth.
+    sure: Vec<Blocker>,
     /// Per swept door standing on the floor: its sectors' inscribed and
     /// circumscribed polygons.
     swings: Vec<(ObjectId, Vec<Polygon>, Vec<Polygon>)>,
@@ -198,9 +214,64 @@ fn polygons(rings: Vec<Ring>) -> Vec<Polygon> {
         .collect()
 }
 
+/// A plan as an overlay region, through its convex pieces.
+fn region_of(plan: &Plan) -> Result<Region, String> {
+    let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+    let rings: Vec<Ring> = trapezoids(plan)
+        .into_iter()
+        .map(|piece| piece.outer)
+        .collect();
+    placement::union(&rings, t).map_err(|e| e.to_string())
+}
+
+fn joined_all<'p>(plans: impl IntoIterator<Item = &'p Plan>) -> Result<Plan, String> {
+    let mut all = Plan::empty();
+    for plan in plans {
+        all = join(&all, plan)?;
+    }
+    Ok(all)
+}
+
 impl Ground {
-    fn new(floor: &Floor, blocked: Plan, swept: &[SweptDoor], top: f64) -> Result<Self, String> {
+    fn new(
+        floor: &Floor,
+        blockers: Vec<Blocker>,
+        swept: &[SweptDoor],
+        top: f64,
+        depth: f64,
+    ) -> Result<Self, String> {
+        let raw = joined_all(blockers.iter().map(|blocker| &blocker.plan))?;
+        let (blocked, sure) = if depth > 0.0 && !blockers.is_empty() {
+            let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+            let footprint = region_of(&floor.footprint)?;
+            let beyond_outer = Plan::of(
+                footprint
+                    .erode_outer(depth, t)
+                    .map_err(overlay_error("obstruction depth"))?
+                    .polygons(),
+            );
+            let beyond_inner = Plan::of(
+                footprint
+                    .erode_inner(depth, t)
+                    .map_err(overlay_error("obstruction depth"))?
+                    .polygons(),
+            );
+            let mut sure = Vec::new();
+            for blocker in blockers {
+                let plan = intersect(&blocker.plan, &beyond_inner)?;
+                if !plan.is_empty() {
+                    sure.push(Blocker { plan, ..blocker });
+                }
+            }
+            (intersect(&raw, &beyond_outer)?, sure)
+        } else {
+            (raw.clone(), blockers)
+        };
         let plain = subtract(&floor.footprint, &blocked)?;
+        let wide = subtract(
+            &floor.footprint,
+            &joined_all(sure.iter().map(|blocker| &blocker.plan))?,
+        )?;
         let mut swings = Vec::new();
         for door in swept {
             let (inner, outer) = swept_rings(std::slice::from_ref(door), floor.z0, top);
@@ -211,11 +282,34 @@ impl Ground {
         let mut ground = Self {
             free: plain.clone(),
             plain,
-            blocked,
+            wide,
+            raw,
+            sure,
             swings,
         };
         ground.free = subtract(&ground.plain, &ground.swings_but(None)?)?;
         Ok(ground)
+    }
+
+    /// The obstacles, and the doors whose inscribed swing, meeting `area`;
+    /// only those standing on the floor, or only those hanging above it.
+    fn meeting(&self, area: &Plan, floor: &Floor, overhead: bool) -> Result<Vec<ObjectId>, String> {
+        let mut found = Vec::new();
+        for blocker in &self.sure {
+            if is_overhead(blocker, floor) == overhead
+                && !intersect(&blocker.plan, area)?.is_empty()
+            {
+                found.push(blocker.id.clone());
+            }
+        }
+        if !overhead {
+            for (door, inner, _) in &self.swings {
+                if !intersect(&union(inner.clone())?, area)?.is_empty() {
+                    found.push(door.clone());
+                }
+            }
+        }
+        Ok(found)
     }
 
     /// The circumscribed polygons of every swing but `door`'s.
@@ -252,21 +346,88 @@ enum Parts {
     /// One region: whatever a body can do on it is possible.
     Whole,
     /// One region per possible piece of its free region eroded by half the
-    /// body's width; `hub` is the piece holding the hub, and the first
-    /// without one.
-    Split { pieces: Vec<Region>, hub: usize },
+    /// body's width.
+    Split(Box<Split>),
+}
+
+/// A piece a portal face may reach: its index, its region's name and
+/// whether the body may reach it from the face.
+type Reach = (usize, String, bool);
+
+/// A surface's possible pieces, and what they would be with fewer
+/// obstacles, to tell what a separation depends on.
+struct Split {
+    pieces: Vec<Region>,
+    /// The piece holding the hub, and the first without one.
+    hub: usize,
+    /// Per piece, the footprint polygon it lies in: pieces of one polygon
+    /// are joined by floor too narrow for the body.
+    components: Vec<Option<usize>>,
+    /// The pieces without the obstacles hanging above the floor, when there
+    /// are any.
+    standing: Option<Vec<Region>>,
+    /// The pieces without any obstacle or swing.
+    bare: Vec<Region>,
 }
 
 fn overlay_error(context: &str) -> impl Fn(axiolid_overlay::OverlayError) -> String + '_ {
     move |error| format!("{context}: {error:?}")
 }
 
+/// Whether an obstacle's body begins above the floor: it hangs in the
+/// headroom band rather than standing on the floor.
+fn is_overhead(blocker: &Blocker, floor: &Floor) -> bool {
+    blocker.bottom > floor.z0 + ON_SURFACE
+}
+
+/// Where the floor between two pieces lies: of the footprint that bodies
+/// centred in neither piece cover, the largest part next to both, and a
+/// point in it. `None` when no part is next to both.
+fn between(floor: &Floor, a: &Plan, b: &Plan) -> Result<Option<(Point2, Plan)>, String> {
+    let rest = subtract(&subtract(&floor.footprint, a)?, b)?;
+    let mut best: Option<(f64, Plan)> = None;
+    for polygon in rest.polygons() {
+        let part = Plan::piece(polygon.clone());
+        if within(&part, a, STRETCH_CONTACT)?
+            && within(&part, b, STRETCH_CONTACT)?
+            && best.as_ref().is_none_or(|(area, _)| part.area() > *area)
+        {
+            best = Some((part.area(), part));
+        }
+    }
+    Ok(best.and_then(|(_, part)| {
+        let point = centroid(&part)
+            .filter(|point| contains(&part, *point))
+            .or_else(|| inner_point(&part))?;
+        Some((point, part))
+    }))
+}
+
+/// How near a part of the floor must come to what a piece's bodies cover
+/// to lie next to it: the overlay's snapping, with room to spare.
+const STRETCH_CONTACT: f64 = 1e-3;
+
+/// The polygons of a region, one region each.
+fn split_region(room: &Region) -> Result<Vec<Region>, String> {
+    let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+    room.polygons()
+        .iter()
+        .map(|polygon| Region::new(vec![polygon.clone()], t))
+        .collect::<Result<_, _>>()
+        .map_err(overlay_error("possible piece"))
+}
+
+fn plan_of(region: &Region) -> Plan {
+    Plan::of(region.polygons())
+}
+
 impl Parts {
     /// The possible pieces of `floor`: its footprint eroded from outside by
     /// the radius less [`MARGIN`], less the sure obstacles (the obstacles'
-    /// band footprint and every sector's inscribed polygon) dilated from
-    /// inside by as much. Every centre of the body clear of walls and
-    /// obstacles lies inside one piece, with a disc of [`MARGIN`] around it.
+    /// band footprint beyond the obstruction depth and every sector's
+    /// inscribed polygon) dilated from inside by as much. Every centre of
+    /// the body clear of walls and obstacles lies inside one piece, with a
+    /// disc of [`MARGIN`] around it.
     fn split(
         floor: &Floor,
         ground: &Ground,
@@ -278,46 +439,41 @@ impl Parts {
             return Ok(Self::Whole);
         }
         let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
-        let rings = |plan: &Plan| -> Vec<Ring> {
-            trapezoids(plan)
-                .into_iter()
-                .map(|piece| piece.outer)
-                .collect()
-        };
-        let footprint = placement::union(&rings(&floor.footprint), t).map_err(|e| e.to_string())?;
-        let mut sure = rings(&ground.blocked);
-        sure.extend(
-            ground
-                .swings
-                .iter()
-                .flat_map(|(_, inner, _)| inner.iter().map(|polygon| polygon.outer.clone())),
-        );
-        let sure = placement::union(&sure, t).map_err(|e| e.to_string())?;
-        let mut room = footprint
+        let bare = region_of(&floor.footprint)?
             .erode_outer(shrunk, t)
             .map_err(overlay_error("possible pieces"))?;
-        if !sure.is_empty() && !room.is_empty() {
-            room = room
-                .difference(
-                    &sure
-                        .dilate_inner(shrunk, t)
-                        .map_err(overlay_error("possible pieces"))?,
-                    t,
-                )
-                .map_err(overlay_error("possible pieces"))?;
-        }
-        let pieces: Vec<Region> = room
-            .polygons()
-            .iter()
-            .map(|polygon| Region::new(vec![polygon.clone()], t))
-            .collect::<Result<_, _>>()
-            .map_err(overlay_error("possible piece"))?;
+        let carve = |overhead: bool| -> Result<Region, String> {
+            let mut sure: Vec<Ring> = Vec::new();
+            for blocker in &ground.sure {
+                if overhead || !is_overhead(blocker, floor) {
+                    sure.extend(trapezoids(&blocker.plan).into_iter().map(|p| p.outer));
+                }
+            }
+            sure.extend(
+                ground
+                    .swings
+                    .iter()
+                    .flat_map(|(_, inner, _)| inner.iter().map(|polygon| polygon.outer.clone())),
+            );
+            let sure = placement::union(&sure, t).map_err(|e| e.to_string())?;
+            if sure.is_empty() || bare.is_empty() {
+                return Ok(bare.clone());
+            }
+            bare.difference(
+                &sure
+                    .dilate_inner(shrunk, t)
+                    .map_err(overlay_error("possible pieces"))?,
+                t,
+            )
+            .map_err(overlay_error("possible pieces"))
+        };
+        let pieces = split_region(&carve(true)?)?;
         let hub = match hub {
             None => 0,
             Some(point) => {
                 let holder = pieces
                     .iter()
-                    .position(|piece| contains(&Plan::piece(piece.polygons()[0].clone()), point));
+                    .position(|piece| contains(&plan_of(piece), point));
                 // A proven hub lies in the exact erosion, hence in a piece;
                 // one rounded out of every piece keeps the surface whole.
                 match holder {
@@ -326,14 +482,191 @@ impl Parts {
                 }
             }
         };
-        Ok(Self::Split { pieces, hub })
+        let components = pieces
+            .iter()
+            .map(|piece| {
+                inner_point(&plan_of(piece)).and_then(|point| {
+                    floor
+                        .footprint
+                        .polygons()
+                        .iter()
+                        .position(|polygon| contains(&Plan::piece(polygon.clone()), point))
+                })
+            })
+            .collect();
+        let standing = if ground
+            .sure
+            .iter()
+            .any(|blocker| is_overhead(blocker, floor))
+        {
+            Some(split_region(&carve(false)?)?)
+        } else {
+            None
+        };
+        Ok(Self::Split(Box::new(Split {
+            pieces,
+            hub,
+            components,
+            standing,
+            bare: split_region(&bare)?,
+        })))
+    }
+
+    /// Whether floor too narrow for the body joins pieces `a` and `b`.
+    fn joined(split: &Split, a: usize, b: usize) -> bool {
+        split.components[a].is_some() && split.components[a] == split.components[b]
+    }
+
+    /// What a separation depends on, given whether it disappears among
+    /// some pieces: the overhead obstacles when it disappears without them,
+    /// else the standing obstacles and swings when it disappears without
+    /// any, else the floor's own shape.
+    fn limit(
+        split: &Split,
+        gone: impl Fn(&[Region]) -> Result<bool, String>,
+    ) -> Result<StretchLimit, String> {
+        if let Some(standing) = &split.standing
+            && gone(standing)?
+        {
+            return Ok(StretchLimit::Low);
+        }
+        Ok(if gone(&split.bare)? {
+            StretchLimit::Obstructed
+        } else {
+            StretchLimit::Narrow
+        })
+    }
+
+    /// A stretch of `limit` at `at`, relating what it depends on near
+    /// `area`: the headroom under overhead obstacles, or the standing
+    /// obstacles and swings.
+    fn stretch(
+        floor: &Floor,
+        ground: &Ground,
+        limit: StretchLimit,
+        at: Point2,
+        area: &Plan,
+    ) -> Result<WalkableStretch, String> {
+        let related = match limit {
+            StretchLimit::Narrow => Vec::new(),
+            StretchLimit::Obstructed => ground.meeting(area, floor, false)?,
+            StretchLimit::Low => ground.meeting(area, floor, true)?,
+        };
+        let headroom = (limit == StretchLimit::Low)
+            .then(|| {
+                ground
+                    .sure
+                    .iter()
+                    .filter(|blocker| related.contains(&blocker.id))
+                    .map(|blocker| blocker.bottom - floor.z0)
+                    .reduce(f64::min)
+            })
+            .flatten();
+        let stretch =
+            WalkableStretch::try_new(floor.id.clone(), limit, [at.x, at.y, floor.z0], related)
+                .map_err(|e| e.to_string())?;
+        match headroom {
+            Some(height) => stretch
+                .with_headroom(width(height, height).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string()),
+            None => Ok(stretch),
+        }
+    }
+
+    /// Every pair of pieces floor too narrow for the body joins, with the
+    /// stretch between them: where the two come closest.
+    fn stretches(
+        &self,
+        floor: &Floor,
+        ground: &Ground,
+        radius: f64,
+    ) -> Result<Vec<(usize, usize, WalkableStretch)>, String> {
+        let Self::Split(split) = self else {
+            return Ok(Vec::new());
+        };
+        let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+        let plans: Vec<Plan> = split.pieces.iter().map(plan_of).collect();
+        let points: Vec<Option<Point2>> = plans.iter().map(inner_point).collect();
+        // What bodies centred in each piece cover, only for pieces with a
+        // stretch.
+        let mut covered: Vec<Option<Plan>> = vec![None; plans.len()];
+        let mut found = Vec::new();
+        for a in 0..plans.len() {
+            for b in a + 1..plans.len() {
+                let (Some(p), Some(q)) = (points[a], points[b]) else {
+                    continue;
+                };
+                if !Self::joined(split, a, b) {
+                    continue;
+                }
+                let limit = Self::limit(split, |pieces| {
+                    Ok(pieces.iter().any(|piece| {
+                        let plan = plan_of(piece);
+                        contains(&plan, p) && contains(&plan, q)
+                    }))
+                })?;
+                for index in [a, b] {
+                    if covered[index].is_none() {
+                        covered[index] = Some(plan_of(
+                            &split.pieces[index]
+                                .dilate_outer(radius, t)
+                                .map_err(overlay_error("stretch"))?,
+                        ));
+                    }
+                }
+                let (Some(cover_a), Some(cover_b)) = (&covered[a], &covered[b]) else {
+                    continue;
+                };
+                let (at, area) = if let Some(found) = between(floor, cover_a, cover_b)? {
+                    found
+                } else {
+                    let Some((near_a, near_b)) = closest(&plans[a], &plans[b]) else {
+                        continue;
+                    };
+                    (
+                        near_a + (near_b - near_a) * 0.5,
+                        sweep(&[near_a, near_b], radius + MARGIN)?,
+                    )
+                };
+                found.push((a, b, Self::stretch(floor, ground, limit, at, &area)?));
+            }
+        }
+        Ok(found)
+    }
+
+    /// The stretch in front of a portal face whose zone reaches no piece:
+    /// nowhere on the surface there does the body fit.
+    fn blocked_face(
+        &self,
+        floor: &Floor,
+        ground: &Ground,
+        zone: &Region,
+        at: Point2,
+    ) -> Result<Option<WalkableStretch>, String> {
+        let Self::Split(split) = self else {
+            return Ok(None);
+        };
+        let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+        let limit = Self::limit(split, |pieces| {
+            for piece in pieces {
+                if !piece
+                    .intersection(zone, t)
+                    .map_err(overlay_error("portal zone"))?
+                    .is_empty()
+                {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        })?;
+        Self::stretch(floor, ground, limit, at, &plan_of(zone)).map(Some)
     }
 
     /// The piece that holds the hub, `surface:{id}` itself.
     fn hub_piece(&self) -> usize {
         match self {
             Self::Whole => 0,
-            Self::Split { hub, .. } => *hub,
+            Self::Split(split) => split.hub,
         }
     }
 
@@ -348,7 +681,7 @@ impl Parts {
     /// Every region of the surface `id`.
     fn names(&self, id: &ObjectId) -> Vec<String> {
         match self {
-            Self::Split { pieces, .. } if !pieces.is_empty() => (0..pieces.len())
+            Self::Split(split) if !split.pieces.is_empty() => (0..split.pieces.len())
                 .map(|piece| self.name(id, piece))
                 .collect(),
             _ => vec![surface_region(id)],
@@ -377,34 +710,43 @@ impl Parts {
 
     /// The pieces a body entering through a portal may reach, by index,
     /// region name and whether it may: every piece within reach of the
-    /// portal's zone, and the hub's piece always, so a separation is a
-    /// passage too narrow rather than a missing one.
+    /// portal's zone, and the hub's piece unless floor too narrow for the
+    /// body joins it to one of those (a stretch then says where), so a
+    /// separation is a passage too narrow rather than a missing one. With
+    /// them the zone, when the surface is split.
     fn near(
         &self,
         id: &ObjectId,
         half: Option<&Plan>,
         swing: &[Polygon],
         radius: f64,
-    ) -> Result<Vec<(usize, String, bool)>, String> {
-        let Self::Split { pieces, hub } = self else {
-            return Ok(vec![(0, surface_region(id), true)]);
+    ) -> Result<(Vec<Reach>, Option<Region>), String> {
+        let Self::Split(split) = self else {
+            return Ok((vec![(0, surface_region(id), true)], None));
         };
-        if pieces.is_empty() {
-            return Ok(vec![(0, surface_region(id), false)]);
+        let zone = Self::zone(half, swing, radius)?;
+        if split.pieces.is_empty() {
+            return Ok((vec![(0, surface_region(id), false)], Some(zone)));
         }
         let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
-        let zone = Self::zone(half, swing, radius)?;
         let mut near = Vec::new();
-        for (index, piece) in pieces.iter().enumerate() {
+        for (index, piece) in split.pieces.iter().enumerate() {
             let meets = !piece
                 .intersection(&zone, t)
                 .map_err(overlay_error("portal zone"))?
                 .is_empty();
-            if meets || index == *hub {
-                near.push((index, self.name(id, index), meets));
+            if meets {
+                near.push((index, self.name(id, index), true));
             }
         }
-        Ok(near)
+        let hub = split.hub;
+        if near
+            .iter()
+            .all(|(index, ..)| *index != hub && !Self::joined(split, *index, hub))
+        {
+            near.push((hub, self.name(id, hub), false));
+        }
+        Ok((near, Some(zone)))
     }
 
     /// Whether a body may pass from one portal to another without standing
@@ -426,6 +768,33 @@ impl Parts {
             .map_err(overlay_error("portal zone"))?
             .is_empty())
     }
+}
+
+/// The floor between two surfaces within `gap` of each other: the points
+/// within the gap of both (from inside the exact set), less what any
+/// obstacle occupies over either and every swing's circumscribed polygon.
+fn bridge(
+    first: &Floor,
+    second: &Floor,
+    one: &Ground,
+    other: &Ground,
+    gap: f64,
+) -> Result<Plan, String> {
+    let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+    let near = |floor: &Floor| -> Result<Region, String> {
+        region_of(&floor.footprint)?
+            .dilate_inner(gap, t)
+            .map_err(overlay_error("surface gap"))
+    };
+    let both = near(first)?
+        .intersection(&near(second)?, t)
+        .map_err(overlay_error("surface gap"))?;
+    let mut floor = plan_of(&both);
+    for ground in [one, other] {
+        floor = subtract(&floor, &ground.raw)?;
+        floor = subtract(&floor, &ground.swings_but(None)?)?;
+    }
+    Ok(floor)
 }
 
 impl AxiolidWalkabilityService {
@@ -453,11 +822,18 @@ impl AxiolidWalkabilityService {
             .iter()
             .map(|surface| floor(&self.geometry, surface))
             .collect::<Result<_, _>>()?;
+        let gap = request.surface_gap_metres();
         let mut grounds = Vec::with_capacity(floors.len());
         for floor in &floors {
             let (lo, hi) = band_limits(band, floor.z0, floor.top);
-            let blocked = obstruction(&obstacles, &floor.bounds, lo, hi)?;
-            grounds.push(Ground::new(floor, blocked, request.swept_doors(), hi)?);
+            let blockers = obstructions(&obstacles, &grown(&floor.bounds, gap), lo, hi)?;
+            grounds.push(Ground::new(
+                floor,
+                blockers,
+                request.swept_doors(),
+                hi,
+                request.obstruction_depth_metres(),
+            )?);
         }
 
         let mut portals = Vec::new();
@@ -507,7 +883,7 @@ impl AxiolidWalkabilityService {
                 .iter()
                 .zip(&grounds)
                 .filter(|(floor, _)| floor.z0 < frame.z1 && floor.top > frame.z0)
-                .map(|(_, ground)| &ground.plain)
+                .map(|(_, ground)| &ground.wide)
                 .chain(
                     portals
                         .iter()
@@ -560,19 +936,21 @@ impl AxiolidWalkabilityService {
             }
         }
 
-        // Surfaces that touch, and those a connector joins, stay one region:
-        // a body may stand across their shared boundary.
+        // Surfaces that touch, or lie within the surface gap, and those a
+        // connector joins, stay one region: a body may stand across their
+        // shared boundary, or the gap between them.
         let mut touches = Vec::new();
         for a in 0..floors.len() {
             for b in a + 1..floors.len() {
                 let (first, second) = (&floors[a], &floors[b]);
                 if first.z0 >= second.top - ON_SURFACE
                     || second.z0 >= first.top - ON_SURFACE
-                    || !touching(&first.footprint, &second.footprint)?
+                    || !within(&first.footprint, &second.footprint, gap)?
                 {
                     continue;
                 }
-                touches.push((a, b));
+                let bridged = gap > 0.0 && !touching(&first.footprint, &second.footprint)?;
+                touches.push((a, b, bridged));
             }
         }
         let mut joined_by_connector = vec![false; floors.len()];
@@ -587,7 +965,7 @@ impl AxiolidWalkabilityService {
         let mut parts: Vec<Parts> = Vec::with_capacity(floors.len());
         for (index, floor) in floors.iter().enumerate() {
             let alone = !joined_by_connector[index]
-                && touches.iter().all(|&(a, b)| a != index && b != index);
+                && touches.iter().all(|&(a, b, _)| a != index && b != index);
             parts.push(if alone {
                 Parts::split(floor, &grounds[index], hubs[index], radius)?
             } else {
@@ -678,12 +1056,24 @@ impl AxiolidWalkabilityService {
                     .find(|(at, s, _)| *at == index && *s == slot)
                     .map(|(_, _, half)| half);
                 let split = &parts[side.floor];
-                for (piece, name, meets) in
-                    split.near(&floor.id, half, ground.swing_of(id), radius)?
-                {
+                let (near, zone) = split.near(&floor.id, half, ground.swing_of(id), radius)?;
+                // Nowhere in front of the face does the body fit: the
+                // stretch there says why.
+                let stranded = match &zone {
+                    Some(zone) if near.iter().all(|(_, _, meets)| !meets) => {
+                        let sign = if slot == 0 { -1.0 } else { 1.0 };
+                        let at = frame.point(
+                            f64::midpoint(frame.u0, frame.u1),
+                            sign * (frame.half + side.gap),
+                        );
+                        split.blocked_face(floor, ground, zone, at)?
+                    }
+                    _ => None,
+                };
+                for (piece, name, meets) in near {
                     let definite = proven && piece == split.hub_piece();
                     let open = definite || meets;
-                    passages.push(passage(
+                    let mut spoke = passage(
                         &floor.id,
                         name,
                         face.clone(),
@@ -696,9 +1086,20 @@ impl AxiolidWalkabilityService {
                             if slot == 0 { "-" } else { "+" },
                             side.gap,
                             if definite { "proven" } else { "unproven" },
-                            if open { "" } else { ":separated" }
+                            match (&stranded, open) {
+                                (_, true) => String::new(),
+                                (Some(stretch), false) =>
+                                    format!(":separated:{}", stretch.limit().as_str()),
+                                (None, false) => ":separated".to_owned(),
+                            }
                         ),
-                    )?);
+                    )?;
+                    if let (Some(stretch), false) = (&stranded, open) {
+                        spoke = spoke
+                            .with_stretch(stretch.clone())
+                            .map_err(|e| e.to_string())?;
+                    }
+                    passages.push(spoke);
                 }
             }
             if !request.traverses_verified_portals() {
@@ -751,12 +1152,21 @@ impl AxiolidWalkabilityService {
             )?);
         }
 
-        // Surfaces touching surfaces.
-        for &(a, b) in &touches {
+        // Surfaces touching surfaces, or across a gap within the surface
+        // gap: the points within the gap of both surfaces are floor too,
+        // less what any obstacle occupies there.
+        for &(a, b, bridged) in &touches {
             let (first, second) = (&floors[a], &floors[b]);
             let proven = match (hubs[a], hubs[b]) {
                 (Some(from), Some(to)) => {
-                    witness(&join(&grounds[a].free, &grounds[b].free)?, from, to, radius)?.is_some()
+                    let mut domain = join(&grounds[a].free, &grounds[b].free)?;
+                    if bridged {
+                        domain = join(
+                            &domain,
+                            &bridge(first, second, &grounds[a], &grounds[b], gap)?,
+                        )?;
+                    }
+                    witness(&domain, from, to, radius)?.is_some()
                 }
                 _ => false,
             };
@@ -768,12 +1178,42 @@ impl AxiolidWalkabilityService {
                 if proven { required } else { 0.0 },
                 UNBOUNDED,
                 format!(
-                    "touch:{}<->{}:sweep={}",
+                    "{}:{}<->{}:sweep={}",
+                    if bridged {
+                        format!("gap<={gap:.6}")
+                    } else {
+                        "touch".to_owned()
+                    },
                     first.id,
                     second.id,
                     if proven { "proven" } else { "unproven" }
                 ),
             )?);
+        }
+
+        // Floor too narrow for the body between the pieces of one surface.
+        for ((floor, ground), split) in floors.iter().zip(&grounds).zip(&parts) {
+            for (a, b, stretch) in split.stretches(floor, ground, radius)? {
+                let [x, y, z] = stretch.at();
+                let locator = format!(
+                    "stretch:{}:{}:at={x:.4},{y:.4},{z:.4}",
+                    floor.id,
+                    stretch.limit().as_str()
+                );
+                passages.push(
+                    passage(
+                        &floor.id,
+                        split.name(&floor.id, a),
+                        split.name(&floor.id, b),
+                        None,
+                        0.0,
+                        required - 2.0 * MARGIN,
+                        locator,
+                    )?
+                    .with_stretch(stretch)
+                    .map_err(|e| e.to_string())?,
+                );
+            }
         }
 
         // Portal faces touching anything but their own side, and faces a

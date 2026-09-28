@@ -126,6 +126,13 @@ impl Plan {
             polygons: vec![polygon],
         }
     }
+
+    /// The polygons of an overlay region (settled output) as a plan.
+    pub(crate) fn of(polygons: &[Polygon]) -> Self {
+        Self {
+            polygons: polygons.to_vec(),
+        }
+    }
 }
 
 /// Slab heights closer than this are one slab: the overlay snaps its output
@@ -511,19 +518,29 @@ pub(crate) fn plan_gap(a: &Bounds2, b: &Extent) -> f64 {
     bounds_gap(a, &([b.0[0], b.0[1]], [b.1[0], b.1[1]]))
 }
 
-/// What the obstacles occupy inside the band `lo < z < hi` over `area`.
+/// What one obstacle occupies inside a band, and where its body begins.
+#[derive(Clone, Debug)]
+pub(crate) struct Blocker {
+    pub(crate) id: ObjectId,
+    pub(crate) plan: Plan,
+    /// The bottom of the obstacle's body (exact: tessellations refuse).
+    pub(crate) bottom: f64,
+}
+
+/// What each obstacle occupies inside the band `lo < z < hi` over `area`;
+/// obstacles occupying nothing there are left out.
 ///
 /// # Errors
 ///
 /// When a tessellated obstacle could change it, or a band footprint cannot
 /// be computed.
-pub(crate) fn obstruction(
+pub(crate) fn obstructions(
     obstacles: &[Obstacle<'_>],
     area: &Bounds2,
     lo: f64,
     hi: f64,
-) -> Result<Plan, String> {
-    let mut region = Plan::empty();
+) -> Result<Vec<Blocker>, String> {
+    let mut found = Vec::new();
     for obstacle in obstacles {
         let (min, max) = obstacle.extent;
         if plan_gap(area, &obstacle.extent) > ON_SURFACE
@@ -539,10 +556,42 @@ pub(crate) fn obstruction(
                 obstacle.id
             ));
         }
-        let footprint = band_footprint(obstacle.id, obstacle.mesh, lo, hi)?;
-        region = join(&region, &footprint)?;
+        let plan = band_footprint(obstacle.id, obstacle.mesh, lo, hi)?;
+        if !plan.is_empty() {
+            found.push(Blocker {
+                id: obstacle.id.clone(),
+                plan,
+                bottom: min[2],
+            });
+        }
+    }
+    Ok(found)
+}
+
+/// What the obstacles occupy inside the band `lo < z < hi` over `area`.
+///
+/// # Errors
+///
+/// As [`obstructions`].
+pub(crate) fn obstruction(
+    obstacles: &[Obstacle<'_>],
+    area: &Bounds2,
+    lo: f64,
+    hi: f64,
+) -> Result<Plan, String> {
+    let mut region = Plan::empty();
+    for blocker in obstructions(obstacles, area, lo, hi)? {
+        region = join(&region, &blocker.plan)?;
     }
     Ok(region)
+}
+
+/// `bounds` grown by `by` on every side.
+pub(crate) fn grown(bounds: &Bounds2, by: f64) -> Bounds2 {
+    (
+        [bounds.0[0] - by, bounds.0[1] - by],
+        [bounds.1[0] + by, bounds.1[1] + by],
+    )
 }
 
 /// The plan bounds of a region; `None` when it is empty.
@@ -724,10 +773,16 @@ pub(crate) fn sweep_inside(domain: &Plan, path: &[Point2], radius: f64) -> Resul
     if domain.is_empty() || path.is_empty() {
         return Ok(false);
     }
-    let grown = radius + MARGIN;
+    let sweep = sweep(path, radius + MARGIN)?;
+    Ok(subtract(&sweep, domain)?.is_empty())
+}
+
+/// A region enclosing the sweep of a disc of `radius` along `path`:
+/// rectangles along the segments and circumscribed polygons at the vertices.
+pub(crate) fn sweep(path: &[Point2], radius: f64) -> Result<Plan, String> {
     let mut parts: Vec<Polygon> = path
         .iter()
-        .filter_map(|point| circumscribed(*point, grown))
+        .filter_map(|point| circumscribed(*point, radius))
         .collect();
     for pair in path.windows(2) {
         let along = pair[1] - pair[0];
@@ -735,7 +790,7 @@ pub(crate) fn sweep_inside(domain: &Plan, path: &[Point2], radius: f64) -> Resul
         if length <= ON_SURFACE {
             continue;
         }
-        let side = along.perp() / length * grown;
+        let side = along.perp() / length * radius;
         parts.extend(polygon(vec![
             pair[0] - side,
             pair[1] - side,
@@ -743,8 +798,7 @@ pub(crate) fn sweep_inside(domain: &Plan, path: &[Point2], radius: f64) -> Resul
             pair[0] + side,
         ]));
     }
-    let sweep = union(parts)?;
-    Ok(subtract(&sweep, domain)?.is_empty())
+    union(parts)
 }
 
 /// A path along which a disc of `radius` provably stays inside `domain`.
@@ -831,10 +885,17 @@ fn segment_distance(a: (Point2, Point2), b: (Point2, Point2)) -> f64 {
 
 /// Whether two regions overlap or their boundaries touch.
 pub(crate) fn touching(a: &Plan, b: &Plan) -> Result<bool, String> {
+    within(a, b, 0.0)
+}
+
+/// Whether two regions overlap or come within `reach` of each other (at
+/// least [`ON_SURFACE`]).
+pub(crate) fn within(a: &Plan, b: &Plan, reach: f64) -> Result<bool, String> {
+    let reach = reach.max(ON_SURFACE);
     let (Some(first), Some(second)) = (region_bounds(a), region_bounds(b)) else {
         return Ok(false);
     };
-    if bounds_gap(&first, &second) > ON_SURFACE {
+    if bounds_gap(&first, &second) > reach {
         return Ok(false);
     }
     if !intersect(a, b)?.is_empty() {
@@ -843,13 +904,66 @@ pub(crate) fn touching(a: &Plan, b: &Plan) -> Result<bool, String> {
     for ring_a in rings(a) {
         for edge_a in edges(ring_a) {
             for ring_b in rings(b) {
-                if edges(ring_b).any(|edge_b| segment_distance(edge_a, edge_b) <= ON_SURFACE) {
+                if edges(ring_b).any(|edge_b| segment_distance(edge_a, edge_b) <= reach) {
                     return Ok(true);
                 }
             }
         }
     }
     Ok(false)
+}
+
+/// The closest point of `(start, end)` to `point`.
+fn nearest_on(point: Point2, (start, end): (Point2, Point2)) -> Point2 {
+    let along = end - start;
+    let length = along.length_squared();
+    if length <= 0.0 {
+        return start;
+    }
+    start + along * ((point - start).dot(along) / length).clamp(0.0, 1.0)
+}
+
+/// A pair of points, one on each region's boundary, as close as any: where
+/// the two regions come closest. `None` when either is empty.
+pub(crate) fn closest(a: &Plan, b: &Plan) -> Option<(Point2, Point2)> {
+    let mut best: Option<(f64, Point2, Point2)> = None;
+    for ring_a in rings(a) {
+        for edge_a in edges(ring_a) {
+            for ring_b in rings(b) {
+                for edge_b in edges(ring_b) {
+                    for (p, q) in [
+                        (edge_a.0, nearest_on(edge_a.0, edge_b)),
+                        (edge_a.1, nearest_on(edge_a.1, edge_b)),
+                        (nearest_on(edge_b.0, edge_a), edge_b.0),
+                        (nearest_on(edge_b.1, edge_a), edge_b.1),
+                    ] {
+                        let distance = (p - q).length();
+                        if best.is_none_or(|(least, ..)| distance < least) {
+                            best = Some((distance, p, q));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    best.map(|(_, p, q)| (p, q))
+}
+
+/// A point inside `plan`: the middle of its first convex piece.
+pub(crate) fn inner_point(plan: &Plan) -> Option<Point2> {
+    trapezoids(plan).into_iter().find_map(|piece| {
+        let points = &piece.outer.points;
+        let count = points.len();
+        if count < 3 {
+            return None;
+        }
+        let sum = points
+            .iter()
+            .fold(Vec2::ZERO, |sum, point| sum + Vec2::new(point.x, point.y));
+        #[allow(clippy::cast_precision_loss)]
+        let middle = sum / count as f64;
+        Some(Point2::new(middle.x, middle.y))
+    })
 }
 
 /// Where a portal lies: the frame its corridor is measured in.

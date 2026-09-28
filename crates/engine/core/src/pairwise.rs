@@ -338,6 +338,7 @@ mod tests {
                 ProximityProjection::Vertical {
                     footprint_offset_metres,
                     direction,
+                    ..
                 } => {
                     plan_gap(&a, &b) <= footprint_offset_metres
                         && match direction {
@@ -416,6 +417,7 @@ mod tests {
                 projections.push(ProximityProjection::Vertical {
                     footprint_offset_metres,
                     direction,
+                    surfaces: crate::VerticalSurfaces::Extents,
                 });
             }
         }
@@ -464,6 +466,7 @@ mod tests {
                     ProximityProjection::Vertical {
                         footprint_offset_metres: 0.0,
                         direction,
+                        surfaces: crate::VerticalSurfaces::Extents,
                     },
                     margin,
                 )
@@ -509,6 +512,7 @@ mod tests {
         let vertical = ProximityProjection::Vertical {
             footprint_offset_metres: 0.0,
             direction: VerticalDirection::Either,
+            surfaces: crate::VerticalSurfaces::Extents,
         };
         assert_eq!(
             projected_candidate_pairs(subjects, counterparts, vertical, 9.0)

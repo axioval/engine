@@ -133,6 +133,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   `measure_overlaps` take a request, and `measure_storey_residuals`
   (`StoreyResidual`) is replaced by `measure_unallocated_regions`
   (`UnallocatedRegion`).
+- **Distances between chosen surfaces, at overlapping heights, within a
+  kind of container.** (#134) `distance` takes `subject_surface` (`top`,
+  `bottom`) and `counterpart_surface` (`top`, `bottom`, `nearest`) for the
+  `vertical` projection: `nearest` is the counterpart's surface directly
+  over or under the subject's footprint, so a sprinkler is measured to the
+  sloped slab underside right above it. `elevation_overlap` `overlapping`
+  (with `elevation_offset_metres`) relates a `horizontal` distance only to
+  counterparts at the subject's heights, so one on another storey is
+  ignored. `container_selector` keeps only reached containers of the given
+  kind, so two sprinklers sharing only a zone of another type are not
+  paired. Findings report how far the named distance misses its bound.
+  `ProximityProjection::Vertical` gains `surfaces`
+  (`VerticalSurfaces::Extents` or `Between` a `SubjectSurface` and a
+  `CounterpartSurface`), measured by the Axiolid adapter; `Nearest` takes
+  no footprint offset. **Breaking:** `ProximityProjection::Vertical` has a
+  new field, and definitions bound to `distance` must declare the five new
+  optional parameters.
 - **Counterpart coverage in the element's elevation, and frame infill.**
   (#133) `counterpart-coverage` takes `measure`: with `elevation`, plan
   and height are one check, the share of the element's projection onto the

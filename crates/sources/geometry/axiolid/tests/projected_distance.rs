@@ -11,8 +11,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidProximityService};
 use axioval_engine::{
-    ProjectedDistanceEvidence, ProximityError, ProximityProjection, ProximityRequest,
-    ProximityService, VerticalDirection,
+    CounterpartSurface, ProjectedDistanceEvidence, ProximityError, ProximityProjection,
+    ProximityRequest, ProximityService, SubjectSurface, VerticalDirection, VerticalSurfaces,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -120,7 +120,176 @@ fn directed(offset: f64, direction: VerticalDirection) -> ProximityProjection {
     ProximityProjection::Vertical {
         footprint_offset_metres: offset,
         direction,
+        surfaces: VerticalSurfaces::Extents,
     }
+}
+
+fn between(
+    direction: VerticalDirection,
+    subject: SubjectSurface,
+    counterpart: CounterpartSurface,
+) -> ProximityProjection {
+    ProximityProjection::Vertical {
+        footprint_offset_metres: 0.0,
+        direction,
+        surfaces: VerticalSurfaces::Between {
+            subject,
+            counterpart,
+        },
+    }
+}
+
+/// A slab over `x0..x1`, `y0..y1`, 0.2 m thick, whose underside rises from
+/// `z0` at `x0` to `z1` at `x1`.
+fn sloped(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> TriMesh {
+    let t = 0.2;
+    TriMesh::new(
+        vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z0 + t),
+            Point3::new(x1, y0, z1 + t),
+            Point3::new(x1, y1, z1 + t),
+            Point3::new(x0, y1, z0 + t),
+        ],
+        vec![
+            0, 2, 1, 0, 3, 2, // underside
+            4, 5, 6, 4, 6, 7, // top
+            0, 1, 5, 0, 5, 4, // front
+            3, 7, 6, 3, 6, 2, // back
+            0, 4, 7, 0, 7, 3, // left
+            1, 2, 6, 1, 6, 5, // right
+        ],
+    )
+}
+
+#[test]
+fn a_sprinkler_is_measured_to_the_sloped_underside_right_above_it() {
+    use CounterpartSurface::{Bottom, Nearest, Top};
+    use SubjectSurface::{Bottom as Base, Top as Head};
+    use VerticalDirection::{Above, Below, Either};
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("sprinkler"), cuboid([1.9, 0.4, 2.5], [2.1, 0.6, 2.6]))
+        .with_mesh(id("slab"), sloped(0.0, 4.0, 0.0, 1.0, 3.0, 4.0))
+        .with_mesh(id("floor"), cuboid([0.0, 0.0, -0.2], [4.0, 1.0, 0.0]))
+        .with_mesh(id("wall"), cuboid([2.1, 0.0, 0.0], [2.3, 1.0, 3.0]));
+    // The underside over x 1.9..2.1 is lowest at 3.475 m; the slab's lowest
+    // point, 3 m, lies elsewhere, so the extent gap is 0.4 m.
+    assert_point(&measure(&geometry, "sprinkler", "slab", above()), 0.4);
+    assert_point(
+        &measure(
+            &geometry,
+            "sprinkler",
+            "slab",
+            between(Above, Head, Nearest),
+        ),
+        0.875,
+    );
+    assert_point(
+        &measure(
+            &geometry,
+            "sprinkler",
+            "slab",
+            between(Either, Base, Nearest),
+        ),
+        0.975,
+    );
+    // Levels: the slab's top (4.2 m) from the sprinkler's top.
+    assert_point(
+        &measure(&geometry, "sprinkler", "slab", between(Above, Head, Top)),
+        1.6,
+    );
+    assert_point(
+        &measure(&geometry, "sprinkler", "slab", between(Below, Head, Bottom)),
+        f64::INFINITY,
+    );
+    assert_point(
+        &measure(
+            &geometry,
+            "sprinkler",
+            "floor",
+            between(Below, Base, Nearest),
+        ),
+        2.5,
+    );
+    assert_point(
+        &measure(
+            &geometry,
+            "sprinkler",
+            "floor",
+            between(Above, Base, Nearest),
+        ),
+        f64::INFINITY,
+    );
+    // A wall only touching the footprint's edge stands over none of it.
+    assert_point(
+        &measure(
+            &geometry,
+            "sprinkler",
+            "wall",
+            between(Above, Head, Nearest),
+        ),
+        f64::INFINITY,
+    );
+    let evidence = measure(
+        &geometry,
+        "sprinkler",
+        "slab",
+        between(Above, Head, Nearest),
+    );
+    assert!(
+        evidence
+            .evidence()
+            .locator
+            .contains(":vertical-above-top-to-nearest:"),
+        "{}",
+        evidence.evidence().locator
+    );
+}
+
+#[test]
+fn a_tessellated_nearest_surface_is_an_interval_holding_the_distance() {
+    let deviation = 0.01;
+    let geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(
+            id("sprinkler"),
+            column([2.0, 0.5], 0.1, [2.5, 2.6], 24),
+            deviation,
+        )
+        .with_mesh(id("slab"), sloped(0.0, 4.0, 0.0, 1.0, 3.0, 4.0));
+    let measured = measure(
+        &geometry,
+        "sprinkler",
+        "slab",
+        between(
+            VerticalDirection::Above,
+            SubjectSurface::Top,
+            CounterpartSurface::Nearest,
+        ),
+    );
+    let (lower, upper) = measured.interval_metres();
+    assert!(!measured.evidence().exact);
+    // The underside over the head's disc is lowest near 3.475 m.
+    assert!(lower <= 0.875 && 0.875 <= upper, "{lower}..{upper}");
+    assert!(upper.is_finite() && upper - lower < 0.2, "{lower}..{upper}");
+}
+
+#[test]
+fn a_nearest_surface_takes_no_footprint_offset() {
+    let projection = ProximityProjection::Vertical {
+        footprint_offset_metres: 0.5,
+        direction: VerticalDirection::Above,
+        surfaces: VerticalSurfaces::Between {
+            subject: SubjectSurface::Top,
+            counterpart: CounterpartSurface::Nearest,
+        },
+    };
+    assert_eq!(
+        ProximityRequest::projected(id("a"), id("b"), projection),
+        Err(ProximityError::InvalidMeasurement)
+    );
 }
 
 fn above() -> ProximityProjection {

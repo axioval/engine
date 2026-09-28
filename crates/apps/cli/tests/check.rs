@@ -4628,6 +4628,78 @@ fn stairs_and_ramps() -> String {
 }
 
 #[test]
+fn with_geometry_a_sprinkler_is_measured_to_the_sloped_slab_right_above_it() {
+    let case = Case::new("geometry-distance-surfaces");
+    // The slab's underside rises from 3 m at x = 0 to 4 m at x = 4; the
+    // sprinkler's top stands at 2.6 m under x = 1.9..2.1.
+    let model = format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(
+            100,
+            [0.0, 1.0, 0.0],
+            &[[0.0, 3.0], [4.0, 4.0], [4.0, 4.2], [0.0, 3.2]],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,$)",
+        ),
+        placed_box(
+            200,
+            [2.0, 0.5, 2.5],
+            [0.2, 0.2, 0.1],
+            "IFCBUILDINGELEMENTPROXY('GID',$,$,$,$,PL,REP,$,$)",
+        ),
+    );
+    let check = |surfaces: bool| {
+        let mut parameters = json!({
+            "counterparts": {"type": "selector", "value": entity("slab")},
+            "maximum_metres": {"type": "number", "value": 0.5},
+            "projection": {"type": "string", "value": "vertical"},
+            "vertical_direction": {"type": "string", "value": "above"},
+        });
+        if surfaces {
+            parameters["subject_surface"] = json!({"type": "string", "value": "top"});
+            parameters["counterpart_surface"] = json!({"type": "string", "value": "nearest"});
+        }
+        case.geometry_rule(
+            &model,
+            &[
+                ("slab", "IfcSlab"),
+                ("sprinkler", "IfcBuildingElementProxy"),
+            ],
+            "axioval:capability.distance",
+            &registry_signature("axioval:capability.distance"),
+            entity("sprinkler"),
+            parameters,
+        )
+    };
+    // The slab's lowest point is 0.4 m above the sprinkler, elsewhere.
+    let (output, result) = check(false);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    // Right above it, the underside is 0.875 m up.
+    let (output, result) = check(true);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(
+        findings[0].1.contains(
+            "vertical distance from its top to the nearest surface 0.8750 m above, farther \
+             than the allowed 0.5000 m"
+        ),
+        "{findings:#?}"
+    );
+}
+
+#[test]
 fn with_geometry_an_irregular_riser_and_too_little_headroom_are_found() {
     let case = Case::new("geometry-stair-flights");
     let (output, result) = case.geometry_rule(

@@ -89,7 +89,7 @@ use axioval_engine::{
     LengthInterval, MetricDirection, ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest,
     OverlapExtents, ProjectedDistanceEvidence, ProximityError, ProximityEvidence,
     ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
-    RegionDistanceRequest, VerticalDirection, VolumeInterval,
+    RegionDistanceRequest, VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -184,6 +184,27 @@ impl AxiolidProximityService {
             ProximityProjection::Vertical {
                 footprint_offset_metres,
                 direction,
+                surfaces:
+                    VerticalSurfaces::Between {
+                        subject: from,
+                        counterpart: to,
+                    },
+            } => crate::vertical_surface::interval(
+                &crate::vertical_surface::Pair {
+                    subject,
+                    counterpart,
+                    subject_fidelity,
+                    counterpart_fidelity,
+                },
+                footprint_offset_metres,
+                direction,
+                from,
+                to,
+            )?,
+            ProximityProjection::Vertical {
+                footprint_offset_metres,
+                direction,
+                surfaces: VerticalSurfaces::Extents,
             } => {
                 let side = side(subject, counterpart, direction, deviation);
                 if matches!(side, Relation::Unrelated) {
@@ -484,7 +505,7 @@ fn side(
 
 /// Whether two bodies are related in plan, or whether the geometry's fidelity
 /// leaves it open.
-enum Relation {
+pub(crate) enum Relation {
     Related,
     Unrelated,
     Open,
@@ -496,7 +517,7 @@ enum Relation {
 /// Exact footprints are decided. A tessellated footprint may lie anywhere
 /// within its chord deviation of the mesh footprint, so a relation is only
 /// asserted or denied when the deviations cannot change it.
-fn relation(
+pub(crate) fn relation(
     subject: &Body<'_>,
     counterpart: &Body<'_>,
     offset: f64,
@@ -1459,6 +1480,22 @@ impl ProximityService for AxiolidProximityService {
             Evidence {
                 source: request.subject().source.clone(),
                 locator: match request.projection() {
+                    ProximityProjection::Vertical {
+                        direction,
+                        surfaces:
+                            VerticalSurfaces::Between {
+                                subject,
+                                counterpart,
+                            },
+                        ..
+                    } => format!(
+                        "axiolid:distance:vertical-{}-{}-to-{}:{}:{}",
+                        direction.name(),
+                        subject.name(),
+                        counterpart.name(),
+                        request.subject(),
+                        request.counterpart()
+                    ),
                     ProximityProjection::Vertical {
                         direction: direction @ (VerticalDirection::Above | VerticalDirection::Below),
                         ..

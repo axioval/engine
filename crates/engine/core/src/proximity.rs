@@ -227,9 +227,13 @@ pub enum ProximityProjection {
     /// closer than the offset to the subject's (the subject's footprint grown
     /// by the offset), and when the counterpart lies in `direction` from the
     /// subject. Unrelated bodies have no distance in this projection.
+    ///
+    /// `surfaces` other than [`VerticalSurfaces::Extents`] measure between
+    /// two chosen surfaces instead (see [`VerticalSurfaces`]).
     Vertical {
         footprint_offset_metres: f64,
         direction: VerticalDirection,
+        surfaces: VerticalSurfaces,
     },
     /// Whether the footprints overlap with positive area: distance zero when
     /// they do, none when they do not.
@@ -259,6 +263,69 @@ pub enum VerticalDirection {
     Below,
 }
 
+/// Which surfaces a [`ProximityProjection::Vertical`] distance runs between.
+///
+/// A subject surface is a level: the subject's highest point (`Top`) or its
+/// lowest (`Bottom`). A counterpart's `Top` and `Bottom` are levels too, and
+/// the distance is the difference of the two levels in `direction`: a
+/// counterpart level on the other side of the subject's is unrelated
+/// (`Either` takes the absolute difference); the footprints must be related
+/// as for [`Self::Extents`]. `Nearest` is the counterpart's surface directly
+/// over or under the subject's footprint (the plan part of it overlapping
+/// the footprint with positive area) nearest to the subject's level in
+/// `direction`: a sprinkler's top to the underside of a sloped slab right
+/// above it, not to the slab's lowest point elsewhere. A counterpart with no
+/// such surface in that direction is unrelated. `Nearest` needs a footprint
+/// offset of zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum VerticalSurfaces {
+    /// The gap between the two vertical extents, zero when they overlap.
+    #[default]
+    Extents,
+    /// From a level of the subject to a surface of the counterpart.
+    Between {
+        subject: SubjectSurface,
+        counterpart: CounterpartSurface,
+    },
+}
+
+/// The subject's level a [`VerticalSurfaces::Between`] distance starts at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SubjectSurface {
+    Top,
+    Bottom,
+}
+
+/// The counterpart's surface a [`VerticalSurfaces::Between`] distance ends at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CounterpartSurface {
+    Top,
+    Bottom,
+    /// The nearest surface overlapping the subject's footprint in plan.
+    Nearest,
+}
+
+impl SubjectSurface {
+    /// The surface's spelling in rule parameters, evidence and messages.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+        }
+    }
+}
+
+impl CounterpartSurface {
+    /// The surface's spelling in rule parameters, evidence and messages.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+            Self::Nearest => "nearest",
+        }
+    }
+}
+
 impl VerticalDirection {
     /// The direction's spelling in rule parameters, evidence and messages.
     pub fn name(self) -> &'static str {
@@ -276,8 +343,20 @@ impl ProximityProjection {
         match self {
             Self::Vertical {
                 footprint_offset_metres,
+                surfaces,
                 ..
-            } => footprint_offset_metres.is_finite() && *footprint_offset_metres >= 0.0,
+            } => {
+                let nearest = matches!(
+                    surfaces,
+                    VerticalSurfaces::Between {
+                        counterpart: CounterpartSurface::Nearest,
+                        ..
+                    }
+                );
+                footprint_offset_metres.is_finite()
+                    && *footprint_offset_metres >= 0.0
+                    && !(nearest && *footprint_offset_metres > 0.0)
+            }
             _ => true,
         }
     }
@@ -294,15 +373,17 @@ impl ProximityProjection {
             Self::PlanOverlap => "plan_overlap",
         }
     }
-    fn key(&self) -> (u8, f64, VerticalDirection) {
+    fn key(&self) -> (u8, f64, VerticalDirection, VerticalSurfaces) {
+        let none = (VerticalDirection::Either, VerticalSurfaces::Extents);
         match self {
-            Self::Minimum3d => (0, 0.0, VerticalDirection::Either),
-            Self::Horizontal => (1, 0.0, VerticalDirection::Either),
+            Self::Minimum3d => (0, 0.0, none.0, none.1),
+            Self::Horizontal => (1, 0.0, none.0, none.1),
             Self::Vertical {
                 footprint_offset_metres,
                 direction,
-            } => (2, *footprint_offset_metres, *direction),
-            Self::PlanOverlap => (3, 0.0, VerticalDirection::Either),
+                surfaces,
+            } => (2, *footprint_offset_metres, *direction, *surfaces),
+            Self::PlanOverlap => (3, 0.0, none.0, none.1),
         }
     }
 }
@@ -320,11 +401,12 @@ impl PartialOrd for ProximityProjection {
 }
 impl Ord for ProximityProjection {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let (a, a_offset, a_direction) = self.key();
-        let (b, b_offset, b_direction) = other.key();
+        let (a, a_offset, a_direction, a_surfaces) = self.key();
+        let (b, b_offset, b_direction, b_surfaces) = other.key();
         a.cmp(&b)
             .then_with(|| a_offset.total_cmp(&b_offset))
             .then_with(|| a_direction.cmp(&b_direction))
+            .then_with(|| a_surfaces.cmp(&b_surfaces))
     }
 }
 
@@ -1526,11 +1608,53 @@ mod tests {
                     ProximityProjection::Vertical {
                         footprint_offset_metres: offset,
                         direction: VerticalDirection::Either,
+                        surfaces: crate::VerticalSurfaces::Extents,
                     }
                 ),
                 Err(ProximityError::InvalidMeasurement)
             );
         }
+    }
+
+    #[test]
+    fn surface_pairs_are_distinct_projections_and_nearest_takes_no_offset() {
+        use crate::{CounterpartSurface, SubjectSurface, VerticalSurfaces};
+        let between = |counterpart, offset| ProximityProjection::Vertical {
+            footprint_offset_metres: offset,
+            direction: VerticalDirection::Above,
+            surfaces: VerticalSurfaces::Between {
+                subject: SubjectSurface::Top,
+                counterpart,
+            },
+        };
+        let extents = ProximityProjection::Vertical {
+            footprint_offset_metres: 0.0,
+            direction: VerticalDirection::Above,
+            surfaces: VerticalSurfaces::Extents,
+        };
+        assert_ne!(between(CounterpartSurface::Nearest, 0.0), extents);
+        assert_ne!(
+            between(CounterpartSurface::Nearest, 0.0),
+            between(CounterpartSurface::Bottom, 0.0)
+        );
+        assert!(
+            ProximityRequest::projected(
+                id("pipe"),
+                id("wall"),
+                between(CounterpartSurface::Bottom, 0.5)
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ProximityRequest::projected(
+                id("pipe"),
+                id("wall"),
+                between(CounterpartSurface::Nearest, 0.5)
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(SubjectSurface::Bottom.name(), "bottom");
+        assert_eq!(CounterpartSurface::Nearest.name(), "nearest");
     }
 
     /// Above and below are different questions.
@@ -1539,6 +1663,7 @@ mod tests {
         let vertical = |direction| ProximityProjection::Vertical {
             footprint_offset_metres: 0.0,
             direction,
+            surfaces: crate::VerticalSurfaces::Extents,
         };
         let above = vertical(VerticalDirection::Above);
         assert_ne!(above, vertical(VerticalDirection::Below));

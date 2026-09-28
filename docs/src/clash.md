@@ -146,7 +146,7 @@ distances fails closed.
 |---|---|
 | `Minimum3d` | shortest distance between the surfaces in space |
 | `Horizontal` | plan distance between the footprints; zero when they meet |
-| `Vertical { footprint_offset_metres, direction }` | gap between the vertical extents (bottom to top) of bodies above one another, one-sided with a direction |
+| `Vertical { footprint_offset_metres, direction, surfaces }` | gap between the vertical extents (bottom to top) of bodies above one another, one-sided with a direction; with `surfaces` `Between`, from the subject's top or bottom to the counterpart's top, bottom or nearest surface over the subject's footprint |
 | `PlanOverlap` | zero when the footprints overlap with positive area |
 
 `measure_region_distance(request)` measures from a stated region instead of
@@ -690,7 +690,11 @@ declared distance. It takes these parameters:
 | `footprint_offset_metres` | number, optional | grows the subject's footprint for `vertical` |
 | `vertical_direction` | string, optional | `either` (default), `above` or `below`: where a counterpart must lie for `vertical` |
 | `subject_extent`, `counterpart_extent` | string, optional | `body` (default) or `leaf_swing` (also `door_swing`): what each side is measured by |
+| `subject_surface`, `counterpart_surface` | string, optional | `vertical` only, declared together: `top` or `bottom` of the subject to `top`, `bottom` or `nearest` of the counterpart |
+| `elevation_overlap` | string, optional | `any` (default) or `overlapping`: `horizontal` only relates counterparts at the subject's heights |
+| `elevation_offset_metres` | number, optional | with `overlapping`, the height gap a counterpart must stay under (zero: the heights overlap) |
 | `relationship`, `direction`, `follow_chain`, `path`, `skip_absent_relationship_ends` | optional | the container traversal |
+| `container_selector` | selector, optional | with a traversal, only reached objects it picks are containers |
 
 The modes:
 
@@ -716,12 +720,38 @@ subject or only those below it, as the vertical projection defines them.
 and `above`. A direction or an offset with another projection is an
 invalid declaration.
 
+**Surfaces.** The plain vertical distance is the gap between two extents.
+`subject_surface` and `counterpart_surface` choose the surfaces instead: the
+subject's `top` or `bottom` level, and the counterpart's `top` or `bottom`
+level (the difference of the two levels in the direction, for bodies whose
+footprints are related) or its `nearest` surface, the part of it directly
+over or under the subject's footprint nearest to the subject's level. The
+six pairs a check commonly chooses among are all spelled this way: a
+sprinkler's top to the nearest surface above is the sloped slab's underside
+right above it, not the slab's lowest point elsewhere. `nearest` takes no
+`footprint_offset_metres`. A tessellated nearest surface has an upper bound
+only from a witness well inside the footprint, so a shortfall may be left
+not evaluated.
+
+**Heights.** A `horizontal` distance ignores heights: a counterpart one
+storey up can be close in plan. With `elevation_overlap` `overlapping` only
+counterparts whose vertical extent overlaps the subject's count, or with
+`elevation_offset_metres` those whose height gap is below it (a band around
+the subject's heights). A counterpart whose extent cannot be read, or whose
+gap straddles the offset, is unknown; the subject's own unreadable extent
+leaves it not evaluated. It needs the vertical-extent service.
+
 **Scoping.** With a traversal declared, only counterparts sharing a container
 with the subject are measured: the objects the traversal reaches from each,
 through declared relationships or derived ones such as
 `axioval:derived.contained-in-space`. An object reaching no container shares
 none. A subject whose containers cannot be decided is not evaluated; a
-counterpart whose containers cannot be decided is undecided.
+counterpart whose containers cannot be decided is undecided. With
+`container_selector` only the reached objects it picks are containers, so
+sprinklers reaching both a fire zone and a lighting zone are scoped to the
+fire zone alone: two sharing only the lighting zone are not paired. A
+reached object the selector cannot decide may be a shared container, so the
+pair is undecided unless a surely picked one is shared.
 
 **Judging intervals.** A counterpart counts within a range only when its whole
 interval lies inside, and breaks a minimum only when its whole interval lies

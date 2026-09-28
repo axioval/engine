@@ -34,6 +34,7 @@ pub mod space;
 pub(crate) mod support_coverage;
 pub mod triangle_count;
 pub mod vertical_extent;
+pub(crate) mod vertical_surface;
 pub mod walkability;
 pub(crate) mod walkable;
 pub mod walking_surface;

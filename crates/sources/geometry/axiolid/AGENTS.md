@@ -215,7 +215,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   closest points over projected triangles (edge-on ones as segments), exact
   for non-convex footprints; vertical is the extent gap of footprint-related
   bodies (one-sided with a direction, whose side a tessellated end within the
-  combined deviation leaves open); plan overlap uses the overlay. Overlap extents span witnessed
+  combined deviation leaves open); plan overlap uses the overlay. `src/vertical_surface.rs` (internal) measures `VerticalSurfaces::Between`: levels from the mesh bounds (widened by the combined deviation, the side open within it), and `Nearest` from counterpart triangles clipped in plan to each projected subject triangle, pieces of positive plan area only (a body touching the footprint's edge stands over none of it), the minimum at a piece's vertex; a tessellation takes its lower bound from the footprint grown by the deviation and its upper bound only from a witness centroid deeper than the deviation inside the footprint, never from a boundary vertex. Overlap extents span witnessed
   intersection points (edge crossings both ways, inside vertices tried
   outermost first) below and the boxes' overlap above; `measure_overlap_along` spans the same witnesses projected onto each stated direction below and the overlap of the bodies' own ranges along it above, widening every projection off a coordinate axis by its rounding bound (`along`), never reported tighter; the Hausdorff
   distance is bounded per triangle by the farthest vertex from one other

@@ -11,11 +11,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    Bounds3, CapabilityEvaluation, GeometryFidelity, NotEvaluatedReason, ObjectBounds,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityRequest,
-    ProximityService, ProximityServiceHandle, RuleCapability,
+    Bounds3, CapabilityEvaluation, ElevationInterval, GeometryFidelity, NotEvaluatedReason,
+    ObjectBounds, ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityRequest,
+    ProximityService, ProximityServiceHandle, RuleCapability, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
 };
-use axioval_ir::contract::ParameterValue;
+use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, ObjectId};
 use axioval_rules::Distance;
 use common::{Model, id, integer, kind, number, rule, selector, source, string, strings};
@@ -376,13 +377,13 @@ fn vertical_projection_counts_only_bodies_above_or_below() {
             .distance(
                 "pipe",
                 "near",
-                "Vertical { footprint_offset_metres: 0.0, direction: Either }",
+                "Vertical { footprint_offset_metres: 0.0, direction: Either, surfaces: Extents }",
                 (2.0, 2.0),
             )
             .distance(
                 "pipe",
                 "mid",
-                "Vertical { footprint_offset_metres: 0.0, direction: Either }",
+                "Vertical { footprint_offset_metres: 0.0, direction: Either, surfaces: Extents }",
                 (f64::INFINITY, f64::INFINITY),
             )
     };
@@ -409,7 +410,7 @@ fn a_footprint_offset_reaches_the_service() {
         .distance(
             "pipe",
             "near",
-            "Vertical { footprint_offset_metres: 0.5, direction: Either }",
+            "Vertical { footprint_offset_metres: 0.5, direction: Either, surfaces: Extents }",
             (2.0, 2.0),
         );
     let mut parameters = at_least(1, 3.0);
@@ -434,13 +435,13 @@ fn a_vertical_direction_counts_only_its_side() {
             .distance(
                 "pipe",
                 "near",
-                "Vertical { footprint_offset_metres: 0.0, direction: Above }",
+                "Vertical { footprint_offset_metres: 0.0, direction: Above, surfaces: Extents }",
                 (0.5, 0.5),
             )
             .distance(
                 "pipe",
                 "mid",
-                "Vertical { footprint_offset_metres: 0.0, direction: Below }",
+                "Vertical { footprint_offset_metres: 0.0, direction: Below, surfaces: Extents }",
                 (0.4, 0.4),
             )
     };
@@ -571,6 +572,183 @@ fn counterparts_are_scoped_to_the_subjects_container() {
     assert!(outcome.findings().is_empty() && outcome.not_evaluated_outcomes().is_empty());
 }
 
+/// Two zones hold the pipe: a fire zone with `mid` and a zone of another
+/// kind with `near`. Only fire zones scope the counterparts.
+#[test]
+fn counterparts_share_only_containers_of_the_declared_kind() {
+    let zoned = || {
+        model()
+            .object("fire", "firezone")
+            .object("lighting", "zone")
+            .edge("groups", "fire", "pipe")
+            .edge("groups", "fire", "mid")
+            .edge("groups", "lighting", "pipe")
+            .edge("groups", "lighting", "near")
+    };
+    let apart = |kinds: bool| {
+        let mut parameters = vec![
+            ("mode", string("none_closer_than")),
+            ("minimum_metres", number(0.6)),
+            ("path", strings(&["groups:backward"])),
+        ];
+        if kinds {
+            parameters.push(("container_selector", selector(kind("firezone"))));
+        }
+        parameters
+    };
+    // Sharing any zone, `near` is 0.5 m away.
+    let outcome = run(zoned(), walls(), apart(false));
+    assert_eq!(only_finding(&outcome).related, vec![id("near")]);
+    // Sharing only a zone of another kind, the two are not paired.
+    let outcome = run(zoned(), walls(), apart(true));
+    assert!(outcome.findings().is_empty(), "{:?}", outcome.findings());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+    // A container the selector cannot decide leaves the pair undecided.
+    let outcome = run(
+        zoned().unreadable("lighting"),
+        walls(),
+        vec![
+            ("mode", string("none_closer_than")),
+            ("minimum_metres", number(0.6)),
+            ("path", strings(&["groups:backward"])),
+            (
+                "container_selector",
+                selector(Selector::AnyOf {
+                    operands: vec![kind("firezone"), unreadable_property()],
+                }),
+            ),
+        ],
+    );
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        reasons(&outcome),
+        vec![("pipe".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// A selector the model cannot decide for objects `unreadable` marks.
+fn unreadable_property() -> Selector {
+    Selector::Property {
+        property_set: Some("Pset".into()),
+        property: "Kind".into(),
+        operator: ComparisonOperator::Exists,
+        value: None,
+        case_sensitive: true,
+        trim: false,
+        quantifier: None,
+        precision: None,
+    }
+}
+
+impl VerticalExtentService for Stub {
+    fn measure_vertical_extent(
+        &self,
+        object: &ObjectId,
+    ) -> Result<VerticalExtent, VerticalExtentError> {
+        let (_, z, _) = self
+            .boxes
+            .get(&object.local_id)
+            .copied()
+            .flatten()
+            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?;
+        VerticalExtent::try_new(
+            object.clone(),
+            ElevationInterval::exact(z)?,
+            ElevationInterval::exact(z + 1.0)?,
+            Evidence::exact(source(), format!("extent:{}", object.local_id)),
+        )
+    }
+}
+
+fn run_with_heights(stub: Stub, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    let stub = Arc::new(stub);
+    model().evaluate_with(&Distance, &check(parameters), |services| {
+        services
+            .register(ProximityServiceHandle::new(stub.clone()))
+            .unwrap();
+        services
+            .register(VerticalExtentServiceHandle::new(stub))
+            .unwrap();
+    })
+}
+
+/// `near` stands beside the pipe, `far` beside it one storey up.
+#[test]
+fn a_counterpart_on_another_storey_is_ignored_under_overlapping() {
+    let storeys = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 0.0)
+            .at("far", 1.5, 3.0)
+            .distance("pipe", "near", "Horizontal", (0.5, 0.5))
+            .distance("pipe", "far", "Horizontal", (0.4, 0.4))
+    };
+    let apart = |overlap: Option<(&'static str, f64)>| {
+        let mut parameters = vec![
+            ("mode", string("none_closer_than")),
+            ("minimum_metres", number(0.6)),
+            ("projection", string("horizontal")),
+        ];
+        if let Some((overlap, offset)) = overlap {
+            parameters.push(("elevation_overlap", string(overlap)));
+            parameters.push(("elevation_offset_metres", number(offset)));
+        }
+        parameters
+    };
+    let outcome = run_with_heights(storeys(), apart(None));
+    assert_eq!(only_finding(&outcome).related, vec![id("far"), id("near")]);
+    let outcome = run_with_heights(storeys(), apart(Some(("overlapping", 0.0))));
+    assert_eq!(only_finding(&outcome).related, vec![id("near")]);
+    // Within a 2.5 m band around the pipe's heights the upper one counts.
+    let outcome = run_with_heights(storeys(), apart(Some(("overlapping", 2.5))));
+    assert_eq!(only_finding(&outcome).related, vec![id("far"), id("near")]);
+    // Without the vertical-extent service the rule is not evaluated.
+    let outcome = run(model(), storeys(), apart(Some(("overlapping", 0.0))));
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        reasons(&outcome),
+        vec![("-".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+}
+
+#[test]
+fn a_distance_between_surfaces_is_requested_and_graded() {
+    let stub = Stub::default()
+        .at("pipe", 0.0, 0.0)
+        .at("near", 0.0, 1.3)
+        .at("mid", 10.0, 0.0)
+        .at("far", 20.0, 0.0)
+        .distance(
+            "pipe",
+            "near",
+            "Vertical { footprint_offset_metres: 0.0, direction: Above, surfaces: Between { \
+             subject: Top, counterpart: Nearest } }",
+            (0.875, 0.875),
+        );
+    let outcome = run(
+        model(),
+        stub,
+        vec![
+            ("maximum_metres", number(0.5)),
+            ("projection", string("vertical")),
+            ("vertical_direction", string("above")),
+            ("subject_surface", string("top")),
+            ("counterpart_surface", string("nearest")),
+        ],
+    );
+    let finding = only_finding(&outcome);
+    assert_eq!(
+        finding.message,
+        "nearest counterpart test:model/near is at vertical distance from its top to the nearest surface \
+         0.8750 m above, farther than the allowed 0.5000 m"
+    );
+    let deviation = outcome.deviation(0).expect("graded");
+    assert!(
+        (deviation.lower() - 0.75).abs() < 1e-9 && (deviation.upper() - 0.75).abs() < 1e-9,
+        "{deviation:?}"
+    );
+}
+
 #[test]
 fn an_undecided_container_leaves_the_subject_not_evaluated() {
     let mut parameters = at_least(1, 1.0);
@@ -660,6 +838,62 @@ fn invalid_mode_projection_and_count_declarations_are_refused() {
     }
 }
 
+#[test]
+fn invalid_surface_height_and_container_declarations_are_refused() {
+    let declarations: Vec<Vec<(&str, ParameterValue)>> = vec![
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("horizontal")),
+            ("subject_surface", string("top")),
+            ("counterpart_surface", string("top")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("vertical")),
+            ("subject_surface", string("top")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("vertical")),
+            ("subject_surface", string("middle")),
+            ("counterpart_surface", string("top")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("vertical")),
+            ("subject_surface", string("top")),
+            ("counterpart_surface", string("nearest")),
+            ("footprint_offset_metres", number(0.5)),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("vertical")),
+            ("elevation_overlap", string("overlapping")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("horizontal")),
+            ("elevation_overlap", string("always")),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("projection", string("horizontal")),
+            ("elevation_offset_metres", number(0.5)),
+        ],
+        vec![
+            ("maximum_metres", number(1.0)),
+            ("container_selector", selector(kind("zone"))),
+        ],
+    ];
+    for parameters in declarations {
+        let outcome = run(model(), Stub::default(), parameters);
+        assert_eq!(
+            reasons(&outcome),
+            vec![("pipe".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
 /// Every declared parameter is part of the signature a definition binds.
 #[test]
 fn the_signature_declares_modes_projections_and_scoping() {
@@ -673,6 +907,11 @@ fn the_signature_declares_modes_projections_and_scoping() {
         "vertical_direction",
         "relationship",
         "path",
+        "subject_surface",
+        "counterpart_surface",
+        "elevation_overlap",
+        "elevation_offset_metres",
+        "container_selector",
     ] {
         assert!(names.contains(&expected), "{expected} missing");
     }

@@ -14,7 +14,18 @@
 //! space, in plan, vertically between bodies above one another (only those
 //! above or only those below with `vertical_direction`), or as overlap in
 //! plan. Counterparts may be scoped to the subject's containers (its space,
-//! its group) through the traversal parameters.
+//! its group) through the traversal parameters; with `container_selector`
+//! only reached containers it picks count, so two sprinklers sharing a zone
+//! of another type than a fire zone are not paired.
+//!
+//! A `vertical` distance may run between chosen surfaces
+//! (`subject_surface` `top` or `bottom`, `counterpart_surface` `top`,
+//! `bottom` or `nearest`): `nearest` is the counterpart's surface directly
+//! over or under the subject's footprint, such as a sloped slab's underside
+//! right above a sprinkler. A `horizontal` distance with `elevation_overlap`
+//! `overlapping` relates only counterparts whose heights overlap the
+//! subject's, or with `elevation_offset_metres` come closer than that in
+//! height: a counterpart on another storey is ignored.
 //!
 //! With `subject_extent` or `counterpart_extent` `leaf_swing` (or its older
 //! name `door_swing`), that side is measured by the plan area its doors'
@@ -38,11 +49,13 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, ConvexPlanRegion, GeometryFidelity, NotEvaluatedReason,
-    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, ProjectedDistanceEvidence,
-    ProximityProjection, ProximityRequest, ProximityServiceHandle, RegionDistanceRequest,
-    RuleCapability, RuleContext, VerticalDirection,
+    CapabilityEvaluation, CompiledRule, ConvexPlanRegion, CounterpartSurface, Deviation,
+    GeometryFidelity, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
+    ParameterType, ProjectedDistanceEvidence, ProximityProjection, ProximityRequest,
+    ProximityServiceHandle, RegionDistanceRequest, RuleCapability, RuleContext, SubjectSurface,
+    VerticalDirection, VerticalExtent, VerticalExtentServiceHandle, VerticalSurfaces,
 };
+use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::door_swing::{self, Footprint, box_gap};
@@ -72,6 +85,11 @@ struct Declaration<'a> {
     maximum: Option<f64>,
     projection: ProximityProjection,
     scope: Option<Traversal<'a>>,
+    /// Which reached objects count as containers; every one without it.
+    containers: Option<&'a Selector>,
+    /// With `elevation_overlap` `overlapping`, the height gap a counterpart
+    /// must stay under (zero: the heights overlap).
+    elevation: Option<f64>,
 }
 
 fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
@@ -81,44 +99,55 @@ fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavai
     }
 }
 
+/// The declared mode, checked against the declared bounds.
+fn mode(
+    parameters: &Parameters<'_>,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+) -> Result<Mode, Unavailable> {
+    let count = parameters.integer("count")?;
+    Ok(
+        match (parameters.string("mode")?.unwrap_or("nearest"), count) {
+            ("nearest", None) => {
+                if minimum.is_none() && maximum.is_none() {
+                    return Err(invalid(
+                        "`nearest` needs `minimum_metres`, `maximum_metres` or both",
+                    ));
+                }
+                Mode::Nearest
+            }
+            ("none_closer_than", None) => {
+                if !minimum.is_some_and(|minimum| minimum > 0.0) || maximum.is_some() {
+                    return Err(invalid(
+                        "`none_closer_than` needs a positive `minimum_metres` and no maximum",
+                    ));
+                }
+                Mode::NoneCloserThan
+            }
+            ("at_least", Some(count)) => {
+                let count = u64::try_from(count)
+                    .ok()
+                    .filter(|count| *count > 0)
+                    .ok_or_else(|| invalid("`count` must be at least one"))?;
+                if maximum.is_none() {
+                    return Err(invalid("`at_least` needs `maximum_metres`"));
+                }
+                Mode::AtLeast(count)
+            }
+            ("at_least", None) => return Err(invalid("`at_least` needs `count`")),
+            ("nearest" | "none_closer_than", Some(_)) => {
+                return Err(invalid("`count` applies only to `at_least`"));
+            }
+            (other, _) => return Err(invalid(format!("mode `{other}` is unsupported"))),
+        },
+    )
+}
+
 fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let minimum = length(&parameters, "minimum_metres")?;
     let maximum = length(&parameters, "maximum_metres")?;
-    let count = parameters.integer("count")?;
-    let mode = match (parameters.string("mode")?.unwrap_or("nearest"), count) {
-        ("nearest", None) => {
-            if minimum.is_none() && maximum.is_none() {
-                return Err(invalid(
-                    "`nearest` needs `minimum_metres`, `maximum_metres` or both",
-                ));
-            }
-            Mode::Nearest
-        }
-        ("none_closer_than", None) => {
-            if !minimum.is_some_and(|minimum| minimum > 0.0) || maximum.is_some() {
-                return Err(invalid(
-                    "`none_closer_than` needs a positive `minimum_metres` and no maximum",
-                ));
-            }
-            Mode::NoneCloserThan
-        }
-        ("at_least", Some(count)) => {
-            let count = u64::try_from(count)
-                .ok()
-                .filter(|count| *count > 0)
-                .ok_or_else(|| invalid("`count` must be at least one"))?;
-            if maximum.is_none() {
-                return Err(invalid("`at_least` needs `maximum_metres`"));
-            }
-            Mode::AtLeast(count)
-        }
-        ("at_least", None) => return Err(invalid("`at_least` needs `count`")),
-        ("nearest" | "none_closer_than", Some(_)) => {
-            return Err(invalid("`count` applies only to `at_least`"));
-        }
-        (other, _) => return Err(invalid(format!("mode `{other}` is unsupported"))),
-    };
+    let mode = mode(&parameters, minimum, maximum)?;
     if let (Some(minimum), Some(maximum)) = (minimum, maximum)
         && minimum > maximum
     {
@@ -136,14 +165,38 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             )));
         }
     };
+    let surfaces = surfaces(&parameters)?;
+    if surfaces.is_some() && parameters.string("projection")? != Some("vertical") {
+        return Err(invalid(
+            "`subject_surface` and `counterpart_surface` apply only to the `vertical` projection",
+        ));
+    }
     let projection = match (parameters.string("projection")?, offset, direction) {
         (None | Some("minimum_3d"), None, None) => ProximityProjection::Minimum3d,
         (Some("horizontal"), None, None) => ProximityProjection::Horizontal,
         (Some("plan_overlap"), None, None) => ProximityProjection::PlanOverlap,
-        (Some("vertical"), offset, direction) => ProximityProjection::Vertical {
-            footprint_offset_metres: offset.unwrap_or(0.0),
-            direction: direction.unwrap_or(VerticalDirection::Either),
-        },
+        (Some("vertical"), offset, direction) => {
+            let surfaces = surfaces.unwrap_or_default();
+            if offset.is_some_and(|offset| offset > 0.0)
+                && matches!(
+                    surfaces,
+                    VerticalSurfaces::Between {
+                        counterpart: CounterpartSurface::Nearest,
+                        ..
+                    }
+                )
+            {
+                return Err(invalid(
+                    "`counterpart_surface` `nearest` lies over the footprint itself; it takes \
+                     no `footprint_offset_metres`",
+                ));
+            }
+            ProximityProjection::Vertical {
+                footprint_offset_metres: offset.unwrap_or(0.0),
+                direction: direction.unwrap_or(VerticalDirection::Either),
+                surfaces,
+            }
+        }
         (None | Some("minimum_3d" | "horizontal" | "plan_overlap"), Some(_), _) => {
             return Err(invalid(
                 "`footprint_offset_metres` applies only to the `vertical` projection",
@@ -171,14 +224,87 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             "a `leaf_swing` extent is a plan footprint: declare `projection` `horizontal`",
         ));
     }
+    let scope = parameters.traversal()?;
+    let containers = parameters.selector("container_selector")?;
+    if containers.is_some() && scope.is_none() {
+        return Err(invalid(
+            "`container_selector` picks among the containers `relationship` or `path` reaches; \
+             declare one",
+        ));
+    }
     Ok(Declaration {
         mode,
         swings,
         minimum,
         maximum,
+        elevation: elevation(&parameters, projection)?,
         projection,
-        scope: parameters.traversal()?,
+        scope,
+        containers,
     })
+}
+
+/// The declared surface pair, when both surfaces are declared.
+fn surfaces(parameters: &Parameters<'_>) -> Result<Option<VerticalSurfaces>, Unavailable> {
+    let subject = match parameters.string("subject_surface")? {
+        None => None,
+        Some("top") => Some(SubjectSurface::Top),
+        Some("bottom") => Some(SubjectSurface::Bottom),
+        Some(other) => {
+            return Err(invalid(format!(
+                "`subject_surface` `{other}` is unsupported; use `top` or `bottom`"
+            )));
+        }
+    };
+    let counterpart = match parameters.string("counterpart_surface")? {
+        None => None,
+        Some("top") => Some(CounterpartSurface::Top),
+        Some("bottom") => Some(CounterpartSurface::Bottom),
+        Some("nearest") => Some(CounterpartSurface::Nearest),
+        Some(other) => {
+            return Err(invalid(format!(
+                "`counterpart_surface` `{other}` is unsupported; use `top`, `bottom` or \
+                 `nearest`"
+            )));
+        }
+    };
+    match (subject, counterpart) {
+        (None, None) => Ok(None),
+        (Some(subject), Some(counterpart)) => Ok(Some(VerticalSurfaces::Between {
+            subject,
+            counterpart,
+        })),
+        _ => Err(invalid(
+            "`subject_surface` and `counterpart_surface` are declared together",
+        )),
+    }
+}
+
+/// The height gap a counterpart must stay under, with `elevation_overlap`
+/// `overlapping`.
+fn elevation(
+    parameters: &Parameters<'_>,
+    projection: ProximityProjection,
+) -> Result<Option<f64>, Unavailable> {
+    let offset = length(parameters, "elevation_offset_metres")?;
+    match (parameters.string("elevation_overlap")?, offset) {
+        (None | Some("any"), None) => Ok(None),
+        (None | Some("any"), Some(_)) => Err(invalid(
+            "`elevation_offset_metres` applies only to `elevation_overlap` `overlapping`",
+        )),
+        (Some("overlapping"), offset) => {
+            if projection == ProximityProjection::Horizontal {
+                Ok(Some(offset.unwrap_or(0.0)))
+            } else {
+                Err(invalid(
+                    "`elevation_overlap` applies only to the `horizontal` projection",
+                ))
+            }
+        }
+        (Some(other), _) => Err(invalid(format!(
+            "`elevation_overlap` `{other}` is unsupported; use `any` or `overlapping`"
+        ))),
+    }
 }
 
 impl Declaration<'_> {
@@ -208,8 +334,9 @@ impl Declaration<'_> {
 /// What is known about one counterpart of one subject.
 struct Candidate {
     counterpart: ObjectId,
-    /// Whether it shares a container with the subject; `None` if undecided.
-    in_scope: Option<bool>,
+    /// Whether it shares a container with the subject and stands at its
+    /// heights, as far as declared; why not, when undecided.
+    in_scope: Result<bool, String>,
     measured: Result<Measured, Unavailable>,
 }
 
@@ -219,7 +346,7 @@ struct Measured {
     lower: f64,
     upper: f64,
     /// `horizontal distance`, `vertical distance`, ...
-    what: &'static str,
+    what: String,
     /// ` above`, ` below` or nothing.
     side: &'static str,
     /// Why the interval is not a point, for messages.
@@ -230,17 +357,31 @@ struct Measured {
 impl Measured {
     fn projected(measured: &ProjectedDistanceEvidence) -> Self {
         let (what, side) = match measured.request().projection() {
-            ProximityProjection::Minimum3d => ("distance", ""),
-            ProximityProjection::Horizontal => ("horizontal distance", ""),
-            ProximityProjection::Vertical { direction, .. } => (
-                "vertical distance",
+            ProximityProjection::Minimum3d => ("distance".to_owned(), ""),
+            ProximityProjection::Horizontal => ("horizontal distance".to_owned(), ""),
+            ProximityProjection::Vertical {
+                direction,
+                surfaces,
+                ..
+            } => (
+                match surfaces {
+                    VerticalSurfaces::Extents => "vertical distance".to_owned(),
+                    VerticalSurfaces::Between {
+                        subject,
+                        counterpart,
+                    } => format!(
+                        "vertical distance from its {} to the {} surface",
+                        subject.name(),
+                        counterpart.name()
+                    ),
+                },
                 match direction {
                     VerticalDirection::Either => "",
                     VerticalDirection::Above => " above",
                     VerticalDirection::Below => " below",
                 },
             ),
-            ProximityProjection::PlanOverlap => ("plan-overlap distance", ""),
+            ProximityProjection::PlanOverlap => ("plan-overlap distance".to_owned(), ""),
         };
         let (lower, upper) = measured.interval_metres();
         Self {
@@ -263,21 +404,15 @@ impl Candidate {
         self.measured.as_ref().ok().map(Measured::interval_metres)
     }
     fn certainly_in_scope(&self) -> bool {
-        self.in_scope == Some(true)
+        self.in_scope == Ok(true)
     }
     fn possibly_in_scope(&self) -> bool {
-        self.in_scope != Some(false)
+        self.in_scope != Ok(false)
     }
     /// Why this candidate leaves a check open.
     fn undecided(&self, bound: &str) -> Unavailable {
-        if self.in_scope.is_none() {
-            return (
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "whether {} shares a container with the subject could not be decided",
-                    self.counterpart
-                ),
-            );
+        if let Err(why) = &self.in_scope {
+            return (NotEvaluatedReason::IncompleteEvidence, why.clone());
         }
         match &self.measured {
             Err(unavailable) => unavailable.clone(),
@@ -296,7 +431,7 @@ impl Candidate {
 
 /// A distance as a reviewer reads it: a point, a range, or no relation.
 fn describe(measured: &Measured) -> String {
-    let (projection, side) = (measured.what, measured.side);
+    let (projection, side) = (&measured.what, measured.side);
     match measured.interval_metres() {
         (lower, _) if lower.is_infinite() => format!("no {projection}{side}"),
         (lower, upper) if lower >= upper => format!("{projection} {lower:.4} m{side}"),
@@ -313,6 +448,9 @@ enum Verdict {
         message: String,
         related: Vec<ObjectId>,
         evidence: Vec<Evidence>,
+        /// How far the named distance misses its bound; `None` when no
+        /// distance was measured against one.
+        deviation: Option<Deviation>,
     },
     NotEvaluated(Unavailable),
     Pass,
@@ -377,8 +515,10 @@ fn keep_apart(
     } else {
         &violating
     };
+    let (lower, upper) = measured.interval_metres();
     Verdict::Finding {
         message,
+        deviation: Some(Deviation::below(minimum, lower, upper)),
         related: shown.iter().map(|c| c.counterpart.clone()).collect(),
         evidence: shown
             .iter()
@@ -451,6 +591,13 @@ fn within(
             possible.len()
         ),
     };
+    let deviation = match (nearest_mode, nearest) {
+        (true, Some((_, measured))) => {
+            let (low, high) = measured.interval_metres();
+            Some(Deviation::above(upper, low, high))
+        }
+        _ => None,
+    };
     let named: Vec<&Candidate> = if nearest_mode {
         nearest
             .map(|(candidate, _)| candidate)
@@ -461,6 +608,7 @@ fn within(
     };
     Verdict::Finding {
         message,
+        deviation,
         related: named.iter().map(|c| c.counterpart.clone()).collect(),
         evidence: named
             .iter()
@@ -473,22 +621,144 @@ fn within(
 /// The containers an object reaches, with the traversal's evidence.
 type Containers = Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable>;
 
-/// Containers reached from objects through the declared traversal, cached.
+/// Whether a counterpart is in scope; why not decided, when undecided.
+type Admission = Result<bool, String>;
+
+/// Both admissions: out when either is, in when both are.
+fn both(first: Admission, second: Admission) -> Admission {
+    match (first, second) {
+        (Ok(false), _) | (_, Ok(false)) => Ok(false),
+        (Ok(true), Ok(true)) => Ok(true),
+        (Err(why), _) | (_, Err(why)) => Err(why),
+    }
+}
+
+/// The objects `container_selector` picks, and those it cannot decide.
+struct Kinds {
+    sure: BTreeSet<ObjectId>,
+    undecided: BTreeSet<ObjectId>,
+}
+
+impl Kinds {
+    fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
+        let (matched, selection) = select_objects(context, selector);
+        Self {
+            sure: matched.iter().map(|object| object.id.clone()).collect(),
+            undecided: selection
+                .not_evaluated_outcomes()
+                .iter()
+                .filter_map(|outcome| outcome.object_id().cloned())
+                .collect(),
+        }
+    }
+
+    /// The reached objects that surely, and that possibly, are containers.
+    fn split(&self, reached: &BTreeSet<ObjectId>) -> (BTreeSet<ObjectId>, BTreeSet<ObjectId>) {
+        let sure: BTreeSet<ObjectId> = reached.intersection(&self.sure).cloned().collect();
+        let mut possible = sure.clone();
+        possible.extend(reached.intersection(&self.undecided).cloned());
+        (sure, possible)
+    }
+}
+
+/// Heights for `elevation_overlap`: the subject's extent and each
+/// counterpart's, cached.
+struct Heights<'r> {
+    service: &'r VerticalExtentServiceHandle,
+    offset: f64,
+    subject: Option<VerticalExtent>,
+    extents: BTreeMap<ObjectId, Result<VerticalExtent, String>>,
+}
+
+impl Heights<'_> {
+    /// Whether `counterpart` comes closer than the offset to the subject in
+    /// height (their heights overlap, for an offset of zero).
+    fn admit(&mut self, counterpart: &ObjectId) -> Admission {
+        let service = self.service;
+        let theirs = self
+            .extents
+            .entry(counterpart.clone())
+            .or_insert_with(|| {
+                service
+                    .measure_vertical_extent(counterpart)
+                    .map_err(|error| {
+                        format!(
+                            "whether {counterpart} stands at the subject's heights could not be \
+                             decided: {error}"
+                        )
+                    })
+            })
+            .clone()?;
+        let own = self
+            .subject
+            .as_ref()
+            .unwrap_or_else(|| unreachable!("a subject's heights are read first"));
+        let (bottom, top) = (own.bottom(), own.top());
+        let (other_bottom, other_top) = (theirs.bottom(), theirs.top());
+        let most = (other_bottom.upper_metres() - top.lower_metres())
+            .max(bottom.upper_metres() - other_top.lower_metres());
+        let least = (other_bottom.lower_metres() - top.upper_metres())
+            .max(bottom.lower_metres() - other_top.upper_metres());
+        if most < self.offset {
+            Ok(true)
+        } else if least >= self.offset {
+            Ok(false)
+        } else {
+            Err(format!(
+                "whether {counterpart} stands at the subject's heights straddles the height gap \
+                 {:.4} m",
+                self.offset
+            ))
+        }
+    }
+}
+
+/// Containers reached from objects through the declared traversal, cached,
+/// and the heights a counterpart must stand at.
 struct Scope<'r, 'a> {
     traversal: Option<&'r Traversal<'a>>,
+    kinds: Option<Kinds>,
+    heights: Option<Heights<'r>>,
     context: &'r RuleContext<'r>,
     everything: Vec<&'r Object>,
     reached: BTreeMap<ObjectId, Containers>,
 }
 
 impl<'r, 'a> Scope<'r, 'a> {
-    fn new(traversal: Option<&'r Traversal<'a>>, context: &'r RuleContext<'r>) -> Self {
+    fn new(
+        declared: &'r Declaration<'a>,
+        heights: Option<&'r VerticalExtentServiceHandle>,
+        context: &'r RuleContext<'r>,
+    ) -> Self {
         Self {
-            traversal,
+            traversal: declared.scope.as_ref(),
+            kinds: declared
+                .containers
+                .map(|selector| Kinds::of(context, selector)),
+            heights: heights
+                .zip(declared.elevation)
+                .map(|(service, offset)| Heights {
+                    service,
+                    offset,
+                    subject: None,
+                    extents: BTreeMap::new(),
+                }),
             context,
             everything: context.project.objects().collect(),
             reached: BTreeMap::new(),
         }
+    }
+
+    /// Reads the subject's heights, when they are declared to matter.
+    fn enter(&mut self, subject: &ObjectId) -> Result<(), Unavailable> {
+        if let Some(heights) = &mut self.heights {
+            let extent = heights
+                .service
+                .measure_vertical_extent(subject)
+                .map_err(|error| crate::orientation::extent_unavailable(&error))?;
+            heights.subject = Some(extent);
+        }
+        Ok(())
     }
 
     fn containers(&mut self, object: &ObjectId) -> &Containers {
@@ -497,6 +767,7 @@ impl<'r, 'a> Scope<'r, 'a> {
             context,
             everything,
             reached,
+            ..
         } = self;
         reached.entry(object.clone()).or_insert_with(|| {
             let traversal = traversal.unwrap_or_else(|| unreachable!("scoped only when declared"));
@@ -507,22 +778,48 @@ impl<'r, 'a> Scope<'r, 'a> {
     }
 
     /// Whether `counterpart` shares a container with a subject reaching
-    /// `subject_containers`; `None` when its containers are undecided.
+    /// `subject_containers` and stands at its heights, as declared.
     fn shares(
         &mut self,
         subject_containers: &BTreeSet<ObjectId>,
         counterpart: &ObjectId,
-    ) -> Option<bool> {
-        if self.traversal.is_none() {
-            return Some(true);
+    ) -> Admission {
+        let heights = match &mut self.heights {
+            Some(heights) => heights.admit(counterpart),
+            None => Ok(true),
+        };
+        if heights == Ok(false) || self.traversal.is_none() {
+            return heights;
         }
-        match self.containers(counterpart) {
-            Ok((containers, _)) => Some(!containers.is_disjoint(subject_containers)),
-            Err(_) => None,
-        }
+        let undecided = || {
+            format!(
+                "whether {counterpart} shares a container with the subject could not be decided"
+            )
+        };
+        let theirs = match self.containers(counterpart) {
+            Ok((containers, _)) => containers.clone(),
+            Err(_) => return both(heights, Err(undecided())),
+        };
+        let shared = match &self.kinds {
+            None => Ok(!theirs.is_disjoint(subject_containers)),
+            Some(kinds) => {
+                let (own_sure, own_possible) = kinds.split(subject_containers);
+                let (sure, possible) = kinds.split(&theirs);
+                if !own_sure.is_disjoint(&sure) {
+                    Ok(true)
+                } else if own_possible.is_disjoint(&possible) {
+                    Ok(false)
+                } else {
+                    Err(format!(
+                        "whether {counterpart} shares a container of the declared kind with the \
+                         subject could not be decided"
+                    ))
+                }
+            }
+        };
+        both(heights, shared)
     }
 }
-
 /// Candidates for `subject`: every counterpart the broad phase proposed, in
 /// scope or undecided, measured in the declared projection.
 fn candidates(
@@ -545,7 +842,7 @@ fn candidates(
     let mut measured = Vec::new();
     for counterpart in proposed {
         let in_scope = scope.shares(subject_containers, counterpart);
-        if in_scope == Some(false) {
+        if in_scope == Ok(false) {
             continue;
         }
         let outcome =
@@ -570,7 +867,7 @@ fn candidates(
         .filter(|counterpart| *counterpart != subject)
         .filter_map(|counterpart| {
             let in_scope = scope.shares(subject_containers, counterpart);
-            (in_scope != Some(false)).then(|| Candidate {
+            (in_scope != Ok(false)).then(|| Candidate {
                 counterpart: counterpart.clone(),
                 in_scope,
                 measured: Err((
@@ -766,7 +1063,7 @@ impl<'a> Swings<'a> {
         let mut measured = Measured {
             lower: f64::INFINITY,
             upper: f64::INFINITY,
-            what: "horizontal distance",
+            what: "horizontal distance".to_owned(),
             side: "",
             note: String::new(),
             evidence: vec![footprint.evidence.clone()],
@@ -801,7 +1098,7 @@ impl<'a> Swings<'a> {
                 Ok(Measured {
                     lower,
                     upper,
-                    what: "horizontal distance",
+                    what: "horizontal distance".to_owned(),
                     side: "",
                     note: String::new(),
                     evidence: vec![from.evidence.clone(), to.evidence.clone()],
@@ -845,7 +1142,7 @@ impl<'a> Swings<'a> {
                 continue;
             }
             let in_scope = scope.shares(subject_containers, counterpart);
-            if in_scope == Some(false) {
+            if in_scope == Ok(false) {
                 continue;
             }
             measured.push(Candidate {
@@ -860,7 +1157,7 @@ impl<'a> Swings<'a> {
             .filter(|counterpart| *counterpart != subject)
             .filter_map(|counterpart| {
                 let in_scope = scope.shares(subject_containers, counterpart);
-                (in_scope != Some(false)).then(|| Candidate {
+                (in_scope != Ok(false)).then(|| Candidate {
                     counterpart: counterpart.clone(),
                     in_scope,
                     measured: Err((
@@ -901,9 +1198,18 @@ impl RuleCapability for Distance {
             ParameterDescriptor::optional("vertical_direction", ParameterType::String),
             ParameterDescriptor::optional("subject_extent", ParameterType::String),
             ParameterDescriptor::optional("counterpart_extent", ParameterType::String),
+            ParameterDescriptor::optional("subject_surface", ParameterType::String),
+            ParameterDescriptor::optional("counterpart_surface", ParameterType::String),
+            ParameterDescriptor::optional("elevation_overlap", ParameterType::String),
+            ParameterDescriptor::optional("elevation_offset_metres", ParameterType::Number),
+            ParameterDescriptor::optional("container_selector", ParameterType::Selector),
         ];
         parameters.extend(traversal_parameters());
         parameters
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -911,6 +1217,14 @@ impl RuleCapability for Distance {
             Ok(declared) => declared,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
+        let heights = context.services.get::<VerticalExtentServiceHandle>();
+        if declared.elevation.is_some() && heights.is_none() {
+            return CapabilityEvaluation::not_evaluated(
+                NotEvaluatedReason::MissingService,
+                "distance: `elevation_overlap` needs the vertical-extent service, which is not \
+                 registered",
+            );
+        }
         let pairs = if declared.swings.0 || declared.swings.1 {
             match Swings::prepare(context, rule, &declared) {
                 Ok(swings) => Pairs::Swings(swings),
@@ -926,10 +1240,18 @@ impl RuleCapability for Distance {
             Pairs::Bodies(prepared) => prepared.subjects.clone(),
             Pairs::Swings(swings) => swings.subjects.clone(),
         };
-        let mut scope = Scope::new(declared.scope.as_ref(), context);
+        let mut scope = Scope::new(&declared, heights, context);
         let mut evaluation = CapabilityEvaluation::default();
 
         for subject in &subjects {
+            if let Err((reason, message)) = scope.enter(subject) {
+                evaluation.push_object_not_evaluated(
+                    subject.clone(),
+                    reason,
+                    format!("the subject's heights could not be read: {message}"),
+                );
+                continue;
+            }
             let (subject_containers, scope_evidence) = if declared.scope.is_some() {
                 match scope.containers(subject) {
                     Ok((containers, evidence)) => (containers.clone(), evidence.clone()),
@@ -957,53 +1279,78 @@ impl RuleCapability for Distance {
                     swings.candidates(&mut scope, subject, &subject_containers)
                 }
             };
-            let nearest_mode = matches!(declared.mode, Mode::Nearest);
-            let apart = declared
-                .keep_apart()
-                .map(|minimum| keep_apart(minimum, &measured, &unmeasurable, nearest_mode));
-            let reach = declared
-                .within()
-                .map(|bounds| within(bounds, &measured, &unmeasurable, nearest_mode));
-
-            let mut messages = Vec::new();
-            let mut related = Vec::new();
-            let mut evidence = Vec::new();
-            let mut open = None;
-            for verdict in [apart, reach].into_iter().flatten() {
-                match verdict {
-                    Verdict::Finding {
-                        message,
-                        related: named,
-                        evidence: cited,
-                    } => {
-                        messages.push(message);
-                        related.extend(named);
-                        evidence.extend(cited);
-                    }
-                    Verdict::NotEvaluated(unavailable) => {
-                        open.get_or_insert(unavailable);
-                    }
-                    Verdict::Pass => {}
-                }
-            }
-            // A certain violation stands whatever is undecided.
-            if !messages.is_empty() {
-                evidence.extend(scope_evidence);
-                evaluation.push_finding(finding(
-                    rule,
-                    subject,
-                    messages.join("; "),
-                    evidence,
-                    related,
-                ));
-            } else if let Some((reason, message)) = open {
-                evaluation.push_object_not_evaluated(subject.clone(), reason, message);
-            }
+            judge(
+                &mut evaluation,
+                rule,
+                &declared,
+                subject,
+                (&measured, &unmeasurable),
+                scope_evidence,
+            );
         }
         match pairs {
             Pairs::Bodies(prepared) => prepared.unevaluated.drain_into(&mut evaluation),
             Pairs::Swings(swings) => swings.unevaluated.drain_into(&mut evaluation),
         }
         evaluation
+    }
+}
+
+/// Judges one subject's candidates and records the outcome.
+fn judge(
+    evaluation: &mut CapabilityEvaluation,
+    rule: &CompiledRule,
+    declared: &Declaration<'_>,
+    subject: &ObjectId,
+    (measured, unmeasurable): (&[Candidate], &[Candidate]),
+    scope_evidence: Vec<Evidence>,
+) {
+    let nearest_mode = matches!(declared.mode, Mode::Nearest);
+    let apart = declared
+        .keep_apart()
+        .map(|minimum| keep_apart(minimum, measured, unmeasurable, nearest_mode));
+    let reach = declared
+        .within()
+        .map(|bounds| within(bounds, measured, unmeasurable, nearest_mode));
+
+    let mut messages = Vec::new();
+    let mut related = Vec::new();
+    let mut evidence = Vec::new();
+    let mut open = None;
+    // A finding missing both bounds grades by the worse; one naming
+    // no distance against its bound is not graded.
+    let mut deviations = Vec::new();
+    for verdict in [apart, reach].into_iter().flatten() {
+        match verdict {
+            Verdict::Finding {
+                message,
+                related: named,
+                evidence: cited,
+                deviation,
+            } => {
+                messages.push(message);
+                related.extend(named);
+                evidence.extend(cited);
+                deviations.push(deviation);
+            }
+            Verdict::NotEvaluated(unavailable) => {
+                open.get_or_insert(unavailable);
+            }
+            Verdict::Pass => {}
+        }
+    }
+    // A certain violation stands whatever is undecided.
+    if !messages.is_empty() {
+        evidence.extend(scope_evidence);
+        let deviation = deviations
+            .into_iter()
+            .reduce(|a, b| a.zip(b).map(|(a, b)| a.worst(b)))
+            .flatten();
+        evaluation.push_finding_deviating(
+            finding(rule, subject, messages.join("; "), evidence, related),
+            deviation,
+        );
+    } else if let Some((reason, message)) = open {
+        evaluation.push_object_not_evaluated(subject.clone(), reason, message);
     }
 }

@@ -8318,10 +8318,10 @@ fn beam_holes_are_checked_against_the_web_zone_and_the_beams_ends() {
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
-/// A 0.3 m square beam #50 running 6 m along x at 3 m, and 0.1 m square
-/// ducts extruded 2 m along +y across it with no void modelled: #100 at
-/// x = 3 m, #200 at x = 0.2 m, and #300 beside the beam's end. The beam is
-/// rectangular: I-shaped sections are not meshed yet (axiolid/kernel#193).
+/// A 300 mm I-beam #50 (10 mm web, 20 mm flanges) running 6 m along x at
+/// 3 m, and 0.1 m square ducts extruded 2 m along +y through its web with
+/// no void modelled: #100 at x = 3 m, #200 at x = 0.2 m, and #300 beside
+/// the beam's end.
 fn beam_with_ducts() -> String {
     let duct = |id: u32, x: f64| {
         format!(
@@ -8353,7 +8353,7 @@ fn beam_with_ducts() -> String {
          #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
          #22=IFCUNITASSIGNMENT((#20,#21));\n\
          #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
-         #51=IFCRECTANGLEPROFILEDEF(.AREA.,'R300',$,0.3,0.3);\n\
+         #51=IFCISHAPEPROFILEDEF(.AREA.,'I300',$,0.3,0.3,0.01,0.02,$,$,$);\n\
          #52=IFCCARTESIANPOINT((0.,0.,3.));\n\
          #55=IFCAXIS2PLACEMENT3D(#52,#7,#8);\n\
          #56=IFCEXTRUDEDAREASOLID(#51,#55,#4,6.);\n\
@@ -8396,6 +8396,9 @@ fn with_geometry_ducts_through_a_beam_without_voids_are_checked_in_the_beam() {
         "{result:#}"
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    // The I-beam, without fillets, meshes exactly, like the ducts.
+    assert_eq!(result["geometry"]["exact"], 4, "{result:#}");
+    assert_eq!(result["geometry"]["unmeasured"], json!([]), "{result:#}");
     let cited = result.to_string();
     assert!(
         cited.contains("axioval:derived.intersects:"),
@@ -9637,18 +9640,10 @@ fn a_wall_with_a_window_is_not_empty() {
 
 #[test]
 fn beam_supports_are_found_by_contact_with_geometry() {
-    // The beam is a 300 mm square section here, so it meshes; the HEB
-    // column #800 does not, so whether it touches the beam is undecided.
-    // Hole #600 moves to mid-height, clear of the section's top face.
-    let model = supported_beam_and_walls_with_areas()
-        .replace(
-            "#51=IFCISHAPEPROFILEDEF(.AREA.,'I300',$,0.3,0.3,0.01,0.02,$,$,$);",
-            "#51=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,0.3,0.3);",
-        )
-        .replace(
-            "#602=IFCCARTESIANPOINT((4.5,-0.2,3.1));",
-            "#602=IFCCARTESIANPOINT((4.5,-0.2,3.));",
-        );
+    // The I-beam rests on both columns at distance 0: the square #700 and
+    // the HEB #800 are supports by contact alone. Hole #600 is tangent to
+    // the top flange's outer face.
+    let model = supported_beam_and_walls_with_areas();
     let case = Case::new("opening-zone-contact");
     let (output, result) = case.geometry_rule(
         &model,
@@ -9671,25 +9666,27 @@ fn beam_supports_are_found_by_contact_with_geometry() {
         }),
     );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Every body meshes, the tangent hole's host included. The HEB has no
+    // fillets, so its mesh is exact; only the beam, cut by round holes, is
+    // a tessellation.
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
+    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
     assert_eq!(
         finding_messages(&result),
-        [(
-            "#500".to_owned(),
-            "opening is 0.1 m from support #700 along its host #50; 0.5 m required".to_owned()
-        )],
+        [
+            (
+                "#500".to_owned(),
+                "opening is 0.1 m from support #700 along its host #50; 0.5 m required".to_owned()
+            ),
+            (
+                "#900".to_owned(),
+                "opening is 0.3 m from support #800 along its host #50; 0.5 m required".to_owned()
+            ),
+        ],
         "{result:#}"
     );
-    // #900 lies within 0.5 m of #800, which may touch the beam.
-    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
-    assert_eq!(not_evaluated.len(), 1, "{result:#}");
-    assert_eq!(not_evaluated[0]["object_id"]["local_id"], json!("#900"));
-    assert!(
-        not_evaluated[0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("#800 (whether it is a selected support of the host is undecided)"),
-        "{result:#}"
-    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
 /// Stair flight #108 (four 0.17 m risers, x 0 to 1.12, y -1.2 to 0) with

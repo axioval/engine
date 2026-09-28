@@ -550,7 +550,7 @@ states:
 
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
-| exact | every face is planar (polygonal extrusions, faceted B-reps, meshes, booleans of these), so the mesh is the shape | measured as exact |
+| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these), so the mesh is the shape | measured as exact |
 | tessellated | some face is curved; the mesh is within 1 mm of it | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
 | unmeasured | a physical product that could not be meshed, including one without a Body representation | measurements it could affect are not evaluated |

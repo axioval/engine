@@ -37,7 +37,7 @@ use axiolid_curve::{Curve2, Curve3};
 use axiolid_mesh_compile_contract::MeshCompiler;
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, SurfaceRelation};
 use axiolid_primitive::Primitive;
-use axiolid_profile::Profile;
+use axiolid_profile::{Profile, SectionProfile};
 use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidBoundaryCoverageService, AxiolidContactService, AxiolidDerivedRelationshipService,
@@ -907,11 +907,62 @@ fn planar(graph: &GeometryGraph, id: NodeId, budget: &mut usize) -> bool {
 
 fn polygonal(profile: &Profile) -> bool {
     let straight = |curve: &Curve2| matches!(curve, Curve2::Line(_) | Curve2::Polyline(_));
+    let sharp = |radius: Option<f64>| radius.is_none_or(|r| r == 0.0);
     match profile {
         Profile::Rectangle(rectangle) => {
-            let sharp = |radius: Option<f64>| radius.is_none_or(|r| r == 0.0);
             sharp(rectangle.outer_radius) && sharp(rectangle.inner_radius)
         }
+        // A section meshes from its exact contour (axiolid-mesh-compile
+        // 0.3.5): straight edges, sloped ones included, are exact and only
+        // its fillets and rounded edges are chorded.
+        Profile::Section(section) => match section {
+            SectionProfile::I {
+                fillet_radius,
+                flange_edge_radius,
+                ..
+            } => sharp(*fillet_radius) && sharp(*flange_edge_radius),
+            SectionProfile::AsymmetricI {
+                bottom_fillet_radius,
+                bottom_flange_edge_radius,
+                top_fillet_radius,
+                top_flange_edge_radius,
+                ..
+            } => [
+                bottom_fillet_radius,
+                bottom_flange_edge_radius,
+                top_fillet_radius,
+                top_flange_edge_radius,
+            ]
+            .into_iter()
+            .all(|radius| sharp(*radius)),
+            SectionProfile::L {
+                fillet_radius,
+                edge_radius,
+                ..
+            }
+            | SectionProfile::U {
+                fillet_radius,
+                edge_radius,
+                ..
+            }
+            | SectionProfile::Z {
+                fillet_radius,
+                edge_radius,
+                ..
+            } => sharp(*fillet_radius) && sharp(*edge_radius),
+            SectionProfile::T {
+                fillet_radius,
+                flange_edge_radius,
+                web_edge_radius,
+                ..
+            } => sharp(*fillet_radius) && sharp(*flange_edge_radius) && sharp(*web_edge_radius),
+            SectionProfile::C {
+                internal_fillet_radius,
+                ..
+            } => sharp(*internal_fillet_radius),
+            SectionProfile::Trapezium { .. } => true,
+            _ => false,
+        },
         Profile::Contour(contour) => std::iter::once(&contour.outer)
             .chain(&contour.holes)
             .flat_map(|ring| &ring.segments)
@@ -1122,5 +1173,45 @@ mod tests {
             routing.route(&route).unwrap(),
             MetricRouteOutcome::Blocked(_)
         ));
+    }
+
+    /// A section without fillets or rounded edges meshes to its exact
+    /// contour, so its mesh is exact; any radius makes it a tessellation.
+    #[test]
+    fn only_sharp_sections_are_polygonal() {
+        use super::polygonal;
+        use axiolid_profile::{Profile, SectionProfile};
+
+        let i = |fillet_radius| {
+            Profile::Section(SectionProfile::I {
+                depth: 0.3,
+                width: 0.3,
+                web_thickness: 0.011,
+                flange_thickness: 0.019,
+                fillet_radius,
+                flange_edge_radius: None,
+                flange_slope: Some(0.1),
+            })
+        };
+        assert!(polygonal(&i(None)));
+        assert!(polygonal(&i(Some(0.0))));
+        assert!(!polygonal(&i(Some(0.027))));
+        let c = |internal_fillet_radius| {
+            Profile::Section(SectionProfile::C {
+                depth: 0.2,
+                width: 0.1,
+                wall_thickness: 0.004,
+                girth: 0.02,
+                internal_fillet_radius,
+            })
+        };
+        assert!(polygonal(&c(None)));
+        assert!(!polygonal(&c(Some(0.004))));
+        assert!(polygonal(&Profile::Section(SectionProfile::Trapezium {
+            bottom_x: 0.4,
+            top_x: 0.2,
+            y: 0.3,
+            top_offset: -0.05,
+        })));
     }
 }

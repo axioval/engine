@@ -3096,6 +3096,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 - Dependencies: `axiolid-mesh-compile` 0.3.4 (curve-bounded planes,
   axiolid/kernel#192) as a direct dependency of the CLI, and
   `axiolid-overlay` 0.3.3.
+- **Steel sections are meshed.** (Refs #65, #140) The workspace requires
+  `axiolid-mesh-compile` 0.3.5 (with `axiolid-construct` 0.3.5 in the
+  lock). Every parameterised section (I, asymmetric I, L, T, U, C, Z,
+  trapezium) now meshes from its exact contour, fillets chorded within
+  the chord budget and straight edges exact; a rounded rectangle keeps its
+  radii (axiolid/kernel#193). A void tangent to its host's face meshes
+  cleanly, or the compiler refuses it and the object is unmeasured, never
+  a non-manifold mesh (axiolid/kernel#194). `check --geometry` counts a
+  section without fillets or rounded edges as exact, so an HEB column
+  under an I-beam touches it at distance 0 and is a support by contact, and
+  a duct through an I-beam's web without a void is judged in the beam.
+  Meshed circles turn half a chord step: the same chord count and
+  deviation at different vertex angles.
 
 - **Breaking.** Semantic capability results are closer to what a reviewer
   acts on. `manual-issue` raises one finding per rule, against the first

@@ -531,7 +531,8 @@ fn valid_value(value: &PropertyValue) -> bool {
         | PropertyValue::Integer(_)
         | PropertyValue::String(_)
         | PropertyValue::Date(_)
-        | PropertyValue::DateTime(_) => true,
+        | PropertyValue::DateTime(_)
+        | PropertyValue::Reference(_) => true,
         // A list holds scalar values only: no null, no nested composite.
         PropertyValue::List(elements) => elements.iter().all(valid_scalar),
         // A range states at least one scalar, and one kind of value.
@@ -563,6 +564,12 @@ fn valid_scalar(value: &PropertyValue) -> bool {
 /// never exact) at least located.
 fn admissible_evidence(request: &PropertyRequest, property: &Property) -> bool {
     let interval = matches!(property.value, PropertyValue::Measured { .. });
+    // A reference names an instance of the requested object's own source.
+    if let PropertyValue::Reference(target) = &property.value
+        && target.source != request.object_id().source
+    {
+        return false;
+    }
     property.evidence.as_ref().is_some_and(|evidence| {
         (reviewable(evidence) || interval && !evidence.locator.trim().is_empty())
             && evidence.source == request.object_id().source

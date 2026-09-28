@@ -84,6 +84,12 @@ whose kind equals the bound name always matches. Any other kind needs the
 source's own hierarchy; without it, membership is unknown and reported as not
 evaluated. An unknown entity name is an error, never a proven non-member.
 
+An `entityType` selector of a rule's applicability is bound per source before
+any rule runs, and the bound class is asked of the source's resource service
+(see [Entity types and resource objects](./capabilities.md#entity-types-and-resource-objects)).
+A concept a source does not bind reaches no resource object there; its objects
+already report the unbound concept.
+
 ## Hosts evaluating capabilities directly
 
 A trusted host that calls a capability without a compiled plan has no

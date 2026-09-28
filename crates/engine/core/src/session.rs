@@ -303,7 +303,8 @@ impl EvidenceSession {
     /// discipline is kept, including a member whose source holds no objects,
     /// which stays in the session as an empty source. Each semantic service the members registered
     /// (property resolution, relationship selection, type hierarchy, object
-    /// frames, classifications, integrity) becomes one service bound to the
+    /// frames, classifications, integrity, resource objects) becomes one
+    /// service bound to the
     /// snapshots of the members that had it, answering each request from
     /// the member that owns the request's source; a source no member
     /// covers is refused, never answered empty. A relationship request is

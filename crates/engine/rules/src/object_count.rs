@@ -9,7 +9,7 @@ use axioval_engine::{
 use axioval_ir::{Discipline, Evidence, Finding, ObjectId, Scope, SourceId};
 
 use crate::pairs::severity;
-use crate::selection::{Selection, selector_matches};
+use crate::selection::{Selection, population, selector_matches};
 use crate::support::{Parameters, Unavailable, invalid, sources};
 
 /// Requires the rule's selection to hold a bounded number of objects in each
@@ -95,7 +95,15 @@ impl RuleCapability for ObjectCount {
                 tallies.insert(Scope::Source(source), Tally::default());
             }
         }
-        for object in context.project.objects() {
+        let (population, unreadable) = population(context, &rule.selector);
+        for (source, why) in unreadable {
+            evaluation.push_source_not_evaluated(
+                source,
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("object-count: its resource objects cannot be listed: {why}"),
+            );
+        }
+        for object in population {
             let source = &object.id.source;
             if membership.left_out.contains(source)
                 || (!across_sources && membership.unknown.contains(source))

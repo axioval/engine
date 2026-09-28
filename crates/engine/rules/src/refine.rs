@@ -14,7 +14,7 @@ use axioval_ir::contract::{CategoryLevel, Selector, SeverityOverride};
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope, Severity};
 
 use crate::location::Locator;
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{Selection, object_by_id, select_objects, selector_matches};
 use crate::support::category_headings;
 
 /// Applies a rule instance's severity overrides, then its nested
@@ -119,10 +119,7 @@ fn categorised(
     levels: &[CategoryLevel],
     mut finding: Finding,
 ) -> Result<Finding, Undecided> {
-    let Some(subject) = finding
-        .object_id()
-        .and_then(|id| context.project.object(id))
-    else {
+    let Some(subject) = finding.object_id().and_then(|id| object_by_id(context, id)) else {
         return Ok(finding);
     };
     match category_headings(context, subject, levels) {
@@ -167,7 +164,7 @@ fn overridden(
         .object_id()
         .into_iter()
         .chain(&finding.related)
-        .filter_map(|id| context.project.object(id))
+        .filter_map(|id| object_by_id(context, id))
         .collect();
     let mut possible: Vec<Severity> = Vec::new();
     let mut doubt: Option<(NotEvaluatedReason, String)> = None;

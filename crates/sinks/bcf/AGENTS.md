@@ -15,6 +15,10 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
   GlobalId alias keeps its topic and is listed in `Export::unanchored`.
 - A source- or project-scoped entry has no subject, so its topic has no
   viewpoint and no component, and nothing in it is `unanchored`.
+- A resource object the report carries (`Report::resources`) is never a
+  component, even with a GlobalId: its topic has no viewpoint and it is
+  listed in `Export::unanchored`. Resolve ids through `Report::object`; an
+  id neither the project nor the report holds is `UnknownObject`.
 - GUIDs are UUIDv5 over rule, GlobalIds and message, so they survive
   re-export. The key is derived by `axioval_ir::finding_ids` and
   `not_evaluated_ids` over `IFC_GLOBAL_ID_SCHEME`, the same identity a host

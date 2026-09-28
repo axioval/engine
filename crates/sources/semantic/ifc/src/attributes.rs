@@ -8,20 +8,23 @@
 //! attribute of the type object assigned through `IfcRelDefinesByType`.
 //!
 //! Only scalar values that mean the same in every file are answered: text,
-//! enumerations, booleans, integers, unit-free reals, and measures
-//! (`IfcLengthMeasure`, ...) converted from the project's default unit to SI.
-//! A measure whose unit cannot be resolved exactly is refused, as is a
-//! reference or an aggregate. An unset
-//! attribute (`$`), an attribute the entity does not declare, and an object
-//! with no type are exact absences; an object typed twice is a conflict.
+//! enumerations, booleans, integers, unit-free reals, measures
+//! (`IfcLengthMeasure`, ...) converted from the project's default unit to SI,
+//! and a reference to another instance, as that instance's source-qualified
+//! identity. A select holding a typed value is read as that type. A measure
+//! whose unit cannot be resolved exactly is refused, as is an aggregate
+//! stating members. An unset attribute (`$`), an empty aggregate (`()`), a
+//! logical unknown (`.U.`, which states no truth value), an attribute the
+//! entity does not declare, and an object with no type are exact absences;
+//! an object typed twice is a conflict.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use axioval_engine::PropertyResolutionError;
 use axioval_ir::{
-    ATTRIBUTE_SET, BODY_SET, MATERIAL_SET, PRESENTATION_LAYER, PRESENTATION_SET,
-    PRESENTATION_TRANSPARENCY, PropertyValue, TYPE_ATTRIBUTE_SET,
+    ATTRIBUTE_SET, BODY_SET, MATERIAL_SET, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET,
+    PRESENTATION_TRANSPARENCY, PropertyValue, SourceId, TYPE_ATTRIBUTE_SET,
 };
 use ifc_model::{EntityId, Model, Value};
 use ifc_schema::{Schema, TypeKind};
@@ -67,14 +70,15 @@ impl Attributes {
     /// Reads `name` in the reserved `set` for `object`; `Ok(None)` is exact absence.
     pub(crate) fn resolve(
         &self,
-        model: &Model,
+        (source, model): (&SourceId, &Model),
         object: EntityId,
         set: &str,
         name: &str,
     ) -> Result<Option<AttributeValue>, PropertyResolutionError> {
         let schema = self.release.schema;
+        let read = |id: EntityId| read(schema, (source, model), id, name);
         if set == ATTRIBUTE_SET {
-            return read(schema, model, object, name).map(|value| {
+            return read(object).map(|value| {
                 value.map(|value| AttributeValue {
                     value,
                     detail: format!("attribute:{object}:{name}"),
@@ -101,14 +105,12 @@ impl Attributes {
             .map_err(|message| PropertyResolutionError::Incomplete(message.clone()))?;
         match types.get(&object).map(Vec::as_slice) {
             None | Some([]) => Ok(None),
-            Some([(type_object, relationship)]) => {
-                read(schema, model, *type_object, name).map(|value| {
-                    value.map(|value| AttributeValue {
-                        value,
-                        detail: format!("type-attribute:{relationship}:{type_object}:{name}"),
-                    })
+            Some([(type_object, relationship)]) => read(*type_object).map(|value| {
+                value.map(|value| AttributeValue {
+                    value,
+                    detail: format!("type-attribute:{relationship}:{type_object}:{name}"),
                 })
-            }
+            }),
             Some(several) => Err(PropertyResolutionError::Conflicting(format!(
                 "{object} is typed by {} type objects ({})",
                 several.len(),
@@ -228,7 +230,7 @@ impl Attributes {
 /// One attribute of one entity, by schema name (ASCII case-insensitive).
 fn read(
     schema: &Schema,
-    model: &Model,
+    (source, model): (&SourceId, &Model),
     id: EntityId,
     name: &str,
 ) -> Result<Option<PropertyValue>, PropertyResolutionError> {
@@ -251,14 +253,31 @@ fn read(
         )))
     };
     if attribute.aggregate {
-        return unsupported("is an aggregate, not a scalar value");
+        // An empty aggregate states no value, as `$` does.
+        return match entity.attribute(slot) {
+            Some(Value::Null) => Ok(None),
+            Some(Value::List(members)) if members.is_empty() => Ok(None),
+            _ => unsupported("is an aggregate, not a scalar value"),
+        };
     }
     match entity.attribute(slot) {
         None => Err(PropertyResolutionError::Incomplete(format!(
             "{id} has no slot for {}",
             attribute.name
         ))),
-        Some(Value::Null) => Ok(None),
+        // A logical unknown states no truth value.
+        Some(Value::Null | Value::LogicalUnknown) => Ok(None),
+        Some(Value::Ref(target)) => {
+            if model.get(*target).is_none() {
+                return Err(PropertyResolutionError::Incomplete(format!(
+                    "{id}.{} references {target}, which is not in the model",
+                    attribute.name
+                )));
+            }
+            ObjectId::new(source.clone(), target.to_string())
+                .map(|target| Some(PropertyValue::Reference(target)))
+                .map_err(|_| PropertyResolutionError::InvalidRequest)
+        }
         Some(Value::Derived) => unsupported("is derived and holds no stated value"),
         Some(Value::Typed { type_name, value }) => {
             typed(schema, model, type_name, value).and_then(|value| match value {

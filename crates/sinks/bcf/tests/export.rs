@@ -46,6 +46,7 @@ fn id(document: &str, local: u64) -> ObjectId {
 fn report(document: &str, first: u64) -> Report {
     let source = SourceId::new("ifc-step", document).unwrap();
     Report {
+        resources: Vec::new(),
         stale_decisions: Vec::new(),
         findings: vec![
             Finding {
@@ -372,6 +373,7 @@ fn related_objects_alone_are_never_selected() {
 fn scoped_report(document: &str, first: u64) -> Report {
     let source = SourceId::new("ifc-step", document).unwrap();
     Report {
+        resources: Vec::new(),
         stale_decisions: Vec::new(),
         findings: vec![
             Finding::new(
@@ -448,6 +450,7 @@ fn a_source_or_project_outcome_is_a_model_level_topic_without_a_component() {
 #[test]
 fn a_project_finding_is_written_and_its_guid_is_stable() {
     let report = Report {
+        resources: Vec::new(),
         stale_decisions: Vec::new(),
         findings: vec![Finding::new(
             RuleId::new("fire-compartment-exists").unwrap(),
@@ -1333,4 +1336,31 @@ mod section_box {
         let views = viewpoints(&export.to_bytes().unwrap());
         assert!(views.iter().all(|view| !view.contains("ClippingPlanes")));
     }
+}
+
+#[test]
+fn a_resource_object_keeps_its_topic_but_is_never_a_component() {
+    // A relationship has a GlobalId, yet no viewer shows it as an element.
+    let relation = Object::new(id("a.ifc", 9), "IFCRELCONNECTSPATHELEMENTS")
+        .with_external_id(ExternalId::new(IFC_GLOBAL_ID_SCHEME, "0000000000000000000009").unwrap());
+    let mut report = report("a.ifc", 1);
+    report.findings = vec![
+        Finding::new(
+            RuleId::new("priorities").unwrap(),
+            id("a.ifc", 9),
+            Severity::Error,
+            "missing required property RelatingPriorities",
+        )
+        .with_related([id("a.ifc", 1)]),
+    ];
+    report.not_evaluated.clear();
+    report.resources = vec![relation];
+    let exported = export(&report, &model("a.ifc", 1), &options()).unwrap();
+    assert_eq!(exported.document.topics.len(), 1);
+    assert!(exported.document.topics[0].viewpoints.is_empty());
+    assert_eq!(exported.unanchored, [id("a.ifc", 9)]);
+    // Without the report carrying it, it names nothing the project holds.
+    report.resources.clear();
+    let error = export(&report, &model("a.ifc", 1), &options()).unwrap_err();
+    assert!(matches!(error, ExportError::UnknownObject(object) if object == id("a.ifc", 9)));
 }

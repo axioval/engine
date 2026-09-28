@@ -18,3 +18,10 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   A missing basis is `unknown`, never `unchanged`.
 - `Finding::id`, `Finding::decision` and `Report::stale_decisions` are absent
   on the wire when unset, so reports serialize as before.
+- Resource objects (instances outside the object population) are never in
+  a `Project`. A report carries the ones its outcomes name in
+  `Report::resources`, sorted, omitted when empty; resolve an outcome's
+  object with `Report::object`, never `Project::object` alone, wherever a
+  report may name one (identities, sinks, hosts).
+- `PropertyValue::Reference` names another instance of the same source. It
+  is never compared with a literal and never read as text or a number.

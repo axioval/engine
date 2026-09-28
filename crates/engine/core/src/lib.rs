@@ -653,6 +653,7 @@ mod properties;
 mod proximity;
 mod refinement;
 mod relationships;
+mod resources;
 mod rule_outcomes;
 mod services;
 mod side_distance;
@@ -777,6 +778,10 @@ pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
     SemanticRelationship, TraversalDirection,
+};
+pub use resources::{
+    Reached, ResourceError, ResourceObjects, ResourceRequest, ResourceService,
+    ResourceServiceHandle,
 };
 pub use rule_outcomes::{ObjectVerdict, RuleOutcomes, RuleRecord, RuleVerdict, SelectorVerdict};
 pub use services::{ServiceRegistry, ServiceRegistryError};
@@ -1075,6 +1080,9 @@ impl Runtime {
         services.replace(metadata);
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
+        // And the resource objects the rules name: a host copy could claim
+        // resource objects the session never listed.
+        resources::install(&mut services, project, &plan.rules);
         let refiner = self.refiner_for(&plan)?;
         let mut summaries: Vec<RuleSummary> = Vec::new();
         let mut findings = Vec::new();
@@ -1176,8 +1184,38 @@ impl Runtime {
             );
             not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
-        assemble(findings, not_evaluated, tables, summaries)
+        assemble(findings, not_evaluated, tables, summaries, &services)
     }
+}
+
+/// The resource objects the outcomes name, sorted by identity.
+fn named_resources(
+    findings: &[Finding],
+    not_evaluated: &[NotEvaluated],
+    tables: &[ReportTable],
+    services: &ServiceRegistry,
+) -> Vec<axioval_ir::Object> {
+    let Some(resources) = services
+        .get::<ResourceObjects>()
+        .filter(|resources| !resources.is_empty())
+    else {
+        return Vec::new();
+    };
+    let mut named: BTreeSet<&ObjectId> = BTreeSet::new();
+    for finding in findings {
+        named.extend(finding.object_id());
+        named.extend(&finding.related);
+    }
+    named.extend(not_evaluated.iter().filter_map(NotEvaluated::object_id));
+    named.extend(
+        tables
+            .iter()
+            .flat_map(|table| table.rows().iter().filter_map(|row| row.scope().object())),
+    );
+    named
+        .into_iter()
+        .filter_map(|id| resources.object(id).cloned())
+        .collect()
 }
 
 /// Classifies every object by each of `definitions`, in order, and installs
@@ -1200,12 +1238,14 @@ fn derive_classifications(
 }
 
 /// The report of every rule's outcomes, each part in its deterministic
-/// order; a rule reporting one table name twice fails the run.
+/// order, with the resource objects of `services` they name; a rule
+/// reporting one table name twice fails the run.
 fn assemble(
     mut findings: Vec<Finding>,
     mut not_evaluated: Vec<NotEvaluated>,
     mut tables: Vec<ReportTable>,
     mut summaries: Vec<RuleSummary>,
+    services: &ServiceRegistry,
 ) -> Result<Report, EngineError> {
     findings.sort_by(|a, b| {
         a.rule_id
@@ -1227,6 +1267,7 @@ fn assemble(
     }
     summaries.sort();
     Ok(Report {
+        resources: named_resources(&findings, &not_evaluated, &tables, services),
         stale_decisions: Vec::new(),
         findings,
         not_evaluated,

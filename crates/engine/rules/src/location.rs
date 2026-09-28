@@ -103,6 +103,9 @@ impl<'p> Locator<'p> {
         }
         let located = match context.project.object(id) {
             Some(object) => self.derive(context, object),
+            // A resource object is placed nowhere: it has no location, and
+            // nothing about it is in doubt.
+            None if crate::selection::is_resource(context, id) => Located::default(),
             None => Located {
                 doubt: Some(format!("{id} is not in the project")),
                 ..Located::default()

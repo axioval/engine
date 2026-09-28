@@ -304,6 +304,94 @@ fn a_type_object_is_checked_against_its_own_property_sets() {
     );
 }
 
+/// A wall, two materials and an `IfcRelConnectsPathElements`, with the
+/// example's wall concept bound to `IFCMATERIAL` when `materials` is set.
+fn materials_check(case: &Case, materials: bool) -> (Output, PathBuf) {
+    let model = case.write(
+        "model.ifc",
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCWALL('0000000000000000000001',$,$,$,$,$,$,$,$);\n\
+         #2=IFCWALL('0000000000000000000002',$,$,$,$,$,$,$,$);\n\
+         #3=IFCRELCONNECTSPATHELEMENTS('0000000000000000000003',$,$,$,$,#1,#2,(),(),.ATSTART.,.ATEND.);\n\
+         #5=IFCMATERIAL('Concrete',$,$);\n\
+         #6=IFCMATERIAL('Steel',$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+    );
+    let text = std::fs::read_to_string(case.definitions(true)).unwrap();
+    let mut definitions: Value = serde_json::from_str(&text).unwrap();
+    if materials {
+        definitions["objectTypes"]["axioval:example.ifc.wall"]["externalNames"]
+            .as_array_mut()
+            .unwrap()
+            .last_mut()
+            .unwrap()["name"] = json!("IFCMATERIAL");
+    }
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let bcf = case.path("issues.bcfzip");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(format!("{FIXTURES}/ruleset.json"))
+        .arg("--bcf")
+        .arg(&bcf)
+        .env("SOURCE_DATE_EPOCH", "1790416800")
+        .output()
+        .unwrap();
+    (output, bcf)
+}
+
+#[test]
+fn a_rule_naming_a_resource_class_checks_its_resource_objects() {
+    // The rule requires Pset_WallCommon.Reference; the model holds no
+    // material property set, so neither material carries it.
+    let case = Case::new("resources");
+    let (output, bcf) = materials_check(&case, true);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let findings = result["report"]["findings"].as_array().unwrap();
+    let subjects: Vec<&str> = findings
+        .iter()
+        .map(|finding| finding["object_id"]["local_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(subjects, ["#5", "#6"], "{result:#}");
+    // The report carries the materials, and the result labels them.
+    let carried: Vec<&str> = result["report"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|resource| resource["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(carried, ["IFCMATERIAL", "IFCMATERIAL"], "{result:#}");
+    assert_eq!(
+        result["objects"]["ifc-step:model.ifc/#5"]["kind"], "IFCMATERIAL",
+        "{result:#}"
+    );
+    // Each keeps its topic; no viewpoint selects a material.
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    assert_eq!(archive.topics().count(), 2);
+    assert!(archive.topics().all(|topic| topic.viewpoints.is_empty()));
+}
+
+#[test]
+fn a_wall_rule_on_a_model_with_resources_never_sees_them() {
+    let case = Case::new("resources-walls");
+    let (output, _) = materials_check(&case, false);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let subjects: Vec<&str> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| finding["object_id"]["local_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(subjects, ["#1", "#2"], "{result:#}");
+    assert!(result["report"].get("resources").is_none(), "{result:#}");
+}
+
 #[test]
 fn integrity_issues_and_unselectable_objects_are_reported() {
     let case = Case::new("integrity");

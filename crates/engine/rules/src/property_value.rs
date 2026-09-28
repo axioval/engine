@@ -762,6 +762,10 @@ fn scalar_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdi
             "a measured interval has no one value to check against literals".into(),
         ),
         PropertyValue::Null => invalid("null has no value to compare"),
+        PropertyValue::Reference(_) => Verdict::Inapplicable(
+            NotEvaluatedReason::InvalidEvidence,
+            "a reference to another instance has no value to check against literals".into(),
+        ),
         PropertyValue::List(_) | PropertyValue::Bounded { .. } | PropertyValue::Table(_) => {
             Verdict::Inapplicable(
                 NotEvaluatedReason::InvalidEvidence,

@@ -146,7 +146,10 @@ The JSON result goes to stdout, or to `--report`:
 `tables` (see [Tables](./ir.md#tables)). `integrity` lists irregularities of the model
 itself (see [Independent adapters](./adapters.md)); they are not rule findings.
 `objects` maps every object the report names to its kind and, when it has one,
-its GlobalId, so a reader can tell what `#4711` is without the model:
+its GlobalId, so a reader can tell what `#4711` is without the model. A
+resource object a rule selected by its class (an `IFCMATERIAL`; see
+[Entity types and resource objects](./capabilities.md#entity-types-and-resource-objects))
+is listed the same way, from the report's `resources`:
 
 ```json
 "objects": {

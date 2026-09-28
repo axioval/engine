@@ -4,15 +4,16 @@ use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationAssignment, ClassificationError,
     ClassificationServiceHandle, ConceptBindings, NameMatch, NamePattern, NotEvaluatedReason,
     PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, RuleOutcomes,
-    SourceDisciplines, SourceMetadataIndex, TypeHierarchyError, TypeHierarchyServiceHandle,
+    PropertyResolutionError, PropertyResolutionServiceHandle, ResourceObjects, RuleContext,
+    RuleOutcomes, SourceDisciplines, SourceMetadataIndex, TypeHierarchyError,
+    TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{
     ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, RuleOutcomeKind, Selector,
 };
 use axioval_ir::{
-    Date, DateTime, Discipline, Evidence, Object, PropertyValue, QuantityDimension,
-    TemporalPrecision,
+    Date, DateTime, Discipline, Evidence, Object, ObjectId, PropertyValue, QuantityDimension,
+    SourceId, TemporalPrecision,
 };
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
@@ -25,7 +26,15 @@ pub(crate) fn select_objects<'a>(
 ) -> (Vec<&'a Object>, CapabilityEvaluation) {
     let mut selected = Vec::new();
     let mut evaluation = CapabilityEvaluation::default();
-    for object in context.project.objects() {
+    let (population, unreadable) = population(context, selector);
+    for (source, why) in unreadable {
+        evaluation.push_source_not_evaluated(
+            source,
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("its resource objects cannot be listed: {why}"),
+        );
+    }
+    for object in population {
         match selector_matches(context, selector, object, &mut Vec::new()) {
             Selection::Match => selected.push(object),
             Selection::NoMatch => {}
@@ -35,6 +44,45 @@ pub(crate) fn select_objects<'a>(
         }
     }
     (selected, evaluation)
+}
+
+/// Every object `selector` may select: the project's objects, then the
+/// resource objects it reaches ([`ResourceObjects::reached`]), and the
+/// sources whose reached resource objects could not be listed.
+pub(crate) fn population<'a>(
+    context: &RuleContext<'a>,
+    selector: &Selector,
+) -> (
+    impl Iterator<Item = &'a Object> + use<'a>,
+    Vec<(SourceId, String)>,
+) {
+    let services: &'a axioval_engine::ServiceRegistry = context.services;
+    let reached = services
+        .get::<ResourceObjects>()
+        .map(|resources| resources.reached(selector, services.get::<RuleOutcomes>()))
+        .unwrap_or_default();
+    (
+        context.project.objects().chain(reached.objects),
+        reached.unreadable,
+    )
+}
+
+/// The object or resource object `id` of the run.
+pub(crate) fn object_by_id<'a>(context: &RuleContext<'a>, id: &ObjectId) -> Option<&'a Object> {
+    let services: &'a axioval_engine::ServiceRegistry = context.services;
+    context.project.object(id).or_else(|| {
+        services
+            .get::<ResourceObjects>()
+            .and_then(|resources| resources.object(id))
+    })
+}
+
+/// Whether `id` is one of the run's resource objects.
+pub(crate) fn is_resource(context: &RuleContext<'_>, id: &ObjectId) -> bool {
+    context
+        .services
+        .get::<ResourceObjects>()
+        .is_some_and(|resources| resources.object(id).is_some())
 }
 
 #[derive(Clone, Debug)]
@@ -1325,6 +1373,7 @@ fn kind(value: &PropertyValue) -> String {
         PropertyValue::String(_) => "text".into(),
         PropertyValue::Date(_) => "a date".into(),
         PropertyValue::DateTime(_) => "a date-time".into(),
+        PropertyValue::Reference(_) => "a reference".into(),
         PropertyValue::List(_) => "a list".into(),
         PropertyValue::Bounded { .. } => "a bounded value".into(),
         PropertyValue::Table(_) => "a table".into(),

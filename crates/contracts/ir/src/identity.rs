@@ -74,8 +74,8 @@ impl FromStr for FindingId {
 /// Why identities could not be derived or read.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum IdentityError {
-    /// The report names an object the project does not contain, so it was
-    /// not computed over this project.
+    /// The report names an object neither the project nor the report's
+    /// resource objects contain, so it was not computed over this project.
     #[error("report names {0}, which is not in the project")]
     UnknownObject(ObjectId),
     /// The text is not a UUID.
@@ -107,7 +107,8 @@ pub fn finding_ids(
             let subject = finding.object_id();
             let mut objects: Vec<&ObjectId> = subject.into_iter().collect();
             objects.extend(&finding.related);
-            let resolved = Resolved::new(&objects, &finding.scope, project, stable_scheme)?;
+            let resolved =
+                Resolved::new(&objects, &finding.scope, (report, project), stable_scheme)?;
             // An object finding's key has no scope marker, as before scopes
             // existed. A scoped one is marked, never named by source: that
             // would change with every file name.
@@ -148,7 +149,8 @@ pub fn not_evaluated_ids(
         .iter()
         .map(|outcome: &NotEvaluated| {
             let objects: Vec<&ObjectId> = outcome.object_id().into_iter().collect();
-            let resolved = Resolved::new(&objects, &outcome.scope, project, stable_scheme)?;
+            let resolved =
+                Resolved::new(&objects, &outcome.scope, (report, project), stable_scheme)?;
             let key = format!(
                 "not-evaluated\n{}\n{}\n{}\n{}",
                 outcome.rule_id,
@@ -190,15 +192,17 @@ impl Resolved {
     fn new(
         objects: &[&ObjectId],
         scope: &Scope,
-        project: &Project,
+        (report, project): (&Report, &Project),
         stable_scheme: &str,
     ) -> Result<Self, IdentityError> {
         let mut keys = Vec::with_capacity(objects.len());
         let mut sources = BTreeSet::new();
         sources.extend(scope.source().map(ToString::to_string));
         for id in objects {
-            let object = project
-                .object(id)
+            // A resource object is keyed like an object: by its stable
+            // alias where it has one, else by its identity.
+            let object = report
+                .object(project, id)
                 .ok_or_else(|| IdentityError::UnknownObject((*id).clone()))?;
             sources.insert(id.source.to_string());
             keys.push(

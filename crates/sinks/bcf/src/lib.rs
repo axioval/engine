@@ -17,6 +17,11 @@
 //! description, and the object is listed in [`Export::unanchored`] so the
 //! host can say so rather than let the gap pass unnoticed.
 //!
+//! A resource object the report names ([`Report::resources`]: a material, a
+//! classification, a relationship) is never a component, since no viewer
+//! shows it as an element. Its topic is written the same way, without a
+//! viewpoint, and it is listed in [`Export::unanchored`].
+//!
 //! # Model-level topics
 //!
 //! A finding or outcome scoped to a source or the project (see
@@ -368,7 +373,8 @@ pub struct Export {
     /// The BCF document, one topic per exported report entry, in report order.
     pub document: Document,
     /// Objects named by the report that no viewpoint could select, because
-    /// they carry no GlobalId alias. Sorted and deduplicated.
+    /// they carry no GlobalId alias or are resource objects. Sorted and
+    /// deduplicated.
     pub unanchored: Vec<ObjectId>,
     /// Objects whose viewpoint got no camera because [`Options::bounds`]
     /// has none for them. Empty when no bounds were supplied at all. Sorted
@@ -406,12 +412,12 @@ pub fn export(
     let mut entries = Vec::new();
     let ids = finding_ids(report, project, IFC_GLOBAL_ID_SCHEME).map_err(unknown)?;
     for (finding, id) in report.findings().iter().zip(ids) {
-        entries.push((Entry::finding(finding, project)?, id.uuid()));
+        entries.push((Entry::finding(finding, (report, project))?, id.uuid()));
     }
     if options.include_not_evaluated {
         let ids = not_evaluated_ids(report, project, IFC_GLOBAL_ID_SCHEME).map_err(unknown)?;
         for (outcome, id) in report.not_evaluated().iter().zip(ids) {
-            entries.push((Entry::not_evaluated(outcome, project)?, id));
+            entries.push((Entry::not_evaluated(outcome, (report, project))?, id));
         }
     }
 
@@ -481,11 +487,11 @@ enum Uncamered {
 }
 
 impl Entry {
-    fn finding(finding: &Finding, project: &Project) -> Result<Self, ExportError> {
+    fn finding(finding: &Finding, known: (&Report, &Project)) -> Result<Self, ExportError> {
         let subject = finding.object_id();
         let mut objects: Vec<&ObjectId> = subject.into_iter().collect();
         objects.extend(&finding.related);
-        let resolved = Resolved::new(&objects, subject.is_some(), project)?;
+        let resolved = Resolved::new(&objects, subject.is_some(), known)?;
         let mut description = vec![
             finding.message.trim().to_owned(),
             format!("Rule: {}", finding.rule_id),
@@ -522,9 +528,12 @@ impl Entry {
         })
     }
 
-    fn not_evaluated(outcome: &NotEvaluated, project: &Project) -> Result<Self, ExportError> {
+    fn not_evaluated(
+        outcome: &NotEvaluated,
+        known: (&Report, &Project),
+    ) -> Result<Self, ExportError> {
         let objects: Vec<&ObjectId> = outcome.object_id().into_iter().collect();
-        let resolved = Resolved::new(&objects, true, project)?;
+        let resolved = Resolved::new(&objects, true, known)?;
         let reason = reason(&outcome.reason);
         let mut description = vec![
             outcome.message.trim().to_owned(),
@@ -805,14 +814,26 @@ struct Resolved {
 impl Resolved {
     /// `anchored` says whether `objects` starts with the subject. Without one
     /// nothing is selected, and so nothing is reported unanchored either.
-    fn new(objects: &[&ObjectId], anchored: bool, project: &Project) -> Result<Self, ExportError> {
+    ///
+    /// A resource object the report names is never a component: it is no
+    /// element a viewer shows, even where it has a GlobalId. It keeps its
+    /// topic and is listed unanchored like an object without a GlobalId.
+    fn new(
+        objects: &[&ObjectId],
+        anchored: bool,
+        (report, project): (&Report, &Project),
+    ) -> Result<Self, ExportError> {
         let mut selection = Vec::new();
         let mut unanchored = Vec::new();
         for (index, id) in objects.iter().enumerate() {
-            let object = project
-                .object(id)
-                .ok_or_else(|| ExportError::UnknownObject((*id).clone()))?;
-            if let Some(global_id) = object.external_id(IFC_GLOBAL_ID_SCHEME) {
+            let object = match project.object(id) {
+                Some(object) => Some(object),
+                None if report.resource(id).is_some() => None,
+                None => return Err(ExportError::UnknownObject((*id).clone())),
+            };
+            if let Some(global_id) =
+                object.and_then(|object| object.external_id(IFC_GLOBAL_ID_SCHEME))
+            {
                 // A viewpoint of only the related objects would show the
                 // reviewer the slab, not the wall that fails to rest on it.
                 if anchored && (index == 0 || !selection.is_empty()) {

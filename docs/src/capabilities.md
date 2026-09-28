@@ -139,6 +139,21 @@ Every finding message starts with its sub-check's category code, so results can 
 | `uncovered_top_cap` / `uncovered_bottom_cap` | A cap less than 98 % covered; under 1 % is an error, up to 15 % a warning, otherwise information. |
 | `unallocated_area` | A connected region of storey floor belonging to no space and larger than the allowance, or a storey whose regions together cover a share of its gross area above `maximum_unallocated_share`, reported against the storey. |
 
+### Entity types and resource objects
+
+An `entityType` selector selects the objects of a class (`includeSubtypes` adds its subclasses; see [Subtypes](./concept-binding.md#subtypes)). It is also the only way to select [resource objects](./ir.md#resource-objects): instances the source does not make objects of, such as an IFC `IfcMaterial`, `IfcClassification` or `IfcRelConnectsPathElements`. A class selects either objects or resource objects, never both: a class whose instances are objects, and with `includeSubtypes` a class one of whose subclasses is (`IfcRoot`, `IfcObjectDefinition`), has no resource objects, so no rule written before resource objects existed selects anything new.
+
+The population a rule selects from is every object of the project, then every resource object its applicability reaches:
+
+- an `entityType` selector reaches its class's resource objects;
+- `allOf` and `anyOf` reach what any operand reaches;
+- a `ruleOutcome` selector reaches the resource objects the named rule judged (selected, failed or left undecided);
+- nothing else reaches one: not `all`, not `not`, and not a `property`, `classification`, `related`, `discipline` or `source` selector alone.
+
+A reached resource object is selected only when the whole selector matches it, as an object is. Selectors in other parameters (counterparts, obstacles, table cells) never enumerate resource objects. A source whose resource objects of a reached class cannot be listed is not evaluated as a whole (`IncompleteEvidence`), never an empty selection. `object-count` counts the same population, so a count of `IfcMaterial` counts materials. A capability that needs geometry or placement asks for it as for any object and is refused for a resource object.
+
+Findings on resource objects are ordinary object findings; the report carries the resource objects it names (`Report::resources`). A resource object has no location (no storey or space, and nothing unresolved) and is never a BCF component.
+
 ### Property selectors
 
 A `property` selector (in a rule's selection or any selector-valued parameter) resolves one property exactly, as `property-predicate` does, and compares it with its `value` under an `operator`:

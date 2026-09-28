@@ -52,6 +52,13 @@ object without the alias cannot be selected: its topic is still written, and
 it is listed in `Export::unanchored`. A viewpoint never selects related
 objects alone, because it would point the reviewer at the wrong element.
 
+**Resource objects are never components.** A finding about a resource object
+(an IFC material, a relationship; see `Report::resources`) keeps its topic and
+its identity, keyed by the resource object's GlobalId where it has one and by
+its source-qualified id otherwise, but no viewer shows it as an element: its
+topic has no viewpoint, and it is listed in `Export::unanchored`. An id the
+report neither finds in the project nor carries is refused (`UnknownObject`).
+
 **Model-level topics.** A finding or outcome about a whole source or the
 project (see [Scope](./ir.md#scope)) has no subject, so its topic has no
 viewpoint and no component. Its description says `Source: <source>; no single

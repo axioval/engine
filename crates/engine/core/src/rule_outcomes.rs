@@ -16,7 +16,7 @@ use std::sync::Arc;
 use axioval_ir::contract::{GateCondition, ParameterValue, RuleOutcomeKind, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, Object, ObjectId, RuleId, Scope, SourceId};
 
-use crate::{CapabilityEvaluation, CompiledRule, OutcomeRefiner, RuleContext};
+use crate::{CapabilityEvaluation, CompiledRule, OutcomeRefiner, ResourceObjects, RuleContext};
 
 /// How a selector judged one object, as the host's outcome refiner
 /// evaluates it ([`crate::OutcomeRefiner::evaluate_selector`]).
@@ -74,6 +74,9 @@ pub struct RuleRecord {
     /// object surely selected, and every object whose selection is
     /// undecided with why.
     selection: Option<(BTreeSet<ObjectId>, BTreeMap<ObjectId, String>)>,
+    /// Sources where the rule's selection reached resource objects that
+    /// could not be listed, with why.
+    unread: BTreeSet<(SourceId, String)>,
 }
 
 impl RuleRecord {
@@ -96,10 +99,7 @@ impl RuleRecord {
 
     /// The record of a rule's refined `evaluation`, with its applicability
     /// selection when a dependent reads it per object.
-    pub(crate) fn of(
-        evaluation: &CapabilityEvaluation,
-        selection: Option<Vec<(ObjectId, SelectorVerdict)>>,
-    ) -> Self {
+    pub(crate) fn of(evaluation: &CapabilityEvaluation, selection: Option<Selection>) -> Self {
         let mut record = Self {
             found: !evaluation.findings().is_empty(),
             open: !evaluation.not_evaluated_outcomes().is_empty(),
@@ -125,6 +125,10 @@ impl RuleRecord {
                 scope => record.note_whole(scope, outcome.message().to_owned()),
             }
         }
+        let selection = selection.map(|selection| {
+            record.unread = selection.unread.into_iter().collect();
+            selection.verdicts
+        });
         record.selection = selection.map(|verdicts| {
             let mut selected = BTreeSet::new();
             let mut open = BTreeMap::new();
@@ -153,6 +157,27 @@ impl RuleRecord {
                 self.project.get_or_insert(message);
             }
         }
+    }
+
+    /// Every object and resource object the rule's outcomes or recorded
+    /// selection name, sorted, possibly more than once.
+    pub fn named(&self) -> impl Iterator<Item = &ObjectId> {
+        let (selected, open) = self
+            .selection
+            .as_ref()
+            .map(|(selected, open)| (Some(selected), Some(open)))
+            .unwrap_or_default();
+        self.failed
+            .iter()
+            .chain(self.undecided.keys())
+            .chain(selected.into_iter().flatten())
+            .chain(open.into_iter().flat_map(BTreeMap::keys))
+    }
+
+    /// Sources where the rule's selection reached resource objects that
+    /// could not be listed, with why.
+    pub fn unread_resources(&self) -> impl Iterator<Item = &(SourceId, String)> {
+        self.unread.iter()
     }
 
     /// How the rule fared as a whole.
@@ -275,21 +300,48 @@ impl RuleOutcomes {
     }
 }
 
+/// How a rule's applicability selector judged its population.
+pub(crate) struct Selection {
+    verdicts: Vec<(ObjectId, SelectorVerdict)>,
+    unread: Vec<(SourceId, String)>,
+}
+
+impl From<Vec<(ObjectId, SelectorVerdict)>> for Selection {
+    /// A selection that reached no unlisted resource objects.
+    fn from(verdicts: Vec<(ObjectId, SelectorVerdict)>) -> Self {
+        Self {
+            verdicts,
+            unread: Vec::new(),
+        }
+    }
+}
+
 /// How `rule`'s applicability selector judges every object of the
-/// project, as a dependent reading it per object needs.
+/// project and every resource object it reaches, as a dependent reading it
+/// per object needs.
 pub(crate) fn selection(
     refiner: &dyn OutcomeRefiner,
     context: &RuleContext<'_>,
     rule: &CompiledRule,
-) -> Vec<(ObjectId, SelectorVerdict)> {
-    context
+) -> Selection {
+    let reached = context
+        .services
+        .get::<ResourceObjects>()
+        .map(|resources| resources.reached(&rule.selector, context.services.get::<RuleOutcomes>()))
+        .unwrap_or_default();
+    let verdicts = context
         .project
         .objects()
+        .chain(reached.objects)
         .map(|object| {
             let verdict = refiner.evaluate_selector(context, &rule.selector, object);
             (object.id.clone(), verdict)
         })
-        .collect()
+        .collect();
+    Selection {
+        verdicts,
+        unread: reached.unreadable,
+    }
 }
 
 /// Whether a whole-rule gate lets its rule run.
@@ -473,7 +525,7 @@ mod tests {
                 SelectorVerdict::Undecided(NotEvaluatedReason::InvalidEvidence, "list".into()),
             ),
         ];
-        RuleRecord::of(&evaluation, Some(selection))
+        RuleRecord::of(&evaluation, Some(selection.into()))
     }
 
     #[test]
@@ -503,10 +555,13 @@ mod tests {
         );
         let record = RuleRecord::of(
             &evaluation,
-            Some(vec![
-                (id("d1"), SelectorVerdict::Match(Vec::new())),
-                (id("d4"), SelectorVerdict::NoMatch(Vec::new())),
-            ]),
+            Some(
+                vec![
+                    (id("d1"), SelectorVerdict::Match(Vec::new())),
+                    (id("d4"), SelectorVerdict::NoMatch(Vec::new())),
+                ]
+                .into(),
+            ),
         );
         assert_eq!(record.verdict(), RuleVerdict::Undecided);
         assert!(matches!(

@@ -260,7 +260,9 @@ impl CheckOutput {
         let objects = named
             .into_iter()
             .filter_map(|id| {
-                let object = project.object(id)?;
+                // A resource object the report names is labelled from the
+                // report, which carries it.
+                let object = report.object(project, id)?;
                 Some((
                     id.to_string(),
                     ObjectInfo {

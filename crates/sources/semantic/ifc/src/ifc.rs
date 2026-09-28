@@ -5,8 +5,8 @@ use axioval_engine::{
     EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, PropertyEnumeration,
     PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
-    ResolvedProperty, SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError,
-    TypeHierarchyService, TypeHierarchyServiceHandle,
+    ResolvedProperty, ResourceServiceHandle, SourceIntegrityServiceHandle, SourceSnapshot,
+    TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyTableRow,
@@ -30,6 +30,7 @@ use crate::integrity::IfcIntegrity;
 use crate::measure::si_value;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
+use crate::resources::{IfcResources, is_object};
 use crate::temporal;
 
 /// Production IFC import/session construction failure.
@@ -91,6 +92,8 @@ struct IfcPropertyService {
     snapshots: Arc<[SourceSnapshot]>,
     attributes: Attributes,
     levels: crate::levels::Levels,
+    /// Whether the model holds any `IfcMaterialProperties`.
+    material_properties: std::sync::OnceLock<bool>,
 }
 
 impl IfcPropertyService {
@@ -407,7 +410,7 @@ impl IfcPropertyService {
         let source = self.snapshots[0].source().clone();
         match self
             .attributes
-            .resolve(&self.model, object, set, request.property())?
+            .resolve((&source, &self.model), object, set, request.property())?
         {
             Some(found) => {
                 let property = Property::new(set, request.property(), found.value)
@@ -503,6 +506,21 @@ impl PropertyResolutionService for IfcPropertyService {
         if let Some(set) = request.property_set().filter(|set| is_reserved_set(set)) {
             return self.resolve_attribute(request, object, set);
         }
+        if self.material_without_properties(object)? {
+            return Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(
+                    request.clone(),
+                    Evidence::exact(
+                        self.snapshots[0].source().clone(),
+                        self.locator(format_args!(
+                            "absence:{object}:{}:{}:no-material-properties",
+                            request.property_set().unwrap_or("*"),
+                            request.property()
+                        )),
+                    ),
+                )?,
+            ));
+        }
         match exact_property(
             &self.model,
             object,
@@ -564,6 +582,20 @@ impl PropertyResolutionService for IfcPropertyService {
         if self.model.get(object).is_none() {
             return Err(PropertyResolutionError::InvalidRequest);
         }
+        if self.material_without_properties(object)? {
+            return PropertyEnumeration::try_new(
+                request.clone(),
+                Vec::new(),
+                Evidence::exact(
+                    source,
+                    self.locator(format_args!(
+                        "enumeration:{object}:{}:{}:no-material-properties",
+                        request.property_set(),
+                        request.property()
+                    )),
+                ),
+            );
+        }
         let selected = |set: &str| !is_reserved_set(set) && request.property_set().matches(set);
         let empty = self.empty_sets(object, selected)?;
         let entries = exact_properties_where(
@@ -594,6 +626,42 @@ impl PropertyResolutionService for IfcPropertyService {
 }
 
 impl IfcPropertyService {
+    /// Whether `object` is a material that provably carries no property
+    /// set: a material definition (an IFC2X3 `IfcMaterial`) in a model
+    /// holding no `IfcMaterialProperties` of any kind, the only way a
+    /// material carries properties. The property library reads no material
+    /// property set, so a material in a model holding one is refused, never
+    /// read as absent.
+    fn material_without_properties(
+        &self,
+        object: EntityId,
+    ) -> Result<bool, PropertyResolutionError> {
+        let schema = self.release.schema;
+        let Some(entity) = self.model.get(object) else {
+            return Err(PropertyResolutionError::InvalidRequest);
+        };
+        let material = if schema.entity("IFCMATERIALDEFINITION").is_some() {
+            "IFCMATERIALDEFINITION"
+        } else {
+            "IFCMATERIAL"
+        };
+        if !schema.is_a(&entity.type_name, material) {
+            return Ok(false);
+        }
+        if *self.material_properties.get_or_init(|| {
+            self.model
+                .iter()
+                .any(|(_, entity)| schema.is_a(&entity.type_name, "IFCMATERIALPROPERTIES"))
+        }) {
+            return Err(PropertyResolutionError::Unavailable(format!(
+                "{object} is a {} and the model holds material property sets, which the IFC \
+                 property library does not read",
+                entity.type_name
+            )));
+        }
+        Ok(true)
+    }
+
     /// The names of the sets `select` picks on `object` of which every set
     /// is empty (`HasProperties` or `Quantities` of `()` or `$`). Such a set
     /// exists and holds nothing, which a rule requiring a property in it
@@ -703,8 +771,9 @@ pub fn import_ifc_session(
         // (`IfcContext`, an `IfcObject` in IFC2X3), and type objects
         // (`IfcTypeObject`, IFC2X3 `IfcDoorStyle` included) are checked:
         // each answers its own properties exactly, a type object its own
-        // `HasPropertySets` (`ifc-properties` ≥ 0.5.1). Resources carry no
-        // GlobalId and take part in no object relationship.
+        // `HasPropertySets` (`ifc-properties` ≥ 0.5.1). Every other
+        // instance is a resource object, listed by class only when a rule
+        // names it (`resources.rs`).
         .filter(|(_, entity)| is_object(release, &entity.type_name))
         .map(|(id, entity)| {
             let object = Object::new(
@@ -736,7 +805,14 @@ pub fn import_ifc_session(
         snapshots: snapshots.clone(),
         attributes: Attributes::new(release),
         levels: crate::levels::Levels::new(release),
+        material_properties: std::sync::OnceLock::new(),
     }));
+    let resources = ResourceServiceHandle::new(Arc::new(IfcResources::new(
+        release,
+        model.clone(),
+        global_ids.clone(),
+        snapshots.clone(),
+    )));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,
         model.clone(),
@@ -770,16 +846,9 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(classifications))
         .and_then(|session| session.with_service(frames))
         .and_then(|session| session.with_service(coordinates))
+        .and_then(|session| session.with_service(resources))
         .and_then(|session| session.with_source_metadata(&source, metadata))
         .map_err(|error| session_error(&error))
-}
-
-/// Whether a session makes an object of an instance of `type_name`: an
-/// occurrence, a context or a type object of the release.
-fn is_object(release: Release, type_name: &str) -> bool {
-    ["IFCOBJECT", "IFCCONTEXT", "IFCTYPEOBJECT"]
-        .iter()
-        .any(|ancestor| release.schema.is_a(type_name, ancestor))
 }
 
 fn session_error(error: &EvidenceSessionError) -> IfcSessionError {

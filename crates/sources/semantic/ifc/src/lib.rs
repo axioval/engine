@@ -22,6 +22,7 @@ mod measure;
 mod metadata;
 mod relationships;
 mod release;
+mod resources;
 mod styles;
 mod temporal;
 mod windows;

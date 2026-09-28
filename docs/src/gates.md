@@ -66,6 +66,8 @@ severity override.
 
 `outcome` is `passed` or `failed`, judged as above.
 
+A `ruleOutcome` selector also reaches the [resource objects](./capabilities.md#entity-types-and-resource-objects) the named rule judged, so a rule over the materials another rule passed selects materials; a source where the named rule could not list its resource objects stays undecided.
+
 ## Auxiliary rules
 
 A rule instance declaring `"auxiliary": true` runs only for the rules that

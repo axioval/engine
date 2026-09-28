@@ -332,6 +332,11 @@ pub enum PropertyValue {
     /// value), in the order the source states them; at least one row, every
     /// cell a scalar value.
     Table(Vec<PropertyTableRow>),
+    /// Another instance of the same source that the value names (an IFC
+    /// attribute referencing an entity), by its source-qualified identity:
+    /// the value is set, and names that instance. It is compared with no
+    /// literal; a comparison with one is undecided, never a match.
+    Reference(ObjectId),
     /// A quantity measured only to lie within `[lower, upper]`, in the SI
     /// unit of its dimension, the bounds finite and ordered: a value from a
     /// tessellated body. It is one value whose exact place is unknown, so a
@@ -1454,6 +1459,16 @@ pub struct Report {
     /// Decisions naming no finding of this report, by finding identity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stale_decisions: Vec<Decision>,
+    /// The resource objects the report's outcomes name, sorted by identity.
+    ///
+    /// A resource object is a source instance outside the project's object
+    /// population (an IFC material, a classification, a relationship) that a
+    /// rule selected by naming its class. The project cannot resolve its
+    /// identity, so the report carries it: consumers resolve an outcome's
+    /// object through [`Report::object`]. Omitted when empty, so a report
+    /// naming no resource serializes as before resources existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<Object>,
 }
 impl Report {
     /// Findings in deterministic order.
@@ -1493,6 +1508,18 @@ impl Report {
             finding.id = Some(id);
         }
         Ok(())
+    }
+    /// The resource object `id` the report names, if it names one.
+    pub fn resource(&self, id: &ObjectId) -> Option<&Object> {
+        self.resources
+            .binary_search_by(|resource| resource.id.cmp(id))
+            .ok()
+            .map(|index| &self.resources[index])
+    }
+    /// The object `id` of `project`, or else the resource object `id` the
+    /// report names.
+    pub fn object<'a>(&'a self, project: &'a Project, id: &ObjectId) -> Option<&'a Object> {
+        project.object(id).or_else(|| self.resource(id))
     }
     /// The table `name` of `rule_id`, if the report has it.
     pub fn table(&self, rule_id: &RuleId, name: &str) -> Option<&ReportTable> {

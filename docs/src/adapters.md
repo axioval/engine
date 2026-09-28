@@ -24,9 +24,10 @@ relationships it takes part in. A type object answers its own
 nothing, so its `axioval:type-attributes` are absent, and it has no placement,
 body or leaves (a door type is not a door). A rule selecting objects by a
 classification, a property or no class at all therefore checks type objects
-too. Resources (`IfcMaterial`, `IfcTaskTime`, `IfcSurfaceStyleRefraction`)
-carry no GlobalId and take part in no object relationship, and are not
-objects.
+too. Every other instance (`IfcMaterial`, `IfcTaskTime`,
+`IfcSurfaceStyleRefraction`, a relationship) is no object: it is a resource
+object, which a rule checks only by naming its class (see *Resource objects*
+below).
 
 A present property reports the IFC type its value was written with (`IFCLABEL`,
 `IFCBOOLEAN`, ...) as `Property::data_type`, upper case whatever the file used.
@@ -149,6 +150,27 @@ snapshot, so package concepts bind to IFC names (see
 [Concept binding](./concept-binding.md)), and registers that release's entity
 inheritance from the bundled normative schema for `includeSubtypes`.
 
+### Resource objects
+
+The session's objects are its `IfcObject` occurrences, `IfcContext`s and
+`IfcTypeObject`s. Every other instance is a resource object: the session
+registers a resource service that lists, for a class a rule names, every
+instance of it (of its subclasses too with `includeSubtypes`), each under its
+STEP instance number and with its GlobalId alias when it is an `IfcRoot` with
+a valid and unique one (a relationship). An object class (`IfcWall`), a class
+with object subclasses and `includeSubtypes` (`IfcRoot`), and a class the
+release does not declare list none. Nothing is listed for a class no rule
+names, so a model's points and loops are never read as objects.
+
+A resource object's attributes are read as an object's are (see
+*Attributes*). Its classifications come from the resource-level
+relationships (see *Classifications*). Property sets are the source's only
+for materials: a material definition (an IFC2X3 `IfcMaterial`) in a model
+holding no `IfcMaterialProperties` of any kind carries no property, an exact
+absence. `ifc-properties` reads no material property set, so a material in a
+model holding one is refused, never read as absent, and so is every property
+request on any other resource object.
+
 ### Classifications
 
 The session registers a classification service backed by
@@ -158,6 +180,15 @@ the chain of codes from the assigned item up to the root. A selector matches
 the leaf code, or any code in the chain when `includeDescendants` is set;
 a `codePattern` matches codes the same way, and a selector without a code
 matches any assignment in its system.
+
+A resource object is no `IfcRoot` and cannot be named by
+`IfcRelAssociatesClassification`. Its classifications are the
+`IfcClassificationReference` of every `IfcExternalReferenceRelationship`
+naming it (IFC4 onwards, through `ifc-classification`; other external
+references classify nothing) and, for a material, the classifications of
+every `IfcMaterialClassificationRelationship` classifying it (through
+`ifc-material`). A malformed relationship of either kind refuses every
+resource object's classifications, never an object's.
 
 IFC2X3 hierarchies are flat: a reference's `ReferencedSource` may only name
 the system itself. A file that chains references anyway is refused rather
@@ -189,13 +220,18 @@ construction type. The evidence locator names the instance
 (`type-attribute:#40:#30:Name`).
 
 - Text, enumeration, boolean, integer and unit-free real values are
-  answered.
-- An unset attribute (`$`), an attribute the entity does not declare, and an
-  object without a type are exact absences.
+  answered, and so is a select holding a typed value, read as that type.
+- An attribute referencing another instance (a select naming an entity,
+  `IfcRelConnectsPathElements.RelatingElement`) is a `Reference` value
+  naming that instance; a reference to an instance the file does not hold
+  is refused as incomplete.
+- An unset attribute (`$`), an empty aggregate (`()`), a logical unknown
+  (`.U.`, which states no truth value), an attribute the entity does not
+  declare, and an object without a type are exact absences.
 - An object typed by two type objects is a conflict.
 - A measure such as `IfcBuildingStorey.Elevation` is converted to SI with
-  the project's default unit, as described under *Measures*. References,
-  aggregates and derived values are refused.
+  the project's default unit, as described under *Measures*. Aggregates
+  stating members and derived values are refused.
 
 ### Measures
 

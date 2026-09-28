@@ -17,6 +17,45 @@ All notable changes are documented here. This project follows Semantic Versionin
   translated rules through the facade, and `./scripts/check.sh test` runs
   the buildingSMART conformance corpus when `IDS_TEST_CASES` is set.
 
+- **Resource objects.** (Refs #116) A source's instances that are not its
+  objects (in IFC every instance that is no occurrence, context or type
+  object: materials, classifications, relationships, task times, surface
+  styles) are resource objects: a separate population, never in the
+  project, so every rule over all objects, object counts, geometry, BCF
+  viewpoints and existing reports are unchanged. A rule reaches them only
+  through an `entityType` selector naming their class in its applicability
+  (`allOf`/`anyOf` reach what an operand reaches, `ruleOutcome` what the
+  named rule judged); a class selects either objects or resource objects,
+  never both, so the MCS selector contract is unchanged. The engine adds
+  `ResourceService`, `ResourceServiceHandle` (routed by source in a
+  federation), `ResourceRequest`, `ResourceError`, and `ResourceObjects`
+  with `Reached`, which the runtime installs before any rule runs from the
+  classes the rules name, bound per source; a class no rule names is never
+  listed. Findings on resource objects are object findings, and the report
+  carries the resource objects it names in the new `Report::resources`
+  (`Report::resource`, `Report::object`), omitted when empty; finding
+  identities key them by alias or identity like objects. A resource object
+  has no location and is never a BCF component (listed in
+  `Export::unanchored`); the CLI labels it in `objects`. The IFC session
+  registers the service: instances by STEP id with their GlobalId alias
+  where they are an `IfcRoot`. A resource object is classified through
+  `IfcExternalReferenceRelationship` (IFC4 onwards) and
+  `IfcMaterialClassificationRelationship`, and a material in a model
+  holding no `IfcMaterialProperties` carries no property (exactly absent);
+  one in a model holding some is refused, since `ifc-properties` reads no
+  material property set. **Breaking:** `Report` gains a public field.
+
+- **References and empty attribute values.** (Refs #116)
+  `PropertyValue::Reference(ObjectId)` names another instance of the same
+  source (`{"type": "reference", ...}`): the IFC adapter answers an
+  attribute referencing an entity (a select naming a colour, a
+  relationship's `RelatingElement`) with it instead of refusing. It is set
+  for `property-required` and `exists`, never compared with a literal
+  (`property-value` is not evaluated), and the property handle refuses one
+  naming another source. An empty aggregate (`()`) and a logical unknown
+  (`.U.`) are exact absences instead of refusals, as IDS requires.
+  **Breaking:** `PropertyValue` gains a variant.
+
 - **Table column types.** (Refs #116) `Property` gains `column_types`
   (`PropertyColumnTypes`, `with_column_types`, `column_types()`): a table
   value's defining and defined column types as the source declares them,

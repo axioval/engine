@@ -8,7 +8,7 @@
 
 use std::{collections::BTreeSet, sync::Arc};
 
-use axioval_ir::{ObjectId, SourceId};
+use axioval_ir::{Object, ObjectId, SourceId};
 
 use crate::{
     ClassificationAssignment, ClassificationError, ClassificationService,
@@ -18,9 +18,10 @@ use crate::{
     ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration, PropertyEnumerationRequest,
     PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
     PropertyResolutionServiceHandle, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionService, RelationshipSelectionServiceHandle, ServiceRegistry,
-    SnapshotBoundService, SourceCoordinateSystem, SourceIntegrityService,
-    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyServiceHandle,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, ResourceError,
+    ResourceRequest, ResourceService, ResourceServiceHandle, ServiceRegistry, SnapshotBoundService,
+    SourceCoordinateSystem, SourceIntegrityService, SourceIntegrityServiceHandle, SourceSnapshot,
+    TypeHierarchyServiceHandle,
 };
 
 /// How many of `registry`'s services federation can route.
@@ -36,6 +37,7 @@ pub(crate) fn routed(registry: &ServiceRegistry) -> usize {
         + usize::from(registry.get::<SourceIntegrityServiceHandle>().is_some())
         + usize::from(registry.get::<ObjectFrameServiceHandle>().is_some())
         + usize::from(registry.get::<CoordinateSystemServiceHandle>().is_some())
+        + usize::from(registry.get::<ResourceServiceHandle>().is_some())
 }
 
 /// Registers one router per semantic interface any member provides.
@@ -60,6 +62,9 @@ pub(crate) fn register(
     }
     if let Some(router) = Router::<CoordinateSystemServiceHandle>::of(members) {
         target.register(CoordinateSystemServiceHandle::new(Arc::new(router)))?;
+    }
+    if let Some(router) = Router::<ResourceServiceHandle>::of(members) {
+        target.register(ResourceServiceHandle::new(Arc::new(router)))?;
     }
     let hierarchies: Vec<&TypeHierarchyServiceHandle> = members
         .iter()
@@ -232,5 +237,17 @@ impl CoordinateSystemService for Router<CoordinateSystemServiceHandle> {
             .member(source)
             .ok_or_else(|| CoordinateSystemError::UncoveredSource(source.clone()))?;
         member.coordinate_system(source)
+    }
+}
+
+impl ResourceService for Router<ResourceServiceHandle> {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+    fn resources(&self, request: &ResourceRequest) -> Result<Vec<Object>, ResourceError> {
+        let (_, member) = self
+            .member(request.source())
+            .ok_or_else(|| ResourceError::UncoveredSource(request.source().clone()))?;
+        member.resources(request)
     }
 }

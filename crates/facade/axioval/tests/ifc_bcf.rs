@@ -52,6 +52,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
         not_evaluated: vec![],
         tables: vec![],
         rules: Vec::new(),
+        resources: Vec::new(),
         stale_decisions: Vec::new(),
     };
 

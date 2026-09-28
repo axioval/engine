@@ -7,8 +7,8 @@ use axioval::ifc::import_ifc_session;
 use axioval::ir::contract::{ParameterValue, RuleApplicability, Selector};
 use axioval::ir::{NotEvaluatedReason, Report};
 use axioval_ids::{
-    IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, Options, OptionsError, Part, Reason, Translation,
-    translate,
+    IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, Options, OptionsError, Part, Reason,
+    Translation, translate,
 };
 use openbim_ids::IfcVersion;
 
@@ -76,6 +76,7 @@ fn reasons(translation: &Translation) -> Vec<(Part, Reason)> {
 fn type_systems_are_the_ifc_adapters() {
     assert_eq!(IFC2X3_TYPE_SYSTEM, axioval::ifc::IFC2X3_TYPE_SYSTEM);
     assert_eq!(IFC4_TYPE_SYSTEM, axioval::ifc::IFC4_TYPE_SYSTEM);
+    assert_eq!(IFC4X3_TYPE_SYSTEM, axioval::ifc::IFC4X3_TYPE_SYSTEM);
 }
 
 #[test]
@@ -439,22 +440,39 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
 }
 
 #[test]
-fn releases_without_a_type_system_are_gaps() {
+fn ifc4x3_specifications_check_ifc4x3_models() {
     let translation = one("IFC4X3_ADD2", OPTIONAL, WALL, &property("P", "N", ""));
-    assert!(translation.specifications[0].is_skipped());
-    assert_eq!(
-        reasons(&translation),
-        [
-            (
-                Part::Releases,
-                Reason::UnsupportedRelease(IfcVersion::Ifc4x3Add2)
-            ),
-            (Part::Releases, Reason::NoSupportedRelease),
-        ]
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let wall = translation
+        .definitions
+        .object_types
+        .values()
+        .next()
+        .unwrap();
+    assert_eq!(wall.external_names[0].type_system, IFC4X3_TYPE_SYSTEM);
+    // IFC4X3 has no IfcWallStandardCase.
+    let model = IFC4_MODEL
+        .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))")
+        .replace(
+            "#3=IFCWALLSTANDARDCASE('0000000000000000000003',$,$,$,$,$,$,$,$);\n",
+            "",
+        );
+    let report = run(&translation, &model);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
     );
+    // Neither wall has `P.N`.
+    let flagged: Vec<&str> = report
+        .findings()
+        .iter()
+        .filter_map(|finding| finding.object_id())
+        .map(|id| id.local_id.as_str())
+        .collect();
+    assert_eq!(flagged, ["#1", "#2"]);
     let mixed = one("IFC4 IFC4X3_ADD2", OPTIONAL, WALL, &property("P", "N", ""));
-    assert_eq!(mixed.specifications[0].rules.len(), 1);
-    assert!(!mixed.specifications[0].is_complete());
+    assert!(mixed.specifications[0].is_complete());
 }
 
 #[test]

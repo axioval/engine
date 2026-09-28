@@ -78,6 +78,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
   `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
   gives way to `matchers`.
+- **IFC4X3 ADD2 models.** (Refs #116) The IFC adapter no longer refuses
+  `IFC4X3_ADD2` files: `ifc-properties` 0.4.1 resolves their properties
+  exactly. A session binds to the IFC4X3 table and declares
+  `IFC4X3_TYPE_SYSTEM` (the bSDD `ifc/4.3` dictionary), so IFC4X3-only
+  entities (`IfcBridge`, `IfcBuiltElement`) have their own ancestry.
+  Classifications stay refused on IFC4X3 sessions: `ifc-classification`
+  0.2.1 binds an IFC4X3 header to the IFC4 table. The staging IDS importer
+  translates `IFC4X3_ADD2` specifications.
+
 - **IFC4 contexts are checked objects.** (Refs #116) An IFC session's
   objects are every `IfcObject` and now every `IfcContext`: an IFC4
   `IfcProject` or `IfcProjectLibrary` answers its properties, attributes,

@@ -112,6 +112,10 @@ pub const IFC2X3_TYPE_SYSTEM: &str =
 /// Type system of IFC4 ADD2 TC1, as the IFC adapter declares it.
 pub const IFC4_TYPE_SYSTEM: &str = "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4";
 
+/// Type system of IFC4X3 ADD2, as the IFC adapter declares it.
+pub const IFC4X3_TYPE_SYSTEM: &str =
+    "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3";
+
 /// The package schema version the engine compiles.
 const SCHEMA_VERSION: &str = "0.1.0";
 
@@ -1867,20 +1871,23 @@ fn releases(specification: &Specification, gaps: &mut Vec<Gap>) -> Vec<IfcVersio
     supported
 }
 
+/// The type system a release binds to, `None` for one the IFC adapter
+/// does not read. Every release IDS 1.0 names is read today.
+#[allow(clippy::unnecessary_wraps)]
 fn type_system(release: IfcVersion) -> Option<&'static str> {
     match release {
         IfcVersion::Ifc2x3 => Some(IFC2X3_TYPE_SYSTEM),
         IfcVersion::Ifc4 => Some(IFC4_TYPE_SYSTEM),
-        IfcVersion::Ifc4x3Add2 => None,
+        IfcVersion::Ifc4x3Add2 => Some(IFC4X3_TYPE_SYSTEM),
     }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn schema(release: IfcVersion) -> Option<&'static Schema> {
     match release {
         IfcVersion::Ifc2x3 => Some(ifc_schema::ifc2x3()),
         IfcVersion::Ifc4 => Some(ifc_schema::ifc4()),
-        // No type system either; reported as a release gap.
-        IfcVersion::Ifc4x3Add2 => None,
+        IfcVersion::Ifc4x3Add2 => Some(ifc_schema::ifc4x3()),
     }
 }
 

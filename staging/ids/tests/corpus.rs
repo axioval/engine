@@ -62,7 +62,7 @@ enum Class {
     CaughtFail,
     /// A fail case with no finding and gaps that may explain it.
     UnjudgedFail,
-    /// The adapter refused the model, e.g. an IFC4X3 file.
+    /// The adapter refused the model, e.g. one declaring several schemas.
     ModelRefused,
     /// Rules could not be evaluated; not a verdict either way.
     NotEvaluated,

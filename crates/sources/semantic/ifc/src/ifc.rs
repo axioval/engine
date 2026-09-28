@@ -671,7 +671,7 @@ pub fn import_ifc_session(
         snapshots.clone(),
     )));
     let classifications = ClassificationServiceHandle::new(Arc::new(
-        IfcClassificationService::new(model.clone(), snapshots.clone()),
+        IfcClassificationService::new(release, model.clone(), snapshots.clone()),
     ));
     let frames = ObjectFrameServiceHandle::new(Arc::new(IfcObjectFrames::new(
         release,

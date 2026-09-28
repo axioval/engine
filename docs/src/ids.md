@@ -37,9 +37,10 @@ These parts stay explicit gaps:
 - an attribute facet whose name is a restriction, with a value or a cardinality other than required, and one whose named attributes a selector cannot compare;
 - requirements on a prohibited specification, which IDS declares invalid;
 - entities that are neither `IfcObject` occurrences nor `IfcContext`s: type objects, whose own property sets the IFC property library does not resolve exactly, so a session does not check them, and resources, and IFC2X3 classes the IDS type mapping table renames (`IFCAIRTERMINAL`);
-- `IFC4X3_ADD2`, for which the IFC adapter declares no type system: it refuses IFC4X3 models until their properties resolve exactly.
 
 A property set that holds no property is malformed IFC (`HasProperties` and `Quantities` are `SET [1:?]`), and the IFC adapter refuses every property answer about an object carrying one, resolved or enumerated, as incomplete. A property facet on such an object is therefore not evaluated, never absent and never passed, where IDS would fail a required facet. This is not reported as a gap, since the translation is exact wherever the source can answer; deciding it needs the adapter to list such a set with no members, which the IFC property library does not yet offer in a released version.
+
+`IFC4X3_ADD2` specifications bind to the IFC adapter's IFC4X3 type system and check IFC4X3 models. A classification facet is not evaluated on an IFC4X3 model: the IFC classification library still reads IFC4X3 with the IFC4 table, and the adapter refuses rather than answer from another release's schema.
 
 ## Conformance corpus
 

@@ -16,9 +16,12 @@ use axioval_ir::ObjectId;
 use ifc_classification::ClassificationView;
 use ifc_model::{Budget, EntityId, Model};
 
+use crate::release::Release;
+
 type Answer = Result<Vec<ClassificationAssignment>, ClassificationError>;
 
 pub(crate) struct IfcClassificationService {
+    release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     /// Resolved assignments per classification item: many objects share one
@@ -27,8 +30,13 @@ pub(crate) struct IfcClassificationService {
 }
 
 impl IfcClassificationService {
-    pub(crate) fn new(model: Arc<Model>, snapshots: Arc<[SourceSnapshot]>) -> Self {
+    pub(crate) fn new(
+        release: Release,
+        model: Arc<Model>,
+        snapshots: Arc<[SourceSnapshot]>,
+    ) -> Self {
         Self {
+            release,
             model,
             snapshots,
             items: Mutex::new(BTreeMap::new()),
@@ -67,6 +75,15 @@ impl ClassificationService for IfcClassificationService {
 
     fn classifications(&self, object: &ObjectId) -> Answer {
         let id = self.entity(object)?;
+        // `ifc-classification` (0.2.1) reads an IFC4X3 file with the IFC4
+        // table; refused rather than answered from another release's schema.
+        if self.release.is_ifc4x3() {
+            return Err(ClassificationError::Unreadable(
+                "IFC4X3 classifications are read with the IFC4 table by the IFC \
+                 classification library, so they are not read exactly"
+                    .into(),
+            ));
+        }
         let effective = ClassificationView::new(&self.model)
             .effective_classifications(id)
             .map_err(|error| ClassificationError::Unreadable(error.to_string()))?;

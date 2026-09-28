@@ -9,7 +9,7 @@
 //! table gives confident wrong answers, so the release is chosen once, here,
 //! and passed to every service rather than looked up per call.
 
-use ifc_schema::{Schema, SchemaVersion, ifc2x3, ifc4};
+use ifc_schema::{Schema, SchemaVersion, ifc2x3, ifc4, ifc4x3};
 
 /// Type system of the IFC2x3 TC1 release, as declared by `openbim.ifc`.
 ///
@@ -26,6 +26,14 @@ pub const IFC2X3_TYPE_SYSTEM: &str =
 /// name in exactly this type system. It is the release's semantic identifier,
 /// not a transport or documentation URL, and it differs per IFC release.
 pub const IFC4_TYPE_SYSTEM: &str = "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4";
+
+/// Type system of the IFC4X3 ADD2 release: its bSDD dictionary identifier.
+///
+/// IFC4X3 renames and adds entities (`IfcBuiltElement`, `IfcFacility`), so
+/// package concepts name its entities under this identifier of their own; an
+/// IFC4 name does not bind to IFC4X3 data.
+pub const IFC4X3_TYPE_SYSTEM: &str =
+    "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3";
 
 /// The release a session is bound to.
 ///
@@ -58,10 +66,20 @@ impl Release {
                 label: "IFC4",
                 type_system: IFC4_TYPE_SYSTEM,
             }),
-            // IFC4X3 has a schema table but no exact property resolution yet;
-            // refuse rather than half-support. Named, not wildcarded, so a
-            // release added upstream is a compile error here, not a silent refusal.
-            SchemaVersion::Ifc4x3 => None,
+            // `ifc-properties` (≥ 0.4.1) resolves IFC4X3 ADD2 exactly. Named,
+            // not wildcarded, so a release added upstream is a compile error
+            // here, not a silent refusal.
+            SchemaVersion::Ifc4x3 => Some(Self {
+                schema: ifc4x3(),
+                label: "IFC4X3",
+                type_system: IFC4X3_TYPE_SYSTEM,
+            }),
         }
+    }
+
+    /// Whether this is IFC4X3, which some upstream readers still read with
+    /// the IFC4 table.
+    pub(crate) fn is_ifc4x3(self) -> bool {
+        self.type_system == IFC4X3_TYPE_SYSTEM
     }
 }

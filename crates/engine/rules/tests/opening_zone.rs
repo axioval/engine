@@ -11,12 +11,15 @@ use axioval_engine::{
     CapabilityEvaluation, GeometryFidelity, ObjectBounds, ProjectedDistanceEvidence,
     ProximityError, ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
 };
-use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::contract::{ParameterValue, Selector, TableRow};
 use axioval_ir::{
     BODY_SET, Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension,
 };
 use axioval_rules::OpeningZone;
-use common::{Model, findings, kind, rule, selector, source, string, strings, unevaluated};
+use common::{
+    Model, assert_deviation, deviation_of, findings, kind, number, rule, selector, source, string,
+    strings, unevaluated,
+};
 
 const ID: &str = "axioval:capability.opening-zone";
 
@@ -1208,4 +1211,132 @@ fn a_duct_through_beams_without_a_void_is_judged_in_each_beam() {
         unevaluated(&evaluation),
         [("near-end".into(), NotEvaluatedReason::IncompleteEvidence)]
     );
+}
+
+fn table(rows: Vec<Vec<(&str, ParameterValue)>>) -> ParameterValue {
+    ParameterValue::Table {
+        value: rows
+            .into_iter()
+            .map(|cells| {
+                cells
+                    .into_iter()
+                    .map(|(column, value)| (column.to_owned(), value))
+                    .collect::<TableRow>()
+            })
+            .collect(),
+    }
+}
+
+/// Two allowed zones in the 6 m I-beam: `middle`, clear of the ends by a
+/// quarter of the span (at least 0.3 m) and of the top by 0.3 of the depth
+/// (at least 0.05 m), of the bottom by 0.02 m; and `supports`, clear of the
+/// ends by 0.3 m and of the top by 0.1 m, the bottom unbounded.
+fn zones() -> ParameterValue {
+    table(vec![
+        vec![
+            ("name", string("middle")),
+            ("end_fraction", number(0.25)),
+            ("end_minimum", metres(0.3)),
+            ("top_fraction", number(0.3)),
+            ("top_of", string("depth")),
+            ("top_minimum", metres(0.05)),
+            ("bottom_minimum", metres(0.02)),
+        ],
+        vec![
+            ("name", string("supports")),
+            ("end_minimum", metres(0.3)),
+            ("top_minimum", metres(0.1)),
+        ],
+    ])
+}
+
+/// Several zone rows combine as a union: a hole in either passes, one in
+/// neither is found, named and graded by the zone it misses least.
+#[test]
+fn a_hole_in_any_allowed_zone_passes_and_one_in_none_is_found() {
+    let circle = |model, local, x, z| hole(model, local, x, z, "circle", &[("Radius", 0.05)]);
+    let model = circle(beam(), "middle", 3.0, 0.0);
+    let model = circle(model, "either", 1.0, 0.0);
+    let model = circle(model, "near-top", 1.0, 0.02);
+    let model = circle(model, "near-end", 0.2, 0.0);
+    let evaluation = check(model, vec![("zones", zones())]);
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "near-end".into(),
+                "opening lies outside any of the 2 allowed zones of its host b: nearest is \
+                 zone `supports`, where it is 0.15 m from an end (0.3 m required)"
+                    .into()
+            ),
+            (
+                "near-top".into(),
+                "opening lies outside any of the 2 allowed zones of its host b: nearest is \
+                 zone `supports`, where it is 0.08 m from the top edge (0.1 m required)"
+                    .into()
+            ),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    // 0.02 m short of 0.1 m, up to the rounding of composed placements.
+    let (lower, upper) = deviation_of(
+        &evaluation,
+        "opening lies outside any of the 2 allowed zones of its host b: nearest is zone \
+         `supports`, where it is 0.08",
+    );
+    assert!((lower - 0.2).abs() < 1e-9 && (upper - 0.2).abs() < 1e-9);
+    assert_deviation(
+        deviation_of(
+            &evaluation,
+            "opening lies outside any of the 2 allowed zones of its host b: nearest is zone \
+             `supports`, where it is 0.15",
+        ),
+        (0.5, 0.5),
+    );
+
+    // One zone alone: `middle` finds the hole near the supports, missing
+    // its 1.5 m end inset.
+    let model = circle(beam(), "either", 1.0, 0.0);
+    let middle = table(vec![vec![
+        ("end_fraction", number(0.25)),
+        ("top_minimum", metres(0.05)),
+    ]]);
+    let evaluation = check(model, vec![("zones", middle)]);
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "either".into(),
+            "opening lies outside its host b's allowed zone: nearest is zone 1, where it is \
+             0.95 m from an end (1.5 m required)"
+                .into()
+        )]
+    );
+}
+
+#[test]
+fn zones_measure_from_the_flanges_in_the_web_and_refuse_bad_rows() {
+    // In the web, the top inset runs from the upper flange.
+    let model = hole(beam(), "high", 3.0, 0.05, "circle", &[("Radius", 0.05)]);
+    let top = table(vec![vec![("top_minimum", metres(0.05))]]);
+    let evaluation = check(model, vec![("zones", top), ("zone", string("web"))]);
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "high".into(),
+            "opening lies outside its host b's allowed zone: nearest is zone 1, where it is \
+             0.03 m from the upper flange (0.05 m required)"
+                .into()
+        )]
+    );
+    for bad in [
+        vec![("end_of", string("width"))],
+        vec![("end_fraction", number(-0.1))],
+        vec![("top_minimum", number(0.1))],
+    ] {
+        let evaluation = check(beam(), vec![("zones", table(vec![bad]))]);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
 }

@@ -51,6 +51,7 @@ These capabilities grade their findings:
 | `keyed-limit` | the measured quantity against the row's bound; sill heights by the worst floor |
 | `table-allocation` | a row's count against its count, its summed area against the tolerance band |
 | `space-distance` | the nearest distance against the row's minimum or maximum |
+| `opening-zone` | a distance from the host's ends, edges or flanges, or from another opening, against its bound; an opening outside every allowed zone by the zone it misses least |
 | `space-validation` | an unallocated floor region's area against `maximum_unallocated_area_square_metres` |
 | `stair-geometry`, `ramp-geometry` | every numeric check: risers, goings, step lengths, widths, rises, headroom, landings, handrail heights, extensions and gaps, slope limits (the nearest row) |
 

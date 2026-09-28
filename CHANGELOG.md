@@ -42,6 +42,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   in each, so with `host_path: ["axioval:derived.intersects"]` a duct is
   checked in every beam it crosses; an element reaching several hosts is no
   longer not evaluated. **Breaking:** `Derivation` gains `Intersects`.
+- **Allowed opening zones.** (#140) `opening-zone` takes `zones`, a table
+  of allowed zones: per row, insets from both ends, the bottom and the top,
+  each the larger of a fraction of the host's span or depth and a minimum
+  length, so asymmetric and one-sided insets are rows too. Rows combine as
+  a union; an opening outside every zone is found, named and graded by the
+  zone it misses least. `opening-zone` now grades its distance findings by
+  severity bands. **Breaking:** the capability gains the optional `zones`,
+  so a definition bound to it must declare it.
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

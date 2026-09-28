@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, Deviation, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, QuantityDimension};
@@ -19,6 +19,7 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 pub(crate) mod face;
 mod outline;
 mod supports;
+mod zones;
 
 use face::{Axis, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
 use supports::{Opening, SupportConfig, Supports};
@@ -31,7 +32,10 @@ use supports::{Opening, SupportConfig, Supports};
 /// of `height_axis`; `both` by default), `opening_spacing` clear of every
 /// other opening in the
 /// same host, `support_distance` along the host from each of its supports
-/// and `support_clearance` clear of their footprints in the face.
+/// and `support_clearance` clear of their footprints in the face, and
+/// inside one of the allowed `zones`: rows of insets from the ends, the
+/// bottom and the top, each the larger of a fraction of the host's span or
+/// depth and a minimum length.
 ///
 /// The host is what `host_path` reaches from the opening among the
 /// `host_selector` objects (with IFC, `IfcRelVoidsElement` backward). An
@@ -97,6 +101,7 @@ struct Config<'a> {
     web: bool,
     spacing: Option<f64>,
     supports: Option<SupportConfig<'a>>,
+    zones: Vec<zones::Zone>,
 }
 
 pub(crate) fn distance(
@@ -163,6 +168,7 @@ impl<'a> Config<'a> {
             web,
             spacing: distance(&parameters, "opening_spacing")?,
             supports: SupportConfig::parse(&parameters)?,
+            zones: zones::parse(&parameters)?,
         })
     }
 }
@@ -184,9 +190,14 @@ impl RuleCapability for OpeningZone {
             ParameterDescriptor::optional("maximum_edges", ParameterType::String),
             ParameterDescriptor::optional("zone", ParameterType::String),
             ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
+            ParameterDescriptor::optional("zones", ParameterType::Table(zones::COLUMNS)),
         ];
         parameters.extend(SupportConfig::parameters());
         parameters
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -259,6 +270,9 @@ impl Placed {
         host.section_rect(axes, self.length, self.height, self.through)
     }
 }
+
+/// A finding's message and, where it misses a bound, by how far.
+type Found = (String, Option<Deviation>);
 
 /// Where an opening is: in each checked host it reaches (none when it
 /// reaches none), each placement known or not; unknown altogether when its
@@ -446,10 +460,13 @@ impl Judge<'_, '_> {
                     true
                 });
         } else {
-            findings.push(format!(
-                "opening lies partly outside its host {}: {}",
-                placed.host.local_id,
-                outside.join("; ")
+            findings.push((
+                format!(
+                    "opening lies partly outside its host {}: {}",
+                    placed.host.local_id,
+                    outside.join("; ")
+                ),
+                None,
             ));
         }
         if !outside_length
@@ -467,6 +484,13 @@ impl Judge<'_, '_> {
         if !outside_height
             && !crosses_outline
             && let Err((reason, message)) = self.far_edges(&host, placed, rect, &mut findings)
+        {
+            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
+        }
+        if !outside_length
+            && !outside_height
+            && !crosses_outline
+            && let Err((reason, message)) = self.zones(&host, placed, rect, &mut findings)
         {
             evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
         }
@@ -494,7 +518,7 @@ impl Judge<'_, '_> {
         host: &Host,
         placed: &Placed,
         rect: [Span; 2],
-        findings: &mut Vec<String>,
+        findings: &mut Vec<Found>,
     ) -> Result<bool, Unavailable> {
         let Some(outline) = &host.outline else {
             return Ok(false);
@@ -513,10 +537,13 @@ impl Judge<'_, '_> {
                 ),
             ));
         }
-        findings.push(format!(
-            "opening lies partly outside its host {}: it crosses the edge of the host's \
-             outline",
-            placed.host.local_id
+        findings.push((
+            format!(
+                "opening lies partly outside its host {}: it crosses the edge of the host's \
+                 outline",
+                placed.host.local_id
+            ),
+            None,
         ));
         Ok(true)
     }
@@ -527,7 +554,7 @@ impl Judge<'_, '_> {
         host: &Host,
         placed: &Placed,
         rect: [Span; 2],
-        findings: &mut Vec<String>,
+        findings: &mut Vec<Found>,
     ) -> Result<(), Unavailable> {
         let length = self.config.axes.length;
         let Some(required) = self.config.end_distance else {
@@ -551,11 +578,14 @@ impl Judge<'_, '_> {
                 ),
             ));
         }
-        findings.push(format!(
-            "opening is {} from an end of its host {}; {} required",
-            metres(clear.max(0.0)),
-            placed.host.local_id,
-            metres(required)
+        findings.push((
+            format!(
+                "opening is {} from an end of its host {}; {} required",
+                metres(clear.max(0.0)),
+                placed.host.local_id,
+                metres(required)
+            ),
+            Some(Deviation::below(required, clear, clear)),
         ));
         Ok(())
     }
@@ -566,7 +596,7 @@ impl Judge<'_, '_> {
         host: &Host,
         placed: &Placed,
         rect: [Span; 2],
-        findings: &mut Vec<String>,
+        findings: &mut Vec<Found>,
     ) -> Result<(), Unavailable> {
         if self.config.edge_distance.is_none() && !self.config.web {
             return Ok(());
@@ -593,11 +623,14 @@ impl Judge<'_, '_> {
                     ),
                 ));
             }
-            findings.push(format!(
-                "opening is {} from an edge of its host {}; {} clear required",
-                metres(clear.max(0.0)),
-                placed.host.local_id,
-                metres(required)
+            findings.push((
+                format!(
+                    "opening is {} from an edge of its host {}; {} clear required",
+                    metres(clear.max(0.0)),
+                    placed.host.local_id,
+                    metres(required)
+                ),
+                Some(Deviation::below(required, clear, clear)),
             ));
             return Ok(());
         }
@@ -622,10 +655,13 @@ impl Judge<'_, '_> {
             } else {
                 format!("is {} from", metres(clear))
             };
-            findings.push(format!(
-                "opening {distance} {what} of its host {}; {} clear required",
-                placed.host.local_id,
-                metres(required)
+            findings.push((
+                format!(
+                    "opening {distance} {what} of its host {}; {} clear required",
+                    placed.host.local_id,
+                    metres(required)
+                ),
+                Some(Deviation::below(required, clear, clear)),
             ));
         }
         Ok(())
@@ -640,7 +676,7 @@ impl Judge<'_, '_> {
         host: &Host,
         placed: &Placed,
         rect: [Span; 2],
-        findings: &mut Vec<String>,
+        findings: &mut Vec<Found>,
     ) -> Result<(), Unavailable> {
         let Some((maximum, low, high)) = self.config.edge_maximum else {
             return Ok(());
@@ -678,11 +714,16 @@ impl Judge<'_, '_> {
             }
             // The distance is exact, or a lower bound of the true one.
             if distance > maximum + ROUNDING {
-                findings.push(format!(
-                    "opening is {} from {edge} of its host {}; at most {} allowed",
-                    metres(distance),
-                    placed.host.local_id,
-                    metres(maximum)
+                // A lower bound over the maximum may be farther still.
+                let upper = if exact { distance } else { f64::INFINITY };
+                findings.push((
+                    format!(
+                        "opening is {} from {edge} of its host {}; at most {} allowed",
+                        metres(distance),
+                        placed.host.local_id,
+                        metres(maximum)
+                    ),
+                    Some(Deviation::above(maximum, distance, upper)),
                 ));
             } else if !exact {
                 open.push(edge);
@@ -740,7 +781,7 @@ impl Judge<'_, '_> {
         opening: &Object,
         placed: &Placed,
         openings: &Population,
-        mut findings: Vec<String>,
+        mut findings: Vec<Found>,
         evaluation: &mut CapabilityEvaluation,
     ) {
         let mut evidence = placed.evidence.clone();
@@ -783,11 +824,14 @@ impl Judge<'_, '_> {
                     .iter()
                     .map(|(_, clear, _)| *clear)
                     .fold(f64::INFINITY, f64::min);
-                findings.push(format!(
-                    "opening is {} clear of another opening in its host {}; {} required",
-                    metres(nearest),
-                    placed.host.local_id,
-                    metres(required)
+                findings.push((
+                    format!(
+                        "opening is {} clear of another opening in its host {}; {} required",
+                        metres(nearest),
+                        placed.host.local_id,
+                        metres(required)
+                    ),
+                    Some(Deviation::below(required, nearest, nearest)),
                 ));
                 for (other, _, neighbour) in sure {
                     evidence.extend(neighbour.evidence.iter().cloned());
@@ -795,8 +839,11 @@ impl Judge<'_, '_> {
                 }
             }
         }
-        for message in findings {
-            evaluation.push_finding(self.finding(opening, placed, message, &evidence, &related));
+        for (message, deviation) in findings {
+            evaluation.push_finding_deviating(
+                self.finding(opening, placed, message, &evidence, &related),
+                deviation,
+            );
         }
     }
 

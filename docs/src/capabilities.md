@@ -1662,11 +1662,23 @@ A row stating a dimension the family does not have, or one the source leaves uns
 | `maximum_edges` | `string` | `top`, `bottom` or `both` (the default): the high and low ends of `height_axis` `edge_distance_maximum` applies to. |
 | `zone` | `string` | `section` (default: the host's whole height) or `web`: between the flanges of an I, T, U, C or Z section, across `profile-y`. |
 | `opening_spacing` | `quantity` | The clear distance the opening must keep from every other opening of the same host, in the face. |
+| `zones` | `table` | Allowed zones, columns below: the opening must lie inside at least one row's zone. |
 | `support_path` | `stringList` | Relationship steps from the host to its supports and connecting members. With IFC, `IfcRelConnectsElements:either`, which takes in its subtype `IfcRelConnectsPathElements`. |
 | `support_gap` | `quantity` | A length: the `support_selector` objects that come this close to the host in space (through the proximity service) are its supports too. |
 | `support_selector` | `selector` | The objects that may be supports (every object by default). |
 | `support_distance` | `quantity` | A length the opening must keep from each support along `length_axis`. |
 | `support_clearance` | `quantity` | A clear distance the opening must keep from each support's footprint in the face; `0 m` requires only that it not overlap one. |
+
+Each row of `zones` is one allowed zone: the host's face less an inset from both ends, one from the bottom and one from the top (the low and high ends of `height_axis`, or the lower and upper flanges with `zone` `web`). Each inset is the larger of a fraction of the host's span or depth and a minimum length; an inset a row leaves out is zero, so a row with only a top inset bounds one side (a precast hole below a one-sided top inset). Rows combine as a union: an opening inside any zone passes. One surely outside every zone is one finding, naming the zone it misses least and each side it is too near (`opening lies outside any of the 2 allowed zones of its host #50: nearest is zone `ends`, where it is 0.15 m from an end (0.2 m required)`), graded by that zone's worst shortfall. Across a free outline a distance known only from below (an opening not extruded straight through) can place an opening inside a zone but never outside one; if it may lie in a zone, it is not evaluated.
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `name` | `string` | The zone's name in findings; `zone 2` for the second row without one. |
+| `end_fraction`, `end_of`, `end_minimum` | `number`, `string`, `quantity` | The inset from both ends: `end_fraction` of the `span` (the default) or the `depth`, at least `end_minimum`. |
+| `bottom_fraction`, `bottom_of`, `bottom_minimum` | `number`, `string`, `quantity` | The inset from the bottom: a fraction of the `depth` (the default) or the `span`, at least the minimum. |
+| `top_fraction`, `top_of`, `top_minimum` | `number`, `string`, `quantity` | The inset from the top, alike. |
+
+The span is the host's length along `length_axis`, the depth its height along `height_axis` (for a free outline, of the box around it).
 
 Every opening is checked to lie within its host's face along both axes (`opening lies partly outside its host #10: along its length it spans 1.7 m to 2.7 m, the host -2.5 m to 2.5 m`); each declared zone is its own finding. Findings relate the host, and a spacing finding the openings too close.
 
@@ -1685,7 +1697,7 @@ A host's supports are the members it rests on or that connect to it (columns, wa
 
 Anything in between is not evaluated, naming each member it could not decide: a support whose body cannot be read, one whose position straddles the limit, and one whose contact, relationship answer or selection is undecided and which may come too close. A support surely too close is found even beside undecided ones. Findings relate the host and every support surely too close, and cite the relationship or contact evidence and their bodies.
 
-Distances between openings are clear distances in the face. They are exact between two rectangles whose sides run along the face axes and which are extruded through the host (the third axis); for any other pair only the distance of their extents is known, a lower bound that can pass a pair but never find one, so a pair it cannot pass leaves the opening not evaluated. An opening whose host cannot be read, or whose own selection is undecided, may be a neighbour of any opening and is treated as one. Positions are composed from placements in binary arithmetic, so every bound is widened by a nanometre.
+Distances between openings are clear distances in the face. They are exact between two rectangles whose sides run along the face axes and which are extruded through the host (the third axis); for any other pair only the distance of their extents is known, a lower bound that can pass a pair but never find one, so a pair it cannot pass leaves the opening not evaluated. An opening whose host cannot be read, or whose own selection is undecided, may be a neighbour of any opening and is treated as one. Positions are composed from placements in binary arithmetic, so every bound is widened by a nanometre. Findings of a distance missing its bound (ends, edges, flanges, the largest edge distance, spacing, zones) are graded by how far they miss it.
 
 `axioval:capability.opening-area` requires the openings of each selected host (a wall) to account for the difference between its stated gross and net side areas.
 

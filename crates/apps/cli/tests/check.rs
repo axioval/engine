@@ -8059,6 +8059,49 @@ fn with_geometry_ducts_through_a_beam_without_voids_are_checked_in_the_beam() {
     );
 }
 
+#[test]
+fn with_geometry_a_duct_in_either_of_two_allowed_zones_passes() {
+    let run = |name: &str, ends: f64| {
+        let metres = |value: f64| json!({"type": "quantity", "value": value, "unit": "m"});
+        Case::new(name).geometry_rule(
+            &beam_with_ducts(),
+            &[("duct", "IfcDuctSegment"), ("beam", "IfcBeam")],
+            "axioval:capability.opening-zone",
+            &registry_signature("axioval:capability.opening-zone"),
+            entity("duct"),
+            json!({
+                "host_path": {"type": "stringList", "value": ["axioval:derived.intersects"]},
+                "host_selector": {"type": "selector", "value": entity("beam")},
+                "length_axis": {"type": "string", "value": "extrusion"},
+                "height_axis": {"type": "string", "value": "profile-y"},
+                "zones": {"type": "table", "value": [
+                    {"name": {"type": "string", "value": "middle"},
+                     "end_fraction": {"type": "number", "value": 0.4}},
+                    {"name": {"type": "string", "value": "ends"},
+                     "end_minimum": metres(ends),
+                     "top_minimum": metres(0.05)},
+                ]},
+            }),
+        )
+    };
+    let (output, result) = run("opening-zone-zones", 0.1);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let (output, result) = run("opening-zone-zones-strict", 0.2);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#200".to_owned(),
+            "opening lies outside any of the 2 allowed zones of its host #50: nearest is zone \
+             `ends`, where it is 0.15 m from an end (0.2 m required)"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
 /// Walls #1 and #2 with an enumerated `Status`, a bounded `Span` in
 /// millimetres and a table `Load` in `Pset_Kinds`, and a `Pset_Checks`
 /// with `CheckA`/`CheckB`; wall #2 also has a `Pset_Draft`.

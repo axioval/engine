@@ -2,7 +2,8 @@
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle, RuleCapability,
+    RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
@@ -115,7 +116,9 @@ impl RuleCapability for PropertyExists {
                 }
             };
             match service.resolve(&request) {
-                Ok(PropertyResolution::Present(_)) => {}
+                // An unreadable value is still a present property.
+                Ok(PropertyResolution::Present(_))
+                | Err(PropertyResolutionError::UnreadableValue(_)) => {}
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
                     rule,
                     object,
@@ -132,7 +135,9 @@ impl RuleCapability for PropertyExists {
 /// Requires an exactly resolved property to contain a non-empty semantic value.
 ///
 /// Exact absence, `null`, and blank text are violations. Other exact typed
-/// values satisfy the requirement; adapter failures remain not-evaluated.
+/// values satisfy the requirement, and so does a stated value the source
+/// cannot read (`PropertyResolutionError::UnreadableValue`); adapter
+/// failures remain not-evaluated.
 pub struct PropertyRequired;
 impl RuleCapability for PropertyRequired {
     fn id(&self) -> &'static str {
@@ -187,6 +192,8 @@ impl RuleCapability for PropertyRequired {
                     format!("missing required property {name}"),
                     vec![proof.evidence().clone()],
                 )),
+                // The source states a value it cannot read: one is there.
+                Err(PropertyResolutionError::UnreadableValue(_)) => {}
                 Err(error) => resolve_error(&mut evaluation, object, error),
             }
         }
@@ -205,7 +212,9 @@ fn is_empty_value(value: &PropertyValue) -> bool {
 /// Absence, `null` and blank text are violations as for `property-required`.
 /// A present value of another declared type is a violation. A present value
 /// whose type the source did not report is not evaluated: an unknown type is
-/// never taken to match. Type names compare ASCII case-insensitively, since
+/// never taken to match. A stated value the source cannot read but whose
+/// declared type it states (`PropertyResolutionError::UnreadableValue`) is
+/// judged by that type alone. Type names compare ASCII case-insensitively, since
 /// STEP-based sources do not distinguish case.
 pub struct PropertyDataType;
 impl RuleCapability for PropertyDataType {
@@ -291,6 +300,19 @@ impl RuleCapability for PropertyDataType {
                     format!("missing required property {name}"),
                     vec![proof.evidence().clone()],
                 )),
+                // A stated value of an exactly declared type: the type
+                // decides, whatever the value.
+                Err(PropertyResolutionError::UnreadableValue(unreadable)) => {
+                    let actual = unreadable.data_type();
+                    if !actual.eq_ignore_ascii_case(expected) {
+                        evaluation.push_finding(finding(
+                            rule,
+                            object,
+                            format!("property {name} is {actual}, not {expected}"),
+                            vec![unreadable.evidence().clone()],
+                        ));
+                    }
+                }
                 Err(error) => resolve_error(&mut evaluation, object, error),
             }
         }

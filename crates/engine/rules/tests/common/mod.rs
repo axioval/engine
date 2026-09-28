@@ -41,6 +41,9 @@ pub struct Model {
     enumerable: bool,
     /// Sets an object carries without any member.
     empty_sets: BTreeSet<(ObjectId, String)>,
+    /// Properties stating a value the source cannot read, with their
+    /// declared type.
+    unreadable_values: BTreeMap<(ObjectId, String, String), String>,
 }
 
 impl Default for Model {
@@ -53,6 +56,7 @@ impl Default for Model {
             citations: BTreeMap::new(),
             enumerable: true,
             empty_sets: BTreeSet::new(),
+            unreadable_values: BTreeMap::new(),
         }
     }
 }
@@ -141,6 +145,14 @@ impl Model {
         self
     }
 
+    /// A property of declared type `data_type` whose stated value the
+    /// source cannot read exactly.
+    pub fn unreadable_value(mut self, local: &str, set: &str, name: &str, data_type: &str) -> Self {
+        self.unreadable_values
+            .insert((id(local), set.into(), name.into()), data_type.into());
+        self
+    }
+
     pub fn unreadable(mut self, local: &str) -> Self {
         self.unreadable.insert(id(local));
         self
@@ -208,6 +220,24 @@ impl PropertyResolutionService for Model {
         if self.unreadable.contains(request.object_id()) {
             return Err(PropertyResolutionError::Unavailable("unreadable".into()));
         }
+        let unreadable = self
+            .unreadable_values
+            .iter()
+            .find(|((object, set, name), _)| {
+                object == request.object_id()
+                    && name == request.property()
+                    && request.property_set().is_none_or(|wanted| wanted == set)
+            });
+        if let Some(((object, set, name), data_type)) = unreadable {
+            return Err(PropertyResolutionError::UnreadableValue(Box::new(
+                axioval_engine::UnreadableValue::try_new(
+                    request.clone(),
+                    data_type.clone(),
+                    Evidence::exact(object.source.clone(), format!("{object}:{set}.{name}")),
+                    format!("the unit of {name} is unknown"),
+                )?,
+            )));
+        }
         let found = self.values.iter().find(|((object, set, name), _)| {
             object == request.object_id()
                 && name == request.property()
@@ -242,7 +272,13 @@ impl PropertyResolutionService for Model {
         &self,
         request: &PropertyEnumerationRequest,
     ) -> Result<PropertyEnumeration, PropertyResolutionError> {
-        if self.unreadable.contains(request.object_id()) || !self.enumerable {
+        if self.unreadable.contains(request.object_id())
+            || !self.enumerable
+            || self
+                .unreadable_values
+                .keys()
+                .any(|(object, _, _)| object == request.object_id())
+        {
             return Err(PropertyResolutionError::Unavailable("unreadable".into()));
         }
         let properties = self

@@ -44,6 +44,76 @@ pub enum PropertyResolutionError {
     /// the run, never the object.
     #[error("{0}")]
     MissingService(String),
+    /// The property is present and states a value of a type the source
+    /// declares exactly, but the value cannot be read exactly (a measure
+    /// whose unit does not resolve). What depends on the declared type and
+    /// on presence alone is decided; the value is not.
+    #[error("{}", .0.reason())]
+    UnreadableValue(Box<UnreadableValue>),
+}
+
+/// A present property whose declared type is known exactly and whose
+/// stated value cannot be read exactly, bound to the request it answers.
+///
+/// The source states a value (never `$`): the property exists and holds
+/// one. Only the value itself is unknown, so a capability may decide
+/// presence, non-emptiness and the declared type, and must leave every
+/// comparison of the value not evaluated.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnreadableValue {
+    request: PropertyRequest,
+    data_type: String,
+    evidence: Evidence,
+    reason: String,
+}
+impl UnreadableValue {
+    /// Creates a request-bound answer: the property holds a value of
+    /// `data_type`, in the source's own vocabulary, that cannot be read
+    /// exactly for `reason`.
+    ///
+    /// # Errors
+    ///
+    /// [`PropertyResolutionError::InvalidRequest`] for a blank type or
+    /// reason, and [`PropertyResolutionError::InexactEvidence`] for evidence
+    /// that is not exact and reviewable or not from the requested object's
+    /// source.
+    pub fn try_new(
+        request: PropertyRequest,
+        data_type: impl Into<String>,
+        evidence: Evidence,
+        reason: impl Into<String>,
+    ) -> Result<Self, PropertyResolutionError> {
+        let (data_type, reason) = (data_type.into(), reason.into());
+        if data_type.trim().is_empty() || reason.trim().is_empty() {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        if !reviewable(&evidence) || evidence.source != request.object_id().source {
+            return Err(PropertyResolutionError::InexactEvidence);
+        }
+        Ok(Self {
+            request,
+            data_type,
+            evidence,
+            reason,
+        })
+    }
+    /// Bound request.
+    pub fn request(&self) -> &PropertyRequest {
+        &self.request
+    }
+    /// The value's type as the source declares it (an IFC property:
+    /// `IFCMASSMEASURE`).
+    pub fn data_type(&self) -> &str {
+        &self.data_type
+    }
+    /// Exact reviewable provenance of the property.
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+    /// Why the value cannot be read exactly.
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
 }
 
 /// Request for one direct property on one source-qualified object.
@@ -471,11 +541,28 @@ impl PropertyResolutionServiceHandle {
         Self { service }
     }
     /// Resolves and validates request binding and exact provenance.
+    ///
+    /// A [`PropertyResolutionError::UnreadableValue`] is an answer too: it
+    /// is bound to this very request and its evidence checked like a
+    /// present value's.
     pub fn resolve(
         &self,
         request: &PropertyRequest,
     ) -> Result<PropertyResolution, PropertyResolutionError> {
-        let resolution = self.service.resolve(request)?;
+        let resolution = match self.service.resolve(request) {
+            Err(PropertyResolutionError::UnreadableValue(unreadable)) => {
+                if unreadable.request() != request {
+                    return Err(PropertyResolutionError::ResponseRequestMismatch);
+                }
+                if !reviewable(unreadable.evidence())
+                    || unreadable.evidence().source != request.object_id().source
+                {
+                    return Err(PropertyResolutionError::InexactEvidence);
+                }
+                return Err(PropertyResolutionError::UnreadableValue(unreadable));
+            }
+            other => other?,
+        };
         match &resolution {
             PropertyResolution::Present(resolved) => {
                 if resolved.request() != request || !request.matches(resolved.property()) {

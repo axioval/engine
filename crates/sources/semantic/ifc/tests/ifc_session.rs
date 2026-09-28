@@ -95,10 +95,13 @@ fn unsupported_source_neutral_scalars_fail_closed() {
         );
     }
     // A measure is converted through its unit; this file has no project to
-    // take a default length unit from, so the length is refused.
+    // take a default length unit from, so the length's value is unread and
+    // only its declared type is answered.
     assert!(matches!(
         service.resolve(&request("Length")),
-        Err(PropertyResolutionError::Incomplete(message)) if message.contains("IFCLENGTHMEASURE")
+        Err(PropertyResolutionError::UnreadableValue(unreadable))
+            if unreadable.data_type() == "IFCLENGTHMEASURE"
+                && unreadable.reason().contains("IFCLENGTHMEASURE")
     ));
 }
 

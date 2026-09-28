@@ -255,7 +255,12 @@ count becomes a plain decimal. A measure whose unit cannot be resolved is
 refused rather than read as a bare number, and so is a plain scalar
 (`IFCREAL`, `IFCINTEGER`) that carries a unit. Causes include no
 `IfcProject`, no project unit of the needed kind, or an ambiguous
-assignment.
+assignment. A single property value refused this way, or an `IfcDateTime`
+without an offset, is still a stated value of an exactly declared type: the
+property service answers it as `PropertyResolutionError::UnreadableValue`
+with that type (`IFCMASSMEASURE`) and the property's locator, so its
+presence and type are judged and its value is not. A composite value (list,
+bounded, table) holding one stays refused as incomplete, as do attributes.
 
 ### Presentation layers
 

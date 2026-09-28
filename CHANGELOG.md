@@ -6,6 +6,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Declared types of unreadable values.** (Refs #116) A property whose
+  value a source cannot read exactly, but whose declared type it states,
+  is answered as `PropertyResolutionError::UnreadableValue` (an
+  `UnreadableValue`: the request, the declared type, exact evidence and
+  the reason) instead of a bare refusal. The handle binds it to the
+  request and checks its evidence. `property-exists` and
+  `property-required` count it as present and not empty;
+  `property-data-type` judges its type; `property-value` fails a
+  `data_type` it does not declare and leaves every value constraint not
+  evaluated; every other consumer reports it not evaluated as before, with
+  the same message. The IFC adapter answers it for a single measure whose
+  unit does not resolve and for an `IfcDateTime` without an offset, so the
+  buildingSMART case
+  `fail-measures_are_used_to_specify_an_ifc_data_type_1_2`
+  (`IFCMASSMEASURE(2.)` in a model without a mass unit, required as
+  `IFCTIMEMEASURE`) is caught. The corpus now checks 185 cases exactly and
+  catches 119 failures; the three cases left not evaluated wait on the IFC
+  property library (complex properties, material property sets).
+  **Breaking:** `PropertyResolutionError` gains the variant.
+
 - **Logical property values.** (Refs #116) The IFC adapter reads an
   `IFCLOGICAL` property: true and false are booleans, and the unknown
   (`.U.`), which states no truth value, is a present property holding no

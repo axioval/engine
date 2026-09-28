@@ -760,7 +760,7 @@ pub use plan_span::{
 pub use properties::{
     CompletePropertyAbsenceEvidence, NameMatch, NamePattern, PropertyEnumeration,
     PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
+    PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty, UnreadableValue,
 };
 pub use proximity::{
     BodyContainment, BodyVolume, Bounds3, CounterpartSurface, FaceClass, FaceDistanceError,

@@ -953,6 +953,11 @@ pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedRea
         PropertyResolutionError::MissingService(message) => {
             (NotEvaluatedReason::MissingService, message)
         }
+        // Present, of a known type: only the value is unknown.
+        PropertyResolutionError::UnreadableValue(unreadable) => (
+            NotEvaluatedReason::IncompleteEvidence,
+            unreadable.reason().to_owned(),
+        ),
         error => (NotEvaluatedReason::InvalidEvidence, error.to_string()),
     }
 }

@@ -6,7 +6,7 @@ use axioval_engine::{
     PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
     ResolvedProperty, ResourceServiceHandle, SourceIntegrityServiceHandle, SourceSnapshot,
-    TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle,
+    TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle, UnreadableValue,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyTableRow,
@@ -151,6 +151,47 @@ impl IfcPropertyService {
 
     fn locator(&self, detail: impl std::fmt::Display) -> String {
         format!("ifc:{}:{detail}", self.snapshots[0].fingerprint())
+    }
+
+    /// Why a present property's value could not be read, as an answer: a
+    /// single stated value (a number or text, never `$` or a composite
+    /// value) of a declared type the file states is `UnreadableValue`, so
+    /// its type and presence are still decided. Anything else stays the
+    /// `Incomplete` refusal it was.
+    fn unreadable(
+        &self,
+        request: &PropertyRequest,
+        exact: &ExactProperty,
+        reason: String,
+    ) -> PropertyResolutionError {
+        let stated = matches!(
+            exact.value,
+            ExactValue::Real(_) | ExactValue::Integer(_) | ExactValue::Text(_)
+        );
+        let provenance = match exact.source {
+            ExactSource::Occurrence => "occurrence".to_owned(),
+            ExactSource::Type(type_id) => format!("type:{type_id}"),
+            _ => return PropertyResolutionError::InexactEvidence,
+        };
+        let (true, Some(data_type)) = (stated, exact.value_type.as_deref()) else {
+            return PropertyResolutionError::Incomplete(reason);
+        };
+        let evidence = Evidence::exact(
+            self.snapshots[0].source().clone(),
+            self.locator(format_args!(
+                "{provenance}:{}/{}",
+                exact.set_id, exact.property_id
+            )),
+        );
+        match UnreadableValue::try_new(
+            request.clone(),
+            data_type.to_ascii_uppercase(),
+            evidence,
+            reason.clone(),
+        ) {
+            Ok(unreadable) => PropertyResolutionError::UnreadableValue(Box::new(unreadable)),
+            Err(_) => PropertyResolutionError::Incomplete(reason),
+        }
     }
 }
 
@@ -542,10 +583,16 @@ impl PropertyResolutionService for IfcPropertyService {
             request.property(),
         ) {
             Ok(ExactResolution::Present(exact)) => {
-                Ok(PropertyResolution::Present(ResolvedProperty::try_new(
-                    request.clone(),
-                    self.property(&exact, request.property())?,
-                )?))
+                match self.property(&exact, request.property()) {
+                    Ok(property) => Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                        request.clone(),
+                        property,
+                    )?)),
+                    Err(PropertyResolutionError::Incomplete(reason)) => {
+                        Err(self.unreadable(request, &exact, reason))
+                    }
+                    Err(error) => Err(error),
+                }
             }
             Ok(ExactResolution::Absent) => Ok(PropertyResolution::Absent(
                 CompletePropertyAbsenceEvidence::try_new(

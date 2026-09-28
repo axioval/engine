@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use axioval_engine::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty,
+    PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty, UnreadableValue,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -214,4 +214,77 @@ fn exact_present_property_bound_to_another_object_is_rejected() {
         handle.resolve(&requested).unwrap_err(),
         PropertyResolutionError::ResponseRequestMismatch
     );
+}
+
+struct Unreadable(UnreadableValue);
+impl PropertyResolutionService for Unreadable {
+    fn resolve(
+        &self,
+        _request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        Err(PropertyResolutionError::UnreadableValue(Box::new(
+            self.0.clone(),
+        )))
+    }
+}
+
+fn unreadable(request: PropertyRequest) -> UnreadableValue {
+    UnreadableValue::try_new(
+        request,
+        "IFCMASSMEASURE",
+        Evidence::exact(source(), "property #10"),
+        "the unit of a IFCMASSMEASURE cannot be resolved exactly",
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_unreadable_value_is_a_request_bound_answer_with_its_declared_type() {
+    let handle = PropertyResolutionServiceHandle::new(Arc::new(Unreadable(unreadable(request()))));
+    let Err(PropertyResolutionError::UnreadableValue(answer)) = handle.resolve(&request()) else {
+        panic!("expected an unreadable value");
+    };
+    assert_eq!(answer.request(), &request());
+    assert_eq!(answer.data_type(), "IFCMASSMEASURE");
+    assert_eq!(answer.evidence().locator, "property #10");
+    assert_eq!(
+        PropertyResolutionError::UnreadableValue(answer).to_string(),
+        "the unit of a IFCMASSMEASURE cannot be resolved exactly"
+    );
+}
+
+#[test]
+fn an_unreadable_value_is_bound_and_exact_or_refused() {
+    let other = PropertyRequest::try_new(
+        ObjectId::new(source(), "other-wall").unwrap(),
+        Some("Pset_WallCommon".into()),
+        "Reference",
+    )
+    .unwrap();
+    let handle = PropertyResolutionServiceHandle::new(Arc::new(Unreadable(unreadable(other))));
+    assert_eq!(
+        handle.resolve(&request()).unwrap_err(),
+        PropertyResolutionError::ResponseRequestMismatch
+    );
+
+    let mut inexact = Evidence::exact(source(), "property #10");
+    inexact.exact = false;
+    let foreign = Evidence::exact(SourceId::new("cad", "other").unwrap(), "property #10");
+    for evidence in [inexact, foreign] {
+        assert_eq!(
+            UnreadableValue::try_new(request(), "IFCMASSMEASURE", evidence, "no unit"),
+            Err(PropertyResolutionError::InexactEvidence)
+        );
+    }
+    for (data_type, reason) in [(" ", "no unit"), ("IFCMASSMEASURE", "")] {
+        assert_eq!(
+            UnreadableValue::try_new(
+                request(),
+                data_type,
+                Evidence::exact(source(), "property #10"),
+                reason
+            ),
+            Err(PropertyResolutionError::InvalidRequest)
+        );
+    }
 }

@@ -24,8 +24,8 @@
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NamePattern, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PropertyResolution, PropertyResolutionServiceHandle, RuleCapability,
-    RuleContext,
+    ParameterType, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    RuleCapability, RuleContext, UnreadableValue,
 };
 use axioval_ir::contract::{ParameterValue, Quantifier};
 use axioval_ir::{
@@ -415,11 +415,49 @@ fn check_exact(
                 ));
             }
         }
+        Err(PropertyResolutionError::UnreadableValue(unreadable)) => {
+            match judge_unreadable(&unreadable, name, constraints) {
+                Verdict::Meets => {}
+                Verdict::Fails(message) => evaluation.push_finding(finding(
+                    rule,
+                    object,
+                    message,
+                    vec![unreadable.evidence().clone()],
+                )),
+                Verdict::Inapplicable(reason, message) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                }
+            }
+        }
         Err(error) => {
             let (reason, message) = property_error(error);
             evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
         }
     }
+}
+
+/// The verdict on a present property whose stated value cannot be read but
+/// whose declared type is exact: another type than `data_type` fails, and
+/// any constraint on the value is not evaluated. Presence and a matching
+/// type alone are met, since a value is stated.
+fn judge_unreadable(
+    unreadable: &UnreadableValue,
+    name: &str,
+    constraints: &Constraints<'_>,
+) -> Verdict {
+    let actual = unreadable.data_type();
+    if let Some(expected) = constraints.data_type
+        && !actual.eq_ignore_ascii_case(expected)
+    {
+        return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
+    }
+    if constraints.constrains_value() {
+        return Verdict::Inapplicable(
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("property {name}: {}", unreadable.reason()),
+        );
+    }
+    Verdict::Meets
 }
 
 /// Every matched property must meet the constraints, and one must match

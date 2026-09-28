@@ -109,11 +109,13 @@ fn a_ratio_is_a_plain_number() {
 
 #[test]
 fn a_measure_without_any_applicable_unit_is_refused() {
-    // The project assigns no thermal transmittance unit.
+    // The project assigns no thermal transmittance unit: the value is not
+    // read, only its declared type is answered.
     assert!(matches!(
         resolve("#11", "Pset_Test", "ThermalTransmittance"),
-        Err(PropertyResolutionError::Incomplete(message))
-            if message.contains("IFCTHERMALTRANSMITTANCEMEASURE")
+        Err(PropertyResolutionError::UnreadableValue(unreadable))
+            if unreadable.data_type() == "IFCTHERMALTRANSMITTANCEMEASURE"
+                && unreadable.reason().contains("IFCTHERMALTRANSMITTANCEMEASURE")
     ));
 }
 

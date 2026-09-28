@@ -79,14 +79,33 @@ fn string_and_integer_based_types_are_carried_with_their_declared_type() {
     }
 }
 
+/// The declared type and locator of a present property whose value cannot
+/// be read, and why.
+fn unreadable(name: &str) -> (String, String, String) {
+    let Err(PropertyResolutionError::UnreadableValue(unreadable)) = resolve(name) else {
+        panic!("{name}: {:?}", resolve(name));
+    };
+    assert_eq!(unreadable.request().property(), name);
+    assert!(unreadable.evidence().exact);
+    (
+        unreadable.data_type().to_owned(),
+        unreadable.evidence().locator.clone(),
+        unreadable.reason().to_owned(),
+    )
+}
+
 #[test]
-fn a_measure_without_a_unit_to_convert_from_is_refused() {
+fn a_measure_without_a_unit_to_convert_from_keeps_its_declared_type() {
     // Measures convert to SI through their unit (tests/measures.rs); this
-    // file has no project, so there is no default length unit.
-    assert!(matches!(
-        resolve("Length"),
-        Err(PropertyResolutionError::Incomplete(message)) if message.contains("IFCLENGTHMEASURE")
-    ));
+    // file has no project, so there is no default length unit. The value is
+    // stated all the same, so the property is present and typed.
+    let (data_type, locator, reason) = unreadable("Length");
+    assert_eq!(data_type, "IFCLENGTHMEASURE");
+    assert!(locator.ends_with(":occurrence:#7/#5"), "{locator}");
+    assert!(
+        reason.contains("the unit of a IFCLENGTHMEASURE cannot be resolved exactly"),
+        "{reason}"
+    );
 }
 
 fn present(object: &str, set: &str, name: &str) -> (PropertyValue, Option<String>, String) {
@@ -140,12 +159,13 @@ fn dates_date_times_and_time_stamps_are_dates_with_their_declared_type() {
 }
 
 #[test]
-fn a_date_time_without_an_offset_is_incomplete_not_guessed() {
-    assert!(matches!(
-        resolve("Local"),
-        Err(PropertyResolutionError::Incomplete(message))
-            if message.contains("IFCDATETIME '2026-09-27T10:30:00' states no UTC offset")
-    ));
+fn a_date_time_without_an_offset_is_unreadable_not_guessed() {
+    let (data_type, _, reason) = unreadable("Local");
+    assert_eq!(data_type, "IFCDATETIME");
+    assert!(
+        reason.contains("IFCDATETIME '2026-09-27T10:30:00' states no UTC offset"),
+        "{reason}"
+    );
 }
 
 #[test]

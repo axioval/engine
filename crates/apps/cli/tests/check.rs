@@ -460,6 +460,37 @@ fn a_date_stating_a_time_zone_is_not_the_unzoned_date() {
 }
 
 #[test]
+fn a_measure_of_unknown_unit_is_judged_by_its_declared_type_alone() {
+    // The file has no project, so no measure's unit resolves: the value of
+    // either wall is unread, but #1 declares a mass, not a time.
+    let case = Case::new("unreadable-value");
+    let (output, result) = case.geometry_rule(
+        &walls_with_references(&["IFCMASSMEASURE(2.)", "IFCTIMEMEASURE(2.)"]),
+        &[],
+        "axioval:capability.property-value",
+        &registry_signature("axioval:capability.property-value"),
+        entity("wall"),
+        json!({"property": {"type": "propertyReference",
+                            "property": "axioval:example.ifc.reference",
+                            "propertySet": "axioval:example.ifc.pset-wall-common"},
+               "data_type": {"type": "string", "value": "IFCTIMEMEASURE"},
+               "values": {"type": "stringList", "value": ["2"]},
+               "si_units": {"type": "boolean", "value": true}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#1"], "{result:#}");
+    assert_eq!(open, ["#11"], "{result:#}");
+    assert!(
+        result["report"]["findings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("is IFCMASSMEASURE, not IFCTIMEMEASURE"),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn a_logical_unknown_holds_no_value() {
     // `.U.` states no truth value, so the property holds none, as `$`; a
     // logical true or false is a boolean of the declared type.

@@ -2,7 +2,8 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    NameMatch, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionServiceHandle,
 };
 use axioval_ifc::import_ifc_session;
 use axioval_ir::{ObjectId, PropertyValue, QuantityDimension, SourceId};
@@ -11,7 +12,9 @@ use axioval_ir::{ObjectId, PropertyValue, QuantityDimension, SourceId};
 /// quantities, one with an explicit metre unit, a count, and a complex
 /// quantity; door #10 carries a predefined lining set with one attribute
 /// stated; wall #20 has a
-/// property set and a quantity set of one name.
+/// property set and a quantity set of one name. Slabs #30, #33 and #36 each
+/// carry one quantity without a readable value: `$`, text, and a record cut
+/// off before its value. Wall #40 states an `IfcNumericMeasure`.
 const IFC4: &str = "ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION((''),'2;1');
@@ -43,6 +46,22 @@ DATA;
 #24=IFCELEMENTQUANTITY('0000000000000000000024',$,'Common',$,$,(#23));
 #25=IFCRELDEFINESBYPROPERTIES('0000000000000000000025',$,$,$,(#20),#22);
 #26=IFCRELDEFINESBYPROPERTIES('0000000000000000000026',$,$,$,(#20),#24);
+#30=IFCSLAB('0000000000000000000030',$,$,$,$,$,$,$,$);
+#31=IFCQUANTITYLENGTH('Width',$,$,$,$);
+#32=IFCELEMENTQUANTITY('0000000000000000000032',$,'Qto_SlabBaseQuantities',$,$,(#31));
+#39=IFCRELDEFINESBYPROPERTIES('0000000000000000000039',$,$,$,(#30),#32);
+#33=IFCSLAB('0000000000000000000033',$,$,$,$,$,$,$,$);
+#34=IFCQUANTITYLENGTH('Width',$,$,'wide',$);
+#35=IFCELEMENTQUANTITY('0000000000000000000035',$,'Qto_SlabBaseQuantities',$,$,(#34));
+#49=IFCRELDEFINESBYPROPERTIES('0000000000000000000049',$,$,$,(#33),#35);
+#36=IFCSLAB('0000000000000000000036',$,$,$,$,$,$,$,$);
+#37=IFCQUANTITYLENGTH('Width',$,$);
+#38=IFCELEMENTQUANTITY('0000000000000000000038',$,'Qto_SlabBaseQuantities',$,$,(#37));
+#59=IFCRELDEFINESBYPROPERTIES('0000000000000000000059',$,$,$,(#36),#38);
+#40=IFCWALL('0000000000000000000040',$,$,$,$,$,$,$,$);
+#41=IFCPROPERTYSINGLEVALUE('Ratio',$,IFCNUMERICMEASURE(3.5),$);
+#42=IFCPROPERTYSET('0000000000000000000042',$,'Pset_Numbers',$,(#41));
+#43=IFCRELDEFINESBYPROPERTIES('0000000000000000000043',$,$,$,(#40),#42);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -157,5 +176,40 @@ fn an_unset_attribute_of_a_predefined_set_is_null_with_its_declared_type() {
     assert_eq!(
         resolved.property().data_type(),
         Some("IFCNONNEGATIVELENGTHMEASURE")
+    );
+}
+
+/// A quantity whose value is `$`, not a number, or cut off by a truncated
+/// record is never read as 0 and never as absent: resolving it and
+/// enumerating its set both refuse, so a rule over it is not evaluated.
+#[test]
+fn a_quantity_without_a_readable_value_is_refused_never_zero_or_absent() {
+    let session = import_ifc_session("model.ifc", IFC4.as_bytes()).unwrap();
+    let service = session
+        .service::<PropertyResolutionServiceHandle>()
+        .unwrap();
+    for (slab, why) in [("#30", "`$`"), ("#33", "text"), ("#36", "truncated")] {
+        for set in [Some("Qto_SlabBaseQuantities"), None] {
+            let result = resolve(slab, set, "Width");
+            assert!(result.is_err(), "{why} {set:?}.Width: {result:?}");
+        }
+        let request = PropertyEnumerationRequest::try_new(
+            ObjectId::new(SourceId::new("ifc-step", "model.ifc").unwrap(), slab).unwrap(),
+            NameMatch::Exact("Qto_SlabBaseQuantities".into()),
+            NameMatch::Exact("Width".into()),
+        )
+        .unwrap();
+        let enumerated = service.enumerate(&request);
+        assert!(enumerated.is_err(), "{why} enumerated: {enumerated:?}");
+    }
+}
+
+/// `IfcNumericMeasure`, the measure of IFC4X3 `IfcQuantityNumber`, is a plain
+/// number without a unit.
+#[test]
+fn a_numeric_measure_is_a_plain_number() {
+    assert_eq!(
+        value("#40", Some("Pset_Numbers"), "Ratio"),
+        PropertyValue::Decimal(3.5)
     );
 }

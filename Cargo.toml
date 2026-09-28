@@ -66,13 +66,13 @@ openbim-bcf = "0.3.0"
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-openbim_ifc = { package = "openbim-ifc", version = "0.7.2", default-features = false, features = ["geometry-select", "properties"] }
+openbim_ifc = { package = "openbim-ifc", version = "0.8.0", default-features = false, features = ["geometry-select", "properties"] }
 ifc-classification = "0.2.1"
-ifc-geometry = { version = "0.4.1", default-features = false }
+ifc-geometry = { version = "0.4.3", default-features = false }
 ifc-material = "0.3.0"
-ifc-spatial = "0.2.2"
+ifc-spatial = "0.2.3"
 ifc-model = "0.2.3"
-ifc-properties = "0.4.1"
+ifc-properties = "0.5.0"
 ifc-schema = "0.2.2"
 ifc-step = "0.3.0"
 ifc-style = "0.3.0"

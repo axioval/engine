@@ -75,6 +75,12 @@ answered as absent, when:
 - the requested attribute of a predefined set is an entity reference;
 - the value is an `IfcPropertyReferenceValue`, which names an entity the IR
   cannot carry, or an `IfcComplexProperty`.
+- a quantity's value is `$`, is not a number, or is cut off by a truncated
+  record (`ifc-properties` 0.5.0, openbimrs/ifc#138): it is never read as 0
+  and never as absent, so a rule over it is not evaluated.
+
+`IfcNumericMeasure`, the measure of IFC4X3 `IfcQuantityNumber`, has no unit
+and is a plain number.
 
 Any other absence is exact.
 

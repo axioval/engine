@@ -1058,9 +1058,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ad0768eec8730b55f309c90a4ff51cb3cfd22ea0e4b7e810aa5f7a99ba9ca15"
+checksum = "06b010ffedd555246a8ba1ed5e58b2c8b1cb89e98adaa4bfb67e8e50633174bc"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",
@@ -1105,9 +1105,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-properties"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b20c024d83f76cf88cf843a060a2950661bfb28233d80c5695a36a9237177afc"
+checksum = "15a6e3f5d3b45a43ab36eb621bf6b7ba8e46ec8f3f11a91b1a2ae2b7680d66b7"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1127,11 +1127,12 @@ dependencies = [
 
 [[package]]
 name = "ifc-spatial"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9e8914977bb0f05732eb99124b55f20489c2461d043fa8be6f35e6929f59336"
+checksum = "ed2ec6d7877f635b1cf5fcc8521f74b566d22185cac0e72dbc4669fdf5e60405"
 dependencies = [
  "ifc-model",
+ "ifc-schema",
 ]
 
 [[package]]
@@ -1304,9 +1305,9 @@ checksum = "34c684331685f7678a2766f3990cca967b3053a6e75ea1523e3e8449ec07217c"
 
 [[package]]
 name = "openbim-ifc"
-version = "0.7.2"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68e51d8afbb045f50839bcc49d736b74c2723ee2528b2e11402d259b905db2b4"
+checksum = "a553a4b16b07c5a578a7bf8158542a16c01ab8b55a0835248414864840558a22"
 dependencies = [
  "ifc-geometry",
  "ifc-model",

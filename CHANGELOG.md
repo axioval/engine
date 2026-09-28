@@ -2981,6 +2981,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking:** the workspace requires `ifc-properties` 0.5.0,
+  `openbim-ifc` 0.8.0, `ifc-geometry` 0.4.3 and `ifc-spatial` 0.2.3, so a
+  host linking `axioval-ifc` or `axioval-cli` beside these crates must move
+  with them. A quantity whose value is `$`, not a number, or cut off by a
+  truncated record (upstream's new `Quantity::Unresolved`) is refused when
+  resolved or enumerated, so a rule over it is not evaluated; it is never
+  read as 0 and never as absent. `IfcNumericMeasure`, the measure of IFC4X3
+  `IfcQuantityNumber` (`QuantityKind::Number`), is a plain number. IFC4X3
+  sessions stay refused. The spatial tree no longer places declared types
+  in the project or coverings in a space (`IfcRelDeclares`,
+  `IfcRelCoversSpaces`) and treats IFC4X3 facilities as containers; no
+  storey or space assignment the engine reports changed.
 - The workspace requires `ifc-geometry` 0.4.1 and `openbim-ifc` 0.7.2.
   Space-boundary coverage lowers each connection surface in the space
   body's frame from `ifc-geometry`'s `product_representation_frame`

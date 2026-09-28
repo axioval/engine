@@ -249,6 +249,10 @@ fn ruleset() -> RuleSetPackage {
 }
 
 fn report() -> Report {
+    report_of(IFC)
+}
+
+fn report_of(ifc: &str) -> Report {
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
     let definitions = definitions(
         &registry,
@@ -262,7 +266,7 @@ fn report() -> Report {
         ],
     );
     let plan = compile(&registry, &[definitions], &ruleset()).unwrap();
-    let session = import_ifc_session("model.ifc", IFC.as_bytes()).unwrap();
+    let session = import_ifc_session("model.ifc", ifc.as_bytes()).unwrap();
     Runtime::new(registry).run_session(&session, plan).unwrap()
 }
 
@@ -347,4 +351,23 @@ fn numbering_gaps_are_found_per_scope() {
 fn base_quantities_are_checked_in_si_through_a_package() {
     // #11 states 8.5 m² of net floor area; the others 24 m².
     assert_eq!(flagged(&report(), "minimum-floor-area"), ["#11"]);
+}
+
+#[test]
+fn a_quantity_without_a_value_is_not_evaluated_never_read_as_zero() {
+    // #10 and #12 share a net floor area of `$`: neither 0 m², which would
+    // fail, nor absent. #11 still states 8.5 m².
+    let ifc = IFC.replace(
+        "#40=IFCQUANTITYAREA('NetFloorArea',$,$,24.,$);",
+        "#40=IFCQUANTITYAREA('NetFloorArea',$,$,$,$);",
+    );
+    let report = report_of(&ifc);
+    assert_eq!(flagged(&report, "minimum-floor-area"), ["#11"]);
+    let not_evaluated: Vec<_> = report
+        .not_evaluated()
+        .iter()
+        .filter(|outcome| outcome.rule_id.to_string() == "minimum-floor-area")
+        .map(|outcome| outcome.object_id().unwrap().local_id.as_str())
+        .collect();
+    assert_eq!(not_evaluated, ["#10", "#12"]);
 }

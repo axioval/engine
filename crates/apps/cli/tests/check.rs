@@ -9298,6 +9298,38 @@ fn wall_openings_are_summed_against_gross_less_net_side_area() {
 }
 
 #[test]
+fn a_wall_with_a_window_is_not_empty() {
+    let run = |name: &str, minimum: f64| {
+        Case::new(name).geometry_rule(
+            &supported_beam_and_walls_with_areas(),
+            &[("opening", "IfcOpeningElement"), ("wall", "IfcWall")],
+            "axioval:capability.empty-host",
+            &registry_signature("axioval:capability.empty-host"),
+            entity("wall"),
+            json!({
+                "opening_path": {"type": "stringList", "value": ["IfcRelVoidsElement:forward"]},
+                "opening_selector": {"type": "selector", "value": entity("opening")},
+                "length_axis": {"type": "string", "value": "profile-x"},
+                "height_axis": {"type": "string", "value": "extrusion"},
+                "minimum_opening_area": {"type": "quantity", "value": minimum, "unit": "m2"},
+            }),
+        )
+    };
+    let (output, result) = run("empty-host-walls", 0.0);
+    assert_ne!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let walls = |result: &Value| -> Vec<Value> {
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|outcome| outcome["object_id"]["local_id"].clone())
+            .collect()
+    };
+    assert!(!walls(&result).contains(&json!("#1100")), "{result:#}");
+}
+
+#[test]
 fn beam_supports_are_found_by_contact_with_geometry() {
     // The beam is a 300 mm square section here, so it meshes; the HEB
     // column #800 does not, so whether it touches the beam is undecided.

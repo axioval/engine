@@ -1604,13 +1604,14 @@ The well's height runs from its lowest bottom to its highest top, and selects th
 
 ### Structural members
 
-Rules on how structural members and walls are built read the reserved body set (`axioval:body`, see [IR](./ir.md#attribute-sets)): the source's own statement of how a body is modelled, never a mesh. They need no geometry service. A wall's allowed representation kinds, its extrusion along the vertical, and an empty wall are ordinary property rules over it:
+Rules on how structural members and walls are built read the reserved body set (`axioval:body`, see [IR](./ir.md#attribute-sets)): the source's own statement of how a body is modelled, never a mesh. They need no geometry service. A wall's allowed representation kinds, its extrusion along the vertical, and a wall without a body are ordinary property rules over it:
 
 | Check | Rule |
 |---|---|
 | Allowed representation kinds | `selector-conformance` or `property-value` on `axioval:body.Kinds` with `quantifier: all` and `oneOf`. |
 | Extruded along the vertical | `property-predicate` on `axioval:body.Extrusion.Inclination`, `less_or_equal` a small angle. |
-| Empty element (no body) | `property-required` on `axioval:body.Count`. |
+| Element without a body | `property-required` on `axioval:body.Count`. |
+| Empty wall: its face wholly voided by its openings | `empty-host`. |
 | Profile from a table | `allowed-profile`. |
 | Openings within their host, clear of its ends, edges, flanges and each other | `opening-zone`. |
 | Gross area equal to net area plus openings | `opening-area` on the stated gross and net side areas (with IFC, `Qto_WallBaseQuantities` `GrossSideArea` and `NetSideArea`). |
@@ -1732,6 +1733,8 @@ With `minimum_opening_area`, an opening's area in the face is its section's wher
 | `minimum_opening_area` | `quantity` | An area: openings smaller in the face are left out of the sum, as quantity rules leave small openings out of the net area. |
 
 A side area is measured on the host's middle plane, so each opening counts with the exact area of its section when it crosses that plane and not at all when it stops short of it (a recess). Its area is known only when it is one straight extrusion through the host of a rectangle, rounded rectangle, circle, ellipse or free outline lying in the face (not a hollow one; a free outline's voids are subtracted), wholly within the host's face and clear of the other openings' extents; the host is read as `opening-zone` reads it, and a host of a free outline must hold the opening inside that outline, not only inside the box around it. A mismatch is a finding on the host relating its openings (`its openings (#1130) cover 1.2 m² of its face, but its gross side area 15 m² less its net side area 15 m² is 0 m²; they must agree within 0.01 m²`). A host stating neither area is not checked; one stating only one, an opening it cannot place, openings that may overlap and an opening whose selection is undecided leave it not evaluated.
+
+`axioval:capability.empty-host` reports each selected host (a wall) whose openings void its whole face: a wall that is one opening, or openings side by side with no wall left between them. It takes `opening_path`, `opening_selector`, `length_axis`, `height_axis` and `minimum_opening_area` as `opening-area` does, and `area_tolerance`, the face area the openings may leave uncovered and still void it (0 m² by default). The openings are placed and summed exactly as `opening-area` sums them, on the middle plane and clear of each other. The face is the host's section across its middle plane: the length times the height of its box or, for a free outline crossed by the face, the outline's chord along the face at the middle of the host's thickness times its height (the outline's area, voids subtracted, when the face is the section itself). An empty host is a finding relating its openings (`host is empty: its openings (#40) void 15 m² of its 15 m² face`); a host with no openings is not empty. An opening it cannot place, openings that may overlap, an opening whose selection is undecided, or a free outline with an edge along the middle plane leave the host not evaluated.
 
 ### Model quality
 

@@ -58,6 +58,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   across the direction. Misses are graded findings relating the target.
   **Breaking:** the capability gains the optional `dimensions`, so a
   definition bound to it must declare it.
+- **Empty walls.** (#140) The new `empty-host` capability reports a host
+  whose openings void its whole face, less `area_tolerance`: a wall that is
+  one opening. It places and sums openings as `opening-area` does, small
+  ones left out below `minimum_opening_area`; the face is the host's box,
+  or its free outline's chord at the middle plane times its height. The
+  structural-member mapping of "empty wall" now names it, and
+  `property-required` on `axioval:body.Count` checks a wall without a body.
 - **Small openings ignored.** (#140) `opening-zone` and `opening-area`
   take `minimum_opening_area`: an opening whose area in the face is below
   it is ignored, neither judged, nor a neighbour or target, nor summed. An

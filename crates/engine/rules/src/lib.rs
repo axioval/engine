@@ -27,6 +27,7 @@ mod distance;
 mod door_swing;
 mod door_swing_direction;
 mod effective_coverage;
+mod empty_host;
 mod escape_route;
 mod exit_separation;
 mod external_wall_validation;
@@ -105,6 +106,7 @@ pub use counts::RelatedCount;
 pub use distance::Distance;
 pub use door_swing_direction::DoorSwing;
 pub use effective_coverage::EffectiveCoverage;
+pub use empty_host::EmptyHost;
 pub use escape_route::EscapeRoute;
 pub use exit_separation::ExitSeparation;
 pub use external_wall_validation::ExternalWallValidation;
@@ -226,5 +228,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(AllowedProfile))
         .and_then(|registry| registry.register(OpeningZone))
         .and_then(|registry| registry.register(OpeningArea))
+        .and_then(|registry| registry.register(EmptyHost))
         .map(|registry| registry.with_refiner(Refiner))
 }

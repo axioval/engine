@@ -162,6 +162,33 @@ impl Polygon {
         })
     }
 
+    /// How long the line through `at` along `along` (0 for X, 1 for Y)
+    /// runs inside the region; `None` when an edge runs along the line,
+    /// where inside and outside are undecided.
+    pub(crate) fn chord(&self, along: usize, at: f64) -> Option<f64> {
+        let across = 1 - along;
+        let mut crossings = Vec::new();
+        for (_, _, a, b) in self.indexed_edges() {
+            if (a[across] - at).abs() <= ROUNDING && (b[across] - at).abs() <= ROUNDING {
+                return None;
+            }
+            if (a[across] > at) != (b[across] > at) {
+                let t = (at - a[across]) / (b[across] - a[across]);
+                crossings.push(a[along] + t * (b[along] - a[along]));
+            }
+        }
+        crossings.sort_by(f64::total_cmp);
+        Some(
+            crossings
+                .chunks(2)
+                .map(|pair| match pair {
+                    [start, end] => end - start,
+                    _ => 0.0,
+                })
+                .sum(),
+        )
+    }
+
     /// Whether `point` lies inside the region: inside the outline and
     /// outside every void.
     fn contains(&self, point: Point) -> bool {
@@ -369,6 +396,19 @@ mod tests {
         .unwrap();
         assert_eq!(turned.l_shape().unwrap().web_zone, (0.0, 0.32));
         assert!(mitred().l_shape().is_none());
+    }
+
+    #[test]
+    fn a_chord_runs_inside_the_outline_and_outside_its_voids() {
+        close(mitred().chord(0, 0.1).unwrap(), 5.1);
+        let slab = Polygon::new(
+            vec![[0.0, 0.0], [4.0, 0.0], [4.0, 3.0], [0.0, 3.0]],
+            vec![vec![[1.0, 1.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]]],
+        )
+        .unwrap();
+        close(slab.chord(0, 1.5).unwrap(), 3.0);
+        close(slab.chord(1, 0.5).unwrap(), 3.0);
+        assert!(slab.chord(0, 1.0).is_none());
     }
 
     #[test]

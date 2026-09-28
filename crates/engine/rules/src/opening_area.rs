@@ -192,6 +192,9 @@ pub(crate) struct Voided {
     pub(crate) sum: f64,
     /// Every opening reached, small ones included.
     pub(crate) reached: Vec<ObjectId>,
+    /// The openings taking area from the middle plane.
+    pub(crate) counted: Vec<ObjectId>,
+    pub(crate) face: Host,
 }
 
 /// Places and sums the openings of `host`, leaving out those below the
@@ -248,7 +251,12 @@ pub(crate) fn voided(
             sum += area;
         }
     }
-    Ok(Voided { sum, reached })
+    Ok(Voided {
+        sum,
+        reached,
+        counted: placed.into_iter().map(|(id, _)| id).collect(),
+        face,
+    })
 }
 
 /// Checks one host; `Ok(None)` when it passes or is not checked.

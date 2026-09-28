@@ -660,6 +660,8 @@ occupants.
 | `occupants` | integer, required | the row covers loads up to this many occupants |
 | `width` | number, required | the least clear width of each exit, in metres |
 | `total_width` | number | the least width of all exits together |
+| `door_width` | number | the least clear width of each door on a route; required in every row by `route_door_selector` |
+| `total_door_width` | number | the least width of a space's own doors together; needs `door_path` and `door_selector` |
 | `passage_width` | number | the least clear width of each passage; required in every row by `passage_selector`, unless the passages only trace routes (`exit_count: routes`, `common_path_factor`) |
 
 | Column of `sections` | Kind | Meaning |
@@ -692,6 +694,7 @@ occupants.
 | `minimum_clear_height` | number | the least clear height, in metres, of every door, opening and space the walks cross, and of the space itself |
 | `clear_height_property`, `overall_height`, `lining_thickness`, `threshold_thickness` | property reference | a door's clear height as `keyed-limit`'s `clear-height` quantity reads it; need `minimum_clear_height` |
 | `common_path_factor` | number | at least 1: a metre of the common path counts this many times; needs a use stating `maximum_travel` |
+| `route_door_selector` | selector | the doors on routes whose loads are checked, as walked passages are; needs `door_path`, `door_selector`, a walking profile and `door_width` in every row |
 | `zones` | table | ranks of zones (`objects`, a selector; `rank`, an integer; `label`); every walk keeps out of what ranks above the start |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
@@ -835,6 +838,16 @@ occupants.
   where `passage_selector` picks it, as when declared. Each detour needs a
   backend that walks around objects (`avoids_objects`); one that does not,
   or refuses, proves no passage sure.
+
+- **Doors on routes** (`route_door_selector`): a second class of walked
+  passages. The doors a space's walks rely on are derived as walked
+  passages are (a door the walk starts from is relied on from it), and
+  each carries the summed occupants of every space relying on it, surely
+  at least and possibly at most, against the `door_width` of the rows
+  for that load. Its width is its `clear_width_property`, else no more
+  than its footprint's longest plan diagonal, as for exits. Separately,
+  `total_door_width` asks a space's own doors (`door_path`) together to
+  be that wide for its load, as `total_width` asks of its exits.
 
 Every measure is an interval, and a verdict stands only when what is
 unknown cannot change it. The travel is bounded from above through the exits

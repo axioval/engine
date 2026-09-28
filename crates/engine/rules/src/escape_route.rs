@@ -72,6 +72,12 @@
 //! walk. A passage carries its sure loads at least and its possible ones at
 //! most, and needs one space surely relying on it to be found too narrow.
 //!
+//! **Doors on routes.** With `route_door_selector`, the doors a space's
+//! walks rely on are derived as walked passages are and carry the summed
+//! loads, each needing the `door_width` of its load's rows; its width is
+//! the `clear_width_property`, else at most the footprint's diagonal.
+//! `total_door_width` asks a space's own doors together to be that wide.
+//!
 //! **Exit door direction.** With `exit_door_direction`, every exit door
 //! must open in the direction of escape: out of the space. Its leaves come
 //! from the object-frame service and which side the space lies on from the
@@ -160,6 +166,8 @@ const WIDTHS: &[TableColumn] = &[
     TableColumn::required("width", ColumnKind::Number),
     TableColumn::optional("total_width", ColumnKind::Number),
     TableColumn::optional("passage_width", ColumnKind::Number),
+    TableColumn::optional("door_width", ColumnKind::Number),
+    TableColumn::optional("total_door_width", ColumnKind::Number),
 ];
 
 const SECTIONS: &[TableColumn] = &[
@@ -207,6 +215,10 @@ struct WidthRow {
     total: Option<f64>,
     /// The least clear width of each passage.
     passage: Option<f64>,
+    /// The least clear width of each door on a route.
+    door: Option<f64>,
+    /// The least width of a space's own doors together.
+    total_door: Option<f64>,
 }
 
 /// One row of `sections`: objects on which a walked metre counts `factor`
@@ -270,6 +282,8 @@ struct Declaration<'a> {
     no_escape: Option<&'a Selector>,
     /// Whether `exits` counts independent routes rather than exits.
     count_routes: bool,
+    /// The doors on routes whose loads are checked.
+    route_doors: Option<&'a Selector>,
     /// How many times a metre of the common path counts, at least one.
     common_path: Option<f64>,
     /// Whether every single-swing door a walk crosses must open along it.
@@ -368,11 +382,15 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             .ok_or_else(|| invalid(format!("{name} has no `width`")))?;
         let total = positive(&name, "total_width", row.number("total_width")?)?;
         let passage = positive(&name, "passage_width", row.number("passage_width")?)?;
+        let door = positive(&name, "door_width", row.number("door_width")?)?;
+        let total_door = positive(&name, "total_door_width", row.number("total_door_width")?)?;
         widths.push(WidthRow {
             occupants,
             width,
             total,
             passage,
+            door,
+            total_door,
         });
     }
     widths.sort_by_key(|row| row.occupants);
@@ -464,6 +482,26 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         ));
     }
     let zones = zones(&parameters)?;
+    let route_doors = parameters.selector("route_door_selector")?;
+    if route_doors.is_some()
+        && (widths.is_empty()
+            || widths.iter().any(|row| row.door.is_none())
+            || doors.is_none()
+            || profile.is_none())
+    {
+        return Err(invalid(
+            "`route_door_selector` needs every row of `widths` to state `door_width`, and \
+             `door_path`, `door_selector`, `walking_height` and `walking_step`",
+        ));
+    }
+    if route_doors.is_none() && widths.iter().any(|row| row.door.is_some()) {
+        return Err(invalid("`door_width` needs `route_door_selector`"));
+    }
+    if doors.is_none() && widths.iter().any(|row| row.total_door.is_some()) {
+        return Err(invalid(
+            "`total_door_width` needs `door_path` and `door_selector`",
+        ));
+    }
     let route_door_direction = parameters.boolean("route_door_direction")?.unwrap_or(false);
     let minimum_height = positive(
         "`minimum_clear_height`",
@@ -520,6 +558,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
         no_escape: parameters.selector("no_escape_selector")?,
         count_routes,
+        route_doors,
         common_path,
         route_door_direction,
         minimum_height,
@@ -722,6 +761,7 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
             ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
             ParameterDescriptor::optional("exit_count", ParameterType::String),
+            ParameterDescriptor::optional("route_door_selector", ParameterType::Selector),
             ParameterDescriptor::optional("common_path_factor", ParameterType::Number),
             ParameterDescriptor::optional("route_door_direction", ParameterType::Boolean),
             ParameterDescriptor::optional("minimum_clear_height", ParameterType::Number),
@@ -766,6 +806,9 @@ impl RuleCapability for EscapeRoute {
             no_escape: declared
                 .no_escape
                 .map(|selector| Candidates::select(context, selector)),
+            route_doors: declared
+                .route_doors
+                .map(|selector| Candidates::select(context, selector)),
             compartments: declared
                 .compartments
                 .as_ref()
@@ -781,6 +824,7 @@ impl RuleCapability for EscapeRoute {
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
         judge.no_compartment(&spaces, &mut evaluation);
         let mut served = Served::default();
+        let mut served_doors = Served::default();
         let mut results: Vec<(ObjectId, String, Checked)> = Vec::new();
         for space in spaces {
             let matched =
@@ -802,6 +846,11 @@ impl RuleCapability for EscapeRoute {
                         "escape-route: no row of `uses` picks this space",
                     );
                     judge.serve(&space.id, Err("no row of `uses` picks it"), &mut served);
+                    judge.serve_doors(
+                        &space.id,
+                        Err("no row of `uses` picks it"),
+                        &mut served_doors,
+                    );
                     continue;
                 }
                 Matched::Undecided | Matched::Ambiguous(_) => {
@@ -814,6 +863,11 @@ impl RuleCapability for EscapeRoute {
                         &space.id,
                         Err("whether a row of `uses` picks it is undecided"),
                         &mut served,
+                    );
+                    judge.serve_doors(
+                        &space.id,
+                        Err("whether a row of `uses` picks it is undecided"),
+                        &mut served_doors,
                     );
                     continue;
                 }
@@ -828,6 +882,7 @@ impl RuleCapability for EscapeRoute {
             if let Some(doubt) = judge.serve(&space.id, load, &mut served) {
                 checked.doubts.push(doubt);
             }
+            judge.serve_doors(&space.id, load, &mut served_doors);
             results.push((
                 space.id.clone(),
                 format!("escape-route {}", use_.name),
@@ -847,7 +902,17 @@ impl RuleCapability for EscapeRoute {
                     &mut served,
                 );
             }
-            judge.judge_passages(served, &mut results);
+            judge.judge_passages(served, Class::Passage, &mut results);
+        }
+        if judge.route_doors.is_some() {
+            for space in Candidates::select(context, &rule.selector).undecided.keys() {
+                judge.serve_doors(
+                    space,
+                    Err("whether the rule selects it is undecided"),
+                    &mut served_doors,
+                );
+            }
+            judge.judge_passages(served_doors, Class::Door, &mut results);
         }
         for (subject, prefix, checked) in results {
             emit(&mut evaluation, subject, &prefix, checked);
@@ -1149,6 +1214,8 @@ impl Avoid {
 struct Required {
     each: (f64, f64),
     total: Option<(f64, f64)>,
+    /// Of a space's own doors together.
+    total_door: Option<(f64, f64)>,
 }
 
 /// A stated or bounded exit width.
@@ -1335,6 +1402,8 @@ struct Judge<'r, 'c> {
     passages: Option<Candidates<'c>>,
     /// Objects not usable for escape.
     no_escape: Option<Candidates<'c>>,
+    /// The doors on routes whose loads are checked.
+    route_doors: Option<Candidates<'c>>,
     /// Every compartment.
     compartments: Option<Candidates<'c>>,
     /// Per row of `zones`, what it picks.
@@ -1343,6 +1412,22 @@ struct Judge<'r, 'c> {
     membership: RefCell<BTreeMap<ObjectId, Result<Assigned, Unavailable>>>,
     /// Walks already measured: travel and walked passages share them.
     walks: RefCell<BTreeMap<WalkKey, Result<Travel, Unavailable>>>,
+}
+
+/// What a relied-on object is: a passage, or a door on a route.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Class {
+    Passage,
+    Door,
+}
+
+impl Class {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Passage => "passage",
+            Self::Door => "door",
+        }
+    }
 }
 
 /// What bounds a clear width from above where none is stated.
@@ -1939,32 +2024,7 @@ impl Judge<'_, '_> {
         }
         if declared.walked {
             let walked = self.walked(space, candidates);
-            let empty = Vec::new();
-            for (passage, proof) in walked
-                .sure
-                .iter()
-                .map(|(passage, proof)| (passage, Some(proof)))
-                .chain(walked.perhaps.iter().map(|passage| (passage, None)))
-            {
-                let reliance = served.passages.entry(passage.clone()).or_default();
-                match (load, proof) {
-                    (Ok(load), Some(_)) => {
-                        reliance.least += load.least;
-                        reliance.most += load.most;
-                        reliance.evidence.push(load.area.evidence().clone());
-                    }
-                    (Ok(load), None) => reliance.most += load.most,
-                    (Err(why), _) => reliance.unbounded.push(format!("{space}: {why}")),
-                }
-                if proof.is_some() {
-                    reliance.spaces.push(space.clone());
-                } else {
-                    reliance.perhaps.push(space.clone());
-                }
-                reliance
-                    .evidence
-                    .extend(proof.unwrap_or(&empty).iter().cloned());
-            }
+            Self::rely(space, load, &walked, served);
             return None;
         }
         let mut reached = Vec::new();
@@ -2002,6 +2062,45 @@ impl Judge<'_, '_> {
             reliance.evidence.extend(evidence.iter().cloned());
         }
         None
+    }
+
+    /// Adds `space`'s load to every object its walks rely on: surely to
+    /// the least and most, perhaps to the most only.
+    fn rely(space: &ObjectId, load: Result<&Load, &str>, walked: &Walked, served: &mut Served) {
+        let empty = Vec::new();
+        for (passage, proof) in walked
+            .sure
+            .iter()
+            .map(|(passage, proof)| (passage, Some(proof)))
+            .chain(walked.perhaps.iter().map(|passage| (passage, None)))
+        {
+            let reliance = served.passages.entry(passage.clone()).or_default();
+            match (load, proof) {
+                (Ok(load), Some(_)) => {
+                    reliance.least += load.least;
+                    reliance.most += load.most;
+                    reliance.evidence.push(load.area.evidence().clone());
+                }
+                (Ok(load), None) => reliance.most += load.most,
+                (Err(why), _) => reliance.unbounded.push(format!("{space}: {why}")),
+            }
+            if proof.is_some() {
+                reliance.spaces.push(space.clone());
+            } else {
+                reliance.perhaps.push(space.clone());
+            }
+            reliance
+                .evidence
+                .extend(proof.unwrap_or(&empty).iter().cloned());
+        }
+    }
+
+    /// Adds `space`'s occupants to every door on a route its walks rely on.
+    fn serve_doors(&self, space: &ObjectId, load: Result<&Load, &str>, served: &mut Served) {
+        if let Some(candidates) = self.route_doors.as_ref() {
+            let walked = self.walked(space, candidates);
+            Self::rely(space, load, &walked, served);
+        }
     }
 
     /// The passages `space`'s occupants rely on, from the walks out of its
@@ -2093,6 +2192,10 @@ impl Judge<'_, '_> {
         let Some(walk) = self.witness(routes, profile, door, escape) else {
             return (sure, all.clone());
         };
+        // Every walk from a door starts in it.
+        if all.contains(door) {
+            sure.insert(door.clone(), walk.evidence.clone());
+        }
         let crossed = Self::crossed(routes, &walk, all);
         let targets: Vec<&ObjectId> = escape
             .targets
@@ -2234,15 +2337,20 @@ impl Judge<'_, '_> {
 
     /// Judges every passage a checked space reaches, adding the outcome to
     /// that of the passage where it is a checked space itself.
-    fn judge_passages(&self, served: Served, results: &mut Vec<(ObjectId, String, Checked)>) {
+    fn judge_passages(
+        &self,
+        served: Served,
+        class: Class,
+        results: &mut Vec<(ObjectId, String, Checked)>,
+    ) {
         for (passage, reliance) in served.passages {
             let mut checked = Checked::default();
-            self.passage(&passage, &reliance, &served.anywhere, &mut checked);
+            self.passage(&passage, class, &reliance, &served.anywhere, &mut checked);
             if let Some((_, _, own)) = results.iter_mut().find(|(id, _, _)| *id == passage) {
                 own.findings.extend(checked.findings);
                 own.doubts.extend(checked.doubts);
             } else {
-                results.push((passage, "escape-route passage".to_owned(), checked));
+                results.push((passage, format!("escape-route {}", class.noun()), checked));
             }
         }
     }
@@ -2251,14 +2359,27 @@ impl Judge<'_, '_> {
     fn passage(
         &self,
         passage: &ObjectId,
+        class: Class,
         reliance: &Reliance,
         anywhere: &[String],
         checked: &mut Checked,
     ) {
-        let (Some(declared), Some(candidates)) =
-            (self.declared.passages.as_ref(), self.passages.as_ref())
-        else {
-            return;
+        let noun = class.noun();
+        let (candidates, property, bound) = match class {
+            Class::Passage => {
+                let (Some(declared), Some(candidates)) =
+                    (self.declared.passages.as_ref(), self.passages.as_ref())
+                else {
+                    return;
+                };
+                (candidates, declared.width, Bound::ShortSide)
+            }
+            Class::Door => {
+                let Some(candidates) = self.route_doors.as_ref() else {
+                    return;
+                };
+                (candidates, self.declared.clear_width, Bound::Diagonal)
+            }
         };
         let unknown: Vec<&str> = reliance
             .unbounded
@@ -2268,7 +2389,7 @@ impl Judge<'_, '_> {
             .collect();
         if !unknown.is_empty() {
             checked.doubts.push(incomplete(format!(
-                "the occupants relying on passage {passage} are unknown: {}",
+                "the occupants relying on {noun} {passage} are unknown: {}",
                 unknown.join("; ")
             )));
             return;
@@ -2276,10 +2397,13 @@ impl Judge<'_, '_> {
         let (least, most) = (reliance.least, reliance.most);
         let required = self.rows(least, most).and_then(|rows| {
             rows.iter()
-                .map(|row| row.passage)
+                .map(|row| match class {
+                    Class::Passage => row.passage,
+                    Class::Door => row.door,
+                })
                 .collect::<Option<Vec<f64>>>()
                 .map(|widths| span(widths.into_iter()))
-                .ok_or_else(|| "a row of `widths` states no `passage_width`".to_owned())
+                .ok_or_else(|| format!("a row of `widths` states no `{noun}_width`"))
         });
         let (low, high) = match required {
             Ok(required) => required,
@@ -2304,42 +2428,45 @@ impl Judge<'_, '_> {
             occupants(least, most),
             shown(low, high)
         );
-        let (what, cited) = match self.width(passage, declared.width, Bound::ShortSide) {
+        let bounded_by = match bound {
+            Bound::ShortSide => "the shorter side of the rectangle enclosing its footprint",
+            Bound::Diagonal => "its whole footprint's longest plan diagonal",
+        };
+        let (what, cited) = match self.width(passage, property, bound) {
             Width::Stated(width, cited) if width < low => (
-                format!("passage {passage} is {width} m wide (stated clear width)"),
+                format!("{noun} {passage} is {width} m wide (stated clear width)"),
                 cited,
             ),
             Width::Stated(width, _) if width >= high => return,
             Width::Stated(width, _) => {
                 checked.doubts.push(incomplete(format!(
-                    "passage {passage} is {width} m wide, and {basis}"
+                    "{noun} {passage} is {width} m wide, and {basis}"
                 )));
                 return;
             }
             Width::AtMost(bound, cited) if bound < low => (
                 format!(
-                    "passage {passage} is at most {} m wide (the shorter side of the rectangle \
-                     enclosing its footprint)",
+                    "{noun} {passage} is at most {} m wide ({bounded_by})",
                     shown(bound, bound)
                 ),
                 vec![cited],
             ),
             Width::AtMost(..) => {
                 checked.doubts.push(incomplete(format!(
-                    "the clear width of passage {passage} is not stated, and {basis}"
+                    "the clear width of {noun} {passage} is not stated, and {basis}"
                 )));
                 return;
             }
             Width::Unknown(why) => {
                 checked.doubts.push(incomplete(format!(
-                    "the width of passage {passage} is unknown: {why}"
+                    "the width of {noun} {passage} is unknown: {why}"
                 )));
                 return;
             }
         };
         if let Some(why) = candidates.undecided.get(passage) {
             checked.doubts.push(incomplete(format!(
-                "whether {passage} is a passage is undecided ({why}), and it may be too narrow"
+                "whether {passage} is a {noun} is undecided ({why}), and it may be too narrow"
             )));
             return;
         }
@@ -2893,20 +3020,28 @@ impl Judge<'_, '_> {
     /// state it.
     fn required_width(&self, least: u64, most: u64) -> Result<Required, String> {
         let rows = self.rows(least, most)?;
-        let totals: Vec<f64> = rows.iter().filter_map(|row| row.total).collect();
-        let total = if totals.is_empty() {
-            None
-        } else if totals.len() == rows.len() {
-            Some(span(totals.into_iter()))
-        } else {
-            return Err(format!(
-                "the rows of `widths` for {least} to {most} occupants state `total_width` \
-                 only in part"
-            ));
+        let together = |column: &str, totals: Vec<f64>| {
+            if totals.is_empty() {
+                Ok(None)
+            } else if totals.len() == rows.len() {
+                Ok(Some(span(totals.into_iter())))
+            } else {
+                Err(format!(
+                    "the rows of `widths` for {least} to {most} occupants state `{column}` \
+                     only in part"
+                ))
+            }
         };
         Ok(Required {
             each: span(rows.iter().map(|row| row.width)),
-            total,
+            total: together(
+                "total_width",
+                rows.iter().filter_map(|row| row.total).collect(),
+            )?,
+            total_door: together(
+                "total_door_width",
+                rows.iter().filter_map(|row| row.total_door).collect(),
+            )?,
         })
     }
 
@@ -2990,7 +3125,22 @@ impl Judge<'_, '_> {
         }
         if let Some(total) = required.total {
             let widths = (sure.as_slice(), maybe.as_slice());
-            self.total_width(space, use_, &occupants, area, total, exits, widths, checked);
+            self.total_width(
+                space, use_, &occupants, area, total, exits, widths, "exit", checked,
+            );
+        }
+        if let Some(total) = required.total_door {
+            match self.start_doors(&space.id) {
+                Ok(doors) => {
+                    let sure: Vec<Width> = doors.sure.iter().map(width).collect();
+                    let maybe: Vec<Width> = doors.maybe.iter().map(width).collect();
+                    let widths = (sure.as_slice(), maybe.as_slice());
+                    self.total_width(
+                        space, use_, &occupants, area, total, &doors, widths, "door", checked,
+                    );
+                }
+                Err(unavailable) => checked.doubts.push(unavailable),
+            }
         }
     }
 
@@ -3005,6 +3155,7 @@ impl Judge<'_, '_> {
         (least_total, most_total): (f64, f64),
         exits: &Reached,
         (sure, maybe): (&[Width], &[Width]),
+        noun: &str,
         checked: &mut Checked,
     ) {
         // Together the sure exits are at least as wide as their stated
@@ -3025,7 +3176,7 @@ impl Judge<'_, '_> {
             })
             .sum();
         let together = format!(
-            "{occupants} require at least {} m of exit width together ({})",
+            "{occupants} require at least {} m of {noun} width together ({})",
             shown(least_total, most_total),
             use_.name
         );
@@ -3043,7 +3194,7 @@ impl Judge<'_, '_> {
                 self.rule,
                 &space.id,
                 format!(
-                    "its {} exit(s) are at most {} m wide together; {together}",
+                    "its {} {noun}(s) are at most {} m wide together; {together}",
                     sure.len() + maybe.len(),
                     shown(bound, bound)
                 ),
@@ -3052,7 +3203,7 @@ impl Judge<'_, '_> {
             ));
         } else if stated < most_total {
             checked.doubts.push(incomplete(format!(
-                "its exits are {} m wide together by their stated widths, and {together}",
+                "its {noun}s are {} m wide together by their stated widths, and {together}",
                 shown(stated, stated)
             )));
         }

@@ -2433,3 +2433,148 @@ fn a_shared_stretch_counts_by_the_common_path_factor() {
         "{evaluation:?}"
     );
 }
+
+/// Rooms `r1` to `r3` (40 m² each) leave by their doors `d1` to `d3`
+/// towards exit `x1`, 2 m wide, through corridor door `cd`.
+fn three_rooms_through_one_door() -> Model {
+    let mut model = Model::default()
+        .object("x1", "exit")
+        .object("cd", "corridor door")
+        .value("x1", "Access", "ClearWidth", metres(2.0));
+    for room in 1..=3 {
+        let (space, door) = (format!("r{room}"), format!("d{room}"));
+        model = model
+            .object(&space, "space")
+            .object(&door, "door")
+            .edge("bounds", &door, &space)
+            .edge("serves", "x1", &space);
+    }
+    model
+}
+
+fn door_widths(rows: &[(i64, f64, &str, f64)]) -> (&'static str, ParameterValue) {
+    (
+        "widths",
+        ParameterValue::Table {
+            value: rows
+                .iter()
+                .map(|(occupants, width, column, value)| {
+                    [
+                        ("occupants".to_owned(), integer(*occupants)),
+                        ("width".to_owned(), number(*width)),
+                        ((*column).to_owned(), number(*value)),
+                    ]
+                    .into_iter()
+                    .collect()
+                })
+                .collect(),
+        },
+    )
+}
+
+#[test]
+fn a_corridor_door_carrying_three_rooms_is_as_wide_as_all_their_occupants_need() {
+    let run = |width: f64| {
+        let mut geometry = Geometry::default();
+        for room in 1..=3 {
+            let door = format!("d{room}");
+            geometry = geometry
+                .area(&format!("r{room}"), 40.0, 40.0)
+                .walk(&door, "x1", Walk::Between(10.0, 10.0))
+                .trace(&door, "cd", 1.0)
+                .detour(&door, "x1", "cd", Walk::Unreachable);
+        }
+        three_rooms_through_one_door()
+            .value("cd", "Access", "ClearWidth", metres(width))
+            .evaluate_with(
+                &EscapeRoute,
+                &rule(
+                    CAPABILITY,
+                    kind("space"),
+                    with(
+                        doors_and_exits(),
+                        vec![
+                            uses(&[("area_per_occupant", number(1.0))]),
+                            door_widths(&[
+                                (60, 0.9, "door_width", 0.9),
+                                (200, 1.2, "door_width", 1.2),
+                            ]),
+                            ("route_door_selector", selector(kind("corridor door"))),
+                        ],
+                    ),
+                ),
+                |services| geometry.register(services),
+            )
+    };
+    // 120 occupants need 1.2 m, though each room's 40 alone need 0.9 m.
+    let evaluation = run(0.9);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "cd".into(),
+            format!(
+                "door {} is 0.9 m wide (stated clear width); 120 occupant(s) relying on it \
+                 (from {}, {}, {}) require at least 1.2 m",
+                id("cd"),
+                id("r1"),
+                id("r2"),
+                id("r3")
+            )
+        )]
+    );
+    assert_eq!(
+        evaluation.findings()[0].related,
+        vec![id("r1"), id("r2"), id("r3")]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    let evaluation = run(1.2);
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+}
+
+#[test]
+fn a_rooms_own_doors_together_are_as_wide_as_its_occupants_need() {
+    // 150 occupants need 1.8 m of door width together; two 0.8 m doors
+    // give 1.6 m.
+    let evaluation = Model::default()
+        .object("r1", "space")
+        .object("d1", "door")
+        .object("d2", "door")
+        .object("x1", "exit")
+        .edge("bounds", "d1", "r1")
+        .edge("bounds", "d2", "r1")
+        .edge("serves", "x1", "r1")
+        .value("x1", "Access", "ClearWidth", metres(2.0))
+        .value("d1", "Access", "ClearWidth", metres(0.8))
+        .value("d2", "Access", "ClearWidth", metres(0.8))
+        .evaluate_with(
+            &EscapeRoute,
+            &rule(
+                CAPABILITY,
+                kind("space"),
+                with(
+                    doors_and_exits(),
+                    vec![
+                        uses(&[("area_per_occupant", number(1.0))]),
+                        door_widths(&[(200, 0.9, "total_door_width", 1.8)]),
+                    ],
+                ),
+            ),
+            |services| {
+                Geometry::default()
+                    .area("r1", 150.0, 150.0)
+                    .register(services);
+            },
+        );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "r1".into(),
+            "its 2 door(s) are at most 1.6 m wide together; 150 occupant(s) require at least \
+             1.8 m of door width together (use 0)"
+                .into()
+        )]
+    );
+}

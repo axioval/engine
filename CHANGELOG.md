@@ -3093,6 +3093,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IDS `ifcVersion` is metadata.** (Refs #116) The staging IDS importer
+  names every concept in the type systems of all three IFC releases IDS
+  names, whichever a specification lists, so an `IFC2X3` specification
+  checks an `IFC4` model as IDS does (the buildingSMART case
+  "specification version is purely metadata"), instead of leaving it not
+  evaluated as an unbound concept. A class some release lacks matches
+  nothing in its models; one no release defines is still a gap
+  (`Reason::UnknownEntity` now carries the class only). The IFC2X3 type
+  mapping applies to every specification, in IFC2X3 sources only.
+  Concepts are shared across specifications whatever releases they list.
+
 - **Breaking:** the workspace requires `ifc-properties` 0.5.1,
   `ifc-classification` 0.2.2, `ifc-systems` 0.2.2 and `openbim-ifc` 0.8.1.
   A property request naming a type object (`IfcWallType`, IFC2X3

@@ -4,13 +4,12 @@
 use axioval::default_registry;
 use axioval::engine::{Runtime, compile};
 use axioval::ifc::import_ifc_session;
+use axioval::ir::Report;
 use axioval::ir::contract::{ParameterValue, RuleApplicability, Selector};
-use axioval::ir::{NotEvaluatedReason, Report};
 use axioval_ids::{
     IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, Options, OptionsError, Part, Reason,
     Translation, translate,
 };
-use openbim_ids::IfcVersion;
 
 const HEADER: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd"><info><title>T</title><author>a@b.org</author></info><specifications>"#;
 
@@ -139,7 +138,11 @@ fn a_presence_requirement_becomes_a_property_required_rule() {
         .iter()
         .map(|name| name.type_system.as_str())
         .collect();
-    assert_eq!(systems, [IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM]);
+    // Named in every release, whichever the specification lists.
+    assert_eq!(
+        systems,
+        [IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM]
+    );
 }
 
 #[test]
@@ -300,13 +303,7 @@ fn only_classes_a_model_session_checks_are_applicable() {
     );
     assert_eq!(
         gap("IFC4", "IFCNOSUCHTHING"),
-        Some((
-            true,
-            Reason::UnknownEntity {
-                entity: "IFCNOSUCHTHING".into(),
-                release: IfcVersion::Ifc4
-            }
-        ))
+        Some((true, Reason::UnknownEntity("IFCNOSUCHTHING".into())))
     );
 }
 
@@ -581,7 +578,11 @@ fn ifc4x3_specifications_check_ifc4x3_models() {
         .values()
         .next()
         .unwrap();
-    assert_eq!(wall.external_names[0].type_system, IFC4X3_TYPE_SYSTEM);
+    assert!(
+        wall.external_names
+            .iter()
+            .any(|name| name.type_system == IFC4X3_TYPE_SYSTEM)
+    );
     // IFC4X3 has no IfcWallStandardCase.
     let model = IFC4_MODEL
         .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))")
@@ -608,16 +609,16 @@ fn ifc4x3_specifications_check_ifc4x3_models() {
 }
 
 #[test]
-fn concepts_are_shared_within_a_release_set_and_split_across_them() {
+fn concepts_are_shared_whichever_releases_are_listed() {
     let translation = translate_all(&[
         specification("IFC4", OPTIONAL, WALL, &property("P", "N", "")),
         specification("IFC4", OPTIONAL, WALL, &property("P", "N", "")),
         specification("IFC2X3 IFC4", OPTIONAL, WALL, &property("P", "N", "")),
     ]);
-    // One wall, property and set per release set.
-    assert_eq!(translation.definitions.object_types.len(), 2);
-    assert_eq!(translation.definitions.properties.len(), 2);
-    assert_eq!(translation.definitions.property_sets.len(), 2);
+    // One wall, property and set: the listed releases are metadata.
+    assert_eq!(translation.definitions.object_types.len(), 1);
+    assert_eq!(translation.definitions.properties.len(), 1);
+    assert_eq!(translation.definitions.property_sets.len(), 1);
     assert_eq!(translation.definitions.definitions.len(), 1);
 }
 
@@ -914,7 +915,9 @@ fn value_rules_check_a_real_model() {
 }
 
 #[test]
-fn a_rule_for_another_release_is_not_evaluated_never_passed() {
+fn the_listed_releases_are_metadata() {
+    // An IFC2X3 specification checks an IFC4 model as IDS does: #2 has no
+    // FireRating.
     let translation = one(
         "IFC2X3",
         OPTIONAL,
@@ -922,14 +925,40 @@ fn a_rule_for_another_release_is_not_evaluated_never_passed() {
         &property("Pset_WallCommon", "FireRating", ""),
     );
     let report = run(&translation, IFC4_MODEL);
-    assert!(report.findings().is_empty());
-    assert!(!report.not_evaluated().is_empty());
     assert!(
-        report
-            .not_evaluated()
-            .iter()
-            .all(|outcome| outcome.reason == NotEvaluatedReason::UnboundConcept)
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
     );
+    let flagged: Vec<&str> = report
+        .findings()
+        .iter()
+        .filter_map(|finding| finding.object_id())
+        .map(|id| id.local_id.as_str())
+        .collect();
+    assert_eq!(flagged, ["#2"]);
+    // A class IFC4X3 lacks matches nothing in an IFC4X3 model: a required
+    // specification over it fails the model, never an object.
+    let translation = one(
+        "IFC4",
+        "",
+        "<entity><name><simpleValue>IFCWALLSTANDARDCASE</simpleValue></name></entity>",
+        &property("Pset_WallCommon", "FireRating", ""),
+    );
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let model = IFC4_MODEL.replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
+    let model = model.replace(
+        "#3=IFCWALLSTANDARDCASE('0000000000000000000003',$,$,$,$,$,$,$,$);\n",
+        "",
+    );
+    let report = run(&translation, &model);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    assert_eq!(report.findings().len(), 1);
+    assert!(report.findings()[0].object_id().is_none());
 }
 
 /// A project, site, building and storey aggregated in a chain, and three

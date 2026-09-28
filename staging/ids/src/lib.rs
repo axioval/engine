@@ -56,7 +56,7 @@
 //! - In IFC2X3 a class the IDS type mapping table renames (`IFCAIRTERMINAL`)
 //!   is its occurrence class typed, through `IfcRelDefinesByType`, by a type
 //!   object of its type class (`IFCFLOWTERMINAL` by `IFCAIRTERMINALTYPE`);
-//!   with another release listed too, only in an IFC2X3 source.
+//!   in an IFC2X3 source only, since other releases define the class itself.
 //! - Entity, material, part-of and name-restricted attribute requirements
 //!   become `selector-conformance` with the facet's selector, negated when
 //!   prohibited. A material value is tested against the material set's
@@ -82,11 +82,12 @@
 //!
 //! # Releases
 //!
-//! A specification's concepts are named only in the type systems of the IFC
-//! releases it lists, so a rule for an IFC4-only specification cannot bind to
-//! an IFC2X3 model: the engine reports it as not evaluated
-//! (`InvalidDeclaration`) rather than applying it. `IFC4X3_ADD2` has no type
-//! system any Axioval adapter declares and is reported as a gap.
+//! `@ifcVersion` is metadata and never changes a verdict, as the
+//! buildingSMART test cases require: every concept is named in the type
+//! systems of all three releases IDS names (IFC2X3, IFC4, IFC4X3_ADD2),
+//! so an IFC2X3 specification checks an IFC4 model. A class some release
+//! lacks matches nothing in its models, as in IDS; one no release defines
+//! is a gap.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -276,13 +277,8 @@ pub enum Reason {
     /// resources (a material, a classification) a model session does not
     /// check.
     WithoutEntity,
-    /// An applicability class the release does not define.
-    UnknownEntity {
-        /// The class as written.
-        entity: String,
-        /// The release that lacks it.
-        release: IfcVersion,
-    },
+    /// A class no IFC release IDS names defines.
+    UnknownEntity(String),
     /// An applicability or part-of class whose instances are neither
     /// `IfcObject` occurrences, `IfcContext`s nor `IfcTypeObject`s (a
     /// resource), which an IFC session does not make project objects of.
@@ -340,8 +336,8 @@ impl fmt::Display for Reason {
             Reason::WithoutEntity => f.write_str(
                 "an applicability without an entity facet also covers resources, which a model session does not check",
             ),
-            Reason::UnknownEntity { entity, release } => {
-                write!(f, "{release} defines no entity {entity}")
+            Reason::UnknownEntity(entity) => {
+                write!(f, "no IFC release IDS names defines an entity {entity}")
             }
             Reason::NotAnObject(entity) => write!(
                 f,
@@ -1115,27 +1111,23 @@ impl<'o> Writer<'o> {
                     selector: Box::new(self.class(type_object, releases)),
                 },
             ]);
-            if releases == [IfcVersion::Ifc2x3] {
-                operands.push(typed);
-            } else {
-                // Another release defines the class itself, and there the
-                // occurrence class is no such object: the mapping holds for
-                // IFC2X3 models only.
-                operands.push(own);
-                operands.push(all_of(vec![
-                    Selector::Source {
-                        field: SourceField::Schema,
-                        operator: ComparisonOperator::Equals,
-                        value: Some(ParameterValue::String {
-                            value: "IFC2X3".to_owned(),
-                        }),
-                        case_sensitive: true,
-                        trim: false,
-                        quantifier: None,
-                    },
-                    typed,
-                ]));
-            }
+            // Another release defines the class itself, and there the
+            // occurrence class is no such object: the mapping holds for
+            // IFC2X3 models only.
+            operands.push(own);
+            operands.push(all_of(vec![
+                Selector::Source {
+                    field: SourceField::Schema,
+                    operator: ComparisonOperator::Equals,
+                    value: Some(ParameterValue::String {
+                        value: "IFC2X3".to_owned(),
+                    }),
+                    case_sensitive: true,
+                    trim: false,
+                    quantifier: None,
+                },
+                typed,
+            ]));
             if !classes.iter().any(|class| class == occurrence) {
                 classes.push(occurrence.to_owned());
             }
@@ -1913,14 +1905,15 @@ fn forbidden_row(set: String, name: String) -> TableRow {
     ])
 }
 
-/// The supported releases, recording a gap for each unsupported one.
+/// The releases a specification is checked in: every supported release
+/// IDS names, whichever it lists, since `@ifcVersion` is metadata that
+/// does not change a verdict (the buildingSMART case "specification version
+/// is purely metadata"). A listed release no adapter reads is still a gap.
 fn releases(specification: &Specification, gaps: &mut Vec<Gap>) -> Vec<IfcVersion> {
-    let mut supported = Vec::new();
+    let mut listed = false;
     for release in &specification.ifc_versions {
         if type_system(*release).is_some() {
-            if !supported.contains(release) {
-                supported.push(*release);
-            }
+            listed = true;
         } else {
             gaps.push(Gap {
                 part: Part::Releases,
@@ -1928,14 +1921,16 @@ fn releases(specification: &Specification, gaps: &mut Vec<Gap>) -> Vec<IfcVersio
             });
         }
     }
-    supported.sort_unstable();
-    if supported.is_empty() {
+    if !listed {
         gaps.push(Gap {
             part: Part::Releases,
             reason: Reason::NoSupportedRelease,
         });
     }
-    supported
+    IfcVersion::ALL
+        .into_iter()
+        .filter(|release| type_system(*release).is_some())
+        .collect()
 }
 
 /// The type system a release binds to, `None` for one the IFC adapter
@@ -1987,13 +1982,18 @@ fn occurrence(specification: &Specification) -> Option<Check> {
 /// An IFC session makes a project object of every `IfcObject` occurrence,
 /// `IfcContext` (an IFC4 `IfcProject`) and `IfcTypeObject`, and of nothing
 /// else. A rule over a resource would select nothing and pass silently, so
-/// such a class, and one the release does not define, is a gap. A class a
-/// pattern matched need only exist in one release.
+/// such a class is a gap, and so is one no release defines. A class some
+/// release lacks matches nothing in its models, as in IDS.
 fn occurrences(
     names: Vec<String>,
     releases: &[IfcVersion],
     matched: bool,
 ) -> Result<Vec<String>, Reason> {
+    if !matched {
+        if let Some(unknown) = names.iter().find(|name| !defined(name, &names, releases)) {
+            return Err(Reason::UnknownEntity(unknown.clone()));
+        }
+    }
     for release in releases {
         let Some(schema) = schema(*release) else {
             continue;
@@ -2001,13 +2001,7 @@ fn occurrences(
         for name in &names {
             let name = in_release(name, &names, releases, *release);
             if schema.entity(name).is_none() {
-                if matched {
-                    continue;
-                }
-                return Err(Reason::UnknownEntity {
-                    entity: name.to_owned(),
-                    release: *release,
-                });
+                continue;
             }
             if !checked(schema, name) {
                 return Err(Reason::NotAnObject(name.to_owned()));
@@ -2029,6 +2023,17 @@ fn in_release<'a>(
         Some((occurrence, _)) if release == IfcVersion::Ifc2x3 => occurrence,
         _ => name,
     }
+}
+
+/// Whether some release defines `name`, or the class it stands for there.
+fn defined(name: &str, names: &[String], releases: &[IfcVersion]) -> bool {
+    releases.iter().any(|release| {
+        schema(*release).is_some_and(|schema| {
+            schema
+                .entity(in_release(name, names, releases, *release))
+                .is_some()
+        })
+    })
 }
 
 /// Whether an IFC session makes project objects of `name`'s instances:
@@ -2099,13 +2104,10 @@ fn whole_names(
             };
             let name = in_release(named, &names, releases, *release).to_owned();
             if schema.entity(&name).is_none() {
-                if pattern_named(entity) {
+                if pattern_named(entity) || defined(named, &names, releases) {
                     continue;
                 }
-                return Err(Reason::UnknownEntity {
-                    entity: name,
-                    release: *release,
-                });
+                return Err(Reason::UnknownEntity(name));
             }
             let accepts = relationships.iter().any(|relationship| {
                 let end = schema

@@ -11412,3 +11412,160 @@ fn an_auxiliary_rule_chooses_the_walls_another_checks_and_reports_nothing() {
     );
     assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
 }
+
+/// The storey-metric definitions with `quantity-takeoff` as
+/// `axioval:example.takeoff` and the concept `Name`.
+fn takeoff_definitions(case: &Case) -> PathBuf {
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(storey_metric_definitions(case)).unwrap())
+            .unwrap();
+    definitions["properties"]["axioval:example.ifc.Name"] = json!({
+        "id": "axioval:example.ifc.Name", "name": text("Name"), "valueKind": "string",
+        "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Name"}], "citations": []});
+    let mut parameters = serde_json::Map::new();
+    let mut declare = |id: String, kind: &str| {
+        let declared = json!({"id": id, "name": text(&id), "kind": kind, "required": false,
+                              "allowedValues": [], "citations": []});
+        parameters.insert(id, declared);
+    };
+    for n in 1..=3 {
+        declare(format!("group_{n}"), "propertyReference");
+        declare(format!("group_{n}_path"), "stringList");
+        declare(format!("group_{n}_name"), "string");
+    }
+    for n in 1..=4 {
+        declare(format!("measure_{n}"), "propertyReference");
+        declare(format!("measure_{n}_aggregates"), "stringList");
+        declare(format!("measure_{n}_name"), "string");
+    }
+    declare("across_sources".to_owned(), "boolean");
+    definitions["definitions"]["axioval:example.takeoff"] = json!({
+        "id": "axioval:example.takeoff", "name": text("takeoff"), "description": text("takeoff"),
+        "capability": "axioval:capability.quantity-takeoff", "parameters": parameters,
+        "citations": [], "tags": []});
+    case.write("definitions.json", &definitions.to_string())
+}
+
+/// One rule taking off walls by storey (the name of the storey containing
+/// them) with their summed footprints.
+fn takeoff_ruleset(case: &Case) -> PathBuf {
+    let text_file = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text_file).unwrap();
+    let mut rule = ruleset["root"]["rules"][0].clone();
+    rule["id"] = json!("wall-takeoff");
+    rule["definitionId"] = json!("axioval:example.takeoff");
+    rule["applicability"]["groups"]["walls"]["selector"] = json!({
+        "kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true});
+    rule["parameters"] = json!({
+        "group_1": {"type": "propertyReference", "propertySet": "axioval:attributes",
+                    "property": "axioval:example.ifc.Name"},
+        "group_1_path": {"type": "stringList",
+                         "value": ["IfcRelContainedInSpatialStructure:backward"]},
+        "group_1_name": {"type": "string", "value": "storey"},
+        "measure_1": {"type": "propertyReference", "propertySet": "axioval:measured",
+                      "property": "area"},
+        "measure_1_name": {"type": "string", "value": "footprint"},
+    });
+    ruleset["root"]["rules"] = json!([rule]);
+    case.write("ruleset.json", &ruleset.to_string())
+}
+
+/// Walls taken off per storey with their measured footprints: the grouped
+/// table is saved, listed with its groups and exported as CSV.
+#[test]
+fn a_quantity_takeoff_is_listed_by_group_and_exported_as_csv() {
+    let case = Case::new("quantity-takeoff");
+    let definitions = takeoff_definitions(&case);
+
+    let ruleset = takeoff_ruleset(&case);
+    let model = case.write("model.ifc", &storeys_with_facades());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let table = &result["report"]["tables"][0];
+    assert_eq!(table["name"], "takeoff", "{result:#}");
+    assert_eq!(table["group_by"], json!(["storey"]), "{result:#}");
+    let groups: Vec<&Value> = table["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| &row["group"])
+        .collect();
+    assert_eq!(groups, [&json!(["EG"]), &json!(["OG"])], "{result:#}");
+    // One 10 m by 0.3 m wall per storey (the file's single-precision
+    // placement rounds its area within a micrometre square or so).
+    for row in table["rows"].as_array().unwrap() {
+        assert_eq!(row["values"][0], json!({"type": "exact", "value": 1.0}));
+        let footprint = &row["values"][1];
+        let (lower, upper) = match footprint["type"].as_str().unwrap() {
+            "exact" => (footprint["value"].as_f64(), footprint["value"].as_f64()),
+            _ => (footprint["lower"].as_f64(), footprint["upper"].as_f64()),
+        };
+        assert!(
+            lower.unwrap() <= 3.0 + 1e-6 && upper.unwrap() >= 3.0 - 1e-6,
+            "{row}"
+        );
+    }
+
+    let saved = saved.to_str().unwrap();
+    let summary = stdout(&report(&[saved]));
+    assert!(
+        summary.contains("grouped by storey; columns: count, sum_footprint (m²)"),
+        "{summary}"
+    );
+    let listing = stdout(&report(&[
+        saved,
+        "--section",
+        "tables",
+        "--rule",
+        "wall-takeoff",
+    ]));
+    assert!(
+        listing.contains("[EG] count 1 · sum_footprint 3"),
+        "{listing}"
+    );
+    assert!(
+        listing.contains("[OG] count 1 · sum_footprint 3"),
+        "{listing}"
+    );
+
+    let csv = stdout(&report(&[
+        saved,
+        "--csv",
+        "--rule",
+        "wall-takeoff",
+        "--table",
+        "takeoff",
+    ]));
+    let lines: Vec<&str> = csv.lines().collect();
+    assert_eq!(
+        lines[0],
+        "scope,storey,count_lower,count_upper,sum_footprint_lower [m²],sum_footprint_upper [m²]",
+        "{csv}"
+    );
+    assert_eq!(lines.len(), 3, "{csv}");
+    assert!(
+        lines[1].starts_with("source ") && lines[1].contains(",EG,1,1,"),
+        "{csv}"
+    );
+    assert!(lines[2].contains(",OG,1,1,"), "{csv}");
+    let missing = report(&[saved, "--csv", "--table", "levels"]);
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(
+        stderr(&missing).contains("--rule wall-takeoff --table takeoff"),
+        "{}",
+        stderr(&missing)
+    );
+}

@@ -20,8 +20,8 @@ use std::fmt::Write as _;
 
 use axioval::ir::{
     Decision, DecisionStatus, EvidenceCheck, Finding, FindingDecision, Location, NotEvaluated,
-    NotEvaluatedReason, ObjectId, Place, Project, Report, ReportColumn, ReportRow, ReportTable,
-    ReportValue, RuleStatus, Scope, Severity, SourceId,
+    NotEvaluatedReason, ObjectId, Place, Project, Report, ReportColumn, ReportColumnKind,
+    ReportRow, ReportTable, ReportValue, RuleStatus, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -473,10 +473,86 @@ fn column_text(column: &ReportColumn) -> String {
     }
 }
 
-/// A table's columns, as the message of its summary group.
+/// A table's columns, as the message of its summary group; a grouped
+/// table's group columns first.
 fn columns_text(table: &ReportTable) -> String {
     let columns: Vec<String> = table.columns().iter().map(column_text).collect();
-    format!("columns: {}", columns.join(", "))
+    let columns = format!("columns: {}", columns.join(", "));
+    if table.group_by().is_empty() {
+        columns
+    } else {
+        format!("grouped by {}; {columns}", table.group_by().join(", "))
+    }
+}
+
+/// A grouped row's group values as headings, `[A] [Level 1] `; nothing
+/// for a row of an ungrouped table.
+fn group_text(row: &ReportRow) -> String {
+    row.group().iter().fold(String::new(), |mut text, value| {
+        let _ = write!(text, "[{value}] ");
+        text
+    })
+}
+
+/// `table` as CSV (RFC 4180, `\n` line ends): a header, then one line per
+/// row in table order.
+///
+/// The columns are `scope` (as a listing names it: `project`, `source …`
+/// or an object id), the group columns, and per value column its text or,
+/// for a number or quantity, `<id>_lower` and `<id>_upper` with the unit in
+/// brackets: an exact value fills both, an unknown one neither.
+pub fn table_csv(table: &ReportTable) -> String {
+    let mut header = vec!["scope".to_owned()];
+    header.extend(table.group_by().iter().cloned());
+    for column in table.columns() {
+        if column.kind == ReportColumnKind::Text {
+            header.push(column.id.clone());
+        } else {
+            let unit = column
+                .kind
+                .unit_symbol()
+                .map(|unit| format!(" [{unit}]"))
+                .unwrap_or_default();
+            header.push(format!("{}_lower{unit}", column.id));
+            header.push(format!("{}_upper{unit}", column.id));
+        }
+    }
+    let mut text = csv_line(&header);
+    for row in table.rows() {
+        let mut cells = vec![row.scope().to_string()];
+        cells.extend(row.group().iter().cloned());
+        for (column, value) in table.columns().iter().zip(row.values()) {
+            let text = column.kind == ReportColumnKind::Text;
+            match value {
+                ReportValue::Text { value } => cells.push(value.clone()),
+                ReportValue::Exact { value } => {
+                    cells.extend([value.to_string(), value.to_string()]);
+                }
+                ReportValue::Interval { lower, upper } => {
+                    cells.extend([lower.to_string(), upper.to_string()]);
+                }
+                ReportValue::Unknown if text => cells.push(String::new()),
+                ReportValue::Unknown => cells.extend([String::new(), String::new()]),
+            }
+        }
+        text.push_str(&csv_line(&cells));
+    }
+    text
+}
+
+/// One CSV line: fields quoted when they hold a comma, quote or line break.
+fn csv_line(fields: &[String]) -> String {
+    let quoted: Vec<String> = fields
+        .iter()
+        .map(|field| {
+            if field.contains([',', '"', '\n', '\r']) {
+                format!("\"{}\"", field.replace('"', "\"\""))
+            } else {
+                field.clone()
+            }
+        })
+        .collect();
+    quoted.join(",") + "\n"
 }
 
 /// A number as a reader reads it: at most six decimals.
@@ -1455,7 +1531,7 @@ fn table_entries(output: &CheckOutput, filter: &Filter, qualify: bool) -> Vec<En
                 scope,
                 related: vec![],
                 location: None,
-                message: row_text(table, row.values()),
+                message: format!("{}{}", group_text(row), row_text(table, row.values())),
                 evidence: vec![],
             }
         }));

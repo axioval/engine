@@ -1888,7 +1888,9 @@ not evaluated as an invalid declaration.
 ```
 
 reports one row per wall type and storey with `count` and
-`sum_net_side_area` (m²).
+`sum_net_side_area` (m²). `axioval report RESULT --section tables` lists the
+rows with their groups, and `--csv` exports the table (see
+[Command line](./cli.md)).
 
 ## Adding a capability
 

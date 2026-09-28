@@ -108,6 +108,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   no selector states exactly, and prohibits one: select what the auxiliary
   rule passed and fail every object.
 
+- **Report tables as CSV.** (#106) `axioval report RESULT --csv` prints
+  the one table `--rule` and `--table` select as CSV: `scope`, the group
+  columns, and each numeric column as `<id>_lower` and `<id>_upper` with
+  its unit; selecting none or several tables fails with the candidates.
+  The summary and listing show a grouped table's group columns and each
+  row's group values.
 - **Information takeoff.** (#106) `quantity-takeoff` counts the rule's
   selection per group and aggregates stated or measured quantities into the
   grouped report table `takeoff`: up to three group keys (`group_<n>`, a

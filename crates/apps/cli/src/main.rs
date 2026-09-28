@@ -303,6 +303,13 @@ struct ReportArgs {
     /// Print JSON instead of text.
     #[arg(long)]
     json: bool,
+    /// Print one report table as CSV: the one `--rule` and `--table`
+    /// select.
+    #[arg(long, conflicts_with_all = ["json", "section", "code", "object", "location"])]
+    csv: bool,
+    /// With `--csv`: the table's name, such as `takeoff`.
+    #[arg(long, requires = "csv")]
+    table: Option<String>,
 }
 
 /// One `--model` argument: a file and the discipline declared for it.
@@ -665,6 +672,10 @@ pub(crate) fn emit(
 
 fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
     let output: CheckOutput = load(&args.result)?;
+    if args.csv {
+        print!("{}", table_csv(&output, &args)?);
+        return Ok(());
+    }
     let path = args.result.to_string_lossy();
     let filtered = args.section.is_some()
         || args.rule.is_some()
@@ -705,6 +716,48 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
     };
     print!("{text}");
     Ok(())
+}
+
+/// The one table `--rule` and `--table` select, as CSV; naming none or
+/// several is an error listing the candidates.
+fn table_csv(output: &CheckOutput, args: &ReportArgs) -> Result<String, Box<dyn Error>> {
+    let tables: Vec<_> = output
+        .report
+        .tables()
+        .iter()
+        .filter(|table| {
+            args.rule
+                .as_deref()
+                .is_none_or(|rule| rule == table.rule_id().to_string())
+                && args
+                    .table
+                    .as_deref()
+                    .is_none_or(|name| name == table.name())
+        })
+        .collect();
+    match tables.as_slice() {
+        [table] => Ok(digest::table_csv(table)),
+        tables => {
+            let names: Vec<String> = if tables.is_empty() {
+                output.report.tables().iter().collect::<Vec<_>>()
+            } else {
+                tables.to_vec()
+            }
+            .iter()
+            .map(|table| format!("--rule {} --table {}", table.rule_id(), table.name()))
+            .collect();
+            Err(format!(
+                "--csv needs exactly one table, but {} tables match; candidates: {}",
+                tables.len(),
+                if names.is_empty() {
+                    "none, the result has no tables".to_owned()
+                } else {
+                    names.join("; ")
+                }
+            )
+            .into())
+        }
+    }
 }
 
 /// Diagnostics for stderr. A summary already groups integrity issues and

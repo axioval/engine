@@ -466,6 +466,32 @@ The summary then counts them (`decisions: 1 accepted · 0 rejected · 0 open ·
 lists only findings with that decision (`changed`: decided and changed
 since).
 
+A grouped table, such as a [takeoff](./capabilities.md#information-takeoff),
+names its group columns in the summary (`grouped by type, storey; columns:
+count, sum_net_side_area (m²)`), and each listed row starts with its group
+values in brackets:
+
+```text
+[table] takeoff wall-takeoff  (source model.ifc)
+    [Basic Wall 200] [EG] count 3 · sum_net_side_area 36.5 m²
+```
+
+**CSV.** `--csv` prints one table as CSV (RFC 4180 quoting, `\n` line
+ends) instead of a view: the table `--rule` and `--table NAME` select, or
+the result's only table. Selecting none or several fails (status 1) and
+names every candidate as `--rule R --table NAME`. The columns are `scope`
+(`project`, `source …` or an object id), the group columns, then each text
+column as it is and each number or quantity column as `<id>_lower` and
+`<id>_upper`, the unit in brackets (`sum_net_side_area_lower [m²]`): an
+exact value fills both with its full precision, an unknown one neither.
+
+```text
+$ axioval report r.json --csv --rule wall-takeoff --table takeoff > takeoff.csv
+```
+
+`--csv` cannot be combined with `--json`, `--section`, `--code`, `--object`
+or `--location`.
+
 Both views end with the exact command for the next step: the largest group,
 an example object, the next page. Every suggested command is quoted for a POSIX
 shell and runs unchanged. `--json` prints either view as JSON. `report` exits 0

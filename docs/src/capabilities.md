@@ -697,6 +697,9 @@ occupants.
 | `route_door_selector` | selector | the doors on routes whose loads are checked, as walked passages are; needs `door_path`, `door_selector`, a walking profile and `door_width` in every row |
 | `zones` | table | ranks of zones (`objects`, a selector; `rank`, an integer; `label`); every walk keeps out of what ranks above the start |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
+| `stair_selector`, `ramp_selector`, `lift_selector` | selector | the vertical connectors walks may climb, by kind (see [Routes across levels](./metric-routing.md#routes-across-levels)); without any, walks stay on their level. One object in two of them is an invalid declaration, and an undecided selection leaves every walk not evaluated |
+| `stair_length` | string | `slope` (default): a climb counts along its slope; `horizontal-plus-vertical`: its horizontal length plus its rise times `vertical_factor`; needs a connector selector |
+| `vertical_factor` | number | what a metre of rise counts, at least 0, default 1; needs a connector selector |
 
 - **Travel** follows the walking line of a point through the metric-routing
   service, from the farthest point of the space's walkable area
@@ -706,6 +709,13 @@ occupants.
   as `space-distance` walks. The farthest distance is a certified bracket;
   part of the space that reaches no exit (proven with complete evidence) is
   a finding at a point of it. See [Metric routing](./metric-routing.md#many-targets).
+  With a connector selector every walk may climb the selected stairs, ramps
+  and lifts to exits on other storeys, a climb counting by `stair_length`
+  and `vertical_factor` (see [Routes across levels](./metric-routing.md#routes-across-levels));
+  a climb the service cannot measure leaves the travel not evaluated. A
+  trace measures in plan and a climb is longer than its plan length, so a
+  walk climbing a connector is never traced: sections bound it by the
+  largest factor, and its common path is the whole walk.
 - **Multiplied sections**: a metre walked on a `sections` object counts
   `factor` times; where sections overlap, the largest factor. The travel
   is the least multiplied length of any walk to an exit, bracketed: at
@@ -1002,6 +1012,7 @@ already decides it.
 | `storey_path`, `storey_selector` | string list, selector | how a space's storeys are found, climbed as `same-container` climbs; required by `same_storey` |
 | `access_path`, `door_selector`, `opening_selector`, `space_selector` | | as for `space-connection`; `access_path` is required by `direct_access` |
 | `walking_radius`, `walking_height`, `walking_step` | number | the body a walking row routes, required by one; `walking_slope` defaults to level |
+| `stair_selector`, `ramp_selector`, `lift_selector`, `stair_length`, `vertical_factor` | | the connectors a walking row climbs and how a climb counts, as for `escape-route`; so a walk reaches destinations on other storeys without `same_storey` |
 
 - **Straight** is the plan distance between the footprints' centroids
   (`PlanSpanService`, `centres`), an interval exact for planar meshes. Plan
@@ -1153,7 +1164,7 @@ A start or destination the portal selector picks is an entrance (its two faces);
 The rule takes one walkability snapshot for the profile and judges every passage on top of its width bounds:
 
 - **Portals.** A stated clear width below `door_width_metres` blocks; so does a door the geometry shows narrower (the upper bound of its crossing). A stated width at or above the minimum, or a crossing proven at least that wide, admits it; otherwise the door is undecided. A stated width is also sent with the request (`WalkabilityRequest::with_stated_clear_widths`), so the geometry can prove the body passes the leaf and lining: without one, a door from IFC can bound a route from above only, never pass it, because its `OverallWidth` includes the lining.
-- **Connectors.** With `forbid_stairs`, a stair blocks. A ramp or stair with a minimum width is admitted by a stated clear width at or above it and blocked by one below it. A connector that states none (an exact absence) is measured as `ramp-geometry` and `stair-geometry` measure it, through the walking-surface service: a ramp's narrowest run, a flight's width from every tread's sides. A measured width wholly below the minimum blocks, citing the measurement; one wholly at or above it admits; anything else, a flight with winders, a refused measurement or no walking-surface service, is undecided. An unreadable stated width stays undecided and is never measured past. Climbs are not measured, so a route through any connector is never proven.
+- **Connectors.** With `forbid_stairs`, a stair blocks. A ramp or stair with a minimum width is admitted by a stated clear width at or above it and blocked by one below it. A connector that states none (an exact absence) is measured as `ramp-geometry` and `stair-geometry` measure it, through the walking-surface service: a ramp's narrowest run, a flight's width from every tread's sides. A measured width wholly below the minimum blocks, citing the measurement; one wholly at or above it admits; anything else, a flight with winders, a refused measurement or no walking-surface service, is undecided. An unreadable stated width stays undecided and is never measured past. A lift needs no width of its own. A route through a connector is proven where the walkability backend proves the climb or ride (see [the Axiolid backend](./walkability.md#the-axiolid-backend)): the flight or run wide enough, its headroom clear and the walks to and from its landings swept.
 - **Tolerances.** `obstruction_depth_metres` and `surface_gap_metres` go into the walkability request (`with_obstruction_depth`, `with_surface_gap`); see [the Axiolid backend](./walkability.md#the-axiolid-backend).
 - **Stretches.** A block inside one route space names where it lies: the snapshot's `WalkableStretch` on the blocking passage. The reason reads `<space> is too narrow near (x, y, z)`, `<space> is obstructed near (x, y, z) … by <obstacles>` or `<space> is too low near (x, y, z) …: the headroom under <obstacles> is <h> m`, and the finding relates the space and those obstacles (or swung doors). The position is in the model's coordinates at the floor's elevation.
 - **Start and destination portals.** A route begins on either face of a start door, so the door's own crossing is judged separately: too narrow for the body, it blocks every route from it.

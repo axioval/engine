@@ -14,6 +14,7 @@ mod clash_groups;
 mod clash_matrix;
 mod clash_severity;
 mod classification_requirement;
+mod climbing;
 mod comparison;
 mod component_clearance;
 mod component_visibility;

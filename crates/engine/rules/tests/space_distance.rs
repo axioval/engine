@@ -210,6 +210,10 @@ impl VerticalExtentService for Geometry {
 }
 
 impl MetricRoutingService for Geometry {
+    fn climbs_connectors(&self) -> bool {
+        true
+    }
+
     fn route(
         &self,
         request: &MetricRouteRequest,
@@ -233,8 +237,20 @@ impl MetricRoutingService for Geometry {
         let from = request.origin().subject().local_id.clone();
         let mut best: Option<(usize, f64, f64)> = None;
         let mut refused = false;
+        // A walk climbing connectors is declared as `{target}^{connectors}`.
+        let climbed = request.connectors().map_or_else(String::new, |routing| {
+            let names: Vec<&str> = routing
+                .connectors()
+                .iter()
+                .map(|connector| connector.object().local_id.as_str())
+                .collect();
+            format!("^{}", names.join(","))
+        });
         for (index, target) in request.targets().iter().enumerate() {
-            let key = (from.clone(), target.subject().local_id.clone());
+            let key = (
+                from.clone(),
+                format!("{}{climbed}", target.subject().local_id),
+            );
             match self
                 .routes
                 .get(&key)
@@ -453,6 +469,36 @@ fn a_walking_distance_too_long_is_found() {
             "reaches none of its 1 destination(s) walking; row 0 requires one within 25 m".into()
         )]
     );
+}
+
+#[test]
+fn a_walk_climbs_the_selected_stair_to_another_storey() {
+    // t1 is upstairs: only a walk up the stair reaches it.
+    let model = || {
+        Model::default()
+            .object("o1", "office")
+            .object("t1", "toilet")
+            .object("stair", "stair")
+    };
+    let geometry = || Geometry::default().route("o1", "t1^stair", Route::Reachable(21.0, 22.5));
+    let mut climbing = walking();
+    climbing.push(("stair_selector", selector(kind("stair"))));
+    climbing.push(("stair_length", string("horizontal-plus-vertical")));
+    climbing.push(("vertical_factor", number(2.0)));
+    let evaluation = run(
+        model(),
+        geometry(),
+        vec![toilets("walking", &[("maximum", 20.0)])],
+        climbing.clone(),
+    );
+    assert_eq!(findings(&evaluation).len(), 1, "{evaluation:?}");
+    let evaluation = run(
+        model(),
+        geometry(),
+        vec![toilets("walking", &[("maximum", 25.0)])],
+        climbing,
+    );
+    assert!(evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty());
 }
 
 #[test]

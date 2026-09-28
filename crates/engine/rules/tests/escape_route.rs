@@ -10,17 +10,17 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ElevationInterval,
-    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, GeometryFidelity,
-    LengthInterval, MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
-    MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, NotEvaluatedReason, ObjectBounds, PathTrace, PathTraceRequest, PlanArea,
-    PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanCentre, PlanLength, PlanRectangle,
-    PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProjectedDistanceEvidence,
-    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
-    ProximityServiceHandle, RectangleOrientation, ServiceRegistry, UnreachableRegionEvidence,
-    UnreachableTargetsEvidence, VerticalExtent, VerticalExtentError, VerticalExtentService,
-    VerticalExtentServiceHandle,
+    CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ConnectorRouting,
+    ElevationInterval, FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest,
+    GeometryFidelity, LengthInterval, MetricPoint, MetricRouteOutcome, MetricRouteRequest,
+    MetricRoutingError, MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence,
+    NearestTargetOutcome, NearestTargetRequest, NotEvaluatedReason, ObjectBounds, PathTrace,
+    PathTraceRequest, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanCentre,
+    PlanLength, PlanRectangle, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, ProximityServiceHandle, RectangleOrientation,
+    ServiceRegistry, UnreachableRegionEvidence, UnreachableTargetsEvidence, VerticalExtent,
+    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, ObjectId, PropertyValue, QuantityDimension};
@@ -129,7 +129,13 @@ impl Geometry {
             .unwrap();
     }
 
-    fn lookup(&self, from: &ObjectId, targets: &[MetricPoint], avoided: &[ObjectId]) -> Walk {
+    fn lookup(
+        &self,
+        from: &ObjectId,
+        targets: &[MetricPoint],
+        avoided: &[ObjectId],
+        climbing: Option<&ConnectorRouting>,
+    ) -> Walk {
         let mut names: Vec<&str> = targets
             .iter()
             .map(|target| target.subject().local_id.as_str())
@@ -139,6 +145,20 @@ impl Geometry {
         if !avoided.is_empty() {
             let avoided: Vec<&str> = avoided.iter().map(|id| id.local_id.as_str()).collect();
             to = format!("{to}~{}", avoided.join(","));
+        }
+        if let Some(climbing) = climbing {
+            let climbed: Vec<String> = climbing
+                .connectors()
+                .iter()
+                .map(|connector| {
+                    format!(
+                        "{}:{}",
+                        connector.kind().as_str(),
+                        connector.object().local_id
+                    )
+                })
+                .collect();
+            to = format!("{to}^{}", climbed.join(","));
         }
         let key = (from.local_id.clone(), to);
         *self
@@ -301,7 +321,12 @@ impl MetricRoutingService for Geometry {
     ) -> Result<NearestTargetOutcome, MetricRoutingError> {
         assert!(request.profile().radius_metres() == 0.0);
         let from = request.origin().subject();
-        match self.lookup(from, request.targets(), request.avoided()) {
+        match self.lookup(
+            from,
+            request.targets(),
+            request.avoided(),
+            request.connectors(),
+        ) {
             Walk::Between(lower, upper) => {
                 // Every point stands at the same centre, so the walk goes
                 // half its length out and back, unless it passes declared
@@ -345,6 +370,10 @@ impl MetricRoutingService for Geometry {
         !self.plain
     }
 
+    fn climbs_connectors(&self) -> bool {
+        !self.plain
+    }
+
     /// A declared length is exact; an object not declared for the walk's
     /// start is unmeasured.
     fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
@@ -374,7 +403,7 @@ impl MetricRoutingService for Geometry {
         assert!(request.profile().radius_metres() == 0.0);
         let region = request.region();
         let witness = MetricPoint::try_new(region.clone(), [19.0, 0.0, 0.0])?;
-        match self.lookup(region, request.targets(), &[]) {
+        match self.lookup(region, request.targets(), &[], request.connectors()) {
             Walk::Between(lower, upper) => Ok(FarthestPointOutcome::Bounded(
                 FarthestPointEvidence::try_new(
                     LengthInterval::try_new(lower, upper)?,
@@ -2576,5 +2605,99 @@ fn a_rooms_own_doors_together_are_as_wide_as_its_occupants_need() {
              1.8 m of door width together (use 0)"
                 .into()
         )]
+    );
+}
+
+/// The hall with a stair and a ramp beside it.
+fn stair_model() -> Model {
+    model().object("stair", "stair").object("ramp", "ramp")
+}
+
+fn climbing(extra: Vec<(&'static str, ParameterValue)>) -> Vec<(&'static str, ParameterValue)> {
+    with(
+        with(
+            exits(kind("door")),
+            vec![
+                uses(&[("maximum_travel", number(20.0))]),
+                ("stair_selector", selector(kind("stair"))),
+                ("ramp_selector", selector(kind("ramp"))),
+            ],
+        ),
+        extra,
+    )
+}
+
+#[test]
+fn walks_climb_the_stairs_and_ramps_the_rule_selects() {
+    // The stub answers only a walk through both connectors.
+    let geometry = || {
+        Geometry::default().walk(
+            "hall",
+            "d1,d2^ramp:ramp,stair:stair",
+            Walk::Between(21.0, 21.01),
+        )
+    };
+    let evaluation = evaluate(stair_model(), geometry(), climbing(Vec::new()));
+    assert_eq!(findings(&evaluation).len(), 1, "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    // How a climb counts is the rule's too.
+    let evaluation = evaluate(
+        stair_model(),
+        geometry(),
+        climbing(vec![
+            ("stair_length", string("horizontal-plus-vertical")),
+            ("vertical_factor", number(2.0)),
+        ]),
+    );
+    assert_eq!(findings(&evaluation).len(), 1, "{evaluation:?}");
+    // A backend that cannot climb is not asked to walk on one level.
+    let evaluation = evaluate(
+        stair_model(),
+        Geometry {
+            plain: true,
+            ..geometry()
+        },
+        climbing(Vec::new()),
+    );
+    assert!(findings(&evaluation).is_empty(), "{evaluation:?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("hall".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_climb_declared_wrongly_is_refused() {
+    for extra in [
+        vec![("stair_length", string("along-the-handrail"))],
+        vec![("vertical_factor", number(-1.0))],
+        // One object cannot be two kinds of connector.
+        vec![("lift_selector", selector(kind("stair")))],
+    ] {
+        let evaluation = evaluate(stair_model(), Geometry::default(), climbing(extra));
+        assert!(findings(&evaluation).is_empty(), "{evaluation:?}");
+        assert!(
+            unevaluated(&evaluation)
+                .iter()
+                .all(|(_, reason)| *reason == NotEvaluatedReason::InvalidDeclaration),
+            "{evaluation:?}"
+        );
+        assert!(!unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    }
+    // A climb length without a connector to climb says nothing.
+    let evaluation = evaluate(
+        stair_model(),
+        Geometry::default(),
+        with(
+            exits(kind("door")),
+            vec![
+                uses(&[("maximum_travel", number(20.0))]),
+                ("stair_length", string("slope")),
+            ],
+        ),
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
     );
 }

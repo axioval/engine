@@ -481,6 +481,41 @@ fn unevaluated(outcome: &CapabilityEvaluation) -> Vec<(String, NotEvaluatedReaso
     found
 }
 
+/// Lobby `l0` (x 0..4) opens onto the lift car `car0` (x 4..6, y 1..3)
+/// inside shaft `lift`; the car `car1` above it opens onto room `l1` on
+/// the next storey (floor at 3 m).
+fn lifts() -> Scene {
+    let mut scene = Scene::empty();
+    for (local, kind, min, max) in [
+        ("l0", "lobby", [0.0, 0.0, 0.0], [4.0, 4.0, 2.7]),
+        ("car0", "car", [4.0, 1.0, 0.0], [6.0, 3.0, 2.7]),
+        ("l1", "room", [0.0, 0.0, 3.0], [4.0, 4.0, 5.7]),
+        ("car1", "car", [4.0, 1.0, 3.0], [6.0, 3.0, 5.7]),
+        ("lift", "lift", [4.0, 1.0, 0.0], [6.0, 3.0, 5.7]),
+    ] {
+        scene = scene.body(local, kind, cuboid(min, max));
+    }
+    scene
+}
+
+#[test]
+fn a_two_storey_route_through_a_lift_passes() {
+    let route = selector(Selector::AnyOf {
+        operands: vec![kind("lobby"), kind("room"), kind("car")],
+    });
+    let outcome = lifts().check(&[
+        ("route_selector", route.clone()),
+        ("lift_selector", selector(kind("lift"))),
+    ]);
+    assert!(findings(&outcome).is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // Without the lift nothing joins the storeys.
+    let outcome = lifts().check(&[("route_selector", route)]);
+    let found = findings(&outcome);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].0, "l1", "{found:#?}");
+}
+
 #[test]
 fn a_continuous_route_passes_and_a_narrow_door_and_a_stair_block() {
     let outcome = Scene::new().check(&[]);

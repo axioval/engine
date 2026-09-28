@@ -4,15 +4,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, Deviation, MetricPoint,
-    MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
-    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan, PlanSpanServiceHandle,
-    ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
-    TableColumn, VerticalExtentServiceHandle,
+    CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, ConnectorRouting, Deviation,
+    MetricPoint, MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome,
+    NearestTargetRequest, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan,
+    PlanSpanServiceHandle, ProximityProjection, ProximityRequest, ProximityServiceHandle,
+    RuleCapability, RuleContext, TableColumn, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId};
 
+use crate::climbing::{self, Climbing};
 use crate::plan_area::shown;
 use crate::selection::{Selection, select_objects, selector_matches};
 use crate::space_access::{AccessDeclaration, AccessIndex, AccessType, Link, Partners};
@@ -50,7 +51,10 @@ const COLUMNS: &[TableColumn] = &[
 /// its footprint, as for an L-shaped room, has no representative point and
 /// is not evaluated rather than walked from elsewhere. `walking_radius`,
 /// `walking_height` and `walking_step` state the body walked with;
-/// `walking_slope` defaults to level.
+/// `walking_slope` defaults to level. With `stair_selector`,
+/// `ramp_selector` or `lift_selector`, walks may climb the selected
+/// connectors to other storeys, a climb counting by `stair_length` and
+/// `vertical_factor`.
 ///
 /// Storeys are the nearest `storey_selector` objects `storey_path` climbs to
 /// (as `same-container` climbs); direct access reads `access_path` among
@@ -111,6 +115,7 @@ struct Declaration<'a> {
     storeys: Option<(Traversal<'a>, &'a Selector)>,
     access: Option<AccessDeclaration<'a>>,
     profile: Option<MobilityProfile>,
+    climbing: Option<Climbing<'a>>,
 }
 
 fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
@@ -205,6 +210,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         storeys,
         access,
         profile,
+        climbing: Climbing::parse(&parameters)?,
     })
 }
 
@@ -218,7 +224,7 @@ impl RuleCapability for SpaceDistance {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
+        let mut parameters = vec![
             ParameterDescriptor::required("distances", ParameterType::Table(COLUMNS)),
             ParameterDescriptor::optional("storey_path", ParameterType::StringList),
             ParameterDescriptor::optional("storey_selector", ParameterType::Selector),
@@ -230,7 +236,9 @@ impl RuleCapability for SpaceDistance {
             ParameterDescriptor::optional("walking_height", ParameterType::Number),
             ParameterDescriptor::optional("walking_step", ParameterType::Number),
             ParameterDescriptor::optional("walking_slope", ParameterType::Number),
-        ]
+        ];
+        parameters.extend(climbing::descriptors());
+        parameters
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -265,6 +273,10 @@ impl RuleCapability for SpaceDistance {
             partners: BTreeMap::new(),
             points: BTreeMap::new(),
             lengths: BTreeMap::new(),
+            connectors: declared
+                .climbing
+                .as_ref()
+                .map(|climbing| climbing.routing(context)),
         };
         for space in spaces {
             let matched = match_rows(
@@ -392,6 +404,8 @@ struct Judge<'r, 'c> {
     partners: BTreeMap<ObjectId, Partners>,
     points: BTreeMap<ObjectId, Result<(MetricPoint, Vec<Evidence>), Unavailable>>,
     lengths: BTreeMap<(Measure, ObjectId, ObjectId), Result<Distance, Unavailable>>,
+    /// The connectors walks may climb, when the rule selects any.
+    connectors: Option<Result<ConnectorRouting, Unavailable>>,
 }
 
 fn missing(service: &str) -> Unavailable {
@@ -736,6 +750,15 @@ impl Judge<'_, '_> {
                 }
             }
         }
+        let routing = match &self.connectors {
+            None => None,
+            Some(Ok(routing)) => Some(routing.clone()),
+            Some(Err(why)) => {
+                nearest.least = 0.0;
+                nearest.doubt(why.clone());
+                return nearest;
+            }
+        };
         let walk = |targets: &[(&Candidate, MetricPoint)]| -> Result<Walked, Unavailable> {
             let request = NearestTargetRequest::try_new(
                 origin.clone(),
@@ -743,6 +766,10 @@ impl Judge<'_, '_> {
                 profile,
             )
             .map_err(|error| incomplete(error.to_string()))?;
+            let request = match &routing {
+                Some(routing) => request.with_connectors(routing.clone()),
+                None => request,
+            };
             match routes.nearest_target(&request) {
                 Ok(NearestTargetOutcome::Reached(reached)) => {
                     let length = reached.shortest_distance();

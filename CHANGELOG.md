@@ -141,6 +141,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   connector too narrow or too low for the body is no way, and one it cannot
   measure or prove passable leaves routes through it undecided. **Breaking:**
   `MetricRoutingError` gains `InvalidClimb` and `ConflictingConnector`.
+- **Escape routes and walking distances across storeys.** (#117)
+  `escape-route` and `space-distance` take `stair_selector`,
+  `ramp_selector`, `lift_selector`, `stair_length` (`slope` or
+  `horizontal-plus-vertical`) and `vertical_factor`, and walk through the
+  selected connectors, so a second-floor room's travel is measured down its
+  stair to a ground-floor exit and a walking distance reaches another
+  storey without `same_storey`. An escape walk that climbs is never traced
+  over sections or passages. `accessible-route` proves a route through a
+  measured ramp or stair, or a lift ride, where walkability proves it.
+  **Breaking:** `escape-route` and `space-distance` gain five optional
+  parameters, so a definition bound to either must declare them.
 - **Definite climbs and rides in walkability.** (#117) The Axiolid
   walkability service makes a stair or ramp passage definite between the
   surfaces its landings stand on when the flight or run is wide enough for

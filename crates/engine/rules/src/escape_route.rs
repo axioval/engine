@@ -123,6 +123,13 @@
 //! of what ranks above the start, as it keeps out of what is not usable for
 //! escape.
 //!
+//! **Across levels.** With `stair_selector`, `ramp_selector` or
+//! `lift_selector`, every walk may climb the selected connectors (read by
+//! the `climbing` module), a climb counting by `stair_length` and
+//! `vertical_factor`. A walk that climbs is never traced over sections or
+//! passages, since a trace measures in plan: sections bound it by the
+//! largest factor and its common path is the whole walk.
+//!
 //! Not checked: passages walked from the farthest point rather than the
 //! doors.
 
@@ -130,7 +137,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeaves, DoorLeavesError,
+    CapabilityEvaluation, ColumnKind, CompiledRule, ConnectorRouting, DoorLeaves, DoorLeavesError,
     FarthestPointOutcome, FarthestPointRequest, FreeSpaceServiceHandle, LengthInterval,
     MetricPoint, MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome,
     NearestTargetRequest, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
@@ -141,6 +148,7 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension, Scope};
 
+use crate::climbing::{self, Climbing};
 use crate::door_swing::{self, Relation};
 use crate::exit_separation::Candidates;
 use crate::keyed_limit::door_clear_height;
@@ -296,6 +304,8 @@ struct Declaration<'a> {
     compartments: Option<Compartments<'a>>,
     /// By row; the first row picking an object ranks it.
     zones: Vec<Zone<'a>>,
+    /// The connectors walks climb between levels.
+    climbing: Option<Climbing<'a>>,
 }
 
 fn positive(name: &str, column: &str, value: Option<f64>) -> Result<Option<f64>, Unavailable> {
@@ -565,6 +575,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         clear_height,
         compartments,
         zones,
+        climbing: Climbing::parse(&parameters)?,
     })
 }
 
@@ -735,7 +746,7 @@ impl RuleCapability for EscapeRoute {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
+        let mut parameters = vec![
             ParameterDescriptor::required("uses", ParameterType::Table(USES)),
             ParameterDescriptor::optional("widths", ParameterType::Table(WIDTHS)),
             ParameterDescriptor::required("exit_path", ParameterType::StringList),
@@ -772,7 +783,9 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
             ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
             ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
-        ]
+        ];
+        parameters.extend(climbing::descriptors());
+        parameters
     }
 
     #[allow(clippy::too_many_lines)]
@@ -820,6 +833,10 @@ impl RuleCapability for EscapeRoute {
                 .collect(),
             membership: RefCell::new(BTreeMap::new()),
             walks: RefCell::new(BTreeMap::new()),
+            connectors: declared
+                .climbing
+                .as_ref()
+                .map(|climbing| climbing.routing(context)),
         };
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
         judge.no_compartment(&spaces, &mut evaluation);
@@ -1412,6 +1429,34 @@ struct Judge<'r, 'c> {
     membership: RefCell<BTreeMap<ObjectId, Result<Assigned, Unavailable>>>,
     /// Walks already measured: travel and walked passages share them.
     walks: RefCell<BTreeMap<WalkKey, Result<Travel, Unavailable>>>,
+    /// The connectors walks may climb, when the rule selects any.
+    connectors: Option<Result<ConnectorRouting, Unavailable>>,
+}
+
+impl Judge<'_, '_> {
+    /// The connectors every walk climbs through, if any.
+    fn routing(&self) -> Result<Option<&ConnectorRouting>, Unavailable> {
+        match &self.connectors {
+            None => Ok(None),
+            Some(Ok(routing)) => Ok(Some(routing)),
+            Some(Err(why)) => Err(why.clone()),
+        }
+    }
+
+    /// Whether a walk may climb a connector: its waypoints stand on one.
+    fn climbs(&self, path: Option<&[MetricPoint]>) -> bool {
+        let Some(Ok(routing)) = &self.connectors else {
+            return false;
+        };
+        path.is_none_or(|path| {
+            path.iter().any(|point| {
+                routing
+                    .connectors()
+                    .iter()
+                    .any(|connector| connector.object() == point.subject())
+            })
+        })
+    }
 }
 
 /// What a relied-on object is: a passage, or a door on a route.
@@ -3566,7 +3611,8 @@ impl Judge<'_, '_> {
                 Err(_) => others += 1,
             }
         }
-        if others == 0 {
+        // A climb is longer than its trace in plan: the whole walk bounds it.
+        if others == 0 || self.climbs(walk.path.as_deref()) {
             return Some(walk.upper);
         }
         let length: f64 = common
@@ -3590,6 +3636,11 @@ impl Judge<'_, '_> {
         path: &[MetricPoint],
         plain: f64,
     ) -> Option<(f64, BTreeSet<usize>)> {
+        // A trace measures in plan, and a climb is longer than its plan
+        // length: a climbing walk is bounded by the largest factor instead.
+        if self.climbs(Some(path)) {
+            return None;
+        }
         let objects = self
             .sections
             .iter()
@@ -3641,6 +3692,7 @@ impl Judge<'_, '_> {
             space,
             targets.iter().map(|(_, point)| point.clone()).collect(),
             profile,
+            self.routing()?,
         )?;
         let near: Vec<String> = avoided
             .iter()
@@ -3682,9 +3734,13 @@ impl Judge<'_, '_> {
         space: &ObjectId,
         targets: Vec<MetricPoint>,
         profile: MobilityProfile,
+        routing: Option<&ConnectorRouting>,
     ) -> Result<Travel, Unavailable> {
-        let request = FarthestPointRequest::try_new(space.clone(), targets, profile, TOLERANCE)
+        let mut request = FarthestPointRequest::try_new(space.clone(), targets, profile, TOLERANCE)
             .map_err(|error| incomplete(error.to_string()))?;
+        if let Some(routing) = routing {
+            request = request.with_connectors(routing.clone());
+        }
         match routes.farthest_point(&request) {
             Ok(FarthestPointOutcome::Bounded(bounded)) => {
                 let [x, y, _] = bounded.witness().coordinates_metres();
@@ -3738,7 +3794,17 @@ impl Judge<'_, '_> {
         if let Some(known) = self.walks.borrow().get(&key) {
             return known.clone();
         }
-        let walked = Self::walk(self.context, routes, origin, targets, &key.2, profile);
+        let walked = self.routing().and_then(|routing| {
+            Self::walk(
+                self.context,
+                routes,
+                origin,
+                targets,
+                &key.2,
+                profile,
+                routing,
+            )
+        });
         self.walks.borrow_mut().insert(key, walked.clone());
         walked
     }
@@ -3750,12 +3816,16 @@ impl Judge<'_, '_> {
         targets: &[Target],
         avoided: &[ObjectId],
         profile: MobilityProfile,
+        routing: Option<&ConnectorRouting>,
     ) -> Result<Travel, Unavailable> {
         let (origin, cited) = representative_point(context, from)?;
         let points = targets.iter().map(|(_, point)| point.clone()).collect();
-        let request = NearestTargetRequest::try_new(origin, points, profile)
+        let mut request = NearestTargetRequest::try_new(origin, points, profile)
             .map_err(|error| incomplete(error.to_string()))?
             .with_avoided(avoided.to_vec());
+        if let Some(routing) = routing {
+            request = request.with_connectors(routing.clone());
+        }
         match routes.nearest_target(&request) {
             Ok(NearestTargetOutcome::Reached(reached)) => {
                 let mut evidence = cited;

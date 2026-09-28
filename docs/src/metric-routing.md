@@ -279,3 +279,10 @@ a section within that bound's reach in plan. With `walked_passages`, a
 passage is one every shortest walk from a door crosses when the walk around
 it is longer than the plain walk. See
 [Escape routes](./capabilities.md#escape-routes).
+
+Both take `stair_selector`, `ramp_selector` and `lift_selector`,
+`stair_length` and `vertical_factor`, and send every query with the
+selected connectors (`with_connectors`), so an escape route from an upper
+storey is walked down its stairs and a walking distance reaches another
+storey without `same_storey`. An escape walk that climbs is never traced:
+its plan trace would undercount the climb.

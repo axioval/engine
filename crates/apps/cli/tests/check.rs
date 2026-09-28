@@ -7021,6 +7021,53 @@ fn with_geometry_escape_routes_too_long_and_too_few_exits_are_found() {
 }
 
 #[test]
+fn with_geometry_escape_routes_climb_only_the_stairs_the_rule_selects() {
+    // The halls stand on one storey and the model holds no stair: a rule
+    // climbing stairs walks the same routes, and the host's own connectors
+    // are no way for it.
+    let case = Case::new("geometry-escape-route-stairs");
+    let (output, result) = case.geometry_rule(
+        &halls_with_exits(),
+        &[
+            ("door", "IfcDoor"),
+            ("space", "IfcSpace"),
+            ("stair", "IfcStair"),
+        ],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        entity("space"),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"spaces": {"type": "selector", "value": entity("space")},
+                 "maximum_travel": {"type": "number", "value": 15.0}},
+            ]},
+            "exit_path": {"type": "stringList",
+                          "value": ["axioval:derived.adjacent-space:backward"]},
+            "exit_selector": {"type": "selector", "value": entity("door")},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+            "stair_selector": {"type": "selector", "value": entity("stair")},
+            "stair_length": {"type": "string", "value": "horizontal-plus-vertical"},
+            "vertical_factor": {"type": "number", "value": 2.0},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#19", "{result:#}");
+    assert!(
+        findings[0].1.contains("18.47") && findings[0].1.contains("walking"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn with_geometry_passages_too_narrow_for_their_occupants_are_found() {
     // Both halls (200 m², 100 occupants each at 2 m²) are declared their own
     // passage; the rectangles enclosing them are 10 m wide where 12 m are

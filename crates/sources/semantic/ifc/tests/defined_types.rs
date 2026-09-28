@@ -20,7 +20,7 @@ DATA;
 #4=IFCPROPERTYSINGLEVALUE('Stamp',$,IFCTIMESTAMP(1700000000),$);
 #5=IFCPROPERTYSINGLEVALUE('Length',$,IFCLENGTHMEASURE(2.5),$);
 #6=IFCPROPERTYSINGLEVALUE('Duration',$,IFCDURATION('P1D'),$);
-#7=IFCPROPERTYSET('0000000000000000000002',$,'P',$,(#2,#3,#4,#5,#6,#9,#10,#11,#12,#13));
+#7=IFCPROPERTYSET('0000000000000000000002',$,'P',$,(#2,#3,#4,#5,#6,#9,#10,#11,#12,#13,#15,#16));
 #8=IFCRELDEFINESBYPROPERTIES('0000000000000000000003',$,$,$,(#1),#7);
 #9=IFCPROPERTYSINGLEVALUE('Inspected',$,IFCDATETIME('2026-09-27T10:30:00.25+02:00'),$);
 #10=IFCPROPERTYSINGLEVALUE('Local',$,IFCDATETIME('2026-09-27T10:30:00'),$);
@@ -28,6 +28,9 @@ DATA;
 #12=IFCPROPERTYSINGLEVALUE('NoDay',$,IFCDATE('2026-02-30'),$);
 #13=IFCPROPERTYSINGLEVALUE('BadDateTime',$,IFCDATETIME('2026-09-27 10:30'),$);
 #14=IFCWORKPLAN('0000000000000000000004',$,'Plan',$,$,$,'2026-09-27T08:00:00Z',$,$,$,$,'2026-10-01T07:00:00',$,$);
+#15=IFCPROPERTYSINGLEVALUE('ZonedDate',$,IFCDATE('2022-01-01+00:00'),$);
+#16=IFCPROPERTYSINGLEVALUE('FarZone',$,IFCDATE('2022-01-01+14:30'),$);
+#17=IFCCLASSIFICATION($,$,'2022-01-01-05:00','Name',$,$,$);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -110,6 +113,13 @@ fn dates_date_times_and_time_stamps_are_dates_with_their_declared_type() {
             "IFCDATETIME",
             ":occurrence:#7/#9",
         ),
+        // `IfcDate` is an `xs:date`, which may state a time zone.
+        (
+            "ZonedDate",
+            PropertyValue::Date("2022-01-01Z".parse().unwrap()),
+            "IFCDATE",
+            ":occurrence:#7/#15",
+        ),
         // Seconds since the epoch, in UTC.
         (
             "Stamp",
@@ -136,13 +146,23 @@ fn a_date_time_without_an_offset_is_incomplete_not_guessed() {
 
 #[test]
 fn text_that_is_not_the_declared_date_form_is_an_invalid_value() {
-    for name in ["BadDate", "NoDay", "BadDateTime"] {
+    for name in ["BadDate", "NoDay", "BadDateTime", "FarZone"] {
         assert_eq!(
             resolve(name).err(),
             Some(PropertyResolutionError::InvalidValue),
             "{name}"
         );
     }
+}
+
+#[test]
+fn a_date_attribute_keeps_its_time_zone() {
+    let (value, _, _) = present("#17", ATTRIBUTE_SET, "EditionDate");
+    let PropertyValue::Date(date) = value else {
+        panic!("{value:?}");
+    };
+    assert_eq!(date.to_string(), "2022-01-01-05:00");
+    assert_ne!(date, "2022-01-01".parse().unwrap());
 }
 
 #[test]

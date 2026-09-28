@@ -1,6 +1,8 @@
 //! IFC date and time defined types as IR dates and date-times.
 //!
-//! - `IfcDate` (a `STRING`, ISO 8601 `YYYY-MM-DD`) is a [`Date`].
+//! - `IfcDate` (a `STRING`, an `xs:date`: ISO 8601 `YYYY-MM-DD`, optionally
+//!   with a time zone `Z` or `±hh:mm`) is a [`Date`], keeping the zone it
+//!   states. A zoned date is never the unzoned date of the same day.
 //! - `IfcDateTime` (a `STRING`, ISO 8601 `YYYY-MM-DDThh:mm:ss`) is a
 //!   [`DateTime`] when it states a UTC offset. Without one its instant is
 //!   unknown, and the value is refused as incomplete; no zone is guessed.

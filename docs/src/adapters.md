@@ -39,7 +39,9 @@ measures are converted to SI through their unit (see *Measures*).
 
 Date and time types are read as dates, in property sets and attributes alike, and
 keep their declared type and the same evidence locator as any other value:
-- `IfcDate` (`YYYY-MM-DD`) is a `Date`;
+- `IfcDate` (`YYYY-MM-DD`, an `xs:date`) is a `Date`, keeping a time zone it
+  states (`2022-01-01+00:00`); such a date never equals the unzoned date of
+  the same day (see [Dates and date-times](./capabilities.md#dates-and-date-times));
 - `IfcDateTime` is a `DateTime` when it states a UTC offset (`2026-09-27T10:00:00+02:00`
   or `...Z`). Without one its instant is unknown: the property is refused as
   incomplete (`PropertyResolutionError::Incomplete`, naming the value), never read

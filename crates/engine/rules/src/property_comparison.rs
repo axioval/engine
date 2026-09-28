@@ -18,7 +18,7 @@ use regex::{Regex, RegexBuilder};
 
 use crate::support::{
     Parameters, PropertyRef, Tolerance, Traversal, Unavailable, invalid, resolve, temporal,
-    temporal_order, undefined,
+    temporal_holds, temporal_order, undefined,
 };
 
 /// Compares a property on relationship-selected candidates with a property on each checked object.
@@ -909,8 +909,21 @@ fn compare_side(
             if !exact_one(config.factor) {
                 return Err("a factor does not apply to dates".into());
             }
+            let Some(ordering) = ordering? else {
+                return match operator {
+                    Operator::Equals | Operator::NotEquals => temporal_holds(
+                        None,
+                        Some(matches!(operator, Operator::NotEquals)),
+                        Ordering::is_eq,
+                    ),
+                    _ if operator.orders(Ordering::Equal).is_some() => {
+                        temporal_holds(None, None, Ordering::is_eq)
+                    }
+                    _ => Err(format!("`{}` does not compare dates", config.operator_name)),
+                };
+            };
             return operator
-                .orders(ordering?)
+                .orders(ordering)
                 .ok_or_else(|| format!("`{}` does not compare dates", config.operator_name));
         }
         if config.precision.is_some() {

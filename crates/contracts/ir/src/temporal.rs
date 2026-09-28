@@ -5,9 +5,15 @@
 //! the years `0000` to `9999`. The wire form is the ISO 8601 extended form,
 //! as XML Schema writes `xs:date` and `xs:dateTime`:
 //!
-//! - a [`Date`] is `YYYY-MM-DD`, with no time zone;
+//! - a [`Date`] is `YYYY-MM-DD`, optionally followed by a time zone, `Z`
+//!   or `±hh:mm` up to 14 hours, as the `xs:date` lexical space allows;
 //! - a [`DateTime`] is `YYYY-MM-DDThh:mm:ss`, an optional fraction of up to
 //!   nine digits, and an explicit offset: `Z` or `±hh:mm` up to 14 hours.
+//!
+//! A date without a time zone is the common case, and its wire form carries
+//! none. A zoned date is a different value from the unzoned date naming the
+//! same day: XML Schema orders the two only when they lie more than 14 hours
+//! apart, and never finds them equal ([`Date::cmp_timeline`]).
 //!
 //! A date-time without an offset is refused. It names a wall-clock time in
 //! an unknown zone, so it cannot be ordered against any other instant; an
@@ -35,7 +41,7 @@ impl TemporalError {
     fn date(literal: &str, reason: &'static str) -> Self {
         Self {
             literal: literal.to_owned(),
-            expected: "an ISO 8601 date (YYYY-MM-DD)",
+            expected: "an ISO 8601 date (YYYY-MM-DD, optionally with a time zone Z or ±hh:mm)",
             reason,
         }
     }
@@ -63,21 +69,90 @@ pub enum TemporalPrecision {
     Day,
 }
 
-/// A calendar day of the proleptic Gregorian calendar.
+/// A calendar day of the proleptic Gregorian calendar, with the time zone
+/// it was stated in, if any.
 ///
-/// Orders chronologically.
+/// Equality and the derived order are structural: by day, then time zone,
+/// an unzoned date first. They are not chronological across time zones;
+/// [`Date::cmp_timeline`] is XML Schema's order of `xs:date` values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Date {
     year: u16,
     month: u8,
     day: u8,
+    /// Minutes east of UTC; `None` when the date states no time zone.
+    offset_minutes: Option<i16>,
 }
 
 impl Date {
-    /// The date, when it is a real day in the years `0000` to `9999`.
+    /// The date without a time zone, when it is a real day in the years
+    /// `0000` to `9999`.
     pub fn new(year: u16, month: u8, day: u8) -> Option<Self> {
         (year <= 9999 && (1..=12).contains(&month) && day >= 1 && day <= days_in(year, month))
-            .then_some(Self { year, month, day })
+            .then_some(Self {
+                year,
+                month,
+                day,
+                offset_minutes: None,
+            })
+    }
+
+    /// The same day stated in the time zone `offset_minutes` east of UTC,
+    /// when the offset is at most 14 hours either way.
+    #[must_use]
+    pub fn with_offset(self, offset_minutes: i16) -> Option<Self> {
+        (offset_minutes.unsigned_abs() <= 14 * 60).then_some(Self {
+            offset_minutes: Some(offset_minutes),
+            ..self
+        })
+    }
+
+    /// The time zone the date was stated in, in minutes east of UTC; `None`
+    /// when it states none.
+    #[must_use]
+    pub const fn offset_minutes(self) -> Option<i16> {
+        self.offset_minutes
+    }
+
+    /// The calendar day the date states, without its time zone.
+    #[must_use]
+    pub const fn calendar_day(self) -> Self {
+        Self {
+            offset_minutes: None,
+            ..self
+        }
+    }
+
+    /// XML Schema's order of two `xs:date` values; `None` where it has none.
+    ///
+    /// Two unzoned dates order by day. Two zoned dates order by the instant
+    /// each day begins, so `2026-09-28+12:00` equals `2026-09-27-12:00`. A
+    /// zoned and an unzoned date are ordered only when the unzoned one,
+    /// placed in any time zone from `-14:00` to `+14:00`, begins on the same
+    /// side of the zoned one; otherwise the pair is incomparable, neither
+    /// before, equal to nor after the other. They are never equal.
+    #[must_use]
+    pub fn cmp_timeline(self, other: Self) -> Option<Ordering> {
+        const WIDEST: i64 = 14 * 60;
+        let start = |date: Self| date.days_since_epoch() * 1440;
+        match (self.offset_minutes, other.offset_minutes) {
+            (None, None) => Some(start(self).cmp(&start(other))),
+            (Some(left), Some(right)) => {
+                Some((start(self) - i64::from(left)).cmp(&(start(other) - i64::from(right))))
+            }
+            (Some(offset), None) => {
+                let zoned = start(self) - i64::from(offset);
+                let unzoned = start(other);
+                if zoned < unzoned - WIDEST {
+                    Some(Ordering::Less)
+                } else if zoned > unzoned + WIDEST {
+                    Some(Ordering::Greater)
+                } else {
+                    None
+                }
+            }
+            (None, Some(_)) => other.cmp_timeline(self).map(Ordering::reverse),
+        }
     }
 
     #[must_use]
@@ -156,6 +231,43 @@ fn digits<const N: usize>(text: &[u8]) -> Option<u32> {
     })
 }
 
+/// A time zone `Z` or `±hh:mm` of at most 14 hours; `None` for no text.
+///
+/// `-00:00` is refused: it conventionally states that the offset is unknown.
+fn parse_offset(text: &[u8]) -> Result<Option<i16>, &'static str> {
+    match *text {
+        [] => Ok(None),
+        [b'Z'] => Ok(Some(0)),
+        [sign @ (b'+' | b'-'), o0, o1, b':', p0, p1] => {
+            let (Some(hours), Some(minutes)) = (digits::<2>(&[o0, o1]), digits::<2>(&[p0, p1]))
+            else {
+                return Err("expected an offset Z or ±hh:mm");
+            };
+            if minutes >= 60 || hours * 60 + minutes > 14 * 60 {
+                return Err("an offset is at most 14:00");
+            }
+            if sign == b'-' && hours == 0 && minutes == 0 {
+                return Err("-00:00 states no offset");
+            }
+            // At most 840.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+            let minutes = (hours * 60 + minutes) as i16;
+            Ok(Some(if sign == b'-' { -minutes } else { minutes }))
+        }
+        _ => Err("expected an offset Z or ±hh:mm"),
+    }
+}
+
+/// An offset as written: `Z` for UTC, otherwise `±hh:mm`.
+fn write_offset(f: &mut fmt::Formatter<'_>, offset_minutes: i16) -> fmt::Result {
+    if offset_minutes == 0 {
+        return f.write_str("Z");
+    }
+    let sign = if offset_minutes < 0 { '-' } else { '+' };
+    let minutes = offset_minutes.unsigned_abs();
+    write!(f, "{sign}{:02}:{:02}", minutes / 60, minutes % 60)
+}
+
 /// The leading `YYYY-MM-DD` of `text`, and why it is not a date.
 fn parse_date(text: &[u8]) -> Result<Date, &'static str> {
     let [y0, y1, y2, y3, b'-', m0, m1, b'-', d0, d1] = *text else {
@@ -177,13 +289,27 @@ impl FromStr for Date {
     type Err = TemporalError;
 
     fn from_str(literal: &str) -> Result<Self, Self::Err> {
-        parse_date(literal.as_bytes()).map_err(|reason| TemporalError::date(literal, reason))
+        let error = |reason| TemporalError::date(literal, reason);
+        let bytes = literal.as_bytes();
+        let date = parse_date(bytes.get(..10).unwrap_or(bytes)).map_err(error)?;
+        match parse_offset(bytes.get(10..).unwrap_or_default()).map_err(error)? {
+            None => Ok(date),
+            Some(offset) => date
+                .with_offset(offset)
+                .ok_or_else(|| error("an offset is at most 14:00")),
+        }
     }
 }
 
 impl fmt::Display for Date {
+    /// `YYYY-MM-DD`, then the time zone if the date states one: `Z` for
+    /// UTC, otherwise `±hh:mm`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)?;
+        match self.offset_minutes {
+            Some(offset) => write_offset(f, offset),
+            None => Ok(()),
+        }
     }
 }
 
@@ -207,6 +333,7 @@ impl DateTime {
     /// The date-time, when the time of day and the offset are valid.
     ///
     /// The offset is in minutes east of UTC, at most 14 hours either way.
+    /// A time zone `date` states is ignored: `offset_minutes` is the one.
     #[must_use]
     pub fn new(
         date: Date,
@@ -220,7 +347,7 @@ impl DateTime {
             && nanosecond < 1_000_000_000
             && offset_minutes.unsigned_abs() <= 14 * 60)
             .then_some(Self {
-                date,
+                date: date.calendar_day(),
                 hour,
                 minute,
                 second,
@@ -249,7 +376,8 @@ impl DateTime {
         )
     }
 
-    /// The calendar day the value states, in its own offset.
+    /// The calendar day the value states, in its own offset, without a time
+    /// zone.
     #[must_use]
     pub const fn date(self) -> Date {
         self.date
@@ -322,27 +450,8 @@ impl FromStr for DateTime {
                 * 10_u32.pow(9 - u32::try_from(length).unwrap_or(9));
             rest = &fraction[length..];
         }
-        let offset = match rest {
-            [] => return Err(error("the UTC offset is missing")),
-            b"Z" => 0,
-            [sign @ (b'+' | b'-'), o0, o1, b':', p0, p1] => {
-                let (Some(hours), Some(minutes)) =
-                    (digits::<2>(&[*o0, *o1]), digits::<2>(&[*p0, *p1]))
-                else {
-                    return Err(error("expected an offset Z or ±hh:mm"));
-                };
-                if minutes >= 60 || hours * 60 + minutes > 14 * 60 {
-                    return Err(error("an offset is at most 14:00"));
-                }
-                if *sign == b'-' && hours == 0 && minutes == 0 {
-                    return Err(error("-00:00 states no offset"));
-                }
-                // At most 840.
-                #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                let minutes = (hours * 60 + minutes) as i16;
-                if *sign == b'-' { -minutes } else { minutes }
-            }
-            _ => return Err(error("expected an offset Z or ±hh:mm")),
+        let Some(offset) = parse_offset(rest).map_err(error)? else {
+            return Err(error("the UTC offset is missing"));
         };
         if hour == 24 {
             return Err(error("24:00 is refused; write 00:00 of the next day"));
@@ -374,12 +483,7 @@ impl fmt::Display for DateTime {
             let fraction = format!("{:09}", self.nanosecond);
             write!(f, ".{}", fraction.trim_end_matches('0'))?;
         }
-        if self.offset_minutes == 0 {
-            return f.write_str("Z");
-        }
-        let sign = if self.offset_minutes < 0 { '-' } else { '+' };
-        let minutes = self.offset_minutes.unsigned_abs();
-        write!(f, "{sign}{:02}:{:02}", minutes / 60, minutes % 60)
+        write_offset(f, self.offset_minutes)
     }
 }
 
@@ -409,7 +513,7 @@ macro_rules! lexical_serde {
     };
 }
 
-lexical_serde!(Date, "an ISO 8601 date string");
+lexical_serde!(Date, "an ISO 8601 date string, optionally with a time zone");
 lexical_serde!(DateTime, "an ISO 8601 date-time string with a UTC offset");
 
 #[cfg(test)]

@@ -34,7 +34,10 @@ fn a_date_is_a_real_calendar_day_in_extended_form() {
         "2026-9-27",
         "26-09-27",
         "+2026-09-27",
-        "2026-09-27Z",
+        "2026-09-27z",
+        "2026-09-27+0200",
+        "2026-09-27+14:30",
+        "2026-09-27-00:00",
         "2026-09-27T00:00:00Z",
         " 2026-09-27",
         "２０２６-09-27",
@@ -42,6 +45,56 @@ fn a_date_is_a_real_calendar_day_in_extended_form() {
     ] {
         assert!(bad.parse::<Date>().is_err(), "{bad:?}");
     }
+}
+
+#[test]
+fn a_date_may_state_a_time_zone() {
+    let zoned = date("2022-01-01+00:00");
+    assert_eq!((zoned.year(), zoned.month(), zoned.day()), (2022, 1, 1));
+    assert_eq!(zoned.offset_minutes(), Some(0));
+    // UTC is written `Z`, as for a date-time.
+    assert_eq!(zoned.to_string(), "2022-01-01Z");
+    assert_eq!(date("2022-01-01Z"), zoned);
+    assert_eq!(date("2022-01-01-09:30").offset_minutes(), Some(-570));
+    assert_eq!(date("2022-01-01+14:00").to_string(), "2022-01-01+14:00");
+    assert_eq!(date("2022-01-01").offset_minutes(), None);
+    assert_eq!(zoned.calendar_day(), date("2022-01-01"));
+    assert_ne!(zoned, date("2022-01-01"), "a zoned date is another value");
+    assert_eq!(Date::new(2022, 1, 1).unwrap().with_offset(841), None);
+    // A date-time's day carries no zone of its own.
+    assert_eq!(
+        DateTime::new(zoned, (1, 0, 0), 0, 60).unwrap().date(),
+        date("2022-01-01")
+    );
+}
+
+#[test]
+fn zoned_and_unzoned_dates_order_as_xml_schema_orders_them() {
+    let order = |left: &str, right: &str| date(left).cmp_timeline(date(right));
+    assert_eq!(order("2022-01-01", "2022-01-02"), Some(Ordering::Less));
+    assert_eq!(order("2022-01-01", "2022-01-01"), Some(Ordering::Equal));
+    // Zoned dates compare the instants their days begin.
+    assert_eq!(
+        order("2022-01-02+12:00", "2022-01-01-12:00"),
+        Some(Ordering::Equal)
+    );
+    assert_eq!(
+        order("2022-01-01+01:00", "2022-01-01Z"),
+        Some(Ordering::Less)
+    );
+    // Within 14 hours either way a zoned and an unzoned date are
+    // incomparable, so never equal.
+    assert_eq!(order("2022-01-01Z", "2022-01-01"), None);
+    assert_eq!(order("2022-01-01", "2022-01-01+14:00"), None);
+    assert_eq!(order("2022-01-01-14:00", "2022-01-01"), None);
+    assert_eq!(order("2022-01-02Z", "2022-01-01"), Some(Ordering::Greater));
+    assert_eq!(order("2022-01-01", "2022-01-02Z"), Some(Ordering::Less));
+    assert_eq!(
+        order("2022-01-01-09:00", "2022-01-02"),
+        Some(Ordering::Less)
+    );
+    // Exactly 14 hours apart is still indeterminate: the order is strict.
+    assert_eq!(order("2022-01-01-10:00", "2022-01-02"), None);
 }
 
 #[test]
@@ -98,6 +151,15 @@ fn wire_forms_are_iso_8601_strings() {
 
     let value = PropertyValue::DateTime(date_time("2026-09-27T10:30:00+02:00"));
     let wire = json!({"type": "dateTime", "value": "2026-09-27T10:30:00+02:00"});
+    assert_eq!(serde_json::to_value(&value).unwrap(), wire);
+    assert_eq!(
+        serde_json::from_value::<PropertyValue>(wire).unwrap(),
+        value
+    );
+
+    // A zoned date keeps its zone on the wire; an unzoned one gains none.
+    let value = PropertyValue::Date(date("2022-01-01+00:00"));
+    let wire = json!({"type": "date", "value": "2022-01-01Z"});
     assert_eq!(serde_json::to_value(&value).unwrap(), wire);
     assert_eq!(
         serde_json::from_value::<PropertyValue>(wire).unwrap(),

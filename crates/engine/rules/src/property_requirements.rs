@@ -829,8 +829,10 @@ fn parse_dates(row: Row<'_>) -> Result<Option<Dates>, Unavailable> {
         exclusive_flags(row, minimum.is_some(), maximum.is_some())?;
     if let (Some(low), Some(high)) = (&minimum, &maximum) {
         match temporal_order(low, high, precision) {
-            Some(Ok(Ordering::Greater)) => return Err(invalid("minimum exceeds maximum")),
-            Some(Ok(Ordering::Equal)) if minimum_exclusive || maximum_exclusive => {
+            Some(Ok(Some(Ordering::Greater))) => {
+                return Err(invalid("minimum exceeds maximum"));
+            }
+            Some(Ok(Some(Ordering::Equal))) if minimum_exclusive || maximum_exclusive => {
                 return Err(invalid(
                     "an exclusive range between equal bounds holds no value",
                 ));
@@ -1527,10 +1529,13 @@ fn date_holds(dates: &Dates, value: &PropertyValue) -> Holds {
                 display(Some(value))
             )),
             Some(Err(why)) => Holds::Undecided(why),
-            Some(Ok(order)) if order == outside || (exclusive && order == Ordering::Equal) => {
+            Some(Ok(None)) => Holds::Undecided(crate::support::INCOMPARABLE_DATES.to_owned()),
+            Some(Ok(Some(order)))
+                if order == outside || (exclusive && order == Ordering::Equal) =>
+            {
                 Holds::No(None)
             }
-            Some(Ok(_)) => Holds::Yes,
+            Some(Ok(Some(_))) => Holds::Yes,
         }
     };
     within(

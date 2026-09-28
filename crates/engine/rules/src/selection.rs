@@ -18,7 +18,9 @@ use axioval_ir::{
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
 
-use crate::support::{Tolerance, Traversal, exact_f64, si_quantity, temporal_order, undefined};
+use crate::support::{
+    Tolerance, Traversal, exact_f64, si_quantity, temporal_holds, temporal_order, undefined,
+};
 
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
@@ -987,6 +989,17 @@ impl Order {
         matches!(self, Self::Equal | Self::NotEqual)
     }
 
+    /// Whether the comparison holds for two dates whose order may be
+    /// indeterminate (see `temporal_order`).
+    fn temporal(self, ordering: Option<Ordering>) -> Result<bool, String> {
+        let equality = match self {
+            Self::Equal => Some(false),
+            Self::NotEqual => Some(true),
+            _ => None,
+        };
+        temporal_holds(ordering, equality, |ordering| self.holds(ordering))
+    }
+
     fn holds(self, ordering: Ordering) -> bool {
         match self {
             Self::Equal => ordering.is_eq(),
@@ -995,6 +1008,17 @@ impl Order {
             Self::LessOrEqual => ordering.is_le(),
             Self::Greater => ordering.is_gt(),
             Self::GreaterOrEqual => ordering.is_ge(),
+        }
+    }
+}
+
+impl Expected {
+    /// A date or date-time literal as a value, and what it is.
+    fn temporal(&self) -> Option<(PropertyValue, &'static str)> {
+        match self {
+            Self::Date(date) => Some((PropertyValue::Date(*date), "a date")),
+            Self::DateTime(instant) => Some((PropertyValue::DateTime(*instant), "a date-time")),
+            _ => None,
         }
     }
 }
@@ -1265,20 +1289,13 @@ impl Test {
             Self::Empty => Ok(undefined(Some(actual))),
             Self::NotEmpty => Ok(!undefined(Some(actual))),
             Self::Compare(order, expected, precision) => {
+                if let Some((expected, declared)) = expected.temporal() {
+                    return match temporal_order(actual, &expected, *precision) {
+                        Some(ordering) => order.temporal(ordering?),
+                        None => mismatch(declared),
+                    };
+                }
                 let ordering = match (expected, actual) {
-                    (Expected::Date(expected), _) => {
-                        match temporal_order(actual, &PropertyValue::Date(*expected), *precision) {
-                            Some(ordering) => ordering?,
-                            None => return mismatch("a date"),
-                        }
-                    }
-                    (Expected::DateTime(expected), _) => {
-                        let expected = PropertyValue::DateTime(*expected);
-                        match temporal_order(actual, &expected, *precision) {
-                            Some(ordering) => ordering?,
-                            None => return mismatch("a date-time"),
-                        }
-                    }
                     (Expected::Boolean(expected), PropertyValue::Boolean(actual)) => {
                         actual.cmp(expected)
                     }
@@ -1323,6 +1340,8 @@ impl Test {
                         return mismatch(&format!("a quantity in {}", dimension.unit_symbol()));
                     }
                     (Expected::Text(_), _) => return mismatch("text"),
+                    (Expected::Date(_), _) => return mismatch("a date"),
+                    (Expected::DateTime(_), _) => return mismatch("a date-time"),
                 };
                 Ok(order.holds(ordering))
             }

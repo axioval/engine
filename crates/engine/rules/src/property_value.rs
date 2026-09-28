@@ -819,9 +819,10 @@ fn temporal_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Ver
             .map_err(|message| format!("{literal:?}: {message}"))
     };
     let shown = crate::support::display(Some(value));
+    // A zoned and an unzoned date XML Schema cannot order are unequal.
     let equal = one_of(
         constraints.values,
-        |literal| order(literal).map(std::cmp::Ordering::is_eq),
+        |literal| order(literal).map(|ordering| ordering.is_some_and(std::cmp::Ordering::is_eq)),
         &shown,
     );
     if !matches!(equal, Verdict::Meets) {
@@ -836,8 +837,14 @@ fn temporal_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Ver
     for (bound, holds, symbol) in checks {
         let Some(bound) = bound else { continue };
         match order(bound) {
-            Ok(ordering) if holds(ordering) => {}
-            Ok(_) => return Verdict::Fails(format!("is {shown}, not {symbol} {bound}")),
+            Ok(Some(ordering)) if holds(ordering) => {}
+            Ok(Some(_)) => return Verdict::Fails(format!("is {shown}, not {symbol} {bound}")),
+            Ok(None) => {
+                return Verdict::Inapplicable(
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!("{bound:?}: {}", crate::support::INCOMPARABLE_DATES),
+                );
+            }
             Err(message) => return invalid(message),
         }
     }

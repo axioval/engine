@@ -10,7 +10,7 @@ use regex::{Regex, RegexBuilder};
 use crate::selection::select_objects;
 use crate::support::{
     Parameters, PropertyRef, Tolerance, Unavailable, display, exact_f64, finding, invalid, resolve,
-    temporal_order, undefined,
+    temporal_holds, temporal_order, undefined,
 };
 
 /// Checks one property of each selected object against a declared predicate.
@@ -23,10 +23,13 @@ use crate::support::{
 /// expression that must match the whole value.
 ///
 /// A `date` or `date_time` target takes the ordered operators and compares
-/// chronologically: dates by day, date-times as instants whatever their UTC
-/// offsets. `precision` `day` reads every date-time as the calendar day it
-/// states, so a date-time value compares with a `date` target and the
-/// reverse; without it that pair is not evaluated. `precision` on any other
+/// chronologically: dates by day, as XML Schema orders them, date-times as
+/// instants whatever their UTC offsets. A date stating a time zone equals no
+/// date stating none, and within 14 hours of one it is neither before nor
+/// after it, so an order there is not evaluated. `precision` `day` reads
+/// every date-time and date as the calendar day it states, so a date-time
+/// value compares with a `date` target and the reverse; without it that
+/// pair is not evaluated. `precision` on any other
 /// target is an invalid declaration.
 ///
 /// A comparison presupposes a value: an exactly absent property fails every
@@ -53,6 +56,15 @@ enum Order {
 }
 
 impl Order {
+    /// `Some(negated)` for an equality test, `None` for an order.
+    fn equality(self) -> Option<bool> {
+        match self {
+            Self::Equal => Some(false),
+            Self::NotEqual => Some(true),
+            _ => None,
+        }
+    }
+
     fn holds(self, ordering: std::cmp::Ordering) -> bool {
         match self {
             Self::Equal => ordering.is_eq(),
@@ -246,7 +258,9 @@ impl Predicate {
         };
         if let Self::Temporal(order, expected, precision) = self {
             return match temporal_order(actual, expected, *precision) {
-                Some(ordering) => ordering.map(|ordering| order.holds(ordering)),
+                Some(ordering) => ordering.and_then(|ordering| {
+                    temporal_holds(ordering, order.equality(), |ordering| order.holds(ordering))
+                }),
                 // A value of another type fails, as for every other target.
                 None => Ok(false),
             };

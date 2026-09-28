@@ -6,6 +6,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Dates with a time zone.** (Refs #116) `Date` may carry the time zone
+  it was stated in, as the `xs:date` lexical space allows: `2022-01-01Z`,
+  `2022-01-01+01:00` (`Date::with_offset`, `Date::offset_minutes`,
+  `Date::calendar_day`). A date without one keeps its wire form byte for
+  byte. Comparisons follow XML Schema (`Date::cmp_timeline`): zoned dates
+  compare the instants their days begin, and a zoned and an unzoned date
+  are ordered only more than 14 hours apart, otherwise incomparable, so
+  never equal and, for an order, not evaluated. `day` precision reads a
+  zoned date as the day it states. The IFC adapter reads a zoned `IfcDate`
+  (`'2022-01-01+00:00'`) exactly, in property sets and attributes alike,
+  where it was an invalid value, so the IDS rule "dates are compared as
+  written" holds without comparing text: the buildingSMART cases
+  `fail-dates_are_treated_as_strings_1_2` and `_2_2` are caught.
+  **Breaking:** `Date` gains a field, so its derived order (still
+  structural) now places a zoned date after the unzoned one of its day;
+  package date literals may state a zone.
+
 - **`axioval-ids` is published.** (Refs #116) The IDS package importer
   graduates from `staging/ids` to `crates/packages/ids`, a workspace member
   published at the workspace version, now that `openbim-ids` 0.1.3 carries

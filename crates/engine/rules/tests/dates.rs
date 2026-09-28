@@ -490,3 +490,142 @@ fn one_instant_in_two_offsets_is_one_value() {
         );
     assert_eq!(flagged(&evaluation), ["x", "y"]);
 }
+
+/// `u` states 2022-01-01 in UTC, `v` the unzoned day, `w` and `x` one day
+/// beginning at 12:00 UTC in two zones, `y` 2022-01-03 in UTC.
+fn zoned_model() -> Model {
+    Model::default()
+        .object("u", "door")
+        .object("v", "door")
+        .object("w", "door")
+        .object("x", "door")
+        .object("y", "door")
+        .value("u", SET, "Inspected", date("2022-01-01+00:00"))
+        .value("v", SET, "Inspected", date("2022-01-01"))
+        .value("w", SET, "Inspected", date("2022-01-02+12:00"))
+        .value("x", SET, "Inspected", date("2022-01-01-12:00"))
+        .value("y", SET, "Inspected", date("2022-01-03Z"))
+}
+
+fn zoned_value(extra: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    let mut parameters = vec![("property", property(Some(SET), "Inspected"))];
+    parameters.extend(extra);
+    zoned_model().evaluate(
+        &PropertyValueConstraint,
+        &rule(
+            "axioval:capability.property-value",
+            Selector::All,
+            parameters,
+        ),
+    )
+}
+
+#[test]
+fn a_zoned_date_equals_no_unzoned_date() {
+    let equal = zoned_value(vec![("values", strings(&["2022-01-01"]))]);
+    assert_eq!(flagged(&equal), ["u", "w", "x", "y"]);
+    assert!(equal.not_evaluated_outcomes().is_empty());
+    // Zoned literals compare the instants the days begin.
+    let zoned = zoned_value(vec![("values", strings(&["2022-01-01-12:00"]))]);
+    assert_eq!(flagged(&zoned), ["u", "v", "y"]);
+    // An order XML Schema leaves indeterminate is not evaluated.
+    let bound = zoned_value(vec![("min_inclusive", string("2022-01-01"))]);
+    assert!(flagged(&bound).is_empty());
+    assert_eq!(not_evaluated(&bound), ["u", "w", "x"]);
+    assert!(
+        bound
+            .not_evaluated_outcomes()
+            .iter()
+            .all(|outcome| outcome.message().contains("within 14 hours")),
+        "{:?}",
+        bound.not_evaluated_outcomes()
+    );
+    // At day precision only the stated day counts.
+    let by_day = zoned_value(vec![
+        ("values", strings(&["2022-01-01"])),
+        ("precision", string("day")),
+    ]);
+    assert_eq!(flagged(&by_day), ["w", "y"]);
+}
+
+#[test]
+fn zoned_dates_compare_as_xml_schema_orders_them_in_every_capability() {
+    let predicate = |operator: &str| {
+        zoned_model().evaluate(
+            &PropertyPredicate,
+            &rule(
+                "axioval:capability.property-predicate",
+                Selector::All,
+                vec![
+                    ("property_set", string(SET)),
+                    ("property", string("Inspected")),
+                    ("operator", string(operator)),
+                    ("date", date_literal("2022-01-01")),
+                ],
+            ),
+        )
+    };
+    assert_eq!(flagged(&predicate("equal")), ["u", "w", "x", "y"]);
+    assert_eq!(flagged(&predicate("not_equal")), ["v"]);
+    let less = predicate("less_than");
+    assert_eq!(flagged(&less), ["v", "y"]);
+    assert_eq!(not_evaluated(&less), ["u", "w", "x"]);
+
+    let compared = zoned_model().evaluate(
+        &PropertyComparison,
+        &rule(
+            "axioval:capability.property-comparison",
+            Selector::All,
+            vec![
+                ("compared_selector", common::selector(Selector::All)),
+                ("compared_property", property(Some(SET), "Inspected")),
+                ("factor", number(1.0)),
+                ("component_mode", string("checked")),
+                ("quantifier", string("each")),
+                ("operator", string("equals")),
+                ("target_date", date_literal("2022-01-01")),
+            ],
+        ),
+    );
+    assert_eq!(flagged(&compared), ["u", "w", "x", "y"]);
+    assert!(compared.not_evaluated_outcomes().is_empty());
+
+    // Two zones stating one day are one value; the unzoned day is another.
+    let unique = zoned_model().evaluate(
+        &axioval_rules::UniqueValue,
+        &rule(
+            "axioval:capability.unique-value",
+            Selector::All,
+            vec![("property", property(Some(SET), "Inspected"))],
+        ),
+    );
+    assert_eq!(flagged(&unique), ["w", "x"]);
+
+    let chosen = |operator| {
+        let evaluation = zoned_model().evaluate(
+            &ManualIssue,
+            &rule(
+                "axioval:capability.manual-issue",
+                inspected(operator, date_literal("2022-01-01"), None),
+                vec![("title", string("selected"))],
+            ),
+        );
+        let mut chosen: Vec<String> = evaluation
+            .findings()
+            .iter()
+            .flat_map(|finding| finding.object_id().into_iter().chain(&finding.related))
+            .map(|id| id.local_id.clone())
+            .collect();
+        chosen.sort();
+        chosen.dedup();
+        (chosen, not_evaluated(&evaluation))
+    };
+    let (equal, open) = chosen(ComparisonOperator::Equals);
+    assert_eq!(equal, ["v"]);
+    assert!(open.is_empty());
+    let (other, _) = chosen(ComparisonOperator::NotEquals);
+    assert_eq!(other, ["u", "w", "x", "y"]);
+    let (later, open) = chosen(ComparisonOperator::GreaterThan);
+    assert_eq!(later, ["y"]);
+    assert_eq!(open, ["u", "w", "x"]);
+}

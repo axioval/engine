@@ -728,7 +728,15 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
                 .collect::<Vec<_>>()
                 .join("\u{1f}")
         ),
-        PropertyValue::Date(date) => format!("date:{date}"),
+        // Zoned dates beginning at one instant are one value, whichever
+        // zone states them; an unzoned date equals no zoned one.
+        PropertyValue::Date(date) => match date.offset_minutes() {
+            None => format!("date:{date}"),
+            Some(offset) => format!(
+                "zoned-date:{}",
+                date.days_since_epoch() * 1440 - i64::from(offset)
+            ),
+        },
         // One instant is one value, whichever offset states it.
         PropertyValue::DateTime(instant) => {
             let (seconds, nanoseconds) = instant.unix_instant();
@@ -740,33 +748,63 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
 
 /// The chronological order of two dates or date-times; `None` unless both are.
 ///
-/// Dates order by day and date-times as instants, whatever their offsets. A
-/// date-time and a date compare only at `day` precision, which reads every
-/// date-time as the calendar day it states in its own offset; exactly, a
-/// date-time neither precedes nor follows the day it falls on, so the pair is
-/// an error, never a verdict.
+/// Dates order as XML Schema orders `xs:date` values (`Date::cmp_timeline`)
+/// and date-times as instants, whatever their offsets. `Ok(None)` is XML
+/// Schema's indeterminate order: a date stating a time zone and one stating
+/// none lie within 14 hours of each other, so neither precedes, equals nor
+/// follows the other. Equality is then decided (they differ) and an order
+/// is not (see [`temporal_holds`]). A date-time and a date compare only
+/// at `day` precision, which reads every date-time and every date as the
+/// calendar day it states, its time zone aside; exactly, a date-time
+/// neither precedes nor follows the day it falls on, so the pair is an
+/// error, never a verdict.
 pub(crate) fn temporal_order(
     left: &PropertyValue,
     right: &PropertyValue,
     precision: Option<TemporalPrecision>,
-) -> Option<Result<Ordering, String>> {
+) -> Option<Result<Option<Ordering>, String>> {
     let day = |value: &PropertyValue| match value {
-        PropertyValue::Date(date) => Some(*date),
+        PropertyValue::Date(date) => Some(date.calendar_day()),
         PropertyValue::DateTime(instant) => Some(instant.date()),
         _ => None,
     };
     let (left_day, right_day) = (day(left)?, day(right)?);
     Some(match (left, right, precision) {
-        (_, _, Some(TemporalPrecision::Day))
-        | (PropertyValue::Date(_), PropertyValue::Date(_), None) => Ok(left_day.cmp(&right_day)),
+        (_, _, Some(TemporalPrecision::Day)) => Ok(Some(left_day.cmp(&right_day))),
+        (PropertyValue::Date(left), PropertyValue::Date(right), None) => {
+            Ok(left.cmp_timeline(*right))
+        }
         (PropertyValue::DateTime(left), PropertyValue::DateTime(right), None) => {
-            Ok(left.cmp_instant(*right))
+            Ok(Some(left.cmp_instant(*right)))
         }
         _ => Err(
             "a date-time compares with a date only at day precision; declare precision `day`"
                 .into(),
         ),
     })
+}
+
+/// Why an order of two dates XML Schema leaves indeterminate is not decided.
+pub(crate) const INCOMPARABLE_DATES: &str = "a date stating a time zone and one stating none \
+     lie within 14 hours of each other, so neither precedes the other";
+
+/// Whether an equality or order holds between two dates or date-times
+/// whose order may be indeterminate (see [`temporal_order`]).
+///
+/// `is` judges a decided ordering. `equality` is `Some(false)` for an
+/// equality test and `Some(true)` for an inequality test, which an
+/// indeterminate pair answers exactly (they differ), and `None` for an
+/// order, which it cannot answer.
+pub(crate) fn temporal_holds(
+    ordering: Option<Ordering>,
+    equality: Option<bool>,
+    is: impl FnOnce(Ordering) -> bool,
+) -> Result<bool, String> {
+    match (ordering, equality) {
+        (Some(ordering), _) => Ok(is(ordering)),
+        (None, Some(negated)) => Ok(negated),
+        (None, None) => Err(INCOMPARABLE_DATES.into()),
+    }
 }
 
 /// Whether a value is a date or a date-time.

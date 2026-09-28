@@ -392,6 +392,73 @@ fn a_wall_rule_on_a_model_with_resources_never_sees_them() {
     assert!(result["report"].get("resources").is_none(), "{result:#}");
 }
 
+/// Walls whose `Pset_WallCommon.Reference` holds `values`, one per wall,
+/// in order: `#1`, `#2`, ...
+fn walls_with_references(values: &[&str]) -> String {
+    let mut data = String::new();
+    for (index, value) in values.iter().enumerate() {
+        let wall = 10 * index + 1;
+        writeln!(
+            data,
+            "#{wall}=IFCWALL('{wall:022}',$,$,$,$,$,$,$,$);\n\
+             #{}=IFCPROPERTYSINGLEVALUE('Reference',$,{value},$);\n\
+             #{}=IFCPROPERTYSET('{:022}',$,'Pset_WallCommon',$,(#{}));\n\
+             #{}=IFCRELDEFINESBYPROPERTIES('{:022}',$,$,$,(#{wall}),#{});",
+            wall + 1,
+            wall + 2,
+            wall + 2,
+            wall + 1,
+            wall + 3,
+            wall + 3,
+            wall + 2,
+        )
+        .unwrap();
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// The subjects of a result's findings and not-evaluated outcomes.
+fn subjects_of(result: &Value) -> (Vec<String>, Vec<String>) {
+    let subjects = |outcomes: &str| {
+        result["report"][outcomes]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|outcome| {
+                outcome["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap_or("(no object)")
+                    .to_owned()
+            })
+            .collect()
+    };
+    (subjects("findings"), subjects("not_evaluated"))
+}
+
+#[test]
+fn a_date_stating_a_time_zone_is_not_the_unzoned_date() {
+    // `IfcDate` is an `xs:date`: `2022-01-01+00:00` is read with its zone,
+    // and XML Schema never finds it equal to `2022-01-01`.
+    let case = Case::new("zoned-dates");
+    let (output, result) = case.geometry_rule(
+        &walls_with_references(&["IFCDATE('2022-01-01+00:00')", "IFCDATE('2022-01-01')"]),
+        &[],
+        "axioval:capability.property-value",
+        &registry_signature("axioval:capability.property-value"),
+        entity("wall"),
+        json!({"property": {"type": "propertyReference",
+                            "property": "axioval:example.ifc.reference",
+                            "propertySet": "axioval:example.ifc.pset-wall-common"},
+               "values": {"type": "stringList", "value": ["2022-01-01"]}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#1"], "{result:#}");
+    assert!(open.is_empty(), "{result:#}");
+}
+
 #[test]
 fn integrity_issues_and_unselectable_objects_are_reported() {
     let case = Case::new("integrity");

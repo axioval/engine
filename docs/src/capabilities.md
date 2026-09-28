@@ -744,9 +744,20 @@ occupants.
   the door it starts at, surely exceeds `U` is not crossed; a section that
   is not measured, or undecided, may be. The farthest point's answer is a
   point, not a walk (a walk from one point bounds that point only), so from
-  the farthest point only the second bound applies. A travel within the
+  the farthest point only the second bound applies. Where the backend
+  weighs travel (`weighs_travel`, see
+  [Weighted travel](./metric-routing.md#weighted-travel-and-forced-walks)),
+  the same query is asked weighted as well, from a door or from the
+  farthest point: over every section that may multiply for the upper bound
+  (which replaces the others where smaller), and over only the sections
+  surely multiplying (surely picked, no `shared_by`) for the lower bound,
+  which replaces the plain one where larger. A room whose weighted farthest
+  point exceeds the maximum only because of a stair's factor is then a
+  finding, naming the rows it counted. A walk that climbs, or a backend
+  that cannot weigh it (a tessellated section, crossing footprints), keeps
+  the bounds above. A travel within the
   maximum only at the plain length is therefore not evaluated unless the
-  traced walk passes, never a pass on a guess. A row with
+  traced or weighted walk passes, never a pass on a guess. A row with
   `shared_by` multiplies only a section at least that many checked spaces
   (including those the rule's selector cannot decide) reach along
   `section_path`; a space whose sections cannot be read may reach any.
@@ -847,10 +858,15 @@ occupants.
   whichever exits there are enters it, ties included. Only passages the
   named walk lies over (`trace_path`) are tried. A passage is **off** every
   shortest walk from a door when the plan distance from the door to it and
-  on from it to the nearest possible exit (`ProximityService`) exceeds `U`;
-  every other passage **may** be crossed. A space surely relies on a
+  on from it to the nearest possible exit (`ProximityService`) exceeds `U`,
+  or when the shortest walk to any possible exit forced through it
+  (`forced_walk`, keeping out of only what surely is avoided, every target
+  placed) is longer than `U` or enters it nowhere; every other passage
+  **may** be crossed. A space surely relies on a
   passage every door's walks surely cross; it may rely on one any door's
-  walks may cross; a door that cannot be walked, a space without doors or
+  walks may cross. A space measured from its farthest point that reaches no
+  door walks its passages from its farthest point instead, as its travel
+  does; a door that cannot be walked, any other space without doors, or one
   with unreadable exits may use any passage. A passage carries the loads
   of the spaces surely relying on it at least and of those that may at
   most, so ties and unknowns widen the load rather than guess it. A

@@ -79,6 +79,51 @@ shortest walk among possibly several.
   requested object (sorted, deduplicated) and none whose lower bound
   exceeds the polyline's own length. The default refuses.
 
+## Weighted travel and forced walks
+
+- `NearestTargetRequest::with_costs` and `FarthestPointRequest::with_costs`
+  take `TravelCost`s: an object and a factor of at least one
+  (`InvalidCostFactor` otherwise). A metre walked over the object's plan
+  footprint counts `factor` metres; where footprints overlap the greatest
+  factor counts, along an edge the cheaper side. The answer then brackets
+  the least weighted cost, and a nearest answer's route is a walk whose
+  weighted cost is at most its upper bound. The costs are sorted by
+  object, each object's greatest factor kept, a factor of one dropped. A
+  backend answers only if `weighs_travel()` says so; the default is
+  `false`, and the handle refuses a weighted request rather than let a
+  backend answer the plain length.
+- `forced_walk(ForcedWalkRequest)` brackets the shortest walk from a point
+  to the nearest of several targets that enters an object's plan footprint
+  (touching counts), optionally keeping out of objects (`with_avoided`,
+  asked only of a backend that avoids objects). `ForcedWalkEvidence` holds a
+  finite lower bound and an upper bound that is infinite when no entering
+  walk is known; `NeverEntered` says, under complete evidence, that no walk
+  to a target enters the object. A lower bound beyond the upper bound of the
+  plain walk proves that no shortest walk enters the object. The handle
+  checks a claimed convergence against the tolerance and that a
+  never-entered verdict names its request. The default refuses.
+
+In the Axiolid backend (`axiolid-route` 0.3.4, axiolid/kernel#195 and
+#196):
+
+- **Weighted maps.** Each costed object's exact plan footprint, cut to the
+  level's free region, becomes a cost region of a weighted distance map; the
+  cut's vertices within a micrometre of an axis-parallel wall are moved onto
+  it, since overlay output is rounded anew on each operation
+  (axiolid/kernel#173) and a cost edge crossing a wall by nanometres is
+  refused. A tessellated or bodiless costed object, footprints crossing
+  each other or a wall at an angle, a body with a radius, and a request
+  across levels are refused. Points along cost edges stand half the
+  tolerance apart (5 mm for a nearest target), or as close as 1024 points
+  over all cost edges allow; the bracket is first order in that spacing.
+  Lower bounds come from the map only on a closed level, as for plain maps.
+- **Forced walks.** One distance map out of the origin and one out of the
+  targets, over the same free region (narrow portals cut as for nearest
+  targets), bracket the forced walk into each polygon of the object's
+  footprint (a tessellation's grown plan box, which only lowers the bound).
+  It is answered only on a closed level with every target placed, else
+  refused; its upper bound only for a point and an exact footprint.
+
 ## Routes across levels
 
 `MetricRouteRequest`, `NearestTargetRequest` and `FarthestPointRequest`
@@ -200,7 +245,7 @@ closed, counts only by its straight-line distance, which no route beats.
   it lies inside and farther than the margin from it.
 
 These need `axiolid-route` 0.3.2 or later (`distance_map`, `farthest_point`);
-the workspace requires 0.3.3.
+the workspace requires 0.3.4.
 
 ### Across levels in the Axiolid backend
 
@@ -275,9 +320,12 @@ Where metres on a stair or a shared section count several times, the
 multiplied travel from a door is bounded from above by the answer's own
 walk, traced over the sections; from the farthest point, whose answer is a
 point and not a walk, by the plain upper bound times the largest factor of
-a section within that bound's reach in plan. With `walked_passages`, a
-passage is one every shortest walk from a door crosses when the walk around
-it is longer than the plain walk. See
+a section within that bound's reach in plan. Where the backend weighs
+travel, the weighted walk and the weighted farthest point bound it from
+above over every possible section and from below over the sure ones. With
+`walked_passages`, a passage is one every shortest walk from a door crosses
+when the walk around it is longer than the plain walk, and off every
+shortest walk when the walk forced through it is. See
 [Escape routes](./capabilities.md#escape-routes).
 
 Both take `stair_selector`, `ramp_selector` and `lift_selector`,

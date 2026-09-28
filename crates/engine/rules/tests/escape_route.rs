@@ -12,15 +12,16 @@ use std::sync::Arc;
 use axioval_engine::{
     CapabilityEvaluation, CentrePlacement, CompleteMetricEvidence, ConnectorRouting,
     ElevationInterval, FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest,
-    GeometryFidelity, LengthInterval, MetricPoint, MetricRouteOutcome, MetricRouteRequest,
-    MetricRoutingError, MetricRoutingService, MetricRoutingServiceHandle, NearestTargetEvidence,
-    NearestTargetOutcome, NearestTargetRequest, NotEvaluatedReason, ObjectBounds, PathTrace,
-    PathTraceRequest, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanCentre,
-    PlanLength, PlanRectangle, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, ProximityServiceHandle, RectangleOrientation,
-    ServiceRegistry, UnreachableRegionEvidence, UnreachableTargetsEvidence, VerticalExtent,
-    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    ForcedWalkEvidence, ForcedWalkOutcome, ForcedWalkRequest, GeometryFidelity, LengthInterval,
+    MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
+    MetricRoutingServiceHandle, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest,
+    NotEvaluatedReason, ObjectBounds, PathTrace, PathTraceRequest, PlanArea, PlanAreaError,
+    PlanAreaService, PlanAreaServiceHandle, PlanCentre, PlanLength, PlanRectangle, PlanSpan,
+    PlanSpanError, PlanSpanService, PlanSpanServiceHandle, ProjectedDistanceEvidence,
+    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RectangleOrientation, ServiceRegistry, TravelCost,
+    UnreachableRegionEvidence, UnreachableTargetsEvidence, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, ObjectId, PropertyValue, QuantityDimension};
@@ -59,6 +60,12 @@ struct Geometry {
     overlaps: BTreeMap<(String, String), f64>,
     /// The points a walk from a start passes, instead of out and back.
     vias: BTreeMap<String, Vec<[f64; 3]>>,
+    /// A backend that weighs travel over costed objects; weighted walks
+    /// are keyed with `$` and the costs as `object*factor`.
+    weighs: bool,
+    /// Brackets on walks from a start forced through an object; with none
+    /// declared the backend measures no forced walk.
+    forced: BTreeMap<(String, String), (f64, f64)>,
 }
 
 impl Geometry {
@@ -110,6 +117,20 @@ impl Geometry {
         self
     }
 
+    /// A backend that weighs travel over costed objects.
+    fn weighing(mut self) -> Self {
+        self.weighs = true;
+        self
+    }
+
+    /// The shortest walk from `from` entering `through` is between `lower`
+    /// and `upper` metres.
+    fn forced(mut self, from: &str, through: &str, lower: f64, upper: f64) -> Self {
+        self.forced
+            .insert((from.into(), through.into()), (lower, upper));
+        self
+    }
+
     fn register(self, services: &mut ServiceRegistry) {
         let shared = Arc::new(self);
         services
@@ -135,6 +156,7 @@ impl Geometry {
         targets: &[MetricPoint],
         avoided: &[ObjectId],
         climbing: Option<&ConnectorRouting>,
+        costs: &[TravelCost],
     ) -> Walk {
         let mut names: Vec<&str> = targets
             .iter()
@@ -159,6 +181,13 @@ impl Geometry {
                 })
                 .collect();
             to = format!("{to}^{}", climbed.join(","));
+        }
+        if !costs.is_empty() {
+            let costed: Vec<String> = costs
+                .iter()
+                .map(|cost| format!("{}*{}", cost.object().local_id, cost.factor()))
+                .collect();
+            to = format!("{to}${}", costed.join(","));
         }
         let key = (from.local_id.clone(), to);
         *self
@@ -326,6 +355,7 @@ impl MetricRoutingService for Geometry {
             request.targets(),
             request.avoided(),
             request.connectors(),
+            request.costs(),
         ) {
             Walk::Between(lower, upper) => {
                 // Every point stands at the same centre, so the walk goes
@@ -374,6 +404,30 @@ impl MetricRoutingService for Geometry {
         !self.plain
     }
 
+    fn weighs_travel(&self) -> bool {
+        self.weighs
+    }
+
+    fn forced_walk(
+        &self,
+        request: &ForcedWalkRequest,
+    ) -> Result<ForcedWalkOutcome, MetricRoutingError> {
+        let from = &request.origin().subject().local_id;
+        let key = (from.clone(), request.through().local_id.clone());
+        let Some((lower, upper)) = self.forced.get(&key) else {
+            return Err(MetricRoutingError::Unavailable(format!(
+                "no walk from {from} is forced through {}",
+                key.1
+            )));
+        };
+        Ok(ForcedWalkOutcome::Bounded(ForcedWalkEvidence::try_new(
+            *lower,
+            *upper,
+            upper - lower <= request.tolerance_metres(),
+            exact(format!("forced:{from}:{}", key.1)),
+        )?))
+    }
+
     /// A declared length is exact; an object not declared for the walk's
     /// start is unmeasured.
     fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
@@ -403,7 +457,13 @@ impl MetricRoutingService for Geometry {
         assert!(request.profile().radius_metres() == 0.0);
         let region = request.region();
         let witness = MetricPoint::try_new(region.clone(), [19.0, 0.0, 0.0])?;
-        match self.lookup(region, request.targets(), &[], request.connectors()) {
+        match self.lookup(
+            region,
+            request.targets(),
+            &[],
+            request.connectors(),
+            request.costs(),
+        ) {
             Walk::Between(lower, upper) => Ok(FarthestPointOutcome::Bounded(
                 FarthestPointEvidence::try_new(
                     LengthInterval::try_new(lower, upper)?,
@@ -2699,5 +2759,207 @@ fn a_climb_declared_wrongly_is_refused() {
     assert_eq!(
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
+#[test]
+fn a_room_whose_weighted_farthest_point_exceeds_the_travel_distance_by_its_stair_is_found() {
+    // Plainly the farthest point lies 18 to 18.01 m from an exit, within
+    // 20 m; its walk down the stair, counting twice, costs 22 to 22.05 m.
+    let run = |weighted: Walk, weighs: bool| {
+        let mut geometry = Geometry::default()
+            .walk("hall", "d1,d2", Walk::Between(18.0, 18.01))
+            .walk("hall", "d1,d2$st*2", weighted)
+            .distance("hall", "st", 0.0);
+        if weighs {
+            geometry = geometry.weighing();
+        }
+        evaluate(
+            model().object("st", "stair"),
+            geometry,
+            with(
+                exits(kind("door")),
+                vec![
+                    uses(&[("maximum_travel", number(20.0))]),
+                    sections(&[("stair", 2.0, None)]),
+                ],
+            ),
+        )
+    };
+    let evaluation = run(Walk::Between(22.0, 22.05), true);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "hall".into(),
+            "its farthest point, around (19.00, 0.00), lies between 22 and 22.05 m from the \
+             nearest exit walking, counting the walk on section 0 (stair) by its factors; use 0 \
+             allows at most 20 m of travel"
+                .into()
+        )]
+    );
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|item| item.locator == "farthest:hall")
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // Weighted, the walk costs at most 19.5 m: a pass the largest factor
+    // alone (up to 36.02 m) could not prove.
+    let evaluation = run(Walk::Between(19.0, 19.5), true);
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+
+    // A backend that cannot weigh travel leaves only the coarse bracket.
+    let evaluation = run(Walk::Refused, false);
+    assert!(evaluation.findings().is_empty());
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("between 18 and 36.02 m walking"),
+        "{message}"
+    );
+    // A refused weighted walk falls back to it too.
+    let evaluation = run(Walk::Refused, true);
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("hall".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn only_a_surely_picked_section_raises_the_weighted_lower_bound() {
+    // Whether `st` is a stair is undecided: it may multiply, so the upper
+    // bound counts it, but the lower bound stays the plain walk's.
+    let geometry = Geometry::default()
+        .weighing()
+        .walk("hall", "d1,d2", Walk::Between(18.0, 18.01))
+        .walk("hall", "d1,d2$st*2", Walk::Between(22.0, 22.05))
+        .distance("hall", "st", 0.0);
+    let evaluation = evaluate(
+        model().object("st", "stair").unreadable("st"),
+        geometry,
+        with(
+            exits(kind("door")),
+            vec![
+                uses(&[("maximum_travel", number(20.0))]),
+                (
+                    "sections",
+                    ParameterValue::Table {
+                        value: vec![
+                            [
+                                ("label".to_owned(), string("stair")),
+                                (
+                                    "objects".to_owned(),
+                                    selector(Selector::AllOf {
+                                        operands: vec![kind("stair"), exists("Stair", "Counted")],
+                                    }),
+                                ),
+                                ("factor".to_owned(), number(2.0)),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ],
+                    },
+                ),
+            ],
+        ),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("between 18 and 22.05 m walking"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_corridor_off_every_shortest_walk_is_proven_not_crossed() {
+    // The hall's 8 m walk does not trace over the corridor, and plan
+    // distances cannot rule it off (1 m to it, 1 m on to the exit), so the
+    // hall may rely on it: 20 to 170 occupants, and 1.2 m decides nothing.
+    let geometry = || {
+        office_through_the_corridor()
+            .trace("d2", "c", 0.0)
+            .distance("d2", "c", 1.0)
+            .distance("c", "x1", 1.0)
+    };
+    let evaluation = walked(geometry());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("c".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // Every walk from the hall's door through the corridor to the exit is
+    // 11 m or more, longer than the 8 m walk: no shortest walk crosses it,
+    // and only the office's 20 occupants rely on it.
+    let evaluation = walked(geometry().forced("d2", "c", 11.0, 11.005));
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    // A forced walk no longer than the plain one proves nothing.
+    let evaluation = walked(geometry().forced("d2", "c", 8.0, 8.005));
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("c".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+#[test]
+fn a_space_without_a_door_walks_its_passages_from_its_farthest_point() {
+    // The annex reaches no door; its farthest point's walk crosses the
+    // corridor, and no walk round it reaches the exit, so its 30
+    // occupants surely rely on it: with the office's 20, 50 need 1.5 m.
+    let model = office_and_hall()
+        .object("annex", "space")
+        .edge("serves", "x1", "annex");
+    let evaluation = model.evaluate_with(
+        &EscapeRoute,
+        &rule(
+            CAPABILITY,
+            kind("space"),
+            with(
+                doors_and_exits(),
+                vec![
+                    uses(&[("area_per_occupant", number(2.0))]),
+                    passage_widths(),
+                    ("passage_selector", selector(kind("corridor"))),
+                    (
+                        "passage_width_property",
+                        property(Some("Corridor"), "ClearWidth"),
+                    ),
+                    ("walked_passages", ParameterValue::Boolean { value: true }),
+                ],
+            ),
+        ),
+        |services| {
+            office_through_the_corridor()
+                .trace("d2", "c", 0.0)
+                .distance("d2", "c", 5.0)
+                .distance("c", "x1", 4.0)
+                .walk("annex", "x1", Walk::Between(12.0, 12.0))
+                .trace("annex", "c", 5.0)
+                .detour("annex", "x1", "c", Walk::Unreachable)
+                .area("annex", 60.0, 60.0)
+                .area("office", 40.0, 40.0)
+                .area("hall", 300.0, 300.0)
+                .register(services);
+        },
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "c".into(),
+            format!(
+                "passage {} is 1.2 m wide (stated clear width); 50 occupant(s) relying on it \
+                 (from {}, {}) require at least 1.5 m",
+                id("c"),
+                id("annex"),
+                id("office")
+            )
+        )]
     );
 }

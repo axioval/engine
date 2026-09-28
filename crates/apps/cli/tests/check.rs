@@ -7072,6 +7072,49 @@ fn with_geometry_escape_routes_too_long_and_too_few_exits_are_found() {
 }
 
 #[test]
+fn with_geometry_travel_over_a_section_counts_by_its_factor() {
+    // Plainly the farthest corner of #19 lies about 18.47 m from its nearer
+    // door, within 30 m; walked over the hall itself, a section counting
+    // twice, it costs about twice that.
+    let case = Case::new("geometry-escape-route-weighted");
+    let (output, result) = case.geometry_rule(
+        &halls_with_exits(),
+        &[("door", "IfcDoor"), ("space", "IfcSpace")],
+        "axioval:capability.escape-route",
+        &registry_signature("axioval:capability.escape-route"),
+        entity("space"),
+        json!({
+            "uses": {"type": "table", "value": [
+                {"label": {"type": "string", "value": "open plan"},
+                 "spaces": {"type": "selector", "value": entity("space")},
+                 "maximum_travel": {"type": "number", "value": 30.0}},
+            ]},
+            "sections": {"type": "table", "value": [
+                {"label": {"type": "string", "value": "slow floor"},
+                 "objects": {"type": "selector", "value": entity("space")},
+                 "factor": {"type": "number", "value": 2.0}},
+            ]},
+            "exit_path": {"type": "stringList",
+                          "value": ["axioval:derived.adjacent-space:backward"]},
+            "exit_selector": {"type": "selector", "value": entity("door")},
+            "walking_height": {"type": "number", "value": 2.0},
+            "walking_step": {"type": "number", "value": 0.02},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert!(
+        findings.iter().any(|(object, message)| object == "#19"
+            && message.starts_with("its farthest point, around (20.00, 0.00), lies ")
+            && message.contains(
+                " m from the nearest exit walking, counting the walk on section 0 (slow floor) \
+                 by its factors; use 0 (open plan) allows at most 30 m of travel"
+            )),
+        "{result:#}"
+    );
+}
+
+#[test]
 fn with_geometry_escape_routes_climb_only_the_stairs_the_rule_selects() {
     // The halls stand on one storey and the model holds no stair: a rule
     // climbing stairs walks the same routes, and the host's own connectors

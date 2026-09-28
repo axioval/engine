@@ -57,6 +57,9 @@ pub enum MetricRoutingError {
     /// One connector was given twice with different kinds.
     #[error("a vertical connector is given twice with different kinds")]
     ConflictingConnector,
+    /// A travel cost factor was below one or non-finite.
+    #[error("a travel cost factor must be finite and at least one")]
+    InvalidCostFactor,
 }
 
 /// Three-valued result for comparing bounded evidence with a policy threshold.
@@ -361,6 +364,53 @@ impl ConnectorRouting {
     }
 }
 
+/// Travel over an object counted by a factor: a metre walked over its
+/// plan footprint counts `factor` metres.
+///
+/// Where footprints overlap the greatest factor counts, and along a
+/// footprint's edge the cheaper side does. A walk under a stair lies over
+/// it, as for [`PathTraceRequest`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct TravelCost {
+    object: ObjectId,
+    factor: f64,
+}
+
+impl TravelCost {
+    /// Validates a finite factor of at least one.
+    ///
+    /// # Errors
+    ///
+    /// [`MetricRoutingError::InvalidCostFactor`] otherwise.
+    pub fn try_new(object: ObjectId, factor: f64) -> Result<Self, MetricRoutingError> {
+        if !(factor.is_finite() && factor >= 1.0) {
+            return Err(MetricRoutingError::InvalidCostFactor);
+        }
+        Ok(Self { object, factor })
+    }
+
+    /// The object whose plan footprint costs more.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// What a metre over it counts.
+    #[must_use]
+    pub fn factor(&self) -> f64 {
+        self.factor
+    }
+}
+
+/// Sorts costs by object, keeps each object's greatest factor and drops a
+/// factor of one, which changes nothing.
+fn settled(mut costs: Vec<TravelCost>) -> Vec<TravelCost> {
+    costs.retain(|cost| cost.factor > 1.0);
+    costs.sort_by(|a, b| a.object.cmp(&b.object).then(b.factor.total_cmp(&a.factor)));
+    costs.dedup_by(|later, earlier| later.object == earlier.object);
+    costs
+}
+
 /// One source-neutral metric routing request.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MetricRouteRequest {
@@ -528,6 +578,11 @@ pub enum MetricRouteOutcome {
 /// beyond the plain walk's upper bound proves that every shortest walk
 /// enters one of them. Only a backend that [avoids
 /// objects](MetricRoutingService::avoids_objects) is asked.
+///
+/// With [`Self::with_costs`], the distance is the least weighted cost of a
+/// walk (see [`TravelCost`]), and the answer's route is a walk whose
+/// weighted cost is at most its upper bound. Only a backend that [weighs
+/// travel](MetricRoutingService::weighs_travel) is asked.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NearestTargetRequest {
     origin: MetricPoint,
@@ -535,6 +590,7 @@ pub struct NearestTargetRequest {
     profile: MobilityProfile,
     avoided: Vec<ObjectId>,
     connectors: Option<ConnectorRouting>,
+    costs: Vec<TravelCost>,
 }
 
 impl NearestTargetRequest {
@@ -553,7 +609,23 @@ impl NearestTargetRequest {
             profile,
             avoided: Vec::new(),
             connectors: None,
+            costs: Vec::new(),
         })
+    }
+
+    /// The same request, counting travel over objects by their factors
+    /// (sorted by object, each object's greatest factor kept, factors of
+    /// one dropped).
+    #[must_use]
+    pub fn with_costs(mut self, costs: Vec<TravelCost>) -> Self {
+        self.costs = settled(costs);
+        self
+    }
+
+    /// The costs travel counts by, sorted by object; empty for plain
+    /// length.
+    pub fn costs(&self) -> &[TravelCost] {
+        &self.costs
     }
 
     /// The same request, walking around `avoided` (sorted, deduplicated).
@@ -698,6 +770,10 @@ pub enum NearestTargetOutcome {
 /// The region is an object's walkable area: the points of its plan, on its
 /// floor, that the mobility profile leaves free. Only those points count;
 /// a point inside an obstacle is none of the region's.
+///
+/// With [`Self::with_costs`], distances are weighted as for a
+/// [`NearestTargetRequest`]; only a backend that [weighs
+/// travel](MetricRoutingService::weighs_travel) is asked.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FarthestPointRequest {
     region: ObjectId,
@@ -705,6 +781,7 @@ pub struct FarthestPointRequest {
     profile: MobilityProfile,
     tolerance_metres: f64,
     connectors: Option<ConnectorRouting>,
+    costs: Vec<TravelCost>,
 }
 
 impl FarthestPointRequest {
@@ -729,7 +806,23 @@ impl FarthestPointRequest {
             profile,
             tolerance_metres,
             connectors: None,
+            costs: Vec::new(),
         })
+    }
+
+    /// The same request, counting travel over objects by their factors
+    /// (sorted by object, each object's greatest factor kept, factors of
+    /// one dropped).
+    #[must_use]
+    pub fn with_costs(mut self, costs: Vec<TravelCost>) -> Self {
+        self.costs = settled(costs);
+        self
+    }
+
+    /// The costs travel counts by, sorted by object; empty for plain
+    /// length.
+    pub fn costs(&self) -> &[TravelCost] {
+        &self.costs
     }
 
     /// The same request, climbing through `connectors` between levels
@@ -956,6 +1049,208 @@ impl PathTrace {
     }
 }
 
+/// The shortest walk from a point to the nearest of several targets that
+/// enters an object's plan footprint (touching it counts).
+///
+/// A lower bound beyond the upper bound of the plain walk's length proves
+/// that no shortest walk enters the object. With [`Self::with_avoided`]
+/// every walk keeps out of the named objects, as for a
+/// [`NearestTargetRequest`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForcedWalkRequest {
+    origin: MetricPoint,
+    targets: Vec<MetricPoint>,
+    through: ObjectId,
+    profile: MobilityProfile,
+    tolerance_metres: f64,
+    avoided: Vec<ObjectId>,
+    connectors: Option<ConnectorRouting>,
+}
+
+impl ForcedWalkRequest {
+    /// Creates a request; `tolerance_metres` is how narrow the bracket
+    /// should become.
+    ///
+    /// # Errors
+    ///
+    /// [`MetricRoutingError::NoTargets`] for no target,
+    /// [`MetricRoutingError::InvalidTolerance`] for a negative or
+    /// non-finite tolerance.
+    pub fn try_new(
+        origin: MetricPoint,
+        targets: Vec<MetricPoint>,
+        through: ObjectId,
+        profile: MobilityProfile,
+        tolerance_metres: f64,
+    ) -> Result<Self, MetricRoutingError> {
+        if targets.is_empty() {
+            return Err(MetricRoutingError::NoTargets);
+        }
+        if !valid_non_negative(tolerance_metres) {
+            return Err(MetricRoutingError::InvalidTolerance);
+        }
+        Ok(Self {
+            origin,
+            targets,
+            through,
+            profile,
+            tolerance_metres,
+            avoided: Vec::new(),
+            connectors: None,
+        })
+    }
+
+    /// The same request, walking around `avoided` (sorted, deduplicated).
+    #[must_use]
+    pub fn with_avoided(mut self, mut avoided: Vec<ObjectId>) -> Self {
+        avoided.sort();
+        avoided.dedup();
+        self.avoided = avoided;
+        self
+    }
+
+    /// The same request, climbing through `connectors` between levels.
+    #[must_use]
+    pub fn with_connectors(mut self, connectors: ConnectorRouting) -> Self {
+        self.connectors = Some(connectors);
+        self
+    }
+
+    /// Where every walk starts.
+    pub fn origin(&self) -> &MetricPoint {
+        &self.origin
+    }
+
+    /// The targets, in request order.
+    pub fn targets(&self) -> &[MetricPoint] {
+        &self.targets
+    }
+
+    /// The object every walk measured enters.
+    pub fn through(&self) -> &ObjectId {
+        &self.through
+    }
+
+    /// Mobility envelope.
+    pub fn profile(&self) -> MobilityProfile {
+        self.profile
+    }
+
+    /// Requested bracket width in metres.
+    pub fn tolerance_metres(&self) -> f64 {
+        self.tolerance_metres
+    }
+
+    /// The objects every walk keeps out of, sorted.
+    pub fn avoided(&self) -> &[ObjectId] {
+        &self.avoided
+    }
+
+    /// The connectors a walk may climb through.
+    pub fn connectors(&self) -> Option<&ConnectorRouting> {
+        self.connectors.as_ref()
+    }
+}
+
+/// Bounds on the shortest walk entering the object.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForcedWalkEvidence {
+    lower_metres: f64,
+    upper_metres: f64,
+    converged: bool,
+    evidence: Evidence,
+}
+
+impl ForcedWalkEvidence {
+    /// Validates the bracket: `lower_metres` finite and non-negative,
+    /// `upper_metres` no less, and infinite when no walk entering the
+    /// object is known.
+    ///
+    /// # Errors
+    ///
+    /// [`MetricRoutingError::InvalidLengthInterval`] for bounds out of
+    /// order, [`MetricRoutingError::InexactRouteEvidence`] for provenance
+    /// that is not exact.
+    pub fn try_new(
+        lower_metres: f64,
+        upper_metres: f64,
+        converged: bool,
+        evidence: Evidence,
+    ) -> Result<Self, MetricRoutingError> {
+        if !valid_non_negative(lower_metres) || upper_metres.is_nan() || upper_metres < lower_metres
+        {
+            return Err(MetricRoutingError::InvalidLengthInterval);
+        }
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(MetricRoutingError::InexactRouteEvidence);
+        }
+        Ok(Self {
+            lower_metres,
+            upper_metres,
+            converged,
+            evidence,
+        })
+    }
+
+    /// No walk entering the object is shorter.
+    pub fn lower_metres(&self) -> f64 {
+        self.lower_metres
+    }
+
+    /// Some walk entering the object is no longer; infinite when none is
+    /// known.
+    pub fn upper_metres(&self) -> f64 {
+        self.upper_metres
+    }
+
+    /// Whether the bracket is no wider than the requested tolerance.
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    /// Measurement provenance.
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
+/// No walk from the origin to a target enters the object, under complete
+/// exact evidence.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NeverEnteredEvidence {
+    request: ForcedWalkRequest,
+    completeness: CompleteMetricEvidence,
+}
+
+impl NeverEnteredEvidence {
+    /// Binds complete evidence to one request.
+    pub fn new(request: ForcedWalkRequest, completeness: CompleteMetricEvidence) -> Self {
+        Self {
+            request,
+            completeness,
+        }
+    }
+
+    /// Request proven never entered.
+    pub fn request(&self) -> &ForcedWalkRequest {
+        &self.request
+    }
+
+    /// Exact completeness provenance.
+    pub fn completeness(&self) -> &CompleteMetricEvidence {
+        &self.completeness
+    }
+}
+
+/// Answer to a [`ForcedWalkRequest`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum ForcedWalkOutcome {
+    /// The shortest walk entering the object is bracketed.
+    Bounded(ForcedWalkEvidence),
+    /// No walk to a target enters the object.
+    NeverEntered(Box<NeverEnteredEvidence>),
+}
+
 /// Relative slack for a backend's rounding when a traced length is checked
 /// against the polyline's own length.
 const TRACE_ROUNDING: f64 = 1e-9;
@@ -997,6 +1292,26 @@ pub trait MetricRoutingService: Send + Sync + 'static {
     /// backend answer the plain walk.
     fn avoids_objects(&self) -> bool {
         false
+    }
+
+    /// Whether [`Self::nearest_target`] and [`Self::farthest_point`] honour
+    /// a request's [`TravelCost`]s. The default is `false`, and the handle
+    /// then refuses a weighted request rather than let the backend answer
+    /// the plain length.
+    fn weighs_travel(&self) -> bool {
+        false
+    }
+
+    /// Brackets the shortest walk to a target that enters an object. The
+    /// default refuses.
+    fn forced_walk(
+        &self,
+        request: &ForcedWalkRequest,
+    ) -> Result<ForcedWalkOutcome, MetricRoutingError> {
+        let _ = request;
+        Err(MetricRoutingError::Unavailable(
+            "this backend does not measure walks forced through objects".into(),
+        ))
     }
 
     /// Whether the queries honour a request's [`ConnectorRouting`]. The
@@ -1064,6 +1379,7 @@ impl MetricRoutingServiceHandle {
                 "this backend does not walk around objects".into(),
             ));
         }
+        self.weighing(request.costs())?;
         self.climbing(request.connectors())?;
         let outcome = self.0.nearest_target(request)?;
         match &outcome {
@@ -1098,6 +1414,7 @@ impl MetricRoutingServiceHandle {
         &self,
         request: &FarthestPointRequest,
     ) -> Result<FarthestPointOutcome, MetricRoutingError> {
+        self.weighing(request.costs())?;
         self.climbing(request.connectors())?;
         let outcome = self.0.farthest_point(request)?;
         match &outcome {
@@ -1123,6 +1440,50 @@ impl MetricRoutingServiceHandle {
 }
 
 impl MetricRoutingServiceHandle {
+    /// Refuses a weighted request unless the backend [weighs
+    /// travel](MetricRoutingService::weighs_travel).
+    fn weighing(&self, costs: &[TravelCost]) -> Result<(), MetricRoutingError> {
+        if !costs.is_empty() && !self.0.weighs_travel() {
+            return Err(MetricRoutingError::Unavailable(
+                "this backend does not weigh travel over objects".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Executes a forced-walk query and checks the answer is bound to it: a
+    /// claimed convergence holds for the requested tolerance, and a
+    /// never-entered verdict names this request. A request avoiding
+    /// objects or climbing connectors is refused as for
+    /// [`Self::nearest_target`].
+    pub fn forced_walk(
+        &self,
+        request: &ForcedWalkRequest,
+    ) -> Result<ForcedWalkOutcome, MetricRoutingError> {
+        if !request.avoided().is_empty() && !self.0.avoids_objects() {
+            return Err(MetricRoutingError::Unavailable(
+                "this backend does not walk around objects".into(),
+            ));
+        }
+        self.climbing(request.connectors())?;
+        let outcome = self.0.forced_walk(request)?;
+        match &outcome {
+            ForcedWalkOutcome::Bounded(bounded) => {
+                if bounded.converged()
+                    && bounded.upper_metres() - bounded.lower_metres() > request.tolerance_metres()
+                {
+                    return Err(MetricRoutingError::InconsistentResponse);
+                }
+            }
+            ForcedWalkOutcome::NeverEntered(never) => {
+                if never.request() != request {
+                    return Err(MetricRoutingError::ResponseEndpointMismatch);
+                }
+            }
+        }
+        Ok(outcome)
+    }
+
     /// Refuses a request carrying connectors unless the backend [climbs
     /// connectors](MetricRoutingService::climbs_connectors).
     fn climbing(&self, connectors: Option<&ConnectorRouting>) -> Result<(), MetricRoutingError> {

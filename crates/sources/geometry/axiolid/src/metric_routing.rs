@@ -63,6 +63,7 @@
 //!   reported, with a point of it, only on a closed level.
 
 mod climb;
+mod weighted;
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -72,10 +73,11 @@ use axiolid_mesh::TriMesh;
 use axiolid_route::{FarthestError, MapError, Unreachable};
 use axioval_engine::{
     BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
-    FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
-    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
-    MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest, PathTrace,
-    PathTraceRequest, UnreachableRegionEvidence, UnreachableTargetsEvidence,
+    FarthestPointOutcome, FarthestPointRequest, ForcedWalkOutcome, ForcedWalkRequest,
+    LengthInterval, MetricPoint, MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest,
+    MetricRoutingError, MetricRoutingService, MobilityProfile, NearestTargetEvidence,
+    NearestTargetOutcome, NearestTargetRequest, PathTrace, PathTraceRequest,
+    UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -799,6 +801,9 @@ impl AxiolidMetricRoutingService {
     #[allow(clippy::too_many_lines)]
     fn nearest(&self, request: &NearestTargetRequest) -> Result<NearestTargetOutcome, String> {
         if let Some(routing) = request.connectors() {
+            if !request.costs().is_empty() {
+                return Err("weighted travel is measured on one level only".into());
+            }
             return self.nearest_across(request, routing);
         }
         let profile = request.profile();
@@ -809,6 +814,13 @@ impl AxiolidMetricRoutingService {
         );
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
+        }
+        if radius > 0.0 && !request.costs().is_empty() {
+            return Err(
+                "weighted travel is measured for a point only: a body's walk is proven by \
+                 its sweep, which the weighted map does not propose"
+                    .into(),
+            );
         }
         let prepared = self.prepared();
         let mut obstacles = self.obstacles()?;
@@ -871,7 +883,22 @@ impl AxiolidMetricRoutingService {
                 why()
             ));
         }
-        let map = Self::map(&domain, &narrow.barriers, targets, &sorted.placed)?;
+        let regions = self.cost_regions(prepared, request.costs(), &domain)?;
+        let points: Vec<Point2> = sorted
+            .placed
+            .iter()
+            .map(|index| plan(&targets[*index]))
+            .collect();
+        let map = if regions.is_empty() {
+            weighted::Map::Plain(Self::map(
+                &domain,
+                &narrow.barriers,
+                targets,
+                &sorted.placed,
+            )?)
+        } else {
+            Self::weighed_map(&domain, &narrow.barriers, &points, &regions, 0.0)?
+        };
         let reach = match map.nearest(from) {
             Ok(Ok(reach)) => reach,
             Ok(Err(Unreachable::StartOutside)) => {
@@ -900,23 +927,23 @@ impl AxiolidMetricRoutingService {
                     why()
                 ));
             }
-            Err(error) => return Err(format!("the nearest target was not found: {error:?}")),
+            Err(error) => return Err(error),
         };
-        let point_length = reach.route.length;
         // The map misses shortcuts through what the level does not close
         // over (an unmeasured surface, a connector), so only a closed level
-        // bounds from below by it; otherwise every target's straight line.
+        // bounds from below by it; otherwise every target's straight line,
+        // which no walk undercuts, weighted or not.
         let lower = if level.complete() {
-            (point_length * (1.0 - LENGTH_ROUNDING)).min(straight)
+            (reach.lower * (1.0 - LENGTH_ROUNDING)).min(straight)
         } else {
             targets
                 .iter()
                 .map(|target| (plan(target) - from).length())
                 .fold(f64::INFINITY, f64::min)
-                .min(point_length)
+                .min(reach.lower)
         };
         let (target, path) = if radius <= 0.0 {
-            (sorted.placed[reach.target], reach.route.polyline)
+            (sorted.placed[reach.target], reach.path.clone())
         } else {
             // Any proven route to any target bounds the nearest from above:
             // the map's nearest first, then the rest by straight line.
@@ -948,15 +975,27 @@ impl AxiolidMetricRoutingService {
                 )
             })?
         };
-        let upper = rounded_up(length(&path));
+        // A point's walk is the map's own, weighted or not; a body's is the
+        // proven sweep, only ever plain.
+        let upper = if radius <= 0.0 {
+            rounded_up(reach.upper)
+        } else {
+            rounded_up(length(&path))
+        };
         let distance =
             LengthInterval::try_new(lower.min(upper), upper).map_err(|e| e.to_string())?;
         let waypoints =
             Self::waypoints(request.origin(), &path, &targets[target], &level, prepared)?;
+        let weighed = map.spacing().map_or_else(String::new, |spacing| {
+            format!(
+                ":costs=[{}]:spacing={spacing:.6}",
+                weighted::costs_text(request.costs())
+            )
+        });
         let evidence = Evidence::exact(
             request.origin().subject().source.clone(),
             format!(
-                "axiolid:metric-route:nearest:level=[{}]:targets={}:placed={}:avoided=[{}]:\
+                "axiolid:metric-route:nearest:level=[{}]:targets={}:placed={}:avoided=[{}]{weighed}:\
                  radius={radius:.6}:step={step:.6}:height={height:.6}:lower={}:upper={upper:.6}:\
                  witness={}",
                 level.text,
@@ -984,6 +1023,9 @@ impl AxiolidMetricRoutingService {
     #[allow(clippy::too_many_lines)]
     fn farthest(&self, request: &FarthestPointRequest) -> Result<FarthestPointOutcome, String> {
         if let Some(routing) = request.connectors() {
+            if !request.costs().is_empty() {
+                return Err("weighted travel is measured on one level only".into());
+            }
             return self.farthest_across(request, routing);
         }
         let profile = request.profile();
@@ -1068,13 +1110,25 @@ impl AxiolidMetricRoutingService {
                 why()
             ));
         }
-        let map = Self::map(&domain, &[], targets, &sorted.placed)?;
         let tolerance = request.tolerance_metres();
+        let regions = self.cost_regions(prepared, request.costs(), &domain)?;
+        let map = if regions.is_empty() {
+            weighted::Map::Plain(Self::map(&domain, &[], targets, &sorted.placed)?)
+        } else {
+            let points: Vec<Point2> = sorted
+                .placed
+                .iter()
+                .map(|index| plan(&targets[*index]))
+                .collect();
+            // The weighted bracket is first order in the spacing, about
+            // twice it wide.
+            Self::weighed_map(&domain, &[], &points, &regions, tolerance / 2.0)?
+        };
         let mut best: Option<(f64, f64, Point2)> = None;
         let mut upper = 0.0_f64;
         let mut cells = 0;
         for piece in floor.footprint.polygons() {
-            match axiolid_route::farthest_point(&map, piece, tolerance) {
+            match map.farthest(piece, tolerance) {
                 Ok(found) => {
                     cells += found.cells;
                     upper = upper.max(found.distance.upper);
@@ -1136,11 +1190,15 @@ impl AxiolidMetricRoutingService {
             region_id.source.clone(),
             format!(
                 "axiolid:metric-route:farthest:region={region_id}:level=[{}]:targets={}:\
-                 placed={}:step={step:.6}:height={height:.6}:tolerance={tolerance:.6}:\
+                 placed={}{}:step={step:.6}:height={height:.6}:tolerance={tolerance:.6}:\
                  cells={cells}:lower={}:upper={upper:.6}:witness=({:.6},{:.6})",
                 level.text,
                 targets.len(),
                 sorted.placed.len(),
+                map.spacing().map_or_else(String::new, |spacing| format!(
+                    ":costs=[{}]:spacing={spacing:.6}",
+                    weighted::costs_text(request.costs())
+                )),
                 if closed {
                     format!("bracket={lower:.6}")
                 } else {
@@ -1343,6 +1401,18 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
 
     fn avoids_objects(&self) -> bool {
         true
+    }
+
+    fn weighs_travel(&self) -> bool {
+        true
+    }
+
+    fn forced_walk(
+        &self,
+        request: &ForcedWalkRequest,
+    ) -> Result<ForcedWalkOutcome, MetricRoutingError> {
+        self.forced(request)
+            .map_err(MetricRoutingError::Unavailable)
     }
 
     fn climbs_connectors(&self) -> bool {

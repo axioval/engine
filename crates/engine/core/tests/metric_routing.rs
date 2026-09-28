@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 use axioval_engine::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
-    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint,
-    MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
-    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence,
-    NearestTargetOutcome, NearestTargetRequest, PathTrace, PathTraceRequest, ServiceRegistry,
-    StairLength, ThresholdVerdict, VerticalConnector, VerticalConnectorKind,
+    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, ForcedWalkEvidence,
+    ForcedWalkOutcome, ForcedWalkRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
+    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
+    MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
+    NearestTargetRequest, PathTrace, PathTraceRequest, ServiceRegistry, StairLength,
+    ThresholdVerdict, TravelCost, VerticalConnector, VerticalConnectorKind,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -649,4 +650,191 @@ fn a_walk_through_connectors_is_asked_only_of_a_backend_that_climbs_them() {
             "this backend does not route through vertical connectors".into()
         ))
     );
+}
+
+/// Answers nearest and farthest queries plainly, forced walks with a
+/// fixed bracket, and says whether it weighs travel.
+struct Weigher {
+    weighs: bool,
+    /// The forced-walk bracket and its convergence claim.
+    forced: (f64, f64, bool),
+}
+
+impl MetricRoutingService for Weigher {
+    fn route(
+        &self,
+        _request: &MetricRouteRequest,
+    ) -> Result<MetricRouteOutcome, MetricRoutingError> {
+        Err(MetricRoutingError::Unavailable(
+            "pairs are not routed".into(),
+        ))
+    }
+
+    fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        Ok(NearestTargetOutcome::Reached(
+            NearestTargetEvidence::try_new(
+                0,
+                LengthInterval::try_new(2.0, 2.5)?,
+                vec![request.origin().clone(), request.targets()[0].clone()],
+                evidence("nearest"),
+            )?,
+        ))
+    }
+
+    fn farthest_point(
+        &self,
+        request: &FarthestPointRequest,
+    ) -> Result<FarthestPointOutcome, MetricRoutingError> {
+        Ok(FarthestPointOutcome::Bounded(
+            FarthestPointEvidence::try_new(
+                LengthInterval::try_new(4.0, 4.0)?,
+                MetricPoint::try_new(request.region().clone(), [1.0, 0.0, 0.0])?,
+                true,
+                evidence("farthest"),
+            )?,
+        ))
+    }
+
+    fn weighs_travel(&self) -> bool {
+        self.weighs
+    }
+
+    fn forced_walk(
+        &self,
+        _request: &ForcedWalkRequest,
+    ) -> Result<ForcedWalkOutcome, MetricRoutingError> {
+        let (lower, upper, converged) = self.forced;
+        Ok(ForcedWalkOutcome::Bounded(ForcedWalkEvidence::try_new(
+            lower,
+            upper,
+            converged,
+            evidence("forced"),
+        )?))
+    }
+}
+
+#[test]
+fn weighted_travel_is_asked_only_of_a_backend_that_weighs_it() {
+    assert_eq!(
+        TravelCost::try_new(object("cad", "stair"), 0.5),
+        Err(MetricRoutingError::InvalidCostFactor)
+    );
+    assert!(TravelCost::try_new(object("cad", "stair"), f64::INFINITY).is_err());
+    let cost =
+        |local: &str, factor: f64| TravelCost::try_new(object("cad", local), factor).unwrap();
+    let plain = NearestTargetRequest::try_new(
+        point("cad", "a", 0.0),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+    )
+    .unwrap();
+    // Sorted by object, the greatest factor of each kept, a factor of one
+    // dropped.
+    let weighted = plain.clone().with_costs(vec![
+        cost("stair", 1.5),
+        cost("hall", 1.0),
+        cost("corridor", 1.2),
+        cost("stair", 2.0),
+    ]);
+    assert_eq!(
+        weighted.costs(),
+        [cost("corridor", 1.2), cost("stair", 2.0)]
+    );
+    assert!(
+        plain
+            .clone()
+            .with_costs(vec![cost("hall", 1.0)])
+            .costs()
+            .is_empty()
+    );
+    let farthest = FarthestPointRequest::try_new(
+        object("cad", "room"),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+        0.01,
+    )
+    .unwrap();
+    let weighted_farthest = farthest.clone().with_costs(vec![cost("stair", 2.0)]);
+    let handle = |weighs| {
+        MetricRoutingServiceHandle::new(Arc::new(Weigher {
+            weighs,
+            forced: (1.0, 1.0, true),
+        }))
+    };
+    // The plain length is asked of any backend; a weighted one only of a
+    // backend that weighs, never answered as the plain length.
+    assert!(handle(false).nearest_target(&plain).is_ok());
+    assert!(handle(false).farthest_point(&farthest).is_ok());
+    let refused = Some(MetricRoutingError::Unavailable(
+        "this backend does not weigh travel over objects".into(),
+    ));
+    assert_eq!(handle(false).nearest_target(&weighted).err(), refused);
+    assert_eq!(
+        handle(false).farthest_point(&weighted_farthest).err(),
+        refused
+    );
+    assert!(handle(true).nearest_target(&weighted).is_ok());
+    assert!(handle(true).farthest_point(&weighted_farthest).is_ok());
+}
+
+#[test]
+fn a_forced_walk_bracket_is_ordered_and_converges_honestly() {
+    let request = |targets: Vec<MetricPoint>, tolerance: f64| {
+        ForcedWalkRequest::try_new(
+            point("cad", "a", 0.0),
+            targets,
+            object("cad", "corridor"),
+            profile(),
+            tolerance,
+        )
+    };
+    assert_eq!(
+        request(Vec::new(), 0.01),
+        Err(MetricRoutingError::NoTargets)
+    );
+    assert_eq!(
+        request(vec![point("cad", "b", 3.0)], -1.0),
+        Err(MetricRoutingError::InvalidTolerance)
+    );
+    // A lower bound past the upper one, or not finite, is no bracket; an
+    // infinite upper bound says no entering walk is known.
+    assert!(ForcedWalkEvidence::try_new(3.0, 2.0, false, evidence("forced")).is_err());
+    assert!(
+        ForcedWalkEvidence::try_new(f64::INFINITY, f64::INFINITY, false, evidence("forced"))
+            .is_err()
+    );
+    assert!(ForcedWalkEvidence::try_new(3.0, f64::INFINITY, false, evidence("forced")).is_ok());
+    let request = request(vec![point("cad", "b", 3.0)], 0.01).unwrap();
+    assert_eq!(request.through(), &object("cad", "corridor"));
+    let handle = |forced| {
+        MetricRoutingServiceHandle::new(Arc::new(Weigher {
+            weighs: false,
+            forced,
+        }))
+    };
+    let Ok(ForcedWalkOutcome::Bounded(bounded)) = handle((5.0, 5.005, true)).forced_walk(&request)
+    else {
+        panic!("a converged bracket within the tolerance stands");
+    };
+    assert!((bounded.lower_metres() - 5.0).abs() < f64::EPSILON);
+    assert_eq!(
+        handle((5.0, 6.0, true)).forced_walk(&request),
+        Err(MetricRoutingError::InconsistentResponse)
+    );
+    assert!(handle((5.0, 6.0, false)).forced_walk(&request).is_ok());
+    // A walk around objects is asked only of a backend that avoids them;
+    // the default backend measures no forced walk at all.
+    let avoiding = request.clone().with_avoided(vec![object("cad", "door")]);
+    assert!(matches!(
+        handle((5.0, 5.0, true)).forced_walk(&avoiding),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
+    let plain = MetricRoutingServiceHandle::new(Arc::new(Climber(true)));
+    assert!(matches!(
+        plain.forced_walk(&request),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
 }

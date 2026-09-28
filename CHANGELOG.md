@@ -30,6 +30,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   `--bcf-section-box`, effective with `--geometry`. **Breaking:** `Options`
   gains a field.
 
+- **Weighted escape travel and walks forced through passages.** (#89)
+  Nearest-target and farthest-point requests take `with_costs`
+  (`TravelCost`: an object and a factor of at least one), answered only by
+  a backend whose `weighs_travel()` is true; `forced_walk`
+  (`ForcedWalkRequest`, `ForcedWalkOutcome`) brackets the shortest walk to
+  a target that enters an object. The Axiolid backend answers both with
+  `axiolid-route` 0.3.4 (axiolid/kernel#195, #196): exact costed
+  footprints cut to the free region, and forced walks on a closed level
+  with every target placed. `escape-route` asks the weighted walk and
+  farthest point as well: over every possible section for the upper
+  bound, over the sure ones (surely picked, not shared) for the lower
+  bound, so a room whose farthest point exceeds the travel only because of
+  a stair's factor is found. A walked passage whose forced walk is longer
+  than the plain walk is proven off every shortest walk, and a space
+  measured from its farthest point that reaches no door walks its passages
+  from there. A climbing walk, a tessellated section or a refusing backend
+  keeps the earlier bounds. **Breaking:** `MetricRoutingError` gains
+  `InvalidCostFactor`, and `NearestTargetRequest` and
+  `FarthestPointRequest` gain costs, compared by `PartialEq`.
 - **Stable finding identities and review decisions.** (#94) A finding may
   carry `id`, a `FindingId`: UUIDv5 over its rule, its objects' aliases in a
   host-named stable scheme and its message, the key the BCF sink has always

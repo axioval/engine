@@ -489,6 +489,7 @@ Every metric reports what it measured beside its findings, passing or not, as ta
 | `level-spacing` with `space_selector` | `spaces` | `level` (its id), `height` (m), `level_height` (m) |
 | `plan-area` | `areas` | `plan_area` or, with `measure: facade`, `facade_area` (m²); a subject with undecided members has no row |
 | `area-ratio` | `ratios` | `numerator_area` (m²), `denominator_area` (m²), `ratio` (unknown when the denominator may be zero) |
+| `quantity-takeoff` | `takeoff` | grouped by its keys: `count`, then `<aggregate>_<name>` per measure (see [Information takeoff](#information-takeoff)) |
 
 Tables need no parameter: a definition's signature is unchanged. An anchor that could not be measured has no row, and its not-evaluated outcome says why.
 
@@ -1827,6 +1828,67 @@ property sets are compared through property enumeration. Objects without
 stable identities are matched by their bodies or a related object, and a
 revised model older than its base is an error finding. See [The
 comparison as a rule](./comparison.md#the-comparison-as-a-rule).
+
+### Information takeoff
+
+`axioval:capability.quantity-takeoff` counts the rule's selection per group
+and aggregates stated or measured quantities of each group into the report
+table `takeoff` (see [Report tables](./ir.md#tables)). It raises no finding:
+quantity takeoff, model value reports and degree-of-detail reports read the
+table.
+
+| Parameter | Kind | Meaning |
+|---|---|---|
+| `group_1` to `group_3` | `propertyReference` | The group keys, outermost first, each declared only after the one before it. A key is read as a rule's [categories](./refinement.md#nested-categories) read a level: on the object, distinct values joined (`Lab, Office`), no value (absent, null, blank) `-`. A derived classification is the property `<id>` in `axioval:classification`, a type name `Name` in `axioval:type-attributes`, a material a property of `axioval:material`. |
+| `group_<n>_path` | `stringList` | Read key `n` on the objects this path reaches instead (steps as in a `related` selector): `IfcRelContainedInSpatialStructure:backward` with `Name` groups by storey. |
+| `group_<n>_name` | `string` | The group column's id; `group_<n>` without it. |
+| `measure_1` to `measure_4` | `propertyReference` | The quantities aggregated, each declared only after the one before it: a stated number or quantity, or a value of `axioval:measured` (`area`, `volume`, extents). |
+| `measure_<n>_aggregates` | `stringList` | Any of `sum`, `min`, `max`, `mean`, once each; `sum` without it. |
+| `measure_<n>_name` | `string` | The column name after the aggregate (`sum_<name>`); without it the property's name after its last `.`, split at case changes, lowercase (`t.NetSideArea` is `net_side_area`). |
+| `across_sources` | `boolean` | One set of groups for the whole project; per source without it. |
+
+The table's group columns are the keys' ids, its columns `count` and one
+`<aggregate>_<name>` per measure and aggregate, a quantity in the dimension
+its values state (a plain number for unitless values). Rows are keyed by
+the source (or the project) and the group, in group order.
+
+Every value is an interval sure to hold the exact one, so every aggregate is
+too: a tessellated footprint sums to an interval.
+
+- An object whose selection cannot be decided **may** belong to its group:
+  its count is widened by one and its value may be added, never dropped
+  (`sum` widens by `[min(0, lower), max(0, upper)]`).
+- An object whose group cannot be read (its key unreadable, a
+  classification row undecided) may belong to **any** group of its scope,
+  and widens every one of them the same way.
+- A member whose quantity is absent, null, not numeric or unreadable makes
+  its group's aggregate of that quantity `unknown`; its count stands.
+- `min`, `max` and `mean` of a group that may be empty (no sure member) are
+  unknown; a `mean` is bounded over every membership the undecided members
+  allow.
+
+Each such object is reported not evaluated, saying which of these applies,
+so a table value never hides it. Values of one quantity stated in two
+dimensions (or as a number and a quantity) leave that quantity unknown in
+every group and the rule not evaluated. Without the geometry service a
+measured value needs, the rule reports one `missing_service` per source.
+An undeclared key or measure after a gap, an unknown or repeated aggregate,
+or column ids that are not tokens or clash (`count` included) leave the rule
+not evaluated as an invalid declaration.
+
+```json
+"parameters": {
+  "group_1": {"type": "propertyReference", "propertySet": "axioval:type-attributes", "property": "Name"},
+  "group_1_name": {"type": "string", "value": "type"},
+  "group_2": {"type": "propertyReference", "propertySet": "axioval:attributes", "property": "Name"},
+  "group_2_path": {"type": "stringList", "value": ["IfcRelContainedInSpatialStructure:backward"]},
+  "group_2_name": {"type": "string", "value": "storey"},
+  "measure_1": {"type": "propertyReference", "propertySet": "Qto_WallBaseQuantities", "property": "NetSideArea"}
+}
+```
+
+reports one row per wall type and storey with `count` and
+`sum_net_side_area` (m²).
 
 ## Adding a capability
 

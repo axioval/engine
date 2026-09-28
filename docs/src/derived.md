@@ -50,7 +50,8 @@ The runtime classifies every object before any rule runs, each
 classification after those its rows read; its rows are evaluated by the
 host's outcome refiner. `axioval:capability.unclassified-object` (parameter
 `classification`, the id) reports every selected object a classification
-leaves unclassified.
+leaves unclassified. `axioval:capability.quantity-takeoff` groups
+quantities by the class ([Information takeoff](./capabilities.md#information-takeoff)).
 
 Compilation refuses (`EngineError::InvalidClassification`) a classification
 declared under another key than its id, without rows, with a blank class,

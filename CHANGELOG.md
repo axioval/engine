@@ -108,6 +108,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   no selector states exactly, and prohibits one: select what the auxiliary
   rule passed and fail every object.
 
+- **Information takeoff.** (#106) `quantity-takeoff` counts the rule's
+  selection per group and aggregates stated or measured quantities into the
+  grouped report table `takeoff`: up to three group keys (`group_<n>`, a
+  property read on the object or, with `group_<n>_path`, on the objects a
+  path reaches such as the storey; a derived classification is a key too)
+  and up to four measures (`measure_<n>`, aggregated by `sum`, `min`, `max`
+  or `mean`), per source or `across_sources`. Values are intervals: a
+  tessellated footprint sums to an interval, an object of undecided
+  selection or group widens every group it may belong to and is reported
+  not evaluated, and a member without the quantity makes its group's
+  aggregate unknown.
 - **Report-table rows keyed by a group.** (#106) `ReportTable::grouped`
   declares group columns and keys each row by its scope and its group, one
   text value per group column (`push_group_row`, `group_row`,

@@ -62,6 +62,7 @@ mod property_predicate;
 mod property_requirements;
 mod property_rules;
 mod property_value;
+mod quantity_takeoff;
 mod recess_width;
 mod refine;
 mod relative_count;
@@ -138,6 +139,7 @@ pub use property_rules::{
     BooleanPropertyEquals, PropertyDataType, PropertyExists, PropertyRequired,
 };
 pub use property_value::PropertyValueConstraint;
+pub use quantity_takeoff::{QuantityTakeoff, TAKEOFF_TABLE};
 pub use recess_width::RecessWidth;
 pub use refine::Refiner;
 pub use relative_count::RelativeCount;
@@ -235,5 +237,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(OpeningArea))
         .and_then(|registry| registry.register(EmptyHost))
         .and_then(|registry| registry.register(UnclassifiedObject))
+        .and_then(|registry| registry.register(QuantityTakeoff))
         .map(|registry| registry.with_refiner(Refiner))
 }

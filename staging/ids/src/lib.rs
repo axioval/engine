@@ -69,12 +69,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use axioval_engine::{ParameterType, RuleCapability};
 use axioval_ir::contract::{
-    ColumnKind, ComparisonOperator, DefinitionPackage, ExternalName, LocalizedText,
-    ObjectTypeDefinition, PackageMetadata, ParameterDefinition, ParameterKind, ParameterValue,
-    PropertyDefinition, PropertySetDefinition, PropertyValueKind, Quantifier, RelatedQuantifier,
-    RuleApplicability, RuleDefinition, RuleFolder, RuleInstance, RuleSetPackage, Selector,
-    Severity, TableColumnDefinition, TableRow,
+    ComparisonOperator, DefinitionPackage, ExternalName, LocalizedText, ObjectTypeDefinition,
+    PackageMetadata, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
+    PropertySetDefinition, PropertyValueKind, Quantifier, RelatedQuantifier, RuleApplicability,
+    RuleDefinition, RuleFolder, RuleInstance, RuleSetPackage, Selector, Severity,
+    TableColumnDefinition, TableRow,
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use ifc_schema::{Schema, TypeKind};
@@ -97,14 +98,6 @@ pub const IFC4_TYPE_SYSTEM: &str = "https://identifier.buildingsmart.org/uri/bui
 
 /// The package schema version the engine compiles.
 const SCHEMA_VERSION: &str = "0.1.0";
-
-const PROPERTY_REQUIRED: &str = "axioval:capability.property-required";
-const PROPERTY_DATA_TYPE: &str = "axioval:capability.property-data-type";
-const PROPERTY_VALUE: &str = "axioval:capability.property-value";
-const SELECTOR_CONFORMANCE: &str = "axioval:capability.selector-conformance";
-const PROPERTY_REQUIREMENTS: &str = "axioval:capability.property-requirements";
-const OBJECT_COUNT: &str = "axioval:capability.object-count";
-const CLASSIFICATION: &str = "axioval:capability.classification";
 
 /// The longest `length`, `minLength` or `maxLength` a selector spells as a
 /// repetition; a longer one would exceed the regular expression size limit.
@@ -445,6 +438,7 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
                     .map(LocalizedText::plain),
                 rules,
                 folders: Vec::new(),
+                gate: None,
             });
         }
         specifications.push(outcome);
@@ -482,7 +476,9 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
                 description: None,
                 rules: Vec::new(),
                 folders,
+                gate: None,
             },
+            classifications: BTreeMap::new(),
         },
         specifications,
     })
@@ -1223,6 +1219,7 @@ impl<'o> Writer<'o> {
             requirements: Vec::new(),
             citations: Vec::new(),
             parameter_citations: Vec::new(),
+            gate: None,
             explanatory_images: Vec::new(),
             tags: vec!["ids".to_owned()],
             severity_bands: Vec::new(),
@@ -1233,7 +1230,7 @@ impl<'o> Writer<'o> {
 
     /// The rule definition a kind of check uses, written once.
     fn definition(&mut self, kind: Kind) -> String {
-        let (suffix, name, description, capability) = kind.catalog();
+        let (suffix, name, description) = kind.catalog();
         let id = format!("{}.{suffix}", self.options.package_id);
         self.definitions.entry(id.clone()).or_insert_with(|| {
             let parameters = kind
@@ -1245,7 +1242,7 @@ impl<'o> Writer<'o> {
                 id: id.clone(),
                 name: LocalizedText::plain(name),
                 description: Some(LocalizedText::plain(description)),
-                capability: capability.to_owned(),
+                capability: kind.capability().id().to_owned(),
                 parameters,
                 tags: vec!["ids".to_owned()],
                 citations: Vec::new(),
@@ -1485,171 +1482,95 @@ enum Kind {
     Classification,
 }
 
-/// The columns of the `property-requirements` table, as the capability
-/// declares them.
-const REQUIREMENT_COLUMNS: &[(&str, ColumnKind)] = &[
-    ("applies_to", ColumnKind::Selector),
-    ("property_set", ColumnKind::TextPattern),
-    ("property", ColumnKind::TextPattern),
-    ("property_set_pattern", ColumnKind::String),
-    ("property_pattern", ColumnKind::String),
-    ("requirement", ColumnKind::String),
-    ("state", ColumnKind::String),
-    ("presence", ColumnKind::String),
-    ("value_like", ColumnKind::TextPattern),
-    ("one_of", ColumnKind::String),
-    ("one_of_like", ColumnKind::String),
-    ("contains", ColumnKind::String),
-    ("minimum", ColumnKind::Number),
-    ("maximum", ColumnKind::Number),
-    ("unit", ColumnKind::String),
-    ("per", ColumnKind::String),
-    ("decimals", ColumnKind::Integer),
-];
-
 impl Kind {
     /// Definition id suffix, name, description and capability.
-    fn catalog(self) -> (&'static str, &'static str, &'static str, &'static str) {
+    fn catalog(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Kind::Required => (
                 "property-required",
                 "Property is required",
                 "An IDS property or attribute facet without a value: it must exist with a non-empty value.",
-                PROPERTY_REQUIRED,
             ),
             Kind::DataType => (
                 "property-data-type",
                 "Property is required with a data type",
                 "An IDS property facet with a dataType and no value: the property must exist with a non-empty value of that declared type.",
-                PROPERTY_DATA_TYPE,
             ),
             Kind::Value => (
                 "property-value",
                 "Property value meets constraints",
                 "An IDS property or attribute facet with a value, or an optional one with a dataType: literals and XML Schema facets cast to the value.",
-                PROPERTY_VALUE,
             ),
             Kind::Conformance => (
                 "facet",
                 "Facet holds",
                 "An IDS entity, classification, material, part-of or name-restricted attribute requirement: the facet's selector must hold, or must not when prohibited.",
-                SELECTOR_CONFORMANCE,
             ),
             Kind::Forbidden => (
                 "prohibited-property",
                 "Property is prohibited",
                 "A prohibited IDS property or attribute facet without a value: none of the named properties may hold a value.",
-                PROPERTY_REQUIREMENTS,
             ),
             Kind::Present => (
                 "required-properties",
                 "Properties are required",
                 "An IDS property facet naming its set or property by pattern or enumeration, without a value: one property must match, and every matching one must hold a value.",
-                PROPERTY_REQUIREMENTS,
             ),
             Kind::Count => (
                 "occurrence",
                 "Applicable objects",
                 "An IDS specification's minOccurs/maxOccurs: how many applicable objects each model may hold.",
-                OBJECT_COUNT,
             ),
             Kind::Classification => (
                 "classification",
                 "Classification is required",
                 "An IDS classification requirement: an assignment in a matching system with a matching code or ancestor code, none when prohibited, or none at all when optional.",
-                CLASSIFICATION,
             ),
         }
     }
 
-    /// The parameters, exactly as the capability declares them.
-    fn parameters(self) -> Vec<ParameterDefinition> {
-        let property = || parameter("property", ParameterKind::PropertyReference, true);
+    /// The trusted capability that decides the check.
+    fn capability(self) -> &'static dyn RuleCapability {
         match self {
-            Kind::Required => vec![property()],
-            Kind::DataType => vec![
-                property(),
-                parameter("data_type", ParameterKind::String, true),
-            ],
-            Kind::Value => {
-                let mut parameters = vec![parameter(
-                    "property",
-                    ParameterKind::PropertyReference,
-                    false,
-                )];
-                for id in [
-                    "property_set_pattern",
-                    "property_pattern",
-                    "data_type",
-                    "min_inclusive",
-                    "max_inclusive",
-                    "min_exclusive",
-                    "max_exclusive",
-                    "precision",
-                    "quantifier",
-                ] {
-                    parameters.push(parameter(id, ParameterKind::String, false));
-                }
-                for id in ["values", "patterns"] {
-                    parameters.push(parameter(id, ParameterKind::StringList, false));
-                }
-                for id in [
-                    "length",
-                    "min_length",
-                    "max_length",
-                    "total_digits",
-                    "fraction_digits",
-                ] {
-                    parameters.push(parameter(id, ParameterKind::Integer, false));
-                }
-                for id in ["optional", "si_units"] {
-                    parameters.push(parameter(id, ParameterKind::Boolean, false));
-                }
-                parameters
-            }
-            Kind::Conformance => vec![
-                parameter("requirement", ParameterKind::Selector, true),
-                parameter("message", ParameterKind::String, false),
-            ],
-            Kind::Forbidden | Kind::Present => {
-                let mut table = parameter("requirements", ParameterKind::Table, true);
-                table.columns = REQUIREMENT_COLUMNS
-                    .iter()
-                    .map(|(id, kind)| TableColumnDefinition {
-                        id: (*id).to_owned(),
-                        name: LocalizedText::plain(*id),
-                        description: None,
-                        kind: *kind,
-                        required: false,
-                        unit_dimension: None,
-                    })
-                    .collect();
-                vec![
-                    table,
-                    parameter("case_sensitive", ParameterKind::Boolean, false),
-                    parameter("area_property", ParameterKind::PropertyReference, false),
-                    parameter("volume_property", ParameterKind::PropertyReference, false),
-                    parameter("group_by_value", ParameterKind::Boolean, false),
-                    parameter("category_property", ParameterKind::PropertyReference, false),
-                ]
-            }
-            Kind::Count => vec![
-                parameter("minimum", ParameterKind::Integer, false),
-                parameter("maximum", ParameterKind::Integer, false),
-                parameter("across_sources", ParameterKind::Boolean, false),
-            ],
-            Kind::Classification => {
-                let mut parameters: Vec<_> =
-                    ["codes", "code_patterns", "systems", "system_patterns"]
-                        .into_iter()
-                        .map(|id| parameter(id, ParameterKind::StringList, false))
-                        .collect();
-                for id in ["optional", "prohibited"] {
-                    parameters.push(parameter(id, ParameterKind::Boolean, false));
-                }
-                parameters
-            }
+            Kind::Required => &axioval_rules::PropertyRequired,
+            Kind::DataType => &axioval_rules::PropertyDataType,
+            Kind::Value => &axioval_rules::PropertyValueConstraint,
+            Kind::Conformance => &axioval_rules::SelectorConformance,
+            Kind::Forbidden | Kind::Present => &axioval_rules::PropertyRequirements,
+            Kind::Count => &axioval_rules::ObjectCount,
+            Kind::Classification => &axioval_rules::ClassificationRequirement,
         }
+    }
+
+    /// The parameters, exactly as the capability declares them: read from
+    /// the capability itself, so a new optional parameter or table column
+    /// never leaves the definitions behind.
+    fn parameters(self) -> Vec<ParameterDefinition> {
+        self.capability()
+            .parameters()
+            .into_iter()
+            .map(|descriptor| {
+                let mut definition = parameter(
+                    &descriptor.name,
+                    kind_of(descriptor.parameter_type),
+                    descriptor.required,
+                );
+                if let ParameterType::Table(columns) = descriptor.parameter_type {
+                    definition.columns = columns
+                        .iter()
+                        .map(|column| TableColumnDefinition {
+                            id: column.id.to_owned(),
+                            name: LocalizedText::plain(column.id),
+                            description: None,
+                            kind: column.kind,
+                            required: column.required,
+                            unit_dimension: None,
+                        })
+                        .collect();
+                }
+                definition
+            })
+            .collect()
     }
 
     /// The title of a property or attribute check on `subject`.
@@ -1660,6 +1581,27 @@ impl Kind {
             Kind::Value if optional => format!("{subject}, where present, meets its constraints"),
             _ => format!("{subject} meets its constraints"),
         }
+    }
+}
+
+/// The definition-package spelling of a capability's parameter type.
+fn kind_of(parameter_type: ParameterType) -> ParameterKind {
+    match parameter_type {
+        ParameterType::Boolean => ParameterKind::Boolean,
+        ParameterType::Integer => ParameterKind::Integer,
+        ParameterType::Number => ParameterKind::Number,
+        ParameterType::String => ParameterKind::String,
+        ParameterType::Quantity => ParameterKind::Quantity,
+        ParameterType::Enum => ParameterKind::Enum,
+        ParameterType::Date => ParameterKind::Date,
+        ParameterType::DateTime => ParameterKind::DateTime,
+        ParameterType::Reference => ParameterKind::Reference,
+        ParameterType::ObjectTypeReference => ParameterKind::ObjectTypeReference,
+        ParameterType::PropertyReference => ParameterKind::PropertyReference,
+        ParameterType::Selector => ParameterKind::Selector,
+        ParameterType::StringList => ParameterKind::StringList,
+        ParameterType::ReferenceList => ParameterKind::ReferenceList,
+        ParameterType::Table(_) => ParameterKind::Table,
     }
 }
 

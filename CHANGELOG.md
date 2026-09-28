@@ -2745,6 +2745,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **The staging IDS importer no longer built.** (Refs #116) It wrote its
+  rule definitions' parameters by hand, so the new `gate`, `classifications`
+  and `property-requirements` columns left it uncompilable and its
+  definitions refused. It now reads every definition's parameters and table
+  columns from the capability it selects, and takes the merged
+  `openbim-ids` reader from `main` pinned to the merge of openbimrs/ids#5,
+  whose branch no longer exists.
+
 - **A clearance volume could be obstructed by a body that never entered
   it.** `AxiolidFreeSpaceService::assess_clearance` named an obstacle as a
   blocker when its height range overlapped the volume's band and its plan

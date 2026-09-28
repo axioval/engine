@@ -1,6 +1,7 @@
 # Standalone: NOT a member of the engine workspace. It cannot be published
-# while the `openbim-ids` reader is unreleased (openbimrs/ids#5). See
-# staging/AGENTS.md for the rewiring steps.
+# while the `openbim-ids` reader is unreleased: openbimrs/ids#5 merged it,
+# but no crates.io release carries it yet. See staging/AGENTS.md for the
+# rewiring steps.
 [workspace]
 
 [package]
@@ -15,15 +16,19 @@ publish = false
 [dependencies]
 # The package contracts this importer writes.
 axioval-ir = { path = "../../crates/contracts/ir" }
-# XML Schema patterns in the syntax property selectors match with.
+# The parameters each capability declares, which definitions must match.
+axioval-engine = { path = "../../crates/engine/core" }
+# XML Schema patterns in the syntax property selectors match with, and the
+# trusted capabilities rules select.
 axioval-rules = { path = "../../crates/engine/rules" }
 regex = "1.11.2"
-# UNPUBLISHED reader: a git dependency until a release carrying
-# `openbim_ids::read` lands on crates.io. To build against a local checkout,
+# UNPUBLISHED reader: a git dependency, pinned to the merge of
+# openbimrs/ids#5 on `main`, until a release carrying `openbim_ids::read`
+# lands on crates.io. To build against a local checkout,
 # add to staging/ids/.cargo/config.toml (untracked):
 #   [patch."https://github.com/openbimrs/ids"]
 #   openbim-ids = { path = "/path/to/ids/openbim-ids" }
-openbim-ids = { git = "https://github.com/openbimrs/ids", branch = "feat/ids-reader" }
+openbim-ids = { git = "https://github.com/openbimrs/ids", rev = "381cc5ebc63fba855a997e186c48804ac8fb2ad5" }
 # Which IDS classes are IfcObject occurrences, per release.
 ifc-schema = "0.2.2"
 thiserror = "2.0.16"

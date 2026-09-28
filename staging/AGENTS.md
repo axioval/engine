@@ -70,9 +70,11 @@ All four scenarios were verified to fail the gate before it was trusted.
   (see `docs/src/ids.md`); a facet no capability decides exactly is a gap.
   Depends on `axioval-ir`,
   `axioval-rules` (XML Schema pattern translation only) and the
-  `openbim-ids` reader, which is
-  unreleased (openbimrs/ids#5) and is taken from its `feat/ids-reader` branch;
-  to build against a local checkout, add a `[patch]` for it in an untracked
+  `openbim-ids` reader, which is merged (openbimrs/ids#5) but
+  unreleased, and is taken from `main` pinned to the merge commit; the rule
+  definitions' parameters are read from `axioval-engine`'s capability
+  descriptors, so they follow every new parameter or column. To build
+  against a local checkout, add a `[patch]` for it in an untracked
   `staging/ids/.cargo/config.toml`. The conformance harness needs the
   buildingSMART corpus, which is CC BY-ND 4.0 and not vendored:
   `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -- --ignored corpus`.

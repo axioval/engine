@@ -104,9 +104,10 @@ fn unsupported_source_neutral_scalars_fail_closed() {
 
 #[test]
 fn source_failures_remain_distinct_terminal_errors() {
+    // A member that names no entity leaves the set unreadable.
     let incomplete = String::from_utf8(IFC.to_vec())
         .unwrap()
-        .replace("(#2,#3,#6,#7,#8,#10)", "()");
+        .replace("(#2,#3,#6,#7,#8,#10)", "(#2,#3,#6,#7,#8,#999)");
     let session = import_ifc_session("fixture.ifc", incomplete.as_bytes()).unwrap();
     let properties = session
         .service::<PropertyResolutionServiceHandle>()
@@ -114,6 +115,18 @@ fn source_failures_remain_distinct_terminal_errors() {
     assert!(matches!(
         properties.resolve(&request("Missing")),
         Err(PropertyResolutionError::Incomplete(_))
+    ));
+    // A set without members exists and holds nothing: the property is absent.
+    let empty = String::from_utf8(IFC.to_vec())
+        .unwrap()
+        .replace("(#2,#3,#6,#7,#8,#10)", "()");
+    let session = import_ifc_session("fixture.ifc", empty.as_bytes()).unwrap();
+    assert!(matches!(
+        session
+            .service::<PropertyResolutionServiceHandle>()
+            .unwrap()
+            .resolve(&request("Missing")),
+        Ok(PropertyResolution::Absent(_))
     ));
 
     let conflicting = String::from_utf8(IFC.to_vec())

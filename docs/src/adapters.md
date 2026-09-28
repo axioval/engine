@@ -93,6 +93,11 @@ properties, an occurrence value overrides an inherited one of the same set
 and name, and ambiguity is refused per source. Only selected members must
 be readable: an unselected complex property does not refuse the answer, a
 selected reference value does. A set of a reserved name is never selected.
+A selected set whose `HasProperties` or `Quantities` is `()` or `$` exists
+and holds nothing: `exact_property_sets_where` (`ifc-properties` 0.5.0,
+openbimrs/ifc#186) lists it, the enumeration names it in `empty_sets`, and a
+property requested in it by name is absent. An empty set sharing its name
+with a set that holds members is still malformed and refused.
 
 Direct-property completeness does not imply relationship completeness. The IFC
 session registers an exact relationship-selection service: a relationship

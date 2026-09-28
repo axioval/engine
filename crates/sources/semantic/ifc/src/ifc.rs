@@ -15,7 +15,7 @@ use axioval_ir::{
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
     ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactTableValue,
-    ExactTypedValue, ExactValue, exact_properties_where, exact_property,
+    ExactTypedValue, ExactValue, exact_properties_where, exact_property, exact_property_sets_where,
 };
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
@@ -511,7 +511,21 @@ impl PropertyResolutionService for IfcPropertyService {
                 )?,
             )),
             Ok(_) => Err(PropertyResolutionError::InexactEvidence),
-            Err(error) => Err(map_resolution_error(&error)),
+            Err(error) => match request.property_set() {
+                Some(set) if self.only_empty(object, set, &error) => Ok(
+                    PropertyResolution::Absent(CompletePropertyAbsenceEvidence::try_new(
+                        request.clone(),
+                        Evidence::exact(
+                            self.snapshots[0].source().clone(),
+                            self.locator(format_args!(
+                                "absence:{object}:{set}:{}:empty-set",
+                                request.property()
+                            )),
+                        ),
+                    )?),
+                ),
+                _ => Err(map_resolution_error(&error)),
+            },
         }
     }
 
@@ -532,10 +546,12 @@ impl PropertyResolutionService for IfcPropertyService {
         if self.model.get(object).is_none() {
             return Err(PropertyResolutionError::InvalidRequest);
         }
+        let selected = |set: &str| !is_reserved_set(set) && request.property_set().matches(set);
+        let empty = self.empty_sets(object, selected)?;
         let entries = exact_properties_where(
             &self.model,
             object,
-            |set| !is_reserved_set(set) && request.property_set().matches(set),
+            |set| selected(set) && !empty.iter().any(|name| name == set),
             |name| request.property().matches(name),
         )
         .map_err(|error| map_resolution_error(&error))?;
@@ -554,7 +570,50 @@ impl PropertyResolutionService for IfcPropertyService {
                     request.property()
                 )),
             ),
-        )
+        )?
+        .with_empty_sets(empty)
+    }
+}
+
+impl IfcPropertyService {
+    /// The names of the sets `select` picks on `object` of which every set
+    /// is empty (`HasProperties` or `Quantities` of `()` or `$`). Such a set
+    /// exists and holds nothing, which a rule requiring a property in it
+    /// must see. A name an empty set shares with a set holding members is
+    /// not listed, so `exact_properties_where` still refuses it.
+    fn empty_sets(
+        &self,
+        object: EntityId,
+        select: impl Fn(&str) -> bool,
+    ) -> Result<Vec<String>, PropertyResolutionError> {
+        let sets = exact_property_sets_where(&self.model, object, &select)
+            .map_err(|error| map_resolution_error(&error))?;
+        let mut empty: Vec<String> = sets
+            .iter()
+            .filter(|entry| entry.members == 0)
+            .map(|entry| entry.name.to_string())
+            .filter(|name| {
+                sets.iter()
+                    .all(|entry| *entry.name != **name || entry.members == 0)
+            })
+            .collect();
+        empty.sort();
+        empty.dedup();
+        Ok(empty)
+    }
+
+    /// Whether `error`, refusing a property of set `set`, is only the
+    /// refusal of that set's empty member list: every set of that name is
+    /// empty and `error` names one of them. Such a set holds no property,
+    /// so the property is absent from it.
+    fn only_empty(&self, object: EntityId, set: &str, error: &ExactPropertyError) -> bool {
+        let ExactPropertyError::MalformedAggregate { entity, .. } = error else {
+            return false;
+        };
+        exact_property_sets_where(&self.model, object, |name| name == set).is_ok_and(|sets| {
+            sets.iter().all(|entry| entry.members == 0)
+                && sets.iter().any(|entry| entry.set_id == *entity)
+        })
     }
 }
 

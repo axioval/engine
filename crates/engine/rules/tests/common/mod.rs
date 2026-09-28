@@ -39,6 +39,8 @@ pub struct Model {
     citations: BTreeMap<String, Vec<(ObjectId, String)>>,
     /// Whether the source can enumerate an object's properties.
     enumerable: bool,
+    /// Sets an object carries without any member.
+    empty_sets: BTreeSet<(ObjectId, String)>,
 }
 
 impl Default for Model {
@@ -50,6 +52,7 @@ impl Default for Model {
             unreadable: BTreeSet::new(),
             citations: BTreeMap::new(),
             enumerable: true,
+            empty_sets: BTreeSet::new(),
         }
     }
 }
@@ -98,6 +101,12 @@ impl Model {
             .entry(relationship.into())
             .or_default()
             .push((relating, related));
+        self
+    }
+
+    /// A set `local` carries without any member.
+    pub fn empty_set(mut self, local: &str, set: &str) -> Self {
+        self.empty_sets.insert((id(local), set.into()));
         self
     }
 
@@ -253,6 +262,13 @@ impl PropertyResolutionService for Model {
                     ))
             })
             .collect();
+        let empty = self
+            .empty_sets
+            .iter()
+            .filter(|(object, set)| {
+                object == request.object_id() && request.property_set().matches(set)
+            })
+            .map(|(_, set)| set.clone());
         PropertyEnumeration::try_new(
             request.clone(),
             properties,
@@ -260,7 +276,8 @@ impl PropertyResolutionService for Model {
                 request.object_id().source.clone(),
                 format!("enumerated:{}", request.object_id()),
             ),
-        )
+        )?
+        .with_empty_sets(empty)
     }
 }
 

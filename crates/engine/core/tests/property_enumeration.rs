@@ -167,3 +167,36 @@ fn the_handle_binds_the_answer_and_the_default_refuses() {
         Err(PropertyResolutionError::Unavailable(_))
     ));
 }
+
+#[test]
+fn empty_sets_are_selected_sorted_and_hold_no_property() {
+    let enumeration = PropertyEnumeration::try_new(
+        request(),
+        vec![property("Pset_WallCommon", "IsExternal")],
+        complete(),
+    )
+    .unwrap();
+    let with = enumeration
+        .clone()
+        .with_empty_sets([
+            "Pset_SlabCommon".to_owned(),
+            "Pset_BeamCommon".to_owned(),
+            "Pset_SlabCommon".to_owned(),
+        ])
+        .unwrap();
+    assert_eq!(with.empty_sets(), ["Pset_BeamCommon", "Pset_SlabCommon"]);
+    assert!(enumeration.empty_sets().is_empty());
+    // A set the request does not select, or a reserved one, is not an answer.
+    for set in ["Other", "axioval:attributes"] {
+        assert_eq!(
+            enumeration.clone().with_empty_sets([set.to_owned()]),
+            Err(PropertyResolutionError::ResponseRequestMismatch),
+            "{set}"
+        );
+    }
+    // A set holding an enumerated property is not empty.
+    assert!(matches!(
+        enumeration.with_empty_sets(["Pset_WallCommon".to_owned()]),
+        Err(PropertyResolutionError::Conflicting(_))
+    ));
+}

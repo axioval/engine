@@ -1561,7 +1561,10 @@ fn missing_set(
         return (property, failure);
     };
     match enumerate(context, subject, set, NameSpec::Any) {
-        Ok(enumeration) if enumeration.properties().is_empty() => {
+        // A set the object carries without members is present, not missing.
+        Ok(enumeration)
+            if enumeration.properties().is_empty() && enumeration.empty_sets().is_empty() =>
+        {
             failure.result = MISSING_SET;
             failure.evidence.push(enumeration.evidence().clone());
             (shown.to_owned(), failure)

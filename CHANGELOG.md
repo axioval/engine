@@ -2843,6 +2843,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A required property fails on an empty matching set.** (Refs #116) A
+  property set or quantity set whose members are `()` or `$` left no trace
+  in an enumeration, and the IFC adapter refused the whole answer, so a
+  required property or IDS facet over it was not evaluated. The IFC
+  adapter lists such sets through `ifc-properties`'
+  `exact_property_sets_where`: `PropertyEnumeration` gains `empty_sets`
+  (`with_empty_sets`, additive), `property-value` and
+  `property-requirements` count them among the sets that need a match, and
+  a property named in one is absent, so the rule fails as IDS requires. An
+  empty set sharing its name with one that holds members is still
+  refused, and a property named in an empty set is a `missing property`,
+  not a missing set.
+
 - **Mirroring is read for mapped items of every kind.** (Refs #108) The IFC
   adapter's `axioval:body.Mirrored` refused a body with a mapped item that
   is not a swept solid, so model comparison left its `mirroring`

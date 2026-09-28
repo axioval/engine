@@ -865,9 +865,10 @@ pub(crate) fn enumerate(
     service.enumerate(&request).map_err(property_error)
 }
 
-/// The sets `set` names that hold a property but none `matched` found, by
-/// name, with the evidence of their enumeration: a rule naming its sets
-/// requires a match in each of them, as IDS does.
+/// The sets `set` names in which `matched` found no property, by name and
+/// sorted, with the evidence of their enumeration: a rule naming its sets
+/// requires a match in each of them, as IDS does. A set the object carries
+/// without any member is one of them (`PropertyEnumeration::empty_sets`).
 pub(crate) fn sets_without_match(
     context: &RuleContext<'_>,
     object: &Object,
@@ -875,10 +876,11 @@ pub(crate) fn sets_without_match(
     matched: &PropertyEnumeration,
 ) -> Result<(Vec<String>, Evidence), (NotEvaluatedReason, String)> {
     let every = enumerate(context, object, set, NameSpec::Any)?;
-    let mut missing: Vec<String> = every
+    let missing: std::collections::BTreeSet<String> = every
         .properties()
         .iter()
         .map(|property| property.property_set.clone())
+        .chain(every.empty_sets().iter().cloned())
         .filter(|name| {
             !matched
                 .properties()
@@ -886,8 +888,7 @@ pub(crate) fn sets_without_match(
                 .any(|found| found.property_set == *name)
         })
         .collect();
-    missing.dedup();
-    Ok((missing, every.evidence().clone()))
+    Ok((missing.into_iter().collect(), every.evidence().clone()))
 }
 
 pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedReason, String) {

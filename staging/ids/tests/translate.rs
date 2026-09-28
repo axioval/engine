@@ -1576,41 +1576,40 @@ END-ISO-10303-21;
 ";
 
 #[test]
-fn an_empty_property_set_leaves_the_object_not_evaluated_never_without_the_property() {
-    for (applicability, requirement) in [
-        // Required, prohibited, and in the applicability.
-        (WALL.to_owned(), property("P", "N", "")),
+fn an_empty_property_set_proves_its_properties_absent() {
+    // #1 carries an empty set `P`: `N` is exactly absent there, so a required
+    // facet fails it, a prohibited facet passes it, and as applicability it
+    // is not selected. Nothing about #1 is left undecided.
+    for (case, applicability, requirement, found) in [
+        ("required", WALL.to_owned(), property("P", "N", ""), true),
         (
+            "prohibited",
             WALL.to_owned(),
             property("P", "N", "cardinality=\"prohibited\""),
+            false,
         ),
         (
+            "applicability",
             format!("{WALL}{}", property("P", "N", "")),
             every_applicable(),
+            false,
         ),
     ] {
         let translation = one("IFC4", OPTIONAL, &applicability, &requirement);
         assert!(translation.is_complete(), "{:?}", reasons(&translation));
         let report = run(&translation, EMPTY_SET_MODEL);
-        let undecided: Vec<&str> = report
-            .not_evaluated()
-            .iter()
-            .filter_map(|outcome| outcome.object_id())
-            .map(|id| id.local_id.as_str())
-            .collect();
-        assert_eq!(
-            undecided,
-            ["#1"],
-            "{requirement}: {:?}",
-            report.not_evaluated()
-        );
         assert!(
             report
-                .findings()
+                .not_evaluated()
                 .iter()
-                .all(|finding| finding.object_id().is_none_or(|id| id.local_id != "#1")),
-            "{requirement}: {:?}",
-            report.findings()
+                .all(|outcome| outcome.object_id().is_none_or(|id| id.local_id != "#1")),
+            "{case}: {:?}",
+            report.not_evaluated()
         );
+        let on_first = report
+            .findings()
+            .iter()
+            .any(|finding| finding.object_id().is_some_and(|id| id.local_id == "#1"));
+        assert_eq!(on_first, found, "{case}: {:?}", report.findings());
     }
 }

@@ -312,11 +312,17 @@ impl PropertyEnumerationRequest {
 /// Properties are sorted by set and name; no set and name occurs twice. An
 /// empty enumeration is an exact proof that the object has no selected
 /// property, as [`CompletePropertyAbsenceEvidence`] is for one name.
+///
+/// A set the object carries without any member holds no property, so it
+/// leaves no trace among the properties. A source that can tell such a set
+/// apart from no set at all names it in [`Self::empty_sets`], so a rule
+/// requiring a property in every selected set fails on it, as IDS requires.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PropertyEnumeration {
     request: PropertyEnumerationRequest,
     properties: Vec<Property>,
     evidence: Evidence,
+    empty_sets: Vec<String>,
 }
 impl PropertyEnumeration {
     /// Creates a request-bound enumeration.
@@ -367,7 +373,41 @@ impl PropertyEnumeration {
             request,
             properties,
             evidence,
+            empty_sets: Vec::new(),
         })
+    }
+    /// The same enumeration, also naming the selected sets the object carries
+    /// without any member, sorted and each once.
+    ///
+    /// # Errors
+    ///
+    /// [`PropertyResolutionError::ResponseRequestMismatch`] for a set the
+    /// request does not select, or of a reserved name; and
+    /// [`PropertyResolutionError::Conflicting`] for a set an enumerated
+    /// property is in, which is not empty.
+    pub fn with_empty_sets(
+        mut self,
+        sets: impl IntoIterator<Item = String>,
+    ) -> Result<Self, PropertyResolutionError> {
+        let mut sets: Vec<String> = sets.into_iter().collect();
+        for set in &sets {
+            if is_reserved_set(set) || !self.request.property_set().matches(set) {
+                return Err(PropertyResolutionError::ResponseRequestMismatch);
+            }
+            if self
+                .properties
+                .iter()
+                .any(|property| property.property_set == *set)
+            {
+                return Err(PropertyResolutionError::Conflicting(format!(
+                    "set {set} is reported empty and holds a property"
+                )));
+            }
+        }
+        sets.sort();
+        sets.dedup();
+        self.empty_sets = sets;
+        Ok(self)
     }
     /// Bound request.
     pub fn request(&self) -> &PropertyEnumerationRequest {
@@ -380,6 +420,12 @@ impl PropertyEnumeration {
     /// Exact reviewable evidence that the enumeration is complete.
     pub fn evidence(&self) -> &Evidence {
         &self.evidence
+    }
+    /// The selected sets the object carries without any member, sorted. The
+    /// same evidence proves there are no others; a source that cannot tell
+    /// an empty set from none reports none.
+    pub fn empty_sets(&self) -> &[String] {
+        &self.empty_sets
     }
 }
 

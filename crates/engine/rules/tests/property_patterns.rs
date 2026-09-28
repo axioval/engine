@@ -232,3 +232,31 @@ fn a_set_pattern_needs_a_match_in_every_set_it_matches() {
     );
     assert!(findings(&evaluation).is_empty());
 }
+
+#[test]
+fn an_empty_set_the_pattern_matches_needs_a_match_too() {
+    // `Foo_Baz` exists on w1 but holds nothing (#116).
+    let evaluation = Model::default()
+        .object("w1", "wall")
+        .text("w1", "Foo_Bar", "Foo", "x")
+        .empty_set("w1", "Foo_Baz")
+        .evaluate(
+            &PropertyValueConstraint,
+            &rule(
+                VALUE,
+                kind("wall"),
+                values_x(vec![
+                    ("property_set_pattern", string("Foo_.*")),
+                    ("property_pattern", string("Foo")),
+                ]),
+            ),
+        );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "missing required property /Foo_.*/./Foo/ in set Foo_Baz".into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}

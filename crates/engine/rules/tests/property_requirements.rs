@@ -1418,6 +1418,50 @@ fn a_required_pattern_needs_a_match_in_every_named_set() {
 }
 
 #[test]
+fn an_empty_named_set_is_a_set_without_the_required_property() {
+    // `Pset_ConcreteCommon` exists on w1 but holds nothing (#116).
+    let model = Model::default()
+        .object("w1", "wall")
+        .text("w1", "Pset_WallCommon", "Reference", "W-01")
+        .empty_set("w1", "Pset_ConcreteCommon");
+    let evaluation = run(
+        model,
+        requirements(vec![row(&[
+            ("property_set", string("Pset_*Common")),
+            ("property", string("Reference")),
+            ("requirement", string("required")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "missing property: Pset_ConcreteCommon.Reference is absent (requirement row 0)".into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    // Named exactly, an empty set is present: its property is missing, not
+    // the set.
+    let evaluation = run(
+        Model::default()
+            .object("w1", "wall")
+            .empty_set("w1", "Pset_ConcreteCommon"),
+        requirements(vec![row(&[
+            ("property_set", string("Pset_ConcreteCommon")),
+            ("property", string("Reference")),
+            ("requirement", string("required")),
+        ])]),
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "w1".into(),
+            "missing property: Pset_ConcreteCommon.Reference is absent (requirement row 0)".into()
+        )]
+    );
+}
+
+#[test]
 fn an_exclusive_bound_fails_its_own_value() {
     let model = Model::default()
         .object("w1", "wall")

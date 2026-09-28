@@ -13,7 +13,10 @@ use axioval_ir::{ObjectId, PropertyValue, SourceId};
 /// `Pset_Custom` (`FooBar`, `FooBaz`, a complex `Layers`), a quantity set and,
 /// through its type #30, an inherited `Pset_WallCommon` (`IsExternal`,
 /// overridden, and `FireRating`). Wall #2 has two sets named `Twice` and a
-/// reference value `Link` in `Pset_Links`. Wall #3 has no property.
+/// reference value `Link` in `Pset_Links`. Wall #3 has no property. Wall
+/// #4 has a `Pset_Full` and an empty `Pset_Empty`, wall #5 a `Pset_Empty`
+/// whose members are `$`; wall #6 has an empty `Pset_Mixed` and, through its
+/// type #61, one holding `B`.
 const IFC4: &str = "ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION((''),'2;1');
@@ -55,6 +58,22 @@ DATA;
 #46=IFCPROPERTYREFERENCEVALUE('Link',$,$,#94);
 #47=IFCPROPERTYSET('0000000000000000000047',$,'Pset_Links',$,(#46));
 #48=IFCRELDEFINESBYPROPERTIES('0000000000000000000048',$,$,$,(#2),#47);
+#4=IFCWALL('0000000000000000000004',$,$,$,$,$,$,$,$);
+#5=IFCWALL('0000000000000000000005',$,$,$,$,$,$,$,$);
+#6=IFCWALL('0000000000000000000006',$,$,$,$,$,$,$,$);
+#50=IFCPROPERTYSINGLEVALUE('A',$,IFCLABEL('a'),$);
+#51=IFCPROPERTYSET('0000000000000000000051',$,'Pset_Full',$,(#50));
+#52=IFCPROPERTYSET('0000000000000000000052',$,'Pset_Empty',$,());
+#53=IFCRELDEFINESBYPROPERTIES('0000000000000000000053',$,$,$,(#4),#51);
+#54=IFCRELDEFINESBYPROPERTIES('0000000000000000000054',$,$,$,(#4),#52);
+#55=IFCPROPERTYSET('0000000000000000000055',$,'Pset_Empty',$,$);
+#56=IFCRELDEFINESBYPROPERTIES('0000000000000000000056',$,$,$,(#5),#55);
+#57=IFCPROPERTYSET('0000000000000000000057',$,'Pset_Mixed',$,());
+#58=IFCRELDEFINESBYPROPERTIES('0000000000000000000058',$,$,$,(#6),#57);
+#59=IFCPROPERTYSINGLEVALUE('B',$,IFCLABEL('b'),$);
+#60=IFCPROPERTYSET('0000000000000000000060',$,'Pset_Mixed',$,(#59));
+#61=IFCWALLTYPE('0000000000000000000061',$,'M',$,$,(#60),$,$,$,.STANDARD.);
+#62=IFCRELDEFINESBYTYPE('0000000000000000000062',$,$,$,(#6),#61);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -202,37 +221,38 @@ fn ambiguity_and_selected_values_the_ir_cannot_carry_are_refused() {
     );
 }
 
+fn resolve(
+    local: &str,
+    set: Option<&str>,
+    name: &str,
+) -> Result<PropertyResolution, PropertyResolutionError> {
+    handle().resolve(&PropertyRequest::try_new(object(local), set.map(Into::into), name).unwrap())
+}
+
+/// A set holding nothing exists: it is listed as empty, so a property
+/// required in it fails, and a property named in it is absent (#116).
 #[test]
-fn a_property_set_holding_no_property_refuses_rather_than_proving_absence() {
-    // `HasProperties` is `SET [1:?]`: an empty set is malformed, so neither
-    // its properties' absence nor anything under its name is known.
-    let model = IFC4.replace(
-        "#48=IFCRELDEFINESBYPROPERTIES",
-        "#50=IFCPROPERTYSET('0000000000000000000050',$,'Pset_Empty',$,());\n\
-         #51=IFCRELDEFINESBYPROPERTIES('0000000000000000000051',$,$,$,(#3),#50);\n\
-         #48=IFCRELDEFINESBYPROPERTIES",
-    );
-    let handle = import_ifc_session("model.ifc", model.as_bytes())
-        .unwrap()
-        .services()
-        .get::<PropertyResolutionServiceHandle>()
-        .unwrap()
-        .clone();
-    for set in [Some("Pset_Empty"), None] {
-        let resolved = handle
-            .resolve(&PropertyRequest::try_new(object("#3"), set.map(Into::into), "N").unwrap());
-        assert!(
-            matches!(resolved, Err(PropertyResolutionError::Incomplete(_))),
-            "{set:?}: {resolved:?}"
-        );
+fn an_empty_set_is_listed_and_its_properties_are_absent() {
+    for wall in ["#4", "#5"] {
+        let found = enumerate(wall, exact("Pset_Empty"), NameMatch::Any).unwrap();
+        assert!(found.properties().is_empty(), "{wall}");
+        assert_eq!(found.empty_sets(), ["Pset_Empty"], "{wall}");
+        assert!(matches!(
+            resolve(wall, Some("Pset_Empty"), "A"),
+            Ok(PropertyResolution::Absent(_))
+        ));
     }
-    for set in [exact("Pset_Empty"), NameMatch::Any] {
-        let listed = handle.enumerate(
-            &PropertyEnumerationRequest::try_new(object("#3"), set, NameMatch::Any).unwrap(),
-        );
-        assert!(
-            matches!(listed, Err(PropertyResolutionError::Incomplete(_))),
-            "{listed:?}"
-        );
-    }
+    let every = enumerate("#4", NameMatch::Any, NameMatch::Any).unwrap();
+    assert_eq!(names(&every), pairs(&[("Pset_Full", "A")]));
+    assert_eq!(every.empty_sets(), ["Pset_Empty"]);
+    let other = enumerate("#4", exact("Pset_Full"), NameMatch::Any).unwrap();
+    assert!(other.empty_sets().is_empty());
+}
+
+/// An empty set sharing its name with one that holds members is still
+/// malformed, and refused.
+#[test]
+fn an_empty_set_beside_a_full_one_of_its_name_is_refused() {
+    assert!(enumerate("#6", exact("Pset_Mixed"), NameMatch::Any).is_err());
+    assert!(resolve("#6", Some("Pset_Mixed"), "B").is_err());
 }

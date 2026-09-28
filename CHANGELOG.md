@@ -6,6 +6,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **IFC4X3 classifications.** (Refs #116) An IFC4X3 session answers
+  classifications: `ifc-classification` 0.2.2 reads IFC4X3 with its own
+  table (openbimrs/ifc#194), so the adapter no longer refuses them and a
+  classification selector over an IFC4X3 model is decided, IFC4X3-only
+  elements such as `IfcRoad` included. The adapter still refuses should
+  the library bind another release than the session's. Zones, read by
+  `ifc-systems` 0.2.2 with the IFC4X3 table as well, raise
+  `ZONE_MEMBER_NOT_SPATIAL` on IFC4X3 models.
+
 - **BCF colouring.** (#109) `axioval_bcf::Options` gains `colors`: every
   viewpoint colours the finding's subject in `Colors::subject` and its
   related objects in `Colors::related`, by default opaque red
@@ -144,8 +153,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   exactly. A session binds to the IFC4X3 table and declares
   `IFC4X3_TYPE_SYSTEM` (the bSDD `ifc/4.3` dictionary), so IFC4X3-only
   entities (`IfcBridge`, `IfcBuiltElement`) have their own ancestry.
-  Classifications stay refused on IFC4X3 sessions: `ifc-classification`
-  0.2.1 binds an IFC4X3 header to the IFC4 table. The staging IDS importer
+  Classifications are read too since `ifc-classification` 0.2.2 (see
+  *IFC4X3 classifications*). The staging IDS importer
   translates `IFC4X3_ADD2` specifications.
 
 - **IFC4 contexts are checked objects.** (Refs #116) An IFC session's

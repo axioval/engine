@@ -3,17 +3,19 @@
 //! `ifc-properties` (≥ 0.4.1) resolves IFC4X3 exactly, so an IFC4X3 file
 //! opens a session bound to the IFC4X3 table and type system. Entities only
 //! IFC4X3 declares (`IfcBridge`, `IfcBuiltElement`) are objects with their
-//! own ancestry; classifications, which `ifc-classification` still reads with
-//! the IFC4 table, are refused rather than read from another release.
+//! own ancestry. Classifications are read with the IFC4X3 table too
+//! (`ifc-classification` ≥ 0.2.2), so an IFC4X3-only element is classified.
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    ClassificationServiceHandle, EvidenceSession, PropertyRequest, PropertyResolution,
-    PropertyResolutionServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
-    TypeHierarchyServiceHandle,
+    ClassificationAssignment, ClassificationServiceHandle, EvidenceSession, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SourceIntegrityServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
 };
-use axioval_ifc::{IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, import_ifc_session};
+use axioval_ifc::{
+    IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, ZONE_MEMBER_NOT_SPATIAL, import_ifc_session,
+};
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_SET, ObjectId, PropertyValue, SourceId};
 
 const MODEL: &str = "ISO-10303-21;
@@ -36,6 +38,12 @@ DATA;
 #11=IFCCLASSIFICATION($,$,$,'Uniclass',$,$,$);
 #12=IFCCLASSIFICATIONREFERENCE($,'EF_25',$,#11,$,$);
 #13=IFCRELASSOCIATESCLASSIFICATION('0000000000000000000013',$,$,$,(#4),#12);
+#14=IFCROAD('0000000000000000000014',$,'Road',$,$,$,$,$,$,.NOTDEFINED.);
+#15=IFCRELAGGREGATES('0000000000000000000015',$,$,$,#1,(#14));
+#16=IFCCLASSIFICATION($,$,$,'CCI',$,'https://example.org/cci',$);
+#17=IFCCLASSIFICATIONREFERENCE($,'RC',$,#16,$,$);
+#18=IFCCLASSIFICATIONREFERENCE($,'RC.1',$,#17,$,$);
+#19=IFCRELASSOCIATESCLASSIFICATION('0000000000000000000019',$,$,$,(#14),#18);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -76,7 +84,7 @@ fn an_ifc4x3_source_declares_its_own_release_and_type_system() {
         .map(|object| object.kind().to_owned())
         .collect();
     kinds.sort();
-    assert_eq!(kinds, ["IFCBRIDGE", "IFCPROJECT", "IFCWALL"]);
+    assert_eq!(kinds, ["IFCBRIDGE", "IFCPROJECT", "IFCROAD", "IFCWALL"]);
     // IfcBuiltElement is IFC4X3's name for IFC4's IfcBuildingElement.
     let hierarchy = session.service::<TypeHierarchyServiceHandle>().unwrap();
     assert!(
@@ -135,11 +143,60 @@ fn relationships_are_read_with_the_ifc4x3_table() {
 }
 
 #[test]
-fn classifications_are_refused_until_read_with_the_ifc4x3_table() {
+fn classifications_are_read_with_the_ifc4x3_table() {
     let session = session();
-    let refused = session
-        .service::<ClassificationServiceHandle>()
-        .unwrap()
-        .classifications(&id("#4"));
-    assert!(refused.is_err(), "{refused:?}");
+    let service = session.service::<ClassificationServiceHandle>().unwrap();
+    assert_eq!(
+        service.classifications(&id("#4")).unwrap(),
+        [ClassificationAssignment {
+            system: Some("Uniclass".into()),
+            codes: vec![Some("EF_25".into())],
+        }]
+    );
+    // IfcRoad exists only in IFC4X3, where it is an IfcDefinitionSelect
+    // member; read with the IFC4 table its assignment was a reference error.
+    // A system stating its `Specification` (IFC4's `Location`) reads alike,
+    // and a code keeps its ancestors, outermost last.
+    assert_eq!(
+        service.classifications(&id("#14")).unwrap(),
+        [ClassificationAssignment {
+            system: Some("CCI".into()),
+            codes: vec![Some("RC.1".into()), Some("RC".into())],
+        }]
+    );
+    assert_eq!(service.classifications(&id("#2")).unwrap(), []);
+}
+
+#[test]
+fn zones_are_read_with_the_ifc4x3_table() {
+    // `ifc-systems` (≥ 0.2.2) reads IFC4X3 zones by attribute name with the
+    // IFC4X3 table, so a zone grouping a wall against its WR1 rule is
+    // reported, and one grouping only spaces is not.
+    let model = |members: &str| {
+        MODEL.replace(
+            "ENDSEC;\nEND-ISO-10303-21;",
+            &format!(
+                "#20=IFCSPACE('0000000000000000000020',$,'R1',$,$,$,$,$,$,$,$);
+#21=IFCZONE('0000000000000000000021',$,'Z',$,$,$);
+#22=IFCRELASSIGNSTOGROUP('0000000000000000000022',$,$,$,({members}),$,#21);
+ENDSEC;\nEND-ISO-10303-21;"
+            ),
+        )
+    };
+    let codes = |members: &str| {
+        let session = import_ifc_session("model.ifc", model(members).as_bytes()).unwrap();
+        session
+            .service::<SourceIntegrityServiceHandle>()
+            .unwrap()
+            .issues(&source())
+            .unwrap()
+            .into_iter()
+            .map(|issue| (issue.code, issue.message))
+            .collect::<Vec<_>>()
+    };
+    let flagged = codes("#20,#4");
+    assert_eq!(flagged.len(), 1, "{flagged:?}");
+    assert_eq!(flagged[0].0, ZONE_MEMBER_NOT_SPATIAL);
+    assert!(flagged[0].1.contains("#4"), "{}", flagged[0].1);
+    assert_eq!(codes("#20"), []);
 }

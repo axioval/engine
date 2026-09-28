@@ -47,6 +47,8 @@ pub(crate) struct Release {
     pub(crate) label: &'static str,
     /// Semantic type-system identity declared on the snapshot.
     pub(crate) type_system: &'static str,
+    /// The release, as upstream readers report the one they bound.
+    pub(crate) version: SchemaVersion,
 }
 
 impl Release {
@@ -60,11 +62,13 @@ impl Release {
                 schema: ifc2x3(),
                 label: "IFC2X3",
                 type_system: IFC2X3_TYPE_SYSTEM,
+                version: SchemaVersion::Ifc2x3,
             }),
             SchemaVersion::Ifc4 => Some(Self {
                 schema: ifc4(),
                 label: "IFC4",
                 type_system: IFC4_TYPE_SYSTEM,
+                version: SchemaVersion::Ifc4,
             }),
             // `ifc-properties` (≥ 0.4.1) resolves IFC4X3 ADD2 exactly. Named,
             // not wildcarded, so a release added upstream is a compile error
@@ -73,13 +77,8 @@ impl Release {
                 schema: ifc4x3(),
                 label: "IFC4X3",
                 type_system: IFC4X3_TYPE_SYSTEM,
+                version: SchemaVersion::Ifc4x3,
             }),
         }
-    }
-
-    /// Whether this is IFC4X3, which some upstream readers still read with
-    /// the IFC4 table.
-    pub(crate) fn is_ifc4x3(self) -> bool {
-        self.type_system == IFC4X3_TYPE_SYSTEM
     }
 }

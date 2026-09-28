@@ -13,7 +13,7 @@ use axioval_engine::{
     ClassificationAssignment, ClassificationError, ClassificationService, SourceSnapshot,
 };
 use axioval_ir::ObjectId;
-use ifc_classification::ClassificationView;
+use ifc_classification::{ClassificationView, classification_schema};
 use ifc_model::{Budget, EntityId, Model};
 
 use crate::release::Release;
@@ -75,14 +75,18 @@ impl ClassificationService for IfcClassificationService {
 
     fn classifications(&self, object: &ObjectId) -> Answer {
         let id = self.entity(object)?;
-        // `ifc-classification` (0.2.1) reads an IFC4X3 file with the IFC4
-        // table; refused rather than answered from another release's schema.
-        if self.release.is_ifc4x3() {
-            return Err(ClassificationError::Unreadable(
-                "IFC4X3 classifications are read with the IFC4 table by the IFC \
-                 classification library, so they are not read exactly"
-                    .into(),
-            ));
+        // `ifc-classification` (≥ 0.2.2) binds the release the header
+        // declares, IFC4X3 included. Should it ever bind another release
+        // than the session's, it would read with that release's table:
+        // refused, never answered from another release's schema.
+        let bound = classification_schema(&self.model)
+            .map_err(|error| ClassificationError::Unreadable(error.to_string()))?;
+        if bound != self.release.version {
+            return Err(ClassificationError::Unreadable(format!(
+                "the IFC classification library reads this {} model as {bound:?}, \
+                 so its classifications are not read exactly",
+                self.release.label
+            )));
         }
         let effective = ClassificationView::new(&self.model)
             .effective_classifications(id)

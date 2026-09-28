@@ -4,13 +4,13 @@
 //! read the project's inline classification list, which the IFC adapter
 //! never fills. Every classification rule over an IFC model therefore
 //! selected nothing and returned an empty report. These tests pin that the
-//! selector now reads what the file states, in both supported releases, and
+//! selector now reads what the file states, in every supported release, and
 //! refuses what it cannot decide.
 #![cfg(feature = "ifc")]
 #![allow(missing_docs)]
 
 use axioval::engine::{CapabilityRegistry, EvidenceSession, Runtime, compile};
-use axioval::ifc::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, import_ifc_session};
+use axioval::ifc::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, import_ifc_session};
 use axioval::ir::contract::{ExternalName, RuleApplicability, Selector};
 use axioval::ir::{DefinitionPackage, NotEvaluatedReason, Report, RuleSetPackage};
 use axioval::rules::register_builtins;
@@ -138,6 +138,20 @@ fn a_group_code_selects_its_descendants_only_when_asked() {
     let report = run(&session, IFC4_TYPE_SYSTEM, classification("330", true));
     // #1 and #2 are both under 330; only #2 lacks the reference. #3, which
     // is unclassified and also lacks nothing, is never selected.
+    assert_eq!(flagged(&report), ["#2"]);
+}
+
+#[test]
+fn ifc4x3_classifications_are_read_through_their_release() {
+    // `ifc-classification` 0.2.2 binds IFC4X3 to its own table, so an
+    // IFC4X3 model is classified as the IFC4 one, never refused.
+    let session = import_ifc_session("model.ifc", &step("IFC4X3_ADD2", IFC4_WALLS)).unwrap();
+    let report = run(&session, IFC4X3_TYPE_SYSTEM, classification("330", true));
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
     assert_eq!(flagged(&report), ["#2"]);
 }
 

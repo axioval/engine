@@ -41,7 +41,7 @@ These parts stay explicit gaps:
 
 A property set that holds no property is malformed IFC (`HasProperties` and `Quantities` are `SET [1:?]`), and the IFC adapter refuses every property answer about an object carrying one, resolved or enumerated, as incomplete. A property facet on such an object is therefore not evaluated, never absent and never passed, where IDS would fail a required facet. This is not reported as a gap, since the translation is exact wherever the source can answer; deciding it needs the adapter to list such a set with no members, which the IFC property library does not yet offer in a released version.
 
-`IFC4X3_ADD2` specifications bind to the IFC adapter's IFC4X3 type system and check IFC4X3 models. A classification facet is not evaluated on an IFC4X3 model: the IFC classification library still reads IFC4X3 with the IFC4 table, and the adapter refuses rather than answer from another release's schema.
+`IFC4X3_ADD2` specifications bind to the IFC adapter's IFC4X3 type system and check IFC4X3 models. Classification facets are decided on them as on IFC4 models, read with the IFC4X3 table.
 
 ## Conformance corpus
 

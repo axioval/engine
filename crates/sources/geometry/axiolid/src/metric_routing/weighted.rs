@@ -35,6 +35,8 @@ const FINEST_SPACING: f64 = 0.005;
 const COST_POINTS: f64 = 1024.0;
 
 /// The distance map a query walks: plain, or weighted by cost regions.
+// One map lives per query, never in a collection: its size is no cost.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum Map {
     Plain(DistanceMap),
     Weighted(WeightedMap, f64),
@@ -114,62 +116,6 @@ pub(super) fn costs_text(costs: &[TravelCost]) -> String {
         .join(",")
 }
 
-/// How far a cut footprint's vertex may lie from the free region's
-/// boundary and still be moved onto it, in metres.
-const SNAP: f64 = 1e-6;
-
-/// A footprint cut to the free region, its vertices moved onto the
-/// region's boundary where they lie within [`SNAP`] of it.
-///
-/// Overlay output is rounded to a grid anew on every operation
-/// (axiolid/kernel#173), so a cut footprint's edge along a wall lies a
-/// few nanometres off the wall, crossing the region's edges at its ends,
-/// which the weighted map refuses. A vertex near a region vertex takes
-/// that vertex; one near an axis-parallel region edge takes that edge's
-/// coordinate, so edges along axis-parallel walls lie exactly on them.
-/// Along an oblique wall the cut may still be refused.
-fn snapped(piece: &Polygon, domain: &Plan) -> Polygon {
-    let edges: Vec<(Point2, Point2)> = domain
-        .polygons()
-        .iter()
-        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
-        .flat_map(|ring| {
-            let points = &ring.points;
-            (0..points.len()).map(move |i| (points[i], points[(i + 1) % points.len()]))
-        })
-        .collect();
-    let snap = |p: Point2| -> Point2 {
-        if let Some((vertex, _)) = edges
-            .iter()
-            .find(|(vertex, _)| (*vertex - p).length() < SNAP)
-        {
-            return *vertex;
-        }
-        let mut q = p;
-        for (a, b) in &edges {
-            let within = |low: f64, high: f64, value: f64| {
-                low.min(high) - SNAP <= value && value <= low.max(high) + SNAP
-            };
-            #[allow(clippy::float_cmp)]
-            if a.x == b.x && (q.x - a.x).abs() < SNAP && within(a.y, b.y, q.y) {
-                q.x = a.x;
-            }
-            #[allow(clippy::float_cmp)]
-            if a.y == b.y && (q.y - a.y).abs() < SNAP && within(a.x, b.x, q.x) {
-                q.y = a.y;
-            }
-        }
-        q
-    };
-    let ring = |ring: &axiolid_overlay::Ring| axiolid_overlay::Ring {
-        points: ring.points.iter().map(|p| snap(*p)).collect(),
-    };
-    Polygon {
-        outer: ring(&piece.outer),
-        holes: piece.holes.iter().map(ring).collect(),
-    }
-}
-
 /// A polygon's boundary length, holes included.
 fn perimeter(polygon: &Polygon) -> f64 {
     std::iter::once(&polygon.outer)
@@ -210,7 +156,7 @@ impl AxiolidMetricRoutingService {
             regions.extend(
                 free.polygons()
                     .iter()
-                    .map(|piece| CostRegion::new(snapped(piece, domain), cost.factor())),
+                    .map(|piece| CostRegion::new(piece.clone(), cost.factor())),
             );
         }
         Ok(regions)

@@ -205,10 +205,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the boundary, the lower bound drops them. Keep the upper bound never
   short of the length along the boundary.
   `src/metric_routing/weighted.rs` answers weighted travel and forced walks
-  on one level (`axiolid-route` 0.3.4, axiolid/kernel#195, #196): costed
-  objects' exact footprints cut to the free region, vertices within `SNAP`
-  of an axis-parallel wall moved onto it (overlay output is re-rounded,
-  axiolid/kernel#173), spacing from the tolerance within `COST_POINTS`; a
+  on one level (`axiolid-route` 0.3.5, axiolid/kernel#195, #196, #198):
+  costed objects' exact footprints cut to the free region and handed over
+  as cut (the kernel takes a cut edge meeting a wall up to rounding as
+  touching it; never snap vertices here), spacing from the tolerance
+  within `COST_POINTS`; a
   tessellated or bodiless costed object, a radius or connectors refuse, and
   a weighted request must never be answered with a plain map. Forced walks
   need a closed level with every target placed; their upper bound only a
@@ -355,7 +356,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
 0.3.0, except `axiolid-overlay` 0.3.3 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output), `axiolid-route`
-0.3.4 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
+0.3.5 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
 maps and corridor ends, with `axiolid-triangulate` 0.3.1) and
 `axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). `mesh_distance` is published there, but certified exact-B-rep distance
 (`boundary_distance` / `boundary_clearance`) exists only on the kernel's main

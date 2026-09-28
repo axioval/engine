@@ -3005,6 +3005,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Weighted travel stays sound at an angle.** The Axiolid backend moves to
+  `axiolid-route` 0.3.5 (axiolid/kernel#198), inheriting its soundness
+  fix: on cost edges at an angle, 0.3.4 decided interval sides and
+  blocking on points interpolated off the edge by rounding, which could
+  put a weighted map's lower bound above the true weighted distance.
+  A costed footprint cut flush with a wall at an angle is now weighed
+  instead of refused, and one whose cut vertex rounded a hair inside such
+  a wall no longer leaves a sliver along it at factor 1, which let 0.3.4
+  bound the weighted walk below its true cost from both sides.
+
 - **A reference value referencing nothing is no value.** (Refs #116) The
   IFC adapter read every `IfcPropertyReferenceValue` as unreadable, so a
   required property holding one was not evaluated. One whose
@@ -3172,6 +3182,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   entity the schema does not declare is an error, not a non-member.
 
 ### Changed
+
+- **No snapping of costed footprints.** (Refs axiolid/kernel#198) The
+  Axiolid backend no longer moves a costed footprint's cut vertices within
+  1 µm of an axis-parallel wall onto it: `axiolid-route` 0.3.5 takes a
+  cost region meeting the free region's boundary up to rounding as
+  touching it, at any angle.
 
 - **IDS `ifcVersion` is metadata.** (Refs #116) The staging IDS importer
   names every concept in the type systems of all three IFC releases IDS

@@ -103,17 +103,18 @@ shortest walk among possibly several.
   checks a claimed convergence against the tolerance and that a
   never-entered verdict names its request. The default refuses.
 
-In the Axiolid backend (`axiolid-route` 0.3.4, axiolid/kernel#195 and
-#196):
+In the Axiolid backend (`axiolid-route` 0.3.5, axiolid/kernel#195, #196
+and #198):
 
 - **Weighted maps.** Each costed object's exact plan footprint, cut to the
-  level's free region, becomes a cost region of a weighted distance map; the
-  cut's vertices within a micrometre of an axis-parallel wall are moved onto
-  it, since overlay output is rounded anew on each operation
-  (axiolid/kernel#173) and a cost edge crossing a wall by nanometres is
-  refused. A tessellated or bodiless costed object, footprints crossing
-  each other or a wall at an angle, a body with a radius, and a request
-  across levels are refused. Points along cost edges stand half the
+  level's free region, becomes a cost region of a weighted distance map.
+  Overlay output is rounded anew on each operation (axiolid/kernel#173), so
+  a cut edge along a wall, straight or at an angle, meets it only up to
+  rounding; `axiolid-route` takes such a region as touching the wall
+  (a vertex within 2^-24 of the region's extent of it), leaving no sliver
+  along the wall at factor 1. A tessellated or bodiless costed object,
+  footprints crossing each other or a wall, a body with a radius, and a
+  request across levels are refused. Points along cost edges stand half the
   tolerance apart (5 mm for a nearest target), or as close as 1024 points
   over all cost edges allow; the bracket is first order in that spacing.
   Lower bounds come from the map only on a closed level, as for plain maps.
@@ -245,7 +246,8 @@ closed, counts only by its straight-line distance, which no route beats.
   it lies inside and farther than the margin from it.
 
 These need `axiolid-route` 0.3.2 or later (`distance_map`, `farthest_point`);
-the workspace requires 0.3.4.
+the workspace requires 0.3.5, whose weighted maps keep their lower bound
+below the distance on cost edges at an angle (0.3.4's could exceed it).
 
 ### Across levels in the Axiolid backend
 

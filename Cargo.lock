@@ -487,9 +487,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-route"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26ba1657c2f05d9aed1ff521817c5e2e6df5cb598afb91afdd49cf340ac839e4"
+checksum = "acd65d1cfe28f95405e8979a2798eb9bbc83f52d47b2ecaa364d7ad74a848ee2"
 dependencies = [
  "axiolid-contracts",
  "axiolid-core",

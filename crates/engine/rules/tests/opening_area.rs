@@ -144,27 +144,26 @@ fn window(model: Model, local: &str, x: f64) -> Model {
 }
 
 fn check(model: Model) -> CapabilityEvaluation {
-    model.evaluate(
-        &OpeningArea,
-        &rule(
-            ID,
-            kind("wall"),
-            vec![
-                ("opening_path", strings(&["voids:forward"])),
-                ("length_axis", string("profile-x")),
-                ("height_axis", string("extrusion")),
-                ("gross_area", property(Some(QTO), "GrossSideArea")),
-                ("net_area", property(Some(QTO), "NetSideArea")),
-                (
-                    "area_tolerance",
-                    ParameterValue::Quantity {
-                        value: 0.01,
-                        unit: "m2".into(),
-                    },
-                ),
-            ],
+    check_with(model, Vec::new())
+}
+
+fn check_with(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> CapabilityEvaluation {
+    let mut parameters = vec![
+        ("opening_path", strings(&["voids:forward"])),
+        ("length_axis", string("profile-x")),
+        ("height_axis", string("extrusion")),
+        ("gross_area", property(Some(QTO), "GrossSideArea")),
+        ("net_area", property(Some(QTO), "NetSideArea")),
+        (
+            "area_tolerance",
+            ParameterValue::Quantity {
+                value: 0.01,
+                unit: "m2".into(),
+            },
         ),
-    )
+    ];
+    parameters.extend(extra);
+    model.evaluate(&OpeningArea, &rule(ID, kind("wall"), parameters))
 }
 
 #[test]
@@ -421,4 +420,40 @@ fn an_opening_through_a_mitred_wall_end_cannot_be_counted() {
         "{}",
         evaluation.not_evaluated_outcomes()[0].message()
     );
+}
+
+/// Openings below `minimum_opening_area` are left out of the sum, as
+/// quantity rules leave small openings out of the net area.
+#[test]
+fn openings_below_the_minimum_area_are_left_out() {
+    let small = |model| {
+        opening(
+            model,
+            "small",
+            3.0,
+            0.5,
+            0.2,
+            "rectangle",
+            &[("XDim", 0.2), ("YDim", 0.2)],
+        )
+    };
+    // Net area 13.8 m² leaves out the 0.04 m² hole.
+    let evaluation = check(small(window(wall(Some(13.8)), "o1", 1.0)));
+    assert_eq!(findings(&evaluation).len(), 1);
+    let evaluation = check_with(
+        small(window(wall(Some(13.8)), "o1", 1.0)),
+        vec![(
+            "minimum_opening_area",
+            ParameterValue::Quantity {
+                value: 0.05,
+                unit: "m2".into(),
+            },
+        )],
+    );
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(unevaluated(&evaluation).is_empty());
 }

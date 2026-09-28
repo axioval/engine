@@ -58,6 +58,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   across the direction. Misses are graded findings relating the target.
   **Breaking:** the capability gains the optional `dimensions`, so a
   definition bound to it must declare it.
+- **Small openings ignored.** (#140) `opening-zone` and `opening-area`
+  take `minimum_opening_area`: an opening whose area in the face is below
+  it is ignored, neither judged, nor a neighbour or target, nor summed. An
+  opening not extruded through its host is known small only when the box
+  its extents span is; otherwise it is not evaluated. **Breaking:** both
+  capabilities gain the optional parameter, so a definition bound to either
+  must declare it.
 - **L and non-uniform L hosts.** (#140) `opening-zone` reads an L section
   as its polygon: a parameterised one with straight edges, or a free
   outline of six axis-parallel vertices with legs of any thickness. Its web

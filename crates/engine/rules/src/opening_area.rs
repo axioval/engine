@@ -31,45 +31,86 @@ use crate::support::{
 /// rectangle, rounded rectangle, circle, ellipse or free polygon (its voids
 /// subtracted) lying in the face, wholly within the host's face and clear
 /// of the other openings. A host of a free outline must hold the opening
-/// inside that outline, not only inside the box around it.
+/// inside that outline, not only inside the box around it. An opening
+/// whose area in the face is below `minimum_opening_area` is left out, as
+/// quantity rules leave small openings out of the net area.
 ///
 /// A host stating neither area is not checked. One stating only one, an
 /// opening whose area cannot be placed, or an opening whose selection is
 /// undecided leaves the host not evaluated.
 pub struct OpeningArea;
 
-struct Config<'a> {
-    openings: Traversal<'a>,
-    opening_selector: &'a Selector,
-    axes: FaceAxes,
-    gross: PropertyRef<'a>,
-    net: PropertyRef<'a>,
-    tolerance: f64,
+/// The openings of a host and the face they are placed in: what
+/// `opening-area` and `empty-host` share.
+pub(crate) struct Openings<'a> {
+    path: Traversal<'a>,
+    pub(crate) selector: &'a Selector,
+    pub(crate) axes: FaceAxes,
+    minimum_area: Option<f64>,
 }
 
-impl<'a> Config<'a> {
-    fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
-        let parameters = Parameters(rule);
+impl<'a> Openings<'a> {
+    pub(crate) fn parse(parameters: &Parameters<'a>) -> Result<Self, Unavailable> {
         let path = parameters
             .strings("opening_path")?
             .ok_or_else(|| invalid("parameter `opening_path` is required"))?;
-        let tolerance = match parameters.quantity("area_tolerance")? {
-            None => 0.0,
-            Some((value, QuantityDimension::Area)) if value >= 0.0 => value,
-            Some(_) => return Err(invalid("`area_tolerance` is not a non-negative area")),
-        };
         Ok(Self {
-            openings: Traversal::path(path)?,
-            opening_selector: parameters
+            path: Traversal::path(path)?,
+            selector: parameters
                 .selector("opening_selector")?
                 .unwrap_or(&Selector::All),
             axes: FaceAxes::parse(
                 parameters.required_string("length_axis")?,
                 parameters.required_string("height_axis")?,
             )?,
+            minimum_area: minimum_area(parameters)?,
+        })
+    }
+
+    pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+        vec![
+            ParameterDescriptor::required("opening_path", ParameterType::StringList),
+            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
+            ParameterDescriptor::required("length_axis", ParameterType::String),
+            ParameterDescriptor::required("height_axis", ParameterType::String),
+            ParameterDescriptor::optional("minimum_opening_area", ParameterType::Quantity),
+        ]
+    }
+}
+
+/// Reads `minimum_opening_area`, a non-negative area.
+pub(crate) fn minimum_area(parameters: &Parameters<'_>) -> Result<Option<f64>, Unavailable> {
+    match parameters.quantity("minimum_opening_area")? {
+        None => Ok(None),
+        Some((value, QuantityDimension::Area)) if value >= 0.0 => Ok(Some(value)),
+        Some(_) => Err(invalid("`minimum_opening_area` is not a non-negative area")),
+    }
+}
+
+struct Config<'a> {
+    openings: Openings<'a>,
+    gross: PropertyRef<'a>,
+    net: PropertyRef<'a>,
+    tolerance: f64,
+}
+
+/// Reads `area_tolerance`, a non-negative area, zero when absent.
+pub(crate) fn area_tolerance(parameters: &Parameters<'_>) -> Result<f64, Unavailable> {
+    match parameters.quantity("area_tolerance")? {
+        None => Ok(0.0),
+        Some((value, QuantityDimension::Area)) if value >= 0.0 => Ok(value),
+        Some(_) => Err(invalid("`area_tolerance` is not a non-negative area")),
+    }
+}
+
+impl<'a> Config<'a> {
+    fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
+        let parameters = Parameters(rule);
+        Ok(Self {
+            openings: Openings::parse(&parameters)?,
             gross: parameters.required_property("gross_area")?,
             net: parameters.required_property("net_area")?,
-            tolerance,
+            tolerance: area_tolerance(&parameters)?,
         })
     }
 }
@@ -80,15 +121,13 @@ impl RuleCapability for OpeningArea {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("opening_path", ParameterType::StringList),
-            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
-            ParameterDescriptor::required("length_axis", ParameterType::String),
-            ParameterDescriptor::required("height_axis", ParameterType::String),
+        let mut parameters = Openings::parameters();
+        parameters.extend([
             ParameterDescriptor::required("gross_area", ParameterType::PropertyReference),
             ParameterDescriptor::required("net_area", ParameterType::PropertyReference),
             ParameterDescriptor::optional("area_tolerance", ParameterType::Quantity),
-        ]
+        ]);
+        parameters
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -102,7 +141,7 @@ impl RuleCapability for OpeningArea {
             }
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let openings = Population::of(context, config.opening_selector);
+        let openings = Population::of(context, config.openings.selector);
         for host in selected {
             match check(context, &config, &openings, host) {
                 Ok(None) => {}
@@ -143,8 +182,73 @@ fn area(
     }
 }
 
-fn square_metres(value: f64) -> String {
+pub(crate) fn square_metres(value: f64) -> String {
     format!("{} m²", (value * 1e6).round() / 1e6)
+}
+
+/// The area a host's openings take from its middle plane.
+pub(crate) struct Voided {
+    /// The summed area of the counted openings.
+    pub(crate) sum: f64,
+    /// Every opening reached, small ones included.
+    pub(crate) reached: Vec<ObjectId>,
+}
+
+/// Places and sums the openings of `host`, leaving out those below the
+/// minimum area; an error when an opening cannot be placed, its selection
+/// is undecided, or two may overlap.
+pub(crate) fn voided(
+    context: &RuleContext<'_>,
+    openings: &Openings<'_>,
+    population: &Population,
+    host: &Object,
+    evidence: &mut Vec<Evidence>,
+) -> Result<Voided, Unavailable> {
+    let universe: Vec<&Object> = context
+        .project
+        .objects()
+        .filter(|object| population.contains(&object.id))
+        .collect();
+    let (reached, cited) = openings.path.related(context, &host.id, &universe)?;
+    evidence.extend(cited);
+    if let Some(undecided) = reached.iter().find(|id| !population.matched.contains(*id)) {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("whether {undecided} is one of its openings is undecided"),
+        ));
+    }
+    let face = read_host(context, &host.id)?;
+    evidence.extend(face.evidence.iter().cloned());
+    let mut placed: Vec<(ObjectId, [Span; 2])> = Vec::new();
+    let mut sum = 0.0;
+    for id in &reached {
+        let object = context
+            .project
+            .object(id)
+            .ok_or_else(|| invalid(format!("opening {id} is not in the project")))?;
+        let Some((area, rectangle)) = opening_area(context, openings, &face, object, evidence)
+            .map_err(|(reason, message)| (reason, format!("opening {id}: {message}")))?
+        else {
+            continue;
+        };
+        if area > 0.0 {
+            if let Some((other, _)) = placed
+                .iter()
+                .find(|(_, other)| separation(rectangle, *other) < -ROUNDING)
+            {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "openings {other} and {id} may overlap in its face, so their areas \
+                         cannot be summed"
+                    ),
+                ));
+            }
+            placed.push((id.clone(), rectangle));
+            sum += area;
+        }
+    }
+    Ok(Voided { sum, reached })
 }
 
 /// Checks one host; `Ok(None)` when it passes or is not checked.
@@ -170,47 +274,8 @@ fn check(
             ));
         }
     };
-    let universe: Vec<&Object> = context
-        .project
-        .objects()
-        .filter(|object| openings.contains(&object.id))
-        .collect();
-    let (reached, cited) = config.openings.related(context, &host.id, &universe)?;
-    evidence.extend(cited);
-    if let Some(undecided) = reached.iter().find(|id| !openings.matched.contains(*id)) {
-        return Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!("whether {undecided} is one of its openings is undecided"),
-        ));
-    }
-    let face = read_host(context, &host.id)?;
-    evidence.extend(face.evidence.iter().cloned());
-    let mut placed: Vec<(ObjectId, [Span; 2])> = Vec::new();
-    let mut sum = 0.0;
-    for id in &reached {
-        let object = context
-            .project
-            .object(id)
-            .ok_or_else(|| invalid(format!("opening {id} is not in the project")))?;
-        let (area, rectangle) = opening_area(context, config.axes, &face, object, &mut evidence)
-            .map_err(|(reason, message)| (reason, format!("opening {id}: {message}")))?;
-        if area > 0.0 {
-            if let Some((other, _)) = placed
-                .iter()
-                .find(|(_, other)| separation(rectangle, *other) < -ROUNDING)
-            {
-                return Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "openings {other} and {id} may overlap in its face, so their areas \
-                         cannot be summed"
-                    ),
-                ));
-            }
-            placed.push((id.clone(), rectangle));
-            sum += area;
-        }
-    }
+    let Voided { sum, reached, .. } =
+        voided(context, &config.openings, openings, host, &mut evidence)?;
     let expected = gross - net;
     let slack = config.tolerance + ROUNDING * (1.0 + gross.abs() + net.abs() + sum);
     if (sum - expected).abs() <= slack {
@@ -244,20 +309,33 @@ fn check(
 }
 
 /// The area an opening takes from its host's middle plane, and its extents
-/// in the face.
+/// in the face; `None` for an opening below the minimum area, which is left
+/// out.
 fn opening_area(
     context: &RuleContext<'_>,
-    axes: FaceAxes,
+    openings: &Openings<'_>,
     host: &Host,
     opening: &Object,
     evidence: &mut Vec<Evidence>,
-) -> Result<(f64, [Span; 2]), Unavailable> {
+) -> Result<Option<(f64, [Span; 2])>, Unavailable> {
     let incomplete = |message: String| (NotEvaluatedReason::IncompleteEvidence, message);
+    let axes = openings.axes;
     let solid = Solid::opening(context, opening)?;
     evidence.extend(solid.evidence.iter().cloned());
     let (length_axis, length_bounds) = host.axis(axes.length);
     let (height_axis, height_bounds) = host.axis(axes.height);
     let (through, through_bounds) = host.axis(axes.through());
+    let length = solid.extent(host.origin, length_axis).outer;
+    let height = solid.extent(host.origin, height_axis).outer;
+    // Smaller than the minimum even over the whole box it spans.
+    let below = |area: f64| {
+        openings
+            .minimum_area
+            .is_some_and(|minimum| area < minimum - ROUNDING)
+    };
+    if below((length.1 - length.0) * (height.1 - height.0)) {
+        return Ok(None);
+    }
     if !solid.extruded_along(through) {
         return Err(incomplete(
             "it is not extruded through its host from a section in the face, so its area in \
@@ -271,8 +349,9 @@ fn opening_area(
             solid.family()
         ))
     })?;
-    let length = solid.extent(host.origin, length_axis).outer;
-    let height = solid.extent(host.origin, height_axis).outer;
+    if below(area) {
+        return Ok(None);
+    }
     let within = |extent: Span, bounds: Span| {
         extent.0 >= bounds.0 - ROUNDING && extent.1 <= bounds.1 + ROUNDING
     };
@@ -298,12 +377,12 @@ fn opening_area(
     let middle = f64::midpoint(through_bounds.0, through_bounds.1);
     if depth.1 < middle - ROUNDING || depth.0 > middle + ROUNDING {
         // A recess stopping short of the middle plane takes no side area.
-        return Ok((0.0, [length, height]));
+        return Ok(Some((0.0, [length, height])));
     }
     if depth.0 > middle - ROUNDING || depth.1 < middle + ROUNDING {
         return Err(incomplete(
             "it reaches its host's middle plane only within rounding".to_owned(),
         ));
     }
-    Ok((area, [length, height]))
+    Ok(Some((area, [length, height])))
 }

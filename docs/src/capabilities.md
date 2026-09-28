@@ -1663,6 +1663,7 @@ A row stating a dimension the family does not have, or one the source leaves uns
 | `zone` | `string` | `section` (default: the host's whole height) or `web`: between the flanges of an I, T, U, C or Z section, or beside the ledge of an L, across `profile-y`. |
 | `opening_spacing` | `quantity` | The clear distance the opening must keep from every other opening of the same host, in the face. |
 | `zones` | `table` | Allowed zones, columns below: the opening must lie inside at least one row's zone. |
+| `minimum_opening_area` | `quantity` | An area: openings smaller in the face are ignored, neither judged nor anyone's neighbour or target. |
 | `dimensions` | `table` | The dimensioning table, columns below: distances from an opening to the nearest other opening of the host, or to the host's top, bottom or side. |
 | `support_path` | `stringList` | Relationship steps from the host to its supports and connecting members. With IFC, `IfcRelConnectsElements:either`, which takes in its subtype `IfcRelConnectsPathElements`. |
 | `support_gap` | `quantity` | A length: the `support_selector` objects that come this close to the host in space (through the proximity service) are its supports too. |
@@ -1717,6 +1718,8 @@ Anything in between is not evaluated, naming each member it could not decide: a 
 
 Distances between openings are clear distances in the face. They are exact between two rectangles whose sides run along the face axes and which are extruded through the host (the third axis); for any other pair only the distance of their extents is known, a lower bound that can pass a pair but never find one, so a pair it cannot pass leaves the opening not evaluated. An opening whose host cannot be read, or whose own selection is undecided, may be a neighbour of any opening and is treated as one. Positions are composed from placements in binary arithmetic, so every bound is widened by a nanometre. Findings of a distance missing its bound (ends, edges, flanges, the largest edge distance, spacing, zones) are graded by how far they miss it.
 
+With `minimum_opening_area`, an opening's area in the face is its section's where it is extruded through the host, and otherwise bounded by the box its extents span: one surely below the minimum is ignored, one that may be either is not evaluated and remains a possible neighbour.
+
 `axioval:capability.opening-area` requires the openings of each selected host (a wall) to account for the difference between its stated gross and net side areas.
 
 | Parameter | Kind | Meaning |
@@ -1726,6 +1729,7 @@ Distances between openings are clear distances in the face. They are exact betwe
 | `length_axis`, `height_axis` | `string` | Required. The host's face, as for `opening-zone`. |
 | `gross_area`, `net_area` | `propertyReference` | Required. The host's stated gross and net side areas, such as `Qto_WallBaseQuantities.GrossSideArea` and `NetSideArea`. |
 | `area_tolerance` | `quantity` | The area the sum may differ from gross less net by (0 m² by default). |
+| `minimum_opening_area` | `quantity` | An area: openings smaller in the face are left out of the sum, as quantity rules leave small openings out of the net area. |
 
 A side area is measured on the host's middle plane, so each opening counts with the exact area of its section when it crosses that plane and not at all when it stops short of it (a recess). Its area is known only when it is one straight extrusion through the host of a rectangle, rounded rectangle, circle, ellipse or free outline lying in the face (not a hollow one; a free outline's voids are subtracted), wholly within the host's face and clear of the other openings' extents; the host is read as `opening-zone` reads it, and a host of a free outline must hold the opening inside that outline, not only inside the box around it. A mismatch is a finding on the host relating its openings (`its openings (#1130) cover 1.2 m² of its face, but its gross side area 15 m² less its net side area 15 m² is 0 m²; they must agree within 0.01 m²`). A host stating neither area is not checked; one stating only one, an opening it cannot place, openings that may overlap and an opening whose selection is undecided leave it not evaluated.
 

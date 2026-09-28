@@ -1619,3 +1619,84 @@ fn a_fixed_dimension_is_found_off_its_tolerance_and_bad_rows_are_refused() {
         );
     }
 }
+
+fn square_metres(value: f64) -> ParameterValue {
+    ParameterValue::Quantity {
+        value,
+        unit: "m2".into(),
+    }
+}
+
+/// A 0.2 m x 0.1 m hole `r1` at x = 2, a 0.02 m hole near the end and one
+/// 0.03 m beside `r1`.
+fn small_holes() -> Model {
+    let model = hole(
+        beam(),
+        "r1",
+        2.0,
+        0.0,
+        "rectangle",
+        &[("XDim", 0.2), ("YDim", 0.1)],
+    );
+    let tiny = |model, local, x| hole(model, local, x, 0.0, "circle", &[("Radius", 0.01)]);
+    tiny(tiny(model, "near-end", 0.05), "beside", 2.14)
+}
+
+/// Openings below `minimum_opening_area` are ignored: neither judged nor
+/// anyone's neighbour. One whose area in the face is undecided is not
+/// evaluated.
+#[test]
+fn openings_below_the_minimum_area_are_ignored() {
+    let extra = |minimum: Option<f64>| {
+        let mut extra = vec![
+            ("end_distance", metres(0.3)),
+            ("opening_spacing", metres(0.1)),
+        ];
+        if let Some(minimum) = minimum {
+            extra.push(("minimum_opening_area", square_metres(minimum)));
+        }
+        extra
+    };
+    // Counted, the tiny hole is too near the end, and too near `r1` to
+    // pass their spacing, which is only bounded from below for a circle.
+    let evaluation = check(small_holes(), extra(None));
+    assert_eq!(
+        findings(&evaluation).len(),
+        1,
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            ("beside".into(), NotEvaluatedReason::IncompleteEvidence),
+            ("r1".into(), NotEvaluatedReason::IncompleteEvidence),
+        ]
+    );
+    let evaluation = check(small_holes(), extra(Some(0.001)));
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+
+    // A hole drilled down through the flanges, not across the web: its
+    // area in the face is known only as its box's, which is not small.
+    let model = extrusion(
+        beam(),
+        "down",
+        "opening",
+        [4.0, 0.0, -0.2],
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        0.4,
+        "circle",
+        &[("Radius", 0.005)],
+    )
+    .edge("voids", "b", "down");
+    let evaluation = check(model, extra(Some(0.001)));
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("down".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}

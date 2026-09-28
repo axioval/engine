@@ -89,6 +89,12 @@ use supports::{Opening, SupportConfig, Supports};
 /// with a support whose relation or selection is undecided and which may
 /// come too close, the opening is not evaluated.
 ///
+/// An opening whose area in the face is below `minimum_opening_area` is
+/// ignored: not judged, and no neighbour or target of another. Its area is
+/// its section's where it is extruded through the host, and otherwise known
+/// small only when the box its extents span is; an opening that may be
+/// either is not evaluated, and a possible neighbour.
+///
 /// Positions are composed from placements in binary arithmetic, so every
 /// bound is widened by a nanometre, far below any modelling tolerance.
 pub struct OpeningZone;
@@ -106,6 +112,7 @@ struct Config<'a> {
     supports: Option<SupportConfig<'a>>,
     zones: Vec<zones::Zone>,
     dimensions: Vec<dimensions::Dimension<'a>>,
+    minimum_area: Option<f64>,
 }
 
 pub(crate) fn distance(
@@ -174,6 +181,7 @@ impl<'a> Config<'a> {
             supports: SupportConfig::parse(&parameters)?,
             zones: zones::parse(&parameters)?,
             dimensions: dimensions::parse(&parameters)?,
+            minimum_area: crate::opening_area::minimum_area(&parameters)?,
         })
     }
 }
@@ -196,6 +204,7 @@ impl RuleCapability for OpeningZone {
             ParameterDescriptor::optional("zone", ParameterType::String),
             ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
             ParameterDescriptor::optional("zones", ParameterType::Table(zones::COLUMNS)),
+            ParameterDescriptor::optional("minimum_opening_area", ParameterType::Quantity),
             ParameterDescriptor::optional("dimensions", ParameterType::Table(dimensions::COLUMNS)),
         ];
         parameters.extend(SupportConfig::parameters());
@@ -270,6 +279,8 @@ struct Placed {
     /// where the opening lies in the host's section plane: it is extruded
     /// through a host whose face holds the extrusion, or it is `exact`.
     section_exact: bool,
+    /// Whether its area may be under `minimum_opening_area` or not.
+    may_be_small: bool,
     evidence: Vec<Evidence>,
 }
 
@@ -351,16 +362,23 @@ impl Judge<'_, '_> {
                 let solid = solid.clone()?;
                 self.place_in(host, &solid, evidence.clone())
             })
+            // An opening surely below the minimum area is left out.
+            .filter_map(|placed| match placed {
+                Ok(None) => None,
+                Ok(Some(placed)) => Some(Ok(placed)),
+                Err(error) => Some(Err(error)),
+            })
             .collect())
     }
 
-    /// Places an opening's solid in one host's face.
+    /// Places an opening's solid in one host's face; `None` when its area
+    /// there is surely below the minimum.
     fn place_in(
         &mut self,
         host: ObjectId,
         solid: &Solid,
         mut evidence: Vec<Evidence>,
-    ) -> Result<Placed, Unavailable> {
+    ) -> Result<Option<Placed>, Unavailable> {
         let face = self.host_body(&host)?;
         let (length_axis, _) = face.axis(self.config.axes.length);
         let (height_axis, _) = face.axis(self.config.axes.height);
@@ -374,17 +392,33 @@ impl Judge<'_, '_> {
         // it keeps one extent along the face's profile axis at every depth.
         let section_exact = exact
             || (self.config.axes.through() != Axis::Extrusion && solid.direction_along(through));
+        let mut may_be_small = false;
+        if let Some(minimum) = self.config.minimum_area {
+            let below = |area: f64| area < minimum - ROUNDING;
+            // Its area in the face: its section's when extruded through the
+            // host, otherwise at most the box its extents span.
+            let area = solid
+                .section_area()
+                .filter(|_| solid.extruded_along(through));
+            match area {
+                Some(area) if below(area) => return Ok(None),
+                Some(_) => {}
+                None if below((length.1 - length.0) * (height.1 - height.0)) => return Ok(None),
+                None => may_be_small = true,
+            }
+        }
         evidence.extend(solid.evidence.iter().cloned());
         evidence.extend(face.evidence.iter().cloned());
-        Ok(Placed {
+        Ok(Some(Placed {
             host,
             length,
             height,
             through: across,
             exact,
             section_exact,
+            may_be_small,
             evidence,
-        })
+        }))
     }
 
     fn judge(
@@ -414,6 +448,15 @@ impl Judge<'_, '_> {
         };
         for placed in placements {
             match placed {
+                Ok(placed) if placed.may_be_small => evaluation.push_object_not_evaluated(
+                    opening.id.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "whether its area in its host {} is below `minimum_opening_area` is \
+                         undecided: it is not extruded through the host",
+                        placed.host.local_id
+                    ),
+                ),
                 Ok(placed) => self.judge_in(opening, placed, openings, evaluation),
                 Err((reason, message)) => evaluation.push_object_not_evaluated(
                     opening.id.clone(),
@@ -773,9 +816,9 @@ impl Judge<'_, '_> {
                 Ok(placements) => {
                     for placement in placements {
                         match placement {
-                            Ok(neighbour) if neighbour.host == placed.host => {
-                                neighbours.push((other, Some(neighbour)));
-                            }
+                            // It may be too small to count.
+                            Ok(neighbour) if neighbour.host == placed.host => neighbours
+                                .push((other, (!neighbour.may_be_small).then_some(neighbour))),
                             Ok(_) => {}
                             Err(_) => neighbours.push((other, None)),
                         }

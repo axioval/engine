@@ -43,8 +43,12 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
   bounds the archive is byte-identical to one written before cameras.
 - 3.0 requires a camera on every viewpoint: refuse the export with
   `MissingCamera` rather than drop a viewpoint or write 2.1 instead.
-- Visibility, colouring and clipping planes wait on `openbim-bcf` writing
-  them; do not post-process the writer's XML.
+- `Options::colors` colours the subject (`selection[0]`) and the related
+  objects apart in every viewpoint; `None` (the default) writes no
+  colouring and the archive is byte-identical. `Color` always writes 8
+  uppercase hex digits: BCF 2.1's schema refuses lowercase.
+- Visibility and clipping planes are written through `openbim-bcf`'s
+  `Viewpoint` fields only; never post-process the writer's XML.
 - Run `cargo test -p axioval-bcf` and `cargo test -p axioval --all-features`;
   `tests/export.rs` is the contract and reads every archive back.
 - A located entry's topic is labelled `Storey: <name>` and `Space: <name>`

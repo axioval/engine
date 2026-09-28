@@ -51,6 +51,14 @@
 //! missing bound leaves the viewpoint without a camera rather than a guessed
 //! one, and the object is listed in [`Export::unframed`].
 //!
+//! # Colouring
+//!
+//! With [`Options::colors`], every viewpoint colours the finding's subject in
+//! [`Colors::subject`] and its related objects in [`Colors::related`], so a
+//! reviewer tells the element that fails from the ones it fails against.
+//! The defaults are [`SUBJECT_COLOR`] and [`RELATED_COLOR`]. `None`, the
+//! default, writes no colouring, exactly as before.
+//!
 //! # Version
 //!
 //! BCF 2.1 by default. BCF 3.0 ([`Version::V3_0`]) requires a camera on every
@@ -58,6 +66,8 @@
 //! the export is refused with [`ExportError::MissingCamera`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::str::FromStr;
 
 use axioval_ir::contract::{RuleFolder, RuleSetPackage};
 use axioval_ir::{
@@ -67,8 +77,8 @@ use axioval_ir::{
 };
 use openbim_bcf::Component;
 use openbim_bcf::write::{
-    self, Camera, Comment, Document, Projection, TargetVersion, Topic, Vector3, Viewpoint,
-    WriteError,
+    self, Camera, Coloring, Comment, Document, Projection, TargetVersion, Topic, Vector3,
+    Viewpoint, WriteError,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -115,6 +125,13 @@ pub const FRAME_MARGIN: f64 = 1.2;
 /// shown with some of its surroundings instead of filling the view.
 pub const MIN_FRAME_RADIUS_METRES: f64 = 0.5;
 
+/// Default colour of a finding's subject: opaque red.
+pub const SUBJECT_COLOR: Color = Color::argb(0xFFFF_0000);
+
+/// Default colour of the objects a finding relates its subject to: opaque
+/// blue.
+pub const RELATED_COLOR: Color = Color::argb(0xFF00_00FF);
+
 /// Coordinates of fitted cameras are rounded to micrometres, so written
 /// numbers stay short and stable.
 const DECIMALS: f64 = 1e6;
@@ -135,6 +152,74 @@ impl From<Version> for TargetVersion {
         match version {
             Version::V2_1 => Self::V2_1,
             Version::V3_0 => Self::V3_0,
+        }
+    }
+}
+
+/// A colour as alpha, red, green and blue, written as 8 uppercase hex
+/// digits (`AARRGGBB`), the form both BCF 2.1 and 3.0 accept.
+///
+/// Parsed from 6 (`RRGGBB`, opaque) or 8 (`AARRGGBB`) hex digits in either
+/// case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Color(u32);
+
+impl Color {
+    /// The colour of `value`, `0xAARRGGBB`.
+    #[must_use]
+    pub const fn argb(value: u32) -> Self {
+        Self(value)
+    }
+    /// The colour as `0xAARRGGBB`.
+    #[must_use]
+    pub const fn value(self) -> u32 {
+        self.0
+    }
+}
+
+impl fmt::Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:08X}", self.0)
+    }
+}
+
+impl FromStr for Color {
+    type Err = ParseColorError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let invalid = || ParseColorError(text.to_owned());
+        if !text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(invalid());
+        }
+        let value = u32::from_str_radix(text, 16).map_err(|_| invalid())?;
+        match text.len() {
+            6 => Ok(Self(0xFF00_0000 | value)),
+            8 => Ok(Self(value)),
+            _ => Err(invalid()),
+        }
+    }
+}
+
+/// A colour that is not 6 or 8 hex digits.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[error("`{0}` is not a colour: expected 6 (RRGGBB) or 8 (AARRGGBB) hex digits")]
+pub struct ParseColorError(String);
+
+/// The colours of a viewpoint's objects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Colors {
+    /// The finding's subject, or the object a not-evaluated outcome names.
+    pub subject: Color,
+    /// The objects the finding relates its subject to.
+    pub related: Color,
+}
+
+impl Default for Colors {
+    /// [`SUBJECT_COLOR`] and [`RELATED_COLOR`].
+    fn default() -> Self {
+        Self {
+            subject: SUBJECT_COLOR,
+            related: RELATED_COLOR,
         }
     }
 }
@@ -206,6 +291,9 @@ pub struct Options {
     /// id as the report names it: its ruleset folder path and tags, see
     /// [`ruleset_labels`]. Empty adds none.
     pub rule_labels: BTreeMap<String, Vec<String>>,
+    /// Colours of the subject and the related objects in every viewpoint.
+    /// `None` writes no colouring, exactly as before colouring existed.
+    pub colors: Option<Colors>,
 }
 
 impl Options {
@@ -219,6 +307,7 @@ impl Options {
             version: Version::V2_1,
             bounds: None,
             rule_labels: BTreeMap::new(),
+            colors: None,
         }
     }
 }
@@ -444,6 +533,11 @@ impl Entry {
                 guid: Uuid::new_v5(&guid, name).to_string(),
                 selection: self.selection.clone(),
                 camera,
+                coloring: options
+                    .colors
+                    .map(|colors| self.coloring(colors))
+                    .unwrap_or_default(),
+                ..Viewpoint::default()
             };
             match self.frame(options.bounds.as_ref()) {
                 Ok(frame) => vec![
@@ -487,6 +581,25 @@ impl Entry {
             viewpoints,
         };
         (topic, uncamered)
+    }
+
+    /// The subject in its colour, then the related objects in theirs. The
+    /// selection lists the subject first.
+    fn coloring(&self, colors: Colors) -> Vec<Coloring> {
+        let Some((subject, related)) = self.selection.split_first() else {
+            return Vec::new();
+        };
+        let mut coloring = vec![Coloring {
+            color: colors.subject.to_string(),
+            components: vec![subject.clone()],
+        }];
+        if !related.is_empty() {
+            coloring.push(Coloring {
+                color: colors.related.to_string(),
+                components: related.to_vec(),
+            });
+        }
+        coloring
     }
 
     /// A sphere around the union of the framed objects' bounds.

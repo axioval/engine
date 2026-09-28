@@ -10246,6 +10246,19 @@ fn with_geometry_bcf_viewpoints_frame_the_clashing_pair() {
                 view.contains("0000000000000000000016") && view.contains("0000000000000000000026"),
                 "{view}"
             );
+            // The subject in red, the wall it clashes with in blue.
+            let red = view.find("Color=\"FFFF0000\"").expect(view);
+            let blue = view.find("Color=\"FF0000FF\"").expect(view);
+            let coloring = view.find("</Coloring>").expect(view);
+            assert!(red < blue, "{view}");
+            let (subject, related) = (&view[red..blue], &view[blue..coloring]);
+            let walls = ["0000000000000000000016", "0000000000000000000026"];
+            let in_subject: Vec<_> = walls.iter().filter(|w| subject.contains(*w)).collect();
+            let in_related: Vec<_> = walls.iter().filter(|w| related.contains(*w)).collect();
+            assert!(
+                in_subject.len() == 1 && in_related.len() == 1 && in_subject != in_related,
+                "{view}"
+            );
         }
         let perspective = views
             .iter()
@@ -10273,6 +10286,56 @@ fn with_geometry_bcf_viewpoints_frame_the_clashing_pair() {
         assert!(x > 2.0 && z > 1.5, "{perspective}");
         assert!((number("FieldOfView") - 60.0).abs() < 1e-9, "{perspective}");
     }
+}
+
+#[test]
+fn bcf_colours_are_configurable_and_can_be_left_out() {
+    let case = Case::new("bcf-colours");
+    let views = |name: &str, extra: &[&str]| {
+        let bcf = case.path(name);
+        let mut args = vec!["--bcf", bcf.to_str().unwrap()];
+        args.extend(extra);
+        let output = case.check(&ifc("0000000000000000000002", false), true, &args);
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+        let views = bcf_viewpoints(&bcf);
+        assert!(!views.is_empty());
+        views
+    };
+    // Without geometry nothing is coloured unless a colour is given.
+    let plain = views("plain.bcfzip", &[]);
+    assert!(
+        plain.iter().all(|view| !view.contains("Coloring")),
+        "{plain:?}"
+    );
+    let colored = views("colored.bcfzip", &["--bcf-subject-color", "00ff00"]);
+    assert!(
+        colored
+            .iter()
+            .all(|view| view.contains("Color=\"FF00FF00\"")),
+        "{colored:?}"
+    );
+
+    let bcf = case.path("uncolored.bcfzip");
+    let output = case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        bcf.to_str().unwrap(),
+        "--bcf-no-color",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let uncolored = bcf_viewpoints(&bcf);
+    assert!(
+        !uncolored.is_empty() && uncolored.iter().all(|view| !view.contains("Coloring")),
+        "{uncolored:?}"
+    );
+
+    let bcf = case.path("bad.bcfzip");
+    let output = case.check(
+        &ifc("0000000000000000000002", false),
+        true,
+        &["--bcf", bcf.to_str().unwrap(), "--bcf-related-color", "red"],
+    );
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
 }
 
 #[test]

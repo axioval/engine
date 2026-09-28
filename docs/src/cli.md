@@ -22,7 +22,8 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--summary [--top N]] [--bcf issues.bcfzip] \
-  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
+  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
+  [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color]
 ```
 
 Runs the ruleset over one or more IFC2X3 or IFC4 STEP models. Each model is
@@ -172,6 +173,12 @@ fitted to the measured bounds of the topic's objects. An object that was not
 measured leaves its viewpoint without a camera and is named on stderr.
 Without `--geometry` the archive is the same as before cameras existed.
 
+With `--geometry`, each viewpoint also colours the finding's subject red
+and its related objects blue. `--bcf-subject-color` and
+`--bcf-related-color` take other colours as `RRGGBB` or `AARRGGBB` hex
+digits, and colour viewpoints without `--geometry` too; `--bcf-no-color`
+writes no colouring at all.
+
 `--bcf-version` is `2.1` (default) or `3.0`. BCF 3.0 requires a camera on
 every viewpoint, so it needs `--geometry` and bounds for every selected
 object; otherwise the run fails with status 1 and nothing is written.
@@ -258,7 +265,8 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--geometry] [--timestamps] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
-  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0]
+  [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
+  [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color]
 ```
 
 Compares two revisions of one IFC2X3 or IFC4 model object by object (see

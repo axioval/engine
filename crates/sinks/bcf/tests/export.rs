@@ -553,7 +553,7 @@ mod cameras {
     use super::{SLAB, WALL, id, model, options, report, viewpoints};
 
     /// The wall stands on the slab: together they span 0..4 x 0..2 x -0.2..3.
-    fn bounds() -> BTreeMap<ObjectId, Bounds> {
+    pub(super) fn bounds() -> BTreeMap<ObjectId, Bounds> {
         BTreeMap::from([
             (
                 id("a.ifc", 1),
@@ -1039,5 +1039,132 @@ mod decisions {
                 .unwrap()
         };
         assert_eq!(bytes(&plain), bytes(&identified));
+    }
+}
+
+mod coloring {
+    use axioval_bcf::{Color, Colors, Options, RELATED_COLOR, SUBJECT_COLOR, Version, export};
+    use openbim_bcf::Component;
+    use openbim_bcf::write::Coloring;
+
+    use super::{SLAB, WALL, model, options, report, viewpoints};
+
+    fn colored(colors: Colors) -> Options {
+        Options {
+            colors: Some(colors),
+            ..options()
+        }
+    }
+
+    #[test]
+    fn the_subject_and_the_related_objects_are_coloured_apart() {
+        let export = export(
+            &report("a.ifc", 1),
+            &model("a.ifc", 1),
+            &colored(Colors::default()),
+        )
+        .unwrap();
+        let view = &export.document.topics[0].viewpoints[0];
+        assert_eq!(
+            view.coloring,
+            [
+                Coloring {
+                    color: "FFFF0000".into(),
+                    components: vec![Component::ifc(WALL)],
+                },
+                Coloring {
+                    color: "FF0000FF".into(),
+                    components: vec![Component::ifc(SLAB)],
+                },
+            ]
+        );
+        // Selection and GUID are those of an uncoloured export.
+        let plain = super::export(&report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+        let plain = &plain.document.topics[0].viewpoints[0];
+        assert_eq!(
+            (&view.guid, &view.selection),
+            (&plain.guid, &plain.selection)
+        );
+
+        let bytes = export.to_bytes().unwrap();
+        let archive = openbim_bcf::read_slice(&bytes).unwrap();
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        let views = viewpoints(&bytes);
+        assert!(
+            views[0].contains("<Color Color=\"FFFF0000\">")
+                && views[0].contains("<Color Color=\"FF0000FF\">"),
+            "{}",
+            views[0]
+        );
+    }
+
+    #[test]
+    fn a_subject_without_related_objects_is_coloured_alone() {
+        let mut report = report("a.ifc", 1);
+        report.findings[0].related.clear();
+        let export = export(&report, &model("a.ifc", 1), &colored(Colors::default())).unwrap();
+        let view = &export.document.topics[0].viewpoints[0];
+        assert_eq!(view.coloring.len(), 1, "{:?}", view.coloring);
+        assert_eq!(view.coloring[0].color, SUBJECT_COLOR.to_string());
+    }
+
+    #[test]
+    fn configured_colours_are_written_in_every_viewpoint_of_both_versions() {
+        let colors = Colors {
+            subject: "00ff00".parse().unwrap(),
+            related: "80FFA500".parse().unwrap(),
+        };
+        for version in [Version::V2_1, Version::V3_0] {
+            let options = Options {
+                version,
+                bounds: Some(super::cameras::bounds()),
+                ..colored(colors)
+            };
+            let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options).unwrap();
+            let topic = &export.document.topics[0];
+            assert_eq!(topic.viewpoints.len(), 2);
+            for view in &topic.viewpoints {
+                let colors: Vec<&str> = view.coloring.iter().map(|c| c.color.as_str()).collect();
+                assert_eq!(colors, ["FF00FF00", "80FFA500"]);
+            }
+            let bytes = export.to_bytes().unwrap();
+            assert!(
+                openbim_bcf::read_slice(&bytes)
+                    .unwrap()
+                    .diagnostics()
+                    .is_empty()
+            );
+            assert_eq!(bytes, export.to_bytes().unwrap());
+        }
+    }
+
+    #[test]
+    fn without_colours_nothing_is_coloured() {
+        assert_eq!(options().colors, None);
+        let export = export(&report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+        let views = viewpoints(&export.to_bytes().unwrap());
+        assert!(!views[0].contains("Coloring"), "{}", views[0]);
+    }
+
+    #[test]
+    fn colours_parse_from_six_or_eight_hex_digits() {
+        assert_eq!("ff0000".parse::<Color>(), Ok(SUBJECT_COLOR));
+        assert_eq!("FF0000FF".parse::<Color>(), Ok(RELATED_COLOR));
+        assert_eq!(Color::argb(0x0012_abcd).to_string(), "0012ABCD");
+        for bad in [
+            "",
+            "FF00",
+            "FF00000",
+            "FF0000FF0",
+            "+F0000",
+            "GG0000",
+            "ff 000",
+        ] {
+            assert!(bad.parse::<Color>().is_err(), "{bad:?}");
+        }
     }
 }

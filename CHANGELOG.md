@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **BCF colouring.** (#109) `axioval_bcf::Options` gains `colors`: every
+  viewpoint colours the finding's subject in `Colors::subject` and its
+  related objects in `Colors::related`, by default opaque red
+  (`SUBJECT_COLOR`) and blue (`RELATED_COLOR`). `Color` is ARGB, parsed
+  from 6 or 8 hex digits and written as 8 uppercase ones, valid in BCF 2.1
+  and 3.0. `None` writes no colouring, byte-identical to before. `check`
+  and `compare` colour viewpoints with `--geometry`, take
+  `--bcf-subject-color` and `--bcf-related-color` (which colour without
+  geometry too) and `--bcf-no-color`. The sink now builds on
+  `openbim-bcf` 0.4. **Breaking:** `Options` gains a field.
+
 - **Stable finding identities and review decisions.** (#94) A finding may
   carry `id`, a `FindingId`: UUIDv5 over its rule, its objects' aliases in a
   host-named stable scheme and its message, the key the BCF sink has always

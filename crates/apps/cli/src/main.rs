@@ -235,6 +235,21 @@ struct OutputArgs {
     /// when set, else the current time, in UTC.
     #[arg(long, requires = "bcf")]
     bcf_date: Option<String>,
+    /// Colour of each BCF viewpoint's subject, as `RRGGBB` or `AARRGGBB`
+    /// hex digits [default: FFFF0000]. Colouring is written with
+    /// `--geometry` or when a colour is given.
+    #[arg(long, value_name = "HEX", requires = "bcf")]
+    bcf_subject_color: Option<bcf::Color>,
+    /// Colour of each BCF viewpoint's related objects [default: FF0000FF].
+    #[arg(long, value_name = "HEX", requires = "bcf")]
+    bcf_related_color: Option<bcf::Color>,
+    /// Write no colouring in BCF viewpoints, even with `--geometry`.
+    #[arg(
+        long,
+        requires = "bcf",
+        conflicts_with_all = ["bcf_subject_color", "bcf_related_color"]
+    )]
+    bcf_no_color: bool,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -628,8 +643,20 @@ pub(crate) fn emit(
                 Some(date) => date,
                 None => timestamp()?,
             };
+            // Coloured with geometry, which frames the objects, or when asked;
+            // without either the archive stays as it was before colouring.
+            let colored = !args.bcf_no_color
+                && (bounds.is_some()
+                    || args.bcf_subject_color.is_some()
+                    || args.bcf_related_color.is_some());
+            let defaults = bcf::Colors::default();
+            let colors = colored.then(|| bcf::Colors {
+                subject: args.bcf_subject_color.unwrap_or(defaults.subject),
+                related: args.bcf_related_color.unwrap_or(defaults.related),
+            });
             let options = bcf::Options {
                 version: args.bcf_version.into(),
+                colors,
                 bounds,
                 rule_labels,
                 ..bcf::Options::new(args.bcf_author, date)

@@ -129,6 +129,28 @@ one. With bounds supplied, such objects are listed in `Export::unframed`;
 without any bounds (`None`, the default) viewpoints are written exactly as
 before.
 
+## Colouring
+
+`Options::colors` colours every viewpoint: the finding's subject (or the
+object a not-evaluated outcome names) in `Colors::subject`, the related
+objects in `Colors::related`, so a reviewer tells the element that fails
+from the ones it fails against. `Colors::default()` is opaque red
+(`SUBJECT_COLOR`, `FFFF0000`) and opaque blue (`RELATED_COLOR`,
+`FF0000FF`). A `Color` is ARGB, parsed from 6 (`RRGGBB`, opaque) or 8
+(`AARRGGBB`) hex digits and always written as 8 uppercase digits, which
+both BCF 2.1 and 3.0 accept. `None`, the default, writes no colouring, and
+the archive is byte-identical to one written before colouring existed.
+
+```rust,ignore
+let options = axioval_bcf::Options {
+    colors: Some(axioval_bcf::Colors {
+        subject: "E53935".parse()?,
+        ..axioval_bcf::Colors::default()
+    }),
+    ..axioval_bcf::Options::new("axioval", "2026-09-26T10:00:00Z")
+};
+```
+
 ## BCF 3.0
 
 `Options::version` selects `Version::V2_1` (default) or `Version::V3_0`.
@@ -141,8 +163,6 @@ topics use, and each camera an aspect ratio of 1.
 
 ## Not written yet
 
-Visibility (everything hidden but the involved objects), colouring (subject
-and related objects in different colours) and clipping planes are not
-written: `openbim-bcf` 0.3 writes a selection and a camera only, and every
-viewpoint it writes shows the whole model. Snapshots are rendering and out
-of scope.
+Visibility (everything hidden but the involved objects) and clipping
+planes are not written yet: every viewpoint shows the whole model.
+Snapshots are rendering and out of scope.

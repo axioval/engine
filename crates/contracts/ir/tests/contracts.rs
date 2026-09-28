@@ -812,6 +812,18 @@ fn a_measured_value_reads_and_writes_its_interval() {
 }
 
 #[test]
+fn a_complex_value_is_present_and_no_scalar() {
+    use serde_json::json;
+
+    let wire = json!({"type": "complex"});
+    let value: PropertyValue = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(value, PropertyValue::Complex);
+    assert!(!value.is_scalar());
+    assert!(value.stated_values().is_none());
+    assert_eq!(serde_json::to_value(&value).unwrap(), wire);
+}
+
+#[test]
 fn an_auxiliary_rule_reads_and_writes_its_flag_only_when_set() {
     use axioval_ir::contract::RuleInstance;
     use serde_json::json;

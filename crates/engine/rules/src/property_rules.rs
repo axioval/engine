@@ -267,6 +267,14 @@ impl RuleCapability for PropertyDataType {
                             format!("missing required property {name}"),
                             evidence,
                         ));
+                    } else if matches!(property.value, PropertyValue::Complex) {
+                        // Present, but no value of any type.
+                        evaluation.push_finding(finding(
+                            rule,
+                            object,
+                            format!("property {name} is a complex property, not {expected}"),
+                            evidence,
+                        ));
                     } else {
                         let cells = crate::property_value::typed_cells(property, expected);
                         match (property.data_type(), cells) {
@@ -373,12 +381,14 @@ impl RuleCapability for BooleanPropertyEquals {
                     let property = resolved.property();
                     match &property.value {
                         PropertyValue::Boolean(actual) if *actual == expected => {}
-                        PropertyValue::Boolean(_) => evaluation.push_finding(finding(
-                            rule,
-                            object,
-                            format!("property {name} does not equal {expected}"),
-                            property.evidence.clone().into_iter().collect(),
-                        )),
+                        // A complex property holds no value, so no boolean.
+                        PropertyValue::Boolean(_) | PropertyValue::Complex => evaluation
+                            .push_finding(finding(
+                                rule,
+                                object,
+                                format!("property {name} does not equal {expected}"),
+                                property.evidence.clone().into_iter().collect(),
+                            )),
                         _ => evaluation.push_object_not_evaluated(
                             object.id.clone(),
                             NotEvaluatedReason::InvalidEvidence,

@@ -120,7 +120,15 @@ impl IfcPropertyService {
             ExactSource::Type(type_id) => format!("type:{type_id}"),
             _ => return Err(PropertyResolutionError::InexactEvidence),
         };
-        let (value, data_type) = self.pset_value(exact)?;
+        // A complex property or quantity groups its members and is no
+        // value of any type, so it declares none. Its members are not
+        // read: no rule compares one.
+        let (value, data_type) = match &exact.value {
+            ExactValue::Complex(_) if exact.value_type.is_none() && exact.unit_id.is_none() => {
+                (PropertyValue::Complex, None)
+            }
+            _ => self.pset_value(exact)?,
+        };
         let mut property = Property::new(exact.property_set.as_ref(), name, value)
             .map_err(|_| PropertyResolutionError::InvalidRequest)?;
         if let Some(data_type) = data_type {
@@ -240,7 +248,8 @@ impl IfcPropertyService {
     ///
     /// The declared type is the one type every scalar declares; a table
     /// whose two columns declare different types has none. A reference
-    /// value names an entity the IR cannot carry and is refused.
+    /// value names an entity the IR cannot carry and is refused, and so is
+    /// a complex property here (`property` reads it).
     fn pset_value(
         &self,
         exact: &ExactProperty,
@@ -774,7 +783,8 @@ fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
         | ExactPropertyError::MalformedName { .. }
         | ExactPropertyError::MissingValueSlot { .. }
         | ExactPropertyError::InvalidOccurrenceTarget { .. }
-        | ExactPropertyError::InvalidTypeTarget { .. } => {
+        | ExactPropertyError::InvalidTypeTarget { .. }
+        | ExactPropertyError::ComplexCycle { .. } => {
             PropertyResolutionError::Incomplete(error.to_string())
         }
         ExactPropertyError::MultipleTypeAssignments { .. }
@@ -795,6 +805,8 @@ fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
         | ExactPropertyError::UnsupportedValue { .. }
         | ExactPropertyError::UnsupportedUnit { .. }
         | ExactPropertyError::NonFiniteReal { .. } => PropertyResolutionError::InexactEvidence,
+        // `ComplexTooDeep` and `ComplexBudgetExceeded` (a complex nested
+        // beyond what the library follows) among them.
         _ => PropertyResolutionError::Unavailable(error.to_string()),
     }
 }

@@ -11,7 +11,8 @@ use axioval_ir::{
 };
 
 /// Millimetre lengths. Wall #1 carries one property of each kind in
-/// `Pset_Kinds`; door #30 a predefined panel set.
+/// `Pset_Kinds`, a complex property nesting another among them; door #30 a
+/// predefined panel set; wall #40 two complex properties holding each other.
 const IFC4: &str = "ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION((''),'2;1');
@@ -38,11 +39,19 @@ DATA;
 #13=IFCPROPERTYLISTVALUE('Dates',$,(IFCDATE('2026-09-27')),$);
 #14=IFCPROPERTYTABLEVALUE('Ratios',$,(IFCREAL(1.),IFCREAL(2.)),(IFCREAL(0.5),IFCREAL(0.25)),$,$,$,$);
 #15=IFCPROPERTYREFERENCEVALUE('Unreferenced',$,$,$);
-#20=IFCPROPERTYSET('0000000000000000000020',$,'Pset_Kinds',$,(#3,#4,#5,#6,#7,#8,#9,#10,#11,#12,#13,#14,#15));
+#16=IFCPROPERTYSINGLEVALUE('Inner',$,IFCLENGTHMEASURE(20.),$);
+#17=IFCCOMPLEXPROPERTY('Nested',$,'nested',(#16));
+#18=IFCCOMPLEXPROPERTY('Group',$,'group',(#16,#17));
+#20=IFCPROPERTYSET('0000000000000000000020',$,'Pset_Kinds',$,(#3,#4,#5,#6,#7,#8,#9,#10,#11,#12,#13,#14,#15,#18));
 #21=IFCRELDEFINESBYPROPERTIES('0000000000000000000021',$,$,$,(#1),#20);
 #30=IFCDOOR('0000000000000000000030',$,$,$,$,$,$,$,$,$,$,$,$);
 #31=IFCDOORPANELPROPERTIES('0000000000000000000031',$,'Panel',$,$,.SWINGING.,$,.LEFT.,$);
 #32=IFCRELDEFINESBYPROPERTIES('0000000000000000000032',$,$,$,(#30),#31);
+#40=IFCWALL('0000000000000000000040',$,$,$,$,$,$,$,$);
+#41=IFCCOMPLEXPROPERTY('A',$,'a',(#42));
+#42=IFCCOMPLEXPROPERTY('B',$,'b',(#41));
+#43=IFCPROPERTYSET('0000000000000000000043',$,'Pset_Cycle',$,(#41));
+#44=IFCRELDEFINESBYPROPERTIES('0000000000000000000044',$,$,$,(#40),#43);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -178,6 +187,27 @@ fn a_table_value_keeps_its_rows_and_a_type_only_when_both_columns_share_it() {
             &PropertyValue::Decimal(2.0),
             &PropertyValue::Decimal(0.25),
         ]
+    );
+}
+
+/// A complex property groups its members and is no value of its own:
+/// present, with no declared type, however its members nest (#116).
+#[test]
+fn a_complex_property_is_present_and_untyped() {
+    let group = property("Group");
+    assert_eq!(group.value, PropertyValue::Complex);
+    assert_eq!(group.data_type(), None);
+    assert_eq!(group.column_types(), None);
+}
+
+/// Members that hold each other have no finite reading: refused, never
+/// present or absent.
+#[test]
+fn a_complex_property_holding_itself_is_refused() {
+    let result = resolve("#40", "Pset_Cycle", "A");
+    assert!(
+        matches!(result, Err(PropertyResolutionError::Incomplete(_))),
+        "{result:?}"
     );
 }
 

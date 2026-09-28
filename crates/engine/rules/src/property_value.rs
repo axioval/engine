@@ -532,6 +532,21 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
     if !constraints.optional && is_empty(value) {
         return Verdict::Fails(format!("missing required property {name}"));
     }
+    // A complex property is present but holds no value of any type: its
+    // presence meets the rule, any type or value it must have fails it.
+    if matches!(value, PropertyValue::Complex) {
+        if let Some(expected) = constraints.data_type {
+            return Verdict::Fails(format!(
+                "property {name} is a complex property, not {expected}"
+            ));
+        }
+        if constraints.constrains_value() {
+            return Verdict::Fails(format!(
+                "property {name} is a complex property, which holds no value"
+            ));
+        }
+        return Verdict::Meets;
+    }
     let typed;
     let mut value = value;
     if let Some(expected) = constraints.data_type {
@@ -800,6 +815,9 @@ fn scalar_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdi
             "a measured interval has no one value to check against literals".into(),
         ),
         PropertyValue::Null => invalid("null has no value to compare"),
+        PropertyValue::Complex => {
+            Verdict::Fails("is a complex property, which holds no value to compare".into())
+        }
         PropertyValue::Reference(_) => Verdict::Inapplicable(
             NotEvaluatedReason::InvalidEvidence,
             "a reference to another instance has no value to check against literals".into(),

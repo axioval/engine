@@ -214,7 +214,7 @@ impl ResolvedProperty {
         if !admissible_evidence(&request, &property) {
             return Err(PropertyResolutionError::InexactEvidence);
         }
-        if !valid_value(&property.value) {
+        if !valid_property(&property) {
             return Err(PropertyResolutionError::InvalidValue);
         }
         Ok(Self { request, property })
@@ -426,7 +426,7 @@ impl PropertyEnumeration {
             {
                 return Err(PropertyResolutionError::InexactEvidence);
             }
-            if !valid_value(&property.value) {
+            if !valid_property(property) {
                 return Err(PropertyResolutionError::InvalidValue);
             }
         }
@@ -571,7 +571,7 @@ impl PropertyResolutionServiceHandle {
                 if !admissible_evidence(request, resolved.property()) {
                     return Err(PropertyResolutionError::InexactEvidence);
                 }
-                if !valid_value(&resolved.property().value) {
+                if !valid_property(resolved.property()) {
                     return Err(PropertyResolutionError::InvalidValue);
                 }
             }
@@ -610,6 +610,14 @@ impl SnapshotBoundService for PropertyResolutionServiceHandle {
     }
 }
 
+/// Whether a property's value is well formed: `valid_value`, and a
+/// complex property declares no type, since it holds no value of one.
+fn valid_property(property: &Property) -> bool {
+    valid_value(&property.value)
+        && !(matches!(property.value, PropertyValue::Complex)
+            && (property.data_type().is_some() || property.column_types().is_some()))
+}
+
 fn valid_value(value: &PropertyValue) -> bool {
     match value {
         PropertyValue::Decimal(value) | PropertyValue::Quantity { value, .. } => value.is_finite(),
@@ -619,7 +627,8 @@ fn valid_value(value: &PropertyValue) -> bool {
         | PropertyValue::String(_)
         | PropertyValue::Date(_)
         | PropertyValue::DateTime(_)
-        | PropertyValue::Reference(_) => true,
+        | PropertyValue::Reference(_)
+        | PropertyValue::Complex => true,
         // A list holds scalar values only: no null, no nested composite.
         PropertyValue::List(elements) => elements.iter().all(valid_scalar),
         // A range states at least one scalar, and one kind of value.

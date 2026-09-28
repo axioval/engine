@@ -25,3 +25,7 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   report may name one (identities, sinks, hosts).
 - `PropertyValue::Reference` names another instance of the same source. It
   is never compared with a literal and never read as text or a number.
+- `PropertyValue::Complex` is a property grouping members, present and no
+  value of any type: not scalar, never inside another value, never typed
+  (the engine's property handle refuses either), never compared as one of
+  its members.

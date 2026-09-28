@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Complex properties.** (Refs #116) `PropertyValue::Complex`
+  (`{"type": "complex"}`) is a property grouping named members that is no
+  value of its own. It is present and not empty and declares no type: the
+  property handle refuses a typed one and one inside another value.
+  `property-exists` and `property-required` are met; `property-data-type`
+  and every type or value constraint of `property-value` fail;
+  `property-predicate`, `property-comparison` and `property-value-equals`
+  never pass it (a finding, never not evaluated); a property selector
+  comparing its value leaves the object undecided. The IFC adapter reads
+  an `IfcComplexProperty` or `IfcPhysicalComplexQuantity` as it
+  (`ifc-properties` 0.5.2, openbimrs/ifc#208) where it refused one, in
+  resolution and enumeration alike; members holding each other are
+  refused. The buildingSMART case
+  `fail-complex_properties_are_not_supported_1_2` is caught, which leaves
+  two cases of the corpus not evaluated (material property sets). The
+  openbimrs crates move to their latest patch releases (`ifc-geometry`
+  0.4.4, `ifc-schema` 0.2.4, `ifc-spatial` 0.2.4, `ifc-systems` 0.2.3).
+  **Breaking:** `PropertyValue` gains the variant.
+
 - **Declared types of unreadable values.** (Refs #116) A property whose
   value a source cannot read exactly, but whose declared type it states,
   is answered as `PropertyResolutionError::UnreadableValue` (an

@@ -81,17 +81,23 @@ value of its declared type, with the unit the kind states for it:
 - an `IfcPropertyTableValue` is a `Table` of its defining and defined values,
   each column in its own unit, `null` without rows;
 - an `IfcPropertyReferenceValue` whose `PropertyReference` is `$` (optional
-  since IFC4) references nothing and is `null` with no declared type.
+  since IFC4) references nothing and is `null` with no declared type;
+- an `IfcComplexProperty` or `IfcPhysicalComplexQuantity` (`ifc-properties`
+  0.5.2, openbimrs/ifc#208) is `Complex`, present with no declared type: it
+  groups its members and is no value of its own. Its members are not
+  carried.
 
 The declared type is the one every scalar of the value declares; a table
 whose columns declare two types reports none, and every table reports its
 columns' types as `Property::column_types`. The request is refused, never
 answered as absent, when:
-- a complex quantity or two quantities carry the requested name;
+- two quantities carry the requested name;
 - a property set and a quantity set share the requested set name;
 - the requested attribute of a predefined set is an entity reference;
 - the value is an `IfcPropertyReferenceValue` referencing an entity, which
-  the IR cannot carry, or an `IfcComplexProperty`;
+  the IR cannot carry;
+- a complex property's members hold each other (`ComplexCycle`), or nest
+  deeper or wider than the library follows;
 - a quantity's value is `$`, is not a number, or is cut off by a truncated
   record (`ifc-properties` 0.5.0, openbimrs/ifc#138): it is never read as 0
   and never as absent, so a rule over it is not evaluated.
@@ -108,8 +114,8 @@ exact set and name enumerate what they resolve, and an empty answer is a
 proof. Quantities and predefined-set attributes are enumerated like
 properties, an occurrence value overrides an inherited one of the same set
 and name, and ambiguity is refused per source. Only selected members must
-be readable: an unselected complex property does not refuse the answer, a
-selected reference value referencing an entity does. A set of a reserved name is never selected.
+be readable: a selected reference value referencing an entity refuses the
+answer, a complex property is listed as resolved. A set of a reserved name is never selected.
 A selected set whose `HasProperties` or `Quantities` is `()` or `$` exists
 and holds nothing: `exact_property_sets_where` (`ifc-properties` 0.5.0,
 openbimrs/ifc#186) lists it, the enumeration names it in `empty_sets`, and a

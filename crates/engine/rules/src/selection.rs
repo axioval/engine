@@ -1401,6 +1401,7 @@ fn kind(value: &PropertyValue) -> String {
         PropertyValue::List(_) => "a list".into(),
         PropertyValue::Bounded { .. } => "a bounded value".into(),
         PropertyValue::Table(_) => "a table".into(),
+        PropertyValue::Complex => "a complex property".into(),
         PropertyValue::Measured { dimension, .. } => {
             format!("a measured quantity in {}", dimension.unit_symbol())
         }

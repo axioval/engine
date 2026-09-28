@@ -904,6 +904,11 @@ fn compare_side(
     side: &Side<'_>,
     config: &Config<'_>,
 ) -> Result<bool, String> {
+    // A complex property holds no value: it equals, orders against and
+    // matches nothing, so it satisfies no comparison.
+    if matches!(left, PropertyValue::Complex) || matches!(side.value(), PropertyValue::Complex) {
+        return Ok(false);
+    }
     let at = |right: &PropertyValue, operator: Operator| {
         if let Some(ordering) = temporal_order(left, right, config.precision) {
             if !exact_one(config.factor) {

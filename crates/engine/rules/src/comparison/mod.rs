@@ -754,6 +754,7 @@ fn display_value(value: Option<&PropertyValue>) -> String {
         Some(PropertyValue::Date(value)) => value.to_string(),
         Some(PropertyValue::DateTime(value)) => value.to_string(),
         Some(PropertyValue::Reference(target)) => format!("-> {target}"),
+        Some(PropertyValue::Complex) => "complex".to_owned(),
         Some(PropertyValue::List(values)) => format!(
             "[{}]",
             values

@@ -346,6 +346,12 @@ pub enum PropertyValue {
         upper: f64,
         dimension: QuantityDimension,
     },
+    /// A property that groups named member properties and is no value of
+    /// its own (an IFC complex property or physical complex quantity). It
+    /// is present, declares no type and holds no value of any simple type:
+    /// it meets a requirement that it exist, fails one on its declared type
+    /// or its value, and is never compared as one of its members.
+    Complex,
 }
 
 /// One row of a [`PropertyValue::Table`].
@@ -360,12 +366,12 @@ pub struct PropertyTableRow {
 
 impl PropertyValue {
     /// Whether this is one value of its own: neither null nor a list, a
-    /// bounded value or a table.
+    /// bounded value, a table or a complex property.
     #[must_use]
     pub fn is_scalar(&self) -> bool {
         !matches!(
             self,
-            Self::Null | Self::List(_) | Self::Bounded { .. } | Self::Table(_)
+            Self::Null | Self::List(_) | Self::Bounded { .. } | Self::Table(_) | Self::Complex
         )
     }
 

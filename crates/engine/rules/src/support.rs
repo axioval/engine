@@ -545,6 +545,7 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
         Some(PropertyValue::Date(value)) => value.to_string(),
         Some(PropertyValue::DateTime(value)) => value.to_string(),
         Some(PropertyValue::Reference(target)) => format!("a reference to {target}"),
+        Some(PropertyValue::Complex) => "a complex property".into(),
         Some(PropertyValue::List(values)) => format!(
             "[{}]",
             values

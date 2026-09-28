@@ -179,6 +179,8 @@ fn non_finite_present_property_is_rejected() {
             defining: PropertyValue::Decimal(f64::NAN),
             defined: text(),
         }]),
+        // A complex property is no value: never inside one.
+        PropertyValue::List(vec![PropertyValue::Complex]),
     ] {
         let property = axioval_ir::Property::new("Pset_WallCommon", "Reference", value)
             .unwrap()
@@ -188,6 +190,33 @@ fn non_finite_present_property_is_rejected() {
             PropertyResolutionError::InvalidValue
         );
     }
+}
+
+/// A complex property holds no value of any type, so it declares none.
+#[test]
+fn a_complex_property_is_present_and_declares_no_type() {
+    let complex = || {
+        axioval_ir::Property::new(
+            "Pset_WallCommon",
+            "Reference",
+            axioval_ir::PropertyValue::Complex,
+        )
+        .unwrap()
+        .with_evidence(Evidence::exact(source(), "native property table"))
+    };
+    let resolved = ResolvedProperty::try_new(request(), complex()).unwrap();
+    assert_eq!(
+        resolved.property().value,
+        axioval_ir::PropertyValue::Complex
+    );
+    assert_eq!(
+        ResolvedProperty::try_new(
+            request(),
+            complex().with_data_type("IFCLENGTHMEASURE").unwrap()
+        )
+        .unwrap_err(),
+        PropertyResolutionError::InvalidValue
+    );
 }
 
 #[test]

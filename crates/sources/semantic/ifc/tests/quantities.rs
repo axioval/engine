@@ -154,15 +154,20 @@ fn a_predefined_set_attribute_is_a_measure_in_si() {
 
 #[test]
 fn what_is_not_read_is_refused_never_absent() {
-    for (object, set, name) in [
-        // A complex quantity of the requested name.
-        ("#1", QTO, "Layer"),
-        // A property set and a quantity set of one name.
-        ("#20", Some("Common"), "Width"),
-    ] {
-        let result = resolve(object, set, name);
-        assert!(result.is_err(), "{object} {set:?}.{name}: {result:?}");
-    }
+    // A property set and a quantity set of one name.
+    let result = resolve("#20", Some("Common"), "Width");
+    assert!(result.is_err(), "Common.Width: {result:?}");
+}
+
+/// A complex quantity groups its members and is no value itself: present,
+/// with no declared type (#116).
+#[test]
+fn a_complex_quantity_is_present_and_untyped() {
+    let Ok(PropertyResolution::Present(resolved)) = resolve("#1", QTO, "Layer") else {
+        panic!("the complex quantity Layer is present");
+    };
+    assert_eq!(resolved.property().value, PropertyValue::Complex);
+    assert_eq!(resolved.property().data_type(), None);
 }
 
 #[test]

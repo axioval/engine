@@ -137,6 +137,29 @@ fn a_pattern_selects_every_matching_property_sorted_by_set_and_name() {
     assert!(found.evidence().locator.contains("enumeration:"));
 }
 
+/// A complex property is listed as present and untyped, as it resolves:
+/// it groups its members and holds no value of its own (#116).
+#[test]
+fn a_complex_property_is_listed_present_and_untyped() {
+    let found = enumerate("#1", exact("Pset_Custom"), NameMatch::Any).unwrap();
+    assert_eq!(
+        names(&found),
+        pairs(&[
+            ("Pset_Custom", "FooBar"),
+            ("Pset_Custom", "FooBaz"),
+            ("Pset_Custom", "Layers"),
+        ])
+    );
+    let layers = &found.properties()[2];
+    assert_eq!(layers.value, PropertyValue::Complex);
+    assert_eq!(layers.data_type(), None);
+    let Ok(PropertyResolution::Present(resolved)) = resolve("#1", Some("Pset_Custom"), "Layers")
+    else {
+        panic!("Pset_Custom.Layers is present");
+    };
+    assert_eq!(resolved.property(), layers);
+}
+
 #[test]
 fn inherited_properties_are_enumerated_and_occurrence_values_override_them() {
     let found = enumerate("#1", pattern("Pset_.*Common"), NameMatch::Any).unwrap();
@@ -209,7 +232,6 @@ fn ambiguity_and_selected_values_the_ir_cannot_carry_are_refused() {
         Err(PropertyResolutionError::Conflicting(_))
     ));
     assert!(enumerate("#2", exact("Pset_Links"), NameMatch::Any).is_err());
-    assert!(enumerate("#1", exact("Pset_Custom"), exact("Layers")).is_err());
     // A reserved set is never enumerated.
     assert_eq!(
         PropertyEnumerationRequest::try_new(

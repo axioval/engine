@@ -513,6 +513,50 @@ fn a_logical_unknown_holds_no_value() {
 }
 
 #[test]
+fn a_complex_property_is_present_but_of_no_data_type() {
+    // Wall #1's `Reference` is a complex property grouping a label; wall
+    // #11's a label. Both are present, only #11's is an `IFCLABEL`.
+    let ifc = walls_with_references(&["IFCLABEL('inner')", "IFCLABEL('outer')"]).replace(
+        "#2=IFCPROPERTYSINGLEVALUE('Reference',$,IFCLABEL('inner'),$);",
+        "#2=IFCCOMPLEXPROPERTY('Reference',$,'group',(#5));\n\
+         #5=IFCPROPERTYSINGLEVALUE('Inner',$,IFCLABEL('inner'),$);",
+    );
+    let property = json!({"type": "propertyReference",
+                          "property": "axioval:example.ifc.reference",
+                          "propertySet": "axioval:example.ifc.pset-wall-common"});
+    let (output, result) = Case::new("complex-property").geometry_rule(
+        &ifc,
+        &[],
+        "axioval:capability.property-data-type",
+        &registry_signature("axioval:capability.property-data-type"),
+        entity("wall"),
+        json!({"property": property, "data_type": {"type": "string", "value": "IFCLABEL"}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#1"], "{result:#}");
+    assert!(open.is_empty(), "{result:#}");
+    assert!(
+        result["report"]["findings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("is a complex property, not IFCLABEL"),
+        "{result:#}"
+    );
+    let (output, result) = Case::new("complex-property-required").geometry_rule(
+        &ifc,
+        &[],
+        "axioval:capability.property-required",
+        &registry_signature("axioval:capability.property-required"),
+        entity("wall"),
+        json!({"property": property}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert!(findings.is_empty() && open.is_empty(), "{result:#}");
+}
+
+#[test]
 fn integrity_issues_and_unselectable_objects_are_reported() {
     let case = Case::new("integrity");
     let bcf = case.path("issues.bcfzip");

@@ -3054,6 +3054,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking:** the workspace requires `ifc-properties` 0.5.1,
+  `ifc-classification` 0.2.2, `ifc-systems` 0.2.2 and `openbim-ifc` 0.8.1.
+  A property request naming a type object (`IfcWallType`, IFC2X3
+  `IfcDoorStyle`, ...) now resolves the type object's own
+  `HasPropertySets` with `type:` provenance (openbimrs/ifc#193), where it
+  was refused as unavailable. Door and window leaves given a type object
+  refuse it as not a door. (Refs #116)
 - **Breaking:** the workspace requires `ifc-properties` 0.5.0,
   `openbim-ifc` 0.8.0, `ifc-geometry` 0.4.3 and `ifc-spatial` 0.2.3, so a
   host linking `axioval-ifc` or `axioval-cli` beside these crates must move

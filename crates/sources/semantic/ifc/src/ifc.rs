@@ -636,11 +636,11 @@ fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
         | ExactPropertyError::InconsistentValues { .. } => {
             PropertyResolutionError::Conflicting(error.to_string())
         }
-        // A type object's own `HasPropertySets` are not resolved exactly
-        // upstream: refused, never read as absent.
+        // Neither an occurrence nor a type object (a resource, a
+        // relationship): refused, never read as absent.
         ExactPropertyError::InvalidQueryObject { type_name, .. } => {
             PropertyResolutionError::Unavailable(format!(
-                "the properties of a {type_name} are not resolved exactly by the IFC property library"
+                "a {type_name} has no properties the IFC property library resolves"
             ))
         }
         ExactPropertyError::UnsupportedDefinition { .. }

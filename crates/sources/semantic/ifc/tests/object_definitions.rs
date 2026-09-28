@@ -1,9 +1,8 @@
 //! Which object definitions a session checks.
 //!
 //! Occurrences and, in IFC4, contexts such as `IfcProject` are session
-//! objects: both answer their properties exactly. A type object is not, since
-//! the IFC property library refuses its own property sets and every property
-//! rule it fell under would leave it not evaluated; a resource is not either.
+//! objects: both answer their properties exactly. A type object is not yet
+//! one, although its own property sets now resolve; a resource is not either.
 #![allow(missing_docs)]
 
 use axioval_engine::{
@@ -106,18 +105,37 @@ fn an_ifc4_project_answers_its_properties_and_attributes() {
 }
 
 #[test]
-fn a_type_objects_own_property_sets_are_refused_never_absent() {
-    // Not a session object, but a request naming it is refused by the
-    // property library, never answered as absence.
+fn a_type_objects_own_property_sets_resolve_with_type_provenance() {
+    // `ifc-properties` 0.5.1 resolves a type object's own `HasPropertySets`,
+    // with the provenance an occurrence of that type reports for the set.
     let session = session();
-    let refused = resolve(&session, "#10", "Pset_WallCommon", "FireRating");
-    assert!(
-        matches!(&refused, Err(PropertyResolutionError::Unavailable(message)) if message.contains("IFCWALLTYPE")),
-        "{refused:?}"
-    );
-    // The occurrence inherits them.
+    let own = locator(resolve(&session, "#10", "Pset_WallCommon", "FireRating"));
+    assert!(own.ends_with(":type:#10:#13/#14"), "{own}");
     assert_eq!(
-        value(resolve(&session, "#11", "Pset_WallCommon", "FireRating")),
+        value(resolve(&session, "#10", "Pset_WallCommon", "FireRating")),
         PropertyValue::String("EI 60".into())
     );
+    assert!(matches!(
+        resolve(&session, "#10", "Pset_WallCommon", "Missing"),
+        Ok(PropertyResolution::Absent(_))
+    ));
+    // The occurrence inherits the same set, with the same provenance.
+    assert_eq!(
+        locator(resolve(&session, "#11", "Pset_WallCommon", "FireRating")),
+        own
+    );
+}
+
+fn locator(resolution: Result<PropertyResolution, PropertyResolutionError>) -> String {
+    match resolution {
+        Ok(PropertyResolution::Present(resolved)) => {
+            resolved
+                .property()
+                .evidence
+                .clone()
+                .expect("exact evidence")
+                .locator
+        }
+        other => panic!("expected a value, got {other:?}"),
+    }
 }

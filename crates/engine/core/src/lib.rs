@@ -634,6 +634,7 @@ mod free_space;
 mod guard;
 mod integrity;
 mod linear_quantity;
+mod measured;
 mod metric_routing;
 mod object_frame;
 mod pairwise;
@@ -812,10 +813,11 @@ pub use walking_surface::{
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.
 ///
-/// An unbound concept depends on the package and the source, and an
-/// unrecorded fact on the source alone, never on the object, so every object
-/// of that source fails identically. Listing each one buries the single
-/// cause under thousands of copies. Object-level outcomes with either reason
+/// An unbound concept depends on the package and the source, an unrecorded
+/// fact on the source alone, and a missing service on the run, never on the
+/// object, so every object of that source fails identically. Listing each
+/// one buries the single cause under thousands of copies. Object-level
+/// outcomes with any of these reasons
 /// are merged per source, reason and message into one rule-level outcome
 /// scoped to that source, naming the count and a few examples. Every other
 /// outcome keeps its scope.
@@ -830,7 +832,9 @@ fn collapse_source_wide(
     for outcome in outcomes {
         match (outcome.reason, outcome.scope) {
             (
-                reason @ (NotEvaluatedReason::UnboundConcept | NotEvaluatedReason::NotRecorded),
+                reason @ (NotEvaluatedReason::UnboundConcept
+                | NotEvaluatedReason::NotRecorded
+                | NotEvaluatedReason::MissingService),
                 Scope::Object(object),
             ) => merged
                 .entry((object.source.clone(), reason, outcome.message))
@@ -1081,6 +1085,14 @@ impl Runtime {
                 location: None,
             })
             .collect();
+        // Measured values are answered through the host's resolver in
+        // every run; classifications are derived first when the plan has
+        // any.
+        if plan.classifications.is_empty()
+            && let Some(host) = services.get::<PropertyResolutionServiceHandle>().cloned()
+        {
+            derived::install(&mut services, Some(&host), Arc::default());
+        }
         if let Some(refiner) = refiner.filter(|_| !plan.classifications.is_empty()) {
             derive_classifications(
                 refiner.as_ref(),

@@ -772,12 +772,17 @@ fn each(
                 missing.push((candidate, evidence));
                 continue;
             }
-            (_, Some(value)) => compare_side(value, &target, config),
+            (_, Some(value)) => compare_side(value, &target, config).map_err(|message| {
+                (
+                    crate::support::undecided_reason(&[value, target.value()]),
+                    message,
+                )
+            }),
         };
         match verdict {
             Ok(true) => any_match = true,
             Ok(false) => mismatches.push((candidate, evidence)),
-            Err(message) => uncertainties.push((NotEvaluatedReason::InvalidEvidence, message)),
+            Err((reason, message)) => uncertainties.push((reason, message)),
         }
     }
     let has_missing_information = !missing.is_empty();
@@ -839,6 +844,14 @@ enum Side<'a> {
 }
 
 impl Side<'_> {
+    /// The target value, or null for a side that is not one value.
+    fn value(&self) -> &PropertyValue {
+        match self {
+            Self::Value(value, _) => value,
+            Self::None | Self::Texts(_) | Self::Range(..) => &PropertyValue::Null,
+        }
+    }
+
     fn evidence(&self) -> &[Evidence] {
         match self {
             Self::Value(_, evidence) => evidence,
@@ -1274,9 +1287,49 @@ fn compare(
         (PropertyValue::Integer(_), PropertyValue::Integer(_)) => {
             Err("integer factor cannot be represented exactly".into())
         }
+        (PropertyValue::Measured { .. }, _) | (_, PropertyValue::Measured { .. }) => {
+            measured(left, right, factor, tolerance, equal)
+        }
         _ => Err("property values have incompatible types or dimensions".into()),
     }
 }
+/// Compares quantities of which at least one is a measured interval: every
+/// pair of values they may take must give one answer, or the comparison
+/// straddles its bound.
+fn measured(
+    left: &PropertyValue,
+    right: &PropertyValue,
+    factor: f64,
+    tolerance: &Tolerance,
+    predicate: impl Fn(Ordering) -> bool,
+) -> Result<bool, String> {
+    let (Some((a, b, left_dimension)), Some((c, d, right_dimension))) = (
+        crate::support::quantity_bounds(left),
+        crate::support::quantity_bounds(right),
+    ) else {
+        return Err("property values have incompatible types or dimensions".into());
+    };
+    if left_dimension != right_dimension {
+        return Err("property values have incompatible types or dimensions".into());
+    }
+    let (c, d) = (c * factor, d * factor);
+    let (c, d) = if c <= d { (c, d) } else { (d, c) };
+    let order = |x: f64, y: f64| {
+        if tolerance.is_exact() {
+            x.partial_cmp(&y)
+        } else {
+            tolerance.order(x, y)
+        }
+    };
+    // The least difference is the left's least against the right's most.
+    let (Some(least), Some(greatest)) = (order(a, d), order(b, c)) else {
+        return Err("compared value is non-finite".into());
+    };
+    crate::support::interval_verdict(least, greatest, predicate).ok_or_else(|| {
+        format!("the measured values ({a} to {b} against {c} to {d}) straddle the comparison")
+    })
+}
+
 fn numeric(
     left: f64,
     right: f64,

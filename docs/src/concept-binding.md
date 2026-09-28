@@ -63,7 +63,8 @@ The derived sets (`axioval_ir::is_derived_set`) go further: the property
 inside them is no concept either. In `axioval:classification` it is the id
 of a classification the ruleset declares ([Derived
 properties](./derived.md)); compilation checks it against those ids, and
-evaluation passes it through unchanged.
+evaluation passes it through unchanged. In `axioval:measured` it is one of
+the engine's measured names (`extent_z`, `bottom`, …).
 
 ## Name patterns
 

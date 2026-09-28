@@ -570,6 +570,11 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
         Some(PropertyValue::Quantity { value, dimension }) => {
             format!("{value} {}", dimension.unit_symbol())
         }
+        Some(PropertyValue::Measured {
+            lower,
+            upper,
+            dimension,
+        }) => format!("{lower} to {upper} {} (measured)", dimension.unit_symbol()),
         Some(PropertyValue::String(value)) => format!("`{value}`"),
         Some(PropertyValue::Date(value)) => value.to_string(),
         Some(PropertyValue::DateTime(value)) => value.to_string(),
@@ -1621,6 +1626,56 @@ pub(crate) mod table {
             );
             assert_eq!(report.not_evaluated().len(), 1);
         }
+    }
+}
+
+/// Whether a comparison holds for every value of an interval whose least
+/// and greatest ends order as `least` and `greatest` against the bound:
+/// `Some` when every ordering between them gives one answer, `None` when
+/// the interval straddles the bound. An ordering is monotone in the value,
+/// so the orderings between the ends are every one the interval can take.
+pub(crate) fn interval_verdict(
+    least: std::cmp::Ordering,
+    greatest: std::cmp::Ordering,
+    holds: impl Fn(std::cmp::Ordering) -> bool,
+) -> Option<bool> {
+    use std::cmp::Ordering;
+    let verdicts: Vec<bool> = [Ordering::Less, Ordering::Equal, Ordering::Greater]
+        .into_iter()
+        .filter(|ordering| least <= *ordering && *ordering <= greatest)
+        .map(holds)
+        .collect();
+    let first = *verdicts.first()?;
+    verdicts
+        .iter()
+        .all(|verdict| *verdict == first)
+        .then_some(first)
+}
+
+/// A number or quantity as the interval it lies in, with its dimension:
+/// a quantity is a point, a measured value its interval.
+pub(crate) fn quantity_bounds(value: &PropertyValue) -> Option<(f64, f64, QuantityDimension)> {
+    match value {
+        PropertyValue::Quantity { value, dimension } => Some((*value, *value, *dimension)),
+        PropertyValue::Measured {
+            lower,
+            upper,
+            dimension,
+        } => Some((*lower, *upper, *dimension)),
+        _ => None,
+    }
+}
+
+/// Why a comparison involving `value` could not be decided: a measured
+/// interval is incomplete evidence, anything else invalid.
+pub(crate) fn undecided_reason(values: &[&PropertyValue]) -> NotEvaluatedReason {
+    if values
+        .iter()
+        .any(|value| matches!(value, PropertyValue::Measured { .. }))
+    {
+        NotEvaluatedReason::IncompleteEvidence
+    } else {
+        NotEvaluatedReason::InvalidEvidence
     }
 }
 

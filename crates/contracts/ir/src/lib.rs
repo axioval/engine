@@ -318,6 +318,15 @@ pub enum PropertyValue {
     /// value), in the order the source states them; at least one row, every
     /// cell a scalar value.
     Table(Vec<PropertyTableRow>),
+    /// A quantity measured only to lie within `[lower, upper]`, in the SI
+    /// unit of its dimension, the bounds finite and ordered: a value from a
+    /// tessellated body. It is one value whose exact place is unknown, so a
+    /// comparison it may pass or fail cannot be decided.
+    Measured {
+        lower: f64,
+        upper: f64,
+        dimension: QuantityDimension,
+    },
 }
 
 /// One row of a [`PropertyValue::Table`].
@@ -609,12 +618,56 @@ pub fn is_reserved_set(set: &str) -> bool {
         || is_derived_set(set)
 }
 
+/// Property set that names values the engine measures from geometry.
+///
+/// Answered by the host's geometry services, never by a source. Each value
+/// is a length, area or volume sure to hold the exact value: a
+/// [`PropertyValue::Quantity`] with exact evidence when measured exactly, a
+/// [`PropertyValue::Measured`] interval with inexact evidence otherwise (a
+/// tessellated body). Names are matched ignoring ASCII case:
+///
+/// - [`MEASURED_EXTENT_X`], [`MEASURED_EXTENT_Y`], [`MEASURED_EXTENT_Z`]:
+///   the body's extent along the world axes, in metres.
+/// - [`MEASURED_BOTTOM`], [`MEASURED_TOP`]: the elevation of its lowest and
+///   highest point, in metres.
+/// - [`MEASURED_AREA`]: its footprint area, overlaps counted once.
+/// - [`MEASURED_VOLUME`]: its enclosed volume.
+///
+/// A run without the service a value needs cannot measure it for any
+/// object (a missing service, reported once per rule and source). Reserved
+/// like [`ATTRIBUTE_SET`].
+pub const MEASURED_SET: &str = "axioval:measured";
+/// The extent along the world x axis in [`MEASURED_SET`].
+pub const MEASURED_EXTENT_X: &str = "extent_x";
+/// The extent along the world y axis in [`MEASURED_SET`].
+pub const MEASURED_EXTENT_Y: &str = "extent_y";
+/// The vertical extent (height) in [`MEASURED_SET`].
+pub const MEASURED_EXTENT_Z: &str = "extent_z";
+/// The lowest elevation in [`MEASURED_SET`].
+pub const MEASURED_BOTTOM: &str = "bottom";
+/// The highest elevation in [`MEASURED_SET`].
+pub const MEASURED_TOP: &str = "top";
+/// The footprint area in [`MEASURED_SET`].
+pub const MEASURED_AREA: &str = "area";
+/// The enclosed volume in [`MEASURED_SET`].
+pub const MEASURED_VOLUME: &str = "volume";
+/// Every name in [`MEASURED_SET`].
+pub const MEASURED_NAMES: [&str; 7] = [
+    MEASURED_EXTENT_X,
+    MEASURED_EXTENT_Y,
+    MEASURED_EXTENT_Z,
+    MEASURED_BOTTOM,
+    MEASURED_TOP,
+    MEASURED_AREA,
+    MEASURED_VOLUME,
+];
+
 /// Whether `set` is a reserved set the engine derives rather than a source
 /// states: its property names are engine or ruleset vocabulary and bind to
 /// no concept.
 #[must_use]
 pub fn is_derived_set(set: &str) -> bool {
-    set == CLASSIFICATION_SET
+    set == CLASSIFICATION_SET || set == MEASURED_SET
 }
 
 /// A named semantic property.

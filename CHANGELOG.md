@@ -78,6 +78,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   is the leg spanning the whole height and `zone` `web` the height beside
   the notch, clear of the ledge; an opening through the web leaves the host
   where the web ends instead of crossing its outline.
+- **Values measured from geometry as properties.** (#100) The reserved set
+  `axioval:measured` (`MEASURED_SET`) answers `extent_x`, `extent_y`,
+  `extent_z`, `bottom`, `top`, `area` and `volume` from the host's
+  vertical-extent, plan-area and proximity services, through the property
+  resolver the runtime installs in every run. An exact measurement is a
+  quantity; anything coarser the new `PropertyValue::Measured` interval
+  with inexact evidence, which property selectors and `property-comparison`
+  compare three-valued: an interval straddling the bound is not evaluated
+  (`incomplete_evidence`). Without the service, the resolver answers the
+  new `PropertyResolutionError::MissingService`, and the runtime collapses
+  object-level missing-service outcomes once per rule and source.
+  **Breaking:** `PropertyValue` and `PropertyResolutionError` gain
+  variants, and object-level `missing_service` outcomes are reported per
+  source.
+
 - **Classifications derived by a ruleset.** (#99) A ruleset declares
   `classifications`: ordered rows of a selector and a class name, first
   match (the default) or all match. Every selector, property reference,

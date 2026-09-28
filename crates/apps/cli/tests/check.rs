@@ -812,6 +812,31 @@ impl Case {
     }
 }
 
+/// Only the wall running along x (4 m) is longer than a metre in x; the
+/// crossing wall is 0.2 m there. Neither states a reference.
+#[test]
+fn with_geometry_a_measured_extent_selects_walls() {
+    let case = Case::new("measured-extent");
+    let (output, result) = case.geometry_rule(
+        &crossing_walls(),
+        &[],
+        "axioval:capability.property-exists",
+        &registry_signature("axioval:capability.property-exists"),
+        json!({"kind": "allOf", "operands": [
+            entity("wall"),
+            {"kind": "property", "propertySet": "axioval:measured", "property": "extent_x",
+             "operator": "greaterThan", "value": {"type": "quantity", "value": 1, "unit": "m"}},
+        ]}),
+        json!({"property": {"type": "propertyReference",
+                            "property": "axioval:example.ifc.reference",
+                            "propertySet": "axioval:example.ifc.pset-wall-common"}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#16", "{result:#}");
+}
+
 /// A clash that is a warning in general is an error where a selected wall
 /// is involved.
 #[test]

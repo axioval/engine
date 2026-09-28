@@ -39,6 +39,11 @@ pub enum PropertyResolutionError {
     /// object, so every object of the source answers identically.
     #[error("{0}")]
     NotRecorded(String),
+    /// The run registered no service that could answer the request, for any
+    /// object (a measured value without geometry). The message describes
+    /// the run, never the object.
+    #[error("{0}")]
+    MissingService(String),
 }
 
 /// Request for one direct property on one source-qualified object.
@@ -136,9 +141,7 @@ impl ResolvedProperty {
         if !request.matches(&property) {
             return Err(PropertyResolutionError::ResponseRequestMismatch);
         }
-        if !property.evidence.as_ref().is_some_and(|evidence| {
-            reviewable(evidence) && evidence.source == request.object_id().source
-        }) {
+        if !admissible_evidence(&request, &property) {
             return Err(PropertyResolutionError::InexactEvidence);
         }
         if !valid_value(&property.value) {
@@ -432,14 +435,7 @@ impl PropertyResolutionServiceHandle {
                 if resolved.request() != request || !request.matches(resolved.property()) {
                     return Err(PropertyResolutionError::ResponseRequestMismatch);
                 }
-                if !resolved
-                    .property()
-                    .evidence
-                    .as_ref()
-                    .is_some_and(|evidence| {
-                        reviewable(evidence) && evidence.source == request.object_id().source
-                    })
-                {
+                if !admissible_evidence(request, resolved.property()) {
                     return Err(PropertyResolutionError::InexactEvidence);
                 }
                 if !valid_value(&resolved.property().value) {
@@ -500,6 +496,9 @@ fn valid_value(value: &PropertyValue) -> bool {
                     .windows(2)
                     .all(|pair| std::mem::discriminant(pair[0]) == std::mem::discriminant(pair[1]))
         }),
+        PropertyValue::Measured { lower, upper, .. } => {
+            lower.is_finite() && upper.is_finite() && lower <= upper
+        }
         PropertyValue::Table(rows) => {
             !rows.is_empty()
                 && rows
@@ -511,6 +510,17 @@ fn valid_value(value: &PropertyValue) -> bool {
 
 fn valid_scalar(value: &PropertyValue) -> bool {
     value.is_scalar() && valid_value(value)
+}
+
+/// Whether `property` carries evidence from the requested object's source
+/// that a reviewer can follow: exact, or for a measured interval (which is
+/// never exact) at least located.
+fn admissible_evidence(request: &PropertyRequest, property: &Property) -> bool {
+    let interval = matches!(property.value, PropertyValue::Measured { .. });
+    property.evidence.as_ref().is_some_and(|evidence| {
+        (reviewable(evidence) || interval && !evidence.locator.trim().is_empty())
+            && evidence.source == request.object_id().source
+    })
 }
 
 fn reviewable(evidence: &Evidence) -> bool {

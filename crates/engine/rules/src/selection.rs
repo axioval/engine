@@ -676,7 +676,7 @@ fn property_selector_matches(
             match test.holds_quantified(&property.value, quantifier, options) {
                 Ok(matches) => verdict(matches),
                 Err(message) => Selection::NotEvaluated(
-                    NotEvaluatedReason::InvalidEvidence,
+                    crate::support::undecided_reason(&[&property.value]),
                     format!("property selector on `{name}`: {message}"),
                 ),
             }
@@ -899,6 +899,9 @@ pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedRea
             (NotEvaluatedReason::IncompleteEvidence, message)
         }
         PropertyResolutionError::NotRecorded(message) => (NotEvaluatedReason::NotRecorded, message),
+        PropertyResolutionError::MissingService(message) => {
+            (NotEvaluatedReason::MissingService, message)
+        }
         error => (NotEvaluatedReason::InvalidEvidence, error.to_string()),
     }
 }
@@ -1142,6 +1145,48 @@ impl Test {
         }
     }
 
+    /// Whether every value of a measured interval satisfies the test, or
+    /// none does; `Err` when it straddles the bound or compares with
+    /// another kind of value.
+    fn holds_measured(
+        &self,
+        (lower, upper): (f64, f64),
+        held: QuantityDimension,
+    ) -> Result<bool, String> {
+        match self {
+            Self::Exists | Self::NotEmpty => Ok(true),
+            Self::Empty => Ok(false),
+            Self::Compare(order, Expected::Quantity(expected, dimension), _) => {
+                if held != *dimension {
+                    return Err(format!(
+                        "a quantity in {} cannot be compared with one in {}",
+                        held.unit_symbol(),
+                        dimension.unit_symbol()
+                    ));
+                }
+                let tolerance = Tolerance::unit_conversion();
+                let (Some(least), Some(greatest)) = (
+                    tolerance.order(lower, *expected),
+                    tolerance.order(upper, *expected),
+                ) else {
+                    return Err("the measured value is not finite".into());
+                };
+                crate::support::interval_verdict(least, greatest, |ordering| order.holds(ordering))
+                    .ok_or_else(|| {
+                        format!(
+                            "the measured value lies between {lower} and {upper} {}, which \
+                             straddles the bound",
+                            held.unit_symbol()
+                        )
+                    })
+            }
+            _ => Err(format!(
+                "the value is a measured quantity in {} but the selector compares another kind",
+                held.unit_symbol()
+            )),
+        }
+    }
+
     /// Whether `actual` satisfies the test; `Err` when the value's type
     /// cannot be compared with the declared one, so the object is not
     /// evaluated rather than silently left out.
@@ -1150,6 +1195,14 @@ impl Test {
         // absent property.
         if matches!(actual, PropertyValue::Null) {
             return Ok(matches!(self, Self::Exists | Self::Empty));
+        }
+        if let PropertyValue::Measured {
+            lower,
+            upper,
+            dimension,
+        } = actual
+        {
+            return self.holds_measured((*lower, *upper), *dimension);
         }
         let mismatch = |declared: &str| {
             Err(format!(
@@ -1274,6 +1327,9 @@ fn kind(value: &PropertyValue) -> String {
         PropertyValue::List(_) => "a list".into(),
         PropertyValue::Bounded { .. } => "a bounded value".into(),
         PropertyValue::Table(_) => "a table".into(),
+        PropertyValue::Measured { dimension, .. } => {
+            format!("a measured quantity in {}", dimension.unit_symbol())
+        }
     }
 }
 

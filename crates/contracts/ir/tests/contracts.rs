@@ -623,3 +623,25 @@ fn gates_and_rule_outcome_selectors_read_and_write_their_package_form() {
         serde_json::from_value::<RuleGate>(json!({"rule": "a", "condition": "sometimes"})).is_err()
     );
 }
+
+#[test]
+fn a_measured_value_reads_and_writes_its_interval() {
+    use axioval_ir::QuantityDimension;
+    use serde_json::json;
+
+    let wire = json!({"type": "measured", "value": {"lower": 0.045, "upper": 0.055, "dimension": "length"}});
+    let value: PropertyValue = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(
+        value,
+        PropertyValue::Measured {
+            lower: 0.045,
+            upper: 0.055,
+            dimension: QuantityDimension::Length
+        }
+    );
+    assert!(value.is_scalar());
+    assert!(value.stated_values().is_none());
+    assert_eq!(serde_json::to_value(&value).unwrap(), wire);
+    assert!(axioval_ir::is_derived_set(axioval_ir::MEASURED_SET));
+    assert!(axioval_ir::is_reserved_set(axioval_ir::MEASURED_SET));
+}

@@ -1,6 +1,7 @@
 //! Properties the engine derives instead of reading them from a source: the
 //! class names a ruleset's classifications assign
-//! ([`axioval_ir::CLASSIFICATION_SET`]).
+//! ([`axioval_ir::CLASSIFICATION_SET`]) and values measured from geometry
+//! ([`axioval_ir::MEASURED_SET`], see [`crate::measured`]).
 //!
 //! The runtime answers them through the one property-resolution handle, so
 //! every selector and capability reads a derived property exactly as it
@@ -12,9 +13,11 @@ use std::sync::Arc;
 
 use axioval_ir::contract::{ClassificationDefinition, ClassificationMode};
 use axioval_ir::{
-    CLASSIFICATION_SET, Evidence, NotEvaluatedReason, ObjectId, Property, PropertyValue,
+    CLASSIFICATION_SET, Evidence, MEASURED_SET, NotEvaluatedReason, ObjectId, Property,
+    PropertyValue,
 };
 
+use crate::measured::Measures;
 use crate::properties::{
     CompletePropertyAbsenceEvidence, PropertyEnumeration, PropertyEnumerationRequest,
     PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
@@ -188,6 +191,7 @@ fn classify_one(
 /// other request by the host's resolver.
 pub(crate) struct DerivedProperties {
     pub(crate) inner: Option<PropertyResolutionServiceHandle>,
+    pub(crate) measures: Measures,
     pub(crate) classifications: Arc<Classifications>,
     pub(crate) snapshots: Vec<SourceSnapshot>,
 }
@@ -203,6 +207,9 @@ impl PropertyResolutionService for DerivedProperties {
     ) -> Result<PropertyResolution, PropertyResolutionError> {
         if request.property_set() == Some(CLASSIFICATION_SET) {
             return self.classifications.resolve(request);
+        }
+        if request.property_set() == Some(MEASURED_SET) {
+            return self.measures.resolve(request);
         }
         match &self.inner {
             Some(inner) => inner.resolve(request),
@@ -237,6 +244,7 @@ pub(crate) fn install(
     services.replace(PropertyResolutionServiceHandle::new(Arc::new(
         DerivedProperties {
             inner: host.cloned(),
+            measures: Measures::of(services),
             classifications: classifications.clone(),
             snapshots,
         },

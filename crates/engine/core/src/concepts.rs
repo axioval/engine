@@ -116,6 +116,13 @@ impl ConceptCatalog {
     /// set `set`; `None` when `set` is not a derived set.
     #[must_use]
     pub fn derives(&self, set: &str, name: &str) -> Option<bool> {
+        if set == axioval_ir::MEASURED_SET {
+            return Some(
+                axioval_ir::MEASURED_NAMES
+                    .iter()
+                    .any(|known| known.eq_ignore_ascii_case(name)),
+            );
+        }
         (set == axioval_ir::CLASSIFICATION_SET).then(|| self.classifications.contains(name))
     }
 

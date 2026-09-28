@@ -187,7 +187,7 @@ impl RuleCapability for Scoped {
         evaluation.push_finding(finding(Scope::Source(source("b"))));
         evaluation.push_finding(finding(Scope::Source(source("a"))));
         evaluation.push_finding(finding(Scope::Project));
-        evaluation.push_object_not_evaluated(object, NotEvaluatedReason::MissingService, "m");
+        evaluation.push_object_not_evaluated(object, NotEvaluatedReason::BackendUnavailable, "m");
         evaluation.push_source_not_evaluated(
             source("a"),
             NotEvaluatedReason::IncompleteEvidence,

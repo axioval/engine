@@ -623,6 +623,7 @@ fn verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn scalar_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdict {
     if let (PropertyValue::Quantity { value, .. }, true) = (value, constraints.si_units) {
         // In SI the quantity's number is the literal's number.
@@ -717,6 +718,10 @@ fn scalar_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Verdi
         PropertyValue::Quantity { .. } => Verdict::Inapplicable(
             NotEvaluatedReason::IncompleteEvidence,
             "comparing a quantity needs its unit; declare `si_units` to read literals in SI".into(),
+        ),
+        PropertyValue::Measured { .. } => Verdict::Inapplicable(
+            NotEvaluatedReason::IncompleteEvidence,
+            "a measured interval has no one value to check against literals".into(),
         ),
         PropertyValue::Null => invalid("null has no value to compare"),
         PropertyValue::List(_) | PropertyValue::Bounded { .. } | PropertyValue::Table(_) => {

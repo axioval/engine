@@ -50,6 +50,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   zone it misses least. `opening-zone` now grades its distance findings by
   severity bands. **Breaking:** the capability gains the optional `zones`,
   so a definition bound to it must declare it.
+- **Wall dimensioning tables.** (#140) `opening-zone` takes `dimensions`:
+  rows from the openings a `source` selector picks to the nearest other
+  opening a `target` selector picks, or to the host's `top`, `bottom` or
+  `side`, along the face's `length` or `height`, with a `minimum`,
+  `maximum` or `fixed` distance, a `tolerance` and, for targets, `overlap`
+  across the direction. Misses are graded findings relating the target.
+  **Breaking:** the capability gains the optional `dimensions`, so a
+  definition bound to it must declare it.
 - **L and non-uniform L hosts.** (#140) `opening-zone` reads an L section
   as its polygon: a parameterised one with straight edges, or a free
   outline of six axis-parallel vertices with legs of any thickness. Its web

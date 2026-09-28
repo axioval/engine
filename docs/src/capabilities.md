@@ -1663,6 +1663,7 @@ A row stating a dimension the family does not have, or one the source leaves uns
 | `zone` | `string` | `section` (default: the host's whole height) or `web`: between the flanges of an I, T, U, C or Z section, or beside the ledge of an L, across `profile-y`. |
 | `opening_spacing` | `quantity` | The clear distance the opening must keep from every other opening of the same host, in the face. |
 | `zones` | `table` | Allowed zones, columns below: the opening must lie inside at least one row's zone. |
+| `dimensions` | `table` | The dimensioning table, columns below: distances from an opening to the nearest other opening of the host, or to the host's top, bottom or side. |
 | `support_path` | `stringList` | Relationship steps from the host to its supports and connecting members. With IFC, `IfcRelConnectsElements:either`, which takes in its subtype `IfcRelConnectsPathElements`. |
 | `support_gap` | `quantity` | A length: the `support_selector` objects that come this close to the host in space (through the proximity service) are its supports too. |
 | `support_selector` | `selector` | The objects that may be supports (every object by default). |
@@ -1679,6 +1680,22 @@ Each row of `zones` is one allowed zone: the host's face less an inset from both
 | `top_fraction`, `top_of`, `top_minimum` | `number`, `string`, `quantity` | The inset from the top, alike. |
 
 The span is the host's length along `length_axis`, the depth its height along `height_axis` (for a free outline, of the box around it).
+
+Each row of `dimensions` applies to the openings its `source` selects and bounds one distance along a face axis, `length` or `height`:
+
+| Column | Kind | Meaning |
+|---|---|---|
+| `name` | `string` | The row's name in findings; `dimension row 2` for the second row without one. |
+| `source` | `selector` | Required. The openings (doors, windows, openings) measured from. |
+| `target` | `selector` | The other openings of the same host measured to; the distance is to the nearest. |
+| `edge` | `string` | Instead of a target: the host's `top` or `bottom` (along the height), or its nearer `side` (along the length). |
+| `direction` | `string` | `length` or `height`, along which a distance to a target is measured: the gap between the two openings' extents. Required with `target`; with `edge` it must match the edge. |
+| `minimum`, `maximum` | `quantity` | Bounds on the distance. |
+| `fixed` | `quantity` | The distance required, instead of `minimum` and `maximum`. |
+| `tolerance` | `quantity` | How far the distance may miss its bound (0 m by default). |
+| `overlap` | `boolean` | With `target`: only targets overlapping the opening across the direction count, such as windows side by side. |
+
+A row whose opening's host holds no target is not judged. The nearest sure target bounds the distance from above and every target of undecided selection from below; an opening whose place is unknown may be nearer still, so a minimum surely missed by a sure target stands beside it, and otherwise it leaves the row not evaluated. A distance to an edge across a free outline is known only from below for an opening not extruded straight through: it can miss a maximum, never a minimum. Each miss is a finding relating the host and the target (`opening is 0.2 m from the side of its host #10 along its length; at least 0.3 m required (dimension `window to side`)`), graded against the bound it misses. An opening whose `source` selection is undecided is not evaluated for that row.
 
 Every opening is checked to lie within its host's face along both axes (`opening lies partly outside its host #10: along its length it spans 1.7 m to 2.7 m, the host -2.5 m to 2.5 m`); each declared zone is its own finding. Findings relate the host, and a spacing finding the openings too close.
 

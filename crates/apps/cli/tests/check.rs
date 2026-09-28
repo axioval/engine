@@ -7944,6 +7944,44 @@ fn wall_openings_are_checked_against_the_walls_outline_and_each_other() {
 }
 
 #[test]
+fn wall_openings_are_checked_against_the_dimensioning_table() {
+    let (output, result) = opening_zone(
+        "opening-zone-dimensions",
+        "wall",
+        json!({
+            "length_axis": {"type": "string", "value": "profile-x"},
+            "height_axis": {"type": "string", "value": "extrusion"},
+            "dimensions": {"type": "table", "value": [
+                {"name": {"type": "string", "value": "window to side"},
+                 "source": {"type": "selector", "value": entity("opening")},
+                 "edge": {"type": "string", "value": "side"},
+                 "minimum": {"type": "quantity", "value": 1.0, "unit": "m"}},
+            ]},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#200".to_owned(),
+                "opening is 0.9 m from the side of its host #10 along its length; at least 1 m \
+                 required (dimension `window to side`)"
+                    .to_owned()
+            ),
+            (
+                "#300".to_owned(),
+                "opening lies partly outside its host #10: along its length it spans 1.7 m to \
+                 2.7 m, the host -2.5 m to 2.5 m"
+                    .to_owned()
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
 fn beam_holes_are_checked_against_the_web_zone_and_the_beams_ends() {
     let (output, result) = opening_zone(
         "opening-zone-beam",

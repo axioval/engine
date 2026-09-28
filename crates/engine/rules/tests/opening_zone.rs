@@ -1444,3 +1444,178 @@ fn holes_through_the_web_of_an_l_beam_keep_clear_of_its_ledge() {
         [("web".into(), NotEvaluatedReason::IncompleteEvidence)]
     );
 }
+
+/// Wall `w`, 5 m long (x 0 to 5) and 3 m high, with 1 m x 1.2 m windows
+/// `w1` (x 0.2 to 1.2) and `w2` (x 1.5 to 2.5), 0.9 m to 2.1 m up, and a
+/// 1 m x 2.1 m door `d1` (x 3.5 to 4.5) on the floor.
+fn dimensioned_wall() -> Model {
+    let model = extrusion(
+        Model::default(),
+        "w",
+        "wall",
+        [0.0; 3],
+        UPRIGHT,
+        3.0,
+        "rectangle",
+        &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+    );
+    let opening = |model: Model, local: &str, kind: &str, x: f64, z: f64, height: f64| {
+        extrusion(
+            model,
+            local,
+            kind,
+            [x, 0.1, z],
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+            0.2,
+            "rectangle",
+            &[("XDim", 1.0), ("YDim", height)],
+        )
+        .edge("voids", "w", local)
+    };
+    let model = opening(model, "w1", "window", 0.7, 1.5, 1.2);
+    let model = opening(model, "w2", "window", 2.0, 1.5, 1.2);
+    opening(model, "d1", "door", 4.0, 1.05, 2.1)
+}
+
+fn dimensioned(rows: Vec<Vec<(&str, ParameterValue)>>) -> CapabilityEvaluation {
+    dimensioned_wall().evaluate(
+        &OpeningZone,
+        &rule(
+            ID,
+            Selector::All,
+            vec![
+                ("host_path", strings(&["voids:backward"])),
+                ("host_selector", selector(kind("wall"))),
+                ("length_axis", string("profile-x")),
+                ("height_axis", string("extrusion")),
+                ("dimensions", table(rows)),
+            ],
+        ),
+    )
+}
+
+/// The dimensioning table bounds distances from a door, window or opening
+/// to the nearest other one of the wall, or to its top, bottom or side.
+#[test]
+fn a_window_too_near_the_wall_side_fails_the_dimensioning_table() {
+    let windows = || selector(kind("window"));
+    let doors = || selector(kind("door"));
+    let evaluation = dimensioned(vec![
+        vec![
+            ("name", string("window to side")),
+            ("source", windows()),
+            ("edge", string("side")),
+            ("minimum", metres(0.3)),
+        ],
+        vec![
+            ("source", windows()),
+            ("target", windows()),
+            ("direction", string("length")),
+            ("minimum", metres(0.5)),
+            ("overlap", common::boolean(true)),
+        ],
+        vec![
+            ("source", doors()),
+            ("edge", string("bottom")),
+            ("fixed", metres(0.0)),
+        ],
+        vec![
+            ("source", doors()),
+            ("target", windows()),
+            ("direction", string("length")),
+            ("maximum", metres(0.8)),
+        ],
+        vec![
+            ("source", windows()),
+            ("edge", string("top")),
+            ("fixed", metres(0.85)),
+            ("tolerance", metres(0.05)),
+        ],
+    ]);
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "d1".into(),
+                "opening is 1 m from opening w2 along the length of its host w; at most 0.8 m \
+                 allowed (dimension row 4)"
+                    .into()
+            ),
+            (
+                "w1".into(),
+                "opening is 0.2 m from the side of its host w along its length; at least 0.3 m \
+                 required (dimension `window to side`)"
+                    .into()
+            ),
+            (
+                "w1".into(),
+                "opening is 0.3 m from opening w2 along the length of its host w; at least \
+                 0.5 m required (dimension row 2)"
+                    .into()
+            ),
+            (
+                "w2".into(),
+                "opening is 0.3 m from opening w1 along the length of its host w; at least \
+                 0.5 m required (dimension row 2)"
+                    .into()
+            ),
+        ]
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    let (lower, upper) = deviation_of(&evaluation, "opening is 0.2 m from the side");
+    assert!((lower - 1.0 / 3.0).abs() < 1e-9 && (upper - 1.0 / 3.0).abs() < 1e-9);
+    // Findings relate the host and the opening measured to.
+    let door = evaluation
+        .findings()
+        .iter()
+        .find(|finding| finding.message.contains("at most 0.8 m"))
+        .unwrap();
+    assert!(door.related.iter().any(|id| id.local_id == "w2"));
+    assert!(door.related.iter().any(|id| id.local_id == "w"));
+}
+
+#[test]
+fn a_fixed_dimension_is_found_off_its_tolerance_and_bad_rows_are_refused() {
+    let windows = || selector(kind("window"));
+    let doors = || selector(kind("door"));
+    // A fixed distance off by more than its tolerance is found either way.
+    let evaluation = dimensioned(vec![vec![
+        ("source", windows()),
+        ("edge", string("top")),
+        ("fixed", metres(0.8)),
+        ("tolerance", metres(0.05)),
+    ]]);
+    assert_eq!(sorted(&evaluation).len(), 2);
+
+    // A target needs a direction; an edge takes no overlap.
+    for bad in [
+        vec![
+            ("source", windows()),
+            ("target", doors()),
+            ("minimum", metres(0.1)),
+        ],
+        vec![
+            ("source", windows()),
+            ("edge", string("top")),
+            ("overlap", common::boolean(true)),
+            ("minimum", metres(0.1)),
+        ],
+        vec![("source", windows()), ("edge", string("top"))],
+        vec![
+            ("source", windows()),
+            ("edge", string("top")),
+            ("direction", string("length")),
+            ("minimum", metres(0.1)),
+        ],
+    ] {
+        let evaluation = dimensioned(vec![bad]);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}

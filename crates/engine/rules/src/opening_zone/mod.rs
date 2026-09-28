@@ -16,6 +16,7 @@ use crate::level_spacing::metres;
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
+mod dimensions;
 pub(crate) mod face;
 mod outline;
 mod supports;
@@ -35,7 +36,9 @@ use supports::{Opening, SupportConfig, Supports};
 /// and `support_clearance` clear of their footprints in the face, and
 /// inside one of the allowed `zones`: rows of insets from the ends, the
 /// bottom and the top, each the larger of a fraction of the host's span or
-/// depth and a minimum length.
+/// depth and a minimum length; and the distances the `dimensions` table
+/// bounds, from an opening to the nearest other opening of the host or to
+/// one of its edges.
 ///
 /// The host is what `host_path` reaches from the opening among the
 /// `host_selector` objects (with IFC, `IfcRelVoidsElement` backward). An
@@ -102,6 +105,7 @@ struct Config<'a> {
     spacing: Option<f64>,
     supports: Option<SupportConfig<'a>>,
     zones: Vec<zones::Zone>,
+    dimensions: Vec<dimensions::Dimension<'a>>,
 }
 
 pub(crate) fn distance(
@@ -169,6 +173,7 @@ impl<'a> Config<'a> {
             spacing: distance(&parameters, "opening_spacing")?,
             supports: SupportConfig::parse(&parameters)?,
             zones: zones::parse(&parameters)?,
+            dimensions: dimensions::parse(&parameters)?,
         })
     }
 }
@@ -191,6 +196,7 @@ impl RuleCapability for OpeningZone {
             ParameterDescriptor::optional("zone", ParameterType::String),
             ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
             ParameterDescriptor::optional("zones", ParameterType::Table(zones::COLUMNS)),
+            ParameterDescriptor::optional("dimensions", ParameterType::Table(dimensions::COLUMNS)),
         ];
         parameters.extend(SupportConfig::parameters());
         parameters
@@ -217,7 +223,9 @@ impl RuleCapability for OpeningZone {
             .supports
             .as_ref()
             .map(|supports| Population::of(context, supports.selector));
+        let dimension_selections = dimensions::Selections::of(context, &config.dimensions);
         let mut judge = Judge {
+            dimensions: dimension_selections,
             context,
             rule,
             config: &config,
@@ -287,6 +295,8 @@ struct Judge<'r, 'c> {
     bodies: BTreeMap<ObjectId, Result<Rc<Host>, Unavailable>>,
     placed: BTreeMap<ObjectId, Placement>,
     supports: Option<Supports<'r, 'c>>,
+    /// The selections of each row of the dimensioning table.
+    dimensions: dimensions::Selections,
 }
 
 /// The hosts `traversal` reaches from `object` among `hosts`, none when it
@@ -493,6 +503,9 @@ impl Judge<'_, '_> {
             && let Err((reason, message)) = self.zones(&host, placed, rect, &mut findings)
         {
             evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
+        }
+        if !outside_length && !outside_height && !crosses_outline {
+            self.dimensions(opening, placed, &host, rect, evaluation);
         }
         if let Some(supports) = &self.supports {
             let face = Opening {

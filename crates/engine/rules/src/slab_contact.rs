@@ -59,7 +59,7 @@ struct StoreySkip<'a> {
     top: bool,
     bottom: bool,
     storeys: &'a Selector,
-    traversal: Traversal<'a>,
+    traversal: Traversal,
 }
 
 /// Every selected storey's elevation, and the lowest and highest per source.

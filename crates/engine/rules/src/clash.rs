@@ -530,7 +530,7 @@ type Reached = Result<BTreeSet<ObjectId>, Unavailable>;
 /// every walk and layer read cached per object.
 pub(crate) struct Exclusions<'r> {
     context: &'r RuleContext<'r>,
-    paths: Vec<Traversal<'r>>,
+    paths: Vec<Traversal>,
     /// Reached targets meet when they state the same value of this property.
     target_property: Option<PropertyRef<'r>>,
     same_layer: bool,

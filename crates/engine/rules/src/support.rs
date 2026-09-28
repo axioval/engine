@@ -2,11 +2,9 @@
 //! the semantic capabilities.
 
 use axioval_engine::{
-    AbsentEndPolicy, CompiledRule, DERIVED_RELATIONSHIP_PREFIX, NotEvaluatedReason,
-    ParameterDescriptor, ParameterType, PropertyResolution, PropertyResolutionServiceHandle,
-    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, RuleContext, SemanticRelationship, SessionSources,
-    TraversalDirection,
+    AbsentEndPolicy, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    PathSegment, PropertyResolution, PropertyResolutionServiceHandle, RelationshipSelectionError,
+    RelationshipSelectionServiceHandle, RuleContext, SessionSources,
 };
 use axioval_ir::contract::{CategoryLevel, ParameterValue, Selector};
 use axioval_ir::{
@@ -240,38 +238,30 @@ pub(crate) fn resolve(
     }
 }
 
-/// One step of a relationship path.
-pub(crate) struct Step<'a> {
-    relationship: &'a str,
-    direction: TraversalDirection,
-    /// A trailing `+`: the step is taken one or more times, reaching every
-    /// object along the chain of the relationship.
-    chain: bool,
-}
-
 /// A declared relationship traversal from each anchor.
 ///
 /// Either one `relationship` (with `direction` and `follow_chain`) or a
-/// `path` of steps, each `Relationship` or `Relationship:direction`, walked
-/// one after another: `IfcRelVoidsElement:forward` then
-/// `IfcRelFillsElement:forward` goes from a wall through its openings to the
-/// doors and windows filling them. A step ending in `+` is taken one or more
-/// times: `IfcRelAggregates:backward+` reaches every whole above an object.
-/// Intermediate objects may be anything; the objects the last step reaches
-/// are restricted to the caller's universe.
-pub(crate) struct Traversal<'a> {
+/// `path` of steps in the grammar [`PathSegment`] parses, walked one after
+/// another: `IfcRelVoidsElement:forward` then `IfcRelFillsElement:forward`
+/// goes from a wall through its openings to the doors and windows filling
+/// them. A step ending in `+` is taken one or more times:
+/// `IfcRelAggregates:backward+` reaches every whole above an object, and
+/// `IfcRelFillsElement|IfcRelVoidsElement:backward+` every element above one
+/// through its openings. Intermediate objects may be anything; the objects
+/// the last step reaches are restricted to the caller's universe.
+pub(crate) struct Traversal {
     /// How messages name the traversal: the relationship, or the steps.
     pub(crate) relationship: String,
-    steps: Vec<Step<'a>>,
+    steps: Vec<PathSegment>,
     follow_chain: bool,
     absent_ends: AbsentEndPolicy,
 }
 
-impl<'a> Parameters<'a> {
+impl Parameters<'_> {
     /// An optional relationship traversal declared by the `relationship`,
     /// `direction`, `follow_chain`, `path` and `skip_absent_relationship_ends`
     /// parameters.
-    pub(crate) fn traversal(&self) -> Result<Option<Traversal<'a>>, Unavailable> {
+    pub(crate) fn traversal(&self) -> Result<Option<Traversal>, Unavailable> {
         let relationship = self.string("relationship")?;
         let path = self.strings("path")?;
         let follow_chain = self.boolean("follow_chain")?.unwrap_or(false);
@@ -280,11 +270,10 @@ impl<'a> Parameters<'a> {
             (Some(_), Some(_)) => {
                 return Err(invalid("declare either `relationship` or `path`, not both"));
             }
-            (Some(relationship), None) => vec![Step {
+            (Some(relationship), None) => vec![single_step(
                 relationship,
-                direction: direction(self.string("direction")?)?,
-                chain: false,
-            }],
+                direction(self.string("direction")?)?,
+            )?],
             (None, Some(path)) => {
                 if self.string("direction")?.is_some() || follow_chain {
                     return Err(invalid(
@@ -303,56 +292,48 @@ impl<'a> Parameters<'a> {
     }
 }
 
-fn direction(value: Option<&str>) -> Result<TraversalDirection, Unavailable> {
+fn direction(value: Option<&str>) -> Result<&'static str, Unavailable> {
     match value {
-        None | Some("forward") => Ok(TraversalDirection::Forward),
-        Some("backward") => Ok(TraversalDirection::Backward),
-        Some("either") => Ok(TraversalDirection::Either),
+        None | Some("forward") => Ok("forward"),
+        Some("backward") => Ok("backward"),
+        Some("either") => Ok("either"),
         Some(other) => Err(invalid(format!("direction `{other}` is unsupported"))),
     }
 }
 
-/// The steps of a `path`, each `Relationship` or `Relationship:direction`,
-/// optionally followed by `+` to take the step one or more times.
-///
-/// A derived identity (`axioval:derived.…`) holds a colon of its own, so
-/// only a colon followed by a direction word ends it.
-fn path_steps(path: &[String]) -> Result<Vec<Step<'_>>, Unavailable> {
+/// The one step a `relationship` parameter declares, its identity taken
+/// verbatim: alternatives belong in a `path` step.
+fn single_step(relationship: &str, direction: &str) -> Result<PathSegment, Unavailable> {
+    if relationship.contains('|') {
+        return Err(invalid(
+            "`relationship` names one relationship; alternatives belong in a `path` step",
+        ));
+    }
+    let step = PathSegment::parse(&format!("{relationship}:{direction}")).map_err(invalid)?;
+    match step.relationships() {
+        [parsed] if parsed.as_str() == relationship.trim() => Ok(step),
+        _ => Err(invalid(format!(
+            "`relationship` `{relationship}` is no single relationship identity"
+        ))),
+    }
+}
+
+/// The steps of a `path`, each in the grammar [`PathSegment`] parses.
+fn path_steps(path: &[String]) -> Result<Vec<PathSegment>, Unavailable> {
     if path.is_empty() {
         return Err(invalid("`path` has no steps"));
     }
     path.iter()
-        .map(|step| {
-            let trimmed = step.trim();
-            let (step, chain) = match trimmed.strip_suffix('+') {
-                Some(stepped) => (stepped, true),
-                None => (trimmed, false),
-            };
-            let derived = step.starts_with(DERIVED_RELATIONSHIP_PREFIX);
-            let (relationship, stated) = match step.rsplit_once(':') {
-                Some((_, stated))
-                    if derived && !matches!(stated.trim(), "forward" | "backward" | "either") =>
-                {
-                    (step, None)
-                }
-                Some((relationship, stated)) => (relationship, Some(stated)),
-                None => (step, None),
-            };
-            Ok(Step {
-                relationship: relationship.trim(),
-                direction: direction(stated.map(str::trim))?,
-                chain,
-            })
-        })
+        .map(|step| PathSegment::parse(step).map_err(invalid))
         .collect()
 }
 
-impl<'a> Traversal<'a> {
-    fn new(steps: Vec<Step<'a>>, follow_chain: bool, absent_ends: AbsentEndPolicy) -> Self {
+impl Traversal {
+    fn new(steps: Vec<PathSegment>, follow_chain: bool, absent_ends: AbsentEndPolicy) -> Self {
         Self {
             relationship: steps
                 .iter()
-                .map(|step| step.relationship)
+                .map(PathSegment::shown)
                 .collect::<Vec<_>>()
                 .join(" then "),
             steps,
@@ -363,7 +344,7 @@ impl<'a> Traversal<'a> {
 
     /// The `path` of a `related` selector. A relationship end the source
     /// cannot resolve refuses the step rather than being skipped.
-    pub(crate) fn path(path: &'a [String]) -> Result<Self, Unavailable> {
+    pub(crate) fn path(path: &[String]) -> Result<Self, Unavailable> {
         Ok(Self::new(path_steps(path)?, false, AbsentEndPolicy::Refuse))
     }
 
@@ -371,20 +352,7 @@ impl<'a> Traversal<'a> {
     /// other direction, so it leads from where this one ends to where it
     /// starts.
     pub(crate) fn reversed(&self) -> Self {
-        let steps = self
-            .steps
-            .iter()
-            .rev()
-            .map(|step| Step {
-                relationship: step.relationship,
-                direction: match step.direction {
-                    TraversalDirection::Forward => TraversalDirection::Backward,
-                    TraversalDirection::Backward => TraversalDirection::Forward,
-                    TraversalDirection::Either => TraversalDirection::Either,
-                },
-                chain: step.chain,
-            })
-            .collect();
+        let steps = self.steps.iter().rev().map(PathSegment::reversed).collect();
         Self::new(steps, self.follow_chain, self.absent_ends)
     }
 }
@@ -400,51 +368,37 @@ pub(crate) fn traversal_parameters() -> Vec<ParameterDescriptor> {
     ]
 }
 
-impl Traversal<'_> {
+impl Traversal {
     /// Whether the declaration asks to follow chains of one relationship.
     pub(crate) fn follows_chain(&self) -> bool {
         self.follow_chain
     }
 
-    /// Each step's relationship and direction, in order.
-    pub(crate) fn steps(&self) -> impl Iterator<Item = (&str, TraversalDirection)> {
-        self.steps
-            .iter()
-            .map(|step| (step.relationship, step.direction))
+    /// The steps, in order.
+    pub(crate) fn steps(&self) -> &[PathSegment] {
+        &self.steps
     }
 
-    /// Objects of `scope` one `step` away from `from`, with the service's evidence.
+    /// Objects of `scope` one `step` away from `from` (with `chain`, one
+    /// or more), with the service's evidence.
     fn step(
         &self,
         service: &RelationshipSelectionServiceHandle,
-        step: &Step<'_>,
+        step: &PathSegment,
         from: &ObjectId,
-        scope: &[&Object],
-        follow_chain: bool,
-    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
-        let relationship = SemanticRelationship::try_new(step.relationship)
-            .map_err(|error| invalid(error.to_string()))?;
-        let request = RelationshipSelectionRequest::try_new(
-            from.clone(),
-            scope.iter().map(|object| object.id.clone()).collect(),
-            RelationshipQuery::Related {
-                relationship,
-                direction: step.direction,
-                follow_chain,
-            },
-        )
-        .map_err(|error| invalid(error.to_string()))?
-        .with_absent_ends(self.absent_ends);
-        let selection = service.select(&request).map_err(|error| match error {
-            RelationshipSelectionError::Unavailable(message) => {
-                (NotEvaluatedReason::BackendUnavailable, message)
-            }
-            other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
-        })?;
-        Ok((
-            selection.candidates().to_vec(),
-            selection.evidence().to_vec(),
-        ))
+        everything: &[ObjectId],
+        scope: &[ObjectId],
+        chain: bool,
+    ) -> Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable> {
+        step.walk(service, from, everything, scope, chain, self.absent_ends)
+            .map_err(|error| match error {
+                RelationshipSelectionError::Unavailable(message) => {
+                    (NotEvaluatedReason::BackendUnavailable, message)
+                }
+                RelationshipSelectionError::InvalidRequest
+                | RelationshipSelectionError::DuplicateCandidate => invalid(error.to_string()),
+                other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
+            })
     }
 
     /// Objects of `universe` related to `anchor`, with the completeness evidence.
@@ -455,16 +409,21 @@ impl Traversal<'_> {
         universe: &[&Object],
     ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
         let service = relationship_service(context)?;
-        let everything: Vec<&Object> = context.project.objects().collect();
+        let everything: Vec<ObjectId> = context
+            .project
+            .objects()
+            .map(|object| object.id.clone())
+            .collect();
+        let universe: Vec<ObjectId> = universe.iter().map(|object| object.id.clone()).collect();
         let mut frontier = vec![anchor.clone()];
         let mut evidence = Vec::new();
         for (index, step) in self.steps.iter().enumerate() {
             let last = index + 1 == self.steps.len();
-            let scope = if last { universe } else { &everything[..] };
-            let mut reached = std::collections::BTreeSet::new();
+            let scope = if last { &universe } else { &everything };
+            let mut reached = BTreeSet::new();
             for from in &frontier {
-                let chain = self.follow_chain || step.chain;
-                let (found, cited) = self.step(service, step, from, scope, chain)?;
+                let chain = self.follow_chain || step.chain();
+                let (found, cited) = self.step(service, step, from, &everything, scope, chain)?;
                 reached.extend(found);
                 evidence.extend(cited);
             }
@@ -486,17 +445,22 @@ impl Traversal<'_> {
         &self,
         context: &RuleContext<'_>,
         anchor: &ObjectId,
-        containers: &std::collections::BTreeSet<ObjectId>,
-    ) -> Result<(std::collections::BTreeSet<ObjectId>, Vec<Evidence>), Unavailable> {
+        containers: &BTreeSet<ObjectId>,
+    ) -> Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable> {
         let service = relationship_service(context)?;
-        let everything: Vec<&Object> = context.project.objects().collect();
-        let mut found = std::collections::BTreeSet::new();
-        let mut seen = std::collections::BTreeSet::from([anchor.clone()]);
+        let everything: Vec<ObjectId> = context
+            .project
+            .objects()
+            .map(|object| object.id.clone())
+            .collect();
+        let mut found = BTreeSet::new();
+        let mut seen = BTreeSet::from([anchor.clone()]);
         let mut frontier = vec![anchor.clone()];
         let mut evidence = Vec::new();
         while let Some(current) = frontier.pop() {
             for step in &self.steps {
-                let (reached, cited) = self.step(service, step, &current, &everything, false)?;
+                let (reached, cited) =
+                    self.step(service, step, &current, &everything, &everything, false)?;
                 evidence.extend(cited);
                 for object in reached {
                     if containers.contains(&object) {
@@ -720,7 +684,7 @@ pub(crate) fn category_headings(
 /// group of everything in the source that reaches nothing.
 pub(crate) fn scope_key(
     context: &RuleContext<'_>,
-    traversal: Option<&Traversal<'_>>,
+    traversal: Option<&Traversal>,
     across_sources: bool,
     object: &Object,
 ) -> Result<(String, Vec<Evidence>), Unavailable> {

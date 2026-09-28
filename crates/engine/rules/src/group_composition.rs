@@ -319,7 +319,7 @@ struct Declaration<'a> {
     report_absent: bool,
     members: &'a Selector,
     ungrouped: Option<&'a Selector>,
-    traversal: Traversal<'a>,
+    traversal: Traversal,
 }
 
 impl<'a> Declaration<'a> {

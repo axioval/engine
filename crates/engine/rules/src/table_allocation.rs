@@ -513,7 +513,7 @@ struct Declaration<'a> {
     each: bool,
     anchors: Option<&'a axioval_ir::contract::Selector>,
     anchor_key: Option<PropertyRef<'a>>,
-    traversal: Option<Traversal<'a>>,
+    traversal: Option<Traversal>,
     across_sources: bool,
 }
 

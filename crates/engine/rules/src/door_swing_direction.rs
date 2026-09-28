@@ -39,7 +39,7 @@ pub struct DoorSwing;
 const ID: &str = "axioval:capability.door-swing";
 
 struct Config<'a> {
-    spaces: Traversal<'a>,
+    spaces: Traversal,
     into: Option<&'a Selector>,
     not_into: Option<&'a Selector>,
 }

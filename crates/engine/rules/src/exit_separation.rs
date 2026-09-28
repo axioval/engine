@@ -94,7 +94,7 @@ struct FlagSource<'a> {
 }
 
 impl FlagSource<'_> {
-    fn traversal(&self) -> Option<Traversal<'_>> {
+    fn traversal(&self) -> Option<Traversal> {
         self.path
             .as_ref()
             .map(|path| Traversal::path(path).expect("the path was validated when it was declared"))
@@ -196,7 +196,7 @@ fn flag<'a>(parameters: &Parameters<'a>) -> Result<Option<Flag<'a>>, Unavailable
 }
 
 struct Declaration<'a> {
-    exits: Traversal<'a>,
+    exits: Traversal,
     exit_selector: &'a Selector,
     fraction: f64,
     flag: Option<Flag<'a>>,

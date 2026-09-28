@@ -53,10 +53,10 @@ pub struct PropertyComparison;
 enum Mode<'a> {
     Checked,
     Shared(&'a str, AbsentEndPolicy),
-    Related(Traversal<'a>),
+    Related(Traversal),
     /// Candidates sharing a nearest container with the checked object.
     SameContainer {
-        traversal: Traversal<'a>,
+        traversal: Traversal,
         containers: &'a Selector,
         /// Containers of other sources matched as one level
         /// (`axioval:derived.same-level`) by a property, when declared.

@@ -78,6 +78,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
   `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
   gives way to `matchers`.
+- **Relationship alternation in path steps.** (Refs #116) A step of a
+  `related` selector, a traversal `path` or a measured
+  `bottom_above_level` path may name several relationships separated by
+  `|`, with one direction after the last applying to all:
+  `IfcRelFillsElement|IfcRelVoidsElement:backward+`. The step takes any of
+  them; with `+` it mixes them along the chain, hopping between project
+  objects. `PathSegment` in `axioval-engine` is the one parser all three
+  share; an empty or repeated alternative, or a direction inside one, is
+  an invalid declaration. The staging IDS importer translates a part-of
+  facet without a relation (all six relations IDS names) and through
+  `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT` with it.
+
 - **IDS property, classification, material and attribute facets in the
   applicability, and prohibited values.** (Refs #116) The staging IDS
   importer checks a facet no selector states exactly with an auxiliary

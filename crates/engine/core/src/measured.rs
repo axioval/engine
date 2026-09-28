@@ -28,6 +28,7 @@ use crate::boundary_coverage::{
 use crate::concepts::TypeHierarchyServiceHandle;
 use crate::free_space::MetricDirection;
 use crate::object_frame::ObjectFrameServiceHandle;
+use crate::path::PathSegment;
 use crate::plan_area::PlanAreaServiceHandle;
 use crate::properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
@@ -35,19 +36,9 @@ use crate::properties::{
 };
 use crate::proximity::ProximityServiceHandle;
 use crate::relationships::{
-    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
+    AbsentEndPolicy, RelationshipSelectionError, RelationshipSelectionServiceHandle,
 };
 use crate::vertical_extent::VerticalExtentServiceHandle;
-
-/// One step of a `bottom_above_level` path, as a `related` selector writes
-/// it: `Relationship[:forward|backward|either][+]`.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Step {
-    relationship: String,
-    direction: TraversalDirection,
-    chain: bool,
-}
 
 /// A measured name, parsed.
 #[derive(Clone, Debug, PartialEq)]
@@ -55,7 +46,7 @@ pub(crate) enum MeasuredName {
     /// A name without parameters.
     Plain(&'static str),
     /// The bottom above the one level the path reaches.
-    BottomAboveLevel(Vec<Step>),
+    BottomAboveLevel(Vec<PathSegment>),
     /// The summed area of the space boundaries against elements of `kind`.
     BoundaryArea { kind: String, plane: f64 },
 }
@@ -83,7 +74,10 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
     let parsed = match base.as_str() {
         MEASURED_BOTTOM_ABOVE_LEVEL => {
             let path = take("path").ok_or("`bottom_above_level` needs `path`")?;
-            let steps = path.split(',').map(step).collect::<Result<Vec<_>, _>>()?;
+            let steps = path
+                .split(',')
+                .map(PathSegment::parse)
+                .collect::<Result<Vec<_>, _>>()?;
             MeasuredName::BottomAboveLevel(steps)
         }
         MEASURED_BOUNDARY_AREA => {
@@ -111,28 +105,6 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         Some(key) => Err(format!("`{base}` takes no parameter `{key}`")),
         None => Ok(parsed),
     }
-}
-
-fn step(text: &str) -> Result<Step, String> {
-    let text = text.trim();
-    let (text, chain) = match text.strip_suffix('+') {
-        Some(rest) => (rest, true),
-        None => (text, false),
-    };
-    let (relationship, direction) = match text.rsplit_once(':') {
-        Some((relationship, "forward")) => (relationship, TraversalDirection::Forward),
-        Some((relationship, "backward")) => (relationship, TraversalDirection::Backward),
-        Some((relationship, "either")) => (relationship, TraversalDirection::Either),
-        _ => (text, TraversalDirection::Forward),
-    };
-    if relationship.is_empty() {
-        return Err(format!("path step `{text}` names no relationship"));
-    }
-    Ok(Step {
-        relationship: relationship.to_owned(),
-        direction,
-        chain,
-    })
 }
 
 /// A measured answer before it becomes a property.
@@ -388,7 +360,7 @@ impl Measures {
     /// exact absence; levels at different elevations are a conflict.
     fn bottom_above_level(
         &self,
-        steps: &[Step],
+        steps: &[PathSegment],
         object: &ObjectId,
     ) -> Result<Answer, PropertyResolutionError> {
         let name = MEASURED_BOTTOM_ABOVE_LEVEL;
@@ -400,30 +372,30 @@ impl Measures {
         let mut frontier = BTreeSet::from([object.clone()]);
         let mut cited: Vec<String> = Vec::new();
         for step in steps {
-            let relationship = SemanticRelationship::try_new(step.relationship.clone())
-                .map_err(|_| PropertyResolutionError::InvalidRequest)?;
             let mut reached = BTreeSet::new();
             for from in &frontier {
-                let request = RelationshipSelectionRequest::try_new(
-                    from.clone(),
-                    universe.clone(),
-                    RelationshipQuery::Related {
-                        relationship: relationship.clone(),
-                        direction: step.direction,
-                        follow_chain: step.chain,
-                    },
-                )
-                .map_err(|_| PropertyResolutionError::InvalidRequest)?;
-                let selection = service.select(&request).map_err(|error| match error {
-                    RelationshipSelectionError::Unavailable(message) => {
-                        Self::unavailable(name, object, &message)
-                    }
-                    other => PropertyResolutionError::Incomplete(format!(
-                        "`{MEASURED_SET}` value `{name}` of {object}: {other}"
-                    )),
-                })?;
-                cited.extend(selection.evidence().iter().map(|e| e.locator.clone()));
-                reached.extend(selection.candidates().iter().cloned());
+                let (found, evidence) = step
+                    .walk(
+                        service,
+                        from,
+                        &universe,
+                        &universe,
+                        step.chain(),
+                        AbsentEndPolicy::Refuse,
+                    )
+                    .map_err(|error| match error {
+                        RelationshipSelectionError::Unavailable(message) => {
+                            Self::unavailable(name, object, &message)
+                        }
+                        RelationshipSelectionError::InvalidRequest => {
+                            PropertyResolutionError::InvalidRequest
+                        }
+                        other => PropertyResolutionError::Incomplete(format!(
+                            "`{MEASURED_SET}` value `{name}` of {object}: {other}"
+                        )),
+                    })?;
+                cited.extend(evidence.iter().map(|e| e.locator.clone()));
+                reached.extend(found);
             }
             reached.remove(object);
             frontier = reached;
@@ -534,11 +506,9 @@ mod tests {
         );
         assert_eq!(
             parse("bottom_above_level;path=IfcRelContainedInSpatialStructure:backward"),
-            Ok(MeasuredName::BottomAboveLevel(vec![Step {
-                relationship: "IfcRelContainedInSpatialStructure".into(),
-                direction: TraversalDirection::Backward,
-                chain: false,
-            }]))
+            Ok(MeasuredName::BottomAboveLevel(vec![
+                PathSegment::parse("IfcRelContainedInSpatialStructure:backward").unwrap()
+            ]))
         );
         assert_eq!(
             parse("boundary_area;kind=IfcWall;plane=0.01"),

@@ -52,7 +52,7 @@ pub(crate) struct Tally {
 /// every member of the anchor's own source when there is none.
 pub(crate) fn tally(
     context: &RuleContext<'_>,
-    traversal: Option<&Traversal<'_>>,
+    traversal: Option<&Traversal>,
     anchor: &Object,
     population: &Population,
 ) -> Result<Tally, Unavailable> {
@@ -97,7 +97,7 @@ pub(crate) fn tally(
 /// An anchor whose ends cannot be read, or reach nothing, is unavailable.
 pub(crate) fn same_ends(
     context: &RuleContext<'_>,
-    ends: &Traversal<'_>,
+    ends: &Traversal,
     anchor: &Object,
     tally: Tally,
 ) -> Result<Tally, Unavailable> {
@@ -142,7 +142,7 @@ pub(crate) fn same_ends(
     Ok(kept)
 }
 
-pub(crate) fn relation_text(traversal: Option<&Traversal<'_>>) -> String {
+pub(crate) fn relation_text(traversal: Option<&Traversal>) -> String {
     traversal.map_or_else(
         || "in the same source".to_owned(),
         |traversal| format!("via {}", traversal.relationship),

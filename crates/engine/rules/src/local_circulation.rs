@@ -100,11 +100,11 @@ struct EndArea {
 
 struct Declaration<'a> {
     components: &'a Selector,
-    spaces: Traversal<'a>,
+    spaces: Traversal,
     access: AccessDeclaration<'a>,
     obstacles: Option<&'a Selector>,
     swings: Option<&'a Selector>,
-    merge: Option<Traversal<'a>>,
+    merge: Option<Traversal>,
     band_from: Option<f64>,
     exempt: Option<(&'a Selector, f64)>,
     partners: Option<&'a Selector>,

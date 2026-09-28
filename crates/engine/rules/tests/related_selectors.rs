@@ -237,3 +237,85 @@ fn a_malformed_path_is_an_invalid_declaration() {
         );
     }
 }
+
+#[test]
+fn a_step_may_take_any_of_several_relationships() {
+    // One hop through either relationship: a door reaches its opening, an
+    // opening its wall, never two hops.
+    let through = |subject: &str, step: &str| Selector::AllOf {
+        operands: vec![
+            kind(subject),
+            related(&[step], RelatedQuantifier::Any, kind("wall")),
+        ],
+    };
+    assert_eq!(
+        select(walls(), through("door", "fills|voids:backward")),
+        outcome(&[], &[])
+    );
+    assert_eq!(
+        select(walls(), through("opening", "fills|voids:backward")),
+        outcome(&["od1", "od2", "od3", "od4", "od5", "od6"], &[])
+    );
+    // A chain mixes them: door, opening, wall.
+    assert_eq!(
+        select(walls(), through("door", "fills|voids:backward+")),
+        outcome(&["d1", "d2", "d3", "d4", "d5", "d6"], &[])
+    );
+}
+
+#[test]
+fn a_chain_through_several_relationships_mixes_them_at_every_hop() {
+    // `b1` is nested in `a1`, which is contained in `s1`, which is part of
+    // `site`; no one relationship's chain reaches the site from `b1`.
+    let model = || {
+        Model::default()
+            .object("site", "site")
+            .object("s1", "storey")
+            .object("a1", "assembly")
+            .object("b1", "beam")
+            .object("b2", "beam")
+            .edge("aggregates", "site", "s1")
+            .edge("contains", "s1", "a1")
+            .edge("nests", "a1", "b1")
+            .edge("nests", "s1", "b2")
+    };
+    let on_site = |step: &str| Selector::AllOf {
+        operands: vec![
+            kind("beam"),
+            related(&[step], RelatedQuantifier::Any, kind("site")),
+        ],
+    };
+    assert_eq!(
+        select(model(), on_site("aggregates|contains|nests:backward+")),
+        outcome(&["b1", "b2"], &[])
+    );
+    // Without `nests` the chain never leaves either beam.
+    assert_eq!(
+        select(model(), on_site("aggregates|contains:backward+")),
+        outcome(&[], &[])
+    );
+    // A refused alternative leaves the object undecided, never unrelated.
+    assert_eq!(
+        select(model(), on_site("aggregates|hosts:backward+")),
+        outcome(&[], &[("b1", UNAVAILABLE), ("b2", UNAVAILABLE)])
+    );
+}
+
+#[test]
+fn a_malformed_alternation_is_an_invalid_declaration() {
+    for step in [
+        "voids|",
+        "voids||fills",
+        "voids|voids",
+        "voids:backward|fills",
+    ] {
+        let selector = related(&[step], RelatedQuantifier::Any, kind("door"));
+        let (chosen, undecided) = select(Model::default().object("w1", "wall"), selector);
+        assert!(chosen.is_empty(), "{step}");
+        assert_eq!(
+            undecided,
+            [("w1".to_owned(), NotEvaluatedReason::InvalidDeclaration)],
+            "{step}"
+        );
+    }
+}

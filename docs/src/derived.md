@@ -92,7 +92,7 @@ unknown concept.
   relationship places its objects on a level (an IFC element in its storey
   is `IfcRelContainedInSpatialStructure:backward`, a space
   `IfcRelAggregates:backward`). Steps are `,`-separated and written as a
-  `related` selector's steps (`Relationship[:forward|backward|either][+]`),
+  `related` selector's steps (`Relationship[|Relationship…][:forward|backward|either][+]`),
   walked one after another over the whole project. The level's elevation
   is its placement origin's `z`. No level reached is an exact absence (a
   loose object has no storey), several levels at different elevations are

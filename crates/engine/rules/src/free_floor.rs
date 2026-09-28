@@ -54,7 +54,7 @@ pub(crate) struct Options<'a> {
     /// The band obstacles count in; the shape's height without one.
     band: Option<ElevationBand>,
     /// The path from each space to the spaces searched with it.
-    merge: Option<Traversal<'a>>,
+    merge: Option<Traversal>,
     /// The doors whose swings are obstacles.
     swings: Option<&'a Selector>,
     /// The path from the entrances the shape must be reached by.

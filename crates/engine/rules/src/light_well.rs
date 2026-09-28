@@ -84,13 +84,13 @@ impl Requirement {
     }
 }
 
-struct Declaration<'a> {
-    members: Traversal<'a>,
+struct Declaration {
+    members: Traversal,
     rows: Vec<Requirement>,
     tolerance: f64,
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
+fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
     let parameters = Parameters(rule);
     let path = parameters
         .strings("member_path")?
@@ -192,7 +192,7 @@ impl RuleCapability for LightWell {
 
 fn judge_well(
     context: &RuleContext<'_>,
-    declared: &Declaration<'_>,
+    declared: &Declaration,
     well: &Object,
 ) -> Result<Judged, Unavailable> {
     let universe: Vec<&Object> = context.project.objects().collect();

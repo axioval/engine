@@ -112,7 +112,7 @@ struct Row<'a> {
 
 struct Declaration<'a> {
     rows: Vec<Row<'a>>,
-    storeys: Option<(Traversal<'a>, &'a Selector)>,
+    storeys: Option<(Traversal, &'a Selector)>,
     access: Option<AccessDeclaration<'a>>,
     profile: Option<MobilityProfile>,
     climbing: Option<Climbing<'a>>,
@@ -397,7 +397,7 @@ struct Judge<'r, 'c> {
     profile: Option<MobilityProfile>,
     /// The climb, the storeys, and whether the storey selection decided
     /// every object.
-    storeys: Option<(&'r Traversal<'r>, BTreeSet<ObjectId>, bool)>,
+    storeys: Option<(&'r Traversal, BTreeSet<ObjectId>, bool)>,
     index: Option<&'r AccessIndex>,
     targets: BTreeMap<(usize, ObjectId), Selection>,
     climbed: BTreeMap<ObjectId, Climb>,

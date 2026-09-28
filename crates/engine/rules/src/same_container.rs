@@ -43,10 +43,10 @@ use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, finding, i
 pub struct SameContainer;
 
 struct Config<'a> {
-    counterparts: Traversal<'a>,
+    counterparts: Traversal,
     counterpart_selector: Option<&'a axioval_ir::contract::Selector>,
     containers: &'a axioval_ir::contract::Selector,
-    climb: Traversal<'a>,
+    climb: Traversal,
     /// `container_relationship` and `level_property`, when declared.
     levels: Option<(&'a str, PropertyRef<'a>)>,
 }

@@ -102,7 +102,7 @@ struct Config<'a> {
     order: PropertyRef<'a>,
     first: i64,
     increment: i64,
-    traversal: Option<Traversal<'a>>,
+    traversal: Option<Traversal>,
 }
 
 /// The anchor's members in order, or why they cannot be ordered.

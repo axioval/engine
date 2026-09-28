@@ -122,7 +122,7 @@ impl Height<'_, '_> {
 
 /// The objects a traversal reaches from each level, among a selection.
 struct Reach<'a> {
-    traversal: Traversal<'a>,
+    traversal: Traversal,
     selector: Option<&'a Selector>,
 }
 
@@ -135,7 +135,7 @@ struct Config<'a> {
     tolerance: f64,
     ignore_lowest: bool,
     ignore_highest: bool,
-    traversal: Option<Traversal<'a>>,
+    traversal: Option<Traversal>,
     contents: Option<Reach<'a>>,
     spaces: Option<(Reach<'a>, f64)>,
     space_checks: SpaceChecks,

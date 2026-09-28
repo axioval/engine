@@ -42,7 +42,7 @@ const COLUMNS: &[TableColumn] = &[
 /// objects a relationship path reaches from it.
 struct KeySource<'a> {
     property: PropertyRef<'a>,
-    path: Option<Traversal<'a>>,
+    path: Option<Traversal>,
 }
 
 impl KeySource<'_> {
@@ -68,12 +68,12 @@ enum Quantity<'a> {
     /// `plan-area` sums them with `member_selector`.
     MemberPlanArea {
         members: &'a Selector,
-        traversal: Option<Traversal<'a>>,
+        traversal: Option<Traversal>,
     },
     Property(PropertyRef<'a>),
     /// The object's bottom above the bottom of each object `floor_path`
     /// reaches from it.
-    SillHeight(Traversal<'a>),
+    SillHeight(Traversal),
     /// A door's clear width: stated, or its overall width less a deduction
     /// the rule states.
     ClearWidth(ClearWidth<'a>),
@@ -1287,7 +1287,7 @@ fn sill_interval(window: &VerticalExtent, floor: &VerticalExtent) -> (f64, f64) 
 fn sill_height(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
-    path: &Traversal<'_>,
+    path: &Traversal,
     subject: &Object,
     limit: &Limit,
     described: &str,

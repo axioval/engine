@@ -55,13 +55,13 @@ pub struct WallSpacing;
 struct Coverage<'a> {
     maximum: f64,
     footprints: &'a Selector,
-    footprint_path: Traversal<'a>,
+    footprint_path: Traversal,
     threshold: f64,
 }
 
 struct Config<'a> {
     members: &'a Selector,
-    member_path: Traversal<'a>,
+    member_path: Traversal,
     tolerance: f64,
     minimum: Option<f64>,
     coverage: Option<Coverage<'a>>,
@@ -143,7 +143,7 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
         Some((_, QuantityDimension::Length)) => Err(invalid(format!("{name} is negative"))),
         Some(_) => Err(invalid(format!("{name} must be a length"))),
     };
-    let path = |name: &str| -> Result<Option<Traversal<'a>>, Unavailable> {
+    let path = |name: &str| -> Result<Option<Traversal>, Unavailable> {
         parameters.strings(name)?.map(Traversal::path).transpose()
     };
     let minimum = length("minimum")?;

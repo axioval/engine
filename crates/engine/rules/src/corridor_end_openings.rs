@@ -40,7 +40,7 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 pub struct CorridorEndOpenings;
 
 struct Declaration<'a> {
-    openings: Traversal<'a>,
+    openings: Traversal,
     opening_selector: &'a Selector,
     wall_depth: f64,
     facing: f64,

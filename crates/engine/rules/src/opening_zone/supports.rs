@@ -20,7 +20,7 @@ use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
 /// How a rule finds a host's supports and what it requires of them.
 pub(super) struct SupportConfig<'a> {
-    path: Option<Traversal<'a>>,
+    path: Option<Traversal>,
     pub(super) selector: &'a Selector,
     contact: Option<f64>,
     distance: Option<f64>,

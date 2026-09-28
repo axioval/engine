@@ -114,8 +114,11 @@ pub enum Selector {
     /// Each step is `Relationship` or `Relationship:direction` (`forward`,
     /// the default, `backward` or `either`), walked one after another; a step
     /// ending in `+` is taken one or more times, reaching every object along
-    /// the relationship's chain. The reached objects are tested against
-    /// `selector` under `quantifier`.
+    /// the relationship's chain. A step may name several relationships
+    /// separated by `|`, with one direction after the last applying to all
+    /// (`IfcRelFillsElement|IfcRelVoidsElement:backward+`); it takes any of
+    /// them, mixing them along a chain. The reached objects are tested
+    /// against `selector` under `quantifier`.
     Related {
         path: Vec<String>,
         /// Which reached objects must match; `any` is omitted when

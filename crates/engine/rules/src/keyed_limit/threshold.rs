@@ -25,7 +25,7 @@ use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, finding, i
 
 /// The threshold-step quantity's declaration.
 pub(crate) struct ThresholdStep<'a> {
-    floor: Traversal<'a>,
+    floor: Traversal,
     threshold: Option<PropertyRef<'a>>,
     ramps: Option<(&'a Selector, f64)>,
 }
@@ -63,7 +63,7 @@ struct Ramp {
 impl<'a> ThresholdStep<'a> {
     pub(crate) fn parse(
         parameters: &Parameters<'a>,
-        floor: Traversal<'a>,
+        floor: Traversal,
     ) -> Result<Self, Unavailable> {
         let threshold = parameters.property("threshold_thickness")?;
         let ramps = match (

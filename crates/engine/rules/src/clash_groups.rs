@@ -194,7 +194,7 @@ type Storeys = Result<Vec<ObjectId>, Unavailable>;
 pub(crate) struct Groups<'r> {
     context: &'r RuleContext<'r>,
     grouping: &'r Grouping<'r>,
-    storey: Option<Traversal<'r>>,
+    storey: Option<Traversal>,
     everything: Vec<&'r Object>,
     storeys: BTreeMap<ObjectId, Storeys>,
     values: BTreeMap<ObjectId, Result<String, Unavailable>>,

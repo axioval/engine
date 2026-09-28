@@ -201,3 +201,38 @@ fn ambiguity_and_selected_values_the_ir_cannot_carry_are_refused() {
         Err(PropertyResolutionError::InvalidRequest)
     );
 }
+
+#[test]
+fn a_property_set_holding_no_property_refuses_rather_than_proving_absence() {
+    // `HasProperties` is `SET [1:?]`: an empty set is malformed, so neither
+    // its properties' absence nor anything under its name is known.
+    let model = IFC4.replace(
+        "#48=IFCRELDEFINESBYPROPERTIES",
+        "#50=IFCPROPERTYSET('0000000000000000000050',$,'Pset_Empty',$,());\n\
+         #51=IFCRELDEFINESBYPROPERTIES('0000000000000000000051',$,$,$,(#3),#50);\n\
+         #48=IFCRELDEFINESBYPROPERTIES",
+    );
+    let handle = import_ifc_session("model.ifc", model.as_bytes())
+        .unwrap()
+        .services()
+        .get::<PropertyResolutionServiceHandle>()
+        .unwrap()
+        .clone();
+    for set in [Some("Pset_Empty"), None] {
+        let resolved = handle
+            .resolve(&PropertyRequest::try_new(object("#3"), set.map(Into::into), "N").unwrap());
+        assert!(
+            matches!(resolved, Err(PropertyResolutionError::Incomplete(_))),
+            "{set:?}: {resolved:?}"
+        );
+    }
+    for set in [exact("Pset_Empty"), NameMatch::Any] {
+        let listed = handle.enumerate(
+            &PropertyEnumerationRequest::try_new(object("#3"), set, NameMatch::Any).unwrap(),
+        );
+        assert!(
+            matches!(listed, Err(PropertyResolutionError::Incomplete(_))),
+            "{listed:?}"
+        );
+    }
+}

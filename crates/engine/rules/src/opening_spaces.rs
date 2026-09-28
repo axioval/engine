@@ -43,10 +43,10 @@ pub struct OpeningSpaces;
 type Declaration = Result<(bool, Vec<Evidence>), Unavailable>;
 
 struct Config<'a> {
-    hosts: Traversal<'a>,
+    hosts: Traversal,
     host_selector: &'a Selector,
     external: PropertyRef<'a>,
-    spaces: Traversal<'a>,
+    spaces: Traversal,
     space_selector: &'a Selector,
     /// Whether the spaces come from the derived adjacency, whose evidence
     /// records sides.
@@ -65,14 +65,20 @@ impl<'a> Config<'a> {
         let spaces = Traversal::path(space_path)?;
         let adjacency: Vec<bool> = spaces
             .steps()
-            .map(|(relationship, _)| is_adjacency(relationship))
+            .iter()
+            .map(|step| {
+                step.relationships()
+                    .iter()
+                    .any(|r| is_adjacency(r.as_str()))
+            })
             .collect();
         let sided = adjacency.contains(&true);
         if sided
             && (adjacency.len() != 1
-                || spaces
-                    .steps()
-                    .any(|(_, direction)| direction != TraversalDirection::Forward))
+                || spaces.steps().iter().any(|step| {
+                    step.relationships().len() != 1
+                        || step.direction() != TraversalDirection::Forward
+                }))
         {
             return Err(invalid(
                 "`axioval:derived.adjacent-space` must be the only `space_path` step, forward, \

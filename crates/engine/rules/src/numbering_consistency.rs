@@ -178,7 +178,7 @@ struct Config<'a> {
     prefix_length: Option<usize>,
     gap_free: bool,
     across_sources: bool,
-    traversal: Option<crate::support::Traversal<'a>>,
+    traversal: Option<crate::support::Traversal>,
 }
 
 impl<'a> Config<'a> {

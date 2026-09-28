@@ -3052,6 +3052,57 @@ fn with_geometry_doors_and_windows_connect_the_spaces_their_wall_calls_for() {
     );
 }
 
+#[test]
+fn a_related_step_through_several_relationships_climbs_from_a_door_to_its_wall() {
+    let run = |case: &str, step: &str| {
+        Case::new(case).geometry_rule(
+            &walls_with_openings(),
+            &[("door", "IfcDoor"), ("window", "IfcWindow")],
+            "axioval:capability.manual-issue",
+            &signature(&[
+                ("title", "string", true),
+                ("description", "string", false),
+                ("category", "string", false),
+            ]),
+            json!({"kind": "allOf", "operands": [
+                {"kind": "anyOf", "operands": [entity("door"), entity("window")]},
+                {"kind": "related", "path": [step], "selector": entity("wall")},
+            ]}),
+            json!({"title": {"type": "string", "value": "in a wall"}}),
+        )
+    };
+    // One hop through either relationship reaches only the opening, so no
+    // object is selected and the rule reports that about the model.
+    let (output, result) = run(
+        "related-alternation-hop",
+        "IfcRelFillsElement|IfcRelVoidsElement:backward",
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        result["report"]["findings"][0]["message"], "in a wall (no object matches the selection)",
+        "{result:#}"
+    );
+    assert!(result["report"]["findings"][0]["object_id"].is_null());
+    // The chain mixes them: door or window, opening, wall.
+    let (output, result) = run(
+        "related-alternation-chain",
+        "IfcRelFillsElement|IfcRelVoidsElement:backward+",
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // A manual issue names the first selected object and relates the rest.
+    let finding = &result["report"]["findings"][0];
+    let mut selected: Vec<&str> = std::iter::once(&finding["object_id"])
+        .chain(finding["related"].as_array().unwrap())
+        .map(|object| object["local_id"].as_str().unwrap())
+        .collect();
+    selected.sort_unstable();
+    assert_eq!(
+        selected,
+        ["#106", "#116", "#66", "#76", "#96"],
+        "{result:#}"
+    );
+}
+
 /// Offices #19 (x 0..4, floor at 0 m) and #29 (x 4.2..8.2, floor raised to
 /// 0.5 m), both 3 m high and 4 m deep. Window #39 between them has its
 /// bottom at 1.2 m, window #49 in the west facade of #19 at 0.8 m; both are

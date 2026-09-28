@@ -761,7 +761,7 @@ type Failure = (String, Vec<Evidence>, Option<ObjectId>);
 /// `None` when covered; the finding when conclusively not.
 fn coverage(
     context: &RuleContext<'_>,
-    traversal: Option<&crate::support::Traversal<'_>>,
+    traversal: Option<&crate::support::Traversal>,
     subject: &Object,
     candidates: &Population,
     minimum: f64,
@@ -1049,7 +1049,7 @@ pub(crate) type Measured = (Sum, Option<(Vec<ObjectId>, usize)>);
 /// members and the number of undecided ones.
 pub(crate) fn member_areas(
     context: &RuleContext<'_>,
-    traversal: Option<&crate::support::Traversal<'_>>,
+    traversal: Option<&crate::support::Traversal>,
     anchor: &Object,
     population: &Population,
     measure: Measure,

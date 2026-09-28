@@ -10,7 +10,7 @@ use axioval_ids::{
     IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, Options, OptionsError, Part, Reason, Translation,
     translate,
 };
-use openbim_ids::{IfcVersion, Relation};
+use openbim_ids::IfcVersion;
 
 const HEADER: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd"><info><title>T</title><author>a@b.org</author></info><specifications>"#;
 
@@ -198,10 +198,6 @@ fn an_untranslatable_applicability_skips_the_whole_specification() {
             Reason::Restriction,
         ),
         (
-            format!("{WALL}<partOf><entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity></partOf>"),
-            Reason::PartOfRelation(None),
-        ),
-        (
             "<material/>".to_owned(),
             Reason::WithoutEntity,
         ),
@@ -244,6 +240,35 @@ fn applicability_facets_beyond_the_entity_become_one_selector() {
         &operands[1],
         Selector::Related { path, .. } if path == &["IfcRelContainedInSpatialStructure:backward+"]
     ));
+}
+
+#[test]
+fn a_part_of_without_a_relation_or_through_openings_climbs_every_relation_it_names() {
+    let path = |part_of: &str| {
+        let applicability = format!(
+            "{WALL}<partOf {part_of}><entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity></partOf>"
+        );
+        let translation = one("IFC4", OPTIONAL, &applicability, &property("P", "N", ""));
+        assert!(translation.is_complete(), "{:?}", reasons(&translation));
+        let rule = &translation.ruleset.root.folders[0].rules[0];
+        let RuleApplicability::Selector(Selector::AllOf { operands }) = &rule.applicability else {
+            panic!("{:?}", rule.applicability)
+        };
+        let Selector::Related { path, .. } = &operands[1] else {
+            panic!("{:?}", operands[1])
+        };
+        path.clone()
+    };
+    assert_eq!(
+        path(""),
+        [
+            "IfcRelAggregates|IfcRelAssignsToGroup|IfcRelContainedInSpatialStructure|IfcRelNests|IfcRelFillsElement|IfcRelVoidsElement:backward+"
+        ]
+    );
+    assert_eq!(
+        path("relation=\"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT\""),
+        ["IfcRelFillsElement|IfcRelVoidsElement:backward+"]
+    );
 }
 
 #[test]
@@ -324,13 +349,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     let requirement = |facet| Part::Requirement { facet };
     assert_eq!(
         reasons(&translation),
-        [
-            (requirement(2), Reason::EmptyRestriction),
-            (
-                requirement(12),
-                Reason::PartOfRelation(Some(Relation::VoidsElementFillsElement))
-            ),
-        ]
+        [(requirement(2), Reason::EmptyRestriction),]
     );
     // The optional value-less property and the redundant entity need no rule.
     assert_eq!(
@@ -347,6 +366,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
             "spec1.facet9",
             "spec1.facet10",
             "spec1.facet11",
+            "spec1.facet12",
             "spec1.facet13"
         ]
     );
@@ -946,6 +966,23 @@ fn classification_material_and_part_of_requirements_check_a_real_model() {
         flagged_in_project(OPTIONAL, WALL, &part_of(containment, "IFCBUILDING")),
         ["#10", "#11", "#12"]
     );
+    // Without a relation every relation is followed, mixed along the chain:
+    // contained in the storey, which is aggregated in the building.
+    let anywhere = |whole: &str| {
+        format!("<partOf><entity><name><simpleValue>{whole}</simpleValue></name></entity></partOf>")
+    };
+    assert_eq!(
+        flagged_in_project(OPTIONAL, WALL, &anywhere("IFCBUILDING")),
+        ["#12"]
+    );
+    assert_eq!(
+        flagged_in_project(
+            OPTIONAL,
+            WALL,
+            "<partOf cardinality=\"prohibited\"><entity><name><simpleValue>IFCSITE</simpleValue></name></entity></partOf>"
+        ),
+        ["#10", "#11"]
+    );
     // Aggregation is followed up the whole chain.
     let storey = "<entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity>";
     assert!(
@@ -1395,4 +1432,112 @@ fn material_values_restricted_by_several_facets_check_one_name() {
         flagged_in_project(OPTIONAL, WALL, steel),
         ["#10", "#11", "#12"]
     );
+}
+
+/// Wall `#2` holds opening `#3`, which door `#4` fills; door `#5` fills
+/// nothing.
+const OPENINGS_MODEL: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#2=IFCWALL('0000000000000000000002',$,'W',$,$,$,$,$,$);
+#3=IFCOPENINGELEMENT('0000000000000000000003',$,$,$,$,$,$,$,.OPENING.);
+#4=IFCDOOR('0000000000000000000004',$,'D1',$,$,$,$,$,$,$,$,$,$);
+#5=IFCDOOR('0000000000000000000005',$,'D2',$,$,$,$,$,$,$,$,$,$);
+#6=IFCRELVOIDSELEMENT('0000000000000000000006',$,$,$,#2,#3);
+#7=IFCRELFILLSELEMENT('0000000000000000000007',$,$,$,#3,#4);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+#[test]
+fn a_part_of_through_openings_climbs_from_the_filling_to_the_host() {
+    let door = "<entity><name><simpleValue>IFCDOOR</simpleValue></name></entity>";
+    let flagged = |part_of: &str| {
+        let requirement = format!(
+            "<partOf {part_of}><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></partOf>"
+        );
+        let translation = one("IFC4", OPTIONAL, door, &requirement);
+        assert!(translation.is_complete(), "{:?}", reasons(&translation));
+        let report = run(&translation, OPENINGS_MODEL);
+        assert!(
+            report.not_evaluated().is_empty(),
+            "{:?}",
+            report.not_evaluated()
+        );
+        report
+            .findings()
+            .iter()
+            .map(|finding| finding.object_id().unwrap().local_id.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        flagged("relation=\"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT\""),
+        ["#5"]
+    );
+    assert_eq!(flagged(""), ["#5"]);
+    assert_eq!(flagged("relation=\"IFCRELNESTS\""), ["#4", "#5"]);
+}
+
+/// Wall `#1` has the property set `P` holding no property, which its
+/// `SET [1:?]` forbids; wall `#2` has `P.N`.
+const EMPTY_SET_MODEL: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCWALL('0000000000000000000001',$,$,$,$,$,$,$,$);
+#2=IFCWALL('0000000000000000000002',$,$,$,$,$,$,$,$);
+#3=IFCPROPERTYSET('0000000000000000000003',$,'P',$,());
+#4=IFCRELDEFINESBYPROPERTIES('0000000000000000000004',$,$,$,(#1),#3);
+#5=IFCPROPERTYSINGLEVALUE('N',$,IFCLABEL('x'),$);
+#6=IFCPROPERTYSET('0000000000000000000006',$,'P',$,(#5));
+#7=IFCRELDEFINESBYPROPERTIES('0000000000000000000007',$,$,$,(#2),#6);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+#[test]
+fn an_empty_property_set_leaves_the_object_not_evaluated_never_without_the_property() {
+    for (applicability, requirement) in [
+        // Required, prohibited, and in the applicability.
+        (WALL.to_owned(), property("P", "N", "")),
+        (
+            WALL.to_owned(),
+            property("P", "N", "cardinality=\"prohibited\""),
+        ),
+        (
+            format!("{WALL}{}", property("P", "N", "")),
+            every_applicable(),
+        ),
+    ] {
+        let translation = one("IFC4", OPTIONAL, &applicability, &requirement);
+        assert!(translation.is_complete(), "{:?}", reasons(&translation));
+        let report = run(&translation, EMPTY_SET_MODEL);
+        let undecided: Vec<&str> = report
+            .not_evaluated()
+            .iter()
+            .filter_map(|outcome| outcome.object_id())
+            .map(|id| id.local_id.as_str())
+            .collect();
+        assert_eq!(
+            undecided,
+            ["#1"],
+            "{requirement}: {:?}",
+            report.not_evaluated()
+        );
+        assert!(
+            report
+                .findings()
+                .iter()
+                .all(|finding| finding.object_id().is_none_or(|id| id.local_id != "#1")),
+            "{requirement}: {:?}",
+            report.findings()
+        );
+    }
 }

@@ -318,7 +318,7 @@ fn compare_derivations(
 struct Declaration<'rule> {
     derivations: Vec<EnvelopeDerivation>,
     bounding: Option<&'rule Selector>,
-    groups: Option<(&'rule Selector, Traversal<'rule>)>,
+    groups: Option<(&'rule Selector, Traversal)>,
 }
 
 impl<'rule> Declaration<'rule> {

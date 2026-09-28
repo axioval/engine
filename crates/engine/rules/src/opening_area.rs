@@ -43,7 +43,7 @@ pub struct OpeningArea;
 /// The openings of a host and the face they are placed in: what
 /// `opening-area` and `empty-host` share.
 pub(crate) struct Openings<'a> {
-    path: Traversal<'a>,
+    path: Traversal,
     pub(crate) selector: &'a Selector,
     pub(crate) axes: FaceAxes,
     minimum_area: Option<f64>,

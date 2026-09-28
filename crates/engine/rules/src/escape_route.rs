@@ -241,7 +241,7 @@ struct SectionKind<'a> {
 
 /// The passages a space's occupants rely on.
 struct Passages<'a> {
-    path: Option<Traversal<'a>>,
+    path: Option<Traversal>,
     selector: &'a Selector,
     width: Option<PropertyRef<'a>>,
     /// Whether the passages are those the walks from each space's doors
@@ -253,9 +253,9 @@ struct Passages<'a> {
 }
 
 /// How a space is assigned to its compartments.
-enum Membership<'a> {
+enum Membership {
     /// The compartments the path reaches from the space.
-    Path(Traversal<'a>),
+    Path(Traversal),
     /// The compartments covering at least this share of its footprint.
     Overlap(f64),
 }
@@ -263,7 +263,7 @@ enum Membership<'a> {
 /// Fire compartments: travel ends at the start compartment's boundary.
 struct Compartments<'a> {
     selector: &'a Selector,
-    membership: Membership<'a>,
+    membership: Membership,
 }
 
 /// One row of `zones`: objects of a rank.
@@ -277,11 +277,11 @@ struct Declaration<'a> {
     /// By occupants.
     widths: Vec<WidthRow>,
     sections: Vec<SectionKind<'a>>,
-    section_path: Option<Traversal<'a>>,
+    section_path: Option<Traversal>,
     passages: Option<Passages<'a>>,
-    exits: Traversal<'a>,
+    exits: Traversal,
     exit_selector: &'a Selector,
-    doors: Option<(Traversal<'a>, &'a Selector)>,
+    doors: Option<(Traversal, &'a Selector)>,
     clear_width: Option<PropertyRef<'a>>,
     profile: Option<MobilityProfile>,
     /// Whether exit doors must open in the direction of escape.
@@ -631,7 +631,7 @@ fn zones<'a>(parameters: &Parameters<'a>) -> Result<Vec<Zone<'a>>, Unavailable> 
     Ok(zones)
 }
 
-type Sections<'a> = (Vec<SectionKind<'a>>, Option<Traversal<'a>>);
+type Sections<'a> = (Vec<SectionKind<'a>>, Option<Traversal>);
 
 fn sections<'a>(
     parameters: &Parameters<'a>,
@@ -1488,7 +1488,7 @@ enum Bound {
 impl Judge<'_, '_> {
     fn reached(
         &self,
-        traversal: &Traversal<'_>,
+        traversal: &Traversal,
         candidates: &Candidates<'_>,
         space: &ObjectId,
     ) -> Result<Reached, Unavailable> {

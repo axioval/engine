@@ -645,6 +645,7 @@ mod measured;
 mod metric_routing;
 mod object_frame;
 mod pairwise;
+mod path;
 mod plan_area;
 mod plan_region;
 mod plan_span;
@@ -744,6 +745,7 @@ pub use object_frame::{
 pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
+pub use path::PathSegment;
 pub use plan_area::{
     ElevationCover, ElevationRequest, PlanArea, PlanAreaError, PlanAreaService,
     PlanAreaServiceHandle, PlanBand,

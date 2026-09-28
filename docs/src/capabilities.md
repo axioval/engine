@@ -200,7 +200,7 @@ Without day precision a date-time neither precedes nor follows the day it falls 
 
 ### Related selectors
 
-A `related` selector selects an object by the objects a relationship `path` reaches from it. The `path` is written as the `path` parameter of the relationship-scoped capabilities: steps `Relationship` or `Relationship:direction` (`forward`, the default, `backward` or `either`), each optionally followed by `+` to take it one or more times (`IfcRelAggregates:backward+` reaches every whole above a part), walked one after another through `RelationshipSelectionServiceHandle`, never reaching the object itself. The reached objects are tested against the nested `selector` under a `quantifier`:
+A `related` selector selects an object by the objects a relationship `path` reaches from it. The `path` is written as the `path` parameter of the relationship-scoped capabilities: steps `Relationship` or `Relationship:direction` (`forward`, the default, `backward` or `either`), each optionally followed by `+` to take it one or more times (`IfcRelAggregates:backward+` reaches every whole above a part) and naming several relationships with `|` (see the step grammar under [semantic capabilities](#semantic-capabilities)), walked one after another through `RelationshipSelectionServiceHandle`, never reaching the object itself. The reached objects are tested against the nested `selector` under a `quantifier`:
 
 | `quantifier` | Selects when |
 |---|---|
@@ -315,6 +315,16 @@ Deliberate differences from other checkers:
 Most names and numbers these rules read are attributes of the object, not properties; see [attribute sets](./ir.md#attribute-sets). Quantities are written with a unit: `m`, `cm`, `mm`, `km`, `m2`, `cm2`, `mm2`, `m3`, `cm3`, `mm3`, `l`, `rad` or `deg`. `²`, `³` and `°` are accepted too.
 
 A traversal is either one `relationship` (with `direction` and `follow_chain`) or a `path` of steps walked in order, each `Relationship` or `Relationship:direction`. For example, `IfcRelVoidsElement:forward` then `IfcRelFillsElement:forward` goes from a wall to the doors and windows filling its openings. A step ending in `+` is taken one or more times, reaching every object along the relationship's chain: `IfcRelAggregates:backward+` reaches every whole above an object (its assembly, storey, building and site), where `follow_chain` would apply to the whole traversal. The anchor is never among the objects reached, even around a cycle.
+
+Every relationship path shares one step grammar (`PathSegment` in `axioval-engine`):
+
+```text
+step          = relationships [ ":" direction ] [ "+" ]
+relationships = relationship { "|" relationship }
+direction     = "forward" | "backward" | "either"
+```
+
+A step naming several relationships, separated by `|`, may take any of them; the one direction is written after the last and applies to all, and no relationship may be named twice. With `+` the chain mixes them, each hop taking any alternative: `IfcRelFillsElement|IfcRelVoidsElement:backward+` climbs from a door through the opening it fills to the wall the opening voids. Where such a chain changes relationship it passes through objects of the project; within one relationship it follows that relationship's chain as the source answers it. A derived identity keeps its own colon, since only a colon followed by a direction word ends the last alternative. The single `relationship` parameter names exactly one relationship; alternatives belong in a `path` step.
 
 ### Relationships derived from geometry
 

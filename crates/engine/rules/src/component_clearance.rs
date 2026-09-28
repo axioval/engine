@@ -496,7 +496,7 @@ struct Config<'a> {
     slide: Option<(f64, f64)>,
     /// The offsets away from the component it may slide by.
     depth_slide: Option<(f64, f64)>,
-    spaces: Option<Traversal<'a>>,
+    spaces: Option<Traversal>,
     /// With `against-wall`: the walls, how far to look and the inset.
     walls: Option<(&'a Selector, f64, f64)>,
     /// What must hold the volume's base, and how far from it vertically.

@@ -84,7 +84,7 @@ struct Declaration<'a> {
     minimum: Option<f64>,
     maximum: Option<f64>,
     projection: ProximityProjection,
-    scope: Option<Traversal<'a>>,
+    scope: Option<Traversal>,
     /// Which reached objects count as containers; every one without it.
     containers: Option<&'a Selector>,
     /// With `elevation_overlap` `overlapping`, the height gap a counterpart
@@ -715,8 +715,8 @@ impl Heights<'_> {
 
 /// Containers reached from objects through the declared traversal, cached,
 /// and the heights a counterpart must stand at.
-struct Scope<'r, 'a> {
-    traversal: Option<&'r Traversal<'a>>,
+struct Scope<'r> {
+    traversal: Option<&'r Traversal>,
     kinds: Option<Kinds>,
     heights: Option<Heights<'r>>,
     context: &'r RuleContext<'r>,
@@ -724,9 +724,9 @@ struct Scope<'r, 'a> {
     reached: BTreeMap<ObjectId, Containers>,
 }
 
-impl<'r, 'a> Scope<'r, 'a> {
+impl<'r> Scope<'r> {
     fn new(
-        declared: &'r Declaration<'a>,
+        declared: &'r Declaration<'_>,
         heights: Option<&'r VerticalExtentServiceHandle>,
         context: &'r RuleContext<'r>,
     ) -> Self {
@@ -825,7 +825,7 @@ impl<'r, 'a> Scope<'r, 'a> {
 fn candidates(
     prepared: &Prepared<'_>,
     declared: &Declaration<'_>,
-    scope: &mut Scope<'_, '_>,
+    scope: &mut Scope<'_>,
     subject: &ObjectId,
     subject_containers: &BTreeSet<ObjectId>,
 ) -> (Vec<Candidate>, Vec<Candidate>) {
@@ -1116,7 +1116,7 @@ impl<'a> Swings<'a> {
     /// comes within the margin of the subject's, in scope or undecided.
     fn candidates(
         &self,
-        scope: &mut Scope<'_, '_>,
+        scope: &mut Scope<'_>,
         subject: &ObjectId,
         subject_containers: &BTreeSet<ObjectId>,
     ) -> (Vec<Candidate>, Vec<Candidate>) {

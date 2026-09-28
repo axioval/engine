@@ -312,9 +312,6 @@ pub enum Reason {
     /// A value literal a selector cannot compare exactly (a boolean other
     /// than `true`/`false`, an integer written with a fraction).
     ValueLiteral(String),
-    /// A part-of facet without a relation (every relation, mixed along the
-    /// chain) or through `IFCRELVOIDSELEMENT IFCRELFILLSELEMENT`.
-    PartOfRelation(Option<Relation>),
     /// Requirements on a prohibited specification, which IDS declares
     /// invalid: no applicable object may exist at all.
     ProhibitedRequirements,
@@ -371,12 +368,6 @@ impl fmt::Display for Reason {
             ),
             Reason::ValueLiteral(literal) => {
                 write!(f, "value {literal:?} cannot be compared exactly by a selector")
-            }
-            Reason::PartOfRelation(None) => f.write_str(
-                "a part-of facet without a relation mixes every relation along the chain",
-            ),
-            Reason::PartOfRelation(Some(relation)) => {
-                write!(f, "a part-of facet through {relation} is not translated")
             }
             Reason::ProhibitedRequirements => f.write_str(
                 "a prohibited specification takes no requirements; IDS declares them invalid",
@@ -1295,21 +1286,31 @@ impl<'o> Writer<'o> {
         part_of: &PartOf,
         releases: &[IfcVersion],
     ) -> Result<Selector, Reason> {
-        let relationship = match part_of.relation {
-            Some(Relation::Aggregates) => "IfcRelAggregates",
-            Some(Relation::AssignsToGroup) => "IfcRelAssignsToGroup",
-            Some(Relation::ContainedInSpatialStructure) => "IfcRelContainedInSpatialStructure",
-            Some(Relation::Nests) => "IfcRelNests",
-            other @ (None | Some(Relation::VoidsElementFillsElement)) => {
-                return Err(Reason::PartOfRelation(other));
-            }
+        const VOIDS_FILLS: [&str; 2] = ["IfcRelFillsElement", "IfcRelVoidsElement"];
+        let relationships: &[&str] = match part_of.relation {
+            Some(Relation::Aggregates) => &["IfcRelAggregates"],
+            Some(Relation::AssignsToGroup) => &["IfcRelAssignsToGroup"],
+            Some(Relation::ContainedInSpatialStructure) => &["IfcRelContainedInSpatialStructure"],
+            Some(Relation::Nests) => &["IfcRelNests"],
+            // An element fills an opening that voids its host: the opening
+            // is the relating end of the one, the host of the other.
+            Some(Relation::VoidsElementFillsElement) => &VOIDS_FILLS,
+            // Every relation IDS names, mixed along the chain.
+            None => &[
+                "IfcRelAggregates",
+                "IfcRelAssignsToGroup",
+                "IfcRelContainedInSpatialStructure",
+                "IfcRelNests",
+                VOIDS_FILLS[0],
+                VOIDS_FILLS[1],
+            ],
         };
-        let names = whole_names(&part_of.entity, relationship, releases)?;
+        let names = whole_names(&part_of.entity, relationships, releases)?;
         let (whole, _) = self.classes_selector(&part_of.entity, names, releases)?;
-        // IDS follows the relation recursively from the part up to its
-        // wholes, the relating ends.
+        // IDS follows the relations recursively from the part up to its
+        // wholes, the relating ends, one step taking any of them.
         Ok(Selector::Related {
-            path: vec![format!("{relationship}:backward+")],
+            path: vec![format!("{}:backward+", relationships.join("|"))],
             quantifier: RelatedQuantifier::Any,
             selector: Box::new(whole),
         })
@@ -1941,8 +1942,8 @@ fn occurrences(
     Ok(names)
 }
 
-/// The classes a part-of whole names that can be the relating end of
-/// `relationship` in some release; each must be an `IfcObject` occurrence.
+/// The classes a part-of whole names that can be the relating end of one
+/// of `relationships` in some release; each must be an `IfcObject` occurrence.
 ///
 /// A class that can never be the whole (a wall is never a spatial
 /// container) matches nothing, as in IDS, so a pattern drops it. A class
@@ -1950,7 +1951,7 @@ fn occurrences(
 /// type object) would silently fail every part, so it is a gap.
 fn whole_names(
     entity: &Entity,
-    relationship: &str,
+    relationships: &[&str],
     releases: &[IfcVersion],
 ) -> Result<Vec<String>, Reason> {
     let names = entity_names(entity, releases)?;
@@ -1970,15 +1971,16 @@ fn whole_names(
                     release: *release,
                 });
             }
-            let end = schema
-                .attributes(relationship)
-                .into_iter()
-                .find(|attribute| attribute.name.starts_with("Relating"))
-                .map(|attribute| attribute.type_name.clone());
-            // An end the schema does not spell as one entity type is
-            // assumed to accept anything.
-            let accepts =
-                end.is_none_or(|end| schema.entity(&end).is_none() || schema.is_a(&name, &end));
+            let accepts = relationships.iter().any(|relationship| {
+                let end = schema
+                    .attributes(relationship)
+                    .into_iter()
+                    .find(|attribute| attribute.name.starts_with("Relating"))
+                    .map(|attribute| attribute.type_name.clone());
+                // An end the schema does not spell as one entity type is
+                // assumed to accept anything.
+                end.is_none_or(|end| schema.entity(&end).is_none() || schema.is_a(&name, &end))
+            });
             if accepts {
                 relating = true;
                 if !schema.is_a(&name, "IFCOBJECT") {

@@ -267,7 +267,7 @@ fn parse_mode<'a>(parameters: &Parameters<'a>) -> Result<Mode<'a>, Unavailable> 
 /// What the counts are taken over.
 enum Grouping<'a> {
     /// The rule's selection, each anchor with its related objects.
-    Anchors(Option<Traversal<'a>>),
+    Anchors(Option<Traversal>),
     /// The rule's selection, grouped by a property value.
     Property {
         property: PropertyRef<'a>,
@@ -384,7 +384,7 @@ fn by_anchor(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
     mode: &Mode<'_>,
-    traversal: Option<&Traversal<'_>>,
+    traversal: Option<&Traversal>,
     provided: &Population,
     required: &Population,
 ) -> CapabilityEvaluation {

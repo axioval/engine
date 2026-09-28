@@ -40,7 +40,7 @@ const MEETING: f64 = 1e-3;
 
 /// The whole-stair mode's declaration.
 pub(super) struct StairMode<'a> {
-    path: Traversal<'a>,
+    path: Traversal,
     flights: &'a Selector,
     maximum_total_rise: Option<f64>,
     /// The doors that break the handrail's continuity where they stand, and

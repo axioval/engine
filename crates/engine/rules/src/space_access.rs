@@ -186,7 +186,7 @@ pub(crate) struct AccessIndex {
 
 /// The declaration an access index is built from.
 pub(crate) struct AccessDeclaration<'a> {
-    path: Traversal<'a>,
+    path: Traversal,
     doors: Option<&'a Selector>,
     openings: Option<&'a Selector>,
     spaces: &'a Selector,
@@ -216,14 +216,20 @@ impl<'a> AccessDeclaration<'a> {
         let path = Traversal::path(path)?;
         let adjacency: Vec<bool> = path
             .steps()
-            .map(|(relationship, _)| is_adjacency(relationship))
+            .iter()
+            .map(|step| {
+                step.relationships()
+                    .iter()
+                    .any(|r| is_adjacency(r.as_str()))
+            })
             .collect();
         let sided = adjacency.contains(&true);
         if sided
             && (adjacency.len() != 1
-                || path
-                    .steps()
-                    .any(|(_, direction)| direction != TraversalDirection::Forward))
+                || path.steps().iter().any(|step| {
+                    step.relationships().len() != 1
+                        || step.direction() != TraversalDirection::Forward
+                }))
         {
             return Err(invalid(
                 "`axioval:derived.adjacent-space` must be the only `access_path` step, forward, \

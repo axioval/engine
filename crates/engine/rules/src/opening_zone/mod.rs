@@ -100,7 +100,7 @@ use supports::{Opening, SupportConfig, Supports};
 pub struct OpeningZone;
 
 struct Config<'a> {
-    hosts: Traversal<'a>,
+    hosts: Traversal,
     host_selector: &'a Selector,
     axes: FaceAxes,
     end_distance: Option<f64>,
@@ -314,7 +314,7 @@ struct Judge<'r, 'c> {
 /// reaches none.
 pub(crate) fn hosts_of(
     context: &RuleContext<'_>,
-    traversal: &Traversal<'_>,
+    traversal: &Traversal,
     hosts: &Population,
     object: &Object,
 ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {

@@ -62,7 +62,7 @@ struct Row {
 /// Where the type name a table row matches is read.
 struct TypeKey<'a> {
     property: PropertyRef<'a>,
-    path: Option<Traversal<'a>>,
+    path: Option<Traversal>,
 }
 
 /// The declared fallback chain.

@@ -312,12 +312,41 @@ def source_violations(source: str, permitted: frozenset[str] = frozenset()) -> l
     return [pattern.pattern for pattern in FORBIDDEN_SOURCE if pattern.search(code)]
 
 
+def shell_commands(source: str) -> list[str]:
+    """The workflow's lines, with backslash-continued lines joined."""
+    return source.replace("\\\n", " ").splitlines()
+
+
+def downloads(command: str) -> bool:
+    """Whether `command` fetches something to disk or into a shell.
+
+    A `curl` writing a file (`-o`/`--output` other than `/dev/null`,
+    `-O`/`--remote-name`) or piped into a shell, and any `wget`, downloads.
+    A `curl` whose body only feeds the step, such as a registry API call,
+    does not.
+    """
+    if re.search(r"\bwget\b", command):
+        return True
+    if not re.search(r"\bcurl\b", command):
+        return False
+    if re.search(r"\|\s*(?:sudo\s+)?(?:ba|z)?sh\b", command):
+        return True
+    if re.search(r"(?:^|\s)(?:-O|--remote-name(?:-all)?)(?:\s|$)", command):
+        return True
+    return any(
+        target != "/dev/null"
+        for target in re.findall(r"(?:^|\s)(?:-o|--output)[\s=]+(\S+)", command)
+    )
+
+
 def workflow_violations(source: str) -> list[str]:
     failures: list[str] = []
     for action in ACTION_USE.findall(source):
         if not action.startswith("./") and not IMMUTABLE_ACTION.fullmatch(action):
             failures.append(f"mutable action reference {action!r}")
-    if "curl " in source and "sha256sum --check --strict" not in source:
+    if any(downloads(command) for command in shell_commands(source)) and (
+        "sha256sum --check --strict" not in source
+    ):
         failures.append("download executes without SHA-256 verification")
     if DEPENDENCY_AUDIT_MARKER in source:
         marker_offset = source.index(DEPENDENCY_AUDIT_MARKER)
@@ -340,6 +369,21 @@ def self_test() -> None:
         "- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
     )
     assert workflow_violations("run: curl https://example.invalid/tool | sh")
+    assert workflow_violations("run: curl -sSfL https://example.invalid/t -o tool")
+    assert workflow_violations(
+        "run: |\n  curl --location https://example.invalid/t \\\n    --output tool.tar.gz"
+    )
+    assert workflow_violations("run: curl -O https://example.invalid/tool")
+    assert workflow_violations("run: wget https://example.invalid/tool")
+    assert not workflow_violations(
+        "run: curl -sSfL https://example.invalid/t -o tool\n"
+        "run: echo 'x  tool' | sha256sum --check --strict"
+    )
+    # An API call feeding the step downloads nothing to run.
+    assert not workflow_violations(
+        'run: |\n  token="$(curl -sSf -X POST "$ENDPOINT" | jq -r .token)"\n'
+        '  curl -sS -o /dev/null -X DELETE "$ENDPOINT"'
+    )
     assert workflow_violations(
         "env:\n  AXIOVAL_DEPENDENCY_AUDIT_COMPLETE: '1'\nrun: ./scripts/check.sh"
     )

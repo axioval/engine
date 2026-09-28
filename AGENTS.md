@@ -49,7 +49,7 @@ a broken page still fails before release.
 - `scripts/` — repository validation and architecture checks.
 - `staging/` — crates developed against unpublished path dependencies.
 - `attic/` — retired crate names kept only to serve a deprecation notice.
-- `.github/workflows/` — CI and GitHub Pages deployment.
+- `.github/workflows/` — CI, GitHub Pages deployment, and the crates.io `Release` (trusted publishing through the `crates.io` environment).
 - `private/` — untracked maintainer-only inputs (capability ledger, publish denylist).
 
 ## Gates

@@ -6,6 +6,9 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- A manual `Release` workflow publishes the workspace to crates.io by trusted
+  publishing through the `crates.io` environment, in dependency order and
+  resumable, after a forbidden-term scan of every archive.
 - **Material property sets.** (Closes #116) The IFC adapter reads the
   properties of a material resource object through `ifc-properties` 0.5.3
   (openbimrs/ifc#218): in IFC4 and IFC4X3 the `IfcMaterialProperties` of

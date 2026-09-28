@@ -44,6 +44,13 @@
 //! the start (the space, or the door) surely exceeds `U` is left out; every
 //! other one, and one that might be shared, may be crossed.
 //!
+//! **Common path.** With `common_path_factor`, the stretch a space's
+//! routes share before they part counts that many times, on top of the
+//! sections: from a door, the named walk's length over the passages the
+//! walks to every other sure target may cross too; the whole walk where
+//! there is no other route, or no walk is named. Only the upper bound
+//! grows.
+//!
 //! **Passages.** With `passage_selector`, the passages of a checked space
 //! are the `passage_selector` objects `passage_path` reaches from it, and
 //! the space itself where `passage_selector` picks it. A passage carries the
@@ -263,6 +270,8 @@ struct Declaration<'a> {
     no_escape: Option<&'a Selector>,
     /// Whether `exits` counts independent routes rather than exits.
     count_routes: bool,
+    /// How many times a metre of the common path counts, at least one.
+    common_path: Option<f64>,
     /// Whether every single-swing door a walk crosses must open along it.
     route_door_direction: bool,
     /// The least clear height of what a walk crosses, in metres.
@@ -419,7 +428,18 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             )));
         }
     };
-    let passages = passages(&parameters, &widths, count_routes)?;
+    let common_path = match parameters.number("common_path_factor")? {
+        Some(factor) if !factor.is_finite() || factor < 1.0 => {
+            return Err(invalid("`common_path_factor` must be at least 1"));
+        }
+        other => other,
+    };
+    if common_path.is_some() && uses.iter().all(|use_| use_.maximum_travel.is_none()) {
+        return Err(invalid(
+            "`common_path_factor` needs a use stating `maximum_travel`",
+        ));
+    }
+    let passages = passages(&parameters, &widths, count_routes || common_path.is_some())?;
     if count_routes
         && (passages.is_none() || profile.is_none() || uses.iter().all(|use_| use_.exits.is_none()))
     {
@@ -500,6 +520,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         door_direction: parameters.boolean("exit_door_direction")?.unwrap_or(false),
         no_escape: parameters.selector("no_escape_selector")?,
         count_routes,
+        common_path,
         route_door_direction,
         minimum_height,
         clear_height,
@@ -622,7 +643,7 @@ fn sections<'a>(
 fn passages<'a>(
     parameters: &Parameters<'a>,
     widths: &[WidthRow],
-    count_routes: bool,
+    merges: bool,
 ) -> Result<Option<Passages<'a>>, Unavailable> {
     let path = parameters.strings("passage_path")?;
     let width = parameters.property("passage_width_property")?;
@@ -647,10 +668,11 @@ fn passages<'a>(
     }
     let judged = !widths.is_empty() && widths.iter().all(|row| row.passage.is_some());
     let stated = widths.iter().any(|row| row.passage.is_some());
-    if !judged && (!count_routes || stated) {
+    if !judged && (!merges || stated) {
         return Err(invalid(
             "`passage_selector` needs every row of `widths` to state `passage_width`, unless \
-             it only merges routes (`exit_count: routes`, no `passage_width`)",
+             it only traces routes (`exit_count: routes` or `common_path_factor`, no \
+             `passage_width`)",
         ));
     }
     if !judged && (path.is_some() || width.is_some() || walked) {
@@ -700,6 +722,7 @@ impl RuleCapability for EscapeRoute {
             ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
             ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
             ParameterDescriptor::optional("exit_count", ParameterType::String),
+            ParameterDescriptor::optional("common_path_factor", ParameterType::Number),
             ParameterDescriptor::optional("route_door_direction", ParameterType::Boolean),
             ParameterDescriptor::optional("minimum_clear_height", ParameterType::Number),
             ParameterDescriptor::optional(
@@ -1276,6 +1299,8 @@ struct Travel {
     at: Option<[f64; 2]>,
     /// A walk no longer than `upper`, where the routing answer names one.
     path: Option<Vec<MetricPoint>>,
+    /// The target that walk reaches.
+    target: Option<ObjectId>,
     evidence: Vec<Evidence>,
 }
 
@@ -1287,6 +1312,7 @@ impl Travel {
             upper: f64::INFINITY,
             at: None,
             path: None,
+            target: None,
             evidence: Vec::new(),
         }
     }
@@ -3148,6 +3174,8 @@ impl Judge<'_, '_> {
         let mut most = 0.0_f64;
         let mut multiplied = 1.0_f64;
         let mut crossed = BTreeSet::new();
+        let shared = self.declared.common_path.unwrap_or(1.0);
+        let mut common_counted = false;
         let mut worst: Option<(Option<ObjectId>, Travel)> = None;
         for (start, sure_start, [lower, upper]) in measured {
             match upper {
@@ -3155,15 +3183,27 @@ impl Judge<'_, '_> {
                     let from = start.as_ref().unwrap_or(&space.id);
                     let (factor, mut kinds) = self.factor(from, upper.upper, maximum);
                     let mut bound = upper.upper * factor;
-                    if bound > maximum
+                    // The common path is at most the whole walk.
+                    let mut common = (shared - 1.0) * upper.upper;
+                    if bound + common > maximum
                         && let Some(path) = &upper.path
-                        && let Some((cost, traced)) = self.walked_cost(routes, path, upper.upper)
-                        && cost < bound
                     {
-                        bound = cost;
-                        kinds = traced;
+                        if let Some((cost, traced)) = self.walked_cost(routes, path, upper.upper)
+                            && cost < bound
+                        {
+                            bound = cost;
+                            kinds = traced;
+                        }
+                        if shared > 1.0
+                            && let Some(door) = &start
+                            && let Some(length) =
+                                self.common_length(routes, profile, door, &upper, &escape)
+                        {
+                            common = common.min((shared - 1.0) * length);
+                        }
                     }
-                    most = most.max(bound);
+                    common_counted |= common > 0.0;
+                    most = most.max(bound + common);
                     for kind in kinds {
                         multiplied = multiplied.max(self.declared.sections[kind].factor);
                         crossed.insert(kind);
@@ -3236,15 +3276,20 @@ impl Judge<'_, '_> {
             return;
         }
         let least = worst.map_or(0.0, |(_, travel)| travel.lower);
-        let counted = if crossed.is_empty() {
+        let common = if common_counted {
+            format!(", its common path counting {shared} times")
+        } else {
             String::new()
+        };
+        let counted = if crossed.is_empty() {
+            common
         } else {
             let names: Vec<&str> = crossed
                 .iter()
                 .map(|kind: &usize| self.declared.sections[*kind].name.as_str())
                 .collect();
             format!(
-                ", counting the walk on {} up to {multiplied} times",
+                ", counting the walk on {} up to {multiplied} times{common}",
                 names.join(", ")
             )
         };
@@ -3321,6 +3366,63 @@ impl Judge<'_, '_> {
             }
         }
         (factor, kinds)
+    }
+
+    /// The common path of `walk` from `start`, bounded from above: its
+    /// length over the passages the walk to every other sure target may
+    /// cross too, as traced (a walk that cannot be traced may share every
+    /// passage). With no other route, the whole walk. `None` when the walk
+    /// cannot be traced, or no passages are declared.
+    fn common_length(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        profile: MobilityProfile,
+        start: &ObjectId,
+        walk: &Travel,
+        escape: &Escape,
+    ) -> Option<f64> {
+        let reached = walk.target.as_ref()?;
+        let candidates = self.passages.as_ref()?;
+        let all: BTreeSet<ObjectId> = candidates
+            .universe
+            .iter()
+            .map(|object| object.id.clone())
+            .collect();
+        let mut common = Self::crossed(routes, walk, &all)?;
+        let mut others = 0_usize;
+        for other in escape
+            .placed
+            .sure
+            .iter()
+            .filter(|(exit, _)| exit != reached)
+        {
+            let route = self.nearest(
+                routes,
+                start,
+                std::slice::from_ref(other),
+                &escape.avoid.most(start),
+                profile,
+            );
+            match route {
+                // Proven unreachable: no route to share.
+                Ok(route) if route.lower.is_infinite() => {}
+                Ok(route) => {
+                    others += 1;
+                    if let Some(shares) = Self::crossed(routes, &route, &all) {
+                        common.retain(|passage, _| shares.contains_key(passage));
+                    }
+                }
+                Err(_) => others += 1,
+            }
+        }
+        if others == 0 {
+            return Some(walk.upper);
+        }
+        let length: f64 = common
+            .values()
+            .map(|length| length.map_or(walk.upper, |length| length.upper_metres()))
+            .sum();
+        Some(length.min(walk.upper))
     }
 
     /// The multiplied length of `path`, a walk of at most `plain` metres,
@@ -3442,6 +3544,7 @@ impl Judge<'_, '_> {
                     // The witness is a point, not a walk: a walk from one
                     // point bounds only that point's travel.
                     path: None,
+                    target: None,
                     evidence: vec![bounded.evidence().clone()],
                 })
             }
@@ -3452,6 +3555,7 @@ impl Judge<'_, '_> {
                     upper: f64::INFINITY,
                     at: Some([x, y]),
                     path: None,
+                    target: None,
                     evidence: vec![cut_off.completeness().evidence().clone()],
                 })
             }
@@ -3510,6 +3614,7 @@ impl Judge<'_, '_> {
                     upper: reached.shortest_distance().upper_metres(),
                     at: None,
                     path: Some(reached.waypoints().to_vec()),
+                    target: targets.get(reached.target()).map(|(exit, _)| exit.clone()),
                     evidence,
                 })
             }
@@ -3521,6 +3626,7 @@ impl Judge<'_, '_> {
                     upper: f64::INFINITY,
                     at: None,
                     path: None,
+                    target: None,
                     evidence,
                 })
             }

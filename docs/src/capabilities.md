@@ -691,6 +691,7 @@ occupants.
 | `route_door_direction` | boolean | every single-swing door the walks from the space's doors cross must open along them |
 | `minimum_clear_height` | number | the least clear height, in metres, of every door, opening and space the walks cross, and of the space itself |
 | `clear_height_property`, `overall_height`, `lining_thickness`, `threshold_thickness` | property reference | a door's clear height as `keyed-limit`'s `clear-height` quantity reads it; need `minimum_clear_height` |
+| `common_path_factor` | number | at least 1: a metre of the common path counts this many times; needs a use stating `maximum_travel` |
 | `zones` | table | ranks of zones (`objects`, a selector; `rank`, an integer; `label`); every walk keeps out of what ranks above the start |
 | `walking_height`, `walking_step` | number | the headroom and the step walked over; required by `maximum_travel` |
 
@@ -724,6 +725,16 @@ occupants.
   `shared_by` multiplies only a section at least that many checked spaces
   (including those the rule's selector cannot decide) reach along
   `section_path`; a space whose sections cannot be read may reach any.
+- **Common path** (`common_path_factor`): the stretch one space's routes
+  share before they part counts `common_path_factor` times, on top of any
+  section's factor. From a door, the named walk to the nearest sure target
+  is traced over the passages (`passage_selector`), and so is the walk to
+  every other sure target; the common path is the named walk's length over
+  the passages every other walk may cross too (a walk that cannot be
+  traced may cross any). With no other route to a target, the whole walk
+  is common, and from the farthest point, whose answer is no walk, it may
+  be. This bounds the multiplied travel from above only: its lower bound
+  stays the plain walk's, as with sections.
 - **Doors not used for escape** (`no_escape_selector`): an exit the
   selector surely picks is no exit, a door it surely picks is no start, and
   every walk keeps out of whatever it picks (`nearest_target` with the

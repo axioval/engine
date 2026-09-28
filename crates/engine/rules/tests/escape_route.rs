@@ -2381,3 +2381,55 @@ fn a_door_lower_than_the_minimum_is_found_while_the_travel_is_judged() {
         "{message}"
     );
 }
+
+#[test]
+fn a_shared_stretch_counts_by_the_common_path_factor() {
+    // The walks from `d1` to either exit cross corridor `c` for `shared`
+    // metres before they part; the nearer exit is 15 m away.
+    let run = |shared: f64, factor: Option<f64>| {
+        let mut parameters = with(
+            doors_and_exits(),
+            vec![from_the_door(&[("maximum_travel", number(20.0))])],
+        );
+        if let Some(factor) = factor {
+            parameters.push(("common_path_factor", number(factor)));
+            parameters.push(("passage_selector", selector(kind("corridor"))));
+        }
+        hall_with_a_locked_door()
+            .object("c", "corridor")
+            .evaluate_with(
+                &EscapeRoute,
+                &rule(CAPABILITY, kind("space"), parameters),
+                |services| {
+                    Geometry::default()
+                        .walk("d1", "x1,x2", Walk::Between(15.0, 15.0))
+                        .walk("d1", "x2", Walk::Between(18.0, 18.0))
+                        .trace("d1", "c", shared)
+                        .register(services);
+                },
+            )
+    };
+    // 10 m shared count twice: up to 25 m, which decides nothing.
+    let evaluation = run(10.0, Some(2.0));
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains(
+            "the longest travel to the nearest exit is between 15 and 25 m walking, its common \
+             path counting 2 times"
+        ),
+        "{message}"
+    );
+    // 3 m shared: at most 18 m.
+    let evaluation = run(3.0, Some(2.0));
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    // Without the factor, the walk counts plain.
+    let evaluation = run(10.0, None);
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+}

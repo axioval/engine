@@ -168,6 +168,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   along a coordinate axis, cutting cover bodies to the element's depth
   with their cross-sections. **Breaking:** definitions bound to
   `counterpart-coverage` must declare the three new optional parameters.
+- **Escape travel counts the common path.** (#119) `escape-route` takes
+  `common_path_factor`: the stretch one space's routes share before they
+  part counts that many times, derived from the traces of the walks from
+  a door to each exit over the passages; a shared 10 m corridor with a
+  factor of 2 lifts the travel's upper bound by 10 m. Like the sections,
+  it bounds the travel from above only. **Breaking:** definitions bound to
+  `escape-route` must declare the new optional parameter.
+
 - **Escape routes judge the doors and heights along the way.** (#119)
   `escape-route` takes `route_door_direction` (every single-swing door the
   walk from a space's doors crosses must open along it, read from where

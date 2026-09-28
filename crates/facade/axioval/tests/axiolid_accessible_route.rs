@@ -64,6 +64,27 @@ fn cuboid(min: [f64; 3], max: [f64; 3]) -> TriMesh {
     )
 }
 
+/// A closed, outward-oriented prism over a counter-clockwise `outline`
+/// whose top is cut into the counter-clockwise triangles `caps`.
+fn prism(outline: &[[f64; 2]], caps: &[[u32; 3]], z0: f64, z1: f64) -> TriMesh {
+    let count = u32::try_from(outline.len()).unwrap();
+    let mut points: Vec<Point3> = outline
+        .iter()
+        .map(|[x, y]| Point3::new(*x, *y, z0))
+        .collect();
+    points.extend(outline.iter().map(|[x, y]| Point3::new(*x, *y, z1)));
+    let mut indices = Vec::new();
+    for [a, b, c] in caps {
+        indices.extend([*a, *c, *b]);
+        indices.extend([count + a, count + b, count + c]);
+    }
+    for i in 0..count {
+        let j = (i + 1) % count;
+        indices.extend([i, j, count + j, i, count + j, count + i]);
+    }
+    TriMesh::new(points, indices)
+}
+
 const PSET: &str = "Accessibility";
 const CLEAR_WIDTH: &str = "ClearWidth";
 
@@ -200,6 +221,65 @@ impl Scene {
             )
             .unwrap(),
         );
+        scene
+    }
+
+    /// The corridor scene with the corridor `e` pinched to 0.4 m (y
+    /// 1.4..1.8) between x 6.5 and 7.5, and no hatch.
+    fn pinched() -> Self {
+        let mut scene = Self::corridor();
+        scene.objects.retain(|object| object.id.local_id != "hatch");
+        scene.leaves.clear();
+        scene.geometry = scene.geometry.with_mesh(
+            id("e"),
+            prism(
+                &[
+                    [4.2, 1.0],
+                    [6.5, 1.0],
+                    [6.5, 1.4],
+                    [7.5, 1.4],
+                    [7.5, 1.0],
+                    [10.0, 1.0],
+                    [10.0, 2.2],
+                    [7.5, 2.2],
+                    [7.5, 1.8],
+                    [6.5, 1.8],
+                    [6.5, 2.2],
+                    [4.2, 2.2],
+                ],
+                &[
+                    [0, 1, 2],
+                    [0, 2, 9],
+                    [0, 9, 11],
+                    [9, 10, 11],
+                    [2, 3, 8],
+                    [2, 8, 9],
+                    [3, 4, 5],
+                    [3, 5, 6],
+                    [3, 6, 8],
+                    [8, 6, 7],
+                ],
+                0.0,
+                3.0,
+            ),
+        );
+        scene
+    }
+
+    /// Lobby `a` (x 0..4), corridor `n` (x 4..8, 0.81 m wide at y
+    /// 1.6..2.41) and room `f` (x 8..12) touching in a row, with 5 mm
+    /// skirtings along both corridor walls.
+    fn skirted() -> Self {
+        let mut scene = Self::empty();
+        for (local, kind, min, max) in [
+            ("a", "lobby", [0.0, 0.0, 0.0], [4.0, 4.0, 3.0]),
+            ("n", "corridor", [4.0, 1.6, 0.0], [8.0, 2.41, 3.0]),
+            ("f", "room", [8.0, 0.0, 0.0], [12.0, 4.0, 3.0]),
+            ("skirt-s", "wall", [4.0, 1.6, 0.0], [8.0, 1.605, 0.06]),
+            ("skirt-n", "wall", [4.0, 2.405, 0.0], [8.0, 2.41, 0.06]),
+        ] {
+            scene = scene.body(local, kind, cuboid(min, max));
+        }
         scene
     }
 
@@ -516,4 +596,73 @@ fn a_corridor_narrowed_by_an_open_leaf_blocks_the_room_beyond() {
                 .starts_with("axiolid:walkability:stretch:cad:model/e:obstructed:at=")),
         "{outcome:#?}"
     );
+    assert!(
+        found[0].2.contains("cad:model/e is obstructed near (6.")
+            && found[0].2.ends_with("by cad:model/hatch"),
+        "{found:#?}"
+    );
+    assert_eq!(found[0].1, vec!["e".to_owned(), "hatch".to_owned()]);
+}
+
+#[test]
+fn a_pinch_inside_the_corridor_is_found_where_it_lies() {
+    let outcome = Scene::pinched().check(&[]);
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    let found = findings(&outcome);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].0, "f");
+    assert_eq!(found[0].1, vec!["e".to_owned()]);
+    assert_eq!(
+        found[0].2,
+        "no accessible route reaches cad:model/f for a body 0.8 m wide: cad:model/e is too \
+         narrow near (7, 1.6, 0) for a body 0.8 m wide"
+    );
+    // A body 0.35 m wide fits through the neck.
+    let outcome = Scene::pinched().check(&[("width_metres", number(0.35))]);
+    assert!(findings(&outcome).is_empty(), "{outcome:#?}");
+}
+
+#[test]
+fn a_beam_below_the_clear_height_is_found_too_low_where_it_hangs() {
+    let mut scene = Scene::corridor();
+    scene.objects.retain(|object| object.id.local_id != "hatch");
+    scene.leaves.clear();
+    let scene = scene.body("beam", "wall", cuboid([7.0, 1.0, 1.8], [7.3, 2.2, 2.0]));
+    let outcome = scene.check(&[("clear_height_metres", number(2.1))]);
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    let found = findings(&outcome);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].0, "f");
+    assert_eq!(found[0].1, vec!["beam".to_owned(), "e".to_owned()]);
+    assert_eq!(
+        found[0].2,
+        "no accessible route reaches cad:model/f for a body 0.8 m wide: cad:model/e is too low \
+         near (7.15, 1.6, 0) for a body 0.8 m wide: the headroom under cad:model/beam is 1.8 m"
+    );
+}
+
+#[test]
+fn a_skirting_within_the_obstruction_depth_does_not_block() {
+    let parameters = |depth: Option<f64>| {
+        let mut parameters = vec![(
+            "route_selector",
+            selector(Selector::AnyOf {
+                operands: vec![kind("lobby"), kind("room"), kind("corridor")],
+            }),
+        )];
+        if let Some(depth) = depth {
+            parameters.push(("obstruction_depth_metres", number(depth)));
+        }
+        parameters
+    };
+    // The 5 mm skirtings leave 0.8 m, too little to prove a 0.8 m body.
+    let outcome = Scene::skirted().check(&parameters(None));
+    assert!(findings(&outcome).is_empty(), "{outcome:#?}");
+    let open = unevaluated(&outcome);
+    assert_eq!(open.len(), 1, "{open:#?}");
+    assert_eq!(open[0].0, "f");
+    // Tolerated up to 1 cm from the walls, they do not narrow it.
+    let outcome = Scene::skirted().check(&parameters(Some(0.01)));
+    assert!(findings(&outcome).is_empty(), "{outcome:#?}");
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
 }

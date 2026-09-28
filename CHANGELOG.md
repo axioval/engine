@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Accessible routes with tolerances, measured connectors and located
+  blocks.** (#123) `accessible-route` takes `obstruction_depth_metres`
+  (obstacles within that depth of a route space's boundary, a 5 mm
+  skirting say, do not block it) and `surface_gap_metres` (route spaces
+  that far apart are joined across the gap). A ramp or stair that states
+  no clear width is judged by its width as `ramp-geometry` and
+  `stair-geometry` measure it. A block inside a route space is reported
+  where it lies: `too narrow near (x, y, z)`, `obstructed near … by` its
+  obstacles, or `too low near …: the headroom under` its obstacles, the
+  finding relating the space and those obstacles. **Breaking:** the
+  capability gains two optional parameters, so a definition bound to it
+  must declare them.
 - **Walkability tolerances and located stretches.** (#123)
   `WalkabilityRequest` takes an obstruction depth
   (`with_obstruction_depth`: obstacles within that distance of a surface's

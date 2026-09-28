@@ -5621,6 +5621,104 @@ fn with_geometry_an_accessible_route_finds_a_narrow_door_and_a_stairs_only_room(
     );
 }
 
+/// Lobby #19 (x 0..4) opens through door #49 onto corridor #29 (x 4.2..10,
+/// y 1..2.2), which opens through door #59 onto room #39 (x 10.2..14). Two
+/// columns, #69 south and #79 north, stand in the corridor at x 7..7.3 and
+/// leave 0.4 m between them. Both doors state a clear width of 0.85 m.
+fn a_corridor_pinched_by_columns() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,0.9,$,$,$)";
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}{}\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Lobby'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Room'),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceCommon',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#39),#211);\n\
+         #220=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(0.85),$);\n\
+         #221=IFCPROPERTYSET('0000000000000000000221',$,'Access',$,(#220));\n\
+         #222=IFCRELDEFINESBYPROPERTIES('0000000000000000000222',$,$,$,(#49,#59),#221);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [7.1, 1.6, 0.0], [5.8, 1.2, 3.0], space),
+        placed_box(30, [12.1, 2.0, 0.0], [3.8, 4.0, 3.0], space),
+        placed_box(40, [4.1, 1.6, 0.0], [0.1, 0.9, 2.1], door),
+        placed_box(50, [10.1, 1.6, 0.0], [0.1, 0.9, 2.1], door),
+        placed_box(60, [7.15, 1.2, 0.0], [0.3, 0.4, 3.0], column),
+        placed_box(70, [7.15, 2.0, 0.0], [0.3, 0.4, 3.0], column),
+    )
+}
+
+#[test]
+fn with_geometry_an_accessible_route_names_where_a_corridor_is_obstructed() {
+    let case = Case::new("geometry-accessible-route-pinch");
+    let reference = |value: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("space"),
+            {"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+             "property": "axioval:example.ifc.reference", "operator": "equals",
+             "value": {"type": "string", "value": value}},
+        ]})
+    };
+    let (output, result) = case.geometry_rule(
+        &a_corridor_pinched_by_columns(),
+        &[
+            ("space", "IfcSpace"),
+            ("door", "IfcDoor"),
+            ("column", "IfcColumn"),
+        ],
+        "axioval:capability.accessible-route",
+        &registry_signature("axioval:capability.accessible-route"),
+        reference("Room"),
+        json!({
+            "route_selector": {"type": "selector", "value": entity("space")},
+            "start_selector": {"type": "selector", "value": reference("Lobby")},
+            "portal_selector": {"type": "selector", "value": entity("door")},
+            "obstacle_selector": {"type": "selector", "value": entity("column")},
+            "width_metres": {"type": "number", "value": 0.8},
+            "door_width_metres": {"type": "number", "value": 0.8},
+            "obstruction_depth_metres": {"type": "number", "value": 0.01},
+            "clear_width_property": {"type": "propertyReference",
+                                     "property": "axioval:example.ifc.clear-width",
+                                     "propertySet": "axioval:example.ifc.pset-access"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .contains("#29 is obstructed near (7.15, 1.6, 0) for a body 0.8 m wide by"),
+        "{result:#}"
+    );
+    let related: Vec<&str> = result["report"]["findings"][0]["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|related| related["local_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(related, ["#29", "#69", "#79"], "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Three 2.1 m doors in one wall line, 0.1 m thick at y 0: #19 at x 0..1
 /// (`OverallWidth` 1 m) and #29 at x 1.5..2.4 (0.9 m), both single swing;
 /// #39 at x 10..11, a double door stating a clear width of 1.15 m and a

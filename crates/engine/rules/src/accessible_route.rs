@@ -14,9 +14,17 @@
 //! ([`PassageAdmission`]): a portal must be at least `door_width_metres`
 //! wide, a ramp `ramp_width_metres` and a stair `stair_width_metres`; a
 //! stair is refused outright while `forbid_stairs` holds (the default). A
-//! width is read from `clear_width_property` where it is stated, and a
-//! portal's from the geometry's bound otherwise; a stated portal width also
-//! goes into the request, so the geometry can admit the body through a door.
+//! width is read from `clear_width_property` where it is stated, a portal's
+//! from the geometry's bound otherwise, and a ramp's or stair's from its
+//! measured flight or runs (the walking-surface service `stair-geometry`
+//! and `ramp-geometry` measure with); a stated portal width also goes into
+//! the request, so the geometry can admit the body through a door.
+//!
+//! `obstruction_depth_metres` tolerates obstacles within that distance of
+//! a route space's boundary (a skirting), and `surface_gap_metres` joins
+//! route spaces at most that far apart; both go into the request. A block
+//! inside one route space names where it lies and whether the space is too
+//! narrow there, obstructed, or too low.
 //!
 //! With `subtract_door_swings`, the sectors the selected doors' leaves sweep
 //! are obstacles on the surfaces they stand on: a body walks through its
@@ -37,11 +45,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, LengthInterval, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PassageAdmission, RuleCapability, RuleContext, SweptDoor,
-    VerifiedWalkablePassage, VerticalConnector, VerticalConnectorKind, WalkabilityError,
-    WalkabilityRegionId, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle,
-    WalkabilitySnapshot,
+    CapabilityEvaluation, CompiledRule, LengthInterval, MeasuredInterval, NotEvaluatedReason,
+    ParameterDescriptor, ParameterType, PassageAdmission, RuleCapability, RuleContext, SlopedRun,
+    StretchLimit, SweptDoor, TreadFlightRequest, VerifiedWalkablePassage, VerticalConnector,
+    VerticalConnectorKind, WalkabilityError, WalkabilityRegionId, WalkabilityRequest,
+    WalkabilityRouteOutcome, WalkabilityServiceHandle, WalkabilitySnapshot, WalkableStretch,
+    WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
@@ -71,12 +80,24 @@ struct Declaration<'a> {
     forbid_stairs: bool,
     clear_width: Option<PropertyRef<'a>>,
     passing: Option<PassingSpaces>,
+    obstruction_depth: f64,
+    surface_gap: f64,
 }
 
 fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
     match parameters.number(name)? {
         Some(value) if value <= 0.0 => Err(invalid(format!("`{name}` must be positive"))),
         other => Ok(other),
+    }
+}
+
+/// A tolerance: zero when absent, never negative.
+fn tolerance(parameters: &Parameters<'_>, name: &str) -> Result<f64, Unavailable> {
+    match parameters.number(name)? {
+        Some(value) if !value.is_finite() || value < 0.0 => {
+            Err(invalid(format!("`{name}` must not be negative")))
+        }
+        other => Ok(other.unwrap_or(0.0)),
     }
 }
 
@@ -112,6 +133,8 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         forbid_stairs: parameters.boolean("forbid_stairs")?.unwrap_or(true),
         clear_width: parameters.property("clear_width_property")?,
         passing: PassingSpaces::parse(&parameters, clear_height)?,
+        obstruction_depth: tolerance(&parameters, "obstruction_depth_metres")?,
+        surface_gap: tolerance(&parameters, "surface_gap_metres")?,
     })
 }
 
@@ -137,6 +160,8 @@ impl RuleCapability for AccessibleRoute {
             ParameterDescriptor::optional("stair_width_metres", ParameterType::Number),
             ParameterDescriptor::optional("forbid_stairs", ParameterType::Boolean),
             ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("obstruction_depth_metres", ParameterType::Number),
+            ParameterDescriptor::optional("surface_gap_metres", ParameterType::Number),
         ];
         parameters.extend(passing_spaces::parameters());
         parameters
@@ -284,7 +309,13 @@ enum Stated {
     Unknown(String),
 }
 
-/// Everything the rule selected, and the widths it read.
+/// A connector's width as its measured flight or runs show it.
+enum Measured {
+    Width(MeasuredInterval, Evidence),
+    Unknown(String),
+}
+
+/// Everything the rule selected, and the widths it read or measured.
 struct Scene {
     route: Picked,
     starts: Picked,
@@ -294,6 +325,7 @@ struct Scene {
     swept: Vec<SweptDoor>,
     destinations: BTreeSet<ObjectId>,
     widths: BTreeMap<ObjectId, Stated>,
+    measured: BTreeMap<ObjectId, Measured>,
 }
 
 impl Scene {
@@ -353,6 +385,7 @@ impl Scene {
                 .map(|object| object.id.clone())
                 .collect(),
             widths: BTreeMap::new(),
+            measured: BTreeMap::new(),
         };
         if scene.starts.decided.is_empty() && scene.starts.undecided.is_empty() {
             return Err((
@@ -380,7 +413,36 @@ impl Scene {
                 scene.widths.insert(id, stated);
             }
         }
+        scene.measure_connectors(context, declared);
         Ok(scene)
+    }
+
+    /// Measures each ramp or stair with a minimum and no stated width, as
+    /// `ramp-geometry` and `stair-geometry` measure it; only an exact
+    /// absence moves on to the geometry.
+    fn measure_connectors(&mut self, context: &RuleContext<'_>, declared: &Declaration<'_>) {
+        let stairs = context.services.get::<WalkingSurfaceServiceHandle>();
+        for (object, (kind, _)) in &self.connectors {
+            let required = match kind {
+                VerticalConnectorKind::Lift => None,
+                VerticalConnectorKind::Ramp => declared.ramp_width,
+                VerticalConnectorKind::Stair if declared.forbid_stairs => None,
+                VerticalConnectorKind::Stair => declared.stair_width,
+            };
+            if required.is_none()
+                || matches!(
+                    self.widths.get(object),
+                    Some(Stated::Known(..) | Stated::Unknown(_))
+                )
+            {
+                continue;
+            }
+            let measured = match stairs {
+                Some(stairs) => measure_width(stairs, object, *kind),
+                None => Measured::Unknown("the walking-surface service is not registered".into()),
+            };
+            self.measured.insert(object.clone(), measured);
+        }
     }
 
     fn request(&self, declared: &Declaration<'_>) -> Result<WalkabilityRequest, Unavailable> {
@@ -426,8 +488,55 @@ impl Scene {
         })
         .and_then(|request| request.with_stated_clear_widths(stated))
         .and_then(|request| request.with_swept_doors(self.swept.clone()))
+        .and_then(|request| request.with_obstruction_depth(declared.obstruction_depth))
+        .and_then(|request| request.with_surface_gap(declared.surface_gap))
         .map_err(|error| invalid(format!("walkability request: {error}")))
     }
+}
+
+/// A ramp's or stair's width from its measured runs or flight: the
+/// narrowest run governs a ramp, and a flight's width needs every tread's
+/// sides.
+fn measure_width(
+    stairs: &WalkingSurfaceServiceHandle,
+    object: &ObjectId,
+    kind: VerticalConnectorKind,
+) -> Measured {
+    let measured = match kind {
+        VerticalConnectorKind::Stair => stairs
+            .measure_tread_flight(&TreadFlightRequest::new(object.clone()))
+            .map(|flight| {
+                flight.width().map_or_else(
+                    || {
+                        Measured::Unknown(
+                            "a tread fills no rectangle along the walking direction".into(),
+                        )
+                    },
+                    |width| Measured::Width(width, flight.evidence().clone()),
+                )
+            }),
+        VerticalConnectorKind::Ramp => stairs.measure_sloped_runs(object).map(|surface| {
+            let widths: Option<Vec<MeasuredInterval>> =
+                surface.runs().iter().map(SlopedRun::width).collect();
+            let narrowest = widths.and_then(|widths| {
+                let lower = widths
+                    .iter()
+                    .map(MeasuredInterval::lower)
+                    .reduce(f64::min)?;
+                let upper = widths
+                    .iter()
+                    .map(MeasuredInterval::upper)
+                    .reduce(f64::min)?;
+                MeasuredInterval::try_new(lower, upper).ok()
+            });
+            narrowest.map_or_else(
+                || Measured::Unknown("a run fills no rectangle along its slope".into()),
+                |width| Measured::Width(width, surface.evidence().clone()),
+            )
+        }),
+        VerticalConnectorKind::Lift => return Measured::Unknown("a lift has no width".into()),
+    };
+    measured.unwrap_or_else(|error| Measured::Unknown(error.to_string()))
 }
 
 /// A clear width read from `property`: a length, stated or absent.
@@ -459,6 +568,8 @@ struct Judgement {
     reason: Option<String>,
     evidence: Vec<Evidence>,
     stairs_only: bool,
+    /// Other objects the block depends on (the obstacles at a stretch).
+    others: Vec<ObjectId>,
 }
 
 impl Judgement {
@@ -469,6 +580,7 @@ impl Judgement {
             reason: None,
             evidence: Vec::new(),
             stairs_only: false,
+            others: Vec::new(),
         }
     }
 
@@ -556,6 +668,7 @@ impl Judge<'_> {
                 )),
                 evidence: Vec::new(),
                 stairs_only: false,
+                others: Vec::new(),
             },
             None => Judgement {
                 admission: PassageAdmission::Refused,
@@ -563,6 +676,7 @@ impl Judge<'_> {
                 reason: Some(format!("{object} is not a route space")),
                 evidence: Vec::new(),
                 stairs_only: false,
+                others: Vec::new(),
             },
         }
     }
@@ -578,6 +692,7 @@ impl Judge<'_> {
             reason,
             evidence,
             stairs_only: false,
+            others: Vec::new(),
         };
         let bound = crossing.clear_width();
         match self.scene.widths.get(portal) {
@@ -616,6 +731,60 @@ impl Judge<'_> {
         }
     }
 
+    /// Whether a connector stating no clear width is wide enough by its
+    /// measured flight or runs.
+    fn measured(&self, object: &ObjectId, kind: VerticalConnectorKind, required: f64) -> Judgement {
+        let judged = |admission, reason: String, evidence| Judgement {
+            admission,
+            element: Some(object.clone()),
+            reason: Some(reason),
+            evidence,
+            stairs_only: false,
+            others: Vec::new(),
+        };
+        let kind = kind.as_str();
+        match self.scene.measured.get(object) {
+            Some(Measured::Width(width, evidence)) if width.upper() < required => judged(
+                PassageAdmission::Refused,
+                format!(
+                    "{kind} {object} is at most {} m wide in the geometry, less than the {} m \
+                     required",
+                    metres(width.upper()),
+                    metres(required)
+                ),
+                vec![evidence.clone()],
+            ),
+            Some(Measured::Width(width, _)) if width.lower() >= required => Judgement::admitted(),
+            Some(Measured::Width(width, _)) => judged(
+                PassageAdmission::Undecided,
+                format!(
+                    "{kind} {object} is {} m wide in the geometry, which does not decide the {} m \
+                     required",
+                    shown(width.lower(), width.upper()),
+                    metres(required)
+                ),
+                Vec::new(),
+            ),
+            Some(Measured::Unknown(why)) => judged(
+                PassageAdmission::Undecided,
+                format!(
+                    "{kind} {object} states no clear width to compare with {} m, and its width is \
+                     not measured: {why}",
+                    metres(required)
+                ),
+                Vec::new(),
+            ),
+            None => judged(
+                PassageAdmission::Undecided,
+                format!(
+                    "{kind} {object} states no clear width to compare with {} m",
+                    metres(required)
+                ),
+                Vec::new(),
+            ),
+        }
+    }
+
     /// Whether a connector may be climbed.
     fn connector(&self, connector: &VerticalConnector) -> Judgement {
         let object = connector.object();
@@ -626,6 +795,7 @@ impl Judge<'_> {
             reason: Some(reason),
             evidence,
             stairs_only,
+            others: Vec::new(),
         };
         if kind == VerticalConnectorKind::Stair && self.declared.forbid_stairs {
             return judged(
@@ -661,16 +831,7 @@ impl Judge<'_> {
                     Vec::new(),
                     false,
                 ),
-                Some(Stated::Absent) | None => judged(
-                    PassageAdmission::Undecided,
-                    format!(
-                        "{} {object} states no clear width to compare with {} m",
-                        kind.as_str(),
-                        metres(required)
-                    ),
-                    Vec::new(),
-                    false,
-                ),
+                Some(Stated::Absent) | None => self.measured(object, kind, required),
             };
         }
         if let Some((_, Some(why))) = self.scene.connectors.get(object) {
@@ -714,6 +875,7 @@ impl Judge<'_> {
                     )),
                     evidence: vec![crossing.evidence().clone()],
                     stairs_only: false,
+                    others: Vec::new(),
                 }
             } else if bound.lower_metres() < width {
                 Judgement {
@@ -722,6 +884,7 @@ impl Judge<'_> {
                     reason: Some(format!("the body's passage through {object} is not proven")),
                     evidence: Vec::new(),
                     stairs_only: false,
+                    others: Vec::new(),
                 }
             } else {
                 Judgement::admitted()
@@ -735,6 +898,7 @@ impl Judge<'_> {
                 reason: Some(format!("{object} has no crossing to pass through")),
                 evidence: Vec::new(),
                 stairs_only: false,
+                others: Vec::new(),
             };
         }
         judged
@@ -902,6 +1066,16 @@ impl Judge<'_> {
         if judged.admission == PassageAdmission::Refused {
             return judged;
         }
+        if let Some(stretch) = passage.stretch() {
+            return Judgement {
+                admission: PassageAdmission::Refused,
+                element: Some(stretch.surface().clone()),
+                reason: Some(self.stretch_reason(stretch)),
+                evidence: vec![passage.evidence().clone()],
+                stairs_only: false,
+                others: stretch.obstacles().to_vec(),
+            };
+        }
         let element = passage
             .portal()
             .or_else(|| passage.connector().map(VerticalConnector::object))
@@ -919,6 +1093,55 @@ impl Judge<'_> {
             element,
             evidence: vec![passage.evidence().clone()],
             stairs_only: false,
+            others: Vec::new(),
+        }
+    }
+
+    /// Where and why a stretch of one route space stops the body.
+    fn stretch_reason(&self, stretch: &WalkableStretch) -> String {
+        let surface = stretch.surface();
+        let [x, y, z] = stretch.at();
+        let at = format!("({}, {}, {})", metres(x), metres(y), metres(z));
+        let listed = || {
+            stretch
+                .obstacles()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let body = metres(self.declared.width);
+        match stretch.limit() {
+            StretchLimit::Narrow => {
+                format!("{surface} is too narrow near {at} for a body {body} m wide")
+            }
+            StretchLimit::Obstructed if stretch.obstacles().is_empty() => {
+                format!("{surface} is obstructed near {at} for a body {body} m wide")
+            }
+            StretchLimit::Obstructed => format!(
+                "{surface} is obstructed near {at} for a body {body} m wide by {}",
+                listed()
+            ),
+            StretchLimit::Low => {
+                let under = if stretch.obstacles().is_empty() {
+                    "overhead obstacles".to_owned()
+                } else {
+                    listed()
+                };
+                let headroom = stretch.headroom().map_or_else(
+                    || "is below the clear height".to_owned(),
+                    |headroom| {
+                        format!(
+                            "is {} m",
+                            shown(headroom.lower_metres(), headroom.upper_metres())
+                        )
+                    },
+                );
+                format!(
+                    "{surface} is too low near {at} for a body {body} m wide: the headroom \
+                     under {under} {headroom}"
+                )
+            }
         }
     }
 
@@ -963,6 +1186,7 @@ impl Judge<'_> {
         for judged in blocked {
             evidence.extend(judged.evidence);
             related.extend(judged.element);
+            related.extend(judged.others);
             reasons.extend(judged.reason);
         }
         let message = if reasons.is_empty() {

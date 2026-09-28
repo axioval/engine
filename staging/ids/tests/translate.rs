@@ -289,11 +289,13 @@ fn only_classes_a_model_session_checks_are_applicable() {
         gap("IFC4", "IFCWALLTYPE"),
         Some((true, Reason::NotAnObject("IFCWALLTYPE".into())))
     );
-    // IfcProject is an IfcObject in IFC2X3 and an IfcContext in IFC4.
+    // IfcProject is an IfcObject in IFC2X3 and an IfcContext in IFC4, both
+    // checked; a resource is neither.
     assert_eq!(gap("IFC2X3", "IFCPROJECT"), None);
+    assert_eq!(gap("IFC2X3 IFC4", "IFCPROJECT"), None);
     assert_eq!(
-        gap("IFC2X3 IFC4", "IFCPROJECT"),
-        Some((true, Reason::NotAnObject("IFCPROJECT".into())))
+        gap("IFC4", "IFCMATERIAL"),
+        Some((true, Reason::NotAnObject("IFCMATERIAL".into())))
     );
     assert_eq!(
         gap("IFC4", "IFCNOSUCHTHING"),
@@ -862,6 +864,16 @@ fn wall_of_type(predefined: &str) -> String {
     format!(
         "<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType>{predefined}</predefinedType></entity>"
     )
+}
+
+#[test]
+fn an_ifc4_project_is_checked_as_a_context() {
+    let project = "<entity><name><simpleValue>IFCPROJECT</simpleValue></name></entity>";
+    assert_eq!(
+        flagged_in_project(OPTIONAL, project, &property("P", "Count", "")),
+        ["#1"]
+    );
+    assert!(flagged_in_project(OPTIONAL, project, &attribute("Name", "", Some("P"))).is_empty());
 }
 
 #[test]

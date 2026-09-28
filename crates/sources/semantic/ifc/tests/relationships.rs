@@ -232,15 +232,15 @@ fn a_supertype_request_includes_every_concrete_subtype() {
     .unwrap();
     assert_eq!(decomposes.candidates(), ids(&["#20"]).as_slice());
     // And from the building, IfcRelDecomposes reaches both aggregated
-    // storeys. The project that aggregates it is an IfcContext, not an
-    // IfcObject, so it is outside the session's objects and the universe.
+    // storeys and the project aggregating it: an IfcContext, not an
+    // IfcObject, but an object definition the session checks.
     let building = select(
         &session,
         "#2",
         related("IfcRelDecomposes", TraversalDirection::Either, false),
     )
     .unwrap();
-    assert_eq!(building.candidates(), ids(&["#3", "#4"]).as_slice());
+    assert_eq!(building.candidates(), ids(&["#1", "#3", "#4"]).as_slice());
 }
 
 #[test]

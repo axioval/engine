@@ -272,9 +272,9 @@ pub enum Reason {
         /// The release that lacks it.
         release: IfcVersion,
     },
-    /// An applicability or part-of class whose instances are not `IfcObject`
-    /// occurrences (a type object, an IFC4 `IfcProject`, a resource), which
-    /// an IFC session does not make project objects of.
+    /// An applicability or part-of class whose instances are neither
+    /// `IfcObject` occurrences nor `IfcContext`s (a type object, a
+    /// resource), which an IFC session does not make project objects of.
     NotAnObject(String),
     /// An entity name that is not upper case, which IDS never matches.
     EntityCase(String),
@@ -334,7 +334,7 @@ impl fmt::Display for Reason {
             }
             Reason::NotAnObject(entity) => write!(
                 f,
-                "{entity} is not an IfcObject occurrence, which is all a model session checks"
+                "{entity} is neither an IfcObject occurrence nor an IfcContext, which is all a model session checks"
             ),
             Reason::EntityCase(name) => {
                 write!(
@@ -1057,8 +1057,8 @@ impl<'o> Writer<'o> {
         }))
     }
 
-    /// The selector for an entity facet whose classes must be `IfcObject`
-    /// occurrences in every release: an applicability, or a part-of whole.
+    /// The selector for an entity facet whose classes must be checked
+    /// objects in every release: an applicability, or a part-of whole.
     fn entity_selector(
         &mut self,
         entity: &Entity,
@@ -1911,8 +1911,8 @@ fn occurrence(specification: &Specification) -> Option<Check> {
 /// Refuses a class whose instances are not checked objects.
 ///
 /// An IFC session makes a project object of every `IfcObject` occurrence and
-/// of nothing else. A rule over a type object, an IFC4 `IfcProject` (an
-/// `IfcContext`) or a resource would select nothing and pass silently, so
+/// `IfcContext` (an IFC4 `IfcProject`) and of nothing else. A rule over a
+/// type object or a resource would select nothing and pass silently, so
 /// such a class, and one the release does not define, is a gap. A class a
 /// pattern matched need only exist in one release.
 fn occurrences(
@@ -1934,7 +1934,7 @@ fn occurrences(
                     release: *release,
                 });
             }
-            if !schema.is_a(name, "IFCOBJECT") {
+            if !checked(schema, name) {
                 return Err(Reason::NotAnObject(name.clone()));
             }
         }
@@ -1942,13 +1942,17 @@ fn occurrences(
     Ok(names)
 }
 
+/// Whether an IFC session makes project objects of `name`'s instances.
+fn checked(schema: &Schema, name: &str) -> bool {
+    schema.is_a(name, "IFCOBJECT") || schema.is_a(name, "IFCCONTEXT")
+}
+
 /// The classes a part-of whole names that can be the relating end of one
-/// of `relationships` in some release; each must be an `IfcObject` occurrence.
+/// of `relationships` in some release; each must be a checked object.
 ///
 /// A class that can never be the whole (a wall is never a spatial
 /// container) matches nothing, as in IDS, so a pattern drops it. A class
-/// that can be the whole but is no project object (an IFC4 `IfcProject`, a
-/// type object) would silently fail every part, so it is a gap.
+/// that can be the whole but is no project object (a type object) would silently fail every part, so it is a gap.
 fn whole_names(
     entity: &Entity,
     relationships: &[&str],
@@ -1983,7 +1987,7 @@ fn whole_names(
             });
             if accepts {
                 relating = true;
-                if !schema.is_a(&name, "IFCOBJECT") {
+                if !checked(schema, &name) {
                     return Err(Reason::NotAnObject(name));
                 }
             }

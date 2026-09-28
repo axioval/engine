@@ -577,6 +577,13 @@ fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
         | ExactPropertyError::InconsistentValues { .. } => {
             PropertyResolutionError::Conflicting(error.to_string())
         }
+        // A type object's own `HasPropertySets` are not resolved exactly
+        // upstream: refused, never read as absent.
+        ExactPropertyError::InvalidQueryObject { type_name, .. } => {
+            PropertyResolutionError::Unavailable(format!(
+                "the properties of a {type_name} are not resolved exactly by the IFC property library"
+            ))
+        }
         ExactPropertyError::UnsupportedDefinition { .. }
         | ExactPropertyError::UnsupportedProperty { .. }
         | ExactPropertyError::UnsupportedValue { .. }
@@ -615,7 +622,17 @@ pub fn import_ifc_session(
     let global_ids = Arc::new(GlobalIds::read(release, &model));
     let objects = model
         .iter()
-        .filter(|(_, entity)| release.schema.is_a(&entity.type_name, "IFCOBJECT"))
+        // Occurrences (`IfcObject`) and, in IFC4, contexts such as
+        // `IfcProject` (`IfcContext`, an `IfcObject` in IFC2X3) are checked:
+        // both answer their properties exactly. A type object is not: the
+        // IFC property library refuses its own property sets, so every
+        // property rule it fell under would leave it not evaluated.
+        // Resources carry no GlobalId and take part in no object
+        // relationship.
+        .filter(|(_, entity)| {
+            release.schema.is_a(&entity.type_name, "IFCOBJECT")
+                || release.schema.is_a(&entity.type_name, "IFCCONTEXT")
+        })
         .map(|(id, entity)| {
             let object = Object::new(
                 ObjectId::new(source.clone(), id.to_string())?,

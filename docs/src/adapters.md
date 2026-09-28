@@ -13,6 +13,18 @@ snapshot registered by the session; mismatched service composition is rejected.
 Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
 unsupported values fail closed.
 
+The session's objects are every `IfcObject` occurrence and every `IfcContext`
+(an IFC4 `IfcProject` or `IfcProjectLibrary`; in IFC2X3 `IfcProject` is an
+`IfcObject`), each with its entity name as kind and its GlobalId alias. Both
+answer their property sets, attributes, classifications and materials. A type
+object (`IfcWallType`) is not an object: `ifc-properties` refuses a type
+object's own `HasPropertySets` as a query (`InvalidQueryObject`), so every
+property rule a type fell under would leave it not evaluated; its sets still
+reach its occurrences, and a property request naming a type is refused as
+unavailable, never answered absent. Resources (`IfcMaterial`, `IfcTaskTime`,
+`IfcSurfaceStyleRefraction`) carry no GlobalId and take part in no object
+relationship, and are not objects either.
+
 A present property reports the IFC type its value was written with (`IFCLABEL`,
 `IFCBOOLEAN`, ...) as `Property::data_type`, upper case whatever the file used.
 A value is carried when its defined type's base in the file's release maps without

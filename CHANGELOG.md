@@ -78,6 +78,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ComparedObject` and `AmbiguousIdentity` gain a `matcher` field,
   `ComparisonError` a `NoMatcher` variant, and `ComparisonRequest::scheme`
   gives way to `matchers`.
+- **IFC4 contexts are checked objects.** (Refs #116) An IFC session's
+  objects are every `IfcObject` and now every `IfcContext`: an IFC4
+  `IfcProject` or `IfcProjectLibrary` answers its properties, attributes,
+  classifications and relationships as the IFC2X3 `IfcProject` (an
+  `IfcObject`) already did, so a rule over every object, an object count
+  and a comparison now include it. Type objects stay outside the session:
+  `ifc-properties` 0.4.1 refuses a type object's own property sets as a
+  query, so every property rule a type fell under would leave it not
+  evaluated; a property request naming one is refused as unavailable,
+  never absent. Resources are not objects. The staging IDS importer
+  translates facets on an IFC4 `IFCPROJECT`; the corpus moves to 143 exact
+  passes, 35 sound passes, 89 caught fails, 22 unjudged fails and 18 not
+  evaluated, with no mismatch.
+
 - **Relationship alternation in path steps.** (Refs #116) A step of a
   `related` selector, a traversal `path` or a measured
   `bottom_above_level` path may name several relationships separated by

@@ -64,12 +64,14 @@ fn an_ifc2x3_source_declares_its_own_release_and_type_system() {
 #[test]
 fn objects_are_discovered_with_the_declared_release_ancestry() {
     // IfcElectricalCircuit exists only in IFC2X3, where it is an IfcObject.
-    // IfcProject is an IfcObject in IFC2X3 but an IfcContext in IFC4. Read
-    // with IFC4 ancestry, both would drop out of an IFC2X3 project.
+    // Read with IFC4 ancestry, it would drop out of an IFC2X3 project. A type
+    // object and a resource such as a material are not objects.
     let data = "\
 #1=IFCPROJECT('000000000000000000000p',$,'P',$,$,$,$,$,$);
 #2=IFCELECTRICALCIRCUIT('000000000000000000000c',$,'Circuit',$,$);
 #3=IFCWALL('000000000000000000000w',$,$,$,$,$,$,$);
+#4=IFCWALLTYPE('000000000000000000000t',$,'T',$,$,$,$,$,$,.STANDARD.);
+#5=IFCMATERIAL('Concrete');
 ";
     let x3 = session("IFC2X3", data);
     let kinds = |session: &EvidenceSession| {
@@ -85,12 +87,12 @@ fn objects_are_discovered_with_the_declared_release_ancestry() {
         kinds(&x3),
         ["IFCELECTRICALCIRCUIT", "IFCPROJECT", "IFCWALL"]
     );
-    // The same project under IFC4 ancestry is a context, not an object.
+    // Under IFC4 the project is an IfcContext, checked all the same.
     let x4 = session(
         "IFC4",
-        "#1=IFCPROJECT('p',$,'P',$,$,$,$,$,$);\n#3=IFCWALL('w',$,$,$,$,$,$,$,$);\n",
+        "#1=IFCPROJECT('p',$,'P',$,$,$,$,$,$);\n#3=IFCWALL('w',$,$,$,$,$,$,$,$);\n#5=IFCMATERIAL('Concrete',$,$);\n",
     );
-    assert_eq!(kinds(&x4), ["IFCWALL"]);
+    assert_eq!(kinds(&x4), ["IFCPROJECT", "IFCWALL"]);
 }
 
 #[test]

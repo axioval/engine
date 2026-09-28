@@ -261,7 +261,7 @@ fn two_revisions_report_a_moved_a_changed_an_added_and_a_removed_element() {
     );
     assert_eq!(
         comparison["counts"],
-        serde_json::json!({"added": 1, "removed": 1, "changed": 2, "unchanged": 1,
+        serde_json::json!({"added": 1, "removed": 1, "changed": 2, "unchanged": 2,
                            "incomplete": 0, "unidentified": 0, "ambiguous": 0})
     );
 
@@ -369,7 +369,7 @@ fn a_comparison_is_a_report_one_rule_per_facet_readable_and_exportable() {
         .output()
         .unwrap();
     assert!(
-        stdout(&summary).contains("objects: 1 added · 1 removed · 2 changed · 1 unchanged"),
+        stdout(&summary).contains("objects: 1 added · 1 removed · 2 changed · 2 unchanged"),
         "{}",
         stdout(&summary)
     );
@@ -401,7 +401,7 @@ fn identical_revisions_exit_0_and_a_summary_names_the_counts() {
     let text = stdout(&output);
     assert!(text.starts_with("compared: ifc-step:a.ifc -> ifc-step:b.ifc · kind, classifications, property, relationship, placement, coordinate-system\n"), "{text}");
     assert!(
-        text.contains("objects: 0 added · 0 removed · 0 changed · 4 unchanged"),
+        text.contains("objects: 0 added · 0 removed · 0 changed · 5 unchanged"),
         "{text}"
     );
     assert!(text.contains("status: passed"), "{text}");

@@ -306,16 +306,17 @@ fn a_type_object_is_checked_against_its_own_property_sets() {
 
 /// A wall, two materials and an `IfcRelConnectsPathElements`, with the
 /// example's wall concept bound to `IFCMATERIAL` when `materials` is set.
-fn materials_check(case: &Case, materials: bool) -> (Output, PathBuf) {
+fn materials_check(case: &Case, materials: bool, extra: &str) -> (Output, PathBuf) {
     let model = case.write(
         "model.ifc",
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+        &format!("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
          #1=IFCWALL('0000000000000000000001',$,$,$,$,$,$,$,$);\n\
          #2=IFCWALL('0000000000000000000002',$,$,$,$,$,$,$,$);\n\
          #3=IFCRELCONNECTSPATHELEMENTS('0000000000000000000003',$,$,$,$,#1,#2,(),(),.ATSTART.,.ATEND.);\n\
          #5=IFCMATERIAL('Concrete',$,$);\n\
          #6=IFCMATERIAL('Steel',$,$);\n\
-         ENDSEC;\nEND-ISO-10303-21;\n",
+         {extra}ENDSEC;\nEND-ISO-10303-21;\n"
+        ),
     );
     let text = std::fs::read_to_string(case.definitions(true)).unwrap();
     let mut definitions: Value = serde_json::from_str(&text).unwrap();
@@ -349,7 +350,7 @@ fn a_rule_naming_a_resource_class_checks_its_resource_objects() {
     // The rule requires Pset_WallCommon.Reference; the model holds no
     // material property set, so neither material carries it.
     let case = Case::new("resources");
-    let (output, bcf) = materials_check(&case, true);
+    let (output, bcf) = materials_check(&case, true, "");
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let result = json(&output);
     let findings = result["report"]["findings"].as_array().unwrap();
@@ -377,9 +378,27 @@ fn a_rule_naming_a_resource_class_checks_its_resource_objects() {
 }
 
 #[test]
+fn a_material_carrying_the_property_in_its_own_set_meets_the_rule() {
+    // Concrete (#5) carries Pset_WallCommon.Reference in a material
+    // property set; Steel (#6) carries none.
+    let case = Case::new("material-properties");
+    let (output, _) = materials_check(
+        &case,
+        true,
+        "#7=IFCPROPERTYSINGLEVALUE('Reference',$,IFCLABEL('C30/37'),$);\n\
+         #8=IFCMATERIALPROPERTIES('Pset_WallCommon',$,(#7),#5);\n",
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#6"], "{result:#}");
+    assert!(open.is_empty(), "{result:#}");
+}
+
+#[test]
 fn a_wall_rule_on_a_model_with_resources_never_sees_them() {
     let case = Case::new("resources-walls");
-    let (output, _) = materials_check(&case, false);
+    let (output, _) = materials_check(&case, false, "");
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let result = json(&output);
     let subjects: Vec<&str> = result["report"]["findings"]

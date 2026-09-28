@@ -76,7 +76,7 @@ ifc-geometry = { version = "0.4.3", default-features = false }
 ifc-material = "0.3.0"
 ifc-spatial = "0.2.3"
 ifc-model = "0.2.3"
-ifc-properties = "0.5.2"
+ifc-properties = "0.5.3"
 ifc-schema = "0.2.2"
 ifc-step = "0.3.0"
 ifc-style = "0.3.0"

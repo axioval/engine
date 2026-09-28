@@ -4,8 +4,9 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    ClassificationAssignment, ClassificationServiceHandle, EvidenceSession, PropertyRequest,
-    PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle, ResourceRequest,
+    ClassificationAssignment, ClassificationServiceHandle, EvidenceSession, NameMatch,
+    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionServiceHandle, ResourceRequest,
     ResourceServiceHandle,
 };
 use axioval_ifc::{IFC_GLOBAL_ID, import_ifc_session};
@@ -189,29 +190,166 @@ fn an_ifc2x3_material_is_classified_through_its_classification_relationship() {
     );
 }
 
+/// IFC4 material definitions: material #1 with a `Custom_Pset` and an
+/// empty `Empty_Pset`, material #4 with none, and layer #5 with an unnamed
+/// set of its own; #7 is a resource that is no material.
+const IFC4_MATERIALS: &str = "\
+#1=IFCMATERIAL('Concrete',$,$);
+#2=IFCPROPERTYSINGLEVALUE('Foo',$,IFCLABEL('Bar'),$);
+#3=IFCMATERIALPROPERTIES('Custom_Pset',$,(#2),#1);
+#4=IFCMATERIAL('Steel',$,$);
+#5=IFCMATERIALLAYER(#4,0.2,$,$,$,$,$);
+#6=IFCMATERIALPROPERTIES($,$,(#8),#5);
+#7=IFCCARTESIANPOINT((0.,0.,0.));
+#8=IFCPROPERTYSINGLEVALUE('Grade',$,IFCLABEL('S355'),$);
+#9=IFCMATERIALPROPERTIES('Empty_Pset',$,(),#1);
+";
+
+fn label(resolution: Result<PropertyResolution, PropertyResolutionError>) -> (String, String) {
+    let Ok(PropertyResolution::Present(resolved)) = resolution else {
+        panic!("present: {resolution:?}");
+    };
+    let property = resolved.property();
+    let PropertyValue::String(text) = &property.value else {
+        panic!("a label: {property:?}");
+    };
+    (text.clone(), property.data_type().unwrap().to_owned())
+}
+
+fn enumerate(
+    session: &EvidenceSession,
+    local: &str,
+    set: NameMatch,
+) -> Result<PropertyEnumeration, PropertyResolutionError> {
+    let request = PropertyEnumerationRequest::try_new(id(local), set, NameMatch::Any).unwrap();
+    session
+        .service::<PropertyResolutionServiceHandle>()
+        .unwrap()
+        .enumerate(&request)
+}
+
 #[test]
-fn a_material_carries_no_property_only_in_a_model_without_material_properties() {
+fn a_material_definition_carries_its_own_property_sets() {
+    let materials = session("IFC4", IFC4_MATERIALS);
+    assert_eq!(
+        label(resolve(&materials, "#1", Some("Custom_Pset"), "Foo")),
+        ("Bar".to_owned(), "IFCLABEL".to_owned())
+    );
+    let Ok(PropertyResolution::Present(resolved)) =
+        resolve(&materials, "#1", Some("Custom_Pset"), "Foo")
+    else {
+        panic!("Custom_Pset.Foo is present");
+    };
+    assert!(
+        resolved
+            .property()
+            .evidence
+            .as_ref()
+            .unwrap()
+            .locator
+            .ends_with(":material:#1:#3/#2"),
+        "{resolved:?}"
+    );
+    // A set without a name is keyed by its entity; a layer's sets are its
+    // own, never its material's.
+    assert_eq!(
+        label(resolve(
+            &materials,
+            "#5",
+            Some("IfcMaterialProperties"),
+            "Grade"
+        ))
+        .0,
+        "S355"
+    );
+    // Proven absences: another name, another set, a material without sets,
+    // a set holding nothing.
+    for (local, set, name) in [
+        ("#1", Some("Custom_Pset"), "Baz"),
+        ("#1", Some("Other_Pset"), "Foo"),
+        ("#4", Some("Custom_Pset"), "Foo"),
+        ("#1", Some("Empty_Pset"), "Foo"),
+    ] {
+        assert!(
+            matches!(
+                resolve(&materials, local, set, name),
+                Ok(PropertyResolution::Absent(_))
+            ),
+            "{local} {set:?}.{name}"
+        );
+    }
+    let listed = enumerate(&materials, "#1", NameMatch::Any).unwrap();
+    assert_eq!(listed.properties().len(), 1);
+    assert_eq!(listed.properties()[0].name, "Foo");
+    assert_eq!(listed.empty_sets(), ["Empty_Pset"]);
+    assert!(
+        enumerate(&materials, "#4", NameMatch::Any)
+            .unwrap()
+            .properties()
+            .is_empty()
+    );
+    // A resource that is no material has no properties to read: refused,
+    // never absent.
+    assert!(matches!(
+        resolve(&materials, "#7", Some("Custom_Pset"), "Foo"),
+        Err(PropertyResolutionError::Unavailable(_))
+    ));
+    assert!(matches!(
+        enumerate(&materials, "#7", NameMatch::Any),
+        Err(PropertyResolutionError::Unavailable(_))
+    ));
     let without = session("IFC4", IFC4);
     assert!(matches!(
         resolve(&without, "#5", Some("Custom_Pset"), "Foo"),
         Ok(PropertyResolution::Absent(_))
     ));
-    // The property library reads no material property set: refused.
-    let with = session(
-        "IFC4",
+}
+
+/// IFC2X3: extended material properties by name, typed ones by entity; a
+/// layer is no material there.
+#[test]
+fn an_ifc2x3_material_carries_its_extended_and_typed_properties() {
+    let materials = session(
+        "IFC2X3",
         "\
-#1=IFCMATERIAL('Concrete',$,$);
+#1=IFCMATERIAL('Concrete');
 #2=IFCPROPERTYSINGLEVALUE('Foo',$,IFCLABEL('Bar'),$);
-#3=IFCMATERIALPROPERTIES('Custom_Pset',$,(#2),#1);
+#3=IFCEXTENDEDMATERIALPROPERTIES(#1,(#2),$,'Custom_Pset');
+#4=IFCMECHANICALMATERIALPROPERTIES(#1,$,$,$,0.2,$);
+#5=IFCMATERIALLAYER(#1,0.2,$);
 ",
     );
+    assert_eq!(
+        label(resolve(&materials, "#1", Some("Custom_Pset"), "Foo")),
+        ("Bar".to_owned(), "IFCLABEL".to_owned())
+    );
+    // A typed set is a predefined set named by its entity: an unset
+    // attribute is present, null, with its declared type.
+    let Ok(PropertyResolution::Present(viscosity)) = resolve(
+        &materials,
+        "#1",
+        Some("IfcMechanicalMaterialProperties"),
+        "DynamicViscosity",
+    ) else {
+        panic!("DynamicViscosity is present");
+    };
+    assert_eq!(viscosity.property().value, PropertyValue::Null);
+    assert_eq!(
+        viscosity.property().data_type(),
+        Some("IFCDYNAMICVISCOSITYMEASURE")
+    );
+    // `Material` names the owner, never a member.
     assert!(matches!(
-        resolve(&with, "#1", Some("Custom_Pset"), "Foo"),
-        Err(PropertyResolutionError::Unavailable(_))
+        resolve(
+            &materials,
+            "#1",
+            Some("IfcMechanicalMaterialProperties"),
+            "Material"
+        ),
+        Ok(PropertyResolution::Absent(_))
     ));
-    // Other resources stay refused, never read as absent.
     assert!(matches!(
-        resolve(&without, "#8", Some("Custom_Pset"), "Foo"),
+        resolve(&materials, "#5", Some("Custom_Pset"), "Foo"),
         Err(PropertyResolutionError::Unavailable(_))
     ));
 }

@@ -14,8 +14,10 @@ use axioval_ir::{
 };
 use ifc_model::{Codec, EntityId, Model};
 use ifc_properties::{
-    ExactLogical, ExactProperty, ExactPropertyError, ExactResolution, ExactSource, ExactTableValue,
-    ExactTypedValue, ExactValue, exact_properties_where, exact_property, exact_property_sets_where,
+    ExactLogical, ExactProperty, ExactPropertyEntry, ExactPropertyError, ExactPropertySetEntry,
+    ExactResolution, ExactSource, ExactTableValue, ExactTypedValue, ExactValue,
+    exact_material_properties_where, exact_material_property, exact_material_property_sets_where,
+    exact_properties_where, exact_property, exact_property_sets_where,
 };
 use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
@@ -92,8 +94,6 @@ struct IfcPropertyService {
     snapshots: Arc<[SourceSnapshot]>,
     attributes: Attributes,
     levels: crate::levels::Levels,
-    /// Whether the model holds any `IfcMaterialProperties`.
-    material_properties: std::sync::OnceLock<bool>,
 }
 
 impl IfcPropertyService {
@@ -118,6 +118,7 @@ impl IfcPropertyService {
         let provenance = match exact.source {
             ExactSource::Occurrence => "occurrence".to_owned(),
             ExactSource::Type(type_id) => format!("type:{type_id}"),
+            ExactSource::Material(material) => format!("material:{material}"),
             _ => return Err(PropertyResolutionError::InexactEvidence),
         };
         // A complex property or quantity groups its members and is no
@@ -179,6 +180,7 @@ impl IfcPropertyService {
         let provenance = match exact.source {
             ExactSource::Occurrence => "occurrence".to_owned(),
             ExactSource::Type(type_id) => format!("type:{type_id}"),
+            ExactSource::Material(material) => format!("material:{material}"),
             _ => return PropertyResolutionError::InexactEvidence,
         };
         let (true, Some(data_type)) = (stated, exact.value_type.as_deref()) else {
@@ -570,27 +572,10 @@ impl PropertyResolutionService for IfcPropertyService {
         if let Some(set) = request.property_set().filter(|set| is_reserved_set(set)) {
             return self.resolve_attribute(request, object, set);
         }
-        if self.material_without_properties(object)? {
-            return Ok(PropertyResolution::Absent(
-                CompletePropertyAbsenceEvidence::try_new(
-                    request.clone(),
-                    Evidence::exact(
-                        self.snapshots[0].source().clone(),
-                        self.locator(format_args!(
-                            "absence:{object}:{}:{}:no-material-properties",
-                            request.property_set().unwrap_or("*"),
-                            request.property()
-                        )),
-                    ),
-                )?,
-            ));
+        if self.model.get(object).is_none() {
+            return Err(PropertyResolutionError::InvalidRequest);
         }
-        match exact_property(
-            &self.model,
-            object,
-            request.property_set(),
-            request.property(),
-        ) {
+        match self.exact_property(object, request.property_set(), request.property()) {
             Ok(ExactResolution::Present(exact)) => {
                 match self.property(&exact, request.property()) {
                     Ok(property) => Ok(PropertyResolution::Present(ResolvedProperty::try_new(
@@ -652,29 +637,15 @@ impl PropertyResolutionService for IfcPropertyService {
         if self.model.get(object).is_none() {
             return Err(PropertyResolutionError::InvalidRequest);
         }
-        if self.material_without_properties(object)? {
-            return PropertyEnumeration::try_new(
-                request.clone(),
-                Vec::new(),
-                Evidence::exact(
-                    source,
-                    self.locator(format_args!(
-                        "enumeration:{object}:{}:{}:no-material-properties",
-                        request.property_set(),
-                        request.property()
-                    )),
-                ),
-            );
-        }
         let selected = |set: &str| !is_reserved_set(set) && request.property_set().matches(set);
         let empty = self.empty_sets(object, selected)?;
-        let entries = exact_properties_where(
-            &self.model,
-            object,
-            |set| selected(set) && !empty.iter().any(|name| name == set),
-            |name| request.property().matches(name),
-        )
-        .map_err(|error| map_resolution_error(&error))?;
+        let entries = self
+            .exact_properties_where(
+                object,
+                |set| selected(set) && !empty.iter().any(|name| name == set),
+                |name| request.property().matches(name),
+            )
+            .map_err(|error| map_resolution_error(&error))?;
         let properties = entries
             .iter()
             .map(|entry| self.property(&entry.property, &entry.name))
@@ -696,40 +667,57 @@ impl PropertyResolutionService for IfcPropertyService {
 }
 
 impl IfcPropertyService {
-    /// Whether `object` is a material that provably carries no property
-    /// set: a material definition (an IFC2X3 `IfcMaterial`) in a model
-    /// holding no `IfcMaterialProperties` of any kind, the only way a
-    /// material carries properties. The property library reads no material
-    /// property set, so a material in a model holding one is refused, never
-    /// read as absent.
-    fn material_without_properties(
+    /// Whether `object` is read through the material property readers: an
+    /// instance that is no session object (`is_object`). A material
+    /// definition's own sets (`ifc-properties` 0.5.3, openbimrs/ifc#218)
+    /// resolve there; any other resource is `InvalidQueryObject`, refused.
+    fn is_resource(&self, object: EntityId) -> bool {
+        self.model
+            .get(object)
+            .is_some_and(|entity| !is_object(self.release, &entity.type_name))
+    }
+
+    /// `exact_property`, or for a resource `exact_material_property`.
+    fn exact_property(
         &self,
         object: EntityId,
-    ) -> Result<bool, PropertyResolutionError> {
-        let schema = self.release.schema;
-        let Some(entity) = self.model.get(object) else {
-            return Err(PropertyResolutionError::InvalidRequest);
-        };
-        let material = if schema.entity("IFCMATERIALDEFINITION").is_some() {
-            "IFCMATERIALDEFINITION"
+        set: Option<&str>,
+        name: &str,
+    ) -> Result<ExactResolution, ExactPropertyError> {
+        if self.is_resource(object) {
+            exact_material_property(&self.model, object, set, name)
         } else {
-            "IFCMATERIAL"
-        };
-        if !schema.is_a(&entity.type_name, material) {
-            return Ok(false);
+            exact_property(&self.model, object, set, name)
         }
-        if *self.material_properties.get_or_init(|| {
-            self.model
-                .iter()
-                .any(|(_, entity)| schema.is_a(&entity.type_name, "IFCMATERIALPROPERTIES"))
-        }) {
-            return Err(PropertyResolutionError::Unavailable(format!(
-                "{object} is a {} and the model holds material property sets, which the IFC \
-                 property library does not read",
-                entity.type_name
-            )));
+    }
+
+    /// `exact_properties_where`, or for a resource its material
+    /// counterpart.
+    fn exact_properties_where(
+        &self,
+        object: EntityId,
+        select_set: impl Fn(&str) -> bool,
+        select_property: impl Fn(&str) -> bool,
+    ) -> Result<Vec<ExactPropertyEntry>, ExactPropertyError> {
+        if self.is_resource(object) {
+            exact_material_properties_where(&self.model, object, select_set, select_property)
+        } else {
+            exact_properties_where(&self.model, object, select_set, select_property)
         }
-        Ok(true)
+    }
+
+    /// `exact_property_sets_where`, or for a resource its material
+    /// counterpart.
+    fn exact_property_sets_where(
+        &self,
+        object: EntityId,
+        select: impl Fn(&str) -> bool,
+    ) -> Result<Vec<ExactPropertySetEntry>, ExactPropertyError> {
+        if self.is_resource(object) {
+            exact_material_property_sets_where(&self.model, object, select)
+        } else {
+            exact_property_sets_where(&self.model, object, select)
+        }
     }
 
     /// The names of the sets `select` picks on `object` of which every set
@@ -742,7 +730,8 @@ impl IfcPropertyService {
         object: EntityId,
         select: impl Fn(&str) -> bool,
     ) -> Result<Vec<String>, PropertyResolutionError> {
-        let sets = exact_property_sets_where(&self.model, object, &select)
+        let sets = self
+            .exact_property_sets_where(object, &select)
             .map_err(|error| map_resolution_error(&error))?;
         let mut empty: Vec<String> = sets
             .iter()
@@ -766,10 +755,11 @@ impl IfcPropertyService {
         let ExactPropertyError::MalformedAggregate { entity, .. } = error else {
             return false;
         };
-        exact_property_sets_where(&self.model, object, |name| name == set).is_ok_and(|sets| {
-            sets.iter().all(|entry| entry.members == 0)
-                && sets.iter().any(|entry| entry.set_id == *entity)
-        })
+        self.exact_property_sets_where(object, |name| name == set)
+            .is_ok_and(|sets| {
+                sets.iter().all(|entry| entry.members == 0)
+                    && sets.iter().any(|entry| entry.set_id == *entity)
+            })
     }
 }
 
@@ -878,7 +868,6 @@ pub fn import_ifc_session(
         snapshots: snapshots.clone(),
         attributes: Attributes::new(release),
         levels: crate::levels::Levels::new(release),
-        material_properties: std::sync::OnceLock::new(),
     }));
     let resources = ResourceServiceHandle::new(Arc::new(IfcResources::new(
         release,

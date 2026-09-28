@@ -181,11 +181,23 @@ names, so a model's points and loops are never read as objects.
 A resource object's attributes are read as an object's are (see
 *Attributes*). Its classifications come from the resource-level
 relationships (see *Classifications*). Property sets are the source's only
-for materials: a material definition (an IFC2X3 `IfcMaterial`) in a model
-holding no `IfcMaterialProperties` of any kind carries no property, an exact
-absence. `ifc-properties` reads no material property set, so a material in a
-model holding one is refused, never read as absent, and so is every property
-request on any other resource object.
+for materials, read through `ifc-properties`' material readers
+(`exact_material_property`, `exact_material_properties_where`,
+`exact_material_property_sets_where`; 0.5.3, openbimrs/ifc#218) with the
+values, units, refusals and empty sets of an object's:
+- in IFC4 and IFC4X3, every `IfcMaterialDefinition` (a material, layer,
+  layer set, profile, profile set, constituent or constituent set) carries
+  the `IfcMaterialProperties` naming it (`HasProperties`); a set without a
+  name is keyed `IfcMaterialProperties`. A layer's sets are its own, never
+  its material's;
+- in IFC2X3, an `IfcMaterial` carries its `IfcExtendedMaterialProperties`,
+  keyed by `Name`, and the typed `IfcMaterialProperties` subtypes, each a
+  predefined set named by its entity (`IfcMechanicalMaterialProperties`)
+  whose attributes are its members, `Material` excluded.
+
+A material without sets carries no property, an exact absence. Every
+property request on any other resource object is refused, never read as
+absent.
 
 ### Classifications
 

@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Material property sets.** (Closes #116) The IFC adapter reads the
+  properties of a material resource object through `ifc-properties` 0.5.3
+  (openbimrs/ifc#218): in IFC4 and IFC4X3 the `IfcMaterialProperties` of
+  any `IfcMaterialDefinition` (an unnamed set keyed
+  `IfcMaterialProperties`), in IFC2X3 an `IfcMaterial`'s
+  `IfcExtendedMaterialProperties` by name and its typed material property
+  sets by entity. Resolution, enumeration and empty sets work as for
+  objects, with `material:<id>` provenance. The refusal of every material
+  in a model holding material property sets is gone; a material without
+  sets still carries no property, exactly, and any other resource object
+  stays refused. The buildingSMART cases
+  `pass-material_properties_are_supported_under_ifc4_via_ifcmaterialproperties`
+  and `..._ifc2x3_via_extendedmaterialproperties` pass, so the corpus
+  checks every case: 187 exactly, 120 failures caught, none not evaluated.
+
 - **Complex properties.** (Refs #116) `PropertyValue::Complex`
   (`{"type": "complex"}`) is a property grouping named members that is no
   value of its own. It is present and not empty and declares no type: the

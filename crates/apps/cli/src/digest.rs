@@ -19,8 +19,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use axioval::ir::{
-    Finding, Location, NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report,
-    ReportColumn, ReportRow, ReportTable, ReportValue, RuleStatus, Scope, Severity, SourceId,
+    Decision, DecisionStatus, EvidenceCheck, Finding, FindingDecision, Location, NotEvaluated,
+    NotEvaluatedReason, ObjectId, Place, Project, Report, ReportColumn, ReportRow, ReportTable,
+    ReportValue, RuleStatus, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -403,6 +404,8 @@ pub enum Section {
     Geometry,
     /// Rows of the tables of measured values rules report.
     Tables,
+    /// Decisions `check --decisions` found no finding for.
+    StaleDecisions,
 }
 
 impl Section {
@@ -413,6 +416,7 @@ impl Section {
             Self::Integrity => "integrity",
             Self::Geometry => "geometry",
             Self::Tables => "table",
+            Self::StaleDecisions => "stale-decision",
         }
     }
 }
@@ -545,10 +549,110 @@ pub struct Summary {
     /// Each rule's status, when `check --rule-status` recorded it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rules: Option<RulesDigest>,
+    /// Findings by decision, when `check --decisions` carried any over.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decisions: Option<DecisionCounts>,
     pub groups: Vec<Group>,
     /// Groups left out by the `top` limit, per section.
     pub omitted_groups: BTreeMap<&'static str, usize>,
     pub next: Vec<String>,
+}
+
+/// Findings by decision, and decisions whose finding is gone.
+#[derive(Debug, Default, Serialize)]
+pub struct DecisionCounts {
+    pub accepted: usize,
+    pub rejected: usize,
+    pub open: usize,
+    pub undecided: usize,
+    /// Decided findings that changed since the decision.
+    pub changed: usize,
+    pub stale: usize,
+}
+
+impl DecisionCounts {
+    /// `decisions: 1 accepted · … · 0 stale`, one line.
+    fn line(&self) -> String {
+        format!(
+            "decisions: {} accepted · {} rejected · {} open · {} undecided · {} changed · {} stale\n",
+            self.accepted, self.rejected, self.open, self.undecided, self.changed, self.stale
+        )
+    }
+}
+
+/// The decision counts of `report`; `None` when no decision was applied
+/// to it.
+fn decision_counts(report: &Report) -> Option<DecisionCounts> {
+    let decided = report.findings().iter().any(|f| f.decision.is_some());
+    if !decided && report.stale_decisions().is_empty() {
+        return None;
+    }
+    let mut counts = DecisionCounts {
+        stale: report.stale_decisions().len(),
+        ..DecisionCounts::default()
+    };
+    for finding in report.findings() {
+        match &finding.decision {
+            None => counts.undecided += 1,
+            Some(decision) => {
+                match decision.status {
+                    DecisionStatus::Accepted => counts.accepted += 1,
+                    DecisionStatus::Rejected => counts.rejected += 1,
+                    DecisionStatus::Open => counts.open += 1,
+                }
+                if decision.evidence == EvidenceCheck::Changed {
+                    counts.changed += 1;
+                }
+            }
+        }
+    }
+    Some(counts)
+}
+
+/// A stale decision's rule and message, from its basis; `-` and the
+/// finding's identity without one.
+fn stale_subject(decision: &Decision) -> (String, String) {
+    match &decision.basis {
+        Some(basis) => (basis.rule_id.to_string(), basis.message.clone()),
+        None => ("-".to_owned(), format!("finding {}", decision.finding)),
+    }
+}
+
+/// `accepted by A. Reviewer on 2026-09-27T08:00:00Z: comment`, then what
+/// changed since, if anything.
+fn decision_text(
+    status: DecisionStatus,
+    author: &str,
+    date: &axioval::ir::DateTime,
+    comment: &str,
+) -> String {
+    let mut text = format!("{} by {author} on {date}", status.as_str());
+    if !comment.trim().is_empty() {
+        let _ = write!(text, ": {}", comment.trim());
+    }
+    text
+}
+
+fn carried_text(decision: &FindingDecision) -> String {
+    let mut text = decision_text(
+        decision.status,
+        &decision.author,
+        &decision.date,
+        &decision.comment,
+    );
+    match decision.evidence {
+        EvidenceCheck::Unchanged => {}
+        EvidenceCheck::Unknown => text.push_str(" (changes unknown: no basis recorded)"),
+        EvidenceCheck::Changed => {
+            let changes: Vec<String> = decision
+                .changes
+                .iter()
+                .map(|c| format!("{} {} -> {}", c.facet.as_str(), c.decided, c.now))
+                .collect();
+            let _ = write!(text, " (changed since: {})", changes.join("; "));
+        }
+    }
+    text
 }
 
 /// Rules by status: how many of each, and the rules themselves, those that
@@ -795,6 +899,18 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
                 Some(output.describe(&unmeasured.object, qualify)),
             );
     }
+    // Stale decisions by the rule and status they were recorded with.
+    for decision in output.report.stale_decisions() {
+        let (rule, message) = stale_subject(decision);
+        tallies
+            .entry((
+                Section::StaleDecisions,
+                rule,
+                decision.status.as_str().to_owned(),
+            ))
+            .or_default()
+            .add(&message, None);
+    }
     // One group per table: its rows are the count, its columns the message.
     for table in output.report.tables() {
         let columns = columns_text(table);
@@ -882,6 +998,7 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             counts: c.counts,
         }),
         rules: rules_digest(&output.report, top),
+        decisions: decision_counts(&output.report),
         groups: kept,
         omitted_groups,
         next,
@@ -909,6 +1026,9 @@ fn next_steps(
                 format!("axioval report {quoted} --code {}", shell_quote(&group.key))
             }
             Section::Geometry => format!("axioval report {quoted} --section geometry"),
+            Section::StaleDecisions => {
+                format!("axioval report {quoted} --section stale-decisions")
+            }
             Section::Tables => format!(
                 "axioval report {quoted} --section tables --rule {}",
                 shell_quote(&group.key)
@@ -924,6 +1044,14 @@ fn next_steps(
         && groups.iter().any(|g| g.section == Section::Geometry)
     {
         next.push(format!("axioval report {quoted} --section geometry"));
+    }
+    // A stale decision is a reviewed finding that is gone: worth a look.
+    if groups
+        .first()
+        .is_some_and(|g| g.section != Section::StaleDecisions)
+        && groups.iter().any(|g| g.section == Section::StaleDecisions)
+    {
+        next.push(format!("axioval report {quoted} --section stale-decisions"));
     }
     // Measured values are what a reader asks for next once issues are known.
     if groups.first().is_some_and(|g| g.section != Section::Tables)
@@ -1015,6 +1143,9 @@ pub fn render_summary(summary: &Summary) -> String {
             let _ = writeln!(out, "  … {} more rule(s)", rules.omitted);
         }
     }
+    if let Some(decisions) = &summary.decisions {
+        out.push_str(&decisions.line());
+    }
     let mut section = None;
     for group in &summary.groups {
         if section != Some(group.section) {
@@ -1059,6 +1190,33 @@ pub struct Filter {
     pub object: Option<String>,
     /// A storey or space; only located findings and outcomes match.
     pub location: Option<String>,
+    /// A decision; only findings match.
+    pub decision: Option<DecisionFilter>,
+}
+
+/// The `report --decision` values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum DecisionFilter {
+    Accepted,
+    Rejected,
+    Open,
+    /// No decision.
+    Undecided,
+    /// Decided, and changed since the decision.
+    Changed,
+}
+
+impl DecisionFilter {
+    fn matches(self, decision: Option<&FindingDecision>) -> bool {
+        match (self, decision) {
+            (Self::Undecided, None) => true,
+            (_, None) | (Self::Undecided, Some(_)) => false,
+            (Self::Accepted, Some(d)) => d.status == DecisionStatus::Accepted,
+            (Self::Rejected, Some(d)) => d.status == DecisionStatus::Rejected,
+            (Self::Open, Some(d)) => d.status == DecisionStatus::Open,
+            (Self::Changed, Some(d)) => d.evidence == EvidenceCheck::Changed,
+        }
+    }
 }
 
 /// One listed entry.
@@ -1080,6 +1238,12 @@ pub struct Entry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
     pub message: String,
+    /// The finding's identity, to record a decision against.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The decision about the finding, as text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<String>,
 }
@@ -1113,8 +1277,14 @@ pub fn list(
             .as_deref()
             .is_none_or(|query| output.located(location, query))
     };
-    // Only findings and not-evaluated outcomes are located.
-    let unlocated = filter.location.is_none();
+    // Only findings and not-evaluated outcomes are located, and only
+    // findings decided.
+    let unlocated = filter.location.is_none() && filter.decision.is_none();
+    let decision_ok = |decision: Option<&FindingDecision>| {
+        filter
+            .decision
+            .is_none_or(|wanted| wanted.matches(decision))
+    };
     let mut matched: Vec<Entry> = Vec::new();
 
     // `--code` names integrity issues only; rules never match it.
@@ -1123,6 +1293,7 @@ pub fn list(
             let findings = output.report.findings().iter().filter(|finding| {
                 rule_ok(&finding.rule_id.to_string())
                     && place_ok(finding.location.as_ref())
+                    && decision_ok(finding.decision.as_ref())
                     && filter.object.as_deref().is_none_or(|query| {
                         names_source(&finding.scope, query)
                             || finding
@@ -1134,7 +1305,7 @@ pub fn list(
             });
             matched.extend(findings.map(|f| finding_entry(output, f, qualify, evidence)));
         }
-        if wants(Section::NotEvaluated) {
+        if wants(Section::NotEvaluated) && filter.decision.is_none() {
             let outcomes = output.report.not_evaluated().iter().filter(|outcome| {
                 rule_ok(&outcome.rule_id.to_string())
                     && place_ok(outcome.location.as_ref())
@@ -1160,6 +1331,8 @@ pub fn list(
                     .is_none_or(|query| mentions(&record.message, query))
         });
         matched.extend(records.map(|record| Entry {
+            id: None,
+            decision: None,
             section: Section::Integrity,
             key: record.code.clone(),
             level: record.severity.clone(),
@@ -1187,6 +1360,8 @@ pub fn list(
                     .is_none_or(|query| output.names(&u.object, query))
             });
         matched.extend(unmeasured.map(|u| Entry {
+            id: None,
+            decision: None,
             section: Section::Geometry,
             key: "unmeasured".to_owned(),
             level: "unmeasured".to_owned(),
@@ -1201,6 +1376,38 @@ pub fn list(
 
     if unlocated && filter.code.is_none() && wants(Section::Tables) {
         matched.extend(table_entries(output, filter, qualify));
+    }
+
+    // A stale decision names no object that is still reported.
+    if unlocated
+        && filter.code.is_none()
+        && filter.object.is_none()
+        && wants(Section::StaleDecisions)
+    {
+        for decision in output.report.stale_decisions() {
+            let (rule, message) = stale_subject(decision);
+            if !rule_ok(&rule) {
+                continue;
+            }
+            matched.push(Entry {
+                section: Section::StaleDecisions,
+                key: rule,
+                level: decision.status.as_str().to_owned(),
+                object: None,
+                scope: None,
+                related: vec![],
+                location: None,
+                message,
+                id: Some(decision.finding.to_string()),
+                decision: Some(decision_text(
+                    decision.status,
+                    &decision.author,
+                    &decision.date,
+                    &decision.comment,
+                )),
+                evidence: vec![],
+            });
+        }
     }
 
     let total = matched.len();
@@ -1239,6 +1446,8 @@ fn table_entries(output: &CheckOutput, filter: &Filter, qualify: bool) -> Vec<En
         entries.extend(rows.map(|row| {
             let (object, scope) = subject_fields(output, row.scope(), qualify);
             Entry {
+                id: None,
+                decision: None,
                 section: Section::Tables,
                 key: table.rule_id().to_string(),
                 level: table.name().to_owned(),
@@ -1305,6 +1514,8 @@ fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidenc
             .as_ref()
             .map(|location| location_text(location, qualify)),
         message: finding.message.trim().to_owned(),
+        id: finding.id.map(|id| id.to_string()),
+        decision: finding.decision.as_ref().map(carried_text),
         evidence: if evidence {
             finding
                 .evidence
@@ -1323,6 +1534,8 @@ fn finding_entry(output: &CheckOutput, finding: &Finding, qualify: bool, evidenc
 fn not_evaluated_entry(output: &CheckOutput, outcome: &NotEvaluated, qualify: bool) -> Entry {
     let (object, scope) = subject_fields(output, &outcome.scope, qualify);
     Entry {
+        id: None,
+        decision: None,
         section: Section::NotEvaluated,
         key: outcome.rule_id.to_string(),
         level: reason(&outcome.reason).to_owned(),
@@ -1355,6 +1568,12 @@ pub fn render_listing(listing: &Listing) -> String {
             let _ = write!(out, "  ({scope})");
         }
         let _ = writeln!(out, "\n    {}", entry.message);
+        if let Some(id) = &entry.id {
+            let _ = writeln!(out, "    id: {id}");
+        }
+        if let Some(decision) = &entry.decision {
+            let _ = writeln!(out, "    decision: {decision}");
+        }
         if !entry.related.is_empty() {
             let _ = writeln!(out, "    related: {}", entry.related.join("; "));
         }

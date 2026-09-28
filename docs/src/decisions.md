@@ -130,6 +130,13 @@ it is part of the message, so the finding gets a new identity and its old
 decision becomes stale. Without a basis the answer is `unknown`, never a
 claimed `unchanged`.
 
+## Command line
+
+`axioval check` identifies every finding over GlobalIds, and `--decisions
+FILE` applies a decisions file; `axioval decide` records decisions about a
+saved result's findings, with their basis. See
+[`axioval decide`](./cli.md#axioval-decide).
+
 ## BCF
 
 A decided finding's topic carries the decision (see

@@ -199,6 +199,17 @@ rules: 1 failed · 1 nothing selected
 Without it the result is unchanged. A rule that selected nothing does not
 change the exit status.
 
+Every finding has an `id`, its stable identity over GlobalIds (see
+[Review decisions](./decisions.md#finding-identity)), equal to its BCF topic
+GUID. `--decisions FILE` carries the decisions in `FILE` (written by
+[`axioval decide`](#axioval-decide)) over to the findings with the same
+identity: each gets a `decision`, flagged `changed` when its severity or
+evidence counts differ from when it was decided, and decisions whose finding
+is gone are listed in the report's `stale_decisions`. The BCF archive then
+writes accepted and rejected topics with that status and the decision as a
+comment. Decisions never hide a finding or a not-evaluated outcome and never
+change the exit status.
+
 Everything is built before anything is written: a failing run leaves no
 partial report or archive behind.
 
@@ -215,6 +226,29 @@ partial report or archive behind.
 A finding takes precedence over incompleteness: status 3 can still come with
 not-evaluated outcomes in the report. Automation that only needs pass or fail
 treats any non-zero status as a failure.
+
+## `axioval decide`
+
+Records a reviewer's decision about findings of a result saved with `check
+--report`, in a decisions file that `check --decisions` reads:
+
+```bash
+axioval check --model rev1.ifc ... --report r1.json
+axioval report r1.json --rule wall-reference-required   # lists each finding's id
+axioval decide r1.json --decisions decisions.json \
+  --finding 5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20 --status accepted \
+  --author "A. Reviewer" --comment "agreed with the architect"
+axioval check --model rev2.ifc ... --decisions decisions.json --report r2.json --bcf r2.bcfzip
+```
+
+`--finding` repeats to decide several findings alike; `--status` is
+`accepted`, `rejected` or `open`. The file is created when missing, and a
+decision about a finding already decided replaces the earlier one. Each
+decision records the finding's basis (rule, message, severity, evidence
+counts), so a re-check can tell whether it changed. `--date` is an ISO 8601
+date-time with offset, else `SOURCE_DATE_EPOCH` when set, else now, in UTC.
+A finding the result does not contain fails the command (status 1) and
+nothing is written.
 
 ## `axioval compare`
 
@@ -410,6 +444,23 @@ $ axioval report r.json --section tables --rule storey-heights
 
 Numbers are shown to six decimals, an interval as `lower..upper`; the saved
 JSON keeps them in full.
+
+**Decisions.** A listed finding prints its `id` and, when `check
+--decisions` carried one over, its decision:
+
+```text
+[finding] error wall-reference-required  #101 IFCWALL 0000000000000000000011
+    missing exact property axioval:example.ifc.reference
+    id: 5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20
+    decision: accepted by A. Reviewer on 2026-09-27T08:00:00Z: agreed with the architect
+```
+
+The summary then counts them (`decisions: 1 accepted · 0 rejected · 0 open ·
+3 undecided · 0 changed · 1 stale`), and stale decisions form the
+`stale-decision` section, grouped by rule and status and listed with
+`--section stale-decisions`. `--decision accepted|rejected|open|undecided|changed`
+lists only findings with that decision (`changed`: decided and changed
+since).
 
 Both views end with the exact command for the next step: the largest group,
 an example object, the next page. Every suggested command is quoted for a POSIX

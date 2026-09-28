@@ -10978,3 +10978,200 @@ fn area_ratio_measures_its_numerator_and_denominator_differently() {
         "{result:#}"
     );
 }
+
+/// Walls `…11` and `…12` and a slab, numbered from `first`. The wall
+/// `GlobalId`s in `referenced` state a `Reference`; the others are findings.
+fn revision(first: u64, referenced: &[&str]) -> String {
+    let n = |offset: u64| first + offset;
+    let walls = [
+        ("0000000000000000000011", n(0)),
+        ("0000000000000000000012", n(1)),
+    ];
+    let mut related: Vec<String> = walls
+        .iter()
+        .filter(|(global_id, _)| referenced.contains(global_id))
+        .map(|(_, number)| format!("#{number}"))
+        .collect();
+    // The relationship needs an object; the slab is never checked.
+    related.push(format!("#{}", n(2)));
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #{}=IFCWALL('{}',$,$,$,$,$,$,$,$);\n\
+         #{}=IFCWALL('{}',$,$,$,$,$,$,$,$);\n\
+         #{}=IFCSLAB('0000000000000000000013',$,$,$,$,$,$,$,$);\n\
+         #{}=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('W-1'),$);\n\
+         #{}=IFCPROPERTYSET('0000000000000000000015',$,'Pset_WallCommon',$,(#{}));\n\
+         #{}=IFCRELDEFINESBYPROPERTIES('0000000000000000000016',$,$,$,({}),#{});\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        walls[0].1,
+        walls[0].0,
+        walls[1].1,
+        walls[1].0,
+        n(2),
+        n(3),
+        n(4),
+        n(3),
+        n(5),
+        related.join(","),
+        n(4),
+    )
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn revision_two_carries_revision_ones_decisions_and_lists_stale_ones() {
+    let case = Case::new("decisions");
+    let axioval = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .current_dir(case.path("."))
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let read = |name: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(case.path(name)).unwrap()).unwrap()
+    };
+    let text = |output: Output| String::from_utf8(output.stdout).unwrap();
+
+    // Revision 1: both walls lack their reference.
+    let report = case.path("r1.json");
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &["--report", report.to_str().unwrap()],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let first = read("r1.json");
+    let findings = first["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 2, "{first:#}");
+    let id = |finding: &Value| finding["id"].as_str().unwrap().to_owned();
+    let (kept, fixed) = (id(&findings[0]), id(&findings[1]));
+
+    // The reviewer accepts one and rejects the other.
+    let decide = |finding: &str, status: &str, comment: &str| {
+        axioval(&[
+            "decide",
+            "r1.json",
+            "--decisions",
+            "decisions.json",
+            "--finding",
+            finding,
+            "--status",
+            status,
+            "--author",
+            "A. Reviewer",
+            "--comment",
+            comment,
+            "--date",
+            "2026-09-27T08:00:00Z",
+        ])
+    };
+    let output = decide(&kept, "accepted", "agreed with the architect");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let output = decide(&fixed, "rejected", "");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(
+        read("decisions.json")["decisions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    // An unknown finding is refused and nothing is written.
+    let before = std::fs::read(case.path("decisions.json")).unwrap();
+    let output = decide("00000000-0000-5000-8000-000000000000", "accepted", "");
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("no finding has id"),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(std::fs::read(case.path("decisions.json")).unwrap(), before);
+
+    // Revision 2 renumbers every entity and fixes the second wall.
+    let bcf = case.path("r2.bcfzip");
+    let output = case.check(
+        &revision(101, &["0000000000000000000012"]),
+        true,
+        &[
+            "--report",
+            case.path("r2.json").to_str().unwrap(),
+            "--decisions",
+            case.path("decisions.json").to_str().unwrap(),
+            "--bcf",
+            bcf.to_str().unwrap(),
+        ],
+    );
+    // Deciding a finding never changes the exit status.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let second = read("r2.json");
+    let findings = second["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{second:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#101");
+    assert_eq!(id(&findings[0]), kept);
+    assert_eq!(
+        findings[0]["decision"],
+        json!({"status": "accepted", "author": "A. Reviewer", "date": "2026-09-27T08:00:00Z",
+               "comment": "agreed with the architect", "evidence": "unchanged"})
+    );
+    let stale = second["report"]["stale_decisions"].as_array().unwrap();
+    assert_eq!(stale.len(), 1, "{second:#}");
+    assert_eq!(stale[0]["finding"], json!(fixed));
+    assert_eq!(stale[0]["status"], "rejected");
+
+    // The BCF topic is the finding, accepted, with the decision's comment.
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    assert!(
+        archive.diagnostics().is_empty(),
+        "{:?}",
+        archive.diagnostics()
+    );
+    let markup = archive.topics().next().unwrap();
+    assert_eq!(markup.topic.guid.as_deref(), Some(kept.as_str()));
+    assert_eq!(markup.topic.topic_status.as_deref(), Some("Accepted"));
+    assert_eq!(
+        markup.comments[0].comment.as_deref(),
+        Some("Accepted: agreed with the architect")
+    );
+
+    // The summary counts decisions and points at the stale one.
+    let summary = text(axioval(&["report", "r2.json"]));
+    assert!(
+        summary.contains(
+            "decisions: 1 accepted · 0 rejected · 0 open · 0 undecided · 0 changed · 1 stale"
+        ),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("axioval report r2.json --section stale-decisions"),
+        "{summary}"
+    );
+    let listing = text(axioval(&[
+        "report",
+        "r2.json",
+        "--section",
+        "stale-decisions",
+    ]));
+    assert!(listing.contains(&format!("id: {fixed}")), "{listing}");
+    assert!(
+        listing.contains("rejected by A. Reviewer on 2026-09-27T08:00:00Z"),
+        "{listing}"
+    );
+    let listing = text(axioval(&["report", "r2.json", "--decision", "accepted"]));
+    assert!(listing.contains("showing 1–1 of 1"), "{listing}");
+    assert!(
+        listing.contains("decision: accepted by A. Reviewer"),
+        "{listing}"
+    );
+    let listing = text(axioval(&["report", "r2.json", "--decision", "undecided"]));
+    assert!(listing.contains("no matching entries"), "{listing}");
+
+    // Without decisions the same check exits 3 and decides nothing.
+    let output = case.check(&revision(101, &["0000000000000000000012"]), true, &[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(id(&result["report"]["findings"][0]), kept);
+    assert!(result["report"]["findings"][0].get("decision").is_none());
+    assert!(result["report"].get("stale_decisions").is_none());
+}

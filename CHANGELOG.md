@@ -26,6 +26,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   archives are byte-identical. **Breaking:** `Finding` gains `id` and
   `decision` and `Report` gains `stale_decisions`, so struct literals must
   set them.
+- **Review decisions on the command line.** (#94) `check` writes every
+  finding's `id` and takes `--decisions FILE`, carrying the decisions over
+  to the findings with the same identity and listing stale ones in the
+  report; the BCF archive writes them as topic status and comment. `axioval
+  decide RESULT --decisions FILE --finding ID --status
+  accepted|rejected|open --author A [--comment C] [--date D]` records them
+  with each finding's basis. `report` prints ids and decisions, counts them
+  in the summary, lists `--section stale-decisions` and filters by
+  `--decision`. The exit status is unchanged by decisions.
 - **Accessible routes with tolerances, measured connectors and located
   blocks.** (#123) `accessible-route` takes `obstruction_depth_metres`
   (obstacles within that depth of a route space's boundary, a 5 mm

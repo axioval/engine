@@ -5,7 +5,9 @@
 //! writes the report as JSON, and optionally as a BCF archive. `compare`
 //! compares two revisions of a model object by object and writes the same
 //! kind of result. `report` reads a saved result back as a bounded summary
-//! or a filtered, paged listing.
+//! or a filtered, paged listing. `decide` records a reviewer's decisions
+//! about a saved result's findings, which `check --decisions` carries over
+//! to a re-check.
 //!
 //! Exit status is part of the automation contract; see [`Outcome`].
 
@@ -32,8 +34,8 @@ use axioval::{
     },
     ifc::import_ifc_session,
     ir::{
-        DefinitionPackage, Discipline, ObjectId, Project, Report, RuleSetPackage, SourceId,
-        contract::SourceField,
+        DateTime, Decision, DecisionStatus, Decisions, DefinitionPackage, Discipline, FindingId,
+        ObjectId, Project, Report, RuleSetPackage, SourceId, contract::SourceField,
     },
 };
 use clap::{Args, Parser, Subcommand};
@@ -75,6 +77,15 @@ enum Command {
     /// Without filters, prints the same bounded summary as `check --summary`.
     /// With any filter, lists the matching entries, paged.
     Report(ReportArgs),
+    /// Record a reviewer's decision about findings of a saved result.
+    ///
+    /// Accepts, rejects or reopens each `--finding` (its `id` in the
+    /// result) in the decisions file, creating it when missing and
+    /// replacing an earlier decision about the same finding. `check
+    /// --decisions` carries them over to a re-check. Exit status: 0
+    /// recorded, 1 nothing written (an unknown finding, an unreadable
+    /// file), 2 invalid usage.
+    Decide(DecideArgs),
 }
 
 #[derive(Args)]
@@ -120,8 +131,55 @@ struct CheckArgs {
     /// then lists them. Off by default, and then the result is unchanged.
     #[arg(long)]
     rule_status: bool,
+    /// Carry the decisions in this file (written by `axioval decide`) over
+    /// to the findings with the same identity; decisions whose finding is
+    /// gone are listed as stale. Never changes the exit status.
+    #[arg(long, value_name = "FILE")]
+    decisions: Option<PathBuf>,
     #[command(flatten)]
     output: OutputArgs,
+}
+
+#[derive(Args)]
+struct DecideArgs {
+    /// The JSON result `check --report` wrote.
+    result: PathBuf,
+    /// The decisions file to update; created when it does not exist.
+    #[arg(long, value_name = "FILE")]
+    decisions: PathBuf,
+    /// A finding's `id` in the result. Repeat to decide several alike.
+    #[arg(long = "finding", required = true, value_name = "ID")]
+    findings: Vec<FindingId>,
+    #[arg(long, value_enum)]
+    status: StatusArg,
+    /// Who decides.
+    #[arg(long)]
+    author: String,
+    /// Why.
+    #[arg(long, default_value = "")]
+    comment: String,
+    /// When, an ISO 8601 date-time with offset. Defaults to
+    /// `SOURCE_DATE_EPOCH` when set, else the current time, in UTC.
+    #[arg(long)]
+    date: Option<DateTime>,
+}
+
+/// The `decide --status` values.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum StatusArg {
+    Accepted,
+    Rejected,
+    Open,
+}
+
+impl From<StatusArg> for DecisionStatus {
+    fn from(status: StatusArg) -> Self {
+        match status {
+            StatusArg::Accepted => Self::Accepted,
+            StatusArg::Rejected => Self::Rejected,
+            StatusArg::Open => Self::Open,
+        }
+    }
 }
 
 /// How `check --locate` locates outcomes.
@@ -227,6 +285,11 @@ struct ReportArgs {
     /// kept: it may lie there.
     #[arg(long)]
     location: Option<String>,
+    /// Only findings with this decision, as `check --decisions` carried it
+    /// over: `accepted`, `rejected`, `open`, `undecided`, or `changed`
+    /// (decided, and changed since).
+    #[arg(long, value_enum)]
+    decision: Option<digest::DecisionFilter>,
     /// Include evidence locators in listed entries.
     #[arg(long)]
     evidence: bool,
@@ -413,7 +476,50 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
             report(args)?;
             Ok(Outcome::Passed)
         }
+        Command::Decide(args) => {
+            decide(&args)?;
+            Ok(Outcome::Passed)
+        }
     }
+}
+
+/// Records `args`'s decision about each of its findings, taking each
+/// finding's basis from the result. Nothing is written unless every
+/// finding is in the result.
+fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
+    let output: CheckOutput = load(&args.result)?;
+    let mut decisions: Decisions = if args.decisions.exists() {
+        load(&args.decisions)?
+    } else {
+        Decisions::default()
+    };
+    let date = match args.date {
+        Some(date) => date,
+        None => i64::try_from(epoch_seconds()?)
+            .ok()
+            .and_then(DateTime::from_unix_seconds)
+            .ok_or("the current time is not a date-time in the years 0000 to 9999")?,
+    };
+    for id in &args.findings {
+        let finding = output
+            .report
+            .findings()
+            .iter()
+            .find(|finding| finding.id == Some(*id))
+            .ok_or_else(|| format!("{}: no finding has id {id}", args.result.display()))?;
+        let decision = Decision::new(*id, args.status.into(), &args.author, date)?
+            .with_comment(args.comment.trim())
+            .with_basis(finding);
+        decisions.record(decision)?;
+    }
+    let json = serde_json::to_string_pretty(&decisions)? + "\n";
+    write(&args.decisions, json.as_bytes())?;
+    println!(
+        "recorded {} decision(s) in {}",
+        args.findings.len(),
+        args.decisions.display()
+    );
+    Ok(())
 }
 
 fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
@@ -424,6 +530,7 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
     }
     let labels = rule_labels(&rulesets);
+    let decisions: Option<Decisions> = args.decisions.as_deref().map(load).transpose()?;
     let (session, bytes) = sources(&args.models)?;
     let session = session.with_discipline_map(
         &args
@@ -446,7 +553,13 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     if args.rule_status {
         runtime = runtime.with_rule_summaries();
     }
-    let result = runtime.run_session(&session, plan)?;
+    let mut result = runtime.run_session(&session, plan)?;
+    // Keyed as the BCF sink keys its topics, so a decision recorded against
+    // either is the same.
+    result.identify_findings(session.project(), bcf::IFC_GLOBAL_ID_SCHEME)?;
+    if let Some(decisions) = &decisions {
+        result.apply_decisions(decisions)?;
+    }
     let integrity = integrity(&session)?;
 
     let geometry = meshed.map(|report| digest::GeometryRecord {
@@ -556,7 +669,8 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
         || args.rule.is_some()
         || args.code.is_some()
         || args.object.is_some()
-        || args.location.is_some();
+        || args.location.is_some()
+        || args.decision.is_some();
     let text = if filtered {
         let command = listing_command(&path, &args);
         let filter = Filter {
@@ -565,6 +679,7 @@ fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {
             code: args.code,
             object: args.object,
             location: args.location,
+            decision: args.decision,
         };
         let listing = digest::list(
             &output,
@@ -664,6 +779,12 @@ fn listing_command(path: &str, args: &ReportArgs) -> String {
             let _ = write!(command, " {flag} {}", digest::shell_quote(value));
         }
     }
+    if let Some(decision) = args.decision {
+        let name = clap::ValueEnum::to_possible_value(&decision)
+            .map(|value| value.get_name().to_owned())
+            .unwrap_or_default();
+        let _ = write!(command, " --decision {name}");
+    }
     if args.evidence {
         command.push_str(" --evidence");
     }
@@ -759,13 +880,17 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
 /// `SOURCE_DATE_EPOCH` is the reproducible-builds convention: with it set,
 /// the same model and ruleset write byte-identical BCF.
 fn timestamp() -> Result<String, Box<dyn Error>> {
-    let seconds = match std::env::var("SOURCE_DATE_EPOCH") {
+    Ok(utc(epoch_seconds()?))
+}
+
+/// Seconds since the Unix epoch of `SOURCE_DATE_EPOCH` when set, else of now.
+fn epoch_seconds() -> Result<u64, Box<dyn Error>> {
+    Ok(match std::env::var("SOURCE_DATE_EPOCH") {
         Ok(value) => value
             .parse::<u64>()
             .map_err(|_| format!("SOURCE_DATE_EPOCH `{value}` is not a count of seconds"))?,
         Err(_) => SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
-    };
-    Ok(utc(seconds))
+    })
 }
 
 /// Formats seconds since the Unix epoch as `YYYY-MM-DDThh:mm:ssZ`.

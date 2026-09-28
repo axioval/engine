@@ -632,6 +632,20 @@ pub fn is_reserved_set(set: &str) -> bool {
 ///   highest point, in metres.
 /// - [`MEASURED_AREA`]: its footprint area, overlaps counted once.
 /// - [`MEASURED_VOLUME`]: its enclosed volume.
+/// - [`MEASURED_X`], [`MEASURED_Y`], [`MEASURED_Z`]: the world
+///   coordinates of its placement origin, in metres, as stated exactly.
+/// - `bottom_above_level;path=<steps>` ([`MEASURED_BOTTOM_ABOVE_LEVEL`]):
+///   its bottom above the placement origin of the one level the path
+///   reaches from it. Steps are `,`-separated and written as a `related`
+///   selector's (`Relationship[:forward|backward|either][+]`). No level
+///   reached is an exact absence; levels at different elevations conflict.
+/// - `boundary_area;kind=<kind>[;plane=<metres>]`
+///   ([`MEASURED_BOUNDARY_AREA`]): a space's summed space-boundary area
+///   against elements of the source kind `kind` or a subtype, boundaries
+///   counted on the body's face planes within `plane` (default 0).
+/// - [`MEASURED_LEVEL_HEIGHT`]: a storey's height to the next storey of
+///   the same spatial parent, stated by the source rather than measured;
+///   none for the highest storey.
 ///
 /// A run without the service a value needs cannot measure it for any
 /// object (a missing service, reported once per rule and source). Reserved
@@ -651,8 +665,22 @@ pub const MEASURED_TOP: &str = "top";
 pub const MEASURED_AREA: &str = "area";
 /// The enclosed volume in [`MEASURED_SET`].
 pub const MEASURED_VOLUME: &str = "volume";
-/// Every name in [`MEASURED_SET`].
-pub const MEASURED_NAMES: [&str; 7] = [
+/// The x coordinate of the placement origin in [`MEASURED_SET`].
+pub const MEASURED_X: &str = "x";
+/// The y coordinate of the placement origin in [`MEASURED_SET`].
+pub const MEASURED_Y: &str = "y";
+/// The z coordinate of the placement origin in [`MEASURED_SET`].
+pub const MEASURED_Z: &str = "z";
+/// The bottom above a level reached by a path in [`MEASURED_SET`]; takes
+/// `path`.
+pub const MEASURED_BOTTOM_ABOVE_LEVEL: &str = "bottom_above_level";
+/// The space-boundary area against one kind of element in
+/// [`MEASURED_SET`]; takes `kind` and optionally `plane`.
+pub const MEASURED_BOUNDARY_AREA: &str = "boundary_area";
+/// A storey's height to the next storey in [`MEASURED_SET`].
+pub const MEASURED_LEVEL_HEIGHT: &str = "level_height";
+/// Every name in [`MEASURED_SET`] that takes no parameter.
+pub const MEASURED_NAMES: [&str; 11] = [
     MEASURED_EXTENT_X,
     MEASURED_EXTENT_Y,
     MEASURED_EXTENT_Z,
@@ -660,6 +688,10 @@ pub const MEASURED_NAMES: [&str; 7] = [
     MEASURED_TOP,
     MEASURED_AREA,
     MEASURED_VOLUME,
+    MEASURED_X,
+    MEASURED_Y,
+    MEASURED_Z,
+    MEASURED_LEVEL_HEIGHT,
 ];
 
 /// Whether `set` is a reserved set the engine derives rather than a source

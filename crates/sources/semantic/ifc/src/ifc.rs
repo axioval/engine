@@ -90,6 +90,7 @@ struct IfcPropertyService {
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     attributes: Attributes,
+    levels: crate::levels::Levels,
 }
 
 impl IfcPropertyService {
@@ -415,6 +416,56 @@ impl IfcPropertyService {
     }
 }
 
+impl IfcPropertyService {
+    /// The measured values an IFC file states rather than its geometry:
+    /// `level_height`, a storey's height to the next storey. Every other
+    /// measured name is the engine's and never answered here.
+    fn resolve_measured(
+        &self,
+        request: &PropertyRequest,
+        object: EntityId,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        if !request
+            .property()
+            .eq_ignore_ascii_case(axioval_ir::MEASURED_LEVEL_HEIGHT)
+            || self.model.get(object).is_none()
+        {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let source = self.snapshots[0].source().clone();
+        match self.levels.height(&self.model, object) {
+            Ok(Some((metres, detail))) => {
+                let property = Property::new(
+                    axioval_ir::MEASURED_SET,
+                    request.property(),
+                    PropertyValue::Quantity {
+                        value: metres,
+                        dimension: axioval_ir::QuantityDimension::Length,
+                    },
+                )
+                .map_err(|_| PropertyResolutionError::InvalidRequest)?
+                .with_evidence(Evidence::exact(source, self.locator(detail)));
+                Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                    request.clone(),
+                    property,
+                )?))
+            }
+            Ok(None) => Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(
+                    request.clone(),
+                    Evidence::exact(
+                        source,
+                        self.locator(format_args!("level-height:{object}:none")),
+                    ),
+                )?,
+            )),
+            Err(why) => Err(PropertyResolutionError::Unavailable(format!(
+                "the level height of {object} cannot be read: {why}"
+            ))),
+        }
+    }
+}
+
 impl PropertyResolutionService for IfcPropertyService {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &self.snapshots
@@ -428,6 +479,9 @@ impl PropertyResolutionService for IfcPropertyService {
             return Err(PropertyResolutionError::InvalidRequest);
         }
         let object = Self::entity_id(request.object_id())?;
+        if request.property_set() == Some(axioval_ir::MEASURED_SET) {
+            return self.resolve_measured(request, object);
+        }
         if let Some(set) = request.property_set().filter(|set| is_reserved_set(set)) {
             return self.resolve_attribute(request, object, set);
         }
@@ -591,6 +645,7 @@ pub fn import_ifc_session(
         model: model.clone(),
         snapshots: snapshots.clone(),
         attributes: Attributes::new(release),
+        levels: crate::levels::Levels::new(release),
     }));
     let integrity = SourceIntegrityServiceHandle::new(Arc::new(IfcIntegrity::new(
         release,

@@ -91,7 +91,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   object-level missing-service outcomes once per rule and source.
   **Breaking:** `PropertyValue` and `PropertyResolutionError` gain
   variants, and object-level `missing_service` outcomes are reported per
-  source.
+  source. The set also answers `x`, `y` and `z` (the placement origin),
+  `bottom_above_level;path=<steps>` (the bottom above the level a
+  rule-stated containment path reaches), `boundary_area;kind=<kind>` (a
+  space's boundary area per kind of bounding element) and `level_height`,
+  a storey's height to the next storey, which the IFC adapter states.
 
 - **Classifications derived by a ruleset.** (#99) A ruleset declares
   `classifications`: ordered rows of a selector and a class name, first

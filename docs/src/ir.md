@@ -69,7 +69,7 @@ Some facts about an object are not in any property set but in fields of the obje
 
 - `CLASSIFICATION_SET` (`axioval:classification`) holds the classes a ruleset's classifications derive, one property per classification id: a string for a first-match classification, a list of strings for an all-match one, none for an object no row matches. The engine answers it, never a source; see [Derived properties](./derived.md). `is_derived_set` names the sets the engine derives.
 
-- `MEASURED_SET` (`axioval:measured`) holds values measured from geometry: `extent_x`, `extent_y`, `extent_z`, `bottom`, `top`, `area` and `volume` (`MEASURED_NAMES`), each a quantity when measured exactly and a `measured` interval otherwise. The engine answers it through the host's geometry services; see [Derived properties](./derived.md#measured-values).
+- `MEASURED_SET` (`axioval:measured`) holds values measured from geometry: `extent_x`, `extent_y`, `extent_z`, `bottom`, `top`, `area`, `volume`, `x`, `y`, `z` and the parameterised `bottom_above_level;path=…` and `boundary_area;kind=…`, and the stated `level_height` (`MEASURED_NAMES`), each a quantity when measured exactly and a `measured` interval otherwise. The engine answers it through the host's geometry services; see [Derived properties](./derived.md#measured-values).
 
 These sets are engine vocabulary. They name no property set of any source, a package cannot redeclare them, and concept binding passes them through unchanged, while the property name inside them is still bound per source. A request without a set never searches attributes.
 

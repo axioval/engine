@@ -837,6 +837,50 @@ fn with_geometry_a_measured_extent_selects_walls() {
     assert_eq!(findings[0]["object_id"]["local_id"], "#16", "{result:#}");
 }
 
+/// Storeys at 0, 3 and 7 m of one building: only the first floor is more
+/// than 3.5 m high, and the top storey has no height.
+#[test]
+fn a_storey_is_selected_by_its_height_to_the_next_storey() {
+    let case = Case::new("level-height");
+    let model = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
+         #6=IFCLOCALPLACEMENT($,#5);\n\
+         #7=IFCCARTESIANPOINT((0.,0.,7.));\n\
+         #8=IFCAXIS2PLACEMENT3D(#7,$,$);\n\
+         #9=IFCLOCALPLACEMENT($,#8);\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCUNITASSIGNMENT((#20));\n\
+         #22=IFCPROJECT('0000000000000000000022',$,'P',$,$,$,$,$,#21);\n\
+         #10=IFCBUILDING('0000000000000000000010',$,'B',$,$,#3,$,$,.ELEMENT.,$,$,$);\n\
+         #11=IFCBUILDINGSTOREY('0000000000000000000011',$,'0',$,$,#3,$,$,.ELEMENT.,0.);\n\
+         #12=IFCBUILDINGSTOREY('0000000000000000000012',$,'1',$,$,#6,$,$,.ELEMENT.,3.);\n\
+         #13=IFCBUILDINGSTOREY('0000000000000000000013',$,'2',$,$,#9,$,$,.ELEMENT.,7.);\n\
+         #14=IFCRELAGGREGATES('0000000000000000000014',$,$,$,#10,(#11,#12,#13));\n\
+         ENDSEC;\nEND-ISO-10303-21;\n";
+    let (output, result) = case.geometry_rule(
+        model,
+        &[("storey", "IfcBuildingStorey")],
+        "axioval:capability.property-exists",
+        &registry_signature("axioval:capability.property-exists"),
+        json!({"kind": "allOf", "operands": [
+            entity("storey"),
+            {"kind": "property", "propertySet": "axioval:measured", "property": "level_height",
+             "operator": "greaterThan", "value": {"type": "quantity", "value": 3.5, "unit": "m"}},
+        ]}),
+        json!({"property": {"type": "propertyReference",
+                            "property": "axioval:example.ifc.reference",
+                            "propertySet": "axioval:example.ifc.pset-wall-common"}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#12", "{result:#}");
+}
+
 /// A clash that is a warning in general is an error where a selected wall
 /// is involved.
 #[test]

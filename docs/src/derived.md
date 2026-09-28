@@ -74,6 +74,47 @@ ignoring ASCII case):
 | `bottom`, `top` | the elevation of its lowest and highest point, a length | `VerticalExtentService` |
 | `area` | its footprint area, overlaps counted once | `PlanAreaService::measure_footprint` |
 | `volume` | its enclosed volume | `ProximityService::measure_body_volume` |
+| `x`, `y`, `z` | the world coordinates of its placement origin, a length, always exact | `ObjectFrameService` |
+| `bottom_above_level;path=<steps>` | its bottom above the one level the path reaches | `RelationshipSelectionService`, `ObjectFrameService`, `VerticalExtentService` |
+| `boundary_area;kind=<kind>[;plane=<m>]` | a space's summed boundary area against elements of one kind | `BoundaryCoverageService`, `TypeHierarchyService` |
+| `level_height` | a storey's height to the next storey, a length | the source's property resolver |
+
+### Names with parameters
+
+Two names take `;`-separated `key=value` parameters, part of the property
+name so that every selector, property reference and table key can carry
+them unchanged. Compilation checks their syntax; a malformed name is an
+unknown concept.
+
+- `bottom_above_level;path=<steps>`: the containment path is the rule's to
+  state, never a host default, because only the package knows which
+  relationship places its objects on a level (an IFC element in its storey
+  is `IfcRelContainedInSpatialStructure:backward`, a space
+  `IfcRelAggregates:backward`). Steps are `,`-separated and written as a
+  `related` selector's steps (`Relationship[:forward|backward|either][+]`),
+  walked one after another over the whole project. The level's elevation
+  is its placement origin's `z`. No level reached is an exact absence (a
+  loose object has no storey), several levels at different elevations are
+  a conflict, and a path the relationship service cannot answer leaves the
+  object not evaluated. The bottom keeps its interval.
+- `boundary_area;kind=<kind>[;plane=<metres>]`: the area of every declared
+  space boundary on the space body's face planes (within `plane`, default
+  0) whose bounding element is of the source kind `kind` or a subtype
+  (`IfcWall` includes `IfcWallStandardCase`, through the source's type
+  hierarchy). The kind is the source's own vocabulary, as a host's location
+  policy names storeys. A boundary naming no element may be of the kind,
+  so it leaves the space not evaluated, and so does a subtype question
+  without a type-hierarchy service.
+
+### Stated rather than measured
+
+`level_height` is a storey's height to the next storey of the same spatial
+parent, which the IFC adapter states: storey elevations are the world
+heights of their placements (in metres through the project's length unit),
+siblings are the storeys the same `IfcRelAggregates` parent aggregates, and
+the highest storey has none (an exact absence). A tilted storey, a sibling
+at the same elevation or unreadable, and a storey aggregated twice are
+refused. The engine forwards the name to the host's property resolver.
 
 A value measured exactly is a quantity with exact evidence. Anything
 coarser (a tessellated body) is a `measured` value, an interval sure to hold

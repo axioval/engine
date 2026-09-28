@@ -117,11 +117,7 @@ impl ConceptCatalog {
     #[must_use]
     pub fn derives(&self, set: &str, name: &str) -> Option<bool> {
         if set == axioval_ir::MEASURED_SET {
-            return Some(
-                axioval_ir::MEASURED_NAMES
-                    .iter()
-                    .any(|known| known.eq_ignore_ascii_case(name)),
-            );
+            return Some(crate::measured::parse(name).is_ok());
         }
         (set == axioval_ir::CLASSIFICATION_SET).then(|| self.classifications.contains(name))
     }

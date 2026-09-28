@@ -238,13 +238,14 @@ pub(crate) fn install(
     services: &mut crate::ServiceRegistry,
     host: Option<&PropertyResolutionServiceHandle>,
     classifications: Arc<Classifications>,
+    project: &axioval_ir::Project,
 ) {
     use crate::SnapshotBoundService as _;
     let snapshots = host.map_or_else(Vec::new, |host| host.source_snapshots().to_vec());
     services.replace(PropertyResolutionServiceHandle::new(Arc::new(
         DerivedProperties {
             inner: host.cloned(),
-            measures: Measures::of(services),
+            measures: Measures::of(services, host, project),
             classifications: classifications.clone(),
             snapshots,
         },

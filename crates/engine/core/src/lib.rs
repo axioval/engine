@@ -1091,7 +1091,7 @@ impl Runtime {
         if plan.classifications.is_empty()
             && let Some(host) = services.get::<PropertyResolutionServiceHandle>().cloned()
         {
-            derived::install(&mut services, Some(&host), Arc::default());
+            derived::install(&mut services, Some(&host), Arc::default(), project);
         }
         if let Some(refiner) = refiner.filter(|_| !plan.classifications.is_empty()) {
             derive_classifications(
@@ -1176,11 +1176,11 @@ fn derive_classifications(
     let host = services.get::<PropertyResolutionServiceHandle>().cloned();
     let mut derived = Classifications::default();
     for definition in definitions {
-        derived::install(services, host.as_ref(), Arc::new(derived.clone()));
+        derived::install(services, host.as_ref(), Arc::new(derived.clone()), project);
         let context = RuleContext { project, services };
         derived.classify(refiner, &context, definition);
     }
-    derived::install(services, host.as_ref(), Arc::new(derived));
+    derived::install(services, host.as_ref(), Arc::new(derived), project);
 }
 
 /// The report of every rule's outcomes, each part in its deterministic

@@ -724,12 +724,12 @@ pub use linear_quantity::{
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
 pub use metric_routing::{
-    BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
-    FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
-    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
-    MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, PathTrace, PathTraceRequest, ThresholdVerdict, UnreachableRegionEvidence,
-    UnreachableTargetsEvidence,
+    BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
+    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint,
+    MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence,
+    NearestTargetOutcome, NearestTargetRequest, PathTrace, PathTraceRequest, StairLength,
+    ThresholdVerdict, UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
 pub use object_frame::{
     ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,

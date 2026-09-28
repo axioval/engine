@@ -79,6 +79,31 @@ shortest walk among possibly several.
   requested object (sorted, deduplicated) and none whose lower bound
   exceeds the polyline's own length. The default refuses.
 
+## Routes across levels
+
+`MetricRouteRequest`, `NearestTargetRequest` and `FarthestPointRequest`
+take `with_connectors(ConnectorRouting)`: the typed vertical connectors
+(`VerticalConnector`, as in walkability) a route may climb, and a
+`ClimbLength` saying how a climb counts. A route enters and leaves a
+connector at its **landings**, the two ends of its walking line, and counts
+the climb between them:
+
+- `StairLength::Slope`: `sqrt(h² + (f·v)²)`, the slope length for a vertical
+  factor `f` of one;
+- `StairLength::HorizontalPlusVertical`: `h + f·v`, the horizontal length
+  plus the rise times the vertical factor.
+
+`h` is the climb's plan length between the landings and `v` its rise;
+`ClimbLength::length` bounds the result from both intervals' ends, rounded
+outwards. A negative or non-finite factor is `InvalidClimb`, one object given
+two kinds `ConflictingConnector`. A request carrying connectors climbs only
+through them: any other connector is no way between levels for it. A
+backend answers such a request only if `climbs_connectors()` says so; the
+default is `false`, and the handle then refuses the request (`Unavailable`)
+rather than let a backend answer a walk on one level. A connector whose
+length or passability a backend cannot prove leaves every route through it
+undecided: never shorter, never blocked.
+
 The engine contract contains no mesh, B-rep, IFC entity, Axiolid kernel, OpenCascade, or vendor type.
 
 ## The Axiolid backend
@@ -120,8 +145,8 @@ on exactly one surface.
   reason. A gap narrower than the body between obstacles inside a room
   cannot be proven blocking with `axiolid-overlay` 0.3.0, whose erosion does
   not state its side; such a route is refused, not blocked, until one-sided
-  erosion (`Region::erode_inner`, 0.3.1) is published. Routes across vertical
-  connectors are not measured.
+  erosion (`Region::erode_inner`, 0.3.1) is published. A request without
+  connectors stays on its level; one with them is measured as below.
 
 ### Many targets in the Axiolid backend
 
@@ -176,6 +201,62 @@ closed, counts only by its straight-line distance, which no route beats.
 
 These need `axiolid-route` 0.3.2 or later (`distance_map`, `farthest_point`);
 the workspace requires 0.3.3.
+
+### Across levels in the Axiolid backend
+
+A request with connectors climbs only through its own; the host's
+`with_connector` declarations are no way for it and no longer leave a level
+open. Each connector is measured from its body with the walking-surface
+service's own measurements:
+
+- a **stair** must be one exactly measured, straight flight whose first and
+  last treads fill a rectangle: its walking line runs from the first
+  nosing, at the base, to the back of the last tread, at the top, midway
+  between each tread's sides;
+- a **ramp** must be one exactly measured planar run filling a rectangle:
+  its walking line runs along the run's direction from its bottom to its top
+  end, midway between its sides;
+- a **lift** is ridden, not walked: no walking length is measured for it.
+
+The landings stand 1 mm plus the body's radius outside the line's ends,
+along the walking direction, each on the one declared surface whose
+footprint holds it and whose floor lies within a step of the end's
+elevation. The climb's plan length is the distance between the landings and
+its rise the flight's (base to top) or the run's. A body passes when the
+narrowest tread or the run is at least as wide as the body and the
+walking-surface headroom above the connector (against every other body but
+the surfaces and portals) clears the profile's height: a connector surely
+too narrow or too low is no way, one that may be either keeps its lower
+bound and gives no upper bound. A connector that cannot be measured or
+whose landings cannot be placed is not climbed, and every level it touches
+(within 1 m, as before) is not closed.
+
+The levels a walk may reach are the start's and, transitively, every level
+a climbed connector lands on. On each, one `axiolid-route` distance map per
+landing and one from the level's targets give the walks between the start,
+the landings and the targets: a lower bound from the point map on a closed
+level (infinite only where the free region, less the narrow portals' bands,
+proves the two points apart), an upper bound from the point path, or from a
+proven sweep for a body with a radius. These level walks and the climbs
+form a small graph; its shortest path on lower bounds bounds every walk
+through the connectors from below, and its shortest path on upper bounds is
+a walk, whose waypoints stand each landing on its connector. When any
+reached level is not closed or a target cannot be placed, the lower bound
+falls back to the straight line to the nearest target (a climb is never
+shorter than its plan length). `Unreachable` and `Blocked` need every
+reached level closed, every target placed, and no walk that is not proven
+apart.
+
+The **farthest point** (for a point only) weighs each landing on the
+region's level by the walk beyond it, bounded both ways by the graph. As
+`axiolid-route` 0.3.3 builds distance maps from unweighted targets only (axiolid/kernel#197), the
+bracket is assembled: from above, the least over the sources (the level's
+targets, each weighted landing) of that source's farthest distance plus its
+weight, and one map over all sources shifted by the largest weight; from
+below, that map's bracket shifted by the least weight, and the walk from
+every witness found to its nearest source plus its weight. With one source
+on the region's level (a room reached only by one stair) the bracket is the
+kernel's; with several it may not converge.
 
 ## Consumers
 

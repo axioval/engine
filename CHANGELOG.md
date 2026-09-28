@@ -129,7 +129,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   (default: undecided) records the other rule's selection. **Breaking:**
   `Selector`, `RuleStatus` and `EngineError` gain variants, and
   `RuleInstance` and `RuleFolder` gain `gate`.
-
+- **Metric routes across levels.** (#117) Route, nearest-target and
+  farthest-point requests take `with_connectors(ConnectorRouting)`: the
+  vertical connectors a route may climb and a `ClimbLength`, the climb
+  counted along the slope (`StairLength::Slope`) or as its horizontal length
+  plus its rise times a vertical factor (`HorizontalPlusVertical`). The
+  handle refuses such a request unless the backend `climbs_connectors()`.
+  The Axiolid metric-routing service walks through straight stairs and
+  one-run ramps measured exactly from their bodies, between landings at
+  their walking line's ends, joining per-level distance maps in a graph; a
+  connector too narrow or too low for the body is no way, and one it cannot
+  measure or prove passable leaves routes through it undecided. **Breaking:**
+  `MetricRoutingError` gains `InvalidClimb` and `ConflictingConnector`.
 - **Separate area measures and the unallocated share.** (#115)
   `area-ratio` takes `numerator_measure` and `denominator_measure`, so a
   storey's external-wall ratio divides its walls' facade area by its gross

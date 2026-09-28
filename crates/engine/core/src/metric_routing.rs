@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use crate::services::reviewable_exact_evidence;
+use crate::walkability::VerticalConnector;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
@@ -50,6 +51,12 @@ pub enum MetricRoutingError {
     /// claimed convergence for an interval wider than the tolerance.
     #[error("metric routing backend answered inconsistently with the request")]
     InconsistentResponse,
+    /// A climb's vertical factor was negative or non-finite.
+    #[error("a climb's vertical factor must be finite and non-negative")]
+    InvalidClimb,
+    /// One connector was given twice with different kinds.
+    #[error("a vertical connector is given twice with different kinds")]
+    ConflictingConnector,
 }
 
 /// Three-valued result for comparing bounded evidence with a policy threshold.
@@ -216,12 +223,151 @@ impl MobilityProfile {
     }
 }
 
+/// How a climb through a stair or ramp is measured.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StairLength {
+    /// Along the slope: `sqrt(h² + (f·v)²)` for a climb `h` long in plan
+    /// and `v` high, with the vertical factor `f`.
+    Slope,
+    /// The horizontal length plus the rise times the vertical factor:
+    /// `h + f·v`.
+    HorizontalPlusVertical,
+}
+
+impl StairLength {
+    /// The measure's name in rule parameters: `slope` or
+    /// `horizontal-plus-vertical`.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Slope => "slope",
+            Self::HorizontalPlusVertical => "horizontal-plus-vertical",
+        }
+    }
+}
+
+/// How much a climb through a vertical connector adds to a route's length.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClimbLength {
+    measure: StairLength,
+    vertical_factor: f64,
+}
+
+impl ClimbLength {
+    /// Validates a finite, non-negative vertical factor.
+    ///
+    /// # Errors
+    ///
+    /// [`MetricRoutingError::InvalidClimb`] otherwise.
+    pub fn try_new(measure: StairLength, vertical_factor: f64) -> Result<Self, MetricRoutingError> {
+        if !valid_non_negative(vertical_factor) {
+            return Err(MetricRoutingError::InvalidClimb);
+        }
+        Ok(Self {
+            measure,
+            vertical_factor,
+        })
+    }
+
+    /// The true slope length: [`StairLength::Slope`] with a factor of one.
+    #[must_use]
+    pub fn slope() -> Self {
+        Self {
+            measure: StairLength::Slope,
+            vertical_factor: 1.0,
+        }
+    }
+
+    /// How the climb is measured.
+    #[must_use]
+    pub fn measure(&self) -> StairLength {
+        self.measure
+    }
+
+    /// What a metre of rise counts.
+    #[must_use]
+    pub fn vertical_factor(&self) -> f64 {
+        self.vertical_factor
+    }
+
+    /// Bounds the length of a climb whose plan length and rise lie in the
+    /// given intervals. Both measures grow with either, so the bounds come
+    /// from the ends, rounded outwards.
+    #[must_use]
+    pub fn length(&self, horizontal: LengthInterval, rise: LengthInterval) -> LengthInterval {
+        let at = |h: f64, v: f64| match self.measure {
+            StairLength::Slope => h.hypot(self.vertical_factor * v),
+            StairLength::HorizontalPlusVertical => self.vertical_factor.mul_add(v, h),
+        };
+        let lower = at(horizontal.lower_metres(), rise.lower_metres());
+        let upper = at(horizontal.upper_metres(), rise.upper_metres());
+        LengthInterval {
+            lower_metres: (lower * (1.0 - CLIMB_ROUNDING)).max(0.0),
+            upper_metres: upper * (1.0 + CLIMB_ROUNDING),
+        }
+    }
+}
+
+/// Relative allowance for the rounding of a climb's length.
+const CLIMB_ROUNDING: f64 = 4.0 * f64::EPSILON;
+
+/// The vertical connectors a route may climb through, and how a climb
+/// counts.
+///
+/// A route enters and leaves a connector at its **landings**, the two ends
+/// of its walking line, and counts the climb between them by
+/// [`ClimbLength`]. A request carrying this routes through these
+/// connectors only: any other connector is no way between levels for it.
+/// A backend that cannot prove a connector's length or passability leaves
+/// every route through it undecided, never shorter and never blocked.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConnectorRouting {
+    connectors: Vec<VerticalConnector>,
+    climb: ClimbLength,
+}
+
+impl ConnectorRouting {
+    /// The connectors (sorted, deduplicated) and the climb length.
+    ///
+    /// # Errors
+    ///
+    /// [`MetricRoutingError::ConflictingConnector`] when one object is
+    /// given two kinds.
+    pub fn try_new(
+        mut connectors: Vec<VerticalConnector>,
+        climb: ClimbLength,
+    ) -> Result<Self, MetricRoutingError> {
+        connectors.sort();
+        connectors.dedup();
+        if connectors
+            .windows(2)
+            .any(|pair| pair[0].object() == pair[1].object())
+        {
+            return Err(MetricRoutingError::ConflictingConnector);
+        }
+        Ok(Self { connectors, climb })
+    }
+
+    /// The connectors a route may climb through, sorted.
+    #[must_use]
+    pub fn connectors(&self) -> &[VerticalConnector] {
+        &self.connectors
+    }
+
+    /// How a climb counts.
+    #[must_use]
+    pub fn climb(&self) -> ClimbLength {
+        self.climb
+    }
+}
+
 /// One source-neutral metric routing request.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MetricRouteRequest {
     origin: MetricPoint,
     destination: MetricPoint,
     profile: MobilityProfile,
+    connectors: Option<ConnectorRouting>,
 }
 
 impl MetricRouteRequest {
@@ -231,7 +377,23 @@ impl MetricRouteRequest {
             origin,
             destination,
             profile,
+            connectors: None,
         }
+    }
+
+    /// The same request, climbing through `connectors` between levels
+    /// (see [`ConnectorRouting`]). Only a backend that [climbs
+    /// connectors](MetricRoutingService::climbs_connectors) is asked.
+    #[must_use]
+    pub fn with_connectors(mut self, connectors: ConnectorRouting) -> Self {
+        self.connectors = Some(connectors);
+        self
+    }
+
+    /// The connectors a route may climb through; `None` for a request that
+    /// leaves them to the backend.
+    pub fn connectors(&self) -> Option<&ConnectorRouting> {
+        self.connectors.as_ref()
     }
 
     /// Route origin.
@@ -372,6 +534,7 @@ pub struct NearestTargetRequest {
     targets: Vec<MetricPoint>,
     profile: MobilityProfile,
     avoided: Vec<ObjectId>,
+    connectors: Option<ConnectorRouting>,
 }
 
 impl NearestTargetRequest {
@@ -389,16 +552,32 @@ impl NearestTargetRequest {
             targets,
             profile,
             avoided: Vec::new(),
+            connectors: None,
         })
     }
 
     /// The same request, walking around `avoided` (sorted, deduplicated).
+    /// An avoided connector is not climbed.
     #[must_use]
     pub fn with_avoided(mut self, mut avoided: Vec<ObjectId>) -> Self {
         avoided.sort();
         avoided.dedup();
         self.avoided = avoided;
         self
+    }
+
+    /// The same request, climbing through `connectors` between levels
+    /// (see [`ConnectorRouting`]).
+    #[must_use]
+    pub fn with_connectors(mut self, connectors: ConnectorRouting) -> Self {
+        self.connectors = Some(connectors);
+        self
+    }
+
+    /// The connectors a route may climb through; `None` for a request that
+    /// leaves them to the backend.
+    pub fn connectors(&self) -> Option<&ConnectorRouting> {
+        self.connectors.as_ref()
     }
 
     /// Where every route starts.
@@ -525,6 +704,7 @@ pub struct FarthestPointRequest {
     targets: Vec<MetricPoint>,
     profile: MobilityProfile,
     tolerance_metres: f64,
+    connectors: Option<ConnectorRouting>,
 }
 
 impl FarthestPointRequest {
@@ -548,7 +728,22 @@ impl FarthestPointRequest {
             targets,
             profile,
             tolerance_metres,
+            connectors: None,
         })
+    }
+
+    /// The same request, climbing through `connectors` between levels
+    /// (see [`ConnectorRouting`]).
+    #[must_use]
+    pub fn with_connectors(mut self, connectors: ConnectorRouting) -> Self {
+        self.connectors = Some(connectors);
+        self
+    }
+
+    /// The connectors a route may climb through; `None` for a request that
+    /// leaves them to the backend.
+    pub fn connectors(&self) -> Option<&ConnectorRouting> {
+        self.connectors.as_ref()
     }
 
     /// The object whose walkable area is measured.
@@ -804,6 +999,13 @@ pub trait MetricRoutingService: Send + Sync + 'static {
         false
     }
 
+    /// Whether the queries honour a request's [`ConnectorRouting`]. The
+    /// default is `false`, and the handle then refuses a request carrying
+    /// connectors rather than let the backend answer a walk on one level.
+    fn climbs_connectors(&self) -> bool {
+        false
+    }
+
     /// Measures how much of a polyline lies over each requested object. The
     /// default refuses.
     fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
@@ -829,6 +1031,7 @@ impl MetricRoutingServiceHandle {
         &self,
         request: &MetricRouteRequest,
     ) -> Result<MetricRouteOutcome, MetricRoutingError> {
+        self.climbing(request.connectors())?;
         let outcome = self.0.route(request)?;
         if let MetricRouteOutcome::Reachable(route) = &outcome {
             let (Some(first), Some(last)) = (route.waypoints.first(), route.waypoints.last())
@@ -861,6 +1064,7 @@ impl MetricRoutingServiceHandle {
                 "this backend does not walk around objects".into(),
             ));
         }
+        self.climbing(request.connectors())?;
         let outcome = self.0.nearest_target(request)?;
         match &outcome {
             NearestTargetOutcome::Reached(reached) => {
@@ -894,6 +1098,7 @@ impl MetricRoutingServiceHandle {
         &self,
         request: &FarthestPointRequest,
     ) -> Result<FarthestPointOutcome, MetricRoutingError> {
+        self.climbing(request.connectors())?;
         let outcome = self.0.farthest_point(request)?;
         match &outcome {
             FarthestPointOutcome::Bounded(bounded) => {
@@ -918,6 +1123,17 @@ impl MetricRoutingServiceHandle {
 }
 
 impl MetricRoutingServiceHandle {
+    /// Refuses a request carrying connectors unless the backend [climbs
+    /// connectors](MetricRoutingService::climbs_connectors).
+    fn climbing(&self, connectors: Option<&ConnectorRouting>) -> Result<(), MetricRoutingError> {
+        if connectors.is_some() && !self.0.climbs_connectors() {
+            return Err(MetricRoutingError::Unavailable(
+                "this backend does not route through vertical connectors".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Traces a polyline over objects and checks the answer is bound to it:
     /// one length per requested object, none surely longer than the
     /// polyline itself.

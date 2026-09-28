@@ -13,7 +13,8 @@
 //!
 //! A route stays on the origin's **level**: the surfaces reachable from it
 //! through portals and shared boundaries whose floors differ by no more than
-//! the maximum step. Lengths are measured in plan.
+//! the maximum step. Lengths are measured in plan. A request carrying
+//! connectors climbs through them instead, across levels (see `climb`).
 //!
 //! # Verdicts available with `axiolid-overlay` 0.3.0
 //!
@@ -60,6 +61,8 @@
 //!   target placed, and otherwise the witness's straight-line distance to
 //!   the nearest target. A part of the region no target reaches is
 //!   reported, with a point of it, only on a closed level.
+
+mod climb;
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -628,6 +631,9 @@ impl AxiolidMetricRoutingService {
 
     #[allow(clippy::too_many_lines)]
     fn measure(&self, request: &MetricRouteRequest) -> Result<MetricRouteOutcome, String> {
+        if let Some(routing) = request.connectors() {
+            return self.route_across(request, routing);
+        }
         let profile = request.profile();
         let radius = profile.radius_metres();
         let step = profile.maximum_step_metres();
@@ -792,6 +798,9 @@ impl AxiolidMetricRoutingService {
 
     #[allow(clippy::too_many_lines)]
     fn nearest(&self, request: &NearestTargetRequest) -> Result<NearestTargetOutcome, String> {
+        if let Some(routing) = request.connectors() {
+            return self.nearest_across(request, routing);
+        }
         let profile = request.profile();
         let (radius, step, height) = (
             profile.radius_metres(),
@@ -974,6 +983,9 @@ impl AxiolidMetricRoutingService {
 
     #[allow(clippy::too_many_lines)]
     fn farthest(&self, request: &FarthestPointRequest) -> Result<FarthestPointOutcome, String> {
+        if let Some(routing) = request.connectors() {
+            return self.farthest_across(request, routing);
+        }
         let profile = request.profile();
         let (radius, step, height) = (
             profile.radius_metres(),
@@ -1330,6 +1342,10 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
     }
 
     fn avoids_objects(&self) -> bool {
+        true
+    }
+
+    fn climbs_connectors(&self) -> bool {
         true
     }
 

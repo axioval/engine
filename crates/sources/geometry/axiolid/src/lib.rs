@@ -8,6 +8,7 @@
 
 pub mod boundary_coverage;
 mod circulation;
+pub(crate) mod connector;
 pub mod contact;
 pub(crate) mod containment;
 pub(crate) mod corridor_end;

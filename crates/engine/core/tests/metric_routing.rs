@@ -3,11 +3,12 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
-    FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint, MetricRouteEvidence,
-    MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingService,
-    MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
-    NearestTargetRequest, PathTrace, PathTraceRequest, ServiceRegistry, ThresholdVerdict,
+    BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
+    FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, LengthInterval, MetricPoint,
+    MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence,
+    NearestTargetOutcome, NearestTargetRequest, PathTrace, PathTraceRequest, ServiceRegistry,
+    StairLength, ThresholdVerdict, VerticalConnector, VerticalConnectorKind,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -512,5 +513,140 @@ fn a_trace_answers_each_object_and_none_longer_than_the_path() {
             }
         ),
         Err(MetricRoutingError::InexactRouteEvidence)
+    );
+}
+
+#[test]
+fn a_climb_counts_along_the_slope_or_as_horizontal_plus_weighted_rise() {
+    let horizontal = LengthInterval::exact(4.0).unwrap();
+    let rise = LengthInterval::exact(3.0).unwrap();
+    let slope = ClimbLength::slope().length(horizontal, rise);
+    assert!(slope.lower_metres() <= 5.0 && slope.upper_metres() >= 5.0);
+    assert!(slope.upper_metres() - slope.lower_metres() < 1e-12);
+    let summed = ClimbLength::try_new(StairLength::HorizontalPlusVertical, 2.0)
+        .unwrap()
+        .length(horizontal, rise);
+    assert!(summed.lower_metres() <= 10.0 && summed.upper_metres() >= 10.0);
+    // Bounds come from the ends of both intervals.
+    let wide = ClimbLength::try_new(StairLength::HorizontalPlusVertical, 1.0)
+        .unwrap()
+        .length(
+            LengthInterval::try_new(4.0, 5.0).unwrap(),
+            LengthInterval::try_new(3.0, 3.5).unwrap(),
+        );
+    assert!(wide.lower_metres() <= 7.0 && wide.upper_metres() >= 8.5);
+    for factor in [-1.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            ClimbLength::try_new(StairLength::Slope, factor),
+            Err(MetricRoutingError::InvalidClimb)
+        );
+    }
+    assert_eq!(StairLength::Slope.as_str(), "slope");
+    assert_eq!(
+        StairLength::HorizontalPlusVertical.as_str(),
+        "horizontal-plus-vertical"
+    );
+}
+
+#[test]
+fn connectors_are_sorted_and_one_object_has_one_kind() {
+    let stair = VerticalConnector::new(object("cad", "stair"), VerticalConnectorKind::Stair);
+    let lift = VerticalConnector::new(object("cad", "lift"), VerticalConnectorKind::Lift);
+    let routing = ConnectorRouting::try_new(
+        vec![stair.clone(), lift.clone(), stair.clone()],
+        ClimbLength::slope(),
+    )
+    .unwrap();
+    assert_eq!(routing.connectors(), [lift, stair.clone()]);
+    assert_eq!(
+        ConnectorRouting::try_new(
+            vec![
+                stair,
+                VerticalConnector::new(object("cad", "stair"), VerticalConnectorKind::Ramp)
+            ],
+            ClimbLength::slope()
+        ),
+        Err(MetricRoutingError::ConflictingConnector)
+    );
+}
+
+/// Answers a nearest query with its first target, and says whether it
+/// climbs connectors.
+struct Climber(bool);
+
+impl MetricRoutingService for Climber {
+    fn route(
+        &self,
+        _request: &MetricRouteRequest,
+    ) -> Result<MetricRouteOutcome, MetricRoutingError> {
+        Err(MetricRoutingError::Unavailable(
+            "pairs are not routed".into(),
+        ))
+    }
+
+    fn nearest_target(
+        &self,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, MetricRoutingError> {
+        Ok(NearestTargetOutcome::Reached(
+            NearestTargetEvidence::try_new(
+                0,
+                LengthInterval::try_new(2.0, 2.5)?,
+                vec![request.origin().clone(), request.targets()[0].clone()],
+                evidence("nearest"),
+            )?,
+        ))
+    }
+
+    fn climbs_connectors(&self) -> bool {
+        self.0
+    }
+}
+
+#[test]
+fn a_walk_through_connectors_is_asked_only_of_a_backend_that_climbs_them() {
+    let routing = ConnectorRouting::try_new(
+        vec![VerticalConnector::new(
+            object("cad", "stair"),
+            VerticalConnectorKind::Stair,
+        )],
+        ClimbLength::slope(),
+    )
+    .unwrap();
+    let plain = NearestTargetRequest::try_new(
+        point("cad", "a", 0.0),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+    )
+    .unwrap();
+    let climbing = plain.clone().with_connectors(routing.clone());
+    assert_eq!(climbing.connectors(), Some(&routing));
+    assert!(plain.connectors().is_none());
+    let handle = |climbs| MetricRoutingServiceHandle::new(Arc::new(Climber(climbs)));
+    assert!(handle(false).nearest_target(&plain).is_ok());
+    assert!(matches!(
+        handle(false).nearest_target(&climbing),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
+    assert!(handle(true).nearest_target(&climbing).is_ok());
+    let farthest = FarthestPointRequest::try_new(
+        object("cad", "room"),
+        vec![point("cad", "b", 3.0)],
+        profile(),
+        0.01,
+    )
+    .unwrap()
+    .with_connectors(routing.clone());
+    assert!(matches!(
+        handle(false).farthest_point(&farthest),
+        Err(MetricRoutingError::Unavailable(_))
+    ));
+    let route = MetricRouteRequest::new(point("cad", "a", 0.0), point("cad", "b", 3.0), profile())
+        .with_connectors(routing);
+    assert_eq!(
+        handle(false).route(&route),
+        Err(MetricRoutingError::Unavailable(
+            "this backend does not route through vertical connectors".into()
+        ))
     );
 }

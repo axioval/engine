@@ -211,63 +211,228 @@ impl AxiolidWalkingSurfaceService {
     /// curved faces too, and the caller widens what it measures by the
     /// chord deviation.
     fn body(&self, object: &ObjectId, curved: bool) -> Result<Solid<'_>, WalkingSurfaceError> {
-        if self.geometry.has_no_body(object) {
-            return Err(WalkingSurfaceError::Unavailable(format!(
-                "{object} is declared to have no body"
-            )));
+        solid_body(&self.geometry, object, curved)
+    }
+}
+
+/// The flight of `object` walked along its centre line, measured from a
+/// geometry set: as [`WalkingSurfaceService::measure_tread_flight`] does.
+pub(crate) fn tread_flight(
+    geometry: &AxiolidGeometry,
+    object: &ObjectId,
+) -> Result<TreadFlight, WalkingSurfaceError> {
+    let solid = solid_body(geometry, object, true)?;
+    if component_count(solid.mesh) != 1 {
+        return Err(WalkingSurfaceError::Unsupported(format!(
+            "{object} is in several pieces (separate treads); its first riser needs the \
+             floor it starts from, which it does not carry"
+        )));
+    }
+    crate::flight::measure(&TreadFlightRequest::new(object.clone()), &solid)
+}
+
+/// The sloped runs of `object`, measured from a geometry set: as
+/// [`WalkingSurfaceService::measure_sloped_runs`] does.
+pub(crate) fn sloped_runs(
+    geometry: &AxiolidGeometry,
+    object: &ObjectId,
+) -> Result<SlopedSurface, WalkingSurfaceError> {
+    let solid = solid_body(geometry, object, false)?;
+    let mut sloped: Vec<usize> = Vec::new();
+    for (index, triangle) in solid.soup.iter().enumerate() {
+        if facing(object, triangle)? == Facing::Sloped {
+            sloped.push(index);
         }
-        if let Some((_, reason)) = self
-            .geometry
+    }
+    if sloped.is_empty() {
+        return Err(WalkingSurfaceError::Unsupported(format!(
+            "{object} has no sloped face looking up, so no ramp run"
+        )));
+    }
+    let mut runs = Vec::new();
+    for component in connected(solid.mesh, &sloped) {
+        let faces: Vec<Triangle> = component.iter().map(|index| solid.soup[*index]).collect();
+        runs.push(run(object, &faces)?);
+    }
+    runs.sort_by(|a, b| {
+        a.bottom()
+            .lower_metres()
+            .total_cmp(&b.bottom().lower_metres())
+    });
+    let exact = runs.iter().all(SlopedRun::is_exact);
+    let evidence = Evidence {
+        source: object.source.clone(),
+        locator: format!("sloped-runs:{object}"),
+        exact,
+    };
+    SlopedSurface::try_new(object.clone(), runs, evidence)
+}
+
+/// A closed, outward-facing body of a geometry set; with `curved`, a
+/// tessellation of curved faces too, and the caller widens what it measures
+/// by the chord deviation.
+fn solid_body<'g>(
+    geometry: &'g AxiolidGeometry,
+    object: &ObjectId,
+    curved: bool,
+) -> Result<Solid<'g>, WalkingSurfaceError> {
+    if geometry.has_no_body(object) {
+        return Err(WalkingSurfaceError::Unavailable(format!(
+            "{object} is declared to have no body"
+        )));
+    }
+    if let Some((_, reason)) = geometry
+        .unmeasured()
+        .find(|(unmeasured, _)| *unmeasured == object)
+    {
+        return Err(WalkingSurfaceError::Unavailable(format!(
+            "{object} has a body that was not measured: {reason}"
+        )));
+    }
+    let mesh = geometry
+        .mesh(object)
+        .ok_or_else(|| WalkingSurfaceError::UnknownObject(object.clone()))?;
+    if !curved && geometry.is_tessellated(object) {
+        return Err(WalkingSurfaceError::InexactGeometry(format!(
+            "{object} is a tessellation of curved faces, whose faces are chords of its \
+                 surface"
+        )));
+    }
+    let deviation = geometry
+        .fidelity(object)
+        .map_err(|_| {
+            WalkingSurfaceError::Unavailable(format!("{object} has an invalid chord deviation"))
+        })?
+        .deviation_metres();
+    let tolerance = Tolerance::new(LINEAR_TOLERANCE, ANGULAR_TOLERANCE)
+        .map_err(|_| WalkingSurfaceError::Unavailable("invalid audit tolerance".into()))?;
+    let health = audit_mesh(mesh, tolerance);
+    if !health.is_surface_usable() {
+        return Err(WalkingSurfaceError::Unavailable(format!(
+            "the mesh of {object} cannot be read"
+        )));
+    }
+    if !health.is_closed_two_manifold() {
+        return Err(WalkingSurfaceError::Unsupported(format!(
+            "the mesh of {object} is not a closed surface, so which faces look up is unknown"
+        )));
+    }
+    let soup = triangles(mesh);
+    let volume: f64 = soup.iter().map(|[a, b, c]| a.dot(b.cross(*c))).sum::<f64>() / 6.0;
+    if volume <= 0.0 {
+        return Err(WalkingSurfaceError::Unsupported(format!(
+            "the mesh of {object} faces inward, so which faces look up is unknown"
+        )));
+    }
+    Ok(Solid {
+        mesh,
+        soup,
+        deviation,
+    })
+}
+
+/// The headroom above a subject's walking surface, measured from a
+/// geometry set: as [`WalkingSurfaceService::measure_headroom`] does.
+pub(crate) fn headroom(
+    geometry: &AxiolidGeometry,
+    request: &HeadroomRequest,
+) -> Result<Headroom, WalkingSurfaceError> {
+    let subject = request.subject();
+    let solid = solid_body(geometry, subject, false)?;
+    let mut walking = Vec::new();
+    for triangle in &solid.soup {
+        if facing(subject, triangle)? != Facing::Other {
+            walking.push(*triangle);
+        }
+    }
+    if walking.is_empty() {
+        return Err(WalkingSurfaceError::Unsupported(format!(
+            "{subject} has no walking face looking up"
+        )));
+    }
+    let reach = plan_box(walking.iter());
+    let reach_bottom = walking
+        .iter()
+        .flatten()
+        .fold(f64::INFINITY, |low, point| low.min(point.z));
+    let mut clearances: Vec<(ObjectId, MeasuredInterval)> = Vec::new();
+    for obstacle in request.obstacles() {
+        if geometry.has_no_body(obstacle) {
+            continue;
+        }
+        if let Some((_, reason)) = geometry
             .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == object)
+            .find(|(unmeasured, _)| *unmeasured == obstacle)
         {
             return Err(WalkingSurfaceError::Unavailable(format!(
-                "{object} has a body that was not measured: {reason}"
+                "obstacle {obstacle} has a body that was not measured: {reason}"
             )));
         }
-        let mesh = self
-            .geometry
-            .mesh(object)
-            .ok_or_else(|| WalkingSurfaceError::UnknownObject(object.clone()))?;
-        if !curved && self.geometry.is_tessellated(object) {
-            return Err(WalkingSurfaceError::InexactGeometry(format!(
-                "{object} is a tessellation of curved faces, whose faces are chords of its \
-                 surface"
-            )));
-        }
-        let deviation = self
-            .geometry
-            .fidelity(object)
-            .map_err(|_| {
-                WalkingSurfaceError::Unavailable(format!("{object} has an invalid chord deviation"))
-            })?
-            .deviation_metres();
-        let tolerance = Tolerance::new(LINEAR_TOLERANCE, ANGULAR_TOLERANCE)
-            .map_err(|_| WalkingSurfaceError::Unavailable("invalid audit tolerance".into()))?;
-        let health = audit_mesh(mesh, tolerance);
-        if !health.is_surface_usable() {
+        let mesh = geometry
+            .mesh(obstacle)
+            .ok_or_else(|| WalkingSurfaceError::UnknownObject(obstacle.clone()))?;
+        // The mesh box, grown by a tessellation's chord deviation so it
+        // encloses the true body.
+        let Some((min, max)) = geometry.enclosing_extent(obstacle) else {
+            if mesh_extent(mesh).is_none() {
+                continue;
+            }
             return Err(WalkingSurfaceError::Unavailable(format!(
-                "the mesh of {object} cannot be read"
+                "obstacle {obstacle} has an invalid chord deviation"
+            )));
+        };
+        if max[0] < reach.0[0]
+            || min[0] > reach.1[0]
+            || max[1] < reach.0[1]
+            || min[1] > reach.1[1]
+            || max[2] < reach_bottom
+        {
+            continue;
+        }
+        if geometry.is_tessellated(obstacle) {
+            return Err(WalkingSurfaceError::InexactGeometry(format!(
+                "obstacle {obstacle} near {subject} is a tessellation of curved faces"
             )));
         }
-        if !health.is_closed_two_manifold() {
+        let faces = triangles(mesh);
+        let Some((low, high, margin)) = gaps(&walking, &faces) else {
+            continue;
+        };
+        if high <= margin {
+            // Wholly below the walking surface, or resting on it flush.
+            continue;
+        }
+        if low < -margin {
             return Err(WalkingSurfaceError::Unsupported(format!(
-                "the mesh of {object} is not a closed surface, so which faces look up is unknown"
+                "obstacle {obstacle} crosses the walking surface of {subject}"
             )));
         }
-        let soup = triangles(mesh);
-        let volume: f64 = soup.iter().map(|[a, b, c]| a.dot(b.cross(*c))).sum::<f64>() / 6.0;
-        if volume <= 0.0 {
-            return Err(WalkingSurfaceError::Unsupported(format!(
-                "the mesh of {object} faces inward, so which faces look up is unknown"
-            )));
-        }
-        Ok(Solid {
-            mesh,
-            soup,
-            deviation,
-        })
+        let clearance = MeasuredInterval::try_new((low - margin).max(0.0), low.max(0.0) + margin)?;
+        clearances.push((obstacle.clone(), clearance));
     }
+    let least = clearances
+        .iter()
+        .map(|(_, clearance)| *clearance)
+        .reduce(|least, clearance| {
+            MeasuredInterval::try_new(
+                least.lower().min(clearance.lower()),
+                least.upper().min(clearance.upper()),
+            )
+            .unwrap_or(least)
+        });
+    let governing: Vec<ObjectId> = least.map_or_else(Vec::new, |least| {
+        clearances
+            .iter()
+            .filter(|(_, clearance)| clearance.lower() <= least.upper())
+            .map(|(obstacle, _)| obstacle.clone())
+            .collect()
+    });
+    let evidence = Evidence {
+        source: subject.source.clone(),
+        locator: format!("headroom:{subject}"),
+        exact: false,
+    };
+    Headroom::try_new(request.clone(), least, governing, evidence)
 }
 
 /// A position known exactly.
@@ -372,138 +537,11 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
     }
 
     fn measure_sloped_runs(&self, object: &ObjectId) -> Result<SlopedSurface, WalkingSurfaceError> {
-        let solid = self.solid(object)?;
-        let mut sloped: Vec<usize> = Vec::new();
-        for (index, triangle) in solid.soup.iter().enumerate() {
-            if facing(object, triangle)? == Facing::Sloped {
-                sloped.push(index);
-            }
-        }
-        if sloped.is_empty() {
-            return Err(WalkingSurfaceError::Unsupported(format!(
-                "{object} has no sloped face looking up, so no ramp run"
-            )));
-        }
-        let mut runs = Vec::new();
-        for component in connected(solid.mesh, &sloped) {
-            let faces: Vec<Triangle> = component.iter().map(|index| solid.soup[*index]).collect();
-            runs.push(run(object, &faces)?);
-        }
-        runs.sort_by(|a, b| {
-            a.bottom()
-                .lower_metres()
-                .total_cmp(&b.bottom().lower_metres())
-        });
-        let exact = runs.iter().all(SlopedRun::is_exact);
-        let evidence = Evidence {
-            source: object.source.clone(),
-            locator: format!("sloped-runs:{object}"),
-            exact,
-        };
-        SlopedSurface::try_new(object.clone(), runs, evidence)
+        sloped_runs(&self.geometry, object)
     }
 
     fn measure_headroom(&self, request: &HeadroomRequest) -> Result<Headroom, WalkingSurfaceError> {
-        let subject = request.subject();
-        let solid = self.solid(subject)?;
-        let mut walking = Vec::new();
-        for triangle in &solid.soup {
-            if facing(subject, triangle)? != Facing::Other {
-                walking.push(*triangle);
-            }
-        }
-        if walking.is_empty() {
-            return Err(WalkingSurfaceError::Unsupported(format!(
-                "{subject} has no walking face looking up"
-            )));
-        }
-        let reach = plan_box(walking.iter());
-        let reach_bottom = walking
-            .iter()
-            .flatten()
-            .fold(f64::INFINITY, |low, point| low.min(point.z));
-        let mut clearances: Vec<(ObjectId, MeasuredInterval)> = Vec::new();
-        for obstacle in request.obstacles() {
-            if self.geometry.has_no_body(obstacle) {
-                continue;
-            }
-            if let Some((_, reason)) = self
-                .geometry
-                .unmeasured()
-                .find(|(unmeasured, _)| *unmeasured == obstacle)
-            {
-                return Err(WalkingSurfaceError::Unavailable(format!(
-                    "obstacle {obstacle} has a body that was not measured: {reason}"
-                )));
-            }
-            let mesh = self
-                .geometry
-                .mesh(obstacle)
-                .ok_or_else(|| WalkingSurfaceError::UnknownObject(obstacle.clone()))?;
-            // The mesh box, grown by a tessellation's chord deviation so it
-            // encloses the true body.
-            let Some((min, max)) = self.geometry.enclosing_extent(obstacle) else {
-                if mesh_extent(mesh).is_none() {
-                    continue;
-                }
-                return Err(WalkingSurfaceError::Unavailable(format!(
-                    "obstacle {obstacle} has an invalid chord deviation"
-                )));
-            };
-            if max[0] < reach.0[0]
-                || min[0] > reach.1[0]
-                || max[1] < reach.0[1]
-                || min[1] > reach.1[1]
-                || max[2] < reach_bottom
-            {
-                continue;
-            }
-            if self.geometry.is_tessellated(obstacle) {
-                return Err(WalkingSurfaceError::InexactGeometry(format!(
-                    "obstacle {obstacle} near {subject} is a tessellation of curved faces"
-                )));
-            }
-            let faces = triangles(mesh);
-            let Some((low, high, margin)) = gaps(&walking, &faces) else {
-                continue;
-            };
-            if high <= margin {
-                // Wholly below the walking surface, or resting on it flush.
-                continue;
-            }
-            if low < -margin {
-                return Err(WalkingSurfaceError::Unsupported(format!(
-                    "obstacle {obstacle} crosses the walking surface of {subject}"
-                )));
-            }
-            let clearance =
-                MeasuredInterval::try_new((low - margin).max(0.0), low.max(0.0) + margin)?;
-            clearances.push((obstacle.clone(), clearance));
-        }
-        let least =
-            clearances
-                .iter()
-                .map(|(_, clearance)| *clearance)
-                .reduce(|least, clearance| {
-                    MeasuredInterval::try_new(
-                        least.lower().min(clearance.lower()),
-                        least.upper().min(clearance.upper()),
-                    )
-                    .unwrap_or(least)
-                });
-        let governing: Vec<ObjectId> = least.map_or_else(Vec::new, |least| {
-            clearances
-                .iter()
-                .filter(|(_, clearance)| clearance.lower() <= least.upper())
-                .map(|(obstacle, _)| obstacle.clone())
-                .collect()
-        });
-        let evidence = Evidence {
-            source: subject.source.clone(),
-            locator: format!("headroom:{subject}"),
-            exact: false,
-        };
-        Headroom::try_new(request.clone(), least, governing, evidence)
+        headroom(&self.geometry, request)
     }
 
     fn measure_landing(

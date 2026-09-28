@@ -196,6 +196,28 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `walkable::segment_cover`: the upper bound keeps pieces within `MARGIN` of
   the boundary, the lower bound drops them. Keep the upper bound never
   short of the length along the boundary.
+  A request with a `ConnectorRouting` goes to `src/metric_routing/climb.rs`:
+  only its own connectors are climbed (host `with_connector`s are ignored),
+  each measured by `src/connector.rs`; the levels reached through them are
+  joined in a small graph of level walks (one `distance_map` per landing and
+  one per level's targets) and climbs, searched on lower and on upper
+  bounds. A level walk's lower bound is infinite only where `separated`
+  proves it on a closed level; an unclimbed requested connector opens every
+  level it touches; a connector whose passability is undecided keeps its
+  lower bound and loses its upper. Farthest points weigh each landing by
+  the walk beyond it and bracket with per-source maps and one map over all
+  sources (`axiolid-route` 0.3.3 has no weighted targets, axiolid/kernel#197); never report a
+  witness's value without taking the least over every source, straight
+  lines for a source the map cannot show.
+- `src/connector.rs` (internal) measures stairs and ramps for walks between
+  levels: an exact straight flight whose first and last treads have sides,
+  or an exact ramp of one run with sides; the walking line runs between the
+  ends' midpoints, landings stand `LANDING_GAP` plus the body's radius
+  outside them. `passable` refuses only a flight surely narrower than the
+  body or headroom surely below its height, and leaves anything unsure
+  undecided. Lifts are never measured here. It reads flights, runs and
+  headroom through `walking_surface`'s `tread_flight`, `sloped_runs` and
+  `headroom`, the same measurements the walking-surface service answers.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`: parallel shelf
@@ -335,6 +357,10 @@ an API.
   axiolid-route 0.3.3) and needs axiolid-triangulate 0.3.1 with the fix for
   axiolid/kernel#190; it calls the skeleton directly, without a worker,
   timeout or retry spacings.
+- axiolid/kernel#197: `axiolid-route` has no weighted targets (a `distance_map` seeded with a
+  starting distance per target) and hence no farthest point over one: the
+  farthest point across levels is assembled from per-source maps and may not
+  converge when a region's level holds several sources.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

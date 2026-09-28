@@ -800,27 +800,24 @@ impl AxiolidMetricRoutingService {
 
     #[allow(clippy::too_many_lines)]
     fn nearest(&self, request: &NearestTargetRequest) -> Result<NearestTargetOutcome, String> {
-        if let Some(routing) = request.connectors() {
-            if !request.costs().is_empty() {
-                return Err("weighted travel is measured on one level only".into());
-            }
-            return self.nearest_across(request, routing);
-        }
         let profile = request.profile();
         let (radius, step, height) = (
             profile.radius_metres(),
             profile.maximum_step_metres(),
             profile.height_metres(),
         );
-        if height <= step {
-            return Err("the clear height does not exceed the maximum step".into());
-        }
         if radius > 0.0 && !request.costs().is_empty() {
             return Err(
                 "weighted travel is measured for a point only: a body's walk is proven by \
                  its sweep, which the weighted map does not propose"
                     .into(),
             );
+        }
+        if let Some(routing) = request.connectors() {
+            return self.nearest_across(request, routing);
+        }
+        if height <= step {
+            return Err("the clear height does not exceed the maximum step".into());
         }
         let prepared = self.prepared();
         let mut obstacles = self.obstacles()?;
@@ -883,7 +880,8 @@ impl AxiolidMetricRoutingService {
                 why()
             ));
         }
-        let regions = self.cost_regions(prepared, request.costs(), &domain)?;
+        let costed = self.costed(prepared, request.costs())?;
+        let regions = Self::cost_regions(&costed, &level, &domain)?;
         let points: Vec<Point2> = sorted
             .placed
             .iter()
@@ -1023,9 +1021,6 @@ impl AxiolidMetricRoutingService {
     #[allow(clippy::too_many_lines)]
     fn farthest(&self, request: &FarthestPointRequest) -> Result<FarthestPointOutcome, String> {
         if let Some(routing) = request.connectors() {
-            if !request.costs().is_empty() {
-                return Err("weighted travel is measured on one level only".into());
-            }
             return self.farthest_across(request, routing);
         }
         let profile = request.profile();
@@ -1111,7 +1106,8 @@ impl AxiolidMetricRoutingService {
             ));
         }
         let tolerance = request.tolerance_metres();
-        let regions = self.cost_regions(prepared, request.costs(), &domain)?;
+        let costed = self.costed(prepared, request.costs())?;
+        let regions = Self::cost_regions(&costed, &level, &domain)?;
         let map = if regions.is_empty() {
             weighted::Map::Plain(Self::map(&domain, &[], targets, &sorted.placed)?)
         } else {

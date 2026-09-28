@@ -32,27 +32,40 @@
 //! evaluated at every witness found. Only when a weighted map cannot be
 //! built do the per-source maps bound it from above, their farthest
 //! distance plus their weight.
+//!
+//! **Weighted travel.** A request's travel costs weigh each level's walks
+//! with that level's own cost regions (`weighted::cost_regions`: only the
+//! costs whose object lies in the storey of one of the level's floors), so
+//! every level walk, lower and upper bound, is a weighted map's bracket.
+//! The farthest point's sources are seeded with the weighted walks beyond
+//! them (`weighted_distance_map_seeded`, axiolid/kernel#198), each bound
+//! into the map of its own kind. A climb counts its measured length at
+//! least once and at most times the largest factor of a cost meeting its
+//! connector (`weighted::climb_factor`), so the graph's shortest paths
+//! still bound every weighted walk through the connectors from both sides.
+//! Weighted walks are measured for a point only.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axiolid_core::Point2;
-use axiolid_route::{DistanceMap, FarthestError, Unreachable};
+use axiolid_route::{CostRegion, FarthestError, MapError, Unreachable};
 use axioval_engine::{
     ConnectorRouting, FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest,
     LengthInterval, MetricPoint, MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest,
-    MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest,
+    MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest, TravelCost,
     UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
 use axioval_ir::{Evidence, ObjectId};
 
+use super::weighted::{Costed, Map, climb_factor, costs_text, describe};
 use super::{
     AxiolidMetricRoutingService, LENGTH_ROUNDING, Level, Narrow, Prepared, holder, inner_point,
     length, plan, rounded_up,
 };
 use crate::connector::{self, Climb, Passable};
 use crate::walkable::{
-    ON_SURFACE, Obstacle, Plan, REACH, ROUTE_BUDGET, contains, crosses_mid_line, intersect,
-    plan_gap, polygon, separated, witness,
+    ON_SURFACE, Obstacle, Plan, REACH, contains, crosses_mid_line, intersect, plan_gap, polygon,
+    separated, witness,
 };
 
 /// A source of walks on the farthest point's level: its points, and the
@@ -67,13 +80,17 @@ struct Link {
     length: LengthInterval,
     /// Whether the body fits through it; never `Refused` here.
     passable: Passable,
+    /// The largest factor its climb may count, one when unweighted.
+    factor: f64,
 }
 
-/// One level a walk may reach, with its free region.
+/// One level a walk may reach, with its free region and the cost regions
+/// weighing its walks.
 struct Stage {
     level: Level,
     domain: Plan,
     narrow: Narrow,
+    regions: Vec<CostRegion>,
 }
 
 /// The levels a walk may reach through the request's connectors.
@@ -102,7 +119,7 @@ impl Tour {
         reasons
     }
 
-    fn text(&self, routing: &ConnectorRouting, radius: f64) -> String {
+    fn text(&self, routing: &ConnectorRouting, radius: f64, costs: &[TravelCost]) -> String {
         let levels: Vec<String> = self
             .stages
             .iter()
@@ -111,10 +128,29 @@ impl Tour {
         let climbs: Vec<String> = self
             .links
             .iter()
-            .map(|link| link.climb.text(routing.climb(), radius))
+            .map(|link| {
+                let text = link.climb.text(routing.climb(), radius);
+                if link.factor > 1.0 {
+                    format!("{text}*<={}", link.factor)
+                } else {
+                    text
+                }
+            })
             .collect();
+        let weighed = if costs.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ":costs=[{}]:weighed-levels={}",
+                costs_text(costs),
+                self.stages
+                    .iter()
+                    .filter(|stage| !stage.regions.is_empty())
+                    .count()
+            )
+        };
         format!(
-            "levels={}:climbs=[{}]:unclimbed={}",
+            "levels={}:climbs=[{}]:unclimbed={}{weighed}",
             levels.join(","),
             climbs.join(","),
             self.undecided.len()
@@ -174,7 +210,7 @@ pub(super) enum Walked {
 impl AxiolidMetricRoutingService {
     /// The requested connectors measured, and the levels reached from
     /// `seeds` through them.
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
     fn tour(
         &self,
         prepared: &Prepared,
@@ -183,6 +219,7 @@ impl AxiolidMetricRoutingService {
         seeds: BTreeSet<usize>,
         obstacles: &[Obstacle<'_>],
         profile: MobilityProfile,
+        costed: &[Costed],
     ) -> Result<Tour, String> {
         let (radius, step) = (profile.radius_metres(), profile.maximum_step_metres());
         let mut links = Vec::new();
@@ -213,12 +250,14 @@ impl AxiolidMetricRoutingService {
                     2.0 * radius,
                     profile.height_metres(),
                 );
+                let factor = climb_factor(costed, id, self.geometry.enclosing_extent(id).as_ref());
                 Ok(Link {
                     climb,
                     landings,
                     floors,
                     length,
                     passable,
+                    factor,
                 })
             });
             match measured {
@@ -258,6 +297,7 @@ impl AxiolidMetricRoutingService {
             }
             let domain = Self::domain(prepared, &level, obstacles, profile, true)?;
             let narrow = Self::narrow(prepared, &level, &domain, radius);
+            let regions = Self::cost_regions(costed, &level, &domain)?;
             let index = stages.len();
             for floor in &level.floors {
                 stage_of.insert(*floor, index);
@@ -274,6 +314,7 @@ impl AxiolidMetricRoutingService {
                 level,
                 domain,
                 narrow,
+                regions,
             });
         }
         let links: Vec<Link> = links
@@ -318,26 +359,38 @@ impl AxiolidMetricRoutingService {
         placed
     }
 
-    /// A distance map over a stage from some points; `None` when a point
-    /// is not in its free region or the map cannot be built.
-    fn stage_map(stage: &Stage, points: &[Point2]) -> Option<DistanceMap> {
-        axiolid_route::distance_map_within(
-            stage.domain.polygons(),
+    /// A distance map over a stage from some points, each starting at its
+    /// weight, weighted by the stage's cost regions; `None` when a point is
+    /// not in its free region or a plain map cannot be built. A weighted
+    /// map that cannot be built for any other reason refuses, never falls
+    /// back to a plain one.
+    fn stage_map(
+        stage: &Stage,
+        seeded: &[(Point2, f64)],
+        wanted: f64,
+    ) -> Result<Option<Map>, String> {
+        match Self::seeded_map(
+            &stage.domain,
             &stage.narrow.barriers,
-            points,
-            ROUTE_BUDGET,
-        )
-        .ok()
+            seeded,
+            &stage.regions,
+            wanted,
+        ) {
+            Ok(map) => Ok(Some(map)),
+            Err(MapError::TargetOutside { .. }) => Ok(None),
+            Err(_) if stage.regions.is_empty() => Ok(None),
+            Err(error) => Err(describe(error)),
+        }
     }
 
     /// Bounds the walk on a stage from `from` to the map's nearest point:
     /// `(lower, upper, path, index of that point)`. The lower bound is the
     /// map's on a closed level (infinite where a separation is proven),
     /// the straight line to `toward` otherwise; the upper bound is the
-    /// point path, or infinite.
+    /// point path's (weighted) cost, or infinite.
     fn along_map(
         stage: &Stage,
-        map: Option<&DistanceMap>,
+        map: Option<&Map>,
         from: Point2,
         toward: &[Point2],
     ) -> Result<Leg, String> {
@@ -351,15 +404,17 @@ impl AxiolidMetricRoutingService {
         };
         match map.nearest(from) {
             Ok(Ok(reach)) => {
+                // Every factor is at least one: no walk, weighted or not,
+                // undercuts the straight line.
                 let lower = if complete {
-                    reach.route.length * (1.0 - LENGTH_ROUNDING)
+                    reach.lower * (1.0 - LENGTH_ROUNDING)
                 } else {
                     straight
                 };
                 Ok((
-                    lower.min(reach.route.length),
-                    rounded_up(reach.route.length),
-                    Some(reach.route.polyline),
+                    lower.min(reach.lower),
+                    rounded_up(reach.upper),
+                    Some(reach.path),
                     Some(reach.target),
                 ))
             }
@@ -403,7 +458,7 @@ impl AxiolidMetricRoutingService {
                 .collect();
             // Between nodes: one map per node, queried from the others.
             for (i, &a) in here.iter().enumerate() {
-                let map = Self::stage_map(stage, &[nodes[a].2]);
+                let map = Self::stage_map(stage, &[(nodes[a].2, 0.0)], 0.0)?;
                 for &b in here.iter().skip(i + 1) {
                     let (from, to) = (nodes[b].2, nodes[a].2);
                     let (lower, mut upper, mut path, _) =
@@ -437,18 +492,20 @@ impl AxiolidMetricRoutingService {
                 continue;
             }
             let points: Vec<Point2> = on.iter().map(|index| plan(&targets[*index])).collect();
-            let map = axiolid_route::distance_map_within(
-                stage.domain.polygons(),
+            let seeded: Vec<(Point2, f64)> = points.iter().map(|point| (*point, 0.0)).collect();
+            let map = Self::seeded_map(
+                &stage.domain,
                 &stage.narrow.barriers,
-                &points,
-                ROUTE_BUDGET,
+                &seeded,
+                &stage.regions,
+                0.0,
             )
             .map_err(|error| match error {
-                axiolid_route::MapError::TargetOutside { index } => format!(
+                MapError::TargetOutside { index } => format!(
                     "{} is not in free walkable space",
                     targets[on[index]].subject()
                 ),
-                other => format!("the distance map could not be built: {other:?}"),
+                other => describe(other),
             })?;
             for &a in &here {
                 let from = nodes[a].2;
@@ -492,14 +549,18 @@ impl AxiolidMetricRoutingService {
                     .position(|(node, _, _)| *node == Node::Landing(index, end))
             };
             if let (Some(a), Some(b)) = (find(0), find(1)) {
+                // A climb counts its length at least once, and at most by
+                // the largest factor of a cost meeting its connector.
                 edges.push(Edge {
                     a,
                     b,
                     lower: link.length.lower_metres(),
-                    upper: if link.passable == Passable::Proven {
-                        link.length.upper_metres()
-                    } else {
+                    upper: if link.passable != Passable::Proven {
                         f64::INFINITY
+                    } else if link.factor > 1.0 {
+                        rounded_up(link.length.upper_metres() * link.factor)
+                    } else {
+                        link.length.upper_metres()
                     },
                     path: None,
                     stage: None,
@@ -538,6 +599,7 @@ impl AxiolidMetricRoutingService {
         profile: MobilityProfile,
         avoided: &[ObjectId],
         routing: &ConnectorRouting,
+        costs: &[TravelCost],
     ) -> Result<Walked, String> {
         let (radius, step, height) = (
             profile.radius_metres(),
@@ -547,10 +609,18 @@ impl AxiolidMetricRoutingService {
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
         }
+        if radius > 0.0 && !costs.is_empty() {
+            return Err(
+                "weighted travel is measured for a point only: a body's walk is proven by \
+                 its sweep, which the weighted map does not propose"
+                    .into(),
+            );
+        }
         let prepared = self.prepared();
         let mut obstacles = self.obstacles()?;
         obstacles.extend(crate::walkable::obstacles(&self.geometry, avoided)?);
         let start = Self::place(prepared, origin, step)?;
+        let costed = self.costed(prepared, costs)?;
         let tour = self.tour(
             prepared,
             routing,
@@ -558,6 +628,7 @@ impl AxiolidMetricRoutingService {
             Self::seeds(prepared, start, step),
             &obstacles,
             profile,
+            &costed,
         )?;
         let placed = Self::place_all(prepared, &tour, targets, step);
         let from = plan(origin);
@@ -585,7 +656,7 @@ impl AxiolidMetricRoutingService {
         } else {
             lowest[sink].min(straight_all)
         };
-        let text = tour.text(routing, radius);
+        let text = tour.text(routing, radius, costs);
         if lower.is_infinite() {
             // Only a closed tour lets a lower bound be infinite.
             return Ok(Walked::Unreachable(format!(
@@ -721,6 +792,7 @@ impl AxiolidMetricRoutingService {
             request.profile(),
             request.avoided(),
             routing,
+            request.costs(),
         )? {
             Walked::Reached {
                 target,
@@ -763,6 +835,7 @@ impl AxiolidMetricRoutingService {
             request.profile(),
             &[],
             routing,
+            &[],
         )? {
             Walked::Reached {
                 distance,
@@ -834,6 +907,8 @@ impl AxiolidMetricRoutingService {
                 }
             })?;
         let floor = &prepared.floors[region];
+        let costs = request.costs();
+        let costed = self.costed(prepared, costs)?;
         let tour = self.tour(
             prepared,
             routing,
@@ -841,6 +916,7 @@ impl AxiolidMetricRoutingService {
             BTreeSet::from([region]),
             &obstacles,
             profile,
+            &costed,
         )?;
         let targets = request.targets();
         let placed = Self::place_all(prepared, &tour, targets, step);
@@ -852,7 +928,7 @@ impl AxiolidMetricRoutingService {
         let (beyond_upper, _) = shortest(nodes.len() + 1, &edges, sink, |edge| edge.upper);
         let mut closed = tour.closed() && placed.straight.is_empty();
         let stage = &tour.stages[0];
-        let text = tour.text(routing, radius);
+        let text = tour.text(routing, radius, costs);
         let why = || {
             let mut reasons: Vec<String> = placed
                 .straight
@@ -912,9 +988,13 @@ impl AxiolidMetricRoutingService {
             ));
         }
         let tolerance = request.tolerance_metres();
+        // The weighted bracket is first order in the spacing along cost
+        // edges, about twice it wide.
+        let wanted = tolerance / 2.0;
         let mut maps = Vec::with_capacity(sources.len());
         for (points, _, _) in &sources {
-            let map = Self::stage_map(stage, points);
+            let seeded: Vec<(Point2, f64)> = points.iter().map(|point| (*point, 0.0)).collect();
+            let map = Self::stage_map(stage, &seeded, wanted)?;
             if map.is_none() {
                 // A source the map cannot hold may still be walked to.
                 closed = false;
@@ -922,11 +1002,12 @@ impl AxiolidMetricRoutingService {
             maps.push(map);
         }
         // One map over every source the stage holds, each point starting
-        // at its source's weight (axiolid/kernel#197): the walk beyond it
-        // bounded from below, and, where that bound is not already the
-        // upper one, from above (a source with no upper bound left out,
-        // which only lengthens the walks).
-        let weighted = |weight: &dyn Fn(&Source) -> f64| {
+        // at its source's weight (axiolid/kernel#197, weighted by the
+        // level's costs #198): the walk beyond it bounded from below, and,
+        // where that bound is not already the upper one, from above (a
+        // source with no upper bound left out, which only lengthens the
+        // walks).
+        let weighted = |weight: &dyn Fn(&Source) -> f64| -> Result<Option<Map>, String> {
             let seeded: Vec<(Point2, f64)> = sources
                 .iter()
                 .zip(&maps)
@@ -934,29 +1015,23 @@ impl AxiolidMetricRoutingService {
                 .flat_map(|(source, _)| source.0.iter().map(|point| (*point, weight(source))))
                 .collect();
             if seeded.is_empty() {
-                return None;
+                return Ok(None);
             }
-            axiolid_route::distance_map_within_weighted(
-                stage.domain.polygons(),
-                &stage.narrow.barriers,
-                &seeded,
-                ROUTE_BUDGET,
-            )
-            .ok()
+            Self::stage_map(stage, &seeded, wanted)
         };
         #[allow(clippy::float_cmp)]
         let settled = sources.iter().all(|(_, low, high)| low == high);
-        let least = weighted(&|(_, low, _)| *low);
+        let least = weighted(&|(_, low, _)| *low)?;
         let most = if settled {
             None
         } else {
-            weighted(&|(_, _, high)| *high)
+            weighted(&|(_, _, high)| *high)?
         };
-        let search = |map: &DistanceMap| -> Result<Result<(f64, f64, Point2), Point2>, String> {
+        let search = |map: &Map| -> Result<Result<(f64, f64, Point2), Point2>, String> {
             let mut best: Option<(f64, Point2)> = None;
             let mut upper = 0.0_f64;
             for piece in floor.footprint.polygons() {
-                match axiolid_route::farthest_point(map, piece, tolerance) {
+                match map.farthest(piece, tolerance) {
                     Ok(found) => {
                         upper = upper.max(found.distance.upper);
                         let Some(witness) = found.witness else {
@@ -1056,7 +1131,7 @@ impl AxiolidMetricRoutingService {
                     // A source the map cannot show reached counts by its
                     // straight line, never as out of reach.
                     let walked = match map.as_ref().map(|map| map.nearest(*point)) {
-                        Some(Ok(Ok(reach))) => reach.route.length * (1.0 - LENGTH_ROUNDING),
+                        Some(Ok(Ok(reach))) => reach.lower * (1.0 - LENGTH_ROUNDING),
                         _ => points
                             .iter()
                             .map(|source| (*source - *point).length())

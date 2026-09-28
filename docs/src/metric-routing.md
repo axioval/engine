@@ -89,9 +89,14 @@ shortest walk among possibly several.
   the least weighted cost, and a nearest answer's route is a walk whose
   weighted cost is at most its upper bound. The costs are sorted by
   object, each object's greatest factor kept, a factor of one dropped. A
-  backend answers only if `weighs_travel()` says so; the default is
-  `false`, and the handle refuses a weighted request rather than let a
-  backend answer the plain length.
+  cost weighs only walks on its object's own level (the level it lies in,
+  or every level it spans), never a floor above or below it. Across levels
+  a climb counts its length times a factor between one and the largest
+  factor of a cost meeting its connector: the lower bound takes one, the
+  upper bound the largest. A backend that cannot tell an object's level
+  refuses. A backend answers only if `weighs_travel()` says so; the
+  default is `false`, and the handle refuses a weighted request rather
+  than let a backend answer the plain length.
 - `forced_walk(ForcedWalkRequest)` brackets the shortest walk from a point
   to the nearest of several targets that enters an object's plan footprint
   (touching counts), optionally keeping out of objects (`with_avoided`,
@@ -113,8 +118,18 @@ and #198):
   rounding; `axiolid-route` takes such a region as touching the wall
   (a vertex within 2^-24 of the region's extent of it), leaving no sliver
   along the wall at factor 1. A tessellated or bodiless costed object,
-  footprints crossing each other or a wall, a body with a radius, and a
-  request across levels are refused. Points along cost edges stand half the
+  footprints crossing each other or a wall, and a body with a radius are
+  refused.
+- **Levels of a cost.** A cost weighs a level only when its object lies in
+  the storey of one of the level's walkable surfaces. A surface's storey
+  runs from the top of the highest surface below it (over it in plan), or
+  1 m below its floor where that is higher, up to its top, both ends open;
+  an object lies in it when its plan box meets the surface's and its body
+  enters that height range. So a slab under a floor lies in that floor's
+  storey, a body merely touching the storey's ends does not, and a stair
+  from one floor to the next lies in both where its plan meets both
+  floors. An object in no storey whose footprint meets a level's free
+  region is refused there, never weighed on a guessed level. Points along cost edges stand half the
   tolerance apart (5 mm for a nearest target), or as close as 1024 points
   over all cost edges allow; the bracket is first order in that spacing.
   Lower bounds come from the map only on a closed level, as for plain maps.
@@ -309,6 +324,27 @@ the region's level holds; only if no weighted map can be built do the
 per-source maps bound it from above, their farthest distance plus their
 weight.
 
+**Weighted travel across levels.** With `with_costs`, each reached level
+gets its own cost regions, from only the costs whose object lies in the
+storey of one of its surfaces (see [Levels of a
+cost](#weighted-travel-and-forced-walks)), and every map above is a
+weighted one over them: the level walks between the start, the landings
+and the targets are weighted brackets, and the farthest point's sources
+are seeded with the weighted walks beyond them
+(`weighted_distance_map_seeded`, `axiolid-route` 0.3.5, axiolid/kernel#198),
+the lower bounds into one map and the upper bounds into another. A climb
+counts its measured length once in the graph's lower bound and times the
+largest factor of a cost meeting its connector (the connector itself, or
+a cost whose body's box meets the connector's) in its upper bound. Every
+real weighted walk through the connectors is a sequence of level walks and
+climbs, each within its bracket, so the graph's shortest paths still bound
+it from both sides. A costed slab under one floor therefore weighs no walk
+on the floor above, and a cost on a stair whose plan no walk crosses
+raises only the climb's upper bound. A cost whose level cannot be
+resolved, a weighted map that cannot be built, and a body with a radius
+are refused; a connector with no bracketed length is not climbed and
+leaves the levels it touches open, as without costs.
+
 ## Consumers
 
 `space-distance` walks between spaces with `nearest_target`: from the
@@ -339,4 +375,6 @@ Both take `stair_selector`, `ramp_selector` and `lift_selector`,
 selected connectors (`with_connectors`), so an escape route from an upper
 storey is walked down its stairs and a walking distance reaches another
 storey without `same_storey`. An escape walk that climbs is never traced:
-its plan trace would undercount the climb.
+its plan trace would undercount the climb. It is weighted all the same,
+where the backend weighs travel: the weighted walk across levels bounds
+the multiplied travel as it does on one level.

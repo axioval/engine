@@ -204,16 +204,25 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `walkable::segment_cover`: the upper bound keeps pieces within `MARGIN` of
   the boundary, the lower bound drops them. Keep the upper bound never
   short of the length along the boundary.
-  `src/metric_routing/weighted.rs` answers weighted travel and forced walks
-  on one level (`axiolid-route` 0.3.5, axiolid/kernel#195, #196, #198):
-  costed objects' exact footprints cut to the free region and handed over
-  as cut (the kernel takes a cut edge meeting a wall up to rounding as
-  touching it; never snap vertices here), spacing from the tolerance
-  within `COST_POINTS`; a
-  tessellated or bodiless costed object, a radius or connectors refuse, and
-  a weighted request must never be answered with a plain map. Forced walks
-  need a closed level with every target placed; their upper bound only a
-  point and an exact footprint.
+  `src/metric_routing/weighted.rs` answers weighted travel (on one level
+  and, through `climb.rs`, across levels) and forced walks on one level
+  (`axiolid-route` 0.3.5, axiolid/kernel#195, #196, #198): costed
+  objects (`Costed`, measured once per request) have exact footprints cut
+  to a level's free region and handed over as cut (the kernel takes a cut
+  edge meeting a wall up to rounding as touching it; never snap vertices
+  here), spacing from the tolerance within `COST_POINTS`. A cost weighs
+  only the levels holding a floor in whose storey (`storeys`: from the
+  highest floor top below, or `REACH` under the floor, to its top, both
+  open) its body lies; never apply a cost to every level, which would
+  raise the lower bound of a walk on another floor. An object in no storey
+  whose footprint meets a level's free region refuses there. A climb's
+  upper bound counts the largest factor of a cost meeting its connector
+  (`climb_factor`, boxes meeting), its lower bound factor one; never
+  weight a climb's lower bound. A tessellated or bodiless costed object
+  or a radius refuses, and a weighted request must never be answered with
+  a plain map (a level no cost lies on is plain by definition). Forced
+  walks need a closed level with every target placed; their upper bound
+  only a point and an exact footprint.
   A request with a `ConnectorRouting` goes to `src/metric_routing/climb.rs`:
   only its own connectors are climbed (host `with_connector`s are ignored),
   each measured by `src/connector.rs`; the levels reached through them are
@@ -231,7 +240,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   only decide which sources a map holds and bound from above when no
   weighted map can be built. Never seed a lower-bound map with upper
   weights, and never report a witness's value without taking the least over
-  every source, straight lines for a source the map cannot show.
+  every source, straight lines for a source the map cannot show. With
+  costs, every one of these maps is built by `seeded_map` over the stage's
+  own cost regions (`Stage::regions`), weighted maps seeded
+  (`weighted_distance_map_seeded`) where the plain ones were; a weighted
+  map that fails for anything but a target outside refuses, never falls
+  back to a plain map.
 - `src/connector.rs` (internal) measures stairs and ramps for walks between
   levels: an exact straight flight whose first and last treads have sides,
   or an exact ramp of one run with sides; the walking line runs between the

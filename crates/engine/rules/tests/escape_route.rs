@@ -2727,6 +2727,55 @@ fn walks_climb_the_stairs_and_ramps_the_rule_selects() {
 }
 
 #[test]
+fn a_weighted_walk_down_the_stairs_decides_what_the_largest_factor_cannot() {
+    // Climbing, the farthest point lies 18 to 18.01 m from an exit, within
+    // 20 m; the stair counting twice, the coarse bracket reaches 36.02 m.
+    let run = |weighted: Walk| {
+        let geometry = Geometry::default()
+            .weighing()
+            .walk(
+                "hall",
+                "d1,d2^ramp:ramp,stair:stair",
+                Walk::Between(18.0, 18.01),
+            )
+            .walk("hall", "d1,d2^ramp:ramp,stair:stair$stair*2", weighted)
+            .distance("hall", "stair", 0.0);
+        evaluate(
+            stair_model(),
+            geometry,
+            climbing(vec![sections(&[("stair", 2.0, None)])]),
+        )
+    };
+    // The weighted walk across levels, 22 to 22.05 m, is too long.
+    let evaluation = run(Walk::Between(22.0, 22.05));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "hall".into(),
+            "its farthest point, around (19.00, 0.00), lies between 22 and 22.05 m from the \
+             nearest exit walking, counting the walk on section 0 (stair) by its factors; use 0 \
+             allows at most 20 m of travel"
+                .into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+    // At most 19.5 m weighted: a pass.
+    let evaluation = run(Walk::Between(19.0, 19.5));
+    assert!(
+        evaluation.findings().is_empty() && unevaluated(&evaluation).is_empty(),
+        "{evaluation:?}"
+    );
+    // A refused weighted walk keeps the coarse bracket.
+    let evaluation = run(Walk::Refused);
+    assert!(evaluation.findings().is_empty());
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("between 18 and 36.02 m walking"),
+        "{message}"
+    );
+}
+
+#[test]
 fn a_climb_declared_wrongly_is_refused() {
     for extra in [
         vec![("stair_length", string("along-the-handrail"))],

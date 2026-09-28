@@ -768,9 +768,12 @@ occupants.
   surely multiplying (surely picked, no `shared_by`) for the lower bound,
   which replaces the plain one where larger. A room whose weighted farthest
   point exceeds the maximum only because of a stair's factor is then a
-  finding, naming the rows it counted. A walk that climbs, or a backend
-  that cannot weigh it (a tessellated section, crossing footprints), keeps
-  the bounds above. A travel within the
+  finding, naming the rows it counted. A walk that climbs is weighted too,
+  across levels (each section weighing only its own level, and a climb
+  counting at most the largest factor of a section meeting its connector);
+  a backend that cannot weigh it (a tessellated section, crossing
+  footprints, a section whose level it cannot tell) keeps the bounds
+  above. A travel within the
   maximum only at the plain length is therefore not evaluated unless the
   traced or weighted walk passes, never a pass on a guess. A row with
   `shared_by` multiplies only a section at least that many checked spaces

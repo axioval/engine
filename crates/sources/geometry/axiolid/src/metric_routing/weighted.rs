@@ -1,13 +1,21 @@
-//! Weighted travel and walks forced through an object, on one level.
+//! Weighted travel, and walks forced through an object on one level.
 //!
 //! A request's [`TravelCost`]s become `axiolid-route` cost regions
 //! (axiolid/kernel#195): each costed object's exact plan footprint, cut to
-//! the level's free region so that no cost edge crosses an obstacle. A
-//! tessellated object's footprint is only known as a box around it, which
-//! bounds its cost from one side only, so such a request is refused. The
-//! weighted map brackets the least weighted cost to first order in the
-//! spacing of the points along cost edges; the spacing is chosen so that
-//! the points stay within the kernel's node budget.
+//! a level's free region so that no cost edge crosses an obstacle. A cost
+//! weighs only the levels of its object: those holding a floor in whose
+//! storey its body lies (see [`storeys`]), several for an object spanning
+//! levels. An object in no storey whose footprint meets a level's free
+//! region is refused there, never guessed onto a level. A tessellated
+//! object's footprint is only known as a box around it, which bounds its
+//! cost from one side only, so such a request is refused. The weighted map
+//! brackets the least weighted cost to first order in the spacing of the
+//! points along cost edges; the spacing is chosen so that the points stay
+//! within the kernel's node budget.
+//!
+//! A climb through a connector counts its measured length, at least once
+//! and at most times the largest factor of a cost meeting the connector
+//! ([`climb_factor`]).
 //!
 //! A forced walk (axiolid/kernel#196) brackets the shortest walk from the
 //! origin to a target that enters an object's plan footprint, from a map
@@ -16,16 +24,19 @@
 //! it is answered only on a closed level with every target placed; its
 //! upper bound only for a point and an exact footprint.
 
+use std::collections::BTreeSet;
+
 use axiolid_core::Point2;
 use axiolid_overlay::Polygon;
-use axiolid_route::{CostRegion, DistanceMap, Farthest, FarthestError, WeightedMap};
+use axiolid_route::{CostRegion, DistanceMap, Farthest, FarthestError, MapError, WeightedMap};
 use axioval_engine::{
     ForcedWalkEvidence, ForcedWalkOutcome, ForcedWalkRequest, NeverEnteredEvidence, TravelCost,
 };
-use axioval_ir::Evidence;
+use axioval_ir::{Evidence, ObjectId};
 
-use super::{AxiolidMetricRoutingService, LENGTH_ROUNDING, Prepared, plan, rounded_up};
-use crate::walkable::{Plan, intersect};
+use super::{AxiolidMetricRoutingService, LENGTH_ROUNDING, Level, Prepared, plan, rounded_up};
+use crate::geometry::Extent;
+use crate::walkable::{Bounds2, ON_SURFACE, Plan, REACH, ROUTE_BUDGET, intersect, plan_gap};
 
 /// The finest spacing of points along cost edges, in metres.
 const FINEST_SPACING: f64 = 0.005;
@@ -116,6 +127,17 @@ pub(super) fn costs_text(costs: &[TravelCost]) -> String {
         .join(",")
 }
 
+/// Why a map could not be built, for a refusal.
+pub(super) fn describe(error: MapError) -> String {
+    match error {
+        MapError::CostCrossing { .. } => format!(
+            "the costed footprints cannot be weighed: one crosses another or runs along a \
+             narrow portal's mid-line ({error:?})"
+        ),
+        other => format!("the distance map could not be built: {other:?}"),
+    }
+}
+
 /// A polygon's boundary length, holes included.
 fn perimeter(polygon: &Polygon) -> f64 {
     std::iter::once(&polygon.outer)
@@ -129,17 +151,87 @@ fn perimeter(polygon: &Polygon) -> f64 {
         .sum()
 }
 
+/// A costed object, measured once per request: its factor, exact plan
+/// footprint and enclosing extent, and the floors in whose storey it lies.
+pub(super) struct Costed {
+    object: ObjectId,
+    factor: f64,
+    footprint: Plan,
+    extent: Extent,
+    floors: BTreeSet<usize>,
+}
+
+/// Whether two plan boxes share area.
+fn boxes_overlap(a: &Bounds2, b: &Bounds2) -> bool {
+    (0..2).all(|axis| a.0[axis] < b.1[axis] && b.0[axis] < a.1[axis])
+}
+
+/// The floors in whose storey a body of `extent` lies: those its plan box
+/// meets and whose storey it enters. A floor's storey runs from the top of
+/// the highest floor below it (over it in plan), or [`REACH`] below its
+/// elevation where that is higher, up to its top, both ends open: a slab
+/// under a floor lies in that floor's storey, and a body only touching a
+/// storey's end does not.
+fn storeys(prepared: &Prepared, extent: &Extent) -> BTreeSet<usize> {
+    let floors = &prepared.floors;
+    let (bottom, top) = (extent.0[2], extent.1[2]);
+    floors
+        .iter()
+        .enumerate()
+        .filter(|(index, floor)| {
+            if plan_gap(&floor.bounds, extent) > ON_SURFACE {
+                return false;
+            }
+            let below = floors
+                .iter()
+                .enumerate()
+                .filter(|(other, lower)| {
+                    other != index
+                        && lower.top <= floor.z0 + ON_SURFACE
+                        && boxes_overlap(&lower.bounds, &floor.bounds)
+                })
+                .map(|(_, lower)| lower.top)
+                .fold(floor.z0 - REACH, f64::max);
+            bottom < floor.top - ON_SURFACE && top > below + ON_SURFACE
+        })
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// The largest factor a climb through `connector` may count: that of every
+/// cost on the connector itself or whose body's box meets the connector's
+/// (`extent`, or every cost when the connector's is unknown), and one
+/// where none does.
+pub(super) fn climb_factor(
+    costed: &[Costed],
+    connector: &ObjectId,
+    extent: Option<&Extent>,
+) -> f64 {
+    costed
+        .iter()
+        .filter(|cost| {
+            &cost.object == connector
+                || extent.is_none_or(|extent| {
+                    (0..3).all(|axis| {
+                        cost.extent.0[axis] <= extent.1[axis] + ON_SURFACE
+                            && extent.0[axis] <= cost.extent.1[axis] + ON_SURFACE
+                    })
+                })
+        })
+        .map(|cost| cost.factor)
+        .fold(1.0, f64::max)
+}
+
 impl AxiolidMetricRoutingService {
-    /// The cost regions of `costs` within `domain`: each object's exact
-    /// footprint cut to the free region. A tessellated or bodiless object
-    /// is refused, since its cost could then be missed or overstated.
-    pub(super) fn cost_regions(
+    /// Measures a request's costed objects. A tessellated or bodiless
+    /// object is refused, since its cost could then be missed or
+    /// overstated.
+    pub(super) fn costed(
         &self,
         prepared: &Prepared,
         costs: &[TravelCost],
-        domain: &Plan,
-    ) -> Result<Vec<CostRegion>, String> {
-        let mut regions = Vec::new();
+    ) -> Result<Vec<Costed>, String> {
+        let mut costed = Vec::with_capacity(costs.len());
         for cost in costs {
             let (footprint, exact) = self.footprint(prepared, cost.object())?;
             if !exact {
@@ -152,11 +244,52 @@ impl AxiolidMetricRoutingService {
             if footprint.is_empty() {
                 return Err(format!("{} has no plan footprint to weigh", cost.object()));
             }
-            let free = intersect(&footprint, domain)?;
+            let extent = self
+                .geometry
+                .enclosing_extent(cost.object())
+                .ok_or_else(|| format!("{} has no measured body to weigh", cost.object()))?;
+            costed.push(Costed {
+                object: cost.object().clone(),
+                factor: cost.factor(),
+                floors: storeys(prepared, &extent),
+                footprint,
+                extent,
+            });
+        }
+        Ok(costed)
+    }
+
+    /// The cost regions on `level`, within its free region `domain`: the
+    /// footprint of each object lying in the storey of one of the level's
+    /// floors, cut to the free region. An object on another level weighs
+    /// nothing here; one in no floor's storey whose footprint meets the
+    /// free region is refused, since its level is unknown.
+    pub(super) fn cost_regions(
+        costed: &[Costed],
+        level: &Level,
+        domain: &Plan,
+    ) -> Result<Vec<CostRegion>, String> {
+        let mut regions = Vec::new();
+        for cost in costed {
+            let here = cost.floors.iter().any(|floor| level.floors.contains(floor));
+            if !here && !cost.floors.is_empty() {
+                continue;
+            }
+            let free = intersect(&cost.footprint, domain)?;
+            if !here {
+                if free.is_empty() {
+                    continue;
+                }
+                return Err(format!(
+                    "the level of {} cannot be resolved: its body lies in the storey of no \
+                     walkable surface, yet its footprint meets the free region of level [{}]",
+                    cost.object, level.text
+                ));
+            }
             regions.extend(
                 free.polygons()
                     .iter()
-                    .map(|piece| CostRegion::new(piece.clone(), cost.factor())),
+                    .map(|piece| CostRegion::new(piece.clone(), cost.factor)),
             );
         }
         Ok(regions)
@@ -172,31 +305,52 @@ impl AxiolidMetricRoutingService {
         regions: &[CostRegion],
         wanted: f64,
     ) -> Result<Map, String> {
-        let describe = |error: axiolid_route::MapError| match error {
-            axiolid_route::MapError::CostCrossing { .. } => format!(
-                "the costed footprints cannot be weighed: one crosses another or runs along a \
-                 narrow portal's mid-line ({error:?})"
-            ),
-            other => format!("the weighted distance map could not be built: {other:?}"),
-        };
+        let seeded: Vec<(Point2, f64)> = points.iter().map(|point| (*point, 0.0)).collect();
+        Self::seeded_map(domain, barriers, &seeded, regions, wanted).map_err(describe)
+    }
+
+    /// [`Self::weighed_map`] from points each starting at its own weight
+    /// (axiolid/kernel#197, #198), with the kernel's own error.
+    pub(super) fn seeded_map(
+        domain: &Plan,
+        barriers: &[Vec<Point2>],
+        seeded: &[(Point2, f64)],
+        regions: &[CostRegion],
+        wanted: f64,
+    ) -> Result<Map, MapError> {
         if regions.is_empty() {
-            return axiolid_route::distance_map_within(
-                domain.polygons(),
-                barriers,
-                points,
-                crate::walkable::ROUTE_BUDGET,
-            )
-            .map(Map::Plain)
-            .map_err(|error| format!("the distance map could not be built: {error:?}"));
+            #[allow(clippy::float_cmp)]
+            let map = if seeded.iter().all(|(_, weight)| *weight == 0.0) {
+                let points: Vec<Point2> = seeded.iter().map(|(point, _)| *point).collect();
+                axiolid_route::distance_map_within(
+                    domain.polygons(),
+                    barriers,
+                    &points,
+                    ROUTE_BUDGET,
+                )
+            } else {
+                axiolid_route::distance_map_within_weighted(
+                    domain.polygons(),
+                    barriers,
+                    seeded,
+                    ROUTE_BUDGET,
+                )
+            };
+            return map.map(Map::Plain);
         }
         let boundary: f64 = regions
             .iter()
             .map(|region| perimeter(&region.polygon))
             .sum();
         let spacing = wanted.max(FINEST_SPACING).max(boundary / COST_POINTS);
-        axiolid_route::weighted_distance_map(domain.polygons(), barriers, points, regions, spacing)
-            .map(|map| Map::Weighted(map, spacing))
-            .map_err(describe)
+        axiolid_route::weighted_distance_map_seeded(
+            domain.polygons(),
+            barriers,
+            seeded,
+            regions,
+            spacing,
+        )
+        .map(|map| Map::Weighted(map, spacing))
     }
 
     /// Brackets the shortest walk from the origin to a target that enters

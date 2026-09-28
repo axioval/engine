@@ -133,8 +133,10 @@
 //! the `climbing` module), a climb counting by `stair_length` and
 //! `vertical_factor`. A walk that climbs is never traced over sections or
 //! passages, since a trace measures in plan: sections bound it by the
-//! largest factor and its common path is the whole walk. Weighted travel
-//! and forced walks are measured on one level only.
+//! largest factor and its common path is the whole walk. Where the backend
+//! weighs travel, the weighted walk and farthest point climb the same
+//! connectors and tighten that bracket as on one level; forced walks are
+//! measured on one level only.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -3841,10 +3843,9 @@ impl Judge<'_, '_> {
 
     /// The travel from `door` (or the farthest point of `space` for none)
     /// to the nearest of `targets` around `avoided`, weighted by the
-    /// sections' costs (the sure ones only for a lower bound); `None` when
-    /// no section is declared, the walk climbs connectors (weighted travel
-    /// is measured on one level), or the backend cannot weigh it. Only
-    /// ever tightens the plain bounds.
+    /// sections' costs (the sure ones only for a lower bound), climbing
+    /// the rule's connectors if any; `None` when no section is declared or
+    /// the backend cannot weigh it. Only ever tightens the plain bounds.
     #[allow(clippy::too_many_arguments)]
     fn weighted(
         &self,
@@ -3856,7 +3857,7 @@ impl Judge<'_, '_> {
         profile: MobilityProfile,
         sure: bool,
     ) -> Option<Travel> {
-        if targets.is_empty() || self.connectors.is_some() {
+        if targets.is_empty() {
             return None;
         }
         let costs = self.costs(sure);

@@ -52,6 +52,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   **Breaking:** `Date` gains a field, so its derived order (still
   structural) now places a zoned date after the unzoned one of its day;
   package date literals may state a zone.
+- **Weighted travel across levels.** (#147) The Axiolid backend answers
+  weighted nearest-target and farthest-point requests that climb
+  connectors, which it refused before. Each reached level is weighted by
+  its own cost regions, only from costs whose object lies in the storey of
+  one of its surfaces, and its walks are weighted brackets; the farthest
+  point's sources are seeded with the weighted walks beyond them
+  (`weighted_distance_map_seeded`, `axiolid-route` 0.3.5). A climb counts
+  its measured length once in the lower bound and times the largest
+  factor of a cost meeting its connector in the upper bound, so a cost on
+  a stair raises only the climb's upper bound. A cost whose level cannot
+  be resolved, and a body with a radius, are refused.
+- **Weighted escape travel across levels.** (#147) `escape-route` asks the
+  weighted walk and farthest point with its selected stairs, ramps and
+  lifts too, instead of keeping only the plain walk times the largest
+  factor for a walk that may climb: a room upstairs whose travel exceeds
+  the maximum only because of a section's factor is now found, and one
+  within it at its weighted cost passes.
 
 - **`axioval-ids` is published.** (Refs #116) The IDS package importer
   graduates from `staging/ids` to `crates/packages/ids`, a workspace member
@@ -3229,6 +3246,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   entity the schema does not declare is an error, not a non-member.
 
 ### Changed
+
+- **A travel cost weighs only its object's level.** (#147) A `TravelCost`
+  now weighs walks only on the level its object lies in, or on every
+  level it spans, never on a floor above or below it; before, a costed
+  footprint weighed whatever walk crossed it in plan, which could raise
+  the lower bound of a walk on another floor above its true cost. The
+  Axiolid backend takes a walkable surface's storey from the top of the
+  surface below it (at most 1 m under its floor) to its top, and refuses a
+  cost whose object lies in no storey over a walked level. **Breaking:**
+  a cost on another level no longer weighs a walk on one level, and a
+  cost whose level cannot be resolved is refused.
 
 - **No snapping of costed footprints.** (Refs axiolid/kernel#198) The
   Axiolid backend no longer moves a costed footprint's cut vertices within

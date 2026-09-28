@@ -370,6 +370,15 @@ impl ConnectorRouting {
 /// Where footprints overlap the greatest factor counts, and along a
 /// footprint's edge the cheaper side does. A walk under a stair lies over
 /// it, as for [`PathTraceRequest`].
+///
+/// A cost weighs only walks on its object's own level: the level it lies
+/// in, or every level it spans. A walk on a floor above or below the
+/// object is not weighed by it. Across levels ([`ConnectorRouting`]) a
+/// climb counts its length times a factor between one and the largest
+/// factor of a cost meeting its connector: the answer's lower bound takes
+/// one, its upper bound the largest. A backend that cannot tell an
+/// object's level refuses the request rather than weigh a level the
+/// object is not on.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TravelCost {
     object: ObjectId,

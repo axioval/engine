@@ -14,8 +14,8 @@ use axioval_axiolid::{AxiolidGeometry, AxiolidMetricRoutingService};
 use axioval_engine::{
     ClimbLength, ConnectorRouting, FarthestPointOutcome, FarthestPointRequest, MetricPoint,
     MetricRouteOutcome, MetricRouteRequest, MetricRoutingError, MetricRoutingServiceHandle,
-    MobilityProfile, NearestTargetOutcome, NearestTargetRequest, StairLength, VerticalConnector,
-    VerticalConnectorKind,
+    MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest,
+    StairLength, TravelCost, VerticalConnector, VerticalConnectorKind,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -406,4 +406,197 @@ fn the_farthest_point_between_an_exit_and_a_stair_converges() {
     assert!(bounded.converged(), "{bounded:?}");
     let [x, y, _] = bounded.witness().coordinates_metres();
     assert!(x < 0.1 && y < 0.1, "{bounded:?}");
+}
+
+/// Travel over `object` counting `factor` metres a metre.
+fn cost(object: &str, factor: f64) -> TravelCost {
+    TravelCost::try_new(id(object), factor).unwrap()
+}
+
+fn weighted_nearest(
+    service: &MetricRoutingServiceHandle,
+    from: MetricPoint,
+    to: MetricPoint,
+    costs: Vec<TravelCost>,
+) -> Result<NearestTargetOutcome, MetricRoutingError> {
+    service.nearest_target(
+        &NearestTargetRequest::try_new(from, vec![to], walking(0.0))
+            .unwrap()
+            .with_connectors(stairs(ClimbLength::slope()))
+            .with_costs(costs),
+    )
+}
+
+fn reached(outcome: Result<NearestTargetOutcome, MetricRoutingError>) -> NearestTargetEvidence {
+    match outcome {
+        Ok(NearestTargetOutcome::Reached(reached)) => reached,
+        other => panic!("expected a walk, got {other:?}"),
+    }
+}
+
+/// The bracket holds `value` and is at most `width` wide: a weighted one
+/// is first order in the spacing of points along cost edges (5 mm), and
+/// exact where walks cross them square.
+fn brackets(lower: f64, upper: f64, value: f64, width: f64) {
+    assert!(
+        lower <= value + SNAP && value - SNAP <= upper,
+        "[{lower}, {upper}] misses {value}"
+    );
+    assert!(upper - lower <= width, "[{lower}, {upper}] is loose");
+}
+
+#[test]
+fn a_costed_slab_weighs_only_the_walks_on_its_own_level() {
+    // Two slabs under the east strip (x 6..10): one under the ground
+    // floor, one under the upper floor. Upstairs the walk runs straight
+    // along y = 0.5 from x = 0.5 to 9.5, 3.5 m of it over the strip.
+    let service = service(
+        building()
+            .with_mesh(
+                id("ground-slab"),
+                cuboid([6.0, 0.0, -0.25], [10.0, 4.0, -0.05]),
+            )
+            .with_mesh(
+                id("upper-slab"),
+                cuboid([6.0, 0.0, 2.75], [10.0, 4.0, 2.95]),
+            ),
+    );
+    let to = MetricPoint::try_new(id("upper"), [9.5, 0.5, 3.0]).unwrap();
+    let walk = |costs| {
+        let walked = reached(weighted_nearest(&service, upstairs(), to.clone(), costs));
+        let distance = walked.shortest_distance();
+        (distance.lower_metres(), distance.upper_metres(), walked)
+    };
+    // The ground floor's slab lies on another level: it weighs the ground
+    // level, reached down the stair, and the upper walk is its plain 9 m.
+    let (lower, upper, walked) = walk(vec![cost("ground-slab", 3.0)]);
+    brackets(lower, upper, 9.0, 1e-6);
+    let locator = &walked.evidence().locator;
+    assert!(
+        locator.contains("costs=[") && locator.contains("weighed-levels=1"),
+        "{locator}"
+    );
+    // The upper floor's own slab weighs it: 5.5 m plain, 3.5 m thrice.
+    let (lower, upper, _) = walk(vec![cost("upper-slab", 3.0)]);
+    brackets(lower, upper, 5.5 + 3.0 * 3.5, 0.02);
+    // Without connectors the walk stays upstairs, weighed by the same rule.
+    let outcome = service.nearest_target(
+        &NearestTargetRequest::try_new(upstairs(), vec![to.clone()], walking(0.0))
+            .unwrap()
+            .with_costs(vec![cost("ground-slab", 3.0)]),
+    );
+    let alone = reached(outcome);
+    let upstairs_only = alone.shortest_distance();
+    brackets(
+        upstairs_only.lower_metres(),
+        upstairs_only.upper_metres(),
+        9.0,
+        1e-6,
+    );
+    // Both together weigh only the upper one's.
+    let (lower, upper, _) = walk(vec![cost("ground-slab", 3.0), cost("upper-slab", 3.0)]);
+    brackets(lower, upper, 5.5 + 3.0 * 3.5, 0.02);
+}
+
+#[test]
+fn a_weighted_escape_down_the_stair_counts_the_ground_walk_by_its_factor() {
+    // A slab under the whole ground floor doubles every ground metre; the
+    // upper walk and the climb count once.
+    let service = service(building().with_mesh(
+        id("ground-slab"),
+        cuboid([0.0, 0.0, -0.25], [10.0, 4.0, -0.05]),
+    ));
+    let slope = (UPPER[0] - LOWER[0]).hypot(3.0);
+    let walked = reached(weighted_nearest(
+        &service,
+        upstairs(),
+        exit(),
+        vec![cost("ground-slab", 2.0)],
+    ));
+    let walk = walked.shortest_distance();
+    let expected = distance([0.5, 0.5], UPPER) + slope + 2.0 * downstairs();
+    brackets(walk.lower_metres(), walk.upper_metres(), expected, 0.02);
+    assert_eq!(walked.waypoints().last(), Some(&exit()));
+
+    // From the upper room's farthest point, its north-west corner.
+    let request = FarthestPointRequest::try_new(id("upper"), vec![exit()], walking(0.0), 0.01)
+        .unwrap()
+        .with_connectors(stairs(ClimbLength::slope()))
+        .with_costs(vec![cost("ground-slab", 2.0)]);
+    let outcome = service.farthest_point(&request).unwrap();
+    let FarthestPointOutcome::Bounded(bounded) = outcome else {
+        panic!("expected a bracket, got {outcome:?}");
+    };
+    let expected = distance([0.0, 4.0], UPPER) + slope + 2.0 * downstairs();
+    let bracket = bounded.distance();
+    brackets(
+        bracket.lower_metres(),
+        bracket.upper_metres(),
+        expected,
+        0.03,
+    );
+    let [x, y, _] = bounded.witness().coordinates_metres();
+    assert!(x < 0.1 && y > 3.9, "{bounded:?}");
+}
+
+#[test]
+fn a_cost_on_the_stair_raises_only_the_climbs_upper_bound() {
+    // The upper room begins at the stair's head (x 5.6..10), so no walk on
+    // either level passes over the stair: its cost weighs only the climb,
+    // at least once and at most twice.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("ground"), cuboid([0.0, 0.0, 0.0], [10.0, 4.0, 2.7]))
+        .with_mesh(id("upper"), cuboid([5.6, 0.0, 3.0], [10.0, 4.0, 5.7]))
+        .with_mesh(id("stair"), stair());
+    let service = service(geometry);
+    let from = MetricPoint::try_new(id("upper"), [9.5, 0.5, 3.0]).unwrap();
+    let slope = (UPPER[0] - LOWER[0]).hypot(3.0);
+    let plain = distance([9.5, 0.5], UPPER) + slope + downstairs();
+    let walked = reached(weighted_nearest(
+        &service,
+        from.clone(),
+        exit(),
+        vec![cost("stair", 2.0)],
+    ));
+    let walk = walked.shortest_distance();
+    assert!(
+        (walk.lower_metres() - plain).abs() < 1e-6,
+        "{walk:?} misses {plain}"
+    );
+    assert!(
+        (walk.upper_metres() - (plain + slope)).abs() < 1e-6,
+        "{walk:?} misses {}",
+        plain + slope
+    );
+    let locator = &walked.evidence().locator;
+    assert!(locator.contains("*<=2"), "{locator}");
+    // Unweighted, the climb counts once both ways.
+    let walked = reached(weighted_nearest(&service, from, exit(), Vec::new()));
+    let walk = walked.shortest_distance();
+    holds(walk.lower_metres(), walk.upper_metres(), plain);
+}
+
+#[test]
+fn a_cost_whose_level_cannot_be_resolved_is_refused() {
+    // A canopy high above the upper room lies in no storey, yet over its
+    // floor: which level it weighs is unknown.
+    let service =
+        service(building().with_mesh(id("canopy"), cuboid([6.0, 0.0, 9.0], [10.0, 4.0, 9.2])));
+    let to = MetricPoint::try_new(id("upper"), [9.5, 0.5, 3.0]).unwrap();
+    let outcome = weighted_nearest(&service, upstairs(), to, vec![cost("canopy", 2.0)]);
+    assert!(
+        matches!(&outcome, Err(MetricRoutingError::Unavailable(reason)) if reason.contains("cannot be resolved")),
+        "{outcome:?}"
+    );
+    // A body with a radius is never weighed.
+    let outcome = service.nearest_target(
+        &NearestTargetRequest::try_new(upstairs(), vec![exit()], walking(0.2))
+            .unwrap()
+            .with_connectors(stairs(ClimbLength::slope()))
+            .with_costs(vec![cost("stair", 2.0)]),
+    );
+    assert!(
+        matches!(&outcome, Err(MetricRoutingError::Unavailable(reason)) if reason.contains("point only")),
+        "{outcome:?}"
+    );
 }

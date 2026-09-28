@@ -50,7 +50,7 @@ A specification's `ifcVersion` is metadata that never changes a verdict, as the 
 
 `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -- --ignored corpus` runs every buildingSMART test case through the IFC adapter and the engine. It asserts that no translated rule fails a `pass-` case and that every `fail-` case either produces a finding or is explained by a reported gap. `IDS_CORPUS_VERBOSE=1` lists every case with its findings.
 
-Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` or a complex property, which the adapter refuses; a table value checked with a `dataType`, since a table whose columns differ in type reports none; and a measure whose unit the model does not resolve.
+Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` referencing an entity, or a complex property, which the adapter refuses (one referencing nothing is no value, and fails a required facet as IDS requires); a table value checked with a `dataType`, since a table whose columns differ in type reports none; and a measure whose unit the model does not resolve.
 
 ## Publishing
 

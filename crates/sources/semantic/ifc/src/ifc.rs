@@ -261,6 +261,12 @@ impl IfcPropertyService {
                 (value, types)
             }
             ExactValue::Table(table) => self.table_value(table)?,
+            // A reference value referencing nothing (`PropertyReference`
+            // `$`, optional since IFC4) states no value, as an enumerated
+            // value selecting nothing; one naming an entity is refused.
+            ExactValue::Reference(reference) if reference.target.is_none() => {
+                (PropertyValue::Null, Vec::new())
+            }
             ExactValue::Reference(_) | ExactValue::Entity(_) => {
                 return Err(PropertyResolutionError::InexactEvidence);
             }

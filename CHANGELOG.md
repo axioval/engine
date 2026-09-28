@@ -2933,6 +2933,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A reference value referencing nothing is no value.** (Refs #116) The
+  IFC adapter read every `IfcPropertyReferenceValue` as unreadable, so a
+  required property holding one was not evaluated. One whose
+  `PropertyReference` is `$` (optional since IFC4) states no value and is
+  now `null` with no declared type, as an enumerated value selecting
+  nothing is, so a required property or IDS facet over it fails. One
+  referencing an entity is still refused.
+
 - **A required property fails on an empty matching set.** (Refs #116) A
   property set or quantity set whose members are `()` or `$` left no trace
   in an enumeration, and the IFC adapter refused the whole answer, so a

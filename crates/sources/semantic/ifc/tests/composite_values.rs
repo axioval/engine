@@ -1,5 +1,5 @@
 //! Enumerated, list, bounded and table values map onto the IR's values;
-//! reference values stay refused.
+//! reference values stay refused unless they reference nothing.
 #![allow(missing_docs)]
 
 use axioval_engine::{
@@ -37,7 +37,8 @@ DATA;
 #12=IFCPROPERTYREFERENCEVALUE('Reference',$,$,#94);
 #13=IFCPROPERTYLISTVALUE('Dates',$,(IFCDATE('2026-09-27')),$);
 #14=IFCPROPERTYTABLEVALUE('Ratios',$,(IFCREAL(1.),IFCREAL(2.)),(IFCREAL(0.5),IFCREAL(0.25)),$,$,$,$);
-#20=IFCPROPERTYSET('0000000000000000000020',$,'Pset_Kinds',$,(#3,#4,#5,#6,#7,#8,#9,#10,#11,#12,#13,#14));
+#15=IFCPROPERTYREFERENCEVALUE('Unreferenced',$,$,$);
+#20=IFCPROPERTYSET('0000000000000000000020',$,'Pset_Kinds',$,(#3,#4,#5,#6,#7,#8,#9,#10,#11,#12,#13,#14,#15));
 #21=IFCRELDEFINESBYPROPERTIES('0000000000000000000021',$,$,$,(#1),#20);
 #30=IFCDOOR('0000000000000000000030',$,$,$,$,$,$,$,$,$,$,$,$);
 #31=IFCDOORPANELPROPERTIES('0000000000000000000031',$,'Panel',$,$,.SWINGING.,$,.LEFT.,$);
@@ -178,6 +179,13 @@ fn a_table_value_keeps_its_rows_and_a_type_only_when_both_columns_share_it() {
 fn a_reference_value_stays_refused() {
     let result = resolve("#1", "Pset_Kinds", "Reference");
     assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
+fn a_reference_value_referencing_nothing_is_no_value() {
+    let unreferenced = property("Unreferenced");
+    assert_eq!(unreferenced.value, PropertyValue::Null);
+    assert_eq!(unreferenced.data_type(), None);
 }
 
 #[test]

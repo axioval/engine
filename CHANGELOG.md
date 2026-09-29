@@ -4,6 +4,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
+  through zip 8, so the workspace carries a single zip version. Archives are
+  byte-identical to those written with 0.4.
+
 ## [0.3.0] - 2026-09-28
 
 ### Added

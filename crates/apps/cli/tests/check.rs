@@ -514,6 +514,52 @@ fn a_date_between_two_date_bounds_is_compared_as_xml_schema_orders_it() {
     assert_eq!(open, ["#21"], "{result:#}");
 }
 
+/// Walls #1, #11 and #21 of type `T1` state 240 mm, 240.5 mm and 260 mm:
+/// within 1 mm only #21 is inconsistent, reported against the median.
+#[test]
+fn walls_of_one_type_agree_on_a_value_within_a_tolerance() {
+    let case = Case::new("consistent-tolerance");
+    let model = walls_with_references(&[
+        "IFCLENGTHMEASURE(240.)",
+        "IFCLENGTHMEASURE(240.5)",
+        "IFCLENGTHMEASURE(260.)",
+    ])
+    .replace("',$,$,$,$,$,$,$,$);", "',$,$,$,'T1',$,$,$,$);")
+    .replace(
+        "ENDSEC;\nEND-ISO",
+        "#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);\n\
+         #91=IFCUNITASSIGNMENT((#90));\n\
+         #92=IFCPROJECT('0000000000000000000092',$,'P',$,$,$,$,$,#91);\n\
+         ENDSEC;\nEND-ISO",
+    );
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[],
+        "axioval:capability.consistent-value",
+        &registry_signature("axioval:capability.consistent-value"),
+        entity("wall"),
+        json!({
+            "key": {"type": "propertyReference", "propertySet": "axioval:attributes",
+                    "property": "axioval:example.ifc.object-type"},
+            "value": {"type": "propertyReference",
+                      "property": "axioval:example.ifc.reference",
+                      "propertySet": "axioval:example.ifc.pset-wall-common"},
+            "tolerance_quantity": {"type": "quantity", "value": 1, "unit": "mm"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#21"], "{result:#}");
+    assert!(open.is_empty(), "{result:#}");
+    assert!(
+        result["report"]["findings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("from the median 0.2405 m"),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn a_measure_of_unknown_unit_is_judged_by_its_declared_type_alone() {
     // The file has no project, so no measure's unit resolves: the value of

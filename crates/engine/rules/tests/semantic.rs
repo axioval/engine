@@ -18,8 +18,8 @@ use axioval_rules::{
     SelectorConformance, UniqueValue, register_builtins,
 };
 use common::{
-    Model, assert_deviation, boolean, deviation_of, findings, flagged, integer, kind, property,
-    rule, selector, string, unevaluated,
+    Model, assert_deviation, boolean, deviation_of, findings, flagged, integer, kind, number,
+    property, rule, selector, string, unevaluated,
 };
 
 const ATTR: &str = axioval_ir::ATTRIBUTE_SET;
@@ -338,6 +338,158 @@ mod consistent {
                         .into()
                 ),
             ]
+        );
+    }
+
+    fn metres(value: f64) -> PropertyValue {
+        PropertyValue::Quantity {
+            value,
+            dimension: axioval_ir::QuantityDimension::Length,
+        }
+    }
+
+    fn millimetres(value: f64) -> ParameterValue {
+        ParameterValue::Quantity {
+            value,
+            unit: "mm".into(),
+        }
+    }
+
+    /// Walls of type `T1` of the given thicknesses, `w1` onwards.
+    fn walls(thicknesses: &[PropertyValue]) -> Model {
+        let mut model = Model::default();
+        for (index, thickness) in thicknesses.iter().enumerate() {
+            let local = format!("w{}", index + 1);
+            model = model
+                .object(&local, "wall")
+                .text(&local, "Pset", "Type", "T1")
+                .value(&local, "Pset", "Width", thickness.clone());
+        }
+        model
+    }
+
+    fn thickness(
+        model: Model,
+        tolerance: Option<(&str, ParameterValue)>,
+    ) -> axioval_engine::CapabilityEvaluation {
+        let mut parameters = vec![
+            ("key", property(Some("Pset"), "Type")),
+            ("value", property(Some("Pset"), "Width")),
+        ];
+        parameters.extend(tolerance);
+        model.evaluate(&ConsistentValue, &rule(ID, kind("wall"), parameters))
+    }
+
+    #[test]
+    fn values_within_the_tolerance_agree_and_without_it_disagree() {
+        let close = || walls(&[metres(0.24), metres(0.2405)]);
+        let within = thickness(close(), Some(("tolerance_quantity", millimetres(1.0))));
+        assert!(within.findings().is_empty(), "{:?}", findings(&within));
+        assert!(within.not_evaluated_outcomes().is_empty());
+        assert_eq!(flagged(&thickness(close(), None)), ["w1", "w2"]);
+        // A number tolerance reads quantities in SI units.
+        let within = thickness(close(), Some(("tolerance", number(0.001))));
+        assert!(within.findings().is_empty(), "{:?}", findings(&within));
+        // Plain numbers take a number tolerance.
+        let numbers = walls(&[PropertyValue::Decimal(1.0), PropertyValue::Integer(1)]);
+        let within = thickness(numbers, Some(("tolerance", number(0.0))));
+        assert!(within.findings().is_empty(), "{:?}", findings(&within));
+    }
+
+    #[test]
+    fn an_outlier_beyond_the_tolerance_of_the_median_is_reported() {
+        let model = walls(&[metres(0.24), metres(0.2405), metres(0.26)]);
+        let evaluation = thickness(model, Some(("tolerance_quantity", millimetres(1.0))));
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "w3".into(),
+                "Pset.Width is 0.26 m, farther than the tolerance 0.001 m from the median \
+                 0.2405 m of the objects with Pset.Type `T1`"
+                    .into()
+            )]
+        );
+        assert_eq!(evaluation.findings()[0].related.len(), 2);
+        assert!(evaluation.not_evaluated_outcomes().is_empty());
+    }
+
+    #[test]
+    fn a_range_beyond_the_tolerance_with_no_outlier_reports_its_ends() {
+        let model = walls(&[
+            PropertyValue::Integer(0),
+            PropertyValue::Integer(1),
+            PropertyValue::Integer(2),
+        ]);
+        let evaluation = thickness(model, Some(("tolerance", number(1.0))));
+        assert_eq!(flagged(&evaluation), ["w1", "w3"]);
+        assert_eq!(
+            evaluation.findings()[0].message,
+            "Pset.Width is 0, at an end of the range 0 to 2 of Pset.Width over the objects \
+             with Pset.Type `T1`, which exceeds the tolerance 1"
+        );
+    }
+
+    #[test]
+    fn a_measured_width_counts_whole_and_a_straddling_range_is_not_evaluated() {
+        let measured = |lower, upper| PropertyValue::Measured {
+            lower,
+            upper,
+            dimension: axioval_ir::QuantityDimension::Length,
+        };
+        // 0.2395 to 0.2415 m may lie within 1 mm of 0.24 m, or not.
+        let straddling = walls(&[metres(0.24), measured(0.2395, 0.2415)]);
+        let evaluation = thickness(straddling, Some(("tolerance_quantity", millimetres(1.0))));
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("w1".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("w2".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+        // Wholly within, it agrees.
+        let narrow = walls(&[metres(0.24), measured(0.2398, 0.2402)]);
+        let evaluation = thickness(narrow, Some(("tolerance_quantity", millimetres(1.0))));
+        assert!(evaluation.findings().is_empty());
+        assert!(evaluation.not_evaluated_outcomes().is_empty());
+    }
+
+    #[test]
+    fn a_tolerance_that_does_not_fit_is_refused() {
+        // A length tolerance does not apply to an area.
+        let area = PropertyValue::Quantity {
+            value: 0.24,
+            dimension: axioval_ir::QuantityDimension::Area,
+        };
+        let evaluation = thickness(
+            walls(&[metres(0.24), area]),
+            Some(("tolerance_quantity", millimetres(1.0))),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("w2".to_owned(), NotEvaluatedReason::InvalidEvidence)]
+        );
+        let mut both = rule(
+            ID,
+            kind("wall"),
+            vec![
+                ("key", property(Some("Pset"), "Type")),
+                ("value", property(Some("Pset"), "Width")),
+                ("tolerance", number(0.001)),
+                ("tolerance_quantity", millimetres(1.0)),
+            ],
+        );
+        let evaluation = walls(&[metres(0.24)]).evaluate(&ConsistentValue, &both);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        both.parameters.remove("tolerance_quantity");
+        both.parameters.insert("tolerance".into(), number(-1.0));
+        let evaluation = walls(&[metres(0.24)]).evaluate(&ConsistentValue, &both);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
 }

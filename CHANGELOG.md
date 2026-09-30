@@ -52,6 +52,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   binding. **Breaking:** a definition bound to `property-comparison`
   declares the six new optional parameters.
 
+- **Consistent values within a tolerance.** (Closes #158)
+  `consistent-value` takes `tolerance` (a number, applied to numbers and
+  to quantities in SI units) or `tolerance_quantity` (a quantity, applied
+  to quantities of its dimension). Numeric values of a group agree when
+  its range is within the tolerance; a measured interval counts with its
+  full width, and a range that may lie on either side of the tolerance
+  leaves the group not evaluated. A group beyond it reports the members
+  farther than the tolerance from its median. **Breaking:** a definition
+  bound to `consistent-value` declares `tolerance` (`number`) and
+  `tolerance_quantity` (`quantity`) beside its other optional parameters.
+
 ### Changed
 
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes

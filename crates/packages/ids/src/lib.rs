@@ -88,6 +88,16 @@
 //! so an IFC2X3 specification checks an IFC4 model. A class some release
 //! lacks matches nothing in its models, as in IDS; one no release defines
 //! is a gap.
+//!
+//! # Export
+//!
+//! [`export()`] writes a ruleset back as IDS, as exactly as it reads it: a
+//! rule is exported only when translating the specification it reads as
+//! gives the rule again, and every other rule is listed with a
+//! [`Refusal`]. Every folder [`translate`] writes keeps its specification
+//! in the [`SPECIFICATION_ANNOTATION`], and the root folder the document's
+//! `<info>` under [`INFO_ANNOTATION`], so a translated document is exported
+//! again specification by specification.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -103,9 +113,14 @@ use axioval_ir::contract::{
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use ifc_schema::{Schema, TypeKind};
 use openbim_ids::{
-    Attribute, Classification, Entity, Facet, Ids, IfcVersion, Material, Occurrence, PartOf,
+    Attribute, Classification, Entity, Facet, Ids, IfcVersion, Info, Material, Occurrence, PartOf,
     Property, Relation, Requirement, Restriction, Specification, Value,
 };
+
+mod export;
+mod write;
+
+pub use export::{Export, ExportedSpecification, NotExported, Refusal, export};
 use regex::Regex;
 use thiserror::Error;
 
@@ -432,6 +447,41 @@ impl fmt::Display for Reason {
 /// A document that cannot be translated fully is not an error; see
 /// [`Translation::specifications`].
 pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsError> {
+    let specifications: Vec<&Specification> = ids.specifications.iter().collect();
+    translate_parts(&ids.info, &specifications, options)
+}
+
+/// The annotation key of the folder a specification's rules are written
+/// to, holding the specification as IDS XML, so [`export()`] can write it
+/// back.
+pub const SPECIFICATION_ANNOTATION: &str = "ids:specification";
+
+/// The prefix of the root folder's annotation keys holding the document's
+/// `<info>`, one per field present: `ids:info.title`, `ids:info.author`,
+/// and so on.
+pub const INFO_ANNOTATION: &str = "ids:info.";
+
+/// The `<info>` fields by the name they are annotated under.
+fn info_fields(info: &Info) -> [(&'static str, Option<&String>); 8] {
+    [
+        ("title", Some(&info.title)),
+        ("copyright", info.copyright.as_ref()),
+        ("version", info.version.as_ref()),
+        ("description", info.description.as_ref()),
+        ("author", info.author.as_ref()),
+        ("date", info.date.as_ref()),
+        ("purpose", info.purpose.as_ref()),
+        ("milestone", info.milestone.as_ref()),
+    ]
+}
+
+/// [`translate`] over a document's parts, so [`export()`] can translate one
+/// specification alone.
+fn translate_parts(
+    info: &Info,
+    specifications: &[&Specification],
+    options: &Options,
+) -> Result<Translation, OptionsError> {
     if !is_qualified_id(&options.package_id) {
         return Err(OptionsError::PackageId(options.package_id.clone()));
     }
@@ -443,8 +493,8 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
     }
     let mut writer = Writer::new(options);
     let mut folders = Vec::new();
-    let mut specifications = Vec::new();
-    for (index, specification) in ids.specifications.iter().enumerate() {
+    let mut outcomes = Vec::new();
+    for (index, specification) in specifications.iter().enumerate() {
         let number = index + 1;
         let (rules, gaps) = writer.specification(number, specification);
         let outcome = SpecificationOutcome {
@@ -453,7 +503,9 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
             rules: rules.iter().map(|rule| rule.id.clone()).collect(),
             gaps,
         };
-        if !rules.is_empty() {
+        // A complete specification whose facets always hold writes no rule,
+        // but still a folder, so it is exported again.
+        if !rules.is_empty() || outcome.is_complete() {
             folders.push(RuleFolder {
                 id: format!("spec{number}"),
                 name: LocalizedText::plain(&specification.name),
@@ -464,21 +516,29 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
                 rules,
                 folders: Vec::new(),
                 gate: None,
+                annotations: BTreeMap::from([(
+                    SPECIFICATION_ANNOTATION.to_owned(),
+                    write::specification(specification),
+                )]),
             });
         }
-        specifications.push(outcome);
+        outcomes.push(outcome);
     }
-    let title = &ids.info.title;
+    let title = &info.title;
     let definitions_id = format!("{}.definitions", options.package_id);
     let metadata = |id: &str, name: String| PackageMetadata {
         id: id.to_owned(),
         name: LocalizedText::plain(name),
         version: options.version.clone(),
-        description: ids.info.description.as_deref().map(LocalizedText::plain),
+        description: info.description.as_deref().map(LocalizedText::plain),
         repository: None,
         license: None,
-        authors: ids.info.author.iter().cloned().collect(),
+        authors: info.author.iter().cloned().collect(),
     };
+    let annotations = info_fields(info)
+        .into_iter()
+        .filter_map(|(field, value)| Some((format!("{INFO_ANNOTATION}{field}"), value?.clone())))
+        .collect();
     let concepts = writer.concepts;
     Ok(Translation {
         definitions: DefinitionPackage {
@@ -502,10 +562,11 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
                 rules: Vec::new(),
                 folders,
                 gate: None,
+                annotations,
             },
             classifications: BTreeMap::new(),
         },
-        specifications,
+        specifications: outcomes,
     })
 }
 

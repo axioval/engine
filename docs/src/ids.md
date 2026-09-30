@@ -1,6 +1,6 @@
-# IDS import
+# IDS import and export
 
-`axioval-ids` translates a buildingSMART IDS 1.0 document into a definition package and a ruleset that select the built-in capabilities. It lives in `crates/packages/ids`, reads IDS through the `openbim-ids` reader, and is published with the workspace (see [Publishing](#publishing)). It is a package importer, not a source adapter; it never reads a model.
+`axioval-ids` translates a buildingSMART IDS 1.0 document into a definition package and a ruleset that select the built-in capabilities, and [exports](#export) the rules IDS states exactly back into an IDS document. It lives in `crates/packages/ids`, reads IDS through the `openbim-ids` reader, and is published with the workspace (see [Publishing](#publishing)). It is a package importer, not a source adapter; it never reads a model.
 
 ## Exact or not at all
 
@@ -73,6 +73,96 @@ rules it could name are the translation's own. The walls of one storey:
 On the command line it is `--ids-filter selector.json`, for `check --ids`
 and `ids translate`.
 
+## Export
+
+`axioval_ids::export(definitions, ruleset)` writes a ruleset back as IDS
+1.0, and `axioval ids export` on the [command line](./cli.md#axioval-ids-export).
+Most rules cannot be stated in IDS (geometry, routing, counts of related
+objects, comparisons between objects), so the export is selective and
+explicit: a rule is exported only when IDS states it exactly, and every
+other rule is listed as `NotExported` with a `Refusal` saying why. Nothing
+is approximated and nothing is dropped silently; `Export::is_complete`
+says whether anything was left out.
+
+Exact means the translation above is the judge. A rule is exported as a
+specification only when translating that specification gives the rule
+again: the same capability and parameters (with the definition's
+defaults), the same applicability, gates, severity and grading, every
+concept bound to the same names and every `ruleOutcome` to the same rule.
+Names, descriptions, messages and tags are presentation and not compared.
+A specification comes from one of two places:
+
+- **Its origin.** Every folder a translation writes keeps the
+  specification it came from in its `ids:specification` annotation, as the
+  IDS XML of the `<specification>` element, and the root folder keeps the
+  document's `<info>` under `ids:info.title`, `ids:info.author` and the
+  other field names. That folder is exported as the specification it keeps
+  (names, identifier, description, instructions, `ifcVersion`, facet
+  cardinalities, `uri`s and instructions included), with the folder's own
+  name and description, when translating it gives exactly the folder's
+  rules, auxiliary rules included. A complete specification whose facets
+  always hold writes an empty folder for this, so a translated document is
+  exported again specification by specification. A folder whose rules were
+  edited, that was translated with a prefilter, or whose specification had
+  a gap is refused as a whole (`Refusal::Origin`).
+- **One rule.** Any other rule is read as one specification: its
+  applicability as an entity facet (exact classes, a predefined type as the
+  translation resolves it) followed by the part-of, classification,
+  attribute and material facets its selector's operands state, and its
+  capability as one requirement: `property-required`,
+  `property-data-type`, `property-value` (values, patterns, bounds,
+  lengths and digits; `optional`), `property-requirements` rows forbidding
+  a value or requiring every property a pattern matches, `classification`
+  (`optional`, `prohibited`), and `selector-conformance` over an entity,
+  attribute, material or part-of selector, negated when prohibited.
+  `object-count` is the applicability's `minOccurs`/`maxOccurs` with no
+  requirement. The specification is named after the rule, identified by
+  its id, and lists all three releases, since every concept a translation
+  writes is named in all three.
+
+Among the refusals: a capability no facet states (`clash`, `distance`,
+every geometric or counting capability), a selector no facet states (a
+subtype-inclusive entity type, a rule outcome, a discipline), a concept not
+named alike in IFC2X3, IFC4 and IFC4X3_ADD2, a severity other than error,
+a disabled, auxiliary, gated or graded rule, target groups, and a reading
+whose translation differs (`Refusal::Differs` names the first differing
+path, such as `rules[0].parameters.si_units` for a `property-value` rule
+that reads values in the model's units rather than SI).
+
+### Round trip
+
+A package translated from IDS re-exports the same specifications: for every
+buildingSMART test case that translates without a gap, exporting the
+translation gives a document that reads back to the original
+specifications and info, translates to identical packages, and reports
+identical findings on the case's model. The same rules exported without
+their origin, one specification per rule, translate back to rules that
+report on the same objects. The [conformance corpus](#conformance-corpus)
+test asserts both and validates every exported document against the
+corpus checkout's `ids.xsd`.
+
+### Writing IDS
+
+`openbim-ids` reads IDS but does not write it yet; openbimrs/ids#10 asks for
+a writer. Until it is released, a small writer inside `axioval-ids`
+(`src/write.rs`) produces the XML behind two functions, so switching to
+the upstream writer changes only them. It writes the elements in the order
+`ids.xsd` requires, sorts applicability facets into the schema's sequence,
+writes only the attributes each requirement facet may carry, and escapes
+every text so it reads back unchanged, surrounding whitespace, quotes and
+line breaks included. The schema is CC BY-ND 4.0 and not vendored: unit
+tests check what they write by reading it back, and the corpus test
+validates against the checkout's schema with Python's `lxml`.
+
+### Folder annotations
+
+The origin travels in `annotations`, an optional map on every rule folder
+of the normalized package contract: namespaced keys (`scheme:name`) with
+text values, omitted when empty. The engine never reads it, so it changes
+no selection, evidence or outcome; an importer or authoring tool keeps its
+provenance there. The MCS rule folder needs the same optional field for a
+package authored in MCS to carry it.
+
 ## Gaps
 
 These parts stay explicit gaps:
@@ -93,6 +183,8 @@ A specification's `ifcVersion` is metadata that never changes a verdict, as the 
 ## Conformance corpus
 
 `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -p axioval-ids -- --ignored corpus` runs every buildingSMART test case through the IFC adapter and the engine. It asserts that no translated rule fails a `pass-` case and that every `fail-` case either produces a finding or is explained by a reported gap. `IDS_CORPUS_VERBOSE=1` lists every case with its findings.
+
+The same run checks the [round trip](#round-trip) of every case that translates without a gap: all 307 are exported again, read back to the original specifications and info, translate to identical packages and report identical findings, and all 603 of their rules are also exported one by one without their origin, reporting on the same objects. Every exported document is validated against `Schema/ids.xsd` of the checkout, which needs `python3` with `lxml`.
 
 Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` referencing an entity, which the adapter refuses (one referencing nothing is no value, and fails a required facet as IDS requires); and the value of a measure whose unit the model does not resolve. Such a measure's declared type is still exact, so its `dataType` is judged: `IFCMASSMEASURE(2.)` fails `dataType="IFCTIMEMEASURE"` whatever its value, as the buildingSMART case "measures are used to specify an IFC data type" requires, and a required facet without a value is met.
 

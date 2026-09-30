@@ -179,3 +179,293 @@ fn run() {
 fn corpus_translations_never_contradict_the_expected_verdict() {
     run();
 }
+
+/// What a run reports, comparable across two runs of the same rules.
+fn verdicts(
+    translation: &axioval_ids::Translation,
+    session: &axioval::engine::EvidenceSession,
+) -> Vec<String> {
+    let registry = default_registry().expect("built-in registry");
+    let plan = compile(
+        &registry,
+        &[translation.definitions.clone()],
+        &translation.ruleset,
+    )
+    .expect("translated packages compile");
+    let report = Runtime::new(registry)
+        .run_session(session, plan)
+        .expect("plan runs");
+    let mut verdicts: Vec<String> = report
+        .findings()
+        .iter()
+        .map(|finding| {
+            format!(
+                "finding {} {:?} {:?} {}",
+                finding.rule_id, finding.scope, finding.severity, finding.message
+            )
+        })
+        .chain(report.not_evaluated().iter().map(|outcome| {
+            format!(
+                "not evaluated {} {:?} {:?} {}",
+                outcome.rule_id, outcome.scope, outcome.reason, outcome.message
+            )
+        }))
+        .collect();
+    verdicts.sort();
+    verdicts
+}
+
+/// What each rule, named by `name`, reported about which object: the
+/// verdicts without their wording, which a rule read on its own words
+/// otherwise.
+fn subjects(
+    translation: &axioval_ids::Translation,
+    session: &axioval::engine::EvidenceSession,
+    name: &dyn Fn(&str) -> String,
+) -> Vec<String> {
+    let registry = default_registry().expect("built-in registry");
+    let plan = compile(
+        &registry,
+        &[translation.definitions.clone()],
+        &translation.ruleset,
+    )
+    .expect("translated packages compile");
+    let report = Runtime::new(registry)
+        .run_session(session, plan)
+        .expect("plan runs");
+    let mut subjects: Vec<String> = report
+        .findings()
+        .iter()
+        .map(|finding| {
+            format!(
+                "{} finding {:?} {:?}",
+                name(&finding.rule_id.to_string()),
+                finding.scope,
+                finding.severity
+            )
+        })
+        .chain(report.not_evaluated().iter().map(|outcome| {
+            format!(
+                "{} not evaluated {:?} {:?}",
+                name(&outcome.rule_id.to_string()),
+                outcome.scope,
+                outcome.reason
+            )
+        }))
+        .collect();
+    subjects.sort();
+    subjects
+}
+
+/// The corpus documents that translate without a gap are exported again,
+/// specification by specification as they were read, and the export
+/// translates to rules that report exactly what the original's did on the
+/// case's model.
+fn round_trip() {
+    let written = Path::new(env!("CARGO_TARGET_TMPDIR")).join("ids-export");
+    let _ = std::fs::remove_dir_all(&written);
+    std::fs::create_dir_all(&written).expect("export directory");
+    let options = Options::new("ids:corpus", "1.0.0");
+    let (mut complete, mut identical, mut refused) = (0, 0, 0);
+    let (mut rules_total, mut rules_read) = (0, 0);
+    let mut exported = Vec::new();
+    let mut read_files = Vec::new();
+    let mut failures = Vec::new();
+    for case in cases() {
+        let name = case.file_stem().unwrap().to_string_lossy().into_owned();
+        if name.starts_with("invalid-") {
+            continue;
+        }
+        let ids = openbim_ids::from_slice(&std::fs::read(&case).expect("readable case"))
+            .expect("corpus IDS reads");
+        let translation = translate(&ids, &options).expect("valid options");
+        if !translation.is_complete() {
+            continue;
+        }
+        complete += 1;
+        let export = axioval_ids::export(
+            std::slice::from_ref(&translation.definitions),
+            &translation.ruleset,
+        );
+        if !export.is_complete() {
+            let listed: Vec<String> = export
+                .not_exported
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            failures.push(format!("{name}: not exported: {}", listed.join("; ")));
+            continue;
+        }
+        let xml = export.to_xml().expect("a specification");
+        let path = written.join(format!("{name}.ids"));
+        std::fs::write(&path, &xml).expect("writable export");
+        exported.push(path);
+        let again = match openbim_ids::from_str(&xml) {
+            Ok(again) => again,
+            Err(error) => {
+                failures.push(format!("{name}: the export does not read: {error}"));
+                continue;
+            }
+        };
+        if again.info != ids.info || again.specifications != ids.specifications {
+            failures.push(format!("{name}: the export differs from the document"));
+            continue;
+        }
+        let retranslated = translate(&again, &options).expect("valid options");
+        if retranslated.ruleset != translation.ruleset
+            || retranslated.definitions != translation.definitions
+        {
+            failures.push(format!("{name}: the export translates to other packages"));
+            continue;
+        }
+        let Ok(model) = std::fs::read(case.with_extension("ifc")) else {
+            continue;
+        };
+        let Ok(session) = import_ifc_session("model.ifc", &model) else {
+            refused += 1;
+            continue;
+        };
+        if verdicts(&translation, &session) == verdicts(&retranslated, &session) {
+            identical += 1;
+        } else {
+            failures.push(format!("{name}: the export reports otherwise"));
+        }
+        let detached = one_by_one(&name, &translation, &session, &written);
+        rules_total += detached.total;
+        rules_read += detached.read;
+        read_files.extend(detached.file);
+        failures.extend(detached.failure);
+    }
+    println!(
+        "round trip: {complete} complete translation(s), {} exported, {identical} with identical verdicts, {refused} model(s) refused",
+        exported.len()
+    );
+    println!(
+        "without their origin: {rules_read} of {rules_total} rule(s) read as specifications of their own"
+    );
+    exported.extend(read_files);
+    validate(&exported, &mut failures);
+    assert!(
+        failures.is_empty(),
+        "round-trip failures:\n{}",
+        failures.join("\n")
+    );
+}
+
+/// What reading a translation's rules one by one gave.
+struct OneByOne {
+    /// Rules in the translation.
+    total: usize,
+    /// Rules read as specifications of their own.
+    read: usize,
+    /// The document they were exported to.
+    file: Option<PathBuf>,
+    /// How they report otherwise than as translated.
+    failure: Option<String>,
+}
+
+/// Exports the rules of `translation` without their origin, so each is
+/// read as a specification of its own, and checks that every rule read
+/// reports on `session` as it did.
+fn one_by_one(
+    name: &str,
+    translation: &axioval_ids::Translation,
+    session: &axioval::engine::EvidenceSession,
+    written: &Path,
+) -> OneByOne {
+    let mut detached = translation.ruleset.clone();
+    detached.root.annotations.clear();
+    for folder in &mut detached.root.folders {
+        folder.annotations.clear();
+    }
+    let export = axioval_ids::export(std::slice::from_ref(&translation.definitions), &detached);
+    if std::env::var_os("IDS_CORPUS_VERBOSE").is_some() {
+        for entry in &export.not_exported {
+            println!("    {name}: not read on its own: {entry}");
+        }
+    }
+    let mut outcome = OneByOne {
+        total: export.not_exported.len() + export.specifications.len(),
+        read: export.specifications.len(),
+        file: None,
+        failure: None,
+    };
+    let Some(xml) = export.to_xml() else {
+        return outcome;
+    };
+    let path = written.join(format!("{name}.rules.ids"));
+    std::fs::write(&path, &xml).expect("writable export");
+    outcome.file = Some(path);
+    let back = translate(
+        &openbim_ids::from_str(&xml).expect("the export reads"),
+        &Options::new("ids:corpus", "1.0.0"),
+    )
+    .expect("valid options");
+    // Specification n is the n-th rule read.
+    let origin: BTreeMap<String, String> = back
+        .specifications
+        .iter()
+        .flat_map(|specification| {
+            let rule = export.specifications[specification.number - 1].rules[0].clone();
+            specification
+                .rules
+                .iter()
+                .map(move |id| (id.clone(), rule.clone()))
+        })
+        .collect();
+    let read: Vec<&str> = export
+        .specifications
+        .iter()
+        .map(|specification| specification.rules[0].as_str())
+        .collect();
+    let original: Vec<String> = subjects(translation, session, &|id| id.to_owned())
+        .into_iter()
+        .filter(|verdict| {
+            read.iter()
+                .any(|rule| verdict.starts_with(&format!("{rule} ")))
+        })
+        .collect();
+    if original != subjects(&back, session, &|id| origin[id].clone()) {
+        outcome.failure = Some(format!("{name}: rules read one by one report otherwise"));
+    }
+    outcome
+}
+
+/// Validates every exported document against `ids.xsd` of the corpus
+/// checkout, with Python's `lxml`: the schema is CC BY-ND 4.0 like the
+/// corpus, and not vendored.
+fn validate(files: &[PathBuf], failures: &mut Vec<String>) {
+    let cases = PathBuf::from(std::env::var_os("IDS_TEST_CASES").expect("IDS_TEST_CASES"));
+    let schema = cases.join("../../../Schema/ids.xsd");
+    assert!(
+        schema.exists(),
+        "no ids.xsd at {}; IDS_TEST_CASES must point into a checkout of buildingSMART/IDS",
+        schema.display()
+    );
+    let script = "import sys\nfrom lxml import etree\nschema = etree.XMLSchema(etree.parse(sys.argv[1]))\nfor path in sys.argv[2:]:\n    if not schema.validate(etree.parse(path)):\n        print(path, schema.error_log.last_error)\n";
+    let output = std::process::Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .arg(&schema)
+        .args(files)
+        .output()
+        .expect("python3 runs");
+    assert!(
+        output.status.success(),
+        "schema validation needs python3 with lxml: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let invalid = String::from_utf8_lossy(&output.stdout);
+    failures.extend(
+        invalid
+            .lines()
+            .map(|line| format!("invalid against ids.xsd: {line}")),
+    );
+    println!("{} export(s) validated against ids.xsd", files.len());
+}
+
+#[test]
+#[ignore = "needs a local buildingSMART IDS checkout in IDS_TEST_CASES"]
+fn corpus_round_trips_through_export() {
+    round_trip();
+}

@@ -1,6 +1,6 @@
 [package]
 name = "axioval-ids"
-description = "Axioval rule packages from buildingSMART IDS documents"
+description = "Axioval rule packages from and to buildingSMART IDS documents"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,12 +24,13 @@ openbim-ids.workspace = true
 # Which IDS classes are IfcObject occurrences, per release.
 ifc-schema.workspace = true
 thiserror.workspace = true
+# Rules compared by what decides them, when exporting.
+serde_json.workspace = true
 
 # The facade runs translated rules through the IFC adapter in tests only. A
 # path-only dev-dependency is left out of the published manifest.
 [dev-dependencies]
 axioval = { path = "../../facade/axioval", features = ["ifc"] }
-serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -19,4 +19,4 @@ rulesets) from other rule formats. One subdirectory per format.
 
 ## Direct children
 
-- `ids/` (`axioval-ids`) — rule packages from buildingSMART IDS documents.
+- `ids/` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them.

@@ -343,3 +343,93 @@ fn ids_and_packages_are_exclusive_and_bad_documents_exit_1() {
     );
     assert!(output.stdout.is_empty());
 }
+
+/// `ids export` over the packages in `case`, into `exported.ids`.
+fn export(case: &Case) -> Output {
+    case.run(&[
+        "ids",
+        "export",
+        "--definitions",
+        "definitions.json",
+        "--ruleset",
+        "ruleset.json",
+        "--out",
+        "exported.ids",
+    ])
+}
+
+#[test]
+fn an_exported_package_lists_the_rules_ids_cannot_state() {
+    let case = Case::new("export");
+    case.write("rules.ids", &ids(&[FIRE_RATING]));
+    let output = case.run(&[
+        "ids",
+        "translate",
+        "rules.ids",
+        "--definitions",
+        "definitions.json",
+        "--ruleset",
+        "ruleset.json",
+    ]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    // A translated document is written back as it was.
+    let output = export(&case);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let read = |name: &str| {
+        openbim_ids::from_str(&std::fs::read_to_string(case.dir.join(name)).unwrap()).unwrap()
+    };
+    assert_eq!(
+        read("exported.ids").specifications,
+        read("rules.ids").specifications
+    );
+
+    // A clash rule beside it has no IDS facet.
+    let load = |name: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(case.dir.join(name)).unwrap()).unwrap()
+    };
+    let mut definitions = load("definitions.json");
+    definitions["definitions"]["t:clash"] = serde_json::json!({
+        "id": "t:clash",
+        "name": {"default": "Clash", "translations": {}},
+        "description": null,
+        "capability": "axioval:capability.clash",
+    });
+    let mut ruleset = load("ruleset.json");
+    ruleset["root"]["rules"] = serde_json::json!([{
+        "id": "walls-clash",
+        "definitionId": "t:clash",
+        "name": {"default": "Walls clash", "translations": {}},
+    }]);
+    case.write("definitions.json", &definitions.to_string());
+    case.write("ruleset.json", &ruleset.to_string());
+    std::fs::remove_file(case.dir.join("exported.ids")).unwrap();
+    let output = export(&case);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains(
+            "rule walls-clash is not exported: capability axioval:capability.clash has no IDS facet"
+        ),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("exported 1 rule(s) as 1 specification(s); 1 rule(s) not exported"),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(
+        read("exported.ids").specifications,
+        read("rules.ids").specifications
+    );
+
+    // With nothing exportable, nothing is written.
+    ruleset["root"]["folders"] = serde_json::json!([]);
+    case.write("ruleset.json", &ruleset.to_string());
+    std::fs::remove_file(case.dir.join("exported.ids")).unwrap();
+    let output = export(&case);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(stderr(&output).contains("rule walls-clash is not exported"));
+    assert!(stderr(&output).contains("no rule can be exported as IDS"));
+    assert!(!case.dir.join("exported.ids").exists());
+}

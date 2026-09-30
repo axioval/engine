@@ -540,6 +540,13 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
         } else {
             Outcome::Incomplete
         }),
+        Command::Ids {
+            command: ids::IdsCommand::Export(args),
+        } => Ok(if ids::export_command(&args)? {
+            Outcome::Passed
+        } else {
+            Outcome::Incomplete
+        }),
         Command::Report(args) => {
             report(args)?;
             Ok(Outcome::Passed)

@@ -18,6 +18,11 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   A missing basis is `unknown`, never `unchanged`.
 - `Finding::id`, `Finding::decision` and `Report::stale_decisions` are absent
   on the wire when unset, so reports serialize as before.
+- `RuleFolder::annotations` is provenance only (namespaced keys, text
+  values, omitted when empty): nothing in the engine may read it or let it
+  change a selection, evidence or outcome. `axioval-ids` keeps an IDS
+  specification's origin there so it can be exported again. The MCS rule
+  folder must mirror this field.
 - Resource objects (instances outside the object population) are never in
   a `Project`. A report carries the ones its outcomes name in
   `Report::resources`, sorted, omitted when empty; resolve an outcome's

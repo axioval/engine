@@ -790,6 +790,43 @@ fn gates_and_rule_outcome_selectors_read_and_write_their_package_form() {
 }
 
 #[test]
+fn a_folder_keeps_its_annotations_and_omits_none() {
+    use axioval_ir::contract::RuleFolder;
+    use serde_json::json;
+
+    let folder: RuleFolder = serde_json::from_value(json!({
+        "id": "spec1",
+        "name": {"default": "Walls", "translations": {}},
+        "description": null,
+        "annotations": {"ids:specification": "<specification name=\"Walls\"/>"},
+    }))
+    .unwrap();
+    assert_eq!(
+        folder
+            .annotations
+            .get("ids:specification")
+            .map(String::as_str),
+        Some("<specification name=\"Walls\"/>")
+    );
+    let written = serde_json::to_value(&folder).unwrap();
+    assert_eq!(
+        written["annotations"]["ids:specification"],
+        "<specification name=\"Walls\"/>"
+    );
+    // A folder without annotations writes none, as before.
+    let plain = RuleFolder {
+        annotations: std::collections::BTreeMap::new(),
+        ..folder
+    };
+    assert!(
+        serde_json::to_value(&plain)
+            .unwrap()
+            .get("annotations")
+            .is_none()
+    );
+}
+
+#[test]
 fn a_measured_value_reads_and_writes_its_interval() {
     use axioval_ir::QuantityDimension;
     use serde_json::json;

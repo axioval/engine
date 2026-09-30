@@ -6,6 +6,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Exporting rules as IDS.** (Closes #196; with it #165)
+  `axioval_ids::export` and `axioval ids export --definitions d.json
+  --ruleset r.json --out rules.ids` write the rules IDS 1.0 states exactly
+  as an IDS document: entity with predefined type, attribute, property
+  (required, value, data type, prohibited, with patterns, enumerations and
+  bounds), classification, material and part-of facets, and `object-count`
+  as the applicability's cardinality. A rule is exported only when
+  translating the specification it reads as gives the rule again, concept
+  for concept; every other rule (a clash, a distance, a gated or warning
+  rule) is listed with a `Refusal`, and the command exits 4, or 1 when
+  nothing is exportable. A translated package re-exports the specifications
+  it came from: every folder `translate` writes keeps its specification as
+  IDS XML in the `ids:specification` annotation, the root keeps the
+  document's `<info>` under `ids:info.*`, and a complete specification
+  without rules now writes an empty folder. All 307 buildingSMART test
+  cases that translate without a gap round-trip to the same
+  specifications, packages and findings, and validate against `ids.xsd`.
+  `openbim-ids` does not write IDS yet (openbimrs/ids#10); a small writer
+  in `axioval-ids` stands in behind two functions.
+  **Breaking:** `RuleFolder` has an `annotations` field (namespaced keys,
+  text values, omitted when empty), which a struct literal must name; the
+  engine never reads it.
+
 - **Certified distance for curved bodies.** (Closes #187) A host registers
   an object's exact B-rep beside its mesh with
   `AxiolidGeometry::with_exact_boundary`. For a tessellated pair whose

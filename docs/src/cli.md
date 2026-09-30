@@ -310,6 +310,32 @@ specification with a gap is left out and listed on stderr, as for `check
 | 1 | Nothing written: an unreadable document or an unwritable file |
 | 2 | Invalid command-line usage |
 
+## `axioval ids export`
+
+```bash
+axioval ids export --definitions definitions.json --ruleset ruleset.json --out rules.ids
+```
+
+Writes the ruleset's alphanumerical rules as an IDS 1.0 document, the
+reverse of `ids translate` (see [Export](./ids.md#export)). `--definitions`
+repeats for a ruleset that uses several definition packages. Only rules IDS
+states exactly are written: a folder `ids translate` wrote, as the
+specification it came from, and any other rule as one specification of its
+own. Every other rule is listed on stderr with why, and nothing is
+approximated:
+
+```text
+ids: ruleset.json: rule walls-clash is not exported: capability axioval:capability.clash has no IDS facet
+exported 1 rule(s) as 1 specification(s); 1 rule(s) not exported
+```
+
+| Status | Meaning |
+|---|---|
+| 0 | Every rule exported |
+| 4 | Written, without the rules listed on stderr |
+| 1 | Nothing written: no rule IDS states, an unreadable package or an unwritable file |
+| 2 | Invalid command-line usage |
+
 ## `axioval decide`
 
 Records a reviewer's decision about findings of a result saved with `check

@@ -53,7 +53,7 @@ so it adapts no source and depends on no adapter. It is core to the
 architecture gate: only the libraries named for it in `PERMITTED_COUPLINGS`
 of `scripts/architecture.py` are exempted, and only for that crate.
 
-- `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents.
+- `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them.
 
 ## facade/ and apps/
 

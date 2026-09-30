@@ -1,8 +1,8 @@
 # `axioval-ids`
 
 The IDS package importer: translates a buildingSMART IDS 1.0 document into a
-definition package and a ruleset. See `docs/src/ids.md` for the mapping of
-every facet.
+definition package and a ruleset, and exports the rules IDS states exactly
+back as a document. See `docs/src/ids.md` for the mapping of every facet.
 
 - Exact or not at all. Every facet it cannot translate exactly is reported as
   a `Gap`, never dropped. An untranslatable applicability facet leaves its
@@ -23,6 +23,20 @@ every facet.
   own names are; derived-set names, paths, patterns and source facts pass
   through, and `ruleOutcome` is refused up front. `None` must leave the
   translation byte-identical.
+- `export` (`src/export.rs`) writes rules back as IDS, exact or not at all:
+  a rule, or a translated folder, is exported only when translating the
+  specification it reads as gives it again, compared as `canonical` states
+  it (capability, parameters with defaults, applicability, gates, grading;
+  concepts by the names they bind to, rule ids by position; presentation
+  left out). Never add a reading without that check, and never let a
+  refused rule pass silently: each gets a `Refusal`. A folder `translate`
+  writes keeps its specification in the `ids:specification` annotation
+  and the root the `<info>` under `ids:info.*`; changing what `translate`
+  writes for a facet must keep the corpus round trip passing.
+- `src/write.rs` is the only IDS writer, a stand-in until `openbim-ids`
+  writes IDS (openbimrs/ids#10): keep it behind `document`,
+  `specification` and `read_specification` so switching changes only
+  them. `ids.xsd` is CC BY-ND 4.0 and not vendored.
 - Depends on `axioval-ir` (the package contracts), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),
@@ -35,7 +49,11 @@ every facet.
   buildingSMART corpus, which is CC BY-ND 4.0 and not vendored:
   `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -p axioval-ids -- --ignored corpus`.
   It asserts that no translated rule fails a `pass-` case and that every
-  unflagged `fail-` case is explained by a reported gap. `./scripts/check.sh
-  test` runs it when `IDS_TEST_CASES` is set. Keep it ignored by default.
+  unflagged `fail-` case is explained by a reported gap, and that every
+  complete translation round-trips through `export` (same specifications,
+  packages and findings; its rules one by one too), validating each export
+  against the checkout's `Schema/ids.xsd` with `python3` and `lxml`.
+  `./scripts/check.sh test` runs it when `IDS_TEST_CASES` is set. Keep it
+  ignored by default.
 - `cargo run -p axioval-ids --example coverage -- *.ids` ranks the gaps of
   real documents.

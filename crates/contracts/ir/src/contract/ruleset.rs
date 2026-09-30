@@ -224,6 +224,12 @@ pub struct RuleFolder {
     /// [`RuleGate`]. Omitted when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gate: Option<RuleGate>,
+    /// Provenance an importer or authoring tool keeps with the folder, by
+    /// namespaced key (`scheme:name`, such as `ids:specification`), as
+    /// text. The engine never reads it: an annotation changes no
+    /// selection, evidence or outcome. Empty is omitted when serialized.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub annotations: BTreeMap<String, String>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

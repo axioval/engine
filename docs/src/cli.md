@@ -19,7 +19,8 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
 ```bash
 axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
-  (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] | --ids rules.ids) \
+  (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
+   | --ids rules.ids [--ids-filter selector.json]) \
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
@@ -58,6 +59,14 @@ ids: rules.ids: specification 1 "Mixed case" is not checked:
 ids:   applicability facet 1: entity name "IfcWall" is not upper case, which IDS never matches
 ids: rules.ids: 1 of 2 specification(s) not checked
 ```
+
+`--ids-filter selector.json` restricts every specification to part of the
+model, such as the walls of one storey: the JSON selector, written in IFC
+names, is combined with each specification's applicability through `allOf`
+(see [Prefilter](./ids.md#prefilter)), so objects it leaves out are not
+checked at all. It needs `--ids`, is recorded as the `ids` field's
+`filter`, and a selector naming a rule (`ruleOutcome`) fails with status 1.
+`ids translate` takes it too.
 
 The other specifications run as usual. The result's additive `ids` field
 names the document and lists every specification in order with its number,
@@ -283,7 +292,8 @@ treats any non-zero status as a failure.
 ## `axioval ids translate`
 
 ```bash
-axioval ids translate rules.ids --definitions definitions.json --ruleset ruleset.json
+axioval ids translate rules.ids --definitions definitions.json --ruleset ruleset.json \
+  [--ids-filter selector.json]
 ```
 
 Writes the definition package and the ruleset `check --ids` would run, for

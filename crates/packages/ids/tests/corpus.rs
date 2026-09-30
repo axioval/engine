@@ -81,10 +81,7 @@ fn classify(case: &Path) -> Option<(Class, String)> {
         return None;
     };
     let ids = openbim_ids::from_slice(&std::fs::read(case).ok()?).expect("corpus IDS reads");
-    let options = Options {
-        package_id: "ids:corpus".into(),
-        version: "1.0.0".into(),
-    };
+    let options = Options::new("ids:corpus", "1.0.0");
     let translation = translate(&ids, &options).expect("valid options");
     let model = std::fs::read(case.with_extension("ifc")).ok()?;
     let session = match import_ifc_session("model.ifc", &model) {

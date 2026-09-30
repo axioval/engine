@@ -77,9 +77,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   specifications run: one with a gap runs none of its rules and is listed
   with its gaps on stderr and in the result's additive `ids` field, and the
   check then never exits 0. The CLI depends on `axioval-ids`.
+- **IDS prefilter.** (Closes #167) `axioval_ids::Options::filter` restricts
+  every specification to part of the model: a selector in IFC names, bound
+  to concepts per specification and combined with its applicability through
+  `allOf`. `Options::new` and `Options::with_filter` construct options; a
+  `ruleOutcome` prefilter is refused. The CLI takes it as `--ids-filter
+  selector.json` for `check --ids` and `ids translate`. Without a
+  prefilter translations are unchanged.
 
 ### Changed
 
+- **Breaking:** `axioval_ids::Options` gains the public field `filter` and
+  is no longer `Eq`; construct it with `Options::new`, or add
+  `filter: None`.
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
   through zip 8, so the workspace carries a single zip version. Archives are
   byte-identical to those written with 0.4.

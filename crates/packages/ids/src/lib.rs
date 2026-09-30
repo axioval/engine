@@ -130,14 +130,49 @@ const SCHEMA_VERSION: &str = "0.1.0";
 /// repetition; a longer one would exceed the regular expression size limit.
 const MAX_REPETITION: u64 = 1000;
 
-/// Identity of the packages written.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Identity of the packages written, and what they check.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Options {
     /// Qualified id of the ruleset package, such as `ids:fire-safety`. The
     /// definition package and every concept are named under it.
     pub package_id: String,
     /// Semantic version of both packages.
     pub version: String,
+    /// A prefilter restricting every specification to part of the model
+    /// (one storey, one discipline), combined with each specification's
+    /// applicability through `allOf`. `None` checks what the document
+    /// states.
+    ///
+    /// It is written in IFC names, as IDS writes its facets: an
+    /// `entityType` names a class (`IfcBuildingStorey`), a `property` a
+    /// property set and property (`Pset_WallCommon`, `FireRating`), or a
+    /// reserved set (`axioval:attributes`) and a property in it (`Name`).
+    /// Each is bound to a concept in each specification's releases, as the
+    /// specification's own names are. Relationship paths, classification
+    /// systems, name patterns, disciplines and source fields are used as
+    /// written. A `ruleOutcome` selector is refused: the rules it could
+    /// name are the translation's own.
+    pub filter: Option<Selector>,
+}
+
+impl Options {
+    /// Options identifying the packages, with no prefilter.
+    #[must_use]
+    pub fn new(package_id: impl Into<String>, version: impl Into<String>) -> Self {
+        Self {
+            package_id: package_id.into(),
+            version: version.into(),
+            filter: None,
+        }
+    }
+
+    /// The same options, restricting every specification by `filter`; see
+    /// [`Options::filter`].
+    #[must_use]
+    pub fn with_filter(mut self, filter: Selector) -> Self {
+        self.filter = Some(filter);
+        self
+    }
 }
 
 /// Why the options were refused.
@@ -149,6 +184,12 @@ pub enum OptionsError {
     /// The version is not `major.minor.patch`.
     #[error("version {0:?} is not a semantic version such as `1.0.0`")]
     Version(String),
+    /// The prefilter selects by the outcome of the named rule, which only
+    /// the translation itself defines.
+    #[error(
+        "the prefilter selects by the outcome of rule {0:?}; a prefilter selects objects by what the model states, never by a rule"
+    )]
+    FilterRuleOutcome(String),
 }
 
 /// An IDS document translated into Axioval packages.
@@ -397,6 +438,9 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
     if !is_semver(&options.version) {
         return Err(OptionsError::Version(options.version.clone()));
     }
+    if let Some(rule) = options.filter.as_ref().and_then(rule_outcome) {
+        return Err(OptionsError::FilterRuleOutcome(rule.to_owned()));
+    }
     let mut writer = Writer::new(options);
     let mut folders = Vec::new();
     let mut specifications = Vec::new();
@@ -559,11 +603,19 @@ impl<'o> Writer<'o> {
             }
         }
         let skipped = gaps.iter().any(Gap::skips);
-        let Some(applicable) = applicability.filter(|_| !skipped) else {
+        let Some(mut applicable) = applicability.filter(|_| !skipped) else {
             // Nothing is written, so nothing it would have named is either.
             self.concepts = saved;
             return (Vec::new(), gaps);
         };
+        // The prefilter narrows the applicability itself, so every rule of
+        // the specification, auxiliary and count rules included, sees only
+        // the objects it selects.
+        let options = self.options;
+        if let Some(filter) = &options.filter {
+            let filter = self.bind_filter(filter, &releases);
+            applicable.selector = all_of(vec![applicable.selector, filter]);
+        }
         let mut rules = Vec::new();
         // A facet no selector states is checked by an auxiliary rule over
         // the rest of the applicability; the objects it passes are
@@ -708,6 +760,83 @@ impl<'o> Writer<'o> {
             entity: facet,
             checked,
         })
+    }
+
+    /// The prefilter `filter`, written in IFC names, with every class, set
+    /// and property it names bound to a concept in `releases`.
+    fn bind_filter(&mut self, filter: &Selector, releases: &[IfcVersion]) -> Selector {
+        match filter {
+            Selector::EntityType {
+                object_type,
+                include_subtypes,
+            } => Selector::EntityType {
+                object_type: self.object_type(object_type, releases),
+                include_subtypes: *include_subtypes,
+            },
+            Selector::Property {
+                property_set,
+                property,
+                ..
+            } => {
+                let (set, name) = match property_set.as_deref() {
+                    // A derived set's names are the engine's, never concepts.
+                    Some(set) if axioval_ir::is_derived_set(set) => {
+                        (Some(set.to_owned()), property.clone())
+                    }
+                    Some(set) if axioval_ir::is_reserved_set(set) => {
+                        (Some(set.to_owned()), self.attribute(property, releases))
+                    }
+                    Some(set) => (
+                        Some(self.property_set(set, releases)),
+                        self.property(set, property, releases),
+                    ),
+                    None => (None, self.attribute(property, releases)),
+                };
+                let mut bound = filter.clone();
+                if let Selector::Property {
+                    property_set,
+                    property,
+                    ..
+                } = &mut bound
+                {
+                    *property_set = set;
+                    *property = name;
+                }
+                bound
+            }
+            Selector::AllOf { operands } => Selector::AllOf {
+                operands: operands
+                    .iter()
+                    .map(|operand| self.bind_filter(operand, releases))
+                    .collect(),
+            },
+            Selector::AnyOf { operands } => Selector::AnyOf {
+                operands: operands
+                    .iter()
+                    .map(|operand| self.bind_filter(operand, releases))
+                    .collect(),
+            },
+            Selector::Not { operand } => Selector::Not {
+                operand: Box::new(self.bind_filter(operand, releases)),
+            },
+            Selector::Related {
+                path,
+                quantifier,
+                selector,
+            } => Selector::Related {
+                path: path.clone(),
+                quantifier: *quantifier,
+                selector: Box::new(self.bind_filter(selector, releases)),
+            },
+            // Names no concept: patterns, classification systems, source
+            // facts. A rule outcome was refused before translating.
+            Selector::All
+            | Selector::PropertyPattern { .. }
+            | Selector::Classification { .. }
+            | Selector::Discipline { .. }
+            | Selector::Source { .. }
+            | Selector::RuleOutcome { .. } => filter.clone(),
+        }
     }
 
     /// The selector a facet other than the entity stands for, as required;
@@ -1646,6 +1775,19 @@ struct Applicable<'s> {
     classes: Vec<String>,
     entity: &'s Entity,
     checked: Vec<(usize, Check)>,
+}
+
+/// The rule the first `ruleOutcome` selector in `selector` names, if any.
+fn rule_outcome(selector: &Selector) -> Option<&str> {
+    match selector {
+        Selector::RuleOutcome { rule, .. } => Some(rule),
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            operands.iter().find_map(rule_outcome)
+        }
+        Selector::Not { operand } => rule_outcome(operand),
+        Selector::Related { selector, .. } => rule_outcome(selector),
+        _ => None,
+    }
 }
 
 /// The objects the rule `id` passed.

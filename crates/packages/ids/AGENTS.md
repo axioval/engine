@@ -17,6 +17,12 @@ every facet.
   (`IFCMATERIAL`, a relationship) translates to its `entityType` selector,
   which selects the model's resource objects of that class; only a part-of
   whole no traversal reaches stays a `NotAnObject` gap.
+- `Options::filter` is a prefilter joined to every specification's
+  applicability through `allOf` (`bind_filter`). It is written in IFC names
+  and bound to concepts per specification exactly as the specification's
+  own names are; derived-set names, paths, patterns and source facts pass
+  through, and `ruleOutcome` is refused up front. `None` must leave the
+  translation byte-identical.
 - Depends on `axioval-ir` (the package contracts), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),

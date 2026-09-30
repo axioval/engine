@@ -229,6 +229,92 @@ fn a_translated_document_runs_as_packages_as_it_does_in_memory() {
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
 }
 
+/// The objects contained in the storey named `Level 1`, in IFC names.
+const LEVEL_1: &str = r#"{"kind": "related", "path": ["IfcRelContainedInSpatialStructure:backward"], "selector": {"kind": "allOf", "operands": [{"kind": "entityType", "objectType": "IfcBuildingStorey"}, {"kind": "property", "propertySet": "axioval:attributes", "property": "Name", "operator": "equals", "value": {"type": "string", "value": "Level 1"}}]}}"#;
+
+#[test]
+fn a_prefilter_restricts_every_specification_to_one_storey() {
+    let case = Case::new("filter");
+    let unfiltered = case.check(&ids(&[FIRE_RATING]), &model(&[1, 4]), &[]);
+    assert_eq!(found(&json(&unfiltered)), ["#2", "#3"]);
+
+    case.write("level-1.json", LEVEL_1);
+    let output = case.check(
+        &ids(&[FIRE_RATING]),
+        &model(&[1, 4]),
+        &["--ids-filter", "level-1.json"],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    // Only the unrated wall on Level 1; #3 on Level 2 is not checked.
+    assert_eq!(found(&result), ["#2"]);
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "{result:#}"
+    );
+    assert_eq!(result["ids"]["filter"]["kind"], "related");
+
+    // Every wall on Level 1 rated: a pass, whatever Level 2 lacks.
+    let output = case.check(
+        &ids(&[FIRE_RATING]),
+        &model(&[1, 2]),
+        &["--ids-filter", "level-1.json"],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+
+    // `ids translate` writes the filtered packages.
+    let output = case.run(&[
+        "ids",
+        "translate",
+        "rules.ids",
+        "--ids-filter",
+        "level-1.json",
+        "--definitions",
+        "d.json",
+        "--ruleset",
+        "r.json",
+    ]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let packaged = case.run(&[
+        "check",
+        "--definitions",
+        "d.json",
+        "--ruleset",
+        "r.json",
+        "--model",
+        "model.ifc",
+    ]);
+    assert_eq!(packaged.status.code(), Some(0), "{}", stderr(&packaged));
+
+    // A filter needs `--ids`, and one naming a rule is refused.
+    let output = case.run(&[
+        "check",
+        "--ids-filter",
+        "level-1.json",
+        "--model",
+        "model.ifc",
+    ]);
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+    case.write(
+        "rule.json",
+        r#"{"kind": "ruleOutcome", "rule": "spec1.facet1", "outcome": "passed"}"#,
+    );
+    let output = case.check(
+        &ids(&[FIRE_RATING]),
+        &model(&[]),
+        &["--ids-filter", "rule.json"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("never by a rule"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 #[test]
 fn ids_and_packages_are_exclusive_and_bad_documents_exit_1() {
     let case = Case::new("usage");

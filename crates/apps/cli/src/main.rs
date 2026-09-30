@@ -128,6 +128,12 @@ struct CheckArgs {
     /// `ids` field; the check then never exits 0.
     #[arg(long, value_name = "FILE", conflicts_with_all = ["definitions", "rulesets"])]
     ids: Option<PathBuf>,
+    /// Restrict every IDS specification to part of the model: a JSON
+    /// selector, written in IFC names, combined with each specification's
+    /// applicability through `allOf` (such as the walls contained in one
+    /// storey). The result records it.
+    #[arg(long, value_name = "FILE", requires = "ids")]
+    ids_filter: Option<PathBuf>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -585,7 +591,11 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
 }
 
 fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
-    let translated = args.ids.as_deref().map(ids::load).transpose()?;
+    let translated = args
+        .ids
+        .as_deref()
+        .map(|path| ids::load(path, args.ids_filter.as_deref()))
+        .transpose()?;
     let (definitions, rulesets) = match &translated {
         Some(translated) => (
             vec![translated.definitions.clone()],

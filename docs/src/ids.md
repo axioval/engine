@@ -43,6 +43,36 @@ Both run only complete specifications: a specification with any gap runs
 none of its rules and is listed with its gaps, and a check with one never
 exits 0.
 
+## Prefilter
+
+`Options::filter` restricts every specification to part of the model, beyond
+its own applicability: one storey, one discipline, one selection. The
+selector is combined with each specification's applicability through
+`allOf`, so every rule of the specification, the auxiliary and count rules
+included, sees only the objects it selects; `None` translates what the
+document states, unchanged.
+
+The prefilter is written in IFC names, as IDS writes its facets, and bound
+per specification like the specification's own names: an `entityType`
+names a class (`IfcBuildingStorey`), a `property` a property set and
+property (`Pset_WallCommon`, `FireRating`) or a reserved set and a property
+in it (`axioval:attributes`, `Name`), and each becomes a concept named in
+the specification's releases. Relationship paths, classification systems,
+name patterns, disciplines and source fields are used as written. A
+`ruleOutcome` selector is refused (`OptionsError::FilterRuleOutcome`): the
+rules it could name are the translation's own. The walls of one storey:
+
+```json
+{"kind": "related", "path": ["IfcRelContainedInSpatialStructure:backward"],
+ "selector": {"kind": "allOf", "operands": [
+   {"kind": "entityType", "objectType": "IfcBuildingStorey"},
+   {"kind": "property", "propertySet": "axioval:attributes", "property": "Name",
+    "operator": "equals", "value": {"type": "string", "value": "Level 1"}}]}}
+```
+
+On the command line it is `--ids-filter selector.json`, for `check --ids`
+and `ids translate`.
+
 ## Gaps
 
 These parts stay explicit gaps:

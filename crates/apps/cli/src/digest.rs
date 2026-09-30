@@ -64,6 +64,10 @@ pub struct CheckOutput {
 pub struct IdsRecord {
     /// The document's file name.
     pub document: String,
+    /// The `--ids-filter` prefilter every specification was restricted by,
+    /// as given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<axioval::ir::contract::Selector>,
     /// Every specification, in document order.
     pub specifications: Vec<IdsSpecification>,
 }

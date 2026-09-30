@@ -8,7 +8,7 @@
 
 use std::{error::Error, fs, path::Path};
 
-use axioval::ir::{DefinitionPackage, RuleSetPackage};
+use axioval::ir::{DefinitionPackage, RuleSetPackage, contract::Selector};
 use axioval_ids::{Options, translate};
 use clap::{Args, Subcommand};
 
@@ -37,6 +37,10 @@ pub(crate) struct TranslateArgs {
     /// Where to write the ruleset.
     #[arg(long, value_name = "FILE")]
     ruleset: std::path::PathBuf,
+    /// Restrict every specification by the selector in this JSON file; see
+    /// `check --ids-filter`.
+    #[arg(long, value_name = "FILE")]
+    ids_filter: Option<std::path::PathBuf>,
 }
 
 /// An IDS document translated into the packages that run.
@@ -57,17 +61,19 @@ impl Translated {
     }
 }
 
-/// Reads and translates the IDS document at `path`, leaving out every
-/// specification with a gap, and lists those on stderr.
-pub(crate) fn load(path: &Path) -> Result<Translated, Box<dyn Error>> {
+/// Reads and translates the IDS document at `path`, every specification
+/// restricted by the selector in the file `filter` when given, leaving out
+/// every specification with a gap, and lists those on stderr.
+pub(crate) fn load(path: &Path, filter: Option<&Path>) -> Result<Translated, Box<dyn Error>> {
+    let filter: Option<Selector> = filter.map(crate::load).transpose()?;
     let shown = || path.display().to_string();
     let bytes = fs::read(path).map_err(|error| format!("{}: {error}", shown()))?;
     let document =
         openbim_ids::from_slice(&bytes).map_err(|error| format!("{}: {error}", shown()))?;
-    let options = Options {
-        package_id: package_id(path),
-        version: "0.0.0".to_owned(),
-    };
+    let mut options = Options::new(package_id(path), "0.0.0");
+    if let Some(filter) = &filter {
+        options = options.with_filter(filter.clone());
+    }
     let translation =
         translate(&document, &options).map_err(|error| format!("{}: {error}", shown()))?;
     let mut ruleset = translation.ruleset;
@@ -97,6 +103,7 @@ pub(crate) fn load(path: &Path) -> Result<Translated, Box<dyn Error>> {
         document: path
             .file_name()
             .map_or_else(shown, |name| name.to_string_lossy().into_owned()),
+        filter,
         specifications,
     };
     report_gaps(&record);
@@ -156,7 +163,7 @@ fn package_id(path: &Path) -> String {
 
 /// `ids translate`: writes both packages, or neither.
 pub(crate) fn translate_command(args: &TranslateArgs) -> Result<bool, Box<dyn Error>> {
-    let translated = load(&args.ids)?;
+    let translated = load(&args.ids, args.ids_filter.as_deref())?;
     let definitions = serde_json::to_string_pretty(&translated.definitions)? + "\n";
     let ruleset = serde_json::to_string_pretty(&translated.ruleset)? + "\n";
     crate::write(&args.definitions, definitions.as_bytes())?;

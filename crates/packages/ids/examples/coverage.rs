@@ -10,10 +10,7 @@ use std::collections::BTreeMap;
 use axioval_ids::{Options, translate};
 
 fn main() {
-    let options = Options {
-        package_id: "ids:coverage".into(),
-        version: "0.0.0".into(),
-    };
+    let options = Options::new("ids:coverage", "0.0.0");
     let mut reasons: BTreeMap<String, usize> = BTreeMap::new();
     let (mut specifications, mut complete, mut skipped, mut rules) = (0, 0, 0, 0);
     for path in std::env::args().skip(1) {

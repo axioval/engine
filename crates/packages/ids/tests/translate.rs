@@ -14,10 +14,7 @@ use axioval_ids::{
 const HEADER: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd"><info><title>T</title><author>a@b.org</author></info><specifications>"#;
 
 fn options() -> Options {
-    Options {
-        package_id: "ids:test".into(),
-        version: "1.0.0".into(),
-    }
+    Options::new("ids:test", "1.0.0")
 }
 
 /// One specification over `releases`, applying to `applicability` with
@@ -1763,4 +1760,120 @@ fn an_empty_property_set_proves_its_properties_absent() {
             .any(|finding| finding.object_id().is_some_and(|id| id.local_id == "#1"));
         assert_eq!(on_first, found, "{case}: {:?}", report.findings());
     }
+}
+
+#[test]
+fn a_prefilter_joins_every_applicability_bound_to_concepts() {
+    let text = format!(
+        "{HEADER}{}{}</specifications></ids>",
+        specification(
+            "IFC4",
+            OPTIONAL,
+            WALL,
+            &property("Pset_WallCommon", "FireRating", "")
+        ),
+        specification(
+            "IFC2X3",
+            OPTIONAL,
+            WALL,
+            &property("Pset_WallCommon", "FireRating", "")
+        ),
+    );
+    let ids = openbim_ids::from_str(&text).unwrap();
+    let plain = translate(&ids, &options()).unwrap();
+    let filter: Selector = serde_json::from_value(serde_json::json!({
+        "kind": "related",
+        "path": ["IfcRelContainedInSpatialStructure:backward"],
+        "selector": {"kind": "allOf", "operands": [
+            {"kind": "entityType", "objectType": "IfcBuildingStorey"},
+            {"kind": "property", "propertySet": "axioval:attributes", "property": "Name",
+             "operator": "equals", "value": {"type": "string", "value": "Level 1"}},
+            {"kind": "property", "propertySet": "Pset_BuildingStoreyCommon",
+             "property": "AboveGround", "operator": "exists", "value": null}
+        ]}
+    }))
+    .unwrap();
+    let filtered = translate(&ids, &options().with_filter(filter)).unwrap();
+    assert!(filtered.is_complete());
+    for (number, folder) in filtered.ruleset.root.folders.iter().enumerate() {
+        let plain_rule = &plain.ruleset.root.folders[number].rules[0];
+        let rule = &folder.rules[0];
+        let RuleApplicability::Selector(Selector::AllOf { operands }) = &rule.applicability else {
+            panic!("{:?}", rule.applicability);
+        };
+        // The specification's own applicability, then the prefilter.
+        assert_eq!(
+            RuleApplicability::Selector(operands[0].clone()),
+            plain_rule.applicability
+        );
+        let Selector::Related { path, selector, .. } = &operands[1] else {
+            panic!("{:?}", operands[1]);
+        };
+        assert_eq!(path, &["IfcRelContainedInSpatialStructure:backward"]);
+        let Selector::AllOf { operands } = selector.as_ref() else {
+            panic!("{selector:?}");
+        };
+        // Classes, sets and properties are concepts, named as the
+        // specification's own are; a reserved set stays as it is.
+        let Selector::EntityType { object_type, .. } = &operands[0] else {
+            panic!("{:?}", operands[0]);
+        };
+        let storey = &filtered.definitions.object_types[object_type];
+        assert!(!storey.external_names.is_empty());
+        assert!(
+            storey
+                .external_names
+                .iter()
+                .all(|name| name.name == "IfcBuildingStorey")
+        );
+        let Selector::Property {
+            property_set,
+            property,
+            ..
+        } = &operands[1]
+        else {
+            panic!("{:?}", operands[1]);
+        };
+        assert_eq!(property_set.as_deref(), Some("axioval:attributes"));
+        assert_eq!(
+            filtered.definitions.properties[property].external_names[0].name,
+            "Name"
+        );
+        let Selector::Property {
+            property_set,
+            property,
+            ..
+        } = &operands[2]
+        else {
+            panic!("{:?}", operands[2]);
+        };
+        let set = property_set.as_deref().unwrap();
+        assert_eq!(
+            filtered.definitions.property_sets[set].external_names[0].name,
+            "Pset_BuildingStoreyCommon"
+        );
+        assert_eq!(
+            filtered.definitions.properties[property].external_names[0].name,
+            "AboveGround"
+        );
+    }
+}
+
+#[test]
+fn a_prefilter_naming_a_rule_is_refused() {
+    let ids = openbim_ids::from_str(&format!(
+        "{HEADER}{}</specifications></ids>",
+        specification("IFC4", OPTIONAL, WALL, "")
+    ))
+    .unwrap();
+    let filter = Selector::Not {
+        operand: Box::new(Selector::RuleOutcome {
+            rule: "spec1.facet1".into(),
+            outcome: axioval::ir::contract::RuleOutcomeKind::Failed,
+        }),
+    };
+    assert_eq!(
+        translate(&ids, &options().with_filter(filter)).unwrap_err(),
+        OptionsError::FilterRuleOutcome("spec1.facet1".into())
+    );
 }

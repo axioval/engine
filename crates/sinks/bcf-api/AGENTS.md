@@ -12,8 +12,7 @@ server and pulls its topics back for decisions.
   priority, assignee, due date, stage and extra labels: a push must never
   overwrite review state it did not decide. Comments and viewpoints are
   added only when their GUID is missing; viewpoints are immutable in the API.
-- Assignee and due date go over the API although the BCF file writer
-  cannot write them yet (openbimrs/bcf#11).
+- Assignee and due date are taken from the exported topic, as in a file.
 - Credentials live in `Auth` and `Client` only. Never serialize them,
   never put them in a report, a decisions file or an error message, and
   keep `Debug` redacted.

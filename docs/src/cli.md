@@ -381,8 +381,7 @@ came before it (`: yes, a lining (+1 earlier comment(s))`). `--assign-to NAME`,
 deals with it, by when, how urgent and how it is labelled; a later decision
 about the same finding that does not restate them keeps them (`--label`
 replaces all labels). `check --decisions` carries them to the finding and
-the BCF topic: priority and labels are written, and assignee and due date,
-which the BCF writer cannot write yet, are counted in a warning. `--date` is an ISO 8601
+the BCF topic's `Priority`, labels, `AssignedTo` and `DueDate`. `--date` is an ISO 8601
 date-time with offset, else `SOURCE_DATE_EPOCH` when set, else now, in UTC.
 A finding the result does not contain fails the command (status 1) and
 nothing is written.

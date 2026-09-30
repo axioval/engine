@@ -12725,8 +12725,7 @@ fn a_decision_assigns_a_finding_with_due_date_priority_and_labels() {
     let carried = read("r2.json")["report"]["findings"][0]["decision"].clone();
     assert_eq!(carried["assigned_to"], "C. Engineer");
     assert_eq!(carried["priority"], "Critical");
-    // Priority and labels are in the topic; the assignee and due date wait
-    // for the BCF writer (openbimrs/bcf#11), and the run says so.
+    // Priority, labels, assignee and due date are in the topic.
     let archive = openbim_bcf::read_path(&bcf).unwrap();
     let topic = &archive
         .topics()
@@ -12735,13 +12734,8 @@ fn a_decision_assigns_a_finding_with_due_date_priority_and_labels() {
         .topic;
     assert_eq!(topic.priority.as_deref(), Some("Critical"));
     assert!(topic.labels.contains(&"site visit".to_owned()), "{topic:?}");
-    assert!(
-        stderr(&output).contains(
-            "warning: 2 decision field(s) are not in the BCF archive (AssignedTo, DueDate)"
-        ),
-        "{}",
-        stderr(&output)
-    );
+    assert_eq!(topic.assigned_to.as_deref(), Some("C. Engineer"));
+    assert_eq!(topic.due_date.as_deref(), Some("2026-10-15T17:00:00+02:00"));
     let listing =
         String::from_utf8(axioval(&["report", "r2.json", "--decision", "accepted"]).stdout)
             .unwrap();

@@ -396,19 +396,6 @@ pub struct Export {
     /// has none for them. Empty when no bounds were supplied at all. Sorted
     /// and deduplicated.
     pub unframed: Vec<ObjectId>,
-    /// Decision fields the archive does not carry, in topic order: the BCF
-    /// writer cannot write a topic's `AssignedTo` or `DueDate` yet
-    /// (openbimrs/bcf#11). Never dropped silently: a host says so.
-    pub unwritten: Vec<Unwritten>,
-}
-
-/// A decision field a topic does not carry.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Unwritten {
-    /// The topic's GUID, the finding's identity.
-    pub topic: Uuid,
-    /// The BCF field, `AssignedTo` or `DueDate`.
-    pub field: &'static str,
 }
 
 impl Export {
@@ -452,24 +439,9 @@ pub fn export(
 
     let mut unanchored = BTreeSet::new();
     let mut unframed = BTreeSet::new();
-    let mut unwritten = Vec::new();
     let mut topics = Vec::with_capacity(entries.len());
     for (entry, guid) in &entries {
         unanchored.extend(entry.unanchored.iter().cloned());
-        if let Some(decision) = &entry.decision {
-            let fields = [
-                ("AssignedTo", decision.assigned_to.is_some()),
-                ("DueDate", decision.due_date.is_some()),
-            ];
-            for (field, set) in fields {
-                if set {
-                    unwritten.push(Unwritten {
-                        topic: *guid,
-                        field,
-                    });
-                }
-            }
-        }
         let (topic, uncamered) = entry.topic(*guid, options);
         match uncamered {
             Uncamered::No => {}
@@ -493,7 +465,6 @@ pub fn export(
         },
         unanchored: unanchored.into_iter().collect(),
         unframed: unframed.into_iter().collect(),
-        unwritten,
     })
 }
 
@@ -675,6 +646,9 @@ impl Entry {
             .map(str::trim)
             .filter(|priority| !priority.is_empty())
             .or(self.priority);
+        // Every field is set now, but the writer adds fields in minor
+        // releases; the update keeps a new one at its default.
+        #[allow(clippy::needless_update)]
         let topic = Topic {
             guid: guid.to_string(),
             title: self.title.clone(),
@@ -687,6 +661,18 @@ impl Entry {
             creation_author: options.author.clone(),
             comments,
             viewpoints,
+            assigned_to: self
+                .decision
+                .as_ref()
+                .and_then(|decision| decision.assigned_to.as_deref())
+                .map(str::trim)
+                .filter(|assignee| !assignee.is_empty())
+                .map(str::to_owned),
+            due_date: self
+                .decision
+                .as_ref()
+                .and_then(|decision| decision.due_date)
+                .map(|date| date.to_string()),
             ..Topic::default()
         };
         (topic, uncamered)

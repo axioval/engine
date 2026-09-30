@@ -121,21 +121,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   the result's additive `unmatched_topics` field and the
   `unmatched-topics` report section. An imported archive is read within
   `IMPORT_LIMITS`.
-- **Review metadata.** (Refs #170) A decision records an optional
+- **Review metadata.** (Closes #170) A decision records an optional
   assignee, due date, priority and labels (`Decision::assigned_to`,
   `due_date`, `priority`, `labels`, with `with_assignee`, `with_due_date`,
   `with_priority`, `with_labels`); `Report::apply_decisions` carries them to
   `FindingDecision`. A decisions file or report without them serializes
-  byte-identically. The BCF export writes a decision's priority in place of
-  the severity's and appends its labels; `import` reads `AssignedTo`,
-  `DueDate`, a priority other than the severity's and labels the export
-  does not write (it takes the `rule_labels` the archive was exported
-  with). The BCF writer cannot write `AssignedTo` and `DueDate` yet
-  (openbimrs/bcf#11), so the export lists them in `Export::unwritten` and
-  the CLI warns. `axioval decide` takes `--assign-to`, `--due`,
+  byte-identically. The BCF export writes a decision's assignee and due
+  date as the topic's `AssignedTo` and `DueDate` (openbim-bcf 0.6), its
+  priority in place of the severity's and its labels after the topic's;
+  `import` reads `AssignedTo`, `DueDate`, a priority other than the
+  severity's and labels the export does not write (it takes the
+  `rule_labels` the archive was exported with), so a decision with an
+  assignee and due date round-trips through BCF unchanged. `axioval decide` takes `--assign-to`, `--due`,
   `--priority` and `--label`, and keeps them across later decisions.
   **Breaking:** `Decision` and `FindingDecision` gain public fields,
-  `DecisionError` gains `Blank`, `Export` gains `unwritten`, and `import`
+  `DecisionError` gains `Blank`, and `import`
   and `import_topics` take `rule_labels`.
 - **Comment threads.** (Closes #171) A decision holds an ordered thread of
   comments (`Decision::comments`, `FindingDecision::comments`, each a

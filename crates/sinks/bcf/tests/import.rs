@@ -276,7 +276,7 @@ fn bytes_that_are_no_archive_are_refused() {
 /// Assignee, due date, priority and labels of a review.
 mod review {
     use super::{BTreeMap, model, options, report};
-    use axioval_bcf::{Unmatched, Unwritten, export, import, import_topics};
+    use axioval_bcf::{Bounds, Options, Unmatched, Version, export, import, import_topics};
     use axioval_ir::{Decision, DecisionStatus, Decisions};
 
     fn reviewed() -> (axioval_ir::Report, Decisions) {
@@ -331,27 +331,50 @@ mod review {
     }
 
     #[test]
-    fn an_assignee_and_due_date_the_writer_cannot_write_are_listed_never_dropped() {
-        // openbimrs/bcf#11: the writer has no `AssignedTo` and `DueDate`.
-        let (report, _) = reviewed();
-        let export = export(&report, &model(), &options()).unwrap();
-        let wall = report.findings[0].id.unwrap().uuid();
-        assert_eq!(
-            export.unwritten,
-            [
-                Unwritten {
-                    topic: wall,
-                    field: "AssignedTo"
-                },
-                Unwritten {
-                    topic: wall,
-                    field: "DueDate"
-                },
-            ]
-        );
-        // Without them nothing is listed.
+    fn a_decision_with_an_assignee_and_due_date_round_trips_unchanged() {
+        let (report, decisions) = reviewed();
+        for version in [Version::V2_1, Version::V3_0] {
+            let options = Options {
+                version,
+                bounds: Some(bounds()),
+                ..options()
+            };
+            let export = export(&report, &model(), &options).unwrap();
+            let wall = &export.document.topics[0];
+            assert_eq!(wall.assigned_to.as_deref(), Some("C. Engineer"));
+            assert_eq!(wall.due_date.as_deref(), Some("2026-10-15T17:00:00+02:00"));
+            let bytes = export.to_bytes().unwrap();
+            let archive = openbim_bcf::read_slice(&bytes).unwrap();
+            assert!(
+                archive.diagnostics().is_empty(),
+                "{:?}",
+                archive.diagnostics()
+            );
+            let imported = import(&bytes, &report, &model(), &BTreeMap::new()).unwrap();
+            assert_eq!(imported.decisions, decisions, "{version:?}");
+        }
+        // Without them the topic carries neither.
         let plain = export_of(&super::report());
-        assert!(plain.unwritten.is_empty());
+        assert!(
+            plain
+                .document
+                .topics
+                .iter()
+                .all(|t| t.assigned_to.is_none() && t.due_date.is_none())
+        );
+    }
+
+    /// Bounds for every object, so BCF 3.0 gets its cameras.
+    fn bounds() -> BTreeMap<axioval_ir::ObjectId, Bounds> {
+        (1_u32..=3)
+            .map(|local| {
+                let at = f64::from(local);
+                (
+                    super::id(u64::from(local)),
+                    Bounds::new([at, 0.0, 0.0], [at + 1.0, 1.0, 1.0]).unwrap(),
+                )
+            })
+            .collect()
     }
 
     fn export_of(report: &axioval_ir::Report) -> axioval_bcf::Export {

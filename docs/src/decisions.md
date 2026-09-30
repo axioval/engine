@@ -159,11 +159,9 @@ A decided finding's topic carries the decision (see
 `Rejected` (an open decision keeps the host's status), one comment by the
 decision's author at its date, followed by the rest of its comment thread,
 and the label `Decision changed` when its evidence changed. A decision's priority replaces the one the severity
-gives, and its labels follow the topic's own. Its assignee and due date
-belong in the topic's `AssignedTo` and `DueDate`, which the BCF writer
-cannot write yet (openbimrs/bcf#11): they are listed in `Export::unwritten`
-and the CLI warns, rather than dropping them silently. Stale decisions have
-no topic.
+gives, its labels follow the topic's own, and its assignee and due date
+are the topic's `AssignedTo` and `DueDate`. Stale decisions have no
+topic.
 
 The way back is [`axioval_bcf::import`](./sinks.md#import): a topic reviewed
 in another BCF tool becomes a decision about the finding whose identity is

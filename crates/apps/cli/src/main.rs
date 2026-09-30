@@ -811,19 +811,6 @@ pub(crate) fn emit(
                 ..bcf::Options::new(args.bcf_author, date)
             };
             let export = bcf::export(&output.report, project, &options)?;
-            if !export.unwritten.is_empty() {
-                let fields: std::collections::BTreeSet<&str> = export
-                    .unwritten
-                    .iter()
-                    .map(|unwritten| unwritten.field)
-                    .collect();
-                let fields: Vec<&str> = fields.into_iter().collect();
-                eprintln!(
-                    "warning: {} decision field(s) are not in the BCF archive ({}): the BCF writer cannot write them yet",
-                    export.unwritten.len(),
-                    fields.join(", ")
-                );
-            }
             Some((path, export.to_bytes()?, export.unanchored, export.unframed))
         }
         None => None,

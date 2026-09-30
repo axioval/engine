@@ -41,9 +41,8 @@ review decisions read back from them (`src/import.rs`).
 - A finding's `Priority` follows its severity, unless its decision sets
   one; a not-evaluated outcome has none, because no severity was decided.
   Never invent one for it. A decision's labels follow the topic's own.
-- A decision's `assigned_to` and `due_date` cannot be written until
-  openbimrs/bcf#11 ships: list each in `Export::unwritten`, never drop it
-  silently and never smuggle it into comment text. Import reads them from
+- A decision's `assigned_to` and `due_date` are written as the topic's
+  `AssignedTo` and `DueDate`, never into comment text. Import reads them from
   `AssignedTo`/`DueDate`, a priority only when it differs from the
   severity's, and only labels the export does not write
   (`exported_labels` plus the `Folder:`/`Category:`/`Storey:`/`Space:`

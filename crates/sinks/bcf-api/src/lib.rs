@@ -425,7 +425,7 @@ impl Client {
         let mut pushed = Pushed::default();
         for topic in &exported.document.topics {
             let decision = decided.get(&topic.guid).copied();
-            let mut request = topic_request(topic, decision);
+            let mut request = topic_request(topic);
             let url = format!("{}/{}", self.topics_url(project_id), segment(&topic.guid));
             match self.topic(project_id, &topic.guid)? {
                 None => {
@@ -732,9 +732,8 @@ fn segment(text: &str) -> String {
     encoded
 }
 
-/// The topic the export wrote, with the decision's assignee and due date,
-/// which the BCF API carries although a BCF file cannot yet.
-fn topic_request(topic: &write::Topic, decision: Option<&FindingDecision>) -> ApiTopic {
+/// The topic the export wrote, as the API takes it.
+fn topic_request(topic: &write::Topic) -> ApiTopic {
     ApiTopic {
         guid: topic.guid.clone(),
         topic_type: topic.topic_type.clone(),
@@ -742,10 +741,8 @@ fn topic_request(topic: &write::Topic, decision: Option<&FindingDecision>) -> Ap
         title: topic.title.clone(),
         priority: topic.priority.clone(),
         labels: topic.labels.clone(),
-        assigned_to: decision.and_then(|d| d.assigned_to.clone()),
-        due_date: decision
-            .and_then(|d| d.due_date)
-            .map(|date| date.to_string()),
+        assigned_to: topic.assigned_to.clone(),
+        due_date: topic.due_date.clone(),
         description: topic.description.clone(),
         ..ApiTopic::default()
     }

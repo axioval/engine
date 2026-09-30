@@ -103,10 +103,10 @@ own author at its own date, under the GUID it came with
 repetition in the topic GUID's namespace, so a re-export reproduces every
 comment GUID and a BCF tool updates rather than duplicates them. A decision's `priority` replaces the
 topic's `Priority`, and its `labels` follow the topic's own labels, each
-once. Its `assigned_to` and `due_date` belong in `AssignedTo` and `DueDate`,
-which `openbim-bcf` cannot write yet (openbimrs/bcf#11): every one is
-listed in `Export::unwritten` (topic GUID and field), never dropped
-silently. When the finding changed since the
+once. Its `assigned_to` and `due_date` are the topic's `AssignedTo` and
+`DueDate` (in 3.0 the derived `extensions.xml` lists the assignee among
+its users), so both round-trip through an archive unchanged. When the
+finding changed since the
 decision, the comment adds a line `Changed since the decision: severity
 warning -> error` and the topic gets the label `Decision changed`
 (`DECISION_CHANGED_LABEL`), so a reviewer can filter what to look at again.
@@ -205,8 +205,7 @@ existing one updated in place (`PUT`), never duplicated. For a finding the
 report carries no decision about, the server's status, priority, assignee,
 due date, stage and extra labels are kept: a push never overwrites review
 state it did not decide. A decided finding's topic takes the decision's,
-with its assignee and due date, which the API carries although a BCF file
-cannot yet. Comments and viewpoints are added only when their GUID is
+with its assignee and due date. Comments and viewpoints are added only when their GUID is
 missing, so pushing twice adds nothing; viewpoints are immutable in the API,
 and a camera without an aspect ratio gets `ASPECT_RATIO`. The server
 attributes a pushed comment to the signed-in user.

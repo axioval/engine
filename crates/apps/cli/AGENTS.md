@@ -45,8 +45,7 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   a reviewer's.
 - `decide --assign-to/--due/--priority/--label` keep their earlier values
   when a later decision does not restate them, and `--comment` appends to
-  the finding's thread, never replaces it. BCF decision fields the
-  writer cannot write (`Export::unwritten`) are one stderr warning.
+  the finding's thread, never replaces it.
 - `src/server.rs` is `axioval bcf push` and `pull`. It rebuilds the project
   from the result's `objects` (kind and GlobalId of every object the report
   names; resource objects stay with the report) and maps topics only

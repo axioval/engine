@@ -12,7 +12,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 use axioval::engine::EvidenceSession;
-use axioval::ifc::{IFC_GLOBAL_ID, import_ifc_session};
+use axioval::ifc::IFC_GLOBAL_ID;
 use axioval::ir::{Object, ObjectId, Project, RuleId, Severity};
 use axioval::rules::{
     ComparisonRequest, ComparisonTolerance, Difference, Facet, Measurement, ModelComparison,
@@ -31,7 +31,8 @@ const RULE: &str = "compare";
 
 #[derive(Args)]
 pub struct CompareArgs {
-    /// The earlier revision: an IFC2X3 or IFC4 STEP file.
+    /// The earlier revision: an IFC2X3, IFC4 or IFC4X3 STEP file, or an
+    /// ifcZIP archive holding one.
     #[arg(long, value_name = "PATH")]
     base: PathBuf,
     /// The later revision of the same model.
@@ -174,9 +175,7 @@ fn import(
     path: &Path,
     document: &str,
 ) -> Result<(EvidenceSession, geometry::ModelBytes), Box<dyn Error>> {
-    let content = std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    let session = import_ifc_session(document, &content)
-        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let (session, content) = crate::import(path, Some(document))?;
     let mut bytes = geometry::ModelBytes::new();
     for snapshot in session.snapshots() {
         bytes.insert(snapshot.source().clone(), content.clone());

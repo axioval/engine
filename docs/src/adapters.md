@@ -223,6 +223,23 @@ the system itself. A file that chains references anyway is refused rather
 than flattened. An assignment whose system the file does not state is
 neither a match nor a mismatch, and the object is reported as not evaluated.
 
+### ifcZIP
+
+`read_ifc_zip` reads the one model of an ifcZIP archive and
+`import_ifc_zip_session` reads it into a session exactly as
+`import_ifc_session` reads the plain file: the same bytes, the same
+fingerprint, the same objects and answers. `is_ifc_zip` tells an archive
+from a STEP file by its first bytes, which no STEP file starts with.
+
+- Every member path is checked before anything is read: an absolute path, a
+  `..` component, a backslash, a NUL or a symbolic link refuses the archive.
+- A model member ends in `.ifc` or `.ifcXML`, ignoring case. Exactly one is
+  read; none, several, or an IFC-XML one (not read yet) is refused with the
+  members named. Any other member (a readme, a thumbnail) is ignored.
+- The source document is the archive and the member,
+  `building.ifczip/models/building.ifc`, so two archives holding a member of
+  one name stay two sources.
+
 ### Source metadata
 
 The session states what the file says about itself for `source` selectors

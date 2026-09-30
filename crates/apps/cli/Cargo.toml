@@ -42,7 +42,7 @@ serde_json.workspace = true
 
 [dev-dependencies]
 openbim-bcf.workspace = true
-zip = { version = "8.6", default-features = false, features = ["deflate"] }
+zip = { workspace = true, features = ["deflate"] }
 
 [lints]
 workspace = true

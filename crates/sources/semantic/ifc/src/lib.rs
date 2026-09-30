@@ -3,9 +3,11 @@
 //! Source-neutral `OpenBIM` semantic adapter contracts and production IFC seam.
 //!
 //! [`import_ifc_session`] parses strict IFC2X3 or IFC4 STEP bytes into an immutable,
-//! fingerprint-bound Axioval evidence session. The older importer trait remains
+//! fingerprint-bound Axioval evidence session; [`import_ifc_zip_session`] reads
+//! the one model of an ifcZIP archive the same way. The older importer trait remains
 //! available for host-defined OpenBIM sources.
 
+mod archive;
 mod attributes;
 mod bodies;
 mod classifications;
@@ -26,6 +28,9 @@ mod resources;
 mod styles;
 mod temporal;
 mod windows;
+pub use archive::{
+    IFC_ZIP_EXTENSION, IfcZipError, IfcZipMember, import_ifc_zip_session, is_ifc_zip, read_ifc_zip,
+};
 pub use identity::IFC_GLOBAL_ID;
 pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{

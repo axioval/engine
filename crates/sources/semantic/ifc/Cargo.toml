@@ -27,7 +27,8 @@ ifc-systems.workspace = true
 openbim_ifc.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
-
+# ifcZIP: reads the one model member of an archive.
+zip = { workspace = true, features = ["deflate"] }
 
 [lints]
 workspace = true

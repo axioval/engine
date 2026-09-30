@@ -670,6 +670,7 @@ dependencies = [
  "openbim-ifc",
  "sha2",
  "thiserror",
+ "zip",
 ]
 
 [[package]]

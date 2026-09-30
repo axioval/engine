@@ -27,9 +27,18 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--bcf-isolate] [--bcf-section-box]
 ```
 
-Runs the ruleset over one or more IFC2X3 or IFC4 STEP models. Each model is
-one source, named by its file name, so a result does not depend on the
-directory it was checked from.
+Runs the ruleset over one or more IFC2X3, IFC4 or IFC4X3 STEP models. Each
+model is one source, named by its file name, so a result does not depend on
+the directory it was checked from.
+
+A model may also be an ifcZIP archive (`building.ifczip`, or any file that
+is a zip archive) holding exactly one `.ifc` member, which is read exactly as
+the plain file would be (see [ifcZIP](./adapters.md#ifczip)). Its source is
+named by the archive and the member, `building.ifczip/building.ifc`; apart
+from that name the result is the plain file's. An archive with no model, with
+several (an `.ifcXML` member counts), with only an IFC-XML model, or with a
+member path that is absolute, climbs out with `..` or is a symbolic link is
+refused with status 1 and nothing is written.
 
 ### Several rulesets
 
@@ -283,7 +292,8 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--bcf-isolate] [--bcf-section-box]
 ```
 
-Compares two revisions of one IFC2X3 or IFC4 model object by object (see
+Compares two revisions of one IFC2X3, IFC4 or IFC4X3 model, each a STEP file
+or an ifcZIP archive, object by object (see
 [Model comparison](./comparison.md)). Objects are matched by `GlobalId`, so a
 re-export that renumbers every entity still matches. Each revision is its own
 source, named by its file name; when both files have the same name, as two

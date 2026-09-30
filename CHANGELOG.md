@@ -62,6 +62,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   farther than the tolerance from its median. **Breaking:** a definition
   bound to `consistent-value` declares `tolerance` (`number`) and
   `tolerance_quantity` (`quantity`) beside its other optional parameters.
+- **ifcZIP.** (Closes #189) The IFC adapter reads the one `.ifc` member of an
+  ifcZIP archive (`read_ifc_zip`, `import_ifc_zip_session`, `is_ifc_zip`)
+  with the same session as a plain file. Member paths are checked, and an
+  archive with no model, several, or only an IFC-XML one is refused. The
+  source is named by the archive and the member
+  (`model.ifczip/model.ifc`). `axioval check --model` and `axioval compare`
+  accept archives; a zipped model gives the plain file's report apart from
+  the source name. `zip` 8 becomes a normal dependency of the adapter
+  (`deflate` only).
 
 ### Changed
 

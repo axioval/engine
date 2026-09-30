@@ -32,7 +32,7 @@ use axioval::{
         LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
         SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile_rulesets,
     },
-    ifc::import_ifc_session,
+    ifc,
     ir::{
         DateTime, Decision, DecisionStatus, Decisions, DefinitionPackage, Discipline, FindingId,
         ObjectId, Project, Report, RuleSetPackage, SourceId, contract::SourceField,
@@ -90,7 +90,8 @@ enum Command {
 
 #[derive(Args)]
 struct CheckArgs {
-    /// A model to check: an IFC2X3 or IFC4 STEP file, optionally followed by
+    /// A model to check: an IFC2X3, IFC4 or IFC4X3 STEP file, or an ifcZIP
+    /// archive holding exactly one `.ifc` member, optionally followed by
     /// `:DISCIPLINE`, the role it plays (`arch.ifc:architecture`). Repeat for
     /// several models; each is one source of the check, named by its file
     /// name. A discipline is a lowercase token (`a-z`, `0-9`, `-`, `_`). A
@@ -906,8 +907,7 @@ fn sources(models: &[ModelArg]) -> Result<(EvidenceSession, geometry::ModelBytes
     let mut paths: BTreeMap<SourceId, &Path> = BTreeMap::new();
     for model in models {
         let path = model.path.as_path();
-        let content = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
-        let mut session = import(path, &content)?;
+        let (mut session, content) = import(path, None)?;
         let source = session
             .snapshots()
             .next()
@@ -939,15 +939,39 @@ fn sources(models: &[ModelArg]) -> Result<(EvidenceSession, geometry::ModelBytes
     Ok((EvidenceSession::federate(members)?, bytes))
 }
 
-/// Imports the model, named by its file name so a report does not depend on
-/// where the file was checked from.
-fn import(model: &Path, bytes: &[u8]) -> Result<EvidenceSession, Box<dyn Error>> {
-    let document = model
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("{}: model path has no UTF-8 file name", model.display()))?;
-    Ok(import_ifc_session(document, bytes)
-        .map_err(|error| format!("{}: {error}", model.display()))?)
+/// Imports the model at `path`, a STEP file or an ifcZIP archive, as the
+/// source `document`, by default its file name, so a report does not depend
+/// on where the file was checked from. An archive's source is named by the
+/// archive and its model member (`m.ifczip/m.ifc`).
+///
+/// Returns the session and the STEP bytes read, an archive's member's, for
+/// meshing.
+pub(crate) fn import(
+    path: &Path,
+    document: Option<&str>,
+) -> Result<(EvidenceSession, Vec<u8>), Box<dyn Error>> {
+    let document = match document {
+        Some(document) => document,
+        None => path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("{}: model path has no UTF-8 file name", path.display()))?,
+    };
+    let content = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let is_archive = ifc::is_ifc_zip(&content)
+        || path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case(ifc::IFC_ZIP_EXTENSION));
+    let (document, content) = if is_archive {
+        let member =
+            ifc::read_ifc_zip(&content).map_err(|error| format!("{}: {error}", path.display()))?;
+        (member.document(document), member.into_bytes())
+    } else {
+        (document.to_owned(), content)
+    };
+    let session = ifc::import_ifc_session(document, &content)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    Ok((session, content))
 }
 
 pub(crate) fn integrity(session: &EvidenceSession) -> Result<Vec<IntegrityRecord>, Box<dyn Error>> {

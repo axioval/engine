@@ -84,6 +84,11 @@ impl Case {
 
     fn check(&self, model: &str, bound: bool, extra: &[&str]) -> Output {
         let model = self.write("model.ifc", model);
+        self.check_file(&model, bound, extra)
+    }
+
+    /// Checks the model file at `model` as it is.
+    fn check_file(&self, model: &Path, bound: bool, extra: &[&str]) -> Output {
         let definitions = self.definitions(bound);
         Command::new(env!("CARGO_BIN_EXE_axioval"))
             .arg("check")
@@ -729,6 +734,53 @@ fn unusable_input_exits_1_naming_the_file() {
     );
     assert!(!bcf.exists(), "nothing is written when the writer refuses");
     assert!(output.stdout.is_empty(), "nor is the JSON report");
+}
+
+/// An ifcZIP archive of `members` (path, content).
+fn ifc_zip(members: &[(&str, &str)]) -> Vec<u8> {
+    use std::io::Write as _;
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, content) in members {
+        writer
+            .start_file(*name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(content.as_bytes()).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
+#[test]
+fn a_zipped_model_gives_the_plain_files_report_under_its_archive_name() {
+    let case = Case::new("ifczip");
+    let model = ifc("0000000000000000000002", false);
+    let plain = case.check(&model, true, &[]);
+    assert_eq!(plain.status.code(), Some(3), "{}", stderr(&plain));
+
+    let archive = case.path("model.ifczip");
+    std::fs::write(
+        &archive,
+        ifc_zip(&[("readme.txt", "notes"), ("model.ifc", &model)]),
+    )
+    .unwrap();
+    let zipped = case.check_file(&archive, true, &[]);
+    assert_eq!(zipped.status.code(), Some(3), "{}", stderr(&zipped));
+    let text = String::from_utf8(zipped.stdout.clone()).unwrap();
+    assert!(text.contains("\"model.ifczip/model.ifc\""), "{text}");
+    // Apart from the source name, the same report.
+    let renamed: Value =
+        serde_json::from_str(&text.replace("model.ifczip/model.ifc", "model.ifc")).unwrap();
+    assert_eq!(renamed, json(&plain));
+
+    // Two models in one archive: refused, naming both, nothing written.
+    std::fs::write(&archive, ifc_zip(&[("a.ifc", &model), ("b.ifc", &model)])).unwrap();
+    let refused = case.check_file(&archive, true, &[]);
+    assert_eq!(refused.status.code(), Some(1), "{}", stderr(&refused));
+    assert!(
+        stderr(&refused).contains("holds 2 models (a.ifc, b.ifc); exactly one is read"),
+        "{}",
+        stderr(&refused)
+    );
+    assert!(refused.stdout.is_empty());
 }
 
 #[test]

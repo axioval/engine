@@ -85,6 +85,8 @@ ifc-style = "0.3.0"
 ifc-systems = "0.2.2"
 regex = "1.11.2"
 sha2 = "0.10.9"
+# ifcZIP archives; deflate is the only compression method they use.
+zip = { version = "8.6", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

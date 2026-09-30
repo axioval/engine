@@ -433,3 +433,105 @@ fn an_exported_package_lists_the_rules_ids_cannot_state() {
     assert!(stderr(&output).contains("no rule can be exported as IDS"));
     assert!(!case.dir.join("exported.ids").exists());
 }
+
+#[test]
+fn export_with_the_ids_profile_is_ids_export() {
+    let case = Case::new("export-profile");
+    case.write("rules.ids", &ids(&[FIRE_RATING]));
+    let output = case.run(&[
+        "ids",
+        "translate",
+        "rules.ids",
+        "--definitions",
+        "definitions.json",
+        "--ruleset",
+        "ruleset.json",
+    ]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let profile = |out: &str| {
+        case.run(&[
+            "export",
+            "--profile",
+            "ids",
+            "--definitions",
+            "definitions.json",
+            "--ruleset",
+            "ruleset.json",
+            "--out",
+            out,
+        ])
+    };
+    let alias = |out: &str| {
+        case.run(&[
+            "ids",
+            "export",
+            "--definitions",
+            "definitions.json",
+            "--ruleset",
+            "ruleset.json",
+            "--out",
+            out,
+        ])
+    };
+    let same = |a: &Output, b: &Output| {
+        assert_eq!(a.status.code(), b.status.code(), "{}", stderr(a));
+        assert_eq!(a.stdout, b.stdout);
+        assert_eq!(a.stderr, b.stderr);
+    };
+    let read = |name: &str| std::fs::read(case.dir.join(name)).unwrap();
+
+    // Complete: exit 0 and the same document.
+    let (a, b) = (profile("profile.ids"), alias("alias.ids"));
+    assert_eq!(a.status.code(), Some(0), "{}", stderr(&a));
+    same(&a, &b);
+    assert_eq!(read("profile.ids"), read("alias.ids"));
+
+    // A rule IDS cannot state: exit 4, listed alike.
+    let mut definitions: Value = serde_json::from_slice(&read("definitions.json")).unwrap();
+    definitions["definitions"]["t:clash"] = serde_json::json!({
+        "id": "t:clash",
+        "name": {"default": "Clash", "translations": {}},
+        "description": null,
+        "capability": "axioval:capability.clash",
+    });
+    let mut ruleset: Value = serde_json::from_slice(&read("ruleset.json")).unwrap();
+    ruleset["root"]["rules"] = serde_json::json!([{
+        "id": "walls-clash",
+        "definitionId": "t:clash",
+        "name": {"default": "Walls clash", "translations": {}},
+    }]);
+    case.write("definitions.json", &definitions.to_string());
+    case.write("ruleset.json", &ruleset.to_string());
+    let (a, b) = (profile("profile.ids"), alias("alias.ids"));
+    assert_eq!(a.status.code(), Some(4), "{}", stderr(&a));
+    same(&a, &b);
+    assert!(stderr(&a).contains("ids: ruleset.json: rule walls-clash is not exported"));
+    assert_eq!(read("profile.ids"), read("alias.ids"));
+
+    // Nothing exportable: exit 1, nothing written.
+    ruleset["root"]["folders"] = serde_json::json!([]);
+    case.write("ruleset.json", &ruleset.to_string());
+    let a = profile("none.ids");
+    assert_eq!(a.status.code(), Some(1), "{}", stderr(&a));
+    assert!(stderr(&a).contains("no rule can be exported as IDS"));
+    assert!(!case.dir.join("none.ids").exists());
+
+    // An unknown profile names the ones there are.
+    let a = case.run(&[
+        "export",
+        "--profile",
+        "nope",
+        "--definitions",
+        "definitions.json",
+        "--ruleset",
+        "ruleset.json",
+        "--out",
+        "nope.out",
+    ]);
+    assert_eq!(a.status.code(), Some(1), "{}", stderr(&a));
+    assert!(
+        stderr(&a).contains("unknown export profile \"nope\"; known profiles: ids"),
+        "{}",
+        stderr(&a)
+    );
+}

@@ -25,10 +25,13 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   translation byte-identical.
 - `export` (`src/export.rs`) writes rules back as IDS, exact or not at all:
   a rule, or a translated folder, is exported only when translating the
-  specification it reads as gives it again, compared as `canonical` states
-  it (capability, parameters with defaults, applicability, gates, grading;
-  concepts by the names they bind to, rule ids by position; presentation
-  left out). Never add a reading without that check, and never let a
+  specification it reads as gives it again, compared as
+  `axioval_export::compare` states it (capability, parameters with
+  defaults, applicability, gates, grading; concepts by the names they bind
+  to, rule ids by position; presentation left out), with the plain-rule
+  checks of `axioval_export::precheck`. `IdsProfile` (id `ids`) is the
+  same export as an `ExportProfile`; each `Refusal` becomes a refused
+  `Loss`, and IDS degrades nothing. Never add a reading without that check, and never let a
   refused rule pass silently: each gets a `Refusal`. A folder `translate`
   writes keeps its specification in the `ids:specification` annotation
   and the root the `<info>` under `ids:info.*`; changing what `translate`
@@ -37,7 +40,8 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   writes IDS (openbimrs/ids#10): keep it behind `document`,
   `specification` and `read_specification` so switching changes only
   them. `ids.xsd` is CC BY-ND 4.0 and not vendored.
-- Depends on `axioval-ir` (the package contracts), `axioval-engine` (the
+- Depends on `axioval-ir` (the package contracts), `axioval-export` (the
+  profile and the comparator), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),
   `openbim-ids` (the reader) and `ifc-schema` (which IDS classes are

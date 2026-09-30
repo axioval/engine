@@ -1,0 +1,22 @@
+[package]
+name = "axioval-export"
+description = "Export profiles for Axioval rule packages: one artifact per target format, every loss stated"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+# The framework every export target shares. It is core: it names no target
+# format and depends on the package contracts only.
+[dependencies]
+axioval-ir.workspace = true
+# Rules compared by what decides them.
+serde_json.workspace = true
+
+[lints]
+workspace = true

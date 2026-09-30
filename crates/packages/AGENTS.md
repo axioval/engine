@@ -1,7 +1,8 @@
 # `packages/`
 
 Importers that write Axioval rule packages (definition packages and
-rulesets) from other rule formats. One subdirectory per format.
+rulesets) from other rule formats, one subdirectory per format, and
+`export/`, the framework every export target shares.
 
 - An importer never reads a model and adapts no source: it depends on
   `axioval-ir`, the engine's capability descriptors and `axioval-rules`
@@ -17,6 +18,12 @@ rulesets) from other rule formats. One subdirectory per format.
   `EXPECTED` in `scripts/check_package_contents.py`, bump `EXPECTED_MEMBERS`
   in `scripts/staging_isolation.py`, and give it its own `AGENTS.md`.
 
+- An exporter implements `axioval_export::ExportProfile` and judges
+  exactness with its comparator (`compare`, `precheck`), never with one of
+  its own. Anything that would change a verdict is a refused `Loss`, never
+  a degraded one; name no host product, only the format.
+
 ## Direct children
 
+- `export/` (`axioval-export`) — export profiles, losses and the shared rule comparator.
 - `ids/` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them.

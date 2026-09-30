@@ -3,13 +3,22 @@
 Retired artifacts kept for maintenance, deliberately **outside** the Cargo
 workspace.
 
+## `axioval-spec-notice/`
+
+The source of `axioval-spec` `0.4.0`, a retirement notice pointing at
+`axioval-ir` (rule packages) and `axioval-export` (export profiles),
+containing no functionality. `0.3.0` is the last release with code and is
+not yanked. Like the notice below it roots its own workspace, and
+`cargo test` in its directory is the check. Republish only to correct the
+text, bumping to `0.4.x`; never fold it back into the workspace.
+
 ## `axioval-openbim-notice/`
 
 The source of `axioval-openbim` `0.2.0` on crates.io — a deprecation notice
 pointing at `axioval-ifc`, containing no functionality.
 
 It is not a workspace member on purpose. The publish gate asserts the workspace
-is exactly nine crates, and this is not one of them: it shares neither the
+holds exactly the crates in `EXPECTED_MEMBERS`, and this is not one of them: it shares neither the
 workspace version nor its dependencies, and must keep building unchanged long
 after the engine moves on.
 

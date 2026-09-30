@@ -8,4 +8,5 @@ Generated rustdoc is deployed under this book:
 - [`axioval_ifc`](./api/axioval_ifc/index.html)
 - [`axioval_axiolid`](./api/axioval_axiolid/index.html)
 - [`axioval_icdd`](./api/axioval_icdd/index.html)
+- [`axioval_export`](./api/axioval_export/index.html)
 - [`axioval`](./api/axioval/index.html)

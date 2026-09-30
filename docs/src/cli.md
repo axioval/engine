@@ -337,11 +337,35 @@ specification with a gap is left out and listed on stderr, as for `check
 | 1 | Nothing written: an unreadable document or an unwritable file |
 | 2 | Invalid command-line usage |
 
+## `axioval export`
+
+```bash
+axioval export --profile ids --definitions definitions.json --ruleset ruleset.json --out rules.ids
+```
+
+Writes a ruleset as another format through an [export
+profile](./export.md), chosen by its id. The CLI registers `ids`, which is
+[`ids export`](#axioval-ids-export) by another name: same output, same
+document, same exit status. A rule the format cannot state exactly is listed
+on stderr as not exported; structure or presentation a format reduces
+without changing a verdict is listed as degraded
+(`<id>: ruleset.json: <path> is degraded: <why>`). An unknown profile exits 1
+and names the known ones.
+
+| Status | Meaning |
+|---|---|
+| 0 | Everything exported, nothing lost |
+| 4 | Written, with the losses listed on stderr |
+| 1 | Nothing written: no rule the format states, an unknown profile, an unreadable package or an unwritable file |
+| 2 | Invalid command-line usage |
+
 ## `axioval ids export`
 
 ```bash
 axioval ids export --definitions definitions.json --ruleset ruleset.json --out rules.ids
 ```
+
+The same as `axioval export --profile ids`.
 
 Writes the ruleset's alphanumerical rules as an IDS 1.0 document, the
 reverse of `ids translate` (see [Export](./ids.md#export)). `--definitions`

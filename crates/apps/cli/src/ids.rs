@@ -1,5 +1,6 @@
 //! IDS documents as rule packages: `check --ids`, `ids translate`, and
-//! `ids export`, which writes rule packages back as IDS.
+//! `ids export`, which writes rule packages back as IDS and is
+//! `export --profile ids` by another name.
 //!
 //! A document is translated in memory by `axioval-ids`. Only complete
 //! specifications run: one with any gap runs none of its rules, since a
@@ -10,10 +11,11 @@
 use std::{error::Error, fs, path::Path};
 
 use axioval::ir::{DefinitionPackage, RuleSetPackage, contract::Selector};
-use axioval_ids::{Options, export, translate};
+use axioval_ids::{Options, translate};
 use clap::{Args, Subcommand};
 
 use crate::digest::{IdsRecord, IdsSpecification};
+use crate::export::ExportArgs;
 
 /// The `ids` subcommands.
 #[derive(Subcommand)]
@@ -35,21 +37,9 @@ pub(crate) enum IdsCommand {
     /// part-of requirement). Every other rule is listed on stderr with why
     /// it is not exported. Exit status: 0 every rule exported, 4 the
     /// document was written without the rules listed, 1 nothing written
-    /// (no rule exportable, an unreadable package), 2 invalid usage.
+    /// (no rule exportable, an unreadable package), 2 invalid usage. The
+    /// same as `export --profile ids`.
     Export(ExportArgs),
-}
-
-#[derive(Args)]
-pub(crate) struct ExportArgs {
-    /// A definition package the ruleset uses; repeat for several.
-    #[arg(long = "definitions", required = true, value_name = "FILE")]
-    definitions: Vec<std::path::PathBuf>,
-    /// The ruleset to export.
-    #[arg(long, value_name = "FILE")]
-    ruleset: std::path::PathBuf,
-    /// Where to write the IDS document.
-    #[arg(long, value_name = "FILE")]
-    out: std::path::PathBuf,
 }
 
 #[derive(Args)]
@@ -209,43 +199,9 @@ pub(crate) fn translate_command(args: &TranslateArgs) -> Result<bool, Box<dyn Er
     Ok(translated.is_complete())
 }
 
-/// `ids export`: writes the document, and lists every rule left out.
-/// `Ok(false)` when a rule was left out; nothing is written when no rule
-/// is exported.
+/// `ids export`: `export --profile ids`.
 pub(crate) fn export_command(args: &ExportArgs) -> Result<bool, Box<dyn Error>> {
-    let definitions = args
-        .definitions
-        .iter()
-        .map(|path| crate::load(path))
-        .collect::<Result<Vec<DefinitionPackage>, _>>()?;
-    let ruleset: RuleSetPackage = crate::load(&args.ruleset)?;
-    let exported = export(&definitions, &ruleset);
-    let shown = args.ruleset.display();
-    for entry in &exported.not_exported {
-        eprintln!(
-            "ids: {shown}: rule {} is not exported: {}",
-            entry.rule, entry.reason
-        );
-    }
-    let rules: usize = exported
-        .specifications
-        .iter()
-        .map(|specification| specification.rules.len())
-        .sum();
-    let Some(xml) = exported.to_xml() else {
-        return Err(format!(
-            "{shown}: no rule can be exported as IDS; {} rule(s) not exported",
-            exported.not_exported.len()
-        )
-        .into());
-    };
-    crate::write(&args.out, xml.as_bytes())?;
-    println!(
-        "exported {rules} rule(s) as {} specification(s); {} rule(s) not exported",
-        exported.specifications.len(),
-        exported.not_exported.len()
-    );
-    Ok(exported.is_complete())
+    crate::export::export_command(axioval_ids::IdsProfile::ID, args)
 }
 
 #[cfg(test)]

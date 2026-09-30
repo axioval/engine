@@ -97,7 +97,9 @@
 //! [`Refusal`]. Every folder [`translate`] writes keeps its specification
 //! in the [`SPECIFICATION_ANNOTATION`], and the root folder the document's
 //! `<info>` under [`INFO_ANNOTATION`], so a translated document is exported
-//! again specification by specification.
+//! again specification by specification. [`IdsProfile`] is the same export
+//! as the `ids` export profile of `axioval-export`, whose comparator judges
+//! what "gives the rule again" means.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -120,7 +122,7 @@ use openbim_ids::{
 mod export;
 mod write;
 
-pub use export::{Export, ExportedSpecification, NotExported, Refusal, export};
+pub use export::{Export, ExportedSpecification, IdsProfile, NotExported, Refusal, export};
 use regex::Regex;
 use thiserror::Error;
 

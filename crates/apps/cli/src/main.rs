@@ -24,6 +24,7 @@ use std::{
 
 mod compare;
 mod digest;
+mod export;
 mod geometry;
 mod ids;
 mod server;
@@ -81,6 +82,16 @@ enum Command {
     /// Without filters, prints the same bounded summary as `check --summary`.
     /// With any filter, lists the matching entries, paged.
     Report(ReportArgs),
+    /// Export a ruleset as another format, through an export profile.
+    ///
+    /// A rule is exported only when the format states exactly what decides
+    /// it; every other rule is listed on stderr with why it is not
+    /// exported, and any structure or presentation the format reduces is
+    /// listed as degraded. Profiles: `ids` (as `ids export`). Exit status:
+    /// 0 nothing lost, 4 the document was written with the losses listed, 1
+    /// nothing written (no rule exportable, an unknown profile, an
+    /// unreadable package), 2 invalid usage.
+    Export(export::ProfileExportArgs),
     /// Work with buildingSMART IDS documents.
     Ids {
         #[command(subcommand)]
@@ -579,6 +590,11 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
         Command::Ids {
             command: ids::IdsCommand::Export(args),
         } => Ok(if ids::export_command(&args)? {
+            Outcome::Passed
+        } else {
+            Outcome::Incomplete
+        }),
+        Command::Export(args) => Ok(if args.run()? {
             Outcome::Passed
         } else {
             Outcome::Incomplete

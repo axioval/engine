@@ -25,6 +25,7 @@
 - [Typed host services](./services.md)
 - [Independent adapters](./adapters.md)
 - [Report sinks](./sinks.md)
+- [Export profiles](./export.md)
 - [IDS import and export](./ids.md)
 
 # Operations

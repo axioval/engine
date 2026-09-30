@@ -20,13 +20,13 @@ There is deliberately no combined OpenBIM–Axiolid adapter. `axioval-ifc` maps 
 | Crate | Responsibility |
 |---|---|
 | `axioval-ir` | Stable project/object IDs, semantic values, selectors, provenance, evidence and findings |
-| `axioval-spec` | Portable rule and classification vocabulary shared by authoring front...[truncated]
 | `axioval-rules` | Reusable built-in capability implementations |
 | `axioval-ifc` | Independent IFC semantic source adapter |
 | `axioval-axiolid` | Independent Axiolid geometry evidence adapter |
 | `axioval-icdd` | ICDD project assembly adapter |
 | `axioval-bcf` | BCF 2.1 and 3.0 issue archives from validation reports |
 | `axioval-ids` | Rule packages from buildingSMART IDS documents |
+| `axioval-export` | Export profiles: rule packages written as other formats, every loss stated |
 | `axioval` | Batteries-included facade |
 | `axioval-cli` | Portable command-line runner |
 

@@ -9,14 +9,13 @@ contracts/   source-neutral vocabulary — depends on nothing else in this tree
 engine/      capability execution over those contracts
 sources/     adapters that feed the engine, one directory per port kind
 sinks/       writers that turn a finished report into an exchange format
-packages/    importers that write rule packages from other rule formats
+packages/    importers and exporters between rule packages and other formats
 facade/      feature-gated re-export surface
 apps/        executables
 ```
 
 ## contracts/
 
-- `spec` (`axioval-spec`) — source-neutral rule and classification vocabulary.
 - `ir` (`axioval-ir`) — source-neutral data and normalized package contracts.
 
 ## engine/
@@ -53,13 +52,18 @@ an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
 
 ## packages/
 
-One subdirectory per rule format a package is imported from. An importer
+One subdirectory per rule format a package is imported from, beside the
+export framework every target shares. An importer
 writes `axioval-ir` definition packages and rulesets and never reads a model,
 so it adapts no source and depends on no adapter. It is core to the
 architecture gate: only the libraries named for it in `PERMITTED_COUPLINGS`
 of `scripts/architecture.py` are exempted, and only for that crate.
 
-- `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them.
+- `export` (`axioval-export`) — export profiles, losses (refused or
+  degraded) and the shared rule comparator; depends on `axioval-ir` only.
+- `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them (the `ids` export profile).
+
+`axioval-spec` is retired: its notice lives in `attic/axioval-spec-notice`.
 
 ## facade/ and apps/
 

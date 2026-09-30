@@ -40,6 +40,8 @@ ifc-step.workspace = true
 # into rule packages in memory.
 axioval-ids.workspace = true
 openbim-ids.workspace = true
+# `export --profile`: the profiles every export target implements.
+axioval-export.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

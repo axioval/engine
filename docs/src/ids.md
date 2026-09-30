@@ -77,6 +77,11 @@ and `ids translate`.
 
 `axioval_ids::export(definitions, ruleset)` writes a ruleset back as IDS
 1.0, and `axioval ids export` on the [command line](./cli.md#axioval-ids-export).
+`IdsProfile` is the same export behind the shared
+[export profile](./export.md) with id `ids`, which `axioval export --profile
+ids` runs: its artifact is the document, and every `NotExported` rule is a
+refused `Loss` at the rule's id with its `Refusal` as the reason. IDS
+degrades nothing; a rule it holds, it holds exactly.
 Most rules cannot be stated in IDS (geometry, routing, counts of related
 objects, comparisons between objects), so the export is selective and
 explicit: a rule is exported only when IDS states it exactly, and every
@@ -84,9 +89,11 @@ other rule is listed as `NotExported` with a `Refusal` saying why. Nothing
 is approximated and nothing is dropped silently; `Export::is_complete`
 says whether anything was left out.
 
-Exact means the translation above is the judge. A rule is exported as a
-specification only when translating that specification gives the rule
-again: the same capability and parameters (with the definition's
+Exact means the translation above is the judge, compared with the
+comparator every profile shares (`axioval_export::compare`, with object-type
+names ignoring case and a `selector-conformance` message left out). A rule
+is exported as a specification only when translating that specification
+gives the rule again: the same capability and parameters (with the definition's
 defaults), the same applicability, gates, severity and grading, every
 concept bound to the same names and every `ruleOutcome` to the same rule.
 Names, descriptions, messages and tags are presentation and not compared.

@@ -7,12 +7,13 @@ The directory says what a crate may do; the name says what it contains.
 
 ```text
 crates/
-  contracts/{spec,ir}          source-neutral vocabulary
+  contracts/ir                 source-neutral vocabulary
   engine/{core,rules}          capability execution
   sources/semantic/ifc         one adapter per format
   sources/geometry/axiolid     one adapter per kernel
   sources/assembly/icdd        one adapter per container
   sinks/bcf                    one writer per exchange format
+  packages/export              the export framework every target shares
   packages/ids                 one importer per rule format
   facade/axioval               feature-gated re-exports
   apps/cli                     executables
@@ -38,7 +39,9 @@ engine/core  <-  engine/rules
 
 contracts/ir  <-  sinks/bcf
 
-contracts/ir, engine/core, engine/rules  <-  packages/ids
+contracts/ir  <-  packages/export
+
+contracts/ir, engine/core, engine/rules, packages/export  <-  packages/ids
 ```
 
 A host composes adapters. The CLI, for instance, meshes IFC bodies with
@@ -53,7 +56,14 @@ A package importer writes definition packages and rulesets from another rule
 format. It reads the engine's capability descriptors so its definitions match
 them, and never a model, so it links no source adapter.
 
-`axioval-ir`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
+An exporter writes packages back as another format through an
+[export profile](./export.md). The profile trait, the loss kinds and the
+rule comparator live in `axioval-export`, which depends on the IR alone and
+names no format; each target implements the profile, in this workspace
+(`axioval-ids`) or in a host's own crate. A difference that would change a
+check's result is always a refused loss, never a degraded one.
+
+`axioval-ir`, `axioval-export`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
 
 ## Execution
 

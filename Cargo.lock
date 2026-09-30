@@ -631,6 +631,7 @@ dependencies = [
  "axiolid-profile",
  "axiolid-surface",
  "axioval",
+ "axioval-export",
  "axioval-ids",
  "clap",
  "ifc-geometry",
@@ -659,6 +660,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "axioval-export"
+version = "0.3.0"
+dependencies = [
+ "axioval-ir",
+ "serde_json",
+]
+
+[[package]]
 name = "axioval-icdd"
 version = "0.3.0"
 dependencies = [
@@ -671,6 +680,7 @@ version = "0.3.0"
 dependencies = [
  "axioval",
  "axioval-engine",
+ "axioval-export",
  "axioval-ir",
  "axioval-rules",
  "ifc-schema",
@@ -721,15 +731,6 @@ dependencies = [
  "axioval-ir",
  "indexmap",
  "regex",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "axioval-spec"
-version = "0.3.0"
-dependencies = [
  "serde",
  "serde_json",
  "thiserror",

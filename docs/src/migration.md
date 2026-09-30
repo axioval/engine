@@ -73,7 +73,8 @@ model](./capabilities.md) that shows the composition.
 | `ModelComparisonPlanSpec` (`ModelComparison`) | `model-comparison`: the models by discipline (`base`, `revised`) for `first_model_index` and `second_model_index`; the rule's selector and `revised_selector` for `scope`, `first_scope` and `second_scope`; `match_by` `identity` (with `identity_scheme`), `placement` and `overlap` (with `minimum_overlap_ratio`) for the `identification_modes`; `compare_placement`, `compare_geometry` and `compare_coordinate_systems`; `properties` for `compared_properties`; `all_property_sets` or `property_sets` for `compare_properties`, `compare_quantities` (quantity sets are sets) and `compare_property_sets`. See [Model comparison](./comparison.md#the-comparison-as-a-rule). |
 | `ComponentContainmentPlanSpec` (`ComponentContainment`) | `containment`: the inner components as the rule's selection, the outer ones as `counterparts`, `minimum_volume_ratio` for the classification, `combine_adjacent` for `combine_outer_components`, one `cover` row per dimension band (`faces` the host surface, `side` inside or outside, `minimum_metres`, `maximum_metres`), `minimum_count` and `maximum_count` for the counts per outer component, `report_orphans` for `forbid_orphans`. See [Containment and cover](./clash.md#containment-and-cover). |
 
-`ModelSelectionSpec` stays in `axioval_spec::rule::model`, because
-`HorizontalGuardPlanSpec` still uses it. The remaining plans in
-`axioval_spec::rule` belong to families whose capability work is tracked in
-their own issues.
+`axioval-spec` itself is retired: no crate depended on it, and its
+remaining plans and target list were shaped after particular host
+applications. Rule packages are `axioval-ir`; writing them as another
+format is an [export profile](./export.md). The crate name serves only a
+retirement notice (`attic/axioval-spec-notice`).

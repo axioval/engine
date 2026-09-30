@@ -461,7 +461,7 @@ def self_test() -> None:
     # Core membership is derived, not listed: a new crate is guarded on arrival.
     root = Path(__file__).resolve().parents[1]
     derived = {name for name, _ in core_crates(root)}
-    assert "axioval-spec" in derived, derived
+    assert "axioval-export" in derived, derived
     assert "axioval-engine" in derived, derived
     assert "axioval-ifc" not in derived, derived
     assert "axioval-cli" not in derived, derived

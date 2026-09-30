@@ -297,6 +297,17 @@ fn round_trip() {
             continue;
         }
         let xml = export.to_xml().expect("a specification");
+        // The profile every export target shares writes the same document
+        // and loses nothing.
+        let outcome = axioval_export::ExportProfile::export(
+            &axioval_ids::IdsProfile,
+            std::slice::from_ref(&translation.definitions),
+            &translation.ruleset,
+        );
+        if !outcome.is_complete() || outcome.artifact.as_deref() != Some(xml.as_bytes()) {
+            failures.push(format!("{name}: the ids profile differs from export"));
+            continue;
+        }
         let path = written.join(format!("{name}.ids"));
         std::fs::write(&path, &xml).expect("writable export");
         exported.push(path);

@@ -1,0 +1,19 @@
+[package]
+name = "axioval-spec"
+version = "0.4.0"
+description = "Retired: use axioval-ir for rule packages and axioval-export for export targets. This crate is a notice only and contains no functionality."
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-or-later"
+readme = "README.md"
+authors = ["Axioval contributors"]
+repository = "https://github.com/axioval/engine"
+keywords = ["deprecated", "bim", "validation", "rules"]
+categories = ["science"]
+
+# Its own workspace root, so Cargo does not walk up into the engine
+# workspace and refuse every command run here.
+[workspace]
+
+# No dependencies: a notice must keep building on its own.
+[dependencies]

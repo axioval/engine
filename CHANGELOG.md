@@ -6,6 +6,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Export profiles, shared by every target.** (Closes #197) The new core
+  crate `axioval-export` holds the `ExportProfile` trait (an open string
+  id, `export(definitions, ruleset) -> ExportOutcome`, and optional report,
+  takeoff and classification exports that default to unsupported), the
+  `ExportOutcome { artifact, exported, losses, contents }` and `Loss {
+  path, kind, reason }` with two kinds: `Refused` (the item's checking
+  meaning cannot be expressed, so it is left out) and `Degraded` (structure
+  or presentation reduced, every verdict unchanged). Anything that would
+  change a check's result is refused, never degraded, pinned by an API
+  test. The rule comparator (`canonical`, `substitute`,
+  `first_difference`) and the gate, grading, severity and group pre-checks
+  moved out of the IDS exporter into `axioval_export::compare` and
+  `axioval_export::precheck`, so every profile judges exactness alike; the
+  IDS export is unchanged and its corpus round trip stays 307 of 307.
+  `axioval_ids::IdsProfile` (id `ids`) is the IDS export as a profile, and
+  `axioval export --profile ids --definitions … --ruleset … --out …`
+  behaves exactly like `axioval ids export`, which stays as an alias. A
+  host application implements its own format's profile out of tree,
+  depending on `axioval-export` and `axioval-ir` only.
+
 - **Exporting rules as IDS.** (Closes #196; with it #165)
   `axioval_ids::export` and `axioval ids export --definitions d.json
   --ruleset r.json --out rules.ids` write the rules IDS 1.0 states exactly
@@ -203,6 +223,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   quick-xml 0.42 (RUSTSEC-2026-0194 and RUSTSEC-2026-0195 fixed), so
   `deny.toml` no longer ignores either advisory. Archives written without
   the new writer fields are byte-identical.
+
+### Removed
+
+- **Breaking:** `axioval-spec` is retired and no longer a workspace member.
+  No crate depended on it; its types duplicated the package contracts of
+  `axioval-ir`, and its closed list of export targets and its
+  classification settings were shaped after particular host applications,
+  which a source-neutral engine cannot carry. Its fidelity idea lives on as
+  the two loss kinds of `axioval-export`. The name now serves a retirement
+  notice (`axioval-spec` 0.4.0, `attic/axioval-spec-notice`) pointing at
+  `axioval-ir` and `axioval-export`; 0.3.0 stays the last release with code
+  and is not yanked.
 
 ## [0.3.0] - 2026-09-28
 

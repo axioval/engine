@@ -18,12 +18,12 @@ EXPECTED = {
     "axioval-bcf-snapshot",
     "axioval-cli",
     "axioval-engine",
+    "axioval-export",
     "axioval-icdd",
     "axioval-ids",
     "axioval-ifc",
     "axioval-ir",
     "axioval-rules",
-    "axioval-spec",
 }
 
 

@@ -26,6 +26,8 @@ ifc-schema.workspace = true
 thiserror.workspace = true
 # Rules compared by what decides them, when exporting.
 serde_json.workspace = true
+# The export profile every target shares, and its rule comparator.
+axioval-export.workspace = true
 
 # The facade runs translated rules through the IFC adapter in tests only. A
 # path-only dev-dependency is left out of the published manifest.

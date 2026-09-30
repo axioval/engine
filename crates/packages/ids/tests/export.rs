@@ -9,8 +9,9 @@ use axioval::engine::{Runtime, compile};
 use axioval::ifc::import_ifc_session;
 use axioval::ir::contract::{DefinitionPackage, RuleSetPackage, Selector};
 use axioval::ir::{MATERIAL_SET, Report};
+use axioval_export::{ExportProfile, LossKind};
 use axioval_ids::{
-    Export, IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, Options, Refusal,
+    Export, IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, IdsProfile, Options, Refusal,
     SPECIFICATION_ANNOTATION, export, translate,
 };
 use openbim_ids::{Facet, Occurrence, Value};
@@ -658,4 +659,44 @@ fn the_writer_keeps_every_character() {
     assert_eq!(again.info, ids.info);
     assert_eq!(again.specifications, ids.specifications);
     assert_eq!(again.specifications[0].name, "x\"y\nz\tw\r");
+}
+
+#[test]
+fn the_ids_profile_refuses_every_verdict_changing_edit() {
+    let text = r#"<ids xmlns="http://standards.buildingsmart.org/IDS"><info><title>T</title></info><specifications><specification name="Rated" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName><value><simpleValue>EI 90</simpleValue></value></property></requirements></specification></specifications></ids>"#;
+    let ids = openbim_ids::from_str(text).unwrap();
+    let translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
+    let definitions = std::slice::from_ref(&translation.definitions);
+    let profile: &dyn ExportProfile = &IdsProfile;
+    assert_eq!(profile.id(), "ids");
+
+    // Unedited, the profile holds every rule and loses nothing.
+    let outcome = profile.export(definitions, &translation.ruleset);
+    assert!(outcome.is_complete(), "{:?}", outcome.losses);
+    let rule = translation.ruleset.root.folders[0].rules[0].id.clone();
+    assert_eq!(outcome.exported, vec![rule.clone()]);
+    assert_eq!(outcome.contents.as_deref(), Some("1 specification(s)"));
+    assert_eq!(
+        outcome.artifact,
+        export(definitions, &translation.ruleset)
+            .to_xml()
+            .map(String::into_bytes)
+    );
+
+    // A changed value decides differently: refused, never degraded.
+    let mut edited = translation.ruleset.clone();
+    edited.root.folders[0].rules[0].parameters.insert(
+        "values".to_owned(),
+        serde_json::from_value(strings(&["EI 60"])).unwrap(),
+    );
+    let outcome = profile.export(definitions, &edited);
+    assert!(outcome.artifact.is_none());
+    assert!(outcome.exported.is_empty());
+    assert_eq!(outcome.degraded().count(), 0);
+    let [loss] = outcome.losses.as_slice() else {
+        panic!("{:?}", outcome.losses);
+    };
+    assert_eq!(loss.kind, LossKind::Refused);
+    assert_eq!(loss.path, rule);
+    assert!(loss.reason.contains("parameters.values"), "{}", loss.reason);
 }

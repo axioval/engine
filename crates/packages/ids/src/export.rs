@@ -28,10 +28,12 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use axioval_engine::RuleCapability;
+use axioval_export::compare::{self, Comparison};
+use axioval_export::precheck::{self, PreCheck};
+use axioval_export::{ExportOutcome, ExportProfile, Loss};
 use axioval_ir::contract::{
-    ComparisonOperator, DefinitionPackage, ExternalName, ObjectTypeDefinition, ParameterValue,
-    PropertyDefinition, PropertySetDefinition, Quantifier, RelatedQuantifier, RuleApplicability,
-    RuleDefinition, RuleFolder, RuleInstance, RuleSetPackage, Selector, Severity,
+    ComparisonOperator, DefinitionPackage, ExternalName, ParameterValue, Quantifier,
+    RelatedQuantifier, RuleFolder, RuleInstance, RuleSetPackage, Selector, Severity,
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use openbim_ids::{
@@ -40,7 +42,6 @@ use openbim_ids::{
     Value,
 };
 use regex::Regex;
-use serde_json::Value as Json;
 
 use crate::{INFO_ANNOTATION, Options, SPECIFICATION_ANNOTATION, translate_parts, write};
 
@@ -189,6 +190,19 @@ impl fmt::Display for Refusal {
     }
 }
 
+impl From<PreCheck> for Refusal {
+    fn from(reason: PreCheck) -> Self {
+        match reason {
+            PreCheck::Disabled => Refusal::Disabled,
+            PreCheck::Auxiliary => Refusal::Auxiliary,
+            PreCheck::Gated => Refusal::Gated,
+            PreCheck::Graded => Refusal::Graded,
+            PreCheck::Severity(severity) => Refusal::Severity(severity),
+            PreCheck::Groups => Refusal::Groups,
+        }
+    }
+}
+
 /// The type systems of the releases IDS names, in which every concept a
 /// translation writes is named.
 const TYPE_SYSTEMS: [&str; 3] = [
@@ -226,6 +240,54 @@ pub fn export(definitions: &[DefinitionPackage], ruleset: &RuleSetPackage) -> Ex
     };
     catalog.folder(&ruleset.root, false, &mut export);
     export
+}
+
+/// The IDS export profile, id `ids`: [`export()`] behind the
+/// [`ExportProfile`] every export target shares.
+///
+/// The artifact is the IDS document, `None` when no rule is exported; each
+/// [`NotExported`] rule becomes a refused [`Loss`] at its id, with its
+/// [`Refusal`] as the reason. IDS degrades nothing: a rule it holds, it
+/// holds exactly, and anything else is refused.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct IdsProfile;
+
+impl IdsProfile {
+    /// The profile's id.
+    pub const ID: &'static str = "ids";
+}
+
+impl ExportProfile for IdsProfile {
+    fn id(&self) -> &'static str {
+        Self::ID
+    }
+
+    fn format(&self) -> &'static str {
+        "IDS"
+    }
+
+    fn export(&self, definitions: &[DefinitionPackage], ruleset: &RuleSetPackage) -> ExportOutcome {
+        export(definitions, ruleset).into()
+    }
+}
+
+impl From<Export> for ExportOutcome {
+    fn from(export: Export) -> Self {
+        ExportOutcome {
+            artifact: export.to_xml().map(String::into_bytes),
+            exported: export
+                .specifications
+                .iter()
+                .flat_map(|specification| specification.rules.iter().cloned())
+                .collect(),
+            losses: export
+                .not_exported
+                .iter()
+                .map(|entry| Loss::refused(&entry.rule, entry.reason.to_string()))
+                .collect(),
+            contents: Some(format!("{} specification(s)", export.specifications.len())),
+        }
+    }
 }
 
 /// The `<info>` the root folder keeps, or one made from the package.
@@ -269,41 +331,29 @@ fn info(ruleset: &RuleSetPackage) -> Info {
 
 /// The definitions and concepts of every definition package.
 struct Catalog<'p> {
-    definitions: BTreeMap<&'p str, &'p RuleDefinition>,
-    object_types: BTreeMap<&'p str, &'p ObjectTypeDefinition>,
-    properties: BTreeMap<&'p str, &'p PropertyDefinition>,
-    property_sets: BTreeMap<&'p str, &'p PropertySetDefinition>,
+    shared: compare::Catalog<'p>,
+}
+
+/// How IDS compares rules: class names ignore case, as IFC names classes,
+/// and a conformance rule's message says what a finding reads, not what it
+/// finds.
+fn comparison() -> Comparison {
+    Comparison::default()
+        .presentation_parameter(axioval_rules::SelectorConformance.id(), "message")
+        .case_insensitive_object_types()
 }
 
 impl<'p> Catalog<'p> {
     fn new(packages: &'p [DefinitionPackage]) -> Self {
-        let mut catalog = Self {
-            definitions: BTreeMap::new(),
-            object_types: BTreeMap::new(),
-            properties: BTreeMap::new(),
-            property_sets: BTreeMap::new(),
-        };
-        for package in packages {
-            for (id, definition) in &package.definitions {
-                catalog.definitions.insert(id, definition);
-            }
-            for (id, concept) in &package.object_types {
-                catalog.object_types.insert(id, concept);
-            }
-            for (id, concept) in &package.properties {
-                catalog.properties.insert(id, concept);
-            }
-            for (id, concept) in &package.property_sets {
-                catalog.property_sets.insert(id, concept);
-            }
+        Self {
+            shared: compare::Catalog::new(packages),
         }
-        catalog
     }
 
     /// Exports `folder` and its subfolders; `gated` when a folder around it
     /// has a gate.
     fn folder(&self, folder: &RuleFolder, gated: bool, export: &mut Export) {
-        let gated = gated || folder.gate.is_some();
+        let gated = precheck::is_folder_gated(folder, gated);
         if let Some(fragment) = folder.annotations.get(SPECIFICATION_ANNOTATION) {
             match self.origin(folder, fragment, gated) {
                 Ok(specification) => export.specifications.push(ExportedSpecification {
@@ -380,32 +430,9 @@ impl<'p> Catalog<'p> {
     /// The specification one rule reads as, when its translation is the
     /// rule.
     fn rule(&self, rule: &RuleInstance, gated: bool) -> Result<Specification, Refusal> {
-        if !rule.enabled {
-            return Err(Refusal::Disabled);
-        }
-        if rule.auxiliary {
-            return Err(Refusal::Auxiliary);
-        }
-        if gated || rule.gate.is_some() {
-            return Err(Refusal::Gated);
-        }
-        if !rule.severity_bands.is_empty()
-            || !rule.severity_overrides.is_empty()
-            || !rule.categories.is_empty()
-        {
-            return Err(Refusal::Graded);
-        }
-        if rule.severity != Severity::Error {
-            let severity = serde_json::to_value(&rule.severity)
-                .ok()
-                .and_then(|value| value.as_str().map(ToOwned::to_owned))
-                .unwrap_or_default();
-            return Err(Refusal::Severity(severity));
-        }
-        let RuleApplicability::Selector(selector) = &rule.applicability else {
-            return Err(Refusal::Groups);
-        };
+        let selector = precheck::pre_check(rule, gated, &Severity::Error)?;
         let definition = self
+            .shared
             .definitions
             .get(rule.definition_id.as_str())
             .ok_or_else(|| Refusal::UnknownDefinition(rule.definition_id.clone()))?;
@@ -452,7 +479,7 @@ impl<'p> Catalog<'p> {
         if !gaps.is_empty() {
             return Err(Refusal::Gaps(gaps.join("; ")));
         }
-        let translated = Catalog::new(std::slice::from_ref(&translation.definitions));
+        let translated = compare::Catalog::new(std::slice::from_ref(&translation.definitions));
         let written: Vec<&RuleInstance> = translation
             .ruleset
             .root
@@ -460,126 +487,13 @@ impl<'p> Catalog<'p> {
             .iter()
             .flat_map(|folder| &folder.rules)
             .collect();
-        let expected = translated.canonical(&written)?;
-        let actual = self.canonical(rules)?;
-        match first_difference(&Json::Array(actual), &Json::Array(expected), "rules") {
+        let difference =
+            compare::verdict_difference(&self.shared, rules, &translated, &written, &comparison())
+                .map_err(|unknown| Refusal::UnknownDefinition(unknown.0))?;
+        match difference {
             None => Ok(()),
             Some(path) => Err(Refusal::Differs(path)),
         }
-    }
-
-    /// What decides `rules`, with every concept replaced by the names it
-    /// binds to and every rule id by its position: capability, parameters
-    /// (with the definition's defaults), applicability, gates and grading.
-    /// Names, descriptions, messages and tags are presentation and left
-    /// out.
-    fn canonical(&self, rules: &[&RuleInstance]) -> Result<Vec<Json>, Refusal> {
-        let positions: BTreeMap<&str, usize> = rules
-            .iter()
-            .enumerate()
-            .map(|(index, rule)| (rule.id.as_str(), index + 1))
-            .collect();
-        let conformance = axioval_rules::SelectorConformance.id();
-        rules
-            .iter()
-            .map(|rule| {
-                let definition = self
-                    .definitions
-                    .get(rule.definition_id.as_str())
-                    .ok_or_else(|| Refusal::UnknownDefinition(rule.definition_id.clone()))?;
-                let mut parameters = rule.parameters.clone();
-                for (id, parameter) in &definition.parameters {
-                    if let Some(default) = &parameter.default_value {
-                        parameters
-                            .entry(id.clone())
-                            .or_insert_with(|| default.clone());
-                    }
-                }
-                if definition.capability == conformance {
-                    // What a finding says, not what it finds.
-                    parameters.remove("message");
-                }
-                let mut json = serde_json::json!({
-                    "capability": definition.capability,
-                    "parameters": parameters,
-                    "applicability": rule.applicability,
-                    "enabled": rule.enabled,
-                    "severity": rule.severity,
-                    "gate": rule.gate,
-                    "auxiliary": rule.auxiliary,
-                    "severityBands": rule.severity_bands,
-                    "severityOverrides": rule.severity_overrides,
-                    "categories": rule.categories,
-                });
-                self.substitute(&mut json, &positions);
-                Ok(json)
-            })
-            .collect()
-    }
-
-    /// Replaces every concept id in `json` by what it binds to, and every
-    /// rule id by its position.
-    fn substitute(&self, json: &mut Json, positions: &BTreeMap<&str, usize>) {
-        match json {
-            Json::String(text) => {
-                if let Some(position) = positions.get(text.as_str()) {
-                    *text = format!("rule #{position}");
-                } else if let Some(token) = self.concept_token(text) {
-                    *text = token;
-                }
-            }
-            Json::Array(items) => {
-                for item in items {
-                    self.substitute(item, positions);
-                }
-            }
-            Json::Object(fields) => {
-                for value in fields.values_mut() {
-                    self.substitute(value, positions);
-                }
-            }
-            Json::Null | Json::Bool(_) | Json::Number(_) => {}
-        }
-    }
-
-    /// The names a concept binds to; an entity's case-insensitively, as IFC
-    /// names classes.
-    fn concept_token(&self, id: &str) -> Option<String> {
-        let shown = |names: &[ExternalName], upper: bool| {
-            let mut names: Vec<(String, String)> = names
-                .iter()
-                .map(|name| {
-                    let text = if upper {
-                        name.name.to_ascii_uppercase()
-                    } else {
-                        name.name.clone()
-                    };
-                    (name.type_system.clone(), text)
-                })
-                .collect();
-            names.sort();
-            format!("{names:?}")
-        };
-        let mut tokens = Vec::new();
-        if let Some(concept) = self.object_types.get(id) {
-            tokens.push(format!(
-                "object type {}",
-                shown(&concept.external_names, true)
-            ));
-        }
-        if let Some(concept) = self.properties.get(id) {
-            tokens.push(format!(
-                "property {}",
-                shown(&concept.external_names, false)
-            ));
-        }
-        if let Some(concept) = self.property_sets.get(id) {
-            tokens.push(format!(
-                "property set {}",
-                shown(&concept.external_names, false)
-            ));
-        }
-        (!tokens.is_empty()).then(|| tokens.join(" / "))
     }
 
     /// The one name `names` gives in every release IDS names.
@@ -619,7 +533,7 @@ impl<'p> Catalog<'p> {
 
     /// The IDS class name of an object-type concept, upper case.
     fn class(&self, id: &str) -> Result<String, Refusal> {
-        let concept = self.object_types.get(id).ok_or_else(|| {
+        let concept = self.shared.object_types.get(id).ok_or_else(|| {
             Refusal::Concept(format!("object type {id} is in no definition package"))
         })?;
         Ok(Self::ifc_name("object type", id, &concept.external_names)?.to_ascii_uppercase())
@@ -628,14 +542,14 @@ impl<'p> Catalog<'p> {
     /// The name of a property concept: a property, or an attribute in a
     /// reserved set.
     fn property(&self, id: &str) -> Result<String, Refusal> {
-        let concept = self.properties.get(id).ok_or_else(|| {
+        let concept = self.shared.properties.get(id).ok_or_else(|| {
             Refusal::Concept(format!("property {id} is in no definition package"))
         })?;
         Self::ifc_name("property", id, &concept.external_names)
     }
 
     fn property_set(&self, id: &str) -> Result<String, Refusal> {
-        let concept = self.property_sets.get(id).ok_or_else(|| {
+        let concept = self.shared.property_sets.get(id).ok_or_else(|| {
             Refusal::Concept(format!("property set {id} is in no definition package"))
         })?;
         Self::ifc_name("property set", id, &concept.external_names)
@@ -1633,36 +1547,4 @@ fn xsd_pattern(regex: &str) -> Result<String, Refusal> {
 /// A selector as a package spells it.
 fn shown(selector: &Selector) -> String {
     serde_json::to_string(selector).unwrap_or_default()
-}
-
-/// The path to the first place `actual` and `expected` differ, `None` when
-/// they are equal.
-fn first_difference(actual: &Json, expected: &Json, path: &str) -> Option<String> {
-    match (actual, expected) {
-        (Json::Object(a), Json::Object(b)) => {
-            let mut keys: Vec<&String> = a.keys().chain(b.keys()).collect();
-            keys.sort();
-            keys.dedup();
-            keys.into_iter().find_map(|key| {
-                let inner = format!("{path}.{key}");
-                match (a.get(key), b.get(key)) {
-                    (Some(a), Some(b)) => first_difference(a, b, &inner),
-                    (None, Some(Json::Null)) | (Some(Json::Null), None) => None,
-                    _ => Some(inner),
-                }
-            })
-        }
-        (Json::Array(a), Json::Array(b)) if a.len() == b.len() => a
-            .iter()
-            .zip(b)
-            .enumerate()
-            .find_map(|(index, (a, b))| first_difference(a, b, &format!("{path}[{index}]"))),
-        (Json::Array(a), Json::Array(b)) => Some(format!(
-            "{path} ({} against {} as translated)",
-            a.len(),
-            b.len()
-        )),
-        _ if actual == expected => None,
-        _ => Some(path.to_owned()),
-    }
 }

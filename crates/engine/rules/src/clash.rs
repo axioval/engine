@@ -511,6 +511,30 @@ impl Profile {
         counterpart: &ObjectId,
         note: &str,
     ) -> Outcome {
+        // A certified separation is judged as an interval: below the
+        // clearance only when all of it is, open when it straddles.
+        if let (Some(clearance), Some(certified)) =
+            (self.clearance, measured.certified_separation())
+        {
+            let (lower, upper) = (certified.lower_metres(), certified.upper_metres());
+            return if upper < clearance {
+                Outcome::Finding(
+                    Class::Clearance,
+                    format!(
+                        "clearance clash with {counterpart}: separation certified within [{lower:.6}, {upper:.6}] m, below required {clearance:.4} m{note}"
+                    ),
+                )
+            } else if lower >= clearance {
+                Outcome::Pass
+            } else {
+                Outcome::Open(
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "whether {counterpart} keeps the clearance {clearance:.4} m cannot be decided: separation certified within [{lower:.6}, {upper:.6}] m{note}"
+                    ),
+                )
+            };
+        }
         match self.clearance {
             Some(clearance) if measured.separation_metres() < clearance => Outcome::Finding(
                 Class::Clearance,

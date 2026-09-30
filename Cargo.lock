@@ -261,12 +261,17 @@ dependencies = [
 
 [[package]]
 name = "axiolid-measure"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0c50600df833a21a330ffe2b6656ac90fa959f126bcae148736d83a74fbbc14"
+checksum = "194a050232d59421b07ef382335b5441c04cfc5f1b4235e3aec2f432175221df"
 dependencies = [
+ "axiolid-brep",
  "axiolid-core",
+ "axiolid-curve",
+ "axiolid-evaluate",
  "axiolid-mesh",
+ "axiolid-surface",
+ "axiolid-topology",
 ]
 
 [[package]]
@@ -539,8 +544,10 @@ dependencies = [
 name = "axioval"
 version = "0.3.0"
 dependencies = [
+ "axiolid-construct",
  "axiolid-core",
  "axiolid-mesh",
+ "axiolid-overlay",
  "axioval-axiolid",
  "axioval-bcf",
  "axioval-engine",
@@ -556,6 +563,8 @@ dependencies = [
 name = "axioval-axiolid"
 version = "0.3.0"
 dependencies = [
+ "axiolid-brep",
+ "axiolid-construct",
  "axiolid-core",
  "axiolid-inspect",
  "axiolid-measure",

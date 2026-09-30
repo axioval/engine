@@ -81,6 +81,12 @@ explicit in the contract:
   `separation_interval_metres()`: the range the true separation can lie in.
   `ProximityEvidence::try_new` refuses evidence whose exactness disagrees with
   the fidelity, so a tessellation cannot be presented as fact.
+- **Exact boundaries certify the separation.** A service that also measured
+  the bodies' exact boundaries attaches a certified interval with
+  `with_certified_separation`. `separation_interval_metres()` is then its
+  intersection with the fidelity's interval, and `certified_separation()`
+  returns it; an interval missing the fidelity's is refused. The evidence
+  stays approximate: only the separation is narrowed.
 - **Shape comparisons are intervals.** Overlap extents and the Hausdorff
   distance are `LengthInterval`s the true values lie in, attached with
   `with_overlap_extents` and `with_hausdorff`. They are not points even for
@@ -188,7 +194,8 @@ distances. Seen from the counterpart, above is below.
 
 Exact evidence is a point, related or not. A tessellation widens each
 distance by the combined chord deviation and may leave the relation open: its
-interval then reaches infinity. A direction is open in the same way when
+interval then reaches infinity. A `Minimum3d` distance between bodies with
+certified boundaries is narrowed as the separation is. A direction is open in the same way when
 either end of the counterpart lies within the combined deviation of the
 subject's and no end is decided beyond it. `measure_proximity` refuses a projected
 request, and the default `measure_distance` answers `Minimum3d` from the full
@@ -293,13 +300,35 @@ Projected distances reuse the same pieces:
   meshes' overlap farther than the deviations from its boundary (the overlap's
   centroid and the centroids of its fan triangles are tried), and denied only
   when the plan distance exceeds the combined deviation. Anything between is
-  reported open. A certified boundary distance between curved footprints
-  would narrow this and waits on axiolid/kernel#174.
+  reported open. The certified boundary distance below is a distance in
+  space, not between footprints, so it does not narrow any of these: a
+  certified plan distance between exact footprints is not published by the
+  kernel, and curved footprints stay open within their deviation in plan.
 
 Points are tested only against closed two-manifold meshes. A pair needs at
 least one of them to report a penetration. Hosts declare curved parts with
 `AxiolidGeometry::with_tessellated_mesh(object, mesh, chord_deviation_metres)`.
 A mesh registered with `with_mesh` asserts planar faces.
+
+**Certified distance in space.** A host that also has an object's exact
+B-rep registers it with `AxiolidGeometry::with_exact_boundary(object,
+brep)`, beside the mesh. For a tessellated pair whose objects both have one,
+the separation and the `Minimum3d` distance are also measured with
+`axiolid-measure`'s certified `boundary_distance`: branch and bound over the
+exact faces and edges, its lower bound from bounding spheres on the exact
+surfaces and its upper bound the distance between two points certified on
+the boundaries. It is refined to `CERTIFIED_ACCURACY_METRES` (a micrometre)
+and widened by a bound on the rounding of those points. Both it and the
+chord-widened interval hold the true distance, so the pair reports their
+intersection; an empty intersection refuses the pair, since mesh and
+boundary then describe different bodies. A boundary the kernel cannot bound
+leaves the chord-widened interval. Like the mesh separation, it is the
+distance between the surfaces: a body inside another is apart from it, and
+containment is still the winding test's. A round column of radius 0.2 m
+whose axis stands 1 m from a wall is 0.8 m from it; its 16-chord mesh
+leaves that within about 4 mm, the certified distance within a
+micrometre, so a bound of 0.799 m or 0.8005 m is judged instead of left
+open. An exact pair is already a point and is not certified.
 
 The other Axiolid services only produce exact evidence, so they refuse when a
 tessellation could change their answer. That is the case when the subject is
@@ -347,7 +376,9 @@ Each pair falls into the first class that holds:
    10 mm vertical tolerance lets it pass; a volume tolerance lets small
    overlaps at joints pass however they are shaped.
 4. **Clearance**: a separation below the clearance, when no class above
-   holds.
+   holds. A certified separation is judged as an interval: a clash when all
+   of it lies below the clearance, a pass when none does, and not evaluated
+   when it straddles the clearance.
 
 A class switched off is not reported, and its pairs are not reported as
 anything else: a duplicate is not also an intersection. Surfaces that meet

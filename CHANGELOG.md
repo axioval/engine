@@ -4,6 +4,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Certified distance for curved bodies.** (Closes #187) A host registers
+  an object's exact B-rep beside its mesh with
+  `AxiolidGeometry::with_exact_boundary`. For a tessellated pair whose
+  objects both have one, the Axiolid proximity service bounds the distance
+  in space with the certified `boundary_distance` of `axiolid-measure` 0.3.2
+  (`exact` feature, axiolid/kernel#174) to a micrometre, and reports its
+  intersection with the chord-widened interval; boundary and mesh that
+  disagree refuse the pair. `ProximityEvidence::with_certified_separation`
+  carries the interval, `separation_interval_metres` returns it, and the
+  `Minimum3d` distance is narrowed the same way. `clash` judges a clearance
+  on a certified separation as an interval (a clash below, a pass above,
+  not evaluated when it straddles), and `distance` decides bounds the
+  certified interval clears: a round column 0.8 m from a wall is judged
+  against 0.799 m and 0.8005 m, which its chord mesh leaves open. Plan
+  projections of curved footprints stay chord-widened, since the published
+  distance is in space.
+
 ### Changed
 
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes

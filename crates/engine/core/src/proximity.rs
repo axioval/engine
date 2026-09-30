@@ -786,6 +786,7 @@ pub struct ProximityEvidence {
     overlap_extents: Option<OverlapExtents>,
     hausdorff: Option<LengthInterval>,
     volume: Option<IntersectionVolume>,
+    certified_separation: Option<LengthInterval>,
     fidelity: GeometryFidelity,
     evidence: Evidence,
 }
@@ -840,9 +841,35 @@ impl ProximityEvidence {
             overlap_extents: None,
             hausdorff: None,
             volume: None,
+            certified_separation: None,
             fidelity,
             evidence,
         })
+    }
+
+    /// Adds a certified interval on the separation of the true surfaces,
+    /// measured on their exact boundaries rather than on the meshes.
+    ///
+    /// Both it and the fidelity's interval hold the true separation, so
+    /// [`Self::separation_interval_metres`] becomes their intersection. An
+    /// interval missing the fidelity's is refused: the two measurements
+    /// cannot describe one pair of bodies. Attach it before the Hausdorff
+    /// distance, which is checked against the separation.
+    pub fn with_certified_separation(
+        mut self,
+        interval: LengthInterval,
+    ) -> Result<Self, ProximityError> {
+        let (lower, upper) = self.separation_interval_metres();
+        let lower = lower.max(interval.lower_metres());
+        let upper = upper.min(interval.upper_metres());
+        if lower > upper {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.certified_separation = Some(
+            LengthInterval::try_new(lower, upper)
+                .map_err(|_| ProximityError::InvalidMeasurement)?,
+        );
+        Ok(self)
     }
 
     /// Adds the extents of the bodies' intersection along each axis.
@@ -911,15 +938,24 @@ impl ProximityEvidence {
     pub fn separation_metres(&self) -> f64 {
         self.separation_metres
     }
-    /// The separation the true surfaces may have, given the fidelity.
+    /// The separation the true surfaces may have, given the fidelity, or
+    /// the certified interval where one was attached.
     ///
     /// `(lower, upper)`; both equal the measured separation for exact geometry.
     pub fn separation_interval_metres(&self) -> (f64, f64) {
+        if let Some(certified) = self.certified_separation {
+            return (certified.lower_metres(), certified.upper_metres());
+        }
         let deviation = self.fidelity.deviation_metres();
         (
             (self.separation_metres - deviation).max(0.0),
             self.separation_metres + deviation,
         )
+    }
+    /// The certified separation interval, when the service measured the
+    /// exact boundaries; `None` when only the mesh was measured.
+    pub fn certified_separation(&self) -> Option<LengthInterval> {
+        self.certified_separation
     }
     /// Witnessed interpenetration depth, a lower bound on the true depth.
     pub fn penetration_metres(&self) -> Option<f64> {
@@ -1824,6 +1860,46 @@ mod tests {
             measured
                 .with_hausdorff(LengthInterval::try_new(0.2, 0.5).unwrap())
                 .is_ok()
+        );
+    }
+
+    /// A certified interval narrows the fidelity's to their intersection,
+    /// and one missing it cannot describe the same bodies.
+    #[test]
+    fn a_certified_separation_narrows_the_fidelity_interval() {
+        let measured = ProximityEvidence::try_new(
+            request(),
+            2.004,
+            None,
+            0.0,
+            None,
+            GeometryFidelity::tessellated(0.005).unwrap(),
+            approximate(),
+        )
+        .unwrap();
+        assert_eq!(measured.certified_separation(), None);
+        let (lower, upper) = measured.separation_interval_metres();
+        assert!((lower - 1.999).abs() < 1e-12 && (upper - 2.009).abs() < 1e-12);
+
+        let certified = measured
+            .clone()
+            .with_certified_separation(LengthInterval::try_new(1.999_999, 2.000_001).unwrap())
+            .unwrap();
+        assert_eq!(
+            certified.separation_interval_metres(),
+            (1.999_999, 2.000_001)
+        );
+        assert!(certified.certified_separation().is_some());
+        // Wider on one side than the fidelity allows: the intersection.
+        let clipped = measured
+            .clone()
+            .with_certified_separation(LengthInterval::try_new(1.5, 2.0).unwrap())
+            .unwrap();
+        let (lower, upper) = clipped.separation_interval_metres();
+        assert!((lower - 1.999).abs() < 1e-12 && (upper - 2.0).abs() < 1e-12);
+        assert_eq!(
+            measured.with_certified_separation(LengthInterval::try_new(2.5, 2.6).unwrap()),
+            Err(ProximityError::InvalidMeasurement)
         );
     }
 

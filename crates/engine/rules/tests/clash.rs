@@ -35,6 +35,8 @@ struct Pair {
     extents: Option<[(f64, f64); 3]>,
     /// `(lower, upper)` of the shared volume, the bodies 1 m³ each.
     volume: Option<(f64, f64)>,
+    /// `(lower, upper)` of a certified separation on exact boundaries.
+    certified: Option<(f64, f64)>,
 }
 fn apart(separation: f64) -> Pair {
     Pair {
@@ -44,6 +46,7 @@ fn apart(separation: f64) -> Pair {
         hausdorff: Some((separation.max(1.0), separation.max(1.0))),
         extents: None,
         volume: None,
+        certified: None,
     }
 }
 fn overlapping(depth: f64) -> Pair {
@@ -54,6 +57,7 @@ fn overlapping(depth: f64) -> Pair {
         hausdorff: Some((1.0, 1.0)),
         extents: None,
         volume: None,
+        certified: None,
     }
 }
 impl Pair {
@@ -72,6 +76,12 @@ impl Pair {
     fn volume(self, lower: f64, upper: f64) -> Self {
         Self {
             volume: Some((lower, upper)),
+            ..self
+        }
+    }
+    fn certified(self, lower: f64, upper: f64) -> Self {
+        Self {
+            certified: Some((lower, upper)),
             ..self
         }
     }
@@ -164,6 +174,11 @@ impl ProximityService for Stub {
                 exact: fidelity.is_exact(),
             },
         )?;
+        let measured = match pair.certified {
+            Some((lower, upper)) => measured
+                .with_certified_separation(LengthInterval::try_new(lower, upper).unwrap())?,
+            None => measured,
+        };
         let measured = match pair.hausdorff {
             Some((lower, upper)) => {
                 measured.with_hausdorff(LengthInterval::try_new(lower, upper).unwrap())?
@@ -323,6 +338,7 @@ fn a_body_inside_another_clashes_although_the_surfaces_are_apart() {
                 hausdorff: Some((0.2, 1.0)),
                 extents: None,
                 volume: None,
+                certified: None,
             },
         );
     let outcome = run(
@@ -355,6 +371,55 @@ fn coming_closer_than_the_clearance_is_a_clearance_clash() {
     assert!(outcome.findings()[0].message.starts_with("clearance clash"));
 }
 
+/// A tessellated pair with a certified separation is judged on that
+/// interval: decided where it clears the clearance, open where it straddles
+/// it, whatever the mesh separation says.
+#[test]
+fn a_certified_separation_is_judged_as_an_interval() {
+    let judge = |certified: (f64, f64)| {
+        let stub = Stub::default()
+            .tessellated("pipe", 0.0)
+            .object("wall", 1.05)
+            .object("far-wall", 50.0)
+            // The mesh separation alone would read as a pass.
+            .pair(
+                "pipe",
+                "wall",
+                apart(0.101).certified(certified.0, certified.1),
+            );
+        run(
+            &Clash,
+            &pipes_and_walls(),
+            stub,
+            &clash(&[
+                ("penetration_tolerance_metres", 0.0),
+                ("clearance_metres", 0.1),
+            ]),
+        )
+    };
+    let below = judge((0.099_999, 0.099_999_5));
+    let [finding] = below.findings() else {
+        panic!("one clearance clash expected");
+    };
+    assert!(
+        finding.message.starts_with("clearance clash"),
+        "{}",
+        finding.message
+    );
+    assert!(finding.message.contains("certified"), "{}", finding.message);
+
+    let above = judge((0.100_001, 0.100_002));
+    assert!(above.findings().is_empty());
+    assert!(above.not_evaluated_outcomes().is_empty());
+
+    let straddling = judge((0.099_999, 0.100_001));
+    assert!(straddling.findings().is_empty());
+    let [open] = straddling.not_evaluated_outcomes() else {
+        panic!("one open pair expected");
+    };
+    assert_eq!(open.reason(), &NotEvaluatedReason::IncompleteEvidence);
+}
+
 /// An open surface has no inside. Meeting surfaces could be touching or
 /// crossing, so the pair is reported unevaluated -- never passed.
 #[test]
@@ -373,6 +438,7 @@ fn meeting_surfaces_without_a_penetration_measurement_are_not_evaluated() {
                 hausdorff: Some((0.5, 0.5)),
                 extents: None,
                 volume: None,
+                certified: None,
             },
         );
     let outcome = run(
@@ -881,6 +947,7 @@ fn containment_has_its_own_switch() {
         hausdorff: Some((0.2, 1.0)),
         extents: None,
         volume: None,
+        certified: None,
     };
     let outcome = run(
         &Clash,

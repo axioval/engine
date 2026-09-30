@@ -67,6 +67,20 @@
 //!   ([`axioval_engine::VerticalDirection`]), compared end by end.
 //! - **Plan overlap** is the footprint overlay of plan overlap measurement.
 //!
+//! **Certified separation.** When both bodies of a tessellated pair have an
+//! exact boundary registered ([`AxiolidGeometry::with_exact_boundary`]), the
+//! distance in space is also bounded by `axiolid-measure`'s certified
+//! `boundary_distance` (branch and bound over the exact faces and edges), to
+//! [`CERTIFIED_ACCURACY_METRES`] and widened by a bound on the rounding of
+//! its witness points. Both intervals hold the true separation, so the
+//! evidence carries their intersection; an empty one refuses, since boundary
+//! and mesh then describe different bodies. A boundary the kernel cannot
+//! bound leaves the chord-widened interval, never a guess. Like the mesh
+//! separation it is the distance between the surfaces, so a body inside
+//! another is apart from it; containment stays the winding test's.
+//! Footprints in plan (`Horizontal`, `PlanOverlap`, the relation of
+//! `Vertical`) are not narrowed: the published distance is in space only.
+//!
 //! A tessellation widens every distance by the combined chord deviation. Its
 //! footprint may differ from the mesh footprint by up to the deviation, so
 //! overlap is only asserted from a witness point lying deeper than the
@@ -78,7 +92,8 @@
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
-    WindingMesh, closest_point_on_triangle, closest_points_on_segments, closest_points_on_triangles,
+    WindingMesh, boundary_distance, closest_point_on_triangle, closest_points_on_segments,
+    closest_points_on_triangles,
 };
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
@@ -114,6 +129,12 @@ const INSIDE_WINDING: f64 = 0.5;
 
 /// How often a triangle is split in four to tighten its Hausdorff bound.
 const HAUSDORFF_REFINEMENT: u32 = 2;
+
+/// Width the certified boundary distance is refined to: a micrometre, far
+/// below any clearance a rule states and above the rounding of building
+/// coordinates. Refinement stops earlier only when its step budget runs
+/// out, and the interval is sound either way.
+pub const CERTIFIED_ACCURACY_METRES: f64 = 1e-6;
 
 /// Measures pairwise proximity between registered meshes using Axiolid.
 #[derive(Debug)]
@@ -152,6 +173,61 @@ impl AxiolidProximityService {
         })
     }
 
+    /// The certified interval on the distance between the two objects'
+    /// exact boundaries, when the pair is tessellated and both have one.
+    ///
+    /// `None` leaves the chord-widened mesh interval: an exact pair needs no
+    /// certificate, and a boundary the kernel refuses to bound is no
+    /// evidence either way.
+    fn certified_separation(
+        &self,
+        subject: &ObjectId,
+        counterpart: &ObjectId,
+        fidelity: GeometryFidelity,
+    ) -> Option<(f64, f64)> {
+        if fidelity.is_exact() {
+            return None;
+        }
+        let first = self.geometry.exact_boundary(subject)?;
+        let second = self.geometry.exact_boundary(counterpart)?;
+        let bounds =
+            boundary_distance(first, second, CERTIFIED_ACCURACY_METRES, Tolerance::METRE).ok()?;
+        if !bounds.lower.is_finite() || !bounds.upper.is_finite() || bounds.lower > bounds.upper {
+            return None;
+        }
+        // The upper bound is a floating-point distance between two evaluated
+        // boundary points; widen both ends by a bound on that rounding.
+        let magnitude = [bounds.point_a, bounds.point_b]
+            .iter()
+            .flat_map(Point3::to_array)
+            .fold(bounds.upper, |largest, value| largest.max(value.abs()));
+        let margin = 16.0 * f64::EPSILON * magnitude;
+        Some(((bounds.lower - margin).max(0.0), bounds.upper + margin))
+    }
+
+    /// The separation interval in space: the mesh separation widened by the
+    /// combined deviation, narrowed by the certified boundary distance
+    /// where there is one. Refused when the two miss each other.
+    fn separation_interval(
+        &self,
+        request: &ProximityRequest,
+        separation: f64,
+        fidelity: GeometryFidelity,
+    ) -> Result<(f64, f64), ProximityError> {
+        let deviation = fidelity.deviation_metres();
+        let (lower, upper) = ((separation - deviation).max(0.0), separation + deviation);
+        let Some((certified_lower, certified_upper)) =
+            self.certified_separation(request.subject(), request.counterpart(), fidelity)
+        else {
+            return Ok((lower, upper));
+        };
+        let (lower, upper) = (lower.max(certified_lower), upper.min(certified_upper));
+        if lower > upper {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok((lower, upper))
+    }
+
     /// Measures the pair in the request's projection.
     fn projected_interval(
         &self,
@@ -166,7 +242,11 @@ impl AxiolidProximityService {
             .deviation_metres();
         let widen = |distance: f64| ((distance - deviation).max(0.0), distance + deviation);
         Ok(match request.projection() {
-            ProximityProjection::Minimum3d => widen(separation(&subject.soup, &counterpart.soup)?),
+            ProximityProjection::Minimum3d => self.separation_interval(
+                request,
+                separation(&subject.soup, &counterpart.soup)?,
+                subject_fidelity.combined(counterpart_fidelity),
+            )?,
             ProximityProjection::Horizontal => widen(plan_separation(subject, counterpart)?),
             ProximityProjection::PlanOverlap => {
                 match relation(
@@ -1342,8 +1422,16 @@ impl ProximityService for AxiolidProximityService {
                 ),
                 exact: fidelity.is_exact(),
             },
-        )?
-        .with_hausdorff(hausdorff)?;
+        )?;
+        let measured =
+            match self.certified_separation(request.subject(), request.counterpart(), fidelity) {
+                Some((lower, upper)) => measured.with_certified_separation(
+                    LengthInterval::try_new(lower, upper)
+                        .map_err(|_| ProximityError::InvalidMeasurement)?,
+                )?,
+                None => measured,
+            };
+        let measured = measured.with_hausdorff(hausdorff)?;
         let measured = match extents {
             Some(extents) => measured.with_overlap_extents(extents)?,
             None => measured,

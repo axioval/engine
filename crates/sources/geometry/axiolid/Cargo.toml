@@ -12,10 +12,11 @@ repository.workspace = true
 [dependencies]
 axioval-engine.workspace = true
 axioval-ir.workspace = true
+axiolid-brep.workspace = true
 axiolid-core.workspace = true
 axiolid-inspect.workspace = true
 axiolid-mesh.workspace = true
-axiolid-measure.workspace = true
+axiolid-measure = { workspace = true, features = ["exact"] }
 axiolid-overlay.workspace = true
 axiolid-ray-mesh.workspace = true
 axiolid-route.workspace = true
@@ -23,6 +24,7 @@ axiolid-spatial.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+axiolid-construct.workspace = true
 axiolid-core.workspace = true
 axiolid-mesh.workspace = true
 

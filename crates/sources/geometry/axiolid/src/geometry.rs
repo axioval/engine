@@ -4,7 +4,9 @@
 //! object to its mesh and knows nothing about what will be measured from it.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
+use axiolid_brep::ExactBRep;
 use axiolid_core::Point3;
 use axiolid_mesh::{TriMesh, TriangleMeshView};
 use axioval_engine::{GeometryFidelity, ProximityError};
@@ -30,6 +32,7 @@ pub struct AxiolidGeometry {
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
     groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
+    boundaries: BTreeMap<ObjectId, Arc<ExactBRep>>,
 }
 
 impl AxiolidGeometry {
@@ -146,6 +149,27 @@ impl AxiolidGeometry {
             .insert(object.clone(), chord_deviation_metres);
         self.meshes.insert(object, mesh);
         self
+    }
+
+    /// Registers the exact boundary of an object whose mesh is registered
+    /// too, typically a tessellated one.
+    ///
+    /// The mesh stays the basis of every measurement. The boundary only
+    /// narrows the distance in space between two objects that both have one
+    /// ([`crate::AxiolidProximityService`]): the kernel's certified
+    /// `boundary_distance` bounds it where the chord deviation would leave it
+    /// wide. The host asserts that boundary and mesh describe one body; a
+    /// pair whose certified interval misses the mesh's widened one refuses.
+    #[must_use]
+    pub fn with_exact_boundary(mut self, object: ObjectId, boundary: ExactBRep) -> Self {
+        self.boundaries.insert(object, Arc::new(boundary));
+        self
+    }
+
+    /// The exact boundary registered for an object.
+    #[must_use]
+    pub fn exact_boundary(&self, object: &ObjectId) -> Option<&ExactBRep> {
+        self.boundaries.get(object).map(Arc::as_ref)
     }
 
     /// How faithfully an object's mesh represents it.

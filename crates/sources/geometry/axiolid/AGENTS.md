@@ -290,6 +290,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`. A
   host-declared bodiless object is refused with `ProximityError::NoBody`,
   never `Unavailable`, so a comparison can tell "no body" from "unmeasured".
+  A tessellated pair whose objects both have an exact boundary
+  (`AxiolidGeometry::with_exact_boundary`) also gets the kernel's certified
+  `boundary_distance` (axiolid-measure 0.3.2, `exact` feature) to
+  `CERTIFIED_ACCURACY_METRES`, widened by a rounding bound on its witness
+  points, and reports the intersection with the chord-widened interval
+  (`with_certified_separation` in `measure_proximity`, the interval itself
+  for `Minimum3d` in `measure_distance`); an empty intersection refuses
+  (boundary and mesh disagree), a kernel refusal keeps the chord interval.
+  Never report the certified interval alone, never certify an exact pair
+  (its evidence is a point) and never use it for a plan projection: it is
+  the distance in space between boundaries, not between footprints.
   `measure_region_distance` folds the same 2D closest points between a
   stated region's fan triangles and the counterpart's footprint, widened by
   the counterpart's chord deviation.
@@ -368,21 +379,23 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-overlay` 0.3.3 (`minimum_area_rectangle`, the
+0.3.0, except `axiolid-measure` 0.3.2 with the `exact` feature (certified
+`boundary_distance`, with `axiolid-brep` 0.3.1 for the `ExactBRep` hosts
+register; tests build exact solids with `axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.3 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output), `axiolid-route`
 0.3.5 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
 maps and corridor ends, with `axiolid-triangulate` 0.3.1) and
-`axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). `mesh_distance` is published there, but certified exact-B-rep distance
-(`boundary_distance` / `boundary_clearance`) exists only on the kernel's main
-branch. Check the registry source, not the kernel checkout, before relying on
-an API.
+`axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). Check the
+registry source, not the kernel checkout, before relying on an API.
 
 ## Waiting on upstream
 
 - axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
   plan areas here are off by ~1.5e-8 of the extent while reported exact.
-- axiolid/kernel#174: publish certified `boundary_distance`/`boundary_clearance`,
-  so curved parts can get exact clearances instead of tessellated estimates.
+- A certified distance between plan footprints of exact bodies: the
+  published `boundary_distance` is in space, so horizontal distance, plan
+  overlap and the footprint relation of vertical distance stay chord-widened
+  and open within the deviation for curved footprints.
 - One-sided disc morphology (`Region::erode_inner` and friends, #163) is
   published in axiolid-overlay 0.3.2. Walkability splits surfaces touching
   nothing into possible pieces with it; surfaces touching others stay

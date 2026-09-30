@@ -780,7 +780,7 @@ tessellated target in range or tessellated blocker that may matter refuses,
 since its mesh is not its shape; an unmeasured blocker refuses; a bodiless
 blocker is skipped and a bodiless target refused.
 
-`AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate. See [Clash, interference and distance](./clash.md).
+`AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate; with `with_exact_boundary` beside the mesh, the distance in space between two such objects is also certified on their exact boundaries. See [Clash, interference and distance](./clash.md).
 
 ## ICDD
 

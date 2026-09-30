@@ -36,6 +36,10 @@ ifc-geometry = { workspace = true, features = ["compile-reference-backend"] }
 ifc-model.workspace = true
 ifc-spatial.workspace = true
 ifc-step.workspace = true
+# `check --ids` and `ids translate`: IDS documents read and translated
+# into rule packages in memory.
+axioval-ids.workspace = true
+openbim-ids.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

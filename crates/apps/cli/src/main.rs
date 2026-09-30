@@ -24,6 +24,7 @@ use std::{
 mod compare;
 mod digest;
 mod geometry;
+mod ids;
 
 use axioval::{
     bcf,
@@ -77,6 +78,11 @@ enum Command {
     /// Without filters, prints the same bounded summary as `check --summary`.
     /// With any filter, lists the matching entries, paged.
     Report(ReportArgs),
+    /// Work with buildingSMART IDS documents.
+    Ids {
+        #[command(subcommand)]
+        command: ids::IdsCommand,
+    },
     /// Record a reviewer's decision about findings of a saved result.
     ///
     /// Accepts, rejects or reopens each `--finding` (its `id` in the
@@ -107,14 +113,21 @@ struct CheckArgs {
     /// discipline came from.
     #[arg(long = "discipline-map", value_name = "FIELD:PATTERN=DISCIPLINE", value_parser = discipline_rule)]
     discipline_map: Vec<DisciplineRule>,
-    #[arg(long, required = true)]
+    #[arg(long, required_unless_present = "ids")]
     definitions: Vec<PathBuf>,
     /// A ruleset to check. Repeat for several: each is compiled against
     /// its own definition packages and its rule ids are qualified by its
     /// package id (`package-id/rule-id`), so two rulesets may both define
     /// a rule `r1`. With one ruleset the ids stay as written.
-    #[arg(long = "ruleset", required = true)]
+    #[arg(long = "ruleset", required_unless_present = "ids")]
     rulesets: Vec<PathBuf>,
+    /// Check against a buildingSMART IDS 1.0 document instead of packages:
+    /// it is translated in memory, as `axioval ids translate` writes it. A
+    /// specification that cannot be translated exactly runs none of its
+    /// rules and is listed with its gaps on stderr and in the result's
+    /// `ids` field; the check then never exits 0.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["definitions", "rulesets"])]
+    ids: Option<PathBuf>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -514,6 +527,13 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
         }
         Command::Check(args) => check(args),
         Command::Compare(args) => compare::compare(args),
+        Command::Ids {
+            command: ids::IdsCommand::Translate(args),
+        } => Ok(if ids::translate_command(&args)? {
+            Outcome::Passed
+        } else {
+            Outcome::Incomplete
+        }),
         Command::Report(args) => {
             report(args)?;
             Ok(Outcome::Passed)
@@ -565,7 +585,14 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
 }
 
 fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
-    let (definitions, rulesets) = packages(&args.definitions, &args.rulesets)?;
+    let translated = args.ids.as_deref().map(ids::load).transpose()?;
+    let (definitions, rulesets) = match &translated {
+        Some(translated) => (
+            vec![translated.definitions.clone()],
+            vec![translated.ruleset.clone()],
+        ),
+        None => packages(&args.definitions, &args.rulesets)?,
+    };
     let registry = axioval::default_registry()?;
     let plan = compile_rulesets(&registry, &definitions, &rulesets)?;
     if args.locate == Locate::Geometry && !args.geometry {
@@ -614,13 +641,21 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .map(|(object, reason)| digest::Unmeasured { object, reason })
             .collect(),
     });
-    let output = CheckOutput::new(result, integrity, geometry, session.project())
+    let mut output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session));
+    let complete = translated.as_ref().is_none_or(ids::Translated::is_complete);
+    if let Some(translated) = translated {
+        output = output.with_ids(translated.record);
+    }
     let bounds = args
         .geometry
         .then(|| geometry::bounds(&[&session], &output.report));
     emit(&output, session.project(), bounds, labels, args.output)?;
-    Ok(Outcome::of(&output.report))
+    Ok(match Outcome::of(&output.report) {
+        // A specification that did not run was not checked: never a pass.
+        Outcome::Passed if !complete => Outcome::Incomplete,
+        outcome => outcome,
+    })
 }
 
 /// The BCF labels of every rule: folder path and tags, keyed by rule id as
@@ -996,7 +1031,7 @@ pub(crate) fn integrity(session: &EvidenceSession) -> Result<Vec<IntegrityRecord
     Ok(records)
 }
 
-fn write(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+pub(crate) fn write(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     Ok(fs::write(path, bytes).map_err(|error| format!("{}: {error}", path.display()))?)
 }
 

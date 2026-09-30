@@ -19,7 +19,7 @@ without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
 ```bash
 axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] ...] \
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
-  --definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
+  (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] | --ids rules.ids) \
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
@@ -39,6 +39,30 @@ from that name the result is the plain file's. An archive with no model, with
 several (an `.ifcXML` member counts), with only an IFC-XML model, or with a
 member path that is absolute, climbs out with `..` or is a symbolic link is
 refused with status 1 and nothing is written.
+
+### IDS documents
+
+`--ids rules.ids` checks against a buildingSMART IDS 1.0 document instead of
+packages. It is translated in memory by [`axioval-ids`](./ids.md), exactly as
+`axioval ids translate` writes it, and run as one ruleset whose rule ids are
+the translator's (`spec2.facet1`). It excludes `--definitions` and
+`--ruleset`.
+
+Only complete specifications run. A specification with any translation gap
+runs none of its rules, since part of it would report as met what was never
+wholly checked, and is listed on stderr with every gap, as the conformance
+corpus lists them:
+
+```text
+ids: rules.ids: specification 1 "Mixed case" is not checked:
+ids:   applicability facet 1: entity name "IfcWall" is not upper case, which IDS never matches
+ids: rules.ids: 1 of 2 specification(s) not checked
+```
+
+The other specifications run as usual. The result's additive `ids` field
+names the document and lists every specification in order with its number,
+name, the rules it ran as, and its gaps. A check with a specification that did
+not run never exits 0: with no finding it exits 4.
 
 ### Several rulesets
 
@@ -248,13 +272,33 @@ partial report or archive behind.
 |---|---|
 | 0 | Every rule was evaluated and nothing was found |
 | 3 | At least one finding |
-| 4 | No finding, but part of the check was not evaluated: the model has **not** passed |
+| 4 | No finding, but part of the check was not evaluated, or an IDS specification did not run: the model has **not** passed |
 | 1 | The check could not run: unreadable input, a package that does not compile, a model that does not import, or output the BCF writer refuses |
 | 2 | Invalid command-line usage |
 
 A finding takes precedence over incompleteness: status 3 can still come with
 not-evaluated outcomes in the report. Automation that only needs pass or fail
 treats any non-zero status as a failure.
+
+## `axioval ids translate`
+
+```bash
+axioval ids translate rules.ids --definitions definitions.json --ruleset ruleset.json
+```
+
+Writes the definition package and the ruleset `check --ids` would run, for
+inspection or to check with `--definitions` and `--ruleset`, which then gives
+the same report. The ruleset's package id is `ids:` and the file stem in lower
+case (`ids:rules`); the definitions' is that and `.definitions`. A
+specification with a gap is left out and listed on stderr, as for `check
+--ids`. Both files are written, or neither.
+
+| Status | Meaning |
+|---|---|
+| 0 | Every specification translated |
+| 4 | Written, without the specifications listed on stderr |
+| 1 | Nothing written: an unreadable document or an unwritable file |
+| 2 | Invalid command-line usage |
 
 ## `axioval decide`
 

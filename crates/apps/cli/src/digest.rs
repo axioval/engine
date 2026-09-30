@@ -53,6 +53,35 @@ pub struct CheckOutput {
     /// Absent from a `compare` result and from results saved before it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<SourceInfo>,
+    /// What became of each specification of the IDS document `check --ids`
+    /// ran. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ids: Option<IdsRecord>,
+}
+
+/// The IDS document `check --ids` translated and ran.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IdsRecord {
+    /// The document's file name.
+    pub document: String,
+    /// Every specification, in document order.
+    pub specifications: Vec<IdsSpecification>,
+}
+
+/// One specification of an IDS document: the rules it ran as, or why it
+/// ran none.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IdsSpecification {
+    /// Position in the document, from 1.
+    pub number: usize,
+    /// `@name`.
+    pub name: String,
+    /// Ids of the rules it ran as; none when it has gaps.
+    pub rules: Vec<String>,
+    /// What could not be translated exactly, each as `part: reason`. A
+    /// specification with any gap runs none of its rules.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gaps: Vec<String>,
 }
 
 /// One checked source: its discipline, declared or assigned by
@@ -279,7 +308,15 @@ impl CheckOutput {
             geometry,
             comparison: None,
             sources: Vec::new(),
+            ids: None,
         }
+    }
+
+    /// The same result recording the IDS document it ran.
+    #[must_use]
+    pub fn with_ids(mut self, ids: IdsRecord) -> Self {
+        self.ids = Some(ids);
+        self
     }
 
     /// The same result listing its sources.

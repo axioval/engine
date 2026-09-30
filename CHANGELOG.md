@@ -71,6 +71,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   accept archives; a zipped model gives the plain file's report apart from
   the source name. `zip` 8 becomes a normal dependency of the adapter
   (`deflate` only).
+- **IDS on the command line.** (Closes #166) `axioval check --ids
+  rules.ids` translates an IDS document in memory and runs it, and `axioval
+  ids translate` writes its definition package and ruleset. Only complete
+  specifications run: one with a gap runs none of its rules and is listed
+  with its gaps on stderr and in the result's additive `ids` field, and the
+  check then never exits 0. The CLI depends on `axioval-ids`.
 
 ### Changed
 

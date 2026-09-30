@@ -34,6 +34,15 @@ A property value is judged as IDS judges list, bounded, table and enumerated val
 
 Values keep IDS casting where a capability casts: `property-value` casts literals to the resolved value's kind, including `totalDigits` and `fractionDigits`, which is why a property facet in the applicability is decided by an auxiliary `property-value` rule rather than a selector, which compares one declared type. An attribute value in a selector is translated only when every applicable class declares the attribute as text, an enumeration, a boolean or an integer; XML Schema patterns go through `axioval_rules::translate_xsd_pattern`, which refuses what it cannot map exactly.
 
+## Command line
+
+`axioval check --ids rules.ids --model model.ifc` translates a document in
+memory and runs it; `axioval ids translate rules.ids --definitions d.json
+--ruleset r.json` writes the packages (see [Command line](./cli.md#ids-documents)).
+Both run only complete specifications: a specification with any gap runs
+none of its rules and is listed with its gaps, and a check with one never
+exits 0.
+
 ## Gaps
 
 These parts stay explicit gaps:

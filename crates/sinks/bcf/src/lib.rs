@@ -114,8 +114,8 @@ use uuid::Uuid;
 
 mod import;
 pub use import::{
-    ACCEPTED_STATUSES, IMPORT_LIMITS, Import, ImportError, MAX_ATTRIBUTES_PER_TAG,
-    REJECTED_STATUSES, Unmatched, UnmatchedTopic, import, import_topics,
+    ACCEPTED_STATUSES, IMPORT_LIMITS, Import, ImportError, REJECTED_STATUSES, Unmatched,
+    UnmatchedTopic, import, import_topics,
 };
 use import::{ThreadGuids, decision_comment_guid};
 
@@ -620,6 +620,7 @@ impl Entry {
                     exceptions: self.selection.clone(),
                 }),
                 clipping_planes,
+                ..Viewpoint::default()
             };
             match self.frame(options.bounds.as_ref()) {
                 Ok(frame) => {
@@ -686,6 +687,7 @@ impl Entry {
             creation_author: options.author.clone(),
             comments,
             viewpoints,
+            ..Topic::default()
         };
         (topic, uncamered)
     }

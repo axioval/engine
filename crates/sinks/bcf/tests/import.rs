@@ -2,11 +2,9 @@
 #![allow(missing_docs, clippy::doc_markdown)]
 
 use std::collections::BTreeMap;
-use std::io::{Cursor, Write};
 
 use axioval_bcf::{
-    IFC_GLOBAL_ID_SCHEME, ImportError, MAX_ATTRIBUTES_PER_TAG, Options, Unmatched, export, import,
-    import_topics,
+    IFC_GLOBAL_ID_SCHEME, ImportError, Options, Unmatched, export, import, import_topics,
 };
 use axioval_ir::{
     Decision, DecisionStatus, Decisions, Evidence, ExternalId, Finding, NotEvaluated,
@@ -270,31 +268,9 @@ fn two_topics_about_one_finding_are_refused() {
 }
 
 #[test]
-fn a_tag_with_too_many_attributes_is_refused_before_parsing() {
-    let mut attributes = String::new();
-    for n in 0..=MAX_ATTRIBUTES_PER_TAG {
-        std::fmt::Write::write_fmt(&mut attributes, format_args!(" a{n}=\"{n}\"")).unwrap();
-    }
-    let mut bytes = Cursor::new(Vec::new());
-    let mut zip = zip::ZipWriter::new(&mut bytes);
-    zip.start_file(
-        "3f2504e0-4f89-41d3-9a0c-0305e82c3301/markup.bcf",
-        zip::write::SimpleFileOptions::default(),
-    )
-    .unwrap();
-    write!(zip, "<Markup{attributes}/>").unwrap();
-    zip.finish().unwrap();
-    let result = import(bytes.get_ref(), &report(), &model(), &BTreeMap::new());
-    assert!(
-        matches!(result, Err(ImportError::TooManyAttributes { .. })),
-        "{result:?}"
-    );
-}
-
-#[test]
 fn bytes_that_are_no_archive_are_refused() {
     let result = import(b"not a zip", &report(), &model(), &BTreeMap::new());
-    assert!(matches!(result, Err(ImportError::Archive(_))), "{result:?}");
+    assert!(matches!(result, Err(ImportError::Read(_))), "{result:?}");
 }
 
 /// Assignee, due date, priority and labels of a review.

@@ -166,11 +166,10 @@ topic), `NotEvaluated` (a not-evaluated outcome's topic, never decided),
 or whose comment has no author). Two topics with one finding's GUID refuse
 the import.
 
-**Untrusted input.** An archive is read within `IMPORT_LIMITS` (32 MiB per
-entry, 256 MiB in all), and every entry but an image is scanned before the
-XML reader parses it: a tag with more than `MAX_ATTRIBUTES_PER_TAG` (64)
-attributes refuses the archive, because the reader's duplicate-attribute
-check is quadratic in their number (RUSTSEC-2026-0194).
+**Untrusted input.** An archive comes from other parties, so it is read
+within `IMPORT_LIMITS` (32 MiB per entry, 256 MiB in all, 100 000
+entries), tighter than the reader's defaults; an archive beyond them is
+refused (`ImportError::Read`).
 
 ## BCF API servers
 

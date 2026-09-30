@@ -18,12 +18,10 @@ axioval-ir.workspace = true
 openbim-bcf.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-# Importing scans every entry before the XML reader sees it; see
-# `import::MAX_ATTRIBUTES_PER_TAG`.
-zip = { workspace = true, features = ["deflate"] }
 
 [dev-dependencies]
 serde_json.workspace = true
+zip = { workspace = true, features = ["deflate"] }
 
 [lints]
 workspace = true

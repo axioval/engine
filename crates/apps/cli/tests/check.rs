@@ -12094,8 +12094,7 @@ fn reviewed_topics(path: &Path) -> Vec<openbim_bcf::write::Topic> {
                 labels: topic.labels.clone(),
                 creation_date: topic.creation_date.clone().unwrap(),
                 creation_author: topic.creation_author.clone().unwrap(),
-                comments: Vec::new(),
-                viewpoints: Vec::new(),
+                ..openbim_bcf::write::Topic::default()
             }
         })
         .collect()

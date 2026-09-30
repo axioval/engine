@@ -120,10 +120,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   --decisions-from ARCHIVE` applies them and lists the unmatched ones in
   the result's additive `unmatched_topics` field and the
   `unmatched-topics` report section. An imported archive is read within
-  `IMPORT_LIMITS`, and refused before parsing when a tag has more than
-  `MAX_ATTRIBUTES_PER_TAG` attributes, which bounds the XML reader's
-  quadratic duplicate-attribute check (RUSTSEC-2026-0194). `zip` 8 becomes
-  a normal dependency of the sink (`deflate` only).
+  `IMPORT_LIMITS`.
 - **Review metadata.** (Refs #170) A decision records an optional
   assignee, due date, priority and labels (`Decision::assigned_to`,
   `due_date`, `priority`, `labels`, with `with_assignee`, `with_due_date`,
@@ -175,6 +172,10 @@ All notable changes are documented here. This project follows Semantic Versionin
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
   through zip 8, so the workspace carries a single zip version. Archives are
   byte-identical to those written with 0.4.
+- The BCF crates move to `openbim-bcf` 0.6, whose reader parses with
+  quick-xml 0.42 (RUSTSEC-2026-0194 and RUSTSEC-2026-0195 fixed), so
+  `deny.toml` no longer ignores either advisory. Archives written without
+  the new writer fields are byte-identical.
 
 ## [0.3.0] - 2026-09-28
 

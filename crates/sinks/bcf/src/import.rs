@@ -6,7 +6,6 @@
 //! [`import`] for the mapping.
 
 use std::collections::BTreeMap;
-use std::io::{Cursor, Read};
 
 use axioval_ir::{
     DateTime, Decision, DecisionComment, DecisionError, DecisionStatus, Decisions, Finding,
@@ -31,16 +30,9 @@ pub const ACCEPTED_STATUSES: [&str; 4] = ["Accepted", "Closed", "Resolved", "Don
 /// Topic statuses read as a rejected finding, compared ignoring ASCII case.
 pub const REJECTED_STATUSES: [&str; 1] = ["Rejected"];
 
-/// Most attributes one XML start tag of an imported archive may have.
-///
-/// The XML reader checks a tag's attributes for duplicates in time
-/// quadratic in their number (RUSTSEC-2026-0194), so an archive from an
-/// untrusted party could stall it with one huge tag. No BCF element has more
-/// than a handful; an archive exceeding this is refused before it is parsed.
-pub const MAX_ATTRIBUTES_PER_TAG: usize = 64;
-
 /// How much an imported archive may decompress to: 32 MiB per entry, 256 MiB
-/// in all, 100 000 entries.
+/// in all, 100 000 entries. Tighter than the reader's defaults: an archive
+/// of review topics is small, and it comes from other parties.
 pub const IMPORT_LIMITS: Limits = Limits {
     max_total_uncompressed: 256 * 1024 * 1024,
     max_entry_uncompressed: 32 * 1024 * 1024,
@@ -50,21 +42,10 @@ pub const IMPORT_LIMITS: Limits = Limits {
 /// Why an archive could not be imported. Nothing was imported then.
 #[derive(Debug, Error)]
 pub enum ImportError {
-    /// The bytes are not a BCF archive the reader can read.
+    /// The bytes are not a BCF archive the reader can read, or exceed
+    /// [`IMPORT_LIMITS`].
     #[error("cannot read the BCF archive: {0}")]
     Read(#[from] BcfError),
-    /// The archive could not be opened or scanned before parsing.
-    #[error("cannot read the BCF archive: {0}")]
-    Archive(String),
-    /// An entry has a start tag with more than [`MAX_ATTRIBUTES_PER_TAG`]
-    /// attributes; no BCF document has one.
-    #[error(
-        "BCF archive entry {entry} has a tag with more than {MAX_ATTRIBUTES_PER_TAG} attributes"
-    )]
-    TooManyAttributes {
-        /// The entry's name.
-        entry: String,
-    },
     /// The report names an object the project does not contain, so the
     /// report was not computed over this project.
     #[error("report names {0}, which is not in the project")]
@@ -132,21 +113,18 @@ impl Unmatched {
 /// Reads the BCF 2.1 or 3.0 archive `bytes` and maps its topics onto
 /// decisions about `report`'s findings, as [`import_topics`] does.
 ///
-/// The archive is read within [`IMPORT_LIMITS`], and refused before it is
-/// parsed when a tag has more than [`MAX_ATTRIBUTES_PER_TAG`] attributes.
+/// The archive is read within [`IMPORT_LIMITS`].
 ///
 /// # Errors
 ///
-/// [`ImportError::Read`] or [`ImportError::Archive`] when it is not a
-/// readable BCF archive, [`ImportError::TooManyAttributes`] as above, and as
-/// [`import_topics`].
+/// [`ImportError::Read`] when it is not a readable BCF archive or exceeds
+/// the limits, and as [`import_topics`].
 pub fn import(
     bytes: &[u8],
     report: &Report,
     project: &Project,
     rule_labels: &BTreeMap<String, Vec<String>>,
 ) -> Result<Import, ImportError> {
-    scan(bytes)?;
     let archive = openbim_bcf::read_slice_with(bytes, IMPORT_LIMITS)?;
     import_topics(archive.topics(), report, project, rule_labels)
 }
@@ -508,105 +486,9 @@ fn decision(
     Ok(Some(decision))
 }
 
-/// Refuses an archive with an entry whose tags carry more attributes than
-/// [`MAX_ATTRIBUTES_PER_TAG`], before the XML reader sees it.
-///
-/// Every entry but an image is scanned, within [`IMPORT_LIMITS`]. An `=`
-/// outside quotes inside `<…>` counts as one attribute; comments and
-/// processing instructions are counted alike, which can only refuse more,
-/// never less.
-fn scan(bytes: &[u8]) -> Result<(), ImportError> {
-    let archive_error = |error: zip::result::ZipError| ImportError::Archive(error.to_string());
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(archive_error)?;
-    if archive.len() as u64 > IMPORT_LIMITS.max_entries {
-        return Err(ImportError::Read(BcfError::LimitExceeded {
-            limit: "max_entries",
-            allowed: IMPORT_LIMITS.max_entries,
-            requested: archive.len() as u64,
-        }));
-    }
-    let mut total = 0_u64;
-    let mut text = Vec::new();
-    for index in 0..archive.len() {
-        let entry = archive.by_index(index).map_err(archive_error)?;
-        let name = entry.name().to_owned();
-        let lower = name.to_ascii_lowercase();
-        if [".png", ".jpg", ".jpeg", ".bmp"]
-            .iter()
-            .any(|image| lower.ends_with(image))
-        {
-            continue;
-        }
-        text.clear();
-        entry
-            .take(IMPORT_LIMITS.max_entry_uncompressed + 1)
-            .read_to_end(&mut text)
-            .map_err(|error| ImportError::Archive(format!("{name}: {error}")))?;
-        let size = text.len() as u64;
-        total += size;
-        if size > IMPORT_LIMITS.max_entry_uncompressed {
-            return Err(ImportError::Read(BcfError::LimitExceeded {
-                limit: "max_entry_uncompressed",
-                allowed: IMPORT_LIMITS.max_entry_uncompressed,
-                requested: size,
-            }));
-        }
-        if total > IMPORT_LIMITS.max_total_uncompressed {
-            return Err(ImportError::Read(BcfError::LimitExceeded {
-                limit: "max_total_uncompressed",
-                allowed: IMPORT_LIMITS.max_total_uncompressed,
-                requested: total,
-            }));
-        }
-        if most_attributes(&text) > MAX_ATTRIBUTES_PER_TAG {
-            return Err(ImportError::TooManyAttributes { entry: name });
-        }
-    }
-    Ok(())
-}
-
-/// The most `=` outside quotes within one `<…>` of `text`.
-fn most_attributes(text: &[u8]) -> usize {
-    let mut most = 0;
-    let mut in_tag = false;
-    let mut quote = None;
-    let mut count = 0;
-    for &byte in text {
-        match (in_tag, quote) {
-            (false, _) => {
-                if byte == b'<' {
-                    in_tag = true;
-                    count = 0;
-                }
-            }
-            (true, Some(open)) => {
-                if byte == open {
-                    quote = None;
-                }
-            }
-            (true, None) => match byte {
-                b'"' | b'\'' => quote = Some(byte),
-                b'=' => {
-                    count += 1;
-                    most = most.max(count);
-                }
-                b'>' => in_tag = false,
-                _ => {}
-            },
-        }
-    }
-    most
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{decision_text, most_attributes};
-
-    #[test]
-    fn attributes_are_counted_per_tag_outside_quotes() {
-        assert_eq!(most_attributes(b"<a b=\"=\" c='=='>x=y</a><d e=\"1\"/>"), 2);
-        assert_eq!(most_attributes(b"no tags = here"), 0);
-    }
+    use super::decision_text;
 
     #[test]
     fn the_decision_comment_text_loses_its_status_and_change_note() {

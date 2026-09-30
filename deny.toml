@@ -8,22 +8,7 @@ all-features = true
 # ifc-schema@0.1.0 uses bincode 2.0.1 solely to decode bundled, build-produced
 # schema artifacts. RUSTSEC-2025-0141 reports project discontinuation, not a
 # vulnerability, and states that no safe upgrade exists.
-#
-# quick-xml@0.37.5 is reached only through openbim-bcf 0.5's BCF *reader*,
-# which `axioval_bcf::import` calls. RUSTSEC-2026-0194 (quadratic
-# duplicate-attribute check) and RUSTSEC-2026-0195 (unbounded NsReader
-# namespace allocation) are denial of service on untrusted XML input.
-# - 0195 is unreachable: the reader parses with `quick_xml::Reader`, never
-#   `NsReader` (openbim-bcf 0.5.0, src/xml.rs).
-# - 0194 is quadratic in the attributes of one tag. `import` bounds every
-#   entry by `IMPORT_LIMITS` and refuses an archive with a tag of more than
-#   `MAX_ATTRIBUTES_PER_TAG` attributes before the reader sees it
-#   (crates/sinks/bcf/src/import.rs, tested in tests/import.rs), so the check
-#   stays linear in the input.
-# The fix needs quick-xml >= 0.41, which openbim-bcf's `0.37` requirement
-# cannot resolve. Remove both ignores, and the pre-scan, once openbimrs/bcf#3
-# ships. Never read BCF except through `import`.
-ignore = ["RUSTSEC-2025-0141", "RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
+ignore = ["RUSTSEC-2025-0141"]
 
 [licenses]
 allow = [

@@ -79,12 +79,9 @@ review decisions read back from them (`src/import.rs`).
 - A located entry's topic is labelled `Storey: <name>` and `Space: <name>`
   after the rule id (the place's id when unnamed). Labels never enter the
   GUID key: locating a finding must not change its GUID.
-- `import` is the only way BCF is read. It scans every non-image entry
-  (`MAX_ATTRIBUTES_PER_TAG`, `IMPORT_LIMITS`) before `openbim-bcf`'s reader
-  parses it: quick-xml 0.37's duplicate-attribute check is quadratic
-  (RUSTSEC-2026-0194, ignored in `deny.toml` on that ground). Never call
-  `openbim_bcf::read_*` on untrusted bytes elsewhere; drop the scan and the
-  ignores once openbimrs/bcf#3 ships.
+- `import` reads archives within `IMPORT_LIMITS` through `openbim-bcf`'s
+  bounded reader; never read untrusted bytes without limits. Never add an
+  advisory ignore to `deny.toml` for the reader: wait for the upstream fix.
 - Import matches topics by GUID to `finding_ids` over `IFC_GLOBAL_ID_SCHEME`.
   The status comes from `TopicStatus` only (`ACCEPTED_STATUSES`,
   `REJECTED_STATUSES`, anything else open), never from comment text. An

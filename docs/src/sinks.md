@@ -304,6 +304,44 @@ subjects without a GlobalId) need none. A 3.0 archive carries an
 `extensions.xml` listing the types, statuses, priorities and labels its
 topics use, and each camera an aspect ratio of 1.
 
+## Snapshots
+
+A report carries no geometry, and the sink renders nothing. A host with
+meshes passes a `SnapshotRenderer` to `export_with_snapshots`; every
+viewpoint with a camera then asks it for a PNG, given a `SnapshotView`: the
+camera, the subject and related objects, their colours (`Options::colors`,
+or `Colors::default()` when the archive writes no colouring, so the image
+always tells them apart), whether the view is isolated, and its clipping
+planes. A viewpoint the renderer declines keeps no snapshot and its subject
+is listed in `Export::unrendered`; a viewpoint without a camera has nothing
+to render from and gets none. `export` never asks, so an archive without
+snapshots is byte-identical to one written before they existed.
+
+**A snapshot is illustrative, never evidence.** A topic with any snapshot
+ends its description with `SNAPSHOT_NOTE` ("Snapshot: illustrative
+rendering of tessellated bodies, not evidence."). Nothing is measured from
+an image, and no outcome depends on one.
+
+`axioval-bcf-snapshot` is the renderer, in its own optional crate so the
+sink stays small. `Renderer::new` takes each object's triangle `Mesh` in
+model coordinates (metres), and draws in pure Rust: a z-buffered software
+rasteriser with flat shading, the subject and related objects in their
+colours, every other object in `CONTEXT_COLOR` (light grey) unless the view
+is isolated, triangles cut by the clipping planes before projection, and a
+512-pixel-high image whose width follows the camera's aspect ratio
+(`with_height` changes it). It declines when the subject has no mesh or the
+camera is degenerate. It depends on meshes only, never on a source format
+or a geometry kernel, and the same input gives the same bytes for a given
+build.
+
+```rust,ignore
+let renderer = axioval_bcf_snapshot::Renderer::new(meshes); // BTreeMap<ObjectId, Mesh>
+let export = axioval_bcf::export_with_snapshots(&report, project, &options, &renderer)?;
+```
+
+The CLI renders with `--bcf-snapshots` and `--geometry`, from the meshes it
+compiled for the check.
+
 ## Not written
 
-Snapshots are rendering and out of scope.
+Header files, lines, bitmaps and view setup hints.

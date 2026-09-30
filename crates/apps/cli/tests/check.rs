@@ -13001,3 +13001,86 @@ fn findings_are_pushed_to_a_bcf_server_and_its_review_is_pulled_back() {
         stderr(&output)
     );
 }
+
+#[test]
+fn bcf_snapshots_show_a_clash_and_are_marked_illustrative() {
+    let case = Case::new("bcf-snapshots");
+    let with = case.path("with.bcfzip");
+    let output = case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        with.to_str().unwrap(),
+        "--bcf-date",
+        "2026-09-30T10:00:00Z",
+        "--bcf-snapshots",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let archive = openbim_bcf::read_path(&with).unwrap();
+    assert!(
+        archive.diagnostics().is_empty(),
+        "{:?}",
+        archive.diagnostics()
+    );
+    let markup = archive.topics().next().unwrap();
+    assert!(
+        markup
+            .topic
+            .description
+            .as_deref()
+            .unwrap()
+            .ends_with("Snapshot: illustrative rendering of tessellated bodies, not evidence."),
+        "{:?}",
+        markup.topic.description
+    );
+    assert_eq!(markup.viewpoints.len(), 2);
+    for viewpoint in &markup.viewpoints {
+        let name = viewpoint.snapshot.as_deref().unwrap();
+        assert!(
+            archive.entries().iter().any(|entry| entry.ends_with(name)),
+            "{name} in {:?}",
+            archive.entries()
+        );
+    }
+
+    // Without the flag the archive has no snapshot, byte for byte as before.
+    let without = case.path("without.bcfzip");
+    let output = case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        without.to_str().unwrap(),
+        "--bcf-date",
+        "2026-09-30T10:00:00Z",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let plain = openbim_bcf::read_path(&without).unwrap();
+    assert!(
+        plain
+            .topics()
+            .all(|markup| markup.viewpoints.iter().all(|v| v.snapshot.is_none()))
+    );
+    let again = case.path("again.bcfzip");
+    case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        again.to_str().unwrap(),
+        "--bcf-date",
+        "2026-09-30T10:00:00Z",
+    ]);
+    assert_eq!(
+        std::fs::read(&without).unwrap(),
+        std::fs::read(&again).unwrap()
+    );
+
+    // Snapshots need meshes.
+    let output = case.clash_check(&[
+        "--bcf",
+        case.path("none.bcfzip").to_str().unwrap(),
+        "--bcf-snapshots",
+    ]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("--geometry"),
+        "{}",
+        stderr(&output)
+    );
+}

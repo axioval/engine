@@ -112,9 +112,10 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     records.extend(integrity(&revised)?);
 
     let (base, revised, meshed) = if args.geometry {
-        let (base, before) = geometry::attach(base, &base_bytes)
+        let keep = args.output.bcf_view.snapshots;
+        let (base, before) = geometry::attach(base, &base_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
-        let (revised, after) = geometry::attach(revised, &revised_bytes)
+        let (revised, after) = geometry::attach(revised, &revised_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.revised.display()))?;
         let mut unmeasured: Vec<Unmeasured> = before
             .unmeasured
@@ -123,15 +124,21 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
             .map(|(object, reason)| Unmeasured { object, reason })
             .collect();
         unmeasured.sort_by(|a, b| a.object.cmp(&b.object));
+        let mut bodies = before.meshes;
+        bodies.extend(after.meshes);
         let record = GeometryRecord {
             exact: before.exact + after.exact,
             tessellated: before.tessellated + after.tessellated,
             no_body: before.no_body + after.no_body,
             unmeasured,
         };
-        (base, revised, Some(record))
+        (base, revised, Some((record, bodies)))
     } else {
         (base, revised, None)
+    };
+    let (meshed, bodies) = match meshed {
+        Some((record, kept)) => (Some(record), Some(kept)),
+        None => (None, None),
     };
 
     let comparison = compare_sessions(&base, &revised, &request);
@@ -148,7 +155,13 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
         .geometry
         .then(|| geometry::bounds(&[&base, &revised], &output.report));
     // A comparison runs no ruleset, so its topics have no rule labels.
-    emit(&output, &project, bounds, BTreeMap::new(), args.output)?;
+    emit(
+        &output,
+        &project,
+        (bounds, bodies),
+        BTreeMap::new(),
+        args.output,
+    )?;
     Ok(Outcome::of(&output.report))
 }
 

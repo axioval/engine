@@ -22,6 +22,7 @@ ADAPTER_CRATES = frozenset(
         "axioval-icdd",
         "axioval-bcf",
         "axioval-bcf-api",
+        "axioval-bcf-snapshot",
         "axioval",
         "axioval-cli",
     }

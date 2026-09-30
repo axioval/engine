@@ -18,6 +18,7 @@ axioval-axiolid = { workspace = true, optional = true }
 axioval-icdd = { workspace = true, optional = true }
 axioval-bcf = { workspace = true, optional = true }
 axioval-bcf-api = { workspace = true, optional = true }
+axioval-bcf-snapshot = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -41,6 +42,8 @@ bcf = ["dep:axioval-bcf"]
 # platform's TLS library.
 bcf-api = ["bcf", "dep:axioval-bcf-api"]
 bcf-api-tls = ["bcf-api", "axioval-bcf-api/native-tls"]
+# Illustrative snapshot images of BCF viewpoints, rendered from meshes.
+bcf-snapshot = ["bcf", "dep:axioval-bcf-snapshot"]
 
 [lints]
 workspace = true

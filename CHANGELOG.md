@@ -150,6 +150,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   finding's thread instead of replacing it, and listings show the latest
   comment and how many came before. **Breaking:** `Decision::comment` and
   `FindingDecision::comment` become `comments`.
+- **BCF snapshots.** (Closes #172) `axioval_bcf::export_with_snapshots`
+  asks a host's `SnapshotRenderer` for a PNG of every viewpoint with a
+  camera, given a `SnapshotView` (camera, subject and related objects,
+  colours, isolation, clipping planes), and writes it through
+  `openbim-bcf` 0.6. A topic with a snapshot ends its description with
+  `SNAPSHOT_NOTE`: illustrative, never evidence. Declined viewpoints are
+  listed in `Export::unrendered`. The new `axioval-bcf-snapshot` crate is
+  a pure-Rust renderer over triangle meshes (z-buffered, flat-shaded,
+  clipped, deterministic PNG through `flate2`); the facade gains
+  `bcf-snapshot`, and `axioval check` and `compare` take `--bcf-snapshots`
+  with `--geometry`. `export` is unchanged, so archives without snapshots
+  are byte-identical. **Breaking:** `Export` gains `unrendered`.
 - **BCF API servers.** (Closes #173) The new `axioval-bcf-api` crate is a
   BCF API 3.0 client: `Client::connect` checks the server's versions and
   signs in with a bearer token, OAuth2 client credentials or the OAuth2

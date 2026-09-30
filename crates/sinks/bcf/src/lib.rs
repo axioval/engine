@@ -88,6 +88,13 @@
 //! and slabs around the finding no longer hide it. A viewpoint without a
 //! camera has no bounds to box and is never clipped.
 //!
+//! # Snapshots
+//!
+//! [`export_with_snapshots`] asks a host's [`SnapshotRenderer`] for a PNG of
+//! every viewpoint with a camera. The sink renders nothing itself, and a
+//! snapshot is illustrative, never evidence: a topic with one ends its
+//! description with [`SNAPSHOT_NOTE`]. [`export`] never asks.
+//!
 //! # Version
 //!
 //! BCF 2.1 by default. BCF 3.0 ([`Version::V3_0`]) requires a camera on every
@@ -106,8 +113,8 @@ use axioval_ir::{
 };
 use openbim_bcf::Component;
 use openbim_bcf::write::{
-    self, Camera, ClippingPlane, Coloring, Comment, Document, Projection, TargetVersion, Topic,
-    Vector3, Viewpoint, Visibility, WriteError,
+    self, Camera, ClippingPlane, Coloring, Comment, Document, Projection, Snapshot, TargetVersion,
+    Topic, Vector3, Viewpoint, Visibility, WriteError,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -396,6 +403,45 @@ pub struct Export {
     /// has none for them. Empty when no bounds were supplied at all. Sorted
     /// and deduplicated.
     pub unframed: Vec<ObjectId>,
+    /// Subjects of viewpoints with a camera that got no snapshot because the
+    /// renderer declined them (no mesh for the subject, say). Empty without
+    /// a renderer. Sorted and deduplicated.
+    pub unrendered: Vec<ObjectId>,
+}
+
+/// The line a topic's description ends with when a viewpoint of it carries
+/// a snapshot.
+pub const SNAPSHOT_NOTE: &str =
+    "Snapshot: illustrative rendering of tessellated bodies, not evidence.";
+
+/// What a snapshot of one viewpoint shows.
+#[derive(Clone, Copy, Debug)]
+pub struct SnapshotView<'a> {
+    /// The viewpoint's camera.
+    pub camera: &'a Camera,
+    /// The finding's subject, or the object a not-evaluated outcome names.
+    pub subject: Option<&'a ObjectId>,
+    /// The objects the finding relates its subject to.
+    pub related: &'a [ObjectId],
+    /// The colours of subject and related objects: [`Options::colors`], or
+    /// [`Colors::default`] when the archive writes no colouring, so the
+    /// image always tells them apart.
+    pub colors: Colors,
+    /// Whether only the subject and related objects are shown.
+    pub isolate: bool,
+    /// Planes cutting the view; each clips what lies on the side its
+    /// direction points to.
+    pub clipping_planes: &'a [ClippingPlane],
+}
+
+/// Draws the snapshot of a viewpoint.
+///
+/// Implemented outside this crate, over whatever geometry the host has, so
+/// the sink stays free of rendering. A snapshot is illustrative, never
+/// evidence.
+pub trait SnapshotRenderer {
+    /// The view as a PNG file, or `None` when it cannot be drawn.
+    fn render(&self, view: &SnapshotView<'_>) -> Option<Vec<u8>>;
 }
 
 impl Export {
@@ -423,6 +469,37 @@ pub fn export(
     project: &Project,
     options: &Options,
 ) -> Result<Export, ExportError> {
+    export_with(report, project, options, None)
+}
+
+/// As [`export`], with a snapshot image on every viewpoint that has a
+/// camera, drawn by `renderer`.
+///
+/// A viewpoint the renderer declines keeps no snapshot, and its subject is
+/// listed in [`Export::unrendered`]. A topic with any snapshot says in its
+/// description that the image is illustrative ([`SNAPSHOT_NOTE`]): a
+/// rendering of tessellated bodies, never evidence. Viewpoints without a
+/// camera have nothing to render from and get none. With the same options,
+/// the archive is otherwise the one [`export`] writes.
+///
+/// # Errors
+///
+/// As [`export`]; [`ExportError::Write`] when a snapshot is not a PNG file.
+pub fn export_with_snapshots(
+    report: &Report,
+    project: &Project,
+    options: &Options,
+    renderer: &dyn SnapshotRenderer,
+) -> Result<Export, ExportError> {
+    export_with(report, project, options, Some(renderer))
+}
+
+fn export_with(
+    report: &Report,
+    project: &Project,
+    options: &Options,
+    renderer: Option<&dyn SnapshotRenderer>,
+) -> Result<Export, ExportError> {
     // Topic GUIDs are the outcomes' stable identities over GlobalIds: the
     // identities a host records decisions against.
     let mut entries = Vec::new();
@@ -439,10 +516,14 @@ pub fn export(
 
     let mut unanchored = BTreeSet::new();
     let mut unframed = BTreeSet::new();
+    let mut unrendered = BTreeSet::new();
     let mut topics = Vec::with_capacity(entries.len());
     for (entry, guid) in &entries {
         unanchored.extend(entry.unanchored.iter().cloned());
-        let (topic, uncamered) = entry.topic(*guid, options);
+        let (mut topic, uncamered) = entry.topic(*guid, options);
+        if let Some(renderer) = renderer {
+            entry.snapshots(&mut topic, renderer, options, &mut unrendered);
+        }
         match uncamered {
             Uncamered::No => {}
             Uncamered::NoBounds if options.version == Version::V2_1 => {}
@@ -465,6 +546,7 @@ pub fn export(
         },
         unanchored: unanchored.into_iter().collect(),
         unframed: unframed.into_iter().collect(),
+        unrendered: unrendered.into_iter().collect(),
     })
 }
 
@@ -695,6 +777,49 @@ impl Entry {
             });
         }
         coloring
+    }
+
+    /// Puts a snapshot on every viewpoint of `topic` with a camera, and the
+    /// note that it is illustrative into the description when any got one.
+    fn snapshots(
+        &self,
+        topic: &mut Topic,
+        renderer: &dyn SnapshotRenderer,
+        options: &Options,
+        unrendered: &mut BTreeSet<ObjectId>,
+    ) {
+        let (subject, related) = match self.framed.split_first() {
+            Some((subject, related)) => (Some(subject), related),
+            None => (None, &[][..]),
+        };
+        let mut any = false;
+        for viewpoint in &mut topic.viewpoints {
+            let Some(camera) = &viewpoint.camera else {
+                continue;
+            };
+            let view = SnapshotView {
+                camera,
+                subject,
+                related,
+                colors: options.colors.unwrap_or_default(),
+                isolate: options.isolate,
+                clipping_planes: &viewpoint.clipping_planes,
+            };
+            match renderer.render(&view) {
+                Some(png) => {
+                    viewpoint.snapshot = Some(Snapshot::png(png));
+                    any = true;
+                }
+                None => {
+                    unrendered.extend(subject.cloned());
+                }
+            }
+        }
+        if any {
+            let description = topic.description.get_or_insert_with(String::new);
+            description.push('\n');
+            description.push_str(SNAPSHOT_NOTE);
+        }
     }
 
     /// A sphere around the union of the framed objects' bounds.

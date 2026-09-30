@@ -1,0 +1,25 @@
+[package]
+name = "axioval-bcf-snapshot"
+description = "Illustrative PNG snapshots of BCF viewpoints, rendered from tessellated meshes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# A renderer over meshes: the sink's snapshot hook and the writer's camera
+# types, never a source adapter or a geometry kernel. `flate2` with the
+# zlib-rs backend the workspace already builds encodes the PNG.
+[dependencies]
+axioval-bcf.workspace = true
+axioval-ir.workspace = true
+openbim-bcf.workspace = true
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
+
+[dev-dependencies]
+zip = { workspace = true, features = ["deflate"] }
+
+[lints]
+workspace = true

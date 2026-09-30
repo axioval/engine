@@ -26,7 +26,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
-  [--bcf-isolate] [--bcf-section-box]
+  [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]
 ```
 
 Runs the ruleset over one or more IFC2X3, IFC4 or IFC4X3 STEP models. Each
@@ -235,6 +235,15 @@ boxing the topic's objects half a metre beyond their measured bounds. It
 needs `--geometry`: a viewpoint without a camera has no bounds and is never
 clipped.
 
+`--bcf-snapshots` adds a PNG snapshot to each viewpoint with a camera,
+rendered from the meshed bodies (see [Snapshots](./sinks.md#snapshots)):
+the subject and related objects in their colours, the rest grey unless
+`--bcf-isolate`, cut by the section box. It needs `--geometry`, and fails
+with status 1 without it. A snapshot is illustrative, never evidence: every
+topic with one says so in its description. A viewpoint whose subject has no
+mesh gets none, counted in a warning. Without the flag the archive is byte
+for byte the same.
+
 `--bcf-version` is `2.1` (default) or `3.0`. BCF 3.0 requires a camera on
 every viewpoint, so it needs `--geometry` and bounds for every selected
 object; otherwise the run fails with status 1 and nothing is written.
@@ -440,7 +449,7 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
-  [--bcf-isolate] [--bcf-section-box]
+  [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]
 ```
 
 Compares two revisions of one IFC2X3, IFC4 or IFC4X3 model, each a STEP file

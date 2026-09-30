@@ -70,6 +70,12 @@ review decisions read back from them (`src/import.rs`).
 - `Options::section_box` clips only viewpoints with a fitted camera, by a
   box around the same union of bounds the camera frames; a viewpoint
   without bounds is never clipped by a guessed box. Planes point outwards.
+- Snapshots come only from a host's `SnapshotRenderer` through
+  `export_with_snapshots`; this crate never renders and never depends on a
+  renderer. `export` never asks for one, so its output stays
+  byte-identical. A topic with any snapshot ends its description with
+  `SNAPSHOT_NOTE`: snapshots are illustrative, never evidence. A declined
+  viewpoint keeps none and its subject goes to `Export::unrendered`.
 - Colouring, visibility and clipping planes are written through
   `openbim-bcf`'s `Viewpoint` fields only; never post-process the writer's
   XML.

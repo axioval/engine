@@ -3,8 +3,8 @@
 //! Re-exports are grouped the way the workspace is: the source-neutral
 //! contracts and engine are always present, and each source adapter appears
 //! under a module named for the format or library it adapts, behind a feature
-//! of the same name. Output sinks follow the same rule (`bcf`, and `bcf_api`
-//! for BCF API servers).
+//! of the same name. Output sinks follow the same rule (`bcf`, `bcf_api`
+//! for BCF API servers, and `bcf_snapshot` for viewpoint images).
 #![forbid(unsafe_code)]
 
 pub use axioval_engine as engine;
@@ -17,6 +17,8 @@ pub use axioval_axiolid as axiolid;
 pub use axioval_bcf as bcf;
 #[cfg(feature = "bcf-api")]
 pub use axioval_bcf_api as bcf_api;
+#[cfg(feature = "bcf-snapshot")]
+pub use axioval_bcf_snapshot as bcf_snapshot;
 #[cfg(feature = "icdd")]
 pub use axioval_icdd as icdd;
 #[cfg(feature = "ifc")]

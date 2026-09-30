@@ -551,6 +551,7 @@ dependencies = [
  "axioval-axiolid",
  "axioval-bcf",
  "axioval-bcf-api",
+ "axioval-bcf-snapshot",
  "axioval-engine",
  "axioval-icdd",
  "axioval-ifc",
@@ -602,6 +603,17 @@ dependencies = [
  "serde_json",
  "thiserror",
  "ureq",
+]
+
+[[package]]
+name = "axioval-bcf-snapshot"
+version = "0.3.0"
+dependencies = [
+ "axioval-bcf",
+ "axioval-ir",
+ "flate2",
+ "openbim-bcf",
+ "zip",
 ]
 
 [[package]]

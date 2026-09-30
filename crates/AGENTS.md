@@ -47,6 +47,9 @@ an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
   read back from them.
 - `bcf-api` (`axioval-bcf-api`) — BCF API 3.0 client; maps topics through
   `axioval-bcf`, never a second way.
+- `bcf-snapshot` (`axioval-bcf-snapshot`) — illustrative PNG snapshots of
+  BCF viewpoints from meshes, through the sink's `SnapshotRenderer`; no
+  source or kernel types.
 
 ## packages/
 
@@ -62,7 +65,7 @@ of `scripts/architecture.py` are exempted, and only for that crate.
 
 - `axioval` — feature-gated facade. One feature per source adapter or sink,
   named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`,
-  `bcf-api`).
+  `bcf-api`, `bcf-snapshot`).
 - `cli` (`axioval-cli`) — command-line frontend.
 
 ## Adding a source adapter or sink

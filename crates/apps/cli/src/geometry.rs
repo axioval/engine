@@ -47,7 +47,6 @@ use axioval::axiolid::{
     AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
 };
-use axioval::bcf;
 use axioval::engine::{
     BoundaryCoverageServiceHandle, ContactServiceHandle, DerivedRelationshipServiceHandle,
     EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
@@ -60,6 +59,7 @@ use axioval::engine::{
     WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
+use axioval::{bcf, bcf_snapshot};
 use ifc_geometry::lower::{LoweringSession, lower_connection_surface, lower_product_net};
 use ifc_geometry::{RepresentationPurpose, Transform};
 use ifc_model::{Codec, EntityId, Model};
@@ -99,6 +99,9 @@ pub struct GeometryReport {
     pub no_body: usize,
     /// Physical objects that could not be meshed, with the reason.
     pub unmeasured: Vec<(ObjectId, String)>,
+    /// Every meshed object's triangles, kept only when asked for, to draw
+    /// BCF snapshots from.
+    pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
 }
 
 /// Each source's model bytes, keyed by the source the session imported them as.
@@ -134,7 +137,8 @@ fn parse(
 /// `session`, bound to all its snapshots.
 ///
 /// `models` holds each source's bytes, keyed by the source the session
-/// imported them as. Policy choices IFC does not state, such as which
+/// imported them as. With `keep_meshes`, every meshed object's triangles are
+/// also kept in [`GeometryReport::meshes`], for BCF snapshots. Policy choices IFC does not state, such as which
 /// surfaces are walkable or which spaces bound the envelope, are the rules'
 /// own selections, carried in each request; the bridge declares none of them.
 ///
@@ -143,9 +147,13 @@ fn parse(
 /// Returns an error when a source has no bytes, the bytes do not parse (the
 /// session already parsed them, so this means they changed) or a service
 /// cannot be registered.
+// One pass over the objects, each ending in exactly one state; splitting
+// it would scatter that invariant.
+#[allow(clippy::too_many_lines)]
 pub fn attach(
     session: EvidenceSession,
     models: &ModelBytes,
+    keep_meshes: bool,
 ) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error>> {
     let snapshots: Vec<SourceSnapshot> = session.snapshots().cloned().collect();
     let Some(first) = snapshots.first() else {
@@ -203,7 +211,11 @@ pub fn attach(
             geometry = geometry.with_unmeasured(id, "not a STEP instance id");
             continue;
         };
-        match mesh(&backend, model, units, entity) {
+        match keep(
+            &mut report,
+            keep_meshes.then_some(&id),
+            mesh(&backend, model, units, entity),
+        ) {
             Ok(Some((mesh, true))) => {
                 geometry = geometry.with_mesh(id, mesh);
                 report.exact += 1;
@@ -802,6 +814,27 @@ fn space_frame(
     }
 }
 
+/// `meshed`, its triangles kept in `report` under `id` when given.
+fn keep(report: &mut GeometryReport, id: Option<&ObjectId>, meshed: Meshed) -> Meshed {
+    if let (Some(id), Ok(Some((mesh, _)))) = (id, &meshed)
+        && let Some(kept) = snapshot_mesh(mesh)
+    {
+        report.meshes.insert(id.clone(), kept);
+    }
+    meshed
+}
+
+/// One product's body and whether it is exact, as [`mesh`] returns it.
+type Meshed = Result<Option<(axiolid_mesh::TriMesh, bool)>, String>;
+
+/// A mesh as the snapshot renderer takes it: positions and triangles.
+fn snapshot_mesh(mesh: &axiolid_mesh::TriMesh) -> Option<bcf_snapshot::Mesh> {
+    bcf_snapshot::Mesh::new(
+        mesh.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
+        mesh.triangles().collect(),
+    )
+}
+
 fn entity_id(id: &ObjectId) -> Option<EntityId> {
     id.local_id.strip_prefix('#')?.parse().ok().map(EntityId)
 }
@@ -1130,7 +1163,7 @@ mod tests {
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
             .collect();
-        let (session, report) = attach(session, &models).unwrap();
+        let (session, report) = attach(session, &models, false).unwrap();
         assert_eq!(report.exact, 3, "{report:?}");
         let id = |local: &str| ObjectId {
             source: session.snapshots().next().unwrap().source().clone(),

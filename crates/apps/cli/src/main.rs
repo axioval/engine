@@ -29,7 +29,7 @@ mod ids;
 mod server;
 
 use axioval::{
-    bcf,
+    bcf, bcf_snapshot,
     engine::{
         DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, IntegritySeverity,
         LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
@@ -300,6 +300,7 @@ struct OutputArgs {
 /// How BCF viewpoints show the involved objects: colouring, visibility and
 /// a section box.
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)] // Each is one independent flag.
 struct BcfViewArgs {
     /// Colour of each BCF viewpoint's subject, as `RRGGBB` or `AARRGGBB`
     /// hex digits [default: FFFF0000]. Colouring is written with
@@ -325,6 +326,11 @@ struct BcfViewArgs {
     /// viewpoints without a camera are never clipped.
     #[arg(long = "bcf-section-box", requires = "bcf")]
     section_box: bool,
+    /// Add a PNG snapshot to each BCF viewpoint with a camera, rendered
+    /// from the meshed bodies. Illustrative, never evidence: every topic
+    /// with one says so. Needs `--geometry`.
+    #[arg(long = "bcf-snapshots", requires = "bcf")]
+    snapshots: bool,
 }
 
 /// The `--bcf-version` values.
@@ -693,9 +699,9 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .cloned()
             .fold(DisciplineMap::new(), DisciplineMap::with),
     );
-    let (session, meshed) = if args.geometry {
-        let (session, report) =
-            geometry::attach(session, &bytes).map_err(|error| format!("geometry: {error}"))?;
+    let (session, mut meshed) = if args.geometry {
+        let (session, report) = geometry::attach(session, &bytes, args.output.bcf_view.snapshots)
+            .map_err(|error| format!("geometry: {error}"))?;
         (session, Some(report))
     } else {
         (session, None)
@@ -723,6 +729,9 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let integrity = integrity(&session)?;
 
+    let bodies = meshed
+        .as_mut()
+        .map(|report| std::mem::take(&mut report.meshes));
     let geometry = meshed.map(|report| digest::GeometryRecord {
         exact: report.exact,
         tessellated: report.tessellated,
@@ -743,7 +752,13 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let bounds = args
         .geometry
         .then(|| geometry::bounds(&[&session], &output.report));
-    emit(&output, session.project(), bounds, labels, args.output)?;
+    emit(
+        &output,
+        session.project(),
+        (bounds, bodies),
+        labels,
+        args.output,
+    )?;
     Ok(match Outcome::of(&output.report) {
         // A specification that did not run was not checked: never a pass.
         Outcome::Passed if !complete => Outcome::Incomplete,
@@ -776,10 +791,13 @@ fn rule_labels(rulesets: &[RuleSetPackage]) -> BTreeMap<String, Vec<String>> {
 ///
 /// Everything is built before anything is written, so a run that fails
 /// leaves no partial output behind.
+/// Each meshed object's triangles, to draw BCF snapshots from.
+pub(crate) type Meshes = BTreeMap<ObjectId, bcf_snapshot::Mesh>;
+
 pub(crate) fn emit(
     output: &CheckOutput,
     project: &Project,
-    bounds: Option<BTreeMap<ObjectId, bcf::Bounds>>,
+    (bounds, meshes): (Option<BTreeMap<ObjectId, bcf::Bounds>>, Option<Meshes>),
     rule_labels: BTreeMap<String, Vec<String>>,
     args: OutputArgs,
 ) -> Result<(), Box<dyn Error>> {
@@ -810,7 +828,24 @@ pub(crate) fn emit(
                 rule_labels,
                 ..bcf::Options::new(args.bcf_author, date)
             };
-            let export = bcf::export(&output.report, project, &options)?;
+            let export = if args.bcf_view.snapshots {
+                let meshes = meshes.ok_or("`--bcf-snapshots` needs `--geometry` to have meshes")?;
+                let export = bcf::export_with_snapshots(
+                    &output.report,
+                    project,
+                    &options,
+                    &bcf_snapshot::Renderer::new(meshes),
+                )?;
+                if !export.unrendered.is_empty() {
+                    eprintln!(
+                        "warning: {} BCF viewpoint subject(s) have no mesh; their viewpoints have no snapshot",
+                        export.unrendered.len()
+                    );
+                }
+                export
+            } else {
+                bcf::export(&output.report, project, &options)?
+            };
             Some((path, export.to_bytes()?, export.unanchored, export.unframed))
         }
         None => None,

@@ -22,6 +22,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
    | --ids rules.ids [--ids-filter selector.json]) \
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
+  [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
@@ -271,6 +272,23 @@ is gone are listed in the report's `stale_decisions`. The BCF archive then
 writes accepted and rejected topics with that status and the decision as a
 comment. Decisions never hide a finding or a not-evaluated outcome and never
 change the exit status.
+
+`--decisions-from ARCHIVE` takes the decisions from a BCF 2.1 or 3.0 archive
+instead, typically one `--bcf` wrote and a reviewer worked through in
+another BCF tool (see [Import](./sinks.md#import)): a topic whose GUID is a
+finding's identity decides it when it was closed, resolved, done, accepted
+or rejected, or commented on; the latest comment is carried. Every topic
+that decides no current finding (another tool's topic, a fixed finding's, a
+not-evaluated outcome's, or one whose dates have no UTC offset) is listed in
+the result's `unmatched_topics` with its GUID, title, status and `reason`
+(`no-finding`, `not-evaluated`, `no-guid`, `unreadable` with a `detail`), and
+counted on stderr. It conflicts with `--decisions`; an archive that cannot be
+read fails the run (status 1) before anything is written.
+
+```bash
+axioval check --model rev1.ifc ... --bcf r1.bcfzip       # reviewed elsewhere into reviewed.bcfzip
+axioval check --model rev2.ifc ... --decisions-from reviewed.bcfzip --report r2.json
+```
 
 Everything is built before anything is written: a failing run leaves no
 partial report or archive behind.
@@ -574,7 +592,9 @@ JSON keeps them in full.
 The summary then counts them (`decisions: 1 accepted · 0 rejected · 0 open ·
 3 undecided · 0 changed · 1 stale`), and stale decisions form the
 `stale-decision` section, grouped by rule and status and listed with
-`--section stale-decisions`. `--decision accepted|rejected|open|undecided|changed`
+`--section stale-decisions`. Topics `--decisions-from` could not match form
+the `unmatched-topic` section, grouped by reason and topic status, listed with
+`--section unmatched-topics` by title and GUID. `--decision accepted|rejected|open|undecided|changed`
 lists only findings with that decision (`changed`: decided and changed
 since).
 

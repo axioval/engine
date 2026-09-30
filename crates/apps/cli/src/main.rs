@@ -156,6 +156,15 @@ struct CheckArgs {
     /// gone are listed as stale. Never changes the exit status.
     #[arg(long, value_name = "FILE")]
     decisions: Option<PathBuf>,
+    /// Carry the review state of the topics in this BCF 2.1 or 3.0 archive
+    /// (as `--bcf` wrote it, then reviewed in another BCF tool) over to the
+    /// findings whose identity is the topic GUID: a closed, resolved, done
+    /// or accepted topic accepts its finding, a rejected one rejects it, and
+    /// comments are carried. Topics that decide no current finding are
+    /// listed in the result's `unmatched_topics`. Never changes the exit
+    /// status.
+    #[arg(long, value_name = "FILE", conflicts_with = "decisions")]
+    decisions_from: Option<PathBuf>,
     #[command(flatten)]
     output: OutputArgs,
 }
@@ -617,6 +626,11 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let labels = rule_labels(&rulesets);
     let decisions: Option<Decisions> = args.decisions.as_deref().map(load).transpose()?;
+    let reviewed: Option<Vec<u8>> = args
+        .decisions_from
+        .as_deref()
+        .map(|path| fs::read(path).map_err(|error| format!("{}: {error}", path.display())))
+        .transpose()?;
     let (session, bytes) = sources(&args.models)?;
     let session = session.with_discipline_map(
         &args
@@ -646,6 +660,13 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     if let Some(decisions) = &decisions {
         result.apply_decisions(decisions)?;
     }
+    let mut unmatched = Vec::new();
+    if let (Some(bytes), Some(path)) = (&reviewed, &args.decisions_from) {
+        let imported = bcf::import(bytes, &result, session.project())
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        result.apply_decisions(&imported.decisions)?;
+        unmatched = imported.unmatched.into_iter().map(Into::into).collect();
+    }
     let integrity = integrity(&session)?;
 
     let geometry = meshed.map(|report| digest::GeometryRecord {
@@ -659,7 +680,8 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .collect(),
     });
     let mut output = CheckOutput::new(result, integrity, geometry, session.project())
-        .with_sources(source_infos(&session));
+        .with_sources(source_infos(&session))
+        .with_unmatched_topics(unmatched);
     let complete = translated.as_ref().is_none_or(ids::Translated::is_complete);
     if let Some(translated) = translated {
         output = output.with_ids(translated.record);
@@ -863,6 +885,12 @@ fn table_csv(output: &CheckOutput, args: &ReportArgs) -> Result<String, Box<dyn 
 /// Diagnostics for stderr. A summary already groups integrity issues and
 /// states the counts, so with one only what it cannot show is repeated.
 fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unframed: &[&ObjectId]) {
+    if !output.unmatched_topics.is_empty() {
+        eprintln!(
+            "warning: {} BCF topic(s) decided no current finding; see the result's unmatched_topics",
+            output.unmatched_topics.len()
+        );
+    }
     if summarized {
         // The summary already groups integrity issues and states the counts;
         // one line each would repeat it at the size it exists to avoid.

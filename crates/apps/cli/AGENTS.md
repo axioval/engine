@@ -35,4 +35,10 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   not in the result. `report` prints ids and decisions, counts them in the
   summary, lists stale ones as the `stale-decisions` section and filters by
   `--decision`.
+- `check --decisions-from ARCHIVE` reads the BCF bytes before the run (a
+  missing file fails before any work), imports them with `bcf::import`
+  after identification and applies the decisions; it conflicts with
+  `--decisions`. Unmatched topics go to the additive `unmatched_topics`
+  field (`digest::UnmatchedTopicRecord`), the `unmatched-topics` section and
+  one stderr warning; they never change the exit status.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

@@ -107,6 +107,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ruleOutcome` prefilter is refused. The CLI takes it as `--ids-filter
   selector.json` for `check --ids` and `ids translate`. Without a
   prefilter translations are unchanged.
+- **BCF import.** (Closes #169) `axioval_bcf::import` reads a BCF 2.1 or
+  3.0 archive back and maps each topic whose GUID is a finding's identity
+  onto a review decision: a closed, resolved, done or accepted topic
+  accepts the finding, a rejected one rejects it, and a commented topic of
+  another status is open; the latest comment is carried, and author and
+  date come from the export's decision comment, the topic's modification,
+  its last comment or its creation. An untouched topic decides nothing.
+  Topics that decide no current finding are listed in `Import::unmatched`
+  (no finding, not-evaluated outcome, no GUID, unreadable), never dropped.
+  `import_topics` maps topics already read. `axioval check
+  --decisions-from ARCHIVE` applies them and lists the unmatched ones in
+  the result's additive `unmatched_topics` field and the
+  `unmatched-topics` report section. An imported archive is read within
+  `IMPORT_LIMITS`, and refused before parsing when a tag has more than
+  `MAX_ATTRIBUTES_PER_TAG` attributes, which bounds the XML reader's
+  quadratic duplicate-attribute check (RUSTSEC-2026-0194). `zip` 8 becomes
+  a normal dependency of the sink (`deflate` only).
 
 ### Changed
 

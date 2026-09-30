@@ -12076,6 +12076,183 @@ fn revision_two_carries_revision_ones_decisions_and_lists_stale_ones() {
     assert!(result["report"].get("stale_decisions").is_none());
 }
 
+/// The topics of a BCF archive as the writer takes them, without
+/// viewpoints: what another BCF tool writes back after a review.
+fn reviewed_topics(path: &Path) -> Vec<openbim_bcf::write::Topic> {
+    let archive = openbim_bcf::read_path(path).unwrap();
+    archive
+        .topics()
+        .map(|markup| {
+            let topic = &markup.topic;
+            openbim_bcf::write::Topic {
+                guid: topic.guid.clone().unwrap(),
+                title: topic.title.clone().unwrap(),
+                description: topic.description.clone(),
+                topic_type: topic.topic_type.clone(),
+                topic_status: topic.topic_status.clone(),
+                priority: topic.priority.clone(),
+                labels: topic.labels.clone(),
+                creation_date: topic.creation_date.clone().unwrap(),
+                creation_author: topic.creation_author.clone().unwrap(),
+                comments: Vec::new(),
+                viewpoints: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn a_bcf_reviewed_elsewhere_decides_the_next_check() {
+    let case = Case::new("decisions-from-bcf");
+    let read = |name: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(case.path(name)).unwrap()).unwrap()
+    };
+    let bcf = case.path("r1.bcfzip");
+    let r1 = case.path("r1.json");
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            r1.to_str().unwrap(),
+            "--bcf",
+            bcf.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let first = read("r1.json");
+    let ids: Vec<String> = first["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| finding["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(ids.len(), 2, "{first:#}");
+
+    // Another tool closes the first topic, comments on the second, and adds
+    // a topic of its own.
+    let mut topics = reviewed_topics(&bcf);
+    let position = |id: &str| topics.iter().position(|t| t.guid == id).unwrap();
+    let (closed, commented) = (position(&ids[0]), position(&ids[1]));
+    topics[closed].topic_status = Some("Closed".into());
+    topics[commented]
+        .comments
+        .push(openbim_bcf::write::Comment {
+            guid: "7e1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b".into(),
+            date: "2026-09-28T09:30:00Z".into(),
+            author: "B. Reviewer".into(),
+            comment: "the reference is on the drawing".into(),
+            viewpoint: None,
+        });
+    let mut foreign = topics[commented].clone();
+    foreign.guid = "3f2504e0-4f89-41d3-9a0c-0305e82c3301".into();
+    foreign.title = "Duct clashes with beam".into();
+    foreign.comments.clear();
+    topics.push(foreign);
+    let reviewed = case.path("reviewed.bcfzip");
+    openbim_bcf::write::to_path(
+        &openbim_bcf::write::Document {
+            version: openbim_bcf::write::TargetVersion::V2_1,
+            extensions: None,
+            topics,
+        },
+        &reviewed,
+    )
+    .unwrap();
+
+    let report = case.path("r2.json");
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            report.to_str().unwrap(),
+            "--decisions-from",
+            reviewed.to_str().unwrap(),
+        ],
+    );
+    // Deciding a finding never changes the exit status.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("1 BCF topic(s) decided no current finding"),
+        "{}",
+        stderr(&output)
+    );
+    let second = read("r2.json");
+    let findings = second["report"]["findings"].as_array().unwrap();
+    let decision =
+        |id: &str| findings.iter().find(|finding| finding["id"] == id).unwrap()["decision"].clone();
+    assert_eq!(
+        decision(&ids[0]),
+        json!({"status": "accepted", "author": "axioval", "date": "2026-09-26T10:00:00Z",
+               "evidence": "unknown"})
+    );
+    assert_eq!(
+        decision(&ids[1]),
+        json!({"status": "open", "author": "B. Reviewer", "date": "2026-09-28T09:30:00Z",
+               "comment": "the reference is on the drawing", "evidence": "unknown"})
+    );
+    assert_eq!(
+        second["unmatched_topics"],
+        json!([{"guid": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+                "title": "Duct clashes with beam", "status": "Open", "reason": "no-finding"}])
+    );
+
+    // The summary points at the unmatched topic, and the listing names it.
+    let axioval = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .current_dir(case.path("."))
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let summary = axioval(&["report", "r2.json"]);
+    assert!(
+        summary.contains("axioval report r2.json --section unmatched-topics"),
+        "{summary}"
+    );
+    let listing = axioval(&["report", "r2.json", "--section", "unmatched-topics"]);
+    assert!(listing.contains("Duct clashes with beam"), "{listing}");
+    assert!(
+        listing.contains("id: 3f2504e0-4f89-41d3-9a0c-0305e82c3301"),
+        "{listing}"
+    );
+
+    // A decisions file and a BCF archive are two sources of one thing.
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--decisions",
+            "decisions.json",
+            "--decisions-from",
+            reviewed.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+    // What is not a BCF archive fails the run, which writes nothing.
+    let bogus = case.write("bogus.bcfzip", "not an archive");
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            case.path("r3.json").to_str().unwrap(),
+            "--decisions-from",
+            bogus.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("bogus.bcfzip"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!case.path("r3.json").exists());
+}
+
 /// Doors, each with a `Pset_DoorCommon` holding its number (`Reference`) and
 /// fire rating, and a wall no rule selects. `first` offsets every entity
 /// number, so each export numbers its entities and generates its

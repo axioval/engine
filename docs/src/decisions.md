@@ -144,3 +144,11 @@ A decided finding's topic carries the decision (see
 `Rejected` (an open decision keeps the host's status), one comment by the
 decision's author at its date, and the label `Decision changed` when its
 evidence changed. Stale decisions have no topic.
+
+The way back is [`axioval_bcf::import`](./sinks.md#import): a topic reviewed
+in another BCF tool becomes a decision about the finding whose identity is
+its GUID. A closed, resolved, done or accepted topic accepts it, a rejected
+one rejects it, and a topic with comments but another status is `open`,
+with the latest comment. Topics that decide no current finding are listed
+as unmatched, like stale decisions, and never dropped. `axioval check
+--decisions-from reviewed.bcfzip` applies them in place of a decisions file.

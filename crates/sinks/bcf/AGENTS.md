@@ -1,6 +1,7 @@
 # `axioval-bcf`
 
-BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed over.
+BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed over, and
+review decisions read back from them (`src/import.rs`).
 
 - Depends on `axioval-ir` and `openbim-bcf` only. Never the engine, never a
   source adapter, not even as a dev-dependency: a dev-dependency on an
@@ -66,3 +67,18 @@ BCF 2.1 and 3.0 issue archives from a `Report` and the `Project` it was computed
 - A located entry's topic is labelled `Storey: <name>` and `Space: <name>`
   after the rule id (the place's id when unnamed). Labels never enter the
   GUID key: locating a finding must not change its GUID.
+- `import` is the only way BCF is read. It scans every non-image entry
+  (`MAX_ATTRIBUTES_PER_TAG`, `IMPORT_LIMITS`) before `openbim-bcf`'s reader
+  parses it: quick-xml 0.37's duplicate-attribute check is quadratic
+  (RUSTSEC-2026-0194, ignored in `deny.toml` on that ground). Never call
+  `openbim_bcf::read_*` on untrusted bytes elsewhere; drop the scan and the
+  ignores once openbimrs/bcf#3 ships.
+- Import matches topics by GUID to `finding_ids` over `IFC_GLOBAL_ID_SCHEME`.
+  The status comes from `TopicStatus` only (`ACCEPTED_STATUSES`,
+  `REJECTED_STATUSES`, anything else open), never from comment text. An
+  untouched topic decides nothing, so export then import is a no-op. Every
+  topic that decides no current finding goes to `Import::unmatched` with a
+  reason; never drop one. A date without a UTC offset is `Unreadable`,
+  never guessed as UTC. The export's decision comment (GUID
+  `v5(topic, "decision")`) is recognised by GUID, and its status word and
+  change note are stripped from the text.

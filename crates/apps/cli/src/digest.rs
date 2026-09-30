@@ -57,6 +57,42 @@ pub struct CheckOutput {
     /// ran. Absent otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ids: Option<IdsRecord>,
+    /// The BCF topics `check --decisions-from` read that decided no
+    /// current finding, in archive order. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmatched_topics: Vec<UnmatchedTopicRecord>,
+}
+
+/// A BCF topic that decided no current finding, and why.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnmatchedTopicRecord {
+    /// The topic GUID as written, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// `no-finding`, `not-evaluated`, `no-guid` or `unreadable`.
+    pub reason: String,
+    /// What could not be read, for `unreadable`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl From<axioval::bcf::UnmatchedTopic> for UnmatchedTopicRecord {
+    fn from(topic: axioval::bcf::UnmatchedTopic) -> Self {
+        Self {
+            guid: topic.guid,
+            title: topic.title,
+            status: topic.status,
+            reason: topic.reason.as_str().to_owned(),
+            detail: match topic.reason {
+                axioval::bcf::Unmatched::Unreadable(why) => Some(why),
+                _ => None,
+            },
+        }
+    }
 }
 
 /// The IDS document `check --ids` translated and ran.
@@ -313,7 +349,15 @@ impl CheckOutput {
             comparison: None,
             sources: Vec::new(),
             ids: None,
+            unmatched_topics: Vec::new(),
         }
+    }
+
+    /// The same result listing the BCF topics that decided no finding.
+    #[must_use]
+    pub fn with_unmatched_topics(mut self, topics: Vec<UnmatchedTopicRecord>) -> Self {
+        self.unmatched_topics = topics;
+        self
     }
 
     /// The same result recording the IDS document it ran.
@@ -449,6 +493,8 @@ pub enum Section {
     Tables,
     /// Decisions `check --decisions` found no finding for.
     StaleDecisions,
+    /// BCF topics `check --decisions-from` read that decided no finding.
+    UnmatchedTopics,
 }
 
 impl Section {
@@ -460,6 +506,7 @@ impl Section {
             Self::Geometry => "geometry",
             Self::Tables => "table",
             Self::StaleDecisions => "stale-decision",
+            Self::UnmatchedTopics => "unmatched-topic",
         }
     }
 }
@@ -726,6 +773,15 @@ fn decision_counts(report: &Report) -> Option<DecisionCounts> {
         }
     }
     Some(counts)
+}
+
+/// An unmatched topic's title, and what could not be read of it.
+fn unmatched_message(topic: &UnmatchedTopicRecord) -> String {
+    let title = topic.title.as_deref().unwrap_or("(untitled topic)");
+    match &topic.detail {
+        Some(detail) => format!("{title}: {detail}"),
+        None => title.to_owned(),
+    }
 }
 
 /// A stale decision's rule and message, from its basis; `-` and the
@@ -1030,6 +1086,17 @@ fn tally(output: &CheckOutput) -> BTreeMap<(Section, String, String), Tally> {
             .or_default()
             .add(&message, None);
     }
+    // Unmatched topics by why they decided nothing and their status.
+    for topic in &output.unmatched_topics {
+        tallies
+            .entry((
+                Section::UnmatchedTopics,
+                topic.reason.clone(),
+                topic.status.clone().unwrap_or_else(|| "-".to_owned()),
+            ))
+            .or_default()
+            .add(&unmatched_message(topic), None);
+    }
     // One group per table: its rows are the count, its columns the message.
     for table in output.report.tables() {
         let columns = columns_text(table);
@@ -1148,6 +1215,9 @@ fn next_steps(
             Section::StaleDecisions => {
                 format!("axioval report {quoted} --section stale-decisions")
             }
+            Section::UnmatchedTopics => {
+                format!("axioval report {quoted} --section unmatched-topics")
+            }
             Section::Tables => format!(
                 "axioval report {quoted} --section tables --rule {}",
                 shell_quote(&group.key)
@@ -1171,6 +1241,16 @@ fn next_steps(
         && groups.iter().any(|g| g.section == Section::StaleDecisions)
     {
         next.push(format!("axioval report {quoted} --section stale-decisions"));
+    }
+    // A topic that decided nothing may be a review that went nowhere.
+    if groups
+        .first()
+        .is_some_and(|g| g.section != Section::UnmatchedTopics)
+        && groups.iter().any(|g| g.section == Section::UnmatchedTopics)
+    {
+        next.push(format!(
+            "axioval report {quoted} --section unmatched-topics"
+        ));
     }
     // Measured values are what a reader asks for next once issues are known.
     if groups.first().is_some_and(|g| g.section != Section::Tables)
@@ -1524,6 +1604,30 @@ pub fn list(
                     &decision.date,
                     &decision.comment,
                 )),
+                evidence: vec![],
+            });
+        }
+    }
+
+    // An unmatched topic names no rule and no object of the report.
+    if unlocated
+        && filter.code.is_none()
+        && filter.object.is_none()
+        && filter.rule.is_none()
+        && wants(Section::UnmatchedTopics)
+    {
+        for topic in &output.unmatched_topics {
+            matched.push(Entry {
+                section: Section::UnmatchedTopics,
+                key: topic.reason.clone(),
+                level: topic.status.clone().unwrap_or_else(|| "-".to_owned()),
+                object: None,
+                scope: None,
+                related: vec![],
+                location: None,
+                message: unmatched_message(topic),
+                id: topic.guid.clone(),
+                decision: None,
                 evidence: vec![],
             });
         }

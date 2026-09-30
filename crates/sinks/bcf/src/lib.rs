@@ -47,6 +47,15 @@
 //! [`Options::status`]), one comment by the decision's author at its date,
 //! and [`DECISION_CHANGED_LABEL`] when the finding changed since.
 //!
+//! # Import
+//!
+//! [`import`] reads an archive back, typically one written here and then
+//! reviewed in another BCF tool, and maps each topic whose GUID is a
+//! finding's identity onto a [`Decision`](axioval_ir::Decision): a closed or
+//! accepted topic accepts the finding, a rejected one rejects it, and
+//! comments are carried. Topics that decide no current finding are listed in
+//! [`Import::unmatched`], never dropped.
+//!
 //! # Cameras
 //!
 //! A report carries no geometry. A host that measured the model passes each
@@ -102,6 +111,13 @@ use openbim_bcf::write::{
 };
 use thiserror::Error;
 use uuid::Uuid;
+
+mod import;
+use import::decision_comment_guid;
+pub use import::{
+    ACCEPTED_STATUSES, IMPORT_LIMITS, Import, ImportError, MAX_ATTRIBUTES_PER_TAG,
+    REJECTED_STATUSES, Unmatched, UnmatchedTopic, import, import_topics,
+};
 
 /// External id scheme whose values are IFC GlobalIds.
 ///
@@ -797,7 +813,7 @@ fn decision_comment(decision: &FindingDecision, topic: Uuid) -> Comment {
         text.push_str(&changes.join("; "));
     }
     Comment {
-        guid: Uuid::new_v5(&topic, b"decision").to_string(),
+        guid: decision_comment_guid(topic).to_string(),
         date: decision.date.to_string(),
         author: decision.author.trim().to_owned(),
         comment: text,

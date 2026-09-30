@@ -105,6 +105,54 @@ a re-export reproduces it. Not-evaluated outcomes are never decided, and
 stale decisions write no topic. A report without decisions writes the same
 archive as before.
 
+## Import
+
+`axioval_bcf::import` reads a BCF 2.1 or 3.0 archive back, typically one the
+sink wrote and a reviewer then worked through in another BCF tool, and maps
+its topics onto [review decisions](./decisions.md) about a report's
+findings. `import_topics` does the same for topics already read.
+
+```rust,ignore
+let imported = axioval_bcf::import(&std::fs::read("reviewed.bcfzip")?, &report, project)?;
+report.apply_decisions(&imported.decisions)?;
+for topic in &imported.unmatched {
+    eprintln!("{:?} decided nothing: {:?}", topic.title, topic.reason);
+}
+```
+
+**Matching.** A topic belongs to the finding whose identity over the
+`ifc-globalid` scheme is its GUID, the identity the export wrote it under.
+
+**What a matched topic decides.** It yields a decision only when it carries
+review state; an untouched topic yields none, so exporting and importing
+again decides nothing.
+
+| Topic | Decision |
+|---|---|
+| `TopicStatus` `Accepted`, `Closed`, `Resolved` or `Done` (`ACCEPTED_STATUSES`, any case) | `accepted` |
+| `TopicStatus` `Rejected` (`REJECTED_STATUSES`, any case) | `rejected` |
+| any other status, with the export's decision comment or any other comment | `open` |
+| author and date | of the latest of the export's decision comment and the topic's `ModifiedAuthor`/`ModifiedDate`; without either, of its last comment; without comments, of its creation |
+| comment | the latest comment the export did not write; else the text of the export's decision comment, without its status word and change note |
+
+The status comes from `TopicStatus`, never from comment text, so a status
+changed in another tool wins. An imported decision has no basis, so whether
+its finding changed since is `unknown`.
+
+**Nothing is dropped.** Every topic that decides no current finding is listed
+in `Import::unmatched` with its GUID, title, status and why: `NoFinding`
+(the finding was fixed or changed into a new one, or another tool made the
+topic), `NotEvaluated` (a not-evaluated outcome's topic, never decided),
+`NoGuid`, or `Unreadable` (a matched topic whose dates carry no UTC offset,
+or whose comment has no author). Two topics with one finding's GUID refuse
+the import.
+
+**Untrusted input.** An archive is read within `IMPORT_LIMITS` (32 MiB per
+entry, 256 MiB in all), and every entry but an image is scanned before the
+XML reader parses it: a tag with more than `MAX_ATTRIBUTES_PER_TAG` (64)
+attributes refuses the archive, because the reader's duplicate-attribute
+check is quadratic in their number (RUSTSEC-2026-0194).
+
 ## Cameras
 
 A report carries no geometry, so the host passes what it measured:

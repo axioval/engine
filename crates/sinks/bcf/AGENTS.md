@@ -30,9 +30,13 @@ review decisions read back from them (`src/import.rs`).
   GUID and decision key a user has ever received; treat both as a
   compatibility contract.
 - A finding's `decision` sets the topic status (`Accepted`, `Rejected`; an
-  open decision keeps `Options::status`) and adds one comment by the
-  decision's author at its date, GUID `v5(topic, "decision")`; a changed one
-  adds the `Decision changed` label. Not-evaluated outcomes are never
+  open decision keeps `Options::status`) and adds its own comment by the
+  decision's author at its date, GUID `v5(topic, "decision")`, carrying the
+  thread's first comment when that is the decider's own; a changed one
+  adds the `Decision changed` label. The rest of the thread follows under
+  `DecisionComment::id` or `ThreadGuids` (v5 over author, date, text and
+  repetition); import derives the same GUIDs to tell them from a tracker's,
+  so keep export and import on `ThreadGuids`. Not-evaluated outcomes are never
   decided. Without decisions the archive is byte-identical.
 - A finding's `Priority` follows its severity, unless its decision sets
   one; a not-evaluated outcome has none, because no severity was decided.

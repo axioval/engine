@@ -277,7 +277,7 @@ change the exit status.
 instead, typically one `--bcf` wrote and a reviewer worked through in
 another BCF tool (see [Import](./sinks.md#import)): a topic whose GUID is a
 finding's identity decides it when it was closed, resolved, done, accepted
-or rejected, or commented on; the latest comment is carried. Every topic
+or rejected, or commented on; its comments are carried as the thread. Every topic
 that decides no current finding (another tool's topic, a fixed finding's, a
 not-evaluated outcome's, or one whose dates have no UTC offset) is listed in
 the result's `unmatched_topics` with its GUID, title, status and `reason`
@@ -372,7 +372,11 @@ axioval check --model rev2.ifc ... --decisions decisions.json --report r2.json -
 `accepted`, `rejected` or `open`. The file is created when missing, and a
 decision about a finding already decided replaces the earlier one. Each
 decision records the finding's basis (rule, message, severity, evidence
-counts), so a re-check can tell whether it changed. `--assign-to NAME`,
+counts), so a re-check can tell whether it changed. `--comment` adds to the
+end of the finding's comment thread: deciding again keeps the earlier
+comments, so several reviewers can discuss one finding, and the BCF topic
+carries the whole thread. A listing shows the latest comment and how many
+came before it (`: yes, a lining (+1 earlier comment(s))`). `--assign-to NAME`,
 `--due DATE-TIME`, `--priority P` and `--label L` (repeated) record who
 deals with it, by when, how urgent and how it is labelled; a later decision
 about the same finding that does not restate them keeps them (`--label`

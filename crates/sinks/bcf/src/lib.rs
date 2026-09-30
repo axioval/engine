@@ -113,11 +113,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 mod import;
-use import::decision_comment_guid;
 pub use import::{
     ACCEPTED_STATUSES, IMPORT_LIMITS, Import, ImportError, MAX_ATTRIBUTES_PER_TAG,
     REJECTED_STATUSES, Unmatched, UnmatchedTopic, import, import_topics,
 };
+use import::{ThreadGuids, decision_comment_guid};
 
 /// External id scheme whose values are IFC GlobalIds.
 ///
@@ -665,7 +665,7 @@ impl Entry {
                     labels.push(label.to_owned());
                 }
             }
-            comments.push(decision_comment(decision, guid));
+            comments.extend(decision_comments(decision, guid));
         }
         let priority = self
             .decision
@@ -818,16 +818,51 @@ fn round(value: f64) -> f64 {
     (value * DECIMALS).round() / DECIMALS + 0.0
 }
 
-/// The comment a decided finding's topic carries: the decision's status and
-/// comment, by its author at its date, then what changed since, if anything.
-/// Its GUID derives from the topic's, so re-exporting reproduces it.
-fn decision_comment(decision: &FindingDecision, topic: Uuid) -> Comment {
+/// The comments a decided finding's topic carries.
+///
+/// First the decision's own: its status, and the thread's first comment
+/// when that is by the decision's author at its date (the decision's
+/// comment as it always was), then what changed since; GUID
+/// `v5(topic, "decision")`. Then every other comment of the thread, oldest
+/// first, under the identity it came with or a GUID derived from the topic
+/// and its content, so re-exporting reproduces both.
+fn decision_comments(decision: &FindingDecision, topic: Uuid) -> Vec<Comment> {
+    let own = decision.comments.first().filter(|comment| {
+        comment.author == decision.author && comment.date == decision.date && comment.id.is_none()
+    });
+    let mut comments = vec![decision_comment(
+        decision,
+        own.map_or("", |comment| comment.text.as_str()),
+        topic,
+    )];
+    let mut guids = ThreadGuids::default();
+    for comment in &decision.comments[usize::from(own.is_some())..] {
+        let (author, text) = (comment.author.trim(), comment.text.trim());
+        if text.is_empty() {
+            continue;
+        }
+        let derived = guids.next(topic, author, comment.date, text);
+        comments.push(Comment {
+            guid: comment.id.unwrap_or(derived).to_string(),
+            date: comment.date.to_string(),
+            author: author.to_owned(),
+            comment: text.to_owned(),
+            viewpoint: None,
+        });
+    }
+    comments
+}
+
+/// The decision's own comment: its status and `own` text, by its author at
+/// its date, then what changed since, if anything. Its GUID derives from the
+/// topic's, so re-exporting reproduces it.
+fn decision_comment(decision: &FindingDecision, own: &str, topic: Uuid) -> Comment {
     let status = match decision.status {
         DecisionStatus::Open => "Open",
         DecisionStatus::Accepted => "Accepted",
         DecisionStatus::Rejected => "Rejected",
     };
-    let mut text = match decision.comment.trim() {
+    let mut text = match own.trim() {
         "" => status.to_owned(),
         comment => format!("{status}: {comment}"),
     };

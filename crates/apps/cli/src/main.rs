@@ -35,8 +35,9 @@ use axioval::{
     },
     ifc,
     ir::{
-        DateTime, Decision, DecisionStatus, Decisions, DefinitionPackage, Discipline, FindingId,
-        ObjectId, Project, Report, RuleSetPackage, SourceId, contract::SourceField,
+        DateTime, Decision, DecisionComment, DecisionStatus, Decisions, DefinitionPackage,
+        Discipline, FindingId, ObjectId, Project, Report, RuleSetPackage, SourceId,
+        contract::SourceField,
     },
 };
 use clap::{Args, Parser, Subcommand};
@@ -184,7 +185,8 @@ struct DecideArgs {
     /// Who decides.
     #[arg(long)]
     author: String,
-    /// Why.
+    /// Why. Added to the end of the finding's thread: an earlier
+    /// decision's comments are kept.
     #[arg(long, default_value = "")]
     comment: String,
     /// Who the finding is assigned to.
@@ -603,12 +605,19 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
             .iter()
             .find(|finding| finding.id == Some(*id))
             .ok_or_else(|| format!("{}: no finding has id {id}", args.result.display()))?;
-        let mut decision = Decision::new(*id, args.status.into(), &args.author, date)?
-            .with_comment(args.comment.trim())
-            .with_basis(finding);
+        let mut decision =
+            Decision::new(*id, args.status.into(), &args.author, date)?.with_basis(finding);
         // What the reviewer does not restate is kept from the earlier
-        // decision: an assignment outlives a status change.
+        // decision: an assignment outlives a status change, and a comment
+        // continues the thread.
         let earlier = decisions.get(*id);
+        decision.comments = earlier.map(|e| e.comments.clone()).unwrap_or_default();
+        let comment = args.comment.trim();
+        if !comment.is_empty() {
+            decision
+                .comments
+                .push(DecisionComment::new(args.author.trim(), date, comment));
+        }
         decision.assigned_to = args
             .assign_to
             .as_deref()

@@ -19,9 +19,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use axioval::ir::{
-    Decision, DecisionStatus, EvidenceCheck, Finding, FindingDecision, Location, NotEvaluated,
-    NotEvaluatedReason, ObjectId, Place, Project, Report, ReportColumn, ReportColumnKind,
-    ReportRow, ReportTable, ReportValue, RuleStatus, Scope, Severity, SourceId,
+    Decision, DecisionComment, DecisionStatus, EvidenceCheck, Finding, FindingDecision, Location,
+    NotEvaluated, NotEvaluatedReason, ObjectId, Place, Project, Report, ReportColumn,
+    ReportColumnKind, ReportRow, ReportTable, ReportValue, RuleStatus, Scope, Severity, SourceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -793,17 +793,26 @@ fn stale_subject(decision: &Decision) -> (String, String) {
     }
 }
 
-/// `accepted by A. Reviewer on 2026-09-27T08:00:00Z: comment`, then what
-/// changed since, if anything.
+/// `accepted by A. Reviewer on 2026-09-27T08:00:00Z: comment`: the latest
+/// comment, prefixed by its author when someone else wrote it, and how many
+/// came before it.
 fn decision_text(
     status: DecisionStatus,
     author: &str,
     date: &axioval::ir::DateTime,
-    comment: &str,
+    comments: &[DecisionComment],
 ) -> String {
     let mut text = format!("{} by {author} on {date}", status.as_str());
-    if !comment.trim().is_empty() {
-        let _ = write!(text, ": {}", comment.trim());
+    if let Some(latest) = comments.last() {
+        let said = latest.text.trim();
+        if latest.author == author {
+            let _ = write!(text, ": {said}");
+        } else {
+            let _ = write!(text, ": {}: {said}", latest.author);
+        }
+        if comments.len() > 1 {
+            let _ = write!(text, " (+{} earlier comment(s))", comments.len() - 1);
+        }
     }
     text
 }
@@ -837,7 +846,7 @@ fn carried_text(decision: &FindingDecision) -> String {
         decision.status,
         &decision.author,
         &decision.date,
-        &decision.comment,
+        &decision.comments,
     );
     text.push_str(&review_text(
         decision.assigned_to.as_deref(),
@@ -1633,7 +1642,7 @@ pub fn list(
                         decision.status,
                         &decision.author,
                         &decision.date,
-                        &decision.comment,
+                        &decision.comments,
                     ) + &review_text(
                         decision.assigned_to.as_deref(),
                         decision.due_date.as_ref(),

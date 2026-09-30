@@ -26,8 +26,8 @@ pub use identity::{FindingId, IdentityError, finding_ids, not_evaluated_ids};
 /// Reviewers' decisions about findings, kept across re-checks.
 pub mod decision;
 pub use decision::{
-    ChangedFacet, Decision, DecisionBasis, DecisionChange, DecisionError, DecisionStatus,
-    Decisions, EvidenceCheck, FindingDecision,
+    ChangedFacet, Decision, DecisionBasis, DecisionChange, DecisionComment, DecisionError,
+    DecisionStatus, Decisions, EvidenceCheck, FindingDecision,
 };
 
 /// Named tables of measured values reported beside findings.

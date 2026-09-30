@@ -114,7 +114,12 @@ fn a_topic_closed_elsewhere_is_accepted_and_a_comment_made_elsewhere_is_carried(
     assert_eq!(commented.status, DecisionStatus::Open);
     assert_eq!(commented.author, "B. Reviewer");
     assert_eq!(commented.date.to_string(), "2026-09-28T09:30:00+02:00");
-    assert_eq!(commented.comment, "the rating is in the door schedule");
+    assert_eq!(commented.comments.len(), 1);
+    assert_eq!(
+        commented.comments[0].text,
+        "the rating is in the door schedule"
+    );
+    assert_eq!(commented.comments[0].author, "B. Reviewer");
     assert_eq!(imported.decisions.decisions().len(), 2);
 
     // The not-evaluated outcome's topic is listed, never decided.
@@ -137,7 +142,8 @@ fn a_topic_closed_elsewhere_is_accepted_and_a_comment_made_elsewhere_is_carried(
             .decision
             .as_ref()
             .unwrap()
-            .comment,
+            .comments[0]
+            .text,
         "the rating is in the door schedule"
     );
     assert!(decided_report.stale_decisions.is_empty());
@@ -341,7 +347,7 @@ mod review {
         let back = imported.decisions.get(expected.finding).unwrap();
         assert_eq!(back.priority, expected.priority);
         assert_eq!(back.labels, expected.labels);
-        assert_eq!(back.comment, expected.comment);
+        assert_eq!(back.comments, expected.comments);
         assert_eq!(
             (&back.author, back.date, back.status),
             (&expected.author, expected.date, expected.status)
@@ -420,5 +426,104 @@ mod review {
             "{:?}",
             imported.unmatched
         );
+    }
+}
+
+/// Comment threads written as BCF comments and read back.
+mod threads {
+    use super::{BTreeMap, model, options, report};
+    use axioval_bcf::{export, import};
+    use axioval_ir::{Decision, DecisionComment, DecisionStatus, Decisions};
+
+    fn at(date: &str) -> axioval_ir::DateTime {
+        date.parse().unwrap()
+    }
+
+    /// Exports `decisions` applied to the report and imports the archive.
+    fn round_trip(decisions: &Decisions) -> (Decisions, Vec<openbim_bcf::Markup>) {
+        let mut report = report();
+        report.apply_decisions(decisions).unwrap();
+        let bytes = export(&report, &model(), &options())
+            .unwrap()
+            .to_bytes()
+            .unwrap();
+        let imported = import(&bytes, &report, &model(), &BTreeMap::new()).unwrap();
+        let archive = openbim_bcf::read_slice(&bytes).unwrap();
+        assert!(
+            archive.diagnostics().is_empty(),
+            "{:?}",
+            archive.diagnostics()
+        );
+        (imported.decisions, archive.topics().cloned().collect())
+    }
+
+    #[test]
+    fn a_three_comment_thread_round_trips() {
+        let wall = report().findings[0].id.unwrap();
+        let decisions = Decisions::new([Decision::new(
+            wall,
+            DecisionStatus::Rejected,
+            "A. Reviewer",
+            at("2026-09-27T08:00:00Z"),
+        )
+        .unwrap()
+        .with_comment("the wall is a lining")
+        .with_reply(DecisionComment::new(
+            "B. Engineer",
+            at("2026-09-28T09:30:00+02:00"),
+            "agreed, no contact needed",
+        ))
+        .with_reply(
+            DecisionComment::new("C. Site", at("2026-09-29T08:00:00Z"), "confirmed on site")
+                .with_id("7e1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b".parse().unwrap()),
+        )])
+        .unwrap();
+        let (back, markups) = round_trip(&decisions);
+        assert_eq!(back, decisions);
+
+        // Three BCF comments: the decision's own, then the replies in order.
+        let wall_topic = &markups[0];
+        let texts: Vec<_> = wall_topic
+            .comments
+            .iter()
+            .map(|c| (c.author.as_deref().unwrap(), c.comment.as_deref().unwrap()))
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                ("A. Reviewer", "Rejected: the wall is a lining"),
+                ("B. Engineer", "agreed, no contact needed"),
+                ("C. Site", "confirmed on site"),
+            ]
+        );
+        assert_eq!(
+            wall_topic.comments[2].guid.as_deref(),
+            Some("7e1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b")
+        );
+        // Re-exporting reproduces every comment GUID.
+        let (_, again) = round_trip(&back);
+        assert_eq!(again[0].comments, wall_topic.comments);
+    }
+
+    #[test]
+    fn a_thread_not_opened_by_the_decider_keeps_its_first_comment_apart() {
+        let wall = report().findings[0].id.unwrap();
+        let same = DecisionComment::new("B. Engineer", at("2026-09-28T08:00:00Z"), "+1");
+        let decisions = Decisions::new([Decision::new(
+            wall,
+            DecisionStatus::Accepted,
+            "A. Reviewer",
+            at("2026-09-27T08:00:00Z"),
+        )
+        .unwrap()
+        .with_reply(same.clone())
+        // The same words twice keep two distinct GUIDs.
+        .with_reply(same)])
+        .unwrap();
+        let (back, markups) = round_trip(&decisions);
+        assert_eq!(back, decisions);
+        assert_eq!(markups[0].comments.len(), 3);
+        assert_eq!(markups[0].comments[0].comment.as_deref(), Some("Accepted"));
+        assert_ne!(markups[0].comments[1].guid, markups[0].comments[2].guid);
     }
 }

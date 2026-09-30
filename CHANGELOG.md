@@ -111,7 +111,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   3.0 archive back and maps each topic whose GUID is a finding's identity
   onto a review decision: a closed, resolved, done or accepted topic
   accepts the finding, a rejected one rejects it, and a commented topic of
-  another status is open; the latest comment is carried, and author and
+  another status is open; its comments are carried, and author and
   date come from the export's decision comment, the topic's modification,
   its last comment or its creation. An untouched topic decides nothing.
   Topics that decide no current finding are listed in `Import::unmatched`
@@ -140,6 +140,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   **Breaking:** `Decision` and `FindingDecision` gain public fields,
   `DecisionError` gains `Blank`, `Export` gains `unwritten`, and `import`
   and `import_topics` take `rule_labels`.
+- **Comment threads.** (Closes #171) A decision holds an ordered thread of
+  comments (`Decision::comments`, `FindingDecision::comments`, each a
+  `DecisionComment` with author, date, text and an optional tracker `id`;
+  `with_reply` adds one). A thread of one comment by the decider at the
+  decision's date is still written as the single `comment`, so old
+  decisions files and reports read and serialize byte-identically; any
+  other thread is `comments`, and both at once are refused. The BCF export
+  writes the whole thread after the decision's own comment, under stable
+  GUIDs (a comment's own `id`, else UUIDv5 over its content), and import
+  reads every comment back in order. `axioval decide --comment` continues a
+  finding's thread instead of replacing it, and listings show the latest
+  comment and how many came before. **Breaking:** `Decision::comment` and
+  `FindingDecision::comment` become `comments`.
 
 ### Changed
 

@@ -12191,7 +12191,10 @@ fn a_bcf_reviewed_elsewhere_decides_the_next_check() {
     assert_eq!(
         decision(&ids[1]),
         json!({"status": "open", "author": "B. Reviewer", "date": "2026-09-28T09:30:00Z",
-               "comment": "the reference is on the drawing", "evidence": "unknown"})
+               "comments": [{"author": "B. Reviewer", "date": "2026-09-28T09:30:00Z",
+                             "text": "the reference is on the drawing",
+                             "id": "7e1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b"}],
+               "evidence": "unknown"})
     );
     assert_eq!(
         second["unmatched_topics"],
@@ -12749,4 +12752,133 @@ fn a_decision_assigns_a_finding_with_due_date_priority_and_labels() {
         ),
         "{listing}"
     );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn comments_by_several_reviewers_form_a_thread_through_bcf() {
+    let case = Case::new("decisions-thread");
+    let axioval = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .current_dir(case.path("."))
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let read = |name: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(case.path(name)).unwrap()).unwrap()
+    };
+    let r1 = case.path("r1.json");
+    let output = case.check(&revision(1, &[]), true, &["--report", r1.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let id = read("r1.json")["report"]["findings"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for (author, status, comment, date) in [
+        (
+            "A. Reviewer",
+            "open",
+            "is this a lining?",
+            "2026-09-27T08:00:00Z",
+        ),
+        (
+            "B. Architect",
+            "open",
+            "yes, a lining",
+            "2026-09-28T08:00:00Z",
+        ),
+        (
+            "A. Reviewer",
+            "rejected",
+            "then no reference is needed",
+            "2026-09-29T08:00:00Z",
+        ),
+    ] {
+        let output = axioval(&[
+            "decide",
+            "r1.json",
+            "--decisions",
+            "decisions.json",
+            "--finding",
+            &id,
+            "--status",
+            status,
+            "--author",
+            author,
+            "--comment",
+            comment,
+            "--date",
+            date,
+        ]);
+        assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    }
+    let thread = read("decisions.json")["decisions"][0]["comments"].clone();
+    assert_eq!(thread.as_array().unwrap().len(), 3, "{thread:#}");
+    assert_eq!(thread[1]["author"], "B. Architect");
+
+    let bcf = case.path("r2.bcfzip");
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            case.path("r2.json").to_str().unwrap(),
+            "--decisions",
+            case.path("decisions.json").to_str().unwrap(),
+            "--bcf",
+            bcf.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    let markup = archive
+        .topics()
+        .find(|markup| markup.topic.guid.as_deref() == Some(id.as_str()))
+        .unwrap();
+    let comments: Vec<_> = markup
+        .comments
+        .iter()
+        .map(|c| c.comment.as_deref().unwrap())
+        .collect();
+    assert_eq!(
+        comments,
+        [
+            "Rejected",
+            "is this a lining?",
+            "yes, a lining",
+            "then no reference is needed"
+        ]
+    );
+    let listing =
+        String::from_utf8(axioval(&["report", "r2.json", "--decision", "rejected"]).stdout)
+            .unwrap();
+    assert!(
+        listing.contains(
+            "rejected by A. Reviewer on 2026-09-29T08:00:00Z: then no reference is needed (+2 earlier comment(s))"
+        ),
+        "{listing}"
+    );
+
+    // Read back from the archive, the thread is the same.
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            case.path("r3.json").to_str().unwrap(),
+            "--decisions-from",
+            bcf.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let carried = read("r3.json")["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["id"] == id.as_str())
+        .unwrap()["decision"]
+        .clone();
+    assert_eq!(carried["status"], "rejected");
+    assert_eq!(carried["comments"], thread);
 }

@@ -26,6 +26,11 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   change a selection, evidence or outcome. `axioval-ids` keeps an IDS
   specification's origin there so it can be exported again. The MCS rule
   folder must mirror this field.
+- A decision's `comments` is a thread. Its wire form is a compatibility
+  contract: exactly one comment by the decision's author at its date and
+  without `id` is written as the legacy `comment` string, anything else as
+  `comments`; `comment` and `comments` together are refused. Keep
+  `thread_to_wire`/`thread_from_wire` the only place that decides this.
 - Resource objects (instances outside the object population) are never in
   a `Project`. A report carries the ones its outcomes name in
   `Report::resources`, sorted, omitted when empty; resolve an outcome's

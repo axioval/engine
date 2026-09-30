@@ -1,6 +1,6 @@
 //! Reviewers' decisions about findings, kept across re-checks.
 //!
-//! A reviewer accepts or rejects a finding, with a comment, and may assign
+//! A reviewer accepts or rejects a finding, with comments, and may assign
 //! it to someone, set a due date and a priority, and label it. The decision is
 //! keyed by the finding's [`FindingId`], so checking a revised model carries
 //! it over to the finding with the same identity. A decision whose finding is
@@ -34,6 +34,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::{DateTime, Finding, FindingId, Report, RuleId, Severity};
 
@@ -134,9 +135,80 @@ fn severity(severity: &Severity) -> &'static str {
     }
 }
 
-/// One reviewer's decision about one finding.
+/// One comment of a decision's thread: who said what, when.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct DecisionComment {
+    /// Who; never blank.
+    pub author: String,
+    /// When.
+    pub date: DateTime,
+    /// What.
+    pub text: String,
+    /// The identity an issue tracker gave the comment (a BCF comment GUID),
+    /// kept so writing it back updates it instead of adding a copy. Absent
+    /// for a comment made here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<Uuid>,
+}
+
+impl DecisionComment {
+    /// A comment made here, by `author` at `date`.
+    pub fn new(author: impl Into<String>, date: DateTime, text: impl Into<String>) -> Self {
+        Self {
+            author: author.into(),
+            date,
+            text: text.into(),
+            id: None,
+        }
+    }
+
+    /// The same comment under an issue tracker's identity.
+    #[must_use]
+    pub fn with_id(mut self, id: Uuid) -> Self {
+        self.id = Some(id);
+        self
+    }
+}
+
+/// A thread as written: one comment by the decision's own author at its
+/// date and without an identity is the single `comment` it always was;
+/// any other thread is `comments`.
+fn thread_to_wire(
+    comments: Vec<DecisionComment>,
+    author: &str,
+    date: DateTime,
+) -> (String, Vec<DecisionComment>) {
+    match comments.as_slice() {
+        [only] if only.author == author && only.date == date && only.id.is_none() => {
+            (only.text.clone(), Vec::new())
+        }
+        _ => (String::new(), comments),
+    }
+}
+
+/// A thread as read: `comment` is one comment by the decision's author at
+/// its date, `comments` the whole thread; never both.
+fn thread_from_wire(
+    comment: String,
+    comments: Vec<DecisionComment>,
+    author: &str,
+    date: DateTime,
+) -> Result<Vec<DecisionComment>, String> {
+    match (comment.is_empty(), comments.is_empty()) {
+        (true, _) => Ok(comments),
+        (false, true) => Ok(vec![DecisionComment::new(author, date, comment)]),
+        (false, false) => Err("a decision has `comment` or `comments`, never both".to_owned()),
+    }
+}
+
+/// One reviewer's decision about one finding.
+///
+/// On the wire a thread of one comment by the decision's author at its
+/// date is the field `comment`, as before threads existed; any other thread
+/// is `comments`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "DecisionWire", into = "DecisionWire")]
 pub struct Decision {
     /// The identity of the finding decided about.
     pub finding: FindingId,
@@ -145,25 +217,80 @@ pub struct Decision {
     pub author: String,
     /// When.
     pub date: DateTime,
-    /// Why; may be empty, and is then absent on the wire.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub comment: String,
+    /// Why, and what was said since, oldest first; may be empty.
+    pub comments: Vec<DecisionComment>,
     /// Who the finding is assigned to; never blank.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
     /// When the finding is due to be dealt with.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due_date: Option<DateTime>,
     /// How urgent, in the project's own vocabulary (`High`, `Normal`, ...);
     /// never blank.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
     /// Labels the reviewer gave the finding, in order; none blank.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
     /// The finding as it was decided, when recorded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub basis: Option<DecisionBasis>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DecisionWire {
+    finding: FindingId,
+    status: DecisionStatus,
+    author: String,
+    date: DateTime,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    comment: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    comments: Vec<DecisionComment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    assigned_to: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    due_date: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    basis: Option<DecisionBasis>,
+}
+
+impl TryFrom<DecisionWire> for Decision {
+    type Error = String;
+    fn try_from(wire: DecisionWire) -> Result<Self, String> {
+        Ok(Self {
+            comments: thread_from_wire(wire.comment, wire.comments, &wire.author, wire.date)?,
+            finding: wire.finding,
+            status: wire.status,
+            author: wire.author,
+            date: wire.date,
+            assigned_to: wire.assigned_to,
+            due_date: wire.due_date,
+            priority: wire.priority,
+            labels: wire.labels,
+            basis: wire.basis,
+        })
+    }
+}
+
+impl From<Decision> for DecisionWire {
+    fn from(decision: Decision) -> Self {
+        let (comment, comments) =
+            thread_to_wire(decision.comments, &decision.author, decision.date);
+        Self {
+            finding: decision.finding,
+            status: decision.status,
+            author: decision.author,
+            date: decision.date,
+            comment,
+            comments,
+            assigned_to: decision.assigned_to,
+            due_date: decision.due_date,
+            priority: decision.priority,
+            labels: decision.labels,
+            basis: decision.basis,
+        }
+    }
 }
 
 impl Decision {
@@ -187,7 +314,7 @@ impl Decision {
             status,
             author,
             date,
-            comment: String::new(),
+            comments: Vec::new(),
             assigned_to: None,
             due_date: None,
             priority: None,
@@ -196,10 +323,27 @@ impl Decision {
         })
     }
 
-    /// The same decision with a comment.
+    /// The same decision with its thread replaced by `comment`, by its
+    /// author at its date; an empty `comment` leaves the thread empty.
     #[must_use]
     pub fn with_comment(mut self, comment: impl Into<String>) -> Self {
-        self.comment = comment.into();
+        let comment = comment.into();
+        self.comments = if comment.is_empty() {
+            Vec::new()
+        } else {
+            vec![DecisionComment::new(
+                self.author.clone(),
+                self.date,
+                comment,
+            )]
+        };
+        self
+    }
+
+    /// The same decision with `comment` added to the end of its thread.
+    #[must_use]
+    pub fn with_reply(mut self, comment: DecisionComment) -> Self {
+        self.comments.push(comment);
         self
     }
 
@@ -238,7 +382,7 @@ impl Decision {
         self
     }
 
-    /// Refuses a blank author, assignee, priority or label.
+    /// Refuses a blank author, assignee, priority, label or comment author.
     fn validate(&self) -> Result<(), DecisionError> {
         if self.author.trim().is_empty() {
             return Err(DecisionError::BlankAuthor(self.finding));
@@ -266,6 +410,9 @@ impl Decision {
         if self.labels.iter().any(|label| label.trim().is_empty()) {
             return blank("labels");
         }
+        if self.comments.iter().any(|c| c.author.trim().is_empty()) {
+            return blank("comment author");
+        }
         Ok(())
     }
 }
@@ -279,12 +426,13 @@ pub enum DecisionError {
     /// A decision names nobody who made it.
     #[error("the decision about finding {0} has a blank author")]
     BlankAuthor(FindingId),
-    /// A decision's assignee, priority or a label is blank.
+    /// A decision's assignee, priority, a label or a comment's author is
+    /// blank.
     #[error("the decision about finding {finding} has a blank {field}")]
     Blank {
         /// The finding decided about.
         finding: FindingId,
-        /// `assigned_to`, `priority` or `labels`.
+        /// `assigned_to`, `priority`, `labels` or `comment author`.
         field: &'static str,
     },
     /// A finding of the report has no identity, so no decision can be
@@ -439,31 +587,90 @@ pub struct DecisionChange {
 }
 
 /// The decision carried over to a finding of a report.
+///
+/// Its thread is written as [`Decision`]'s is: one comment by its author at
+/// its date is `comment`, any other thread `comments`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "FindingDecisionWire", into = "FindingDecisionWire")]
 pub struct FindingDecision {
     pub status: DecisionStatus,
     pub author: String,
     pub date: DateTime,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub comment: String,
+    /// The decision's thread, oldest first.
+    pub comments: Vec<DecisionComment>,
     /// Who the finding is assigned to.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
     /// When the finding is due.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due_date: Option<DateTime>,
     /// How urgent, in the project's own vocabulary.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
     /// The reviewer's labels, in order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
     /// Whether the finding changed since it was decided.
     pub evidence: EvidenceCheck,
     /// What changed, when [`EvidenceCheck::Changed`]; empty otherwise.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changes: Vec<DecisionChange>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FindingDecisionWire {
+    status: DecisionStatus,
+    author: String,
+    date: DateTime,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    comment: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    comments: Vec<DecisionComment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    assigned_to: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    due_date: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<String>,
+    evidence: EvidenceCheck,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    changes: Vec<DecisionChange>,
+}
+
+impl TryFrom<FindingDecisionWire> for FindingDecision {
+    type Error = String;
+    fn try_from(wire: FindingDecisionWire) -> Result<Self, String> {
+        Ok(Self {
+            comments: thread_from_wire(wire.comment, wire.comments, &wire.author, wire.date)?,
+            status: wire.status,
+            author: wire.author,
+            date: wire.date,
+            assigned_to: wire.assigned_to,
+            due_date: wire.due_date,
+            priority: wire.priority,
+            labels: wire.labels,
+            evidence: wire.evidence,
+            changes: wire.changes,
+        })
+    }
+}
+
+impl From<FindingDecision> for FindingDecisionWire {
+    fn from(decision: FindingDecision) -> Self {
+        let (comment, comments) =
+            thread_to_wire(decision.comments, &decision.author, decision.date);
+        Self {
+            status: decision.status,
+            author: decision.author,
+            date: decision.date,
+            comment,
+            comments,
+            assigned_to: decision.assigned_to,
+            due_date: decision.due_date,
+            priority: decision.priority,
+            labels: decision.labels,
+            evidence: decision.evidence,
+            changes: decision.changes,
+        }
+    }
 }
 
 impl FindingDecision {
@@ -485,7 +692,7 @@ impl FindingDecision {
             status: decision.status,
             author: decision.author.clone(),
             date: decision.date,
-            comment: decision.comment.clone(),
+            comments: decision.comments.clone(),
             assigned_to: decision.assigned_to.clone(),
             due_date: decision.due_date,
             priority: decision.priority.clone(),

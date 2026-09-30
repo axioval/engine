@@ -94,9 +94,14 @@ writes it into its topic:
 | `rejected` | `TopicStatus` `Rejected` (`STATUS_REJECTED`) |
 | `open` | the host's `Options::status`, as undecided |
 
-Every decided topic gets one comment: the status, then `: ` and the
-decision's comment when it has one (`Accepted: agreed with the engineer`),
-by the decision's author at its date. A decision's `priority` replaces the
+Every decided topic gets the decision's own comment first: the status, then
+`: ` and the thread's first comment when that is by the decision's author at
+its date (`Accepted: agreed with the engineer`), by the decision's author at
+its date. Every other comment of the thread follows, oldest first, by its
+own author at its own date, under the GUID it came with
+(`DecisionComment::id`) or else UUIDv5 over its author, date, text and
+repetition in the topic GUID's namespace, so a re-export reproduces every
+comment GUID and a BCF tool updates rather than duplicates them. A decision's `priority` replaces the
 topic's `Priority`, and its `labels` follow the topic's own labels, each
 once. Its `assigned_to` and `due_date` belong in `AssignedTo` and `DueDate`,
 which `openbim-bcf` cannot write yet (openbimrs/bcf#11): every one is
@@ -144,7 +149,7 @@ again decides nothing.
 | `TopicStatus` `Rejected` (`REJECTED_STATUSES`, any case) | `rejected` |
 | any other status, with the export's decision comment or any other comment | `open` |
 | author and date | of the latest of the export's decision comment and the topic's `ModifiedAuthor`/`ModifiedDate`; without either, of its last comment; without comments, of its creation |
-| comment | the latest comment the export did not write; else the text of the export's decision comment, without its status word and change note |
+| comments | the text of the export's decision comment without its status word and change note, by its author at its date, then every other comment in archive order, each keeping its GUID as `id` unless it is the one the export derives; comments without text are skipped |
 | assignee, due date | `AssignedTo`, `DueDate` (a date without UTC offset is unreadable) |
 | priority | `Priority`, when it differs from the one the finding's severity gives |
 | labels | every label the export does not write for the finding: not the rule id, not the `rule_labels` passed to `import` (pass those the archive was exported with), not `Decision changed`, and no `Folder: `, `Category: `, `Storey: ` or `Space: ` label |

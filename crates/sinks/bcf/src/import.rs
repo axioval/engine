@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
 use axioval_ir::{
-    DateTime, Decision, DecisionError, DecisionStatus, Decisions, Finding, FindingId,
-    IdentityError, Project, Report, finding_ids, not_evaluated_ids,
+    DateTime, Decision, DecisionComment, DecisionError, DecisionStatus, Decisions, Finding,
+    FindingId, IdentityError, Project, Report, finding_ids, not_evaluated_ids,
 };
 use openbim_bcf::{BcfError, Comment, Limits, Markup};
 use thiserror::Error;
@@ -168,9 +168,10 @@ pub fn import(
 /// - **Author and date** of the latest of the export's decision comment and
 ///   the topic's modification; without either, of its last comment, and
 ///   without comments, of its creation.
-/// - **Comment**: the latest comment the export did not write, or else the
-///   text of the export's decision comment without its status prefix and
-///   change note.
+/// - **Comments**: the text of the export's decision comment without its
+///   status word and change note, by its author at its date, then every
+///   other comment in archive order, each keeping its GUID as
+///   [`DecisionComment::id`] unless it is the one the export derives.
 /// - **Assignee** and **due date** from `AssignedTo` and `DueDate`.
 /// - **Priority** from `Priority` when it differs from the one the export
 ///   derives from the finding's severity.
@@ -247,6 +248,25 @@ fn unknown(error: IdentityError) -> ImportError {
 /// from the topic's so re-exporting reproduces it.
 pub(crate) fn decision_comment_guid(topic: Uuid) -> Uuid {
     Uuid::new_v5(&topic, b"decision")
+}
+
+/// GUIDs of the thread comments the export writes without an identity of
+/// their own: UUIDv5 in the topic's namespace over author, date, text and
+/// how often that same comment came before, so re-exporting reproduces them
+/// and importing recognises them.
+#[derive(Default)]
+pub(crate) struct ThreadGuids {
+    seen: BTreeMap<String, usize>,
+}
+
+impl ThreadGuids {
+    pub(crate) fn next(&mut self, topic: Uuid, author: &str, date: DateTime, text: &str) -> Uuid {
+        let key = format!("comment\n{author}\n{date}\n{text}");
+        let count = self.seen.entry(key.clone()).or_default();
+        let guid = Uuid::new_v5(&topic, format!("{key}\n{count}").as_bytes());
+        *count += 1;
+        guid
+    }
 }
 
 /// The decision status a topic status stands for.
@@ -360,8 +380,8 @@ impl Review {
     }
 }
 
-/// A reviewer's comment: author, date and trimmed text.
-type Said<'a> = (String, DateTime, &'a str);
+/// A reviewer's comment: author, date, trimmed text and GUID as written.
+type Said<'a> = (String, DateTime, &'a str, Option<&'a str>);
 
 /// Who decided when: the latest of the export's decision comment and the
 /// topic's modification; without either, the last comment; without
@@ -388,7 +408,7 @@ fn decided_by(
     }
     if candidates.is_empty() {
         return match comments.last() {
-            Some((author, date, _)) => Ok((author.clone(), *date)),
+            Some((author, date, _, _)) => Ok((author.clone(), *date)),
             None => stamp(
                 topic.creation_author.as_deref(),
                 topic.creation_date.as_deref(),
@@ -437,7 +457,7 @@ fn decision(
             .as_deref()
             .map(str::trim)
             .unwrap_or_default();
-        comments.push((author, date, text));
+        comments.push((author, date, text, comment.guid.as_deref()));
     }
     let topic = &markup.topic;
     let status = status(topic.topic_status.as_deref());
@@ -446,18 +466,42 @@ fn decision(
         return Ok(None);
     }
     let (author, date) = decided_by(topic, own, &comments)?;
-    let comment = match comments.iter().rev().find(|(_, _, text)| !text.is_empty()) {
-        Some((_, _, text)) => (*text).to_owned(),
-        None => own
-            .and_then(|own| own.comment.as_deref())
+    let mut thread = Vec::new();
+    if let Some(own) = own {
+        let text = own
+            .comment
+            .as_deref()
             .map(decision_text)
-            .unwrap_or_default()
-            .to_owned(),
-    };
+            .unwrap_or_default();
+        if !text.is_empty() {
+            let (author, date) = stamp(
+                own.author.as_deref(),
+                own.date.as_deref(),
+                "the decision comment",
+            )?;
+            thread.push(DecisionComment::new(author, date, text));
+        }
+    }
+    let mut guids = ThreadGuids::default();
+    for (author, date, text, guid) in comments {
+        if text.is_empty() {
+            continue;
+        }
+        let derived = guids.next(finding.uuid(), &author, date, text);
+        let id = guid
+            .and_then(|guid| Uuid::try_parse(guid).ok())
+            .filter(|guid| *guid != derived);
+        thread.push(DecisionComment {
+            author,
+            date,
+            text: text.to_owned(),
+            id,
+        });
+    }
     let mut decision = Decision::new(finding, status, author, date)
         .map_err(|error| error.to_string())?
-        .with_comment(comment)
         .with_labels(review.labels);
+    decision.comments = thread;
     decision.assigned_to = review.assigned_to;
     decision.due_date = review.due_date;
     decision.priority = review.priority;

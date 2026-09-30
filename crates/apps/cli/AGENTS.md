@@ -44,6 +44,7 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   the run's `rule_labels`, so the export's own labels are not read back as
   a reviewer's.
 - `decide --assign-to/--due/--priority/--label` keep their earlier values
-  when a later decision does not restate them. BCF decision fields the
+  when a later decision does not restate them, and `--comment` appends to
+  the finding's thread, never replaces it. BCF decision fields the
   writer cannot write (`Export::unwritten`) are one stderr warning.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

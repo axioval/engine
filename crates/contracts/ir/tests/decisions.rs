@@ -403,3 +403,78 @@ fn a_blank_assignee_priority_or_label_is_refused() {
         assert!(Decisions::default().record(decided).is_err());
     }
 }
+
+#[test]
+fn a_comment_thread_round_trips_and_a_single_comment_stays_as_it_was() {
+    let mut report = identified("a", 1);
+    let thread = decision(&report.findings[0], DecisionStatus::Accepted)
+        .with_comment("agreed")
+        .with_reply(axioval_ir::DecisionComment::new(
+            "B. Engineer",
+            at("2026-09-28T08:00:00Z"),
+            "the drawing shows a lining",
+        ))
+        .with_reply(
+            axioval_ir::DecisionComment::new("C. Site", at("2026-09-29T08:00:00Z"), "checked")
+                .with_id("7e1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b".parse().unwrap()),
+        );
+    let decisions = Decisions::new([thread]).unwrap();
+    let text = serde_json::to_value(&decisions).unwrap();
+    assert!(text["decisions"][0].get("comment").is_none(), "{text}");
+    assert_eq!(
+        text["decisions"][0]["comments"],
+        json!([
+            {"author": "A. Reviewer", "date": "2026-09-27T08:00:00Z", "text": "agreed"},
+            {"author": "B. Engineer", "date": "2026-09-28T08:00:00Z",
+             "text": "the drawing shows a lining"},
+            {"author": "C. Site", "date": "2026-09-29T08:00:00Z", "text": "checked",
+             "id": "7e1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b"},
+        ])
+    );
+    let back: Decisions = serde_json::from_value(text).unwrap();
+    assert_eq!(back, decisions);
+    report.apply_decisions(&decisions).unwrap();
+    let carried = report.findings[0].decision.as_ref().unwrap();
+    assert_eq!(carried.comments.len(), 3);
+    let back: Report = serde_json::from_value(serde_json::to_value(&report).unwrap()).unwrap();
+    assert_eq!(back, report);
+
+    // One comment by someone else, or at another time, is a thread too.
+    let other = decision(&report.findings[0], DecisionStatus::Open).with_reply(
+        axioval_ir::DecisionComment::new("B. Engineer", at("2026-09-28T08:00:00Z"), "why?"),
+    );
+    let text = serde_json::to_value(&other).unwrap();
+    assert!(text.get("comment").is_none(), "{text}");
+    assert_eq!(text["comments"][0]["author"], "B. Engineer");
+}
+
+#[test]
+fn an_old_single_comment_reads_as_the_first_of_the_thread() {
+    let old = r#"{"finding":"5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20","status":"rejected","author":"A. Reviewer","date":"2026-09-27T08:00:00Z","comment":"a lining"}"#;
+    let decision: Decision = serde_json::from_str(old).unwrap();
+    assert_eq!(
+        decision.comments,
+        [axioval_ir::DecisionComment::new(
+            "A. Reviewer",
+            at("2026-09-27T08:00:00Z"),
+            "a lining"
+        )]
+    );
+    assert_eq!(serde_json::to_string(&decision).unwrap(), old);
+    // Both forms at once are ambiguous.
+    let both = r#"{"finding":"5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20","status":"rejected","author":"A","date":"2026-09-27T08:00:00Z","comment":"x","comments":[{"author":"B","date":"2026-09-27T08:00:00Z","text":"y"}]}"#;
+    assert!(serde_json::from_str::<Decision>(both).is_err());
+    // A comment without an author is refused like a decision without one.
+    let blank = decision.with_reply(axioval_ir::DecisionComment::new(
+        " ",
+        at("2026-09-28T08:00:00Z"),
+        "x",
+    ));
+    assert!(matches!(
+        Decisions::new([blank]),
+        Err(DecisionError::Blank {
+            field: "comment author",
+            ..
+        })
+    ));
+}

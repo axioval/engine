@@ -27,6 +27,7 @@
 - [Report sinks](./sinks.md)
 - [Export profiles](./export.md)
 - [IDS import and export](./ids.md)
+- [Java serialization streams](./java-stream.md)
 
 # Operations
 

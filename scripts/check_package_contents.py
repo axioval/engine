@@ -21,6 +21,7 @@ EXPECTED = {
     "axioval-export",
     "axioval-icdd",
     "axioval-ids",
+    "axioval-java-stream",
     "axioval-ifc",
     "axioval-ir",
     "axioval-rules",

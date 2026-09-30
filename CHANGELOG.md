@@ -42,6 +42,24 @@ All notable changes are documented here. This project follows Semantic Versionin
   **Breaking:** `ClassificationDefinition` has a `classes` field, which a
   struct literal must name, and `Selector` has the variant `DerivedClass`,
   which an exhaustive match must handle.
+- **Java object serialization stream codec.** (Closes #199)
+  The new crate `axioval-java-stream`, in the new `crates/codecs/` group,
+  reads and writes Java object serialization streams. It is written from
+  the public *Java Object Serialization Specification* and knows no
+  application's classes. It covers every `TC_*` record, including class,
+  proxy and enum descriptors, handles and back-references, resets, block
+  data and aborted writes, and every `SC_*` flag, with strings kept as
+  modified UTF-8. `read` returns a graph of records, and
+  `Stream::to_bytes` writes it back byte for byte, handle order included.
+  Custom `writeObject` and `writeExternal` data stays ordered opaque block
+  data and objects. A builder (`Stream::add`, `push`) writes new graphs,
+  and the writer assigns their handles. On untrusted input, the reader
+  never panics, checks every length before allocating, and enforces
+  `Limits` on depth, handles, array and string length and total memory.
+  Tests cover streams a Java program writes over its own test classes
+  (committed with its source), streams built by hand, and truncated,
+  corrupted and random input. The one refusal is externalizable data
+  written with protocol version 1, which only its class can delimit.
 
 - **Exporting rules as IDS.** (Closes #196; with it #165)
   `axioval_ids::export` and `axioval ids export --definitions d.json

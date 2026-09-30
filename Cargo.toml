@@ -6,6 +6,7 @@ resolver = "2"
 #   sources/    adapters that feed the engine, one directory per port kind
 #   sinks/      writers that turn a finished report into an exchange format
 #   packages/   importers that write rule packages from other rule formats
+#   codecs/     standalone wire-format codecs with no engine or source types
 #   facade/     batteries-included re-export surface
 #   apps/       executables
 # A new geometry backend (CGAL, manifold3d) is a sibling under
@@ -16,6 +17,7 @@ members = [
     "crates/sources/*/*",
     "crates/sinks/*",
     "crates/packages/*",
+    "crates/codecs/*",
     "crates/facade/*",
     "crates/apps/*",
 ]
@@ -43,6 +45,7 @@ axioval-bcf-api = { path = "crates/sinks/bcf-api", version = "0.3.0" }
 axioval-bcf-snapshot = { path = "crates/sinks/bcf-snapshot", version = "0.3.0" }
 axioval-ids = { path = "crates/packages/ids", version = "0.3.0" }
 axioval-export = { path = "crates/packages/export", version = "0.3.0" }
+axioval-java-stream = { path = "crates/codecs/java-stream", version = "0.3.0" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"

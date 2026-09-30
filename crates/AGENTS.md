@@ -10,6 +10,8 @@ engine/      capability execution over those contracts
 sources/     adapters that feed the engine, one directory per port kind
 sinks/       writers that turn a finished report into an exchange format
 packages/    importers and exporters between rule packages and other formats
+packages/    importers that write rule packages from other rule formats
+codecs/      standalone wire-format codecs, no engine or source types
 facade/      feature-gated re-export surface
 apps/        executables
 ```
@@ -64,6 +66,16 @@ of `scripts/architecture.py` are exempted, and only for that crate.
 - `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them (the `ids` export profile).
 
 `axioval-spec` is retired: its notice lives in `attic/axioval-spec-notice`.
+
+## codecs/
+
+One subdirectory per wire format. A codec reads and writes its format byte
+for byte and depends on no crate of this tree: it knows the format's
+grammar, never an application's classes, and is core to the architecture
+gate with no exemption. See `codecs/AGENTS.md`.
+
+- `java-stream` (`axioval-java-stream`) — Java object serialization
+  streams, from the public specification.
 
 ## facade/ and apps/
 

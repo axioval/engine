@@ -724,6 +724,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "axioval-java-stream"
+version = "0.3.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "axioval-rules"
 version = "0.3.0"
 dependencies = [

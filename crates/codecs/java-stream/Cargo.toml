@@ -1,0 +1,20 @@
+[package]
+name = "axioval-java-stream"
+description = "Java object serialization stream codec that round-trips byte for byte"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["java", "serialization", "codec", "parser"]
+categories = ["encoding", "parser-implementations"]
+
+# A codec for the stream protocol alone: it knows no application class, no
+# engine contract and no source format, so it depends on nothing in this tree.
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

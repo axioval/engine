@@ -15,6 +15,7 @@ crates/
   sinks/bcf                    one writer per exchange format
   packages/export              the export framework every target shares
   packages/ids                 one importer per rule format
+  codecs/java-stream           one standalone codec per wire format
   facade/axioval               feature-gated re-exports
   apps/cli                     executables
 ```
@@ -42,6 +43,8 @@ contracts/ir  <-  sinks/bcf
 contracts/ir  <-  packages/export
 
 contracts/ir, engine/core, engine/rules, packages/export  <-  packages/ids
+
+codecs/java-stream           (depends on nothing in this tree)
 ```
 
 A host composes adapters. The CLI, for instance, meshes IFC bodies with
@@ -62,6 +65,11 @@ rule comparator live in `axioval-export`, which depends on the IR alone and
 names no format; each target implements the profile, in this workspace
 (`axioval-ids`) or in a host's own crate. A difference that would change a
 check's result is always a refused loss, never a degraded one.
+
+A codec reads and writes one wire format, byte for byte, and depends on no
+crate of this tree. It knows the format's grammar, not the classes or
+records an application stores in it; the application that owns those binds
+them on top ([Java serialization streams](./java-stream.md)).
 
 `axioval-ir`, `axioval-export`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
 

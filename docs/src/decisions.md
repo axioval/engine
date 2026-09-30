@@ -174,3 +174,8 @@ severity's and labels the export does not write are read back as the
 decision's. Topics that decide no current finding are listed
 as unmatched, like stale decisions, and never dropped. `axioval check
 --decisions-from reviewed.bcfzip` applies them in place of a decisions file.
+
+A BCF API 3.0 server is the same way round: `axioval bcf push` creates or
+updates a result's topics on it, and `axioval bcf pull` reads its review
+state into a decisions file, each decision with its finding's basis (see
+[BCF API servers](./sinks.md#bcf-api-servers)).

@@ -12882,3 +12882,129 @@ fn comments_by_several_reviewers_form_a_thread_through_bcf() {
     assert_eq!(carried["status"], "rejected");
     assert_eq!(carried["comments"], thread);
 }
+
+/// The BCF API test server of `axioval-bcf-api`: in process, never a real
+/// server.
+#[path = "../../../sinks/bcf-api/tests/support/mock.rs"]
+mod mock;
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn findings_are_pushed_to_a_bcf_server_and_its_review_is_pulled_back() {
+    let case = Case::new("bcf-server");
+    let server = mock::Mock::start();
+    let axioval = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .current_dir(case.path("."))
+            .args(args)
+            .env("AXIOVAL_BCF_CLIENT_SECRET", mock::CLIENT_SECRET)
+            .env_remove("AXIOVAL_BCF_TOKEN")
+            .env("SOURCE_DATE_EPOCH", "1790416800")
+            .output()
+            .unwrap()
+    };
+    let text = |output: &Output| String::from_utf8_lossy(&output.stdout).into_owned();
+    let r1 = case.path("r1.json");
+    let output = case.check(&revision(1, &[]), true, &["--report", r1.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&r1).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    let topics = findings.len() + result["report"]["not_evaluated"].as_array().unwrap().len();
+    let kept = findings[0]["id"].as_str().unwrap().to_owned();
+    let server_args = [
+        "--server",
+        server.url.as_str(),
+        "--project",
+        mock::PROJECT,
+        "--client-id",
+        mock::CLIENT_ID,
+    ];
+    let bcf = |command: &str, extra: &[&str]| {
+        let mut args = vec!["bcf", command, "r1.json"];
+        args.extend_from_slice(&server_args);
+        args.extend_from_slice(extra);
+        axioval(&args)
+    };
+
+    // Pushing the run creates its topics.
+    let output = bcf("push", &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(
+        text(&output).contains(&format!("{topics} topic(s) created, 0 updated")),
+        "{}",
+        text(&output)
+    );
+    assert_eq!(server.topic_count(), topics);
+    assert_eq!(server.topic(&kept)["topic_status"], "Open");
+
+    // A reviewer closes one on the server; pulling records it as accepted.
+    server.set_status(&kept, "Closed");
+    let output = bcf("pull", &["--decisions", "decisions.json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(
+        text(&output).contains("pulled 1 decision(s)"),
+        "{}",
+        text(&output)
+    );
+    let saved = std::fs::read_to_string(case.path("decisions.json")).unwrap();
+    // No credential ever reaches a file.
+    assert!(!saved.contains(mock::CLIENT_SECRET) && !saved.contains(mock::TOKEN));
+    let decisions: Value = serde_json::from_str(&saved).unwrap();
+    let decision = &decisions["decisions"][0];
+    assert_eq!(decision["finding"], kept.as_str());
+    assert_eq!(decision["status"], "accepted");
+    assert_eq!(decision["author"], "C. Reviewer");
+    assert!(decision["basis"].is_object(), "{decision:#}");
+
+    // A second push updates the topics instead of duplicating them, and
+    // keeps the status the reviewer set.
+    let output = bcf("push", &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(
+        text(&output).contains(&format!("0 topic(s) created, {topics} updated")),
+        "{}",
+        text(&output)
+    );
+    assert_eq!(server.topic_count(), topics);
+    assert_eq!(server.topic(&kept)["topic_status"], "Closed");
+
+    // The next check carries the pulled decision over.
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            case.path("r2.json").to_str().unwrap(),
+            "--decisions",
+            case.path("decisions.json").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let second: Value =
+        serde_json::from_str(&std::fs::read_to_string(case.path("r2.json")).unwrap()).unwrap();
+    let carried = second["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["id"] == kept.as_str())
+        .unwrap()["decision"]
+        .clone();
+    assert_eq!(carried["status"], "accepted");
+    assert_eq!(carried["evidence"], "unchanged");
+
+    // A client id without a secret or device flow cannot sign in.
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .current_dir(case.path("."))
+        .args(["bcf", "push", "r1.json"])
+        .args(server_args)
+        .env_remove("AXIOVAL_BCF_CLIENT_SECRET")
+        .env_remove("AXIOVAL_BCF_TOKEN")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("AXIOVAL_BCF_CLIENT_SECRET"),
+        "{}",
+        stderr(&output)
+    );
+}

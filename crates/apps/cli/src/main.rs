@@ -7,7 +7,8 @@
 //! kind of result. `report` reads a saved result back as a bounded summary
 //! or a filtered, paged listing. `decide` records a reviewer's decisions
 //! about a saved result's findings, which `check --decisions` carries over
-//! to a re-check.
+//! to a re-check. `bcf push` and `bcf pull` exchange a saved result's
+//! topics and decisions with a BCF API 3.0 server.
 //!
 //! Exit status is part of the automation contract; see [`Outcome`].
 
@@ -25,6 +26,7 @@ mod compare;
 mod digest;
 mod geometry;
 mod ids;
+mod server;
 
 use axioval::{
     bcf,
@@ -93,6 +95,11 @@ enum Command {
     /// recorded, 1 nothing written (an unknown finding, an unreadable
     /// file), 2 invalid usage.
     Decide(DecideArgs),
+    /// Exchange topics with a BCF API 3.0 server.
+    Bcf {
+        #[command(subcommand)]
+        command: server::BcfCommand,
+    },
 }
 
 #[derive(Args)]
@@ -576,6 +583,10 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
         }
         Command::Decide(args) => {
             decide(&args)?;
+            Ok(Outcome::Passed)
+        }
+        Command::Bcf { command } => {
+            server::run(command)?;
             Ok(Outcome::Passed)
         }
     }

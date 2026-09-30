@@ -14,6 +14,7 @@ EXPECTED = {
     "axioval",
     "axioval-axiolid",
     "axioval-bcf",
+    "axioval-bcf-api",
     "axioval-cli",
     "axioval-engine",
     "axioval-icdd",

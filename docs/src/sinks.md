@@ -172,6 +172,57 @@ XML reader parses it: a tag with more than `MAX_ATTRIBUTES_PER_TAG` (64)
 attributes refuses the archive, because the reader's duplicate-attribute
 check is quadratic in their number (RUSTSEC-2026-0194).
 
+## BCF API servers
+
+`axioval-bcf-api` exchanges the same topics with a server speaking the
+buildingSMART BCF API 3.0 (REST) instead of a file. It depends on
+`axioval-bcf` for the mapping both ways, so a finding's topic has the same
+GUID, its identity, as a file or over the API.
+
+```rust,ignore
+use axioval_bcf_api::{Auth, Client};
+
+let client = Client::connect("https://bcf.example.com", &Auth::ClientCredentials {
+    client_id: "checker".into(),
+    client_secret: std::env::var("SECRET")?,
+    token_url: None, // the server's /bcf/3.0/auth names it
+})?;
+let pushed = client.push("project-id", &report, project, &options)?;
+let markups = client.pull("project-id")?;
+let imported = axioval_bcf::import_topics(&markups, &report, project, &options.rule_labels)?;
+```
+
+**Signing in.** `Auth::Bearer` takes a token the host obtained,
+`Auth::ClientCredentials` exchanges an OAuth2 client id and secret at the
+server's `oauth2_token_url`, and `Auth::Device` runs the OAuth2 device flow
+(RFC 8628): the host names the device authorization endpoint (BCF API 3.0
+publishes none), shows the person the code, and the client polls until they
+signed in. Credentials stay in `Auth` and `Client`; nothing writes them, and
+their `Debug` output is redacted.
+
+**Push.** `Client::push` exports the report with the given options and, per
+topic, reads the server's topic by GUID: a new one is created (`POST`), an
+existing one updated in place (`PUT`), never duplicated. For a finding the
+report carries no decision about, the server's status, priority, assignee,
+due date, stage and extra labels are kept: a push never overwrites review
+state it did not decide. A decided finding's topic takes the decision's,
+with its assignee and due date, which the API carries although a BCF file
+cannot yet. Comments and viewpoints are added only when their GUID is
+missing, so pushing twice adds nothing; viewpoints are immutable in the API,
+and a camera without an aspect ratio gets `ASPECT_RATIO`. The server
+attributes a pushed comment to the signed-in user.
+
+**Pull.** `Client::pull` reads every topic of a project with its comments
+as `openbim_bcf::Markup`s, so [import](#import) maps them exactly as it maps
+an archive: a status changed on the server comes back as a decision,
+unmatched topics are listed.
+
+**Transport.** `ureq` without a TLS stack by default: an `https` server is
+refused (`ApiError::TlsUnavailable`) rather than contacted in the clear.
+The `native-tls` feature adds HTTPS through the platform's TLS library and
+certificate store. The crate's tests run against an in-process server,
+never a real one.
+
 ## Cameras
 
 A report carries no geometry, so the host passes what it measured:

@@ -1,0 +1,30 @@
+[package]
+name = "axioval-bcf-api"
+description = "BCF API 3.0 client exchanging Axioval findings and review decisions with BCF servers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# Topics are mapped by the BCF sink, both ways, so a finding has one topic
+# GUID whether it travels as a file or over the API.
+[dependencies]
+axioval-bcf.workspace = true
+axioval-ir.workspace = true
+openbim-bcf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Blocking HTTP with no TLS stack by default: HTTPS comes from the
+# `native-tls` feature, the platform's TLS library and certificate store.
+ureq = { version = "3.4", default-features = false, features = ["json"] }
+
+[features]
+default = []
+native-tls = ["ureq/native-tls-no-default"]
+
+[lints]
+workspace = true

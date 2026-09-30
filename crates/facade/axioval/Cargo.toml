@@ -17,6 +17,7 @@ axioval-ifc = { workspace = true, optional = true }
 axioval-axiolid = { workspace = true, optional = true }
 axioval-icdd = { workspace = true, optional = true }
 axioval-bcf = { workspace = true, optional = true }
+axioval-bcf-api = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -36,6 +37,10 @@ axiolid = ["dep:axioval-axiolid"]
 icdd = ["dep:axioval-icdd"]
 # Output sinks follow the same rule: one feature per exchange format.
 bcf = ["dep:axioval-bcf"]
+# Exchange with BCF API 3.0 servers; `bcf-api-tls` adds HTTPS through the
+# platform's TLS library.
+bcf-api = ["bcf", "dep:axioval-bcf-api"]
+bcf-api-tls = ["bcf-api", "axioval-bcf-api/native-tls"]
 
 [lints]
 workspace = true

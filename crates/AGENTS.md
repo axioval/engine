@@ -43,7 +43,10 @@ One subdirectory per exchange format. A sink reads `axioval-ir` reports and
 projects only: never the engine, never a source adapter. It must not depend on
 an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
 
-- `bcf` (`axioval-bcf`) — BCF 2.1 issue archives.
+- `bcf` (`axioval-bcf`) — BCF 2.1 and 3.0 issue archives, and decisions
+  read back from them.
+- `bcf-api` (`axioval-bcf-api`) — BCF API 3.0 client; maps topics through
+  `axioval-bcf`, never a second way.
 
 ## packages/
 
@@ -58,7 +61,8 @@ of `scripts/architecture.py` are exempted, and only for that crate.
 ## facade/ and apps/
 
 - `axioval` — feature-gated facade. One feature per source adapter or sink,
-  named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`).
+  named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`,
+  `bcf-api`).
 - `cli` (`axioval-cli`) — command-line frontend.
 
 ## Adding a source adapter or sink

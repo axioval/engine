@@ -16,7 +16,7 @@ doc = false
 
 [dependencies]
 # The CLI is the host that composes a source adapter with a report sink.
-axioval = { path = "../../facade/axioval", version = "0.3.0", features = ["ifc", "bcf", "axiolid"] }
+axioval = { path = "../../facade/axioval", version = "0.3.0", features = ["ifc", "bcf", "bcf-api", "axiolid"] }
 # `--geometry`: the CLI meshes IFC bodies itself and hands the meshes to the
 # Axiolid services. Neither adapter may depend on the other, so this bridge
 # lives in the host.
@@ -47,6 +47,12 @@ serde_json.workspace = true
 [dev-dependencies]
 openbim-bcf.workspace = true
 zip = { workspace = true, features = ["deflate"] }
+
+[features]
+default = []
+# HTTPS for `axioval bcf push` and `pull`, through the platform's TLS
+# library (OpenSSL on Linux).
+tls = ["axioval/bcf-api-tls"]
 
 [lints]
 workspace = true

@@ -153,6 +153,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   finding's thread instead of replacing it, and listings show the latest
   comment and how many came before. **Breaking:** `Decision::comment` and
   `FindingDecision::comment` become `comments`.
+- **BCF API servers.** (Closes #173) The new `axioval-bcf-api` crate is a
+  BCF API 3.0 client: `Client::connect` checks the server's versions and
+  signs in with a bearer token, OAuth2 client credentials or the OAuth2
+  device flow; `Client::push` creates a report's topics, comments and
+  viewpoints as `axioval_bcf::export` maps them and updates existing
+  topics under their GUIDs instead of duplicating them, keeping review
+  state the report did not decide; `Client::pull` reads topics and
+  comments back as markups for `axioval_bcf::import_topics`. Assignee and
+  due date travel over the API. Credentials never leave `Auth` and
+  `Client`. HTTP through `ureq` without TLS by default; the `native-tls`
+  feature adds HTTPS. The facade gains `bcf-api` and `bcf-api-tls`, and
+  the CLI `axioval bcf push` and `axioval bcf pull` (with a `tls`
+  feature).
 
 ### Changed
 

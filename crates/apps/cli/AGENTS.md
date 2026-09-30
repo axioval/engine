@@ -47,4 +47,12 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   when a later decision does not restate them, and `--comment` appends to
   the finding's thread, never replaces it. BCF decision fields the
   writer cannot write (`Export::unwritten`) are one stderr warning.
+- `src/server.rs` is `axioval bcf push` and `pull`. It rebuilds the project
+  from the result's `objects` (kind and GlobalId of every object the report
+  names; resource objects stay with the report) and maps topics only
+  through the sink and `axioval-bcf-api`. Credentials come from
+  `AXIOVAL_BCF_TOKEN` or `AXIOVAL_BCF_CLIENT_SECRET`, never from arguments,
+  and are never written. `tests/check.rs` includes the API crate's
+  in-process server by path; never call a real server. HTTPS only with the
+  `tls` feature.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

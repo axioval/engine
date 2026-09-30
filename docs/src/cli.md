@@ -387,6 +387,50 @@ date-time with offset, else `SOURCE_DATE_EPOCH` when set, else now, in UTC.
 A finding the result does not contain fails the command (status 1) and
 nothing is written.
 
+## `axioval bcf push` and `axioval bcf pull`
+
+Exchange a saved result's topics with a BCF API 3.0 server:
+
+```bash
+export AXIOVAL_BCF_CLIENT_SECRET=...        # or AXIOVAL_BCF_TOKEN=<bearer token>
+axioval bcf push r1.json --server https://bcf.example.com --project P --client-id checker
+# reviewers work on the server
+axioval bcf pull r1.json --server https://bcf.example.com --project P --client-id checker \
+  --decisions decisions.json
+axioval check --model rev2.ifc ... --decisions decisions.json
+```
+
+`push` maps the result's findings and not-evaluated outcomes onto topics as
+`check --bcf` does (without rule labels, which a result does not record) and
+creates them in the project, or updates the ones the server has under the
+same GUID: pushing twice never duplicates a topic, comment or viewpoint.
+For a finding without a decision, the status, priority, assignee, due date
+and extra labels on the server are kept. It prints how many topics it
+created and updated and how many comments and viewpoints it added.
+
+`pull` reads every topic of the project with its comments and maps them as
+`check --decisions-from` maps an archive: a status changed on the server
+becomes a decision about its finding, recorded in `--decisions` (created
+when missing) with the finding's basis from the result, replacing an
+earlier decision about the same finding. Topics that decide no finding are
+listed on stderr.
+
+Sign-in: `AXIOVAL_BCF_TOKEN` is used as a bearer token when set; otherwise
+`--client-id` with `AXIOVAL_BCF_CLIENT_SECRET` signs in by OAuth2 client
+credentials, or `--client-id` with `--device-authorization-url` by the
+device flow, printing where to enter the code on stderr. `--token-url`
+names the token endpoint when the server's `/bcf/3.0/auth` does not.
+Credentials are never arguments and never written to a result or a
+decisions file. `https` servers need the CLI built with the `tls` feature
+(`cargo install axioval-cli --features tls`, which links the platform's
+TLS library); without it they are refused.
+
+| Status | Meaning |
+|---|---|
+| 0 | Pushed or pulled |
+| 1 | Nothing pulled, or the push stopped: an unreadable result, a server that is unreachable, speaks no BCF API 3.0 or refuses the sign-in or a request |
+| 2 | Invalid command-line usage |
+
 ## `axioval compare`
 
 ```bash

@@ -3,8 +3,8 @@
 use std::cmp::Ordering;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectFrameServiceHandle,
+    ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
@@ -29,8 +29,15 @@ use crate::support::{
 /// without a numeric name, or with a number below `first`, gets its own
 /// finding and does not interrupt the sequence; a number out of order is
 /// reported against the member below it. Ordering needs every member's order
-/// value, so a member without one makes the whole anchor not evaluated: the
-/// engine has no exact source-neutral placement height to fall back on.
+/// value, so a member without one makes the whole anchor not evaluated.
+///
+/// With `order_fallback` `placement_height`, a member with no order value
+/// (absent or null) is ordered by the height of its placement origin, in
+/// metres, from the object-frame service instead: a storey without an
+/// `Elevation` by where it is placed. A member with neither, or with a
+/// placement the service cannot read exactly, still leaves the anchor not
+/// evaluated, and without the service it is a missing service. A present
+/// order value that is not a number is never replaced.
 pub struct NameSequence;
 
 struct Member<'a> {
@@ -52,6 +59,7 @@ impl RuleCapability for NameSequence {
             ParameterDescriptor::required("order", ParameterType::PropertyReference),
             ParameterDescriptor::optional("first", ParameterType::Integer),
             ParameterDescriptor::optional("increment", ParameterType::Integer),
+            ParameterDescriptor::optional("order_fallback", ParameterType::String),
         ]
         .into_iter()
         .chain(crate::support::traversal_parameters())
@@ -65,6 +73,15 @@ impl RuleCapability for NameSequence {
             if increment <= 0 {
                 return Err(invalid("increment must be positive"));
             }
+            let placement_fallback = match parameters.string("order_fallback")? {
+                None => false,
+                Some("placement_height") => true,
+                Some(other) => {
+                    return Err(invalid(format!(
+                        "order_fallback `{other}` is unsupported; use `placement_height`"
+                    )));
+                }
+            };
             Ok::<_, Unavailable>(Config {
                 members: parameters.required_selector("member_selector")?,
                 name: parameters.required_property("name")?,
@@ -72,6 +89,7 @@ impl RuleCapability for NameSequence {
                 first: parameters.integer("first")?.unwrap_or(1),
                 increment,
                 traversal: parameters.traversal()?,
+                placement_fallback,
             })
         })();
         let config = match parsed {
@@ -103,6 +121,8 @@ struct Config<'a> {
     first: i64,
     increment: i64,
     traversal: Option<Traversal>,
+    /// Order a member without an order value by its placement height.
+    placement_fallback: bool,
 }
 
 /// The anchor's members in order, or why they cannot be ordered.
@@ -136,6 +156,8 @@ fn members<'a>(
             .object(&id)
             .ok_or_else(|| invalid(format!("member {id} is not in the project")))?;
         let order = resolve(context, object, config.order)?;
+        let mut evidence = relation_evidence.clone();
+        evidence.extend(order.evidence());
         let order_value = match order.value() {
             Some(PropertyValue::Integer(value)) => {
                 #[allow(clippy::cast_precision_loss)]
@@ -143,6 +165,11 @@ fn members<'a>(
                 value
             }
             Some(PropertyValue::Decimal(value) | PropertyValue::Quantity { value, .. }) => *value,
+            None | Some(PropertyValue::Null) if config.placement_fallback => {
+                let (height, placement) = placement_height(context, &id)?;
+                evidence.push(placement);
+                height
+            }
             other => {
                 return Err((
                     NotEvaluatedReason::IncompleteEvidence,
@@ -155,8 +182,6 @@ fn members<'a>(
             }
         };
         let name = resolve(context, object, config.name)?;
-        let mut evidence = relation_evidence.clone();
-        evidence.extend(order.evidence());
         evidence.extend(name.evidence());
         members.push(Member {
             object,
@@ -172,6 +197,36 @@ fn members<'a>(
             .then_with(|| left.object.id.cmp(&right.object.id))
     });
     Ok(members)
+}
+
+/// The height of `member`'s placement origin in metres, with its evidence.
+fn placement_height(
+    context: &RuleContext<'_>,
+    member: &ObjectId,
+) -> Result<(f64, Evidence), Unavailable> {
+    let frames = context
+        .services
+        .get::<ObjectFrameServiceHandle>()
+        .ok_or_else(|| {
+            (
+                NotEvaluatedReason::MissingService,
+                format!(
+                    "{member} has no order value, and ordering it by its placement height \
+                     needs the object-frame service"
+                ),
+            )
+        })?;
+    let frame = frames.object_frame(member).map_err(|error| {
+        let (reason, message) = crate::body_extent::frame_error(&error);
+        (
+            reason,
+            format!("{member} has no order value, and its placement height is unknown: {message}"),
+        )
+    })?;
+    Ok((
+        frame.frame().origin().coordinates_metres()[2],
+        frame.evidence().clone(),
+    ))
 }
 
 fn name_text(member: &Member<'_>) -> String {

@@ -1253,6 +1253,61 @@ fn a_site_without_geometry_is_found_from_its_representations() {
     assert_eq!(open, [&json!("#30")], "{result:#}");
 }
 
+/// Storeys of one building state no `Elevation` and are placed at 0, 3
+/// and 6 m; the one at 6 m is named `4` where `3` is due.
+#[test]
+fn storeys_without_an_elevation_are_named_in_the_order_of_their_placements() {
+    let case = Case::new("name-sequence-placement");
+    let model = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
+         #6=IFCLOCALPLACEMENT($,#5);\n\
+         #7=IFCCARTESIANPOINT((0.,0.,6.));\n\
+         #8=IFCAXIS2PLACEMENT3D(#7,$,$);\n\
+         #9=IFCLOCALPLACEMENT($,#8);\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCUNITASSIGNMENT((#20));\n\
+         #22=IFCPROJECT('0000000000000000000022',$,'P',$,$,$,$,$,#21);\n\
+         #10=IFCBUILDING('0000000000000000000010',$,'B',$,$,#3,$,$,.ELEMENT.,$,$,$);\n\
+         #11=IFCBUILDINGSTOREY('0000000000000000000011',$,'4',$,$,#9,$,$,.ELEMENT.,$);\n\
+         #12=IFCBUILDINGSTOREY('0000000000000000000012',$,'1',$,$,#3,$,$,.ELEMENT.,$);\n\
+         #13=IFCBUILDINGSTOREY('0000000000000000000013',$,'2',$,$,#6,$,$,.ELEMENT.,$);\n\
+         #14=IFCRELAGGREGATES('0000000000000000000014',$,$,$,#10,(#11,#12,#13));\n\
+         ENDSEC;\nEND-ISO-10303-21;\n";
+    let attribute = |property: &str| {
+        json!({"type": "propertyReference", "propertySet": "axioval:attributes",
+               "property": format!("axioval:example.ifc.{property}")})
+    };
+    let (output, result) = case.geometry_rule(
+        model,
+        &[("building", "IfcBuilding"), ("storey", "IfcBuildingStorey")],
+        "axioval:capability.name-sequence",
+        &registry_signature("axioval:capability.name-sequence"),
+        entity("building"),
+        json!({
+            "member_selector": {"type": "selector", "value": entity("storey")},
+            "name": attribute("name"),
+            "order": attribute("elevation"),
+            "relationship": {"type": "string", "value": "IfcRelAggregates"},
+            "order_fallback": {"type": "string", "value": "placement_height"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#11".to_owned(),
+            "axioval:attributes.axioval:example.ifc.name 4 does not follow 2; expected 3"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
 /// A clash that is a warning in general is an error where a selected wall
 /// is involved.
 #[test]
@@ -3213,6 +3268,13 @@ impl Case {
             "name": {"default": "TotalThickness", "translations": {}},
             "valueKind": "quantity",
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "TotalThickness"}],
+            "citations": [],
+        });
+        definitions["properties"]["axioval:example.ifc.elevation"] = json!({
+            "id": "axioval:example.ifc.elevation",
+            "name": {"default": "Elevation", "translations": {}},
+            "valueKind": "quantity",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Elevation"}],
             "citations": [],
         });
         definitions["properties"]["axioval:example.ifc.body-count"] = json!({

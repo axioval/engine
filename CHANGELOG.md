@@ -30,6 +30,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   exactly; tests now pin it for sites, and the migration table no longer
   lists it as undecidable.
 
+- **Storey name sequence by placement height.** (Closes #159)
+  `name-sequence` takes `order_fallback: placement_height`: a member whose
+  order value is absent or null is ordered by the height of its placement
+  origin from the object-frame service, so storeys without `Elevation`
+  are ordered where they stand. A member with neither stays not evaluated,
+  and without the service it is a missing service. Without the parameter
+  the behaviour is unchanged. **Breaking:** a definition bound to
+  `name-sequence` declares `order_fallback` (`string`) beside its other
+  optional parameters.
+
 ### Changed
 
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes

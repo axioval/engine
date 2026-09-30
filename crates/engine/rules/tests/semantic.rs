@@ -3,9 +3,16 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use axioval_engine::{
+    MetricDirection, MetricFrame, MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService,
+    ObjectFrameServiceHandle, ObjectFront, SourceSnapshot,
+};
 use axioval_ir::NotEvaluatedReason;
-use axioval_ir::PropertyValue;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
+use axioval_ir::{Evidence, ObjectId, PropertyValue};
 use axioval_rules::{
     ConsistentValue, ManualIssue, NameSequence, NumberingConsistency, RelatedCount, RelativeCount,
     SelectorConformance, UniqueValue, register_builtins,
@@ -771,6 +778,151 @@ mod name_sequence {
         assert_eq!(
             unevaluated(&evaluation),
             [("b".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+
+    /// Placement origins by local id; any other object is not placed.
+    struct Heights(BTreeMap<&'static str, f64>, Vec<SourceSnapshot>);
+
+    impl ObjectFrameService for Heights {
+        fn source_snapshots(&self) -> &[SourceSnapshot] {
+            &self.1
+        }
+
+        fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
+            let height = *self
+                .0
+                .get(object.local_id.as_str())
+                .ok_or_else(|| ObjectFrameError::NotPlaced(object.clone()))?;
+            let axis = |vector| MetricDirection::try_new(vector).unwrap();
+            let frame = MetricFrame::try_new(
+                MetricPoint::try_new(object.clone(), [0.0, 0.0, height]).unwrap(),
+                axis([1.0, 0.0, 0.0]),
+                axis([0.0, 1.0, 0.0]),
+                axis([0.0, 0.0, 1.0]),
+            )
+            .unwrap();
+            ObjectFrame::try_new(
+                object.clone(),
+                frame,
+                ObjectFront::NotStated,
+                Evidence::exact(common::source(), format!("placement:{object}")),
+            )
+        }
+    }
+
+    /// Checks with `order_fallback` `placement_height` and, when given, the
+    /// object-frame service placing members at `heights`.
+    fn check_placed(
+        model: Model,
+        heights: Option<&[(&'static str, f64)]>,
+    ) -> axioval_engine::CapabilityEvaluation {
+        let rule = rule(
+            ID,
+            kind("building"),
+            vec![
+                ("member_selector", selector(kind("storey"))),
+                ("name", property(Some(ATTR), "Name")),
+                ("order", property(Some("Levels"), "Elevation")),
+                ("relationship", string("aggregates")),
+                ("order_fallback", string("placement_height")),
+            ],
+        );
+        model.evaluate_with(&NameSequence, &rule, |services| {
+            if let Some(heights) = heights {
+                let snapshot = SourceSnapshot::try_new(common::source(), "r1", "sha256:1").unwrap();
+                services
+                    .register(ObjectFrameServiceHandle::new(Arc::new(Heights(
+                        heights.iter().copied().collect(),
+                        vec![snapshot],
+                    ))))
+                    .unwrap();
+            }
+        })
+    }
+
+    #[test]
+    fn members_without_an_order_value_are_ordered_by_their_placement_height() {
+        // No storey states an elevation; they stand at 0 m, 3 m and 6 m.
+        let storeys = building(&[("g", "1", None), ("u", "3", None), ("m", "2", None)]);
+        let heights = [("g", 0.0), ("m", 3.0), ("u", 6.0)];
+        let evaluation = check_placed(storeys, Some(&heights));
+        assert!(
+            evaluation.findings().is_empty() && evaluation.not_evaluated_outcomes().is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+        // The one at 3 m misnamed `4` is reported against the one below it.
+        let misnamed = building(&[("g", "1", None), ("u", "3", None), ("m", "4", None)]);
+        let evaluation = check_placed(misnamed, Some(&heights));
+        assert_eq!(
+            findings(&evaluation),
+            [
+                (
+                    "m".into(),
+                    "axioval:attributes.Name 4 does not follow 1; expected 2".into()
+                ),
+                (
+                    "u".into(),
+                    "axioval:attributes.Name 3 is not above 4, the member below it".into()
+                ),
+            ]
+        );
+        assert!(
+            evaluation.findings()[0]
+                .evidence
+                .iter()
+                .any(|evidence| evidence.locator.starts_with("placement:"))
+        );
+        // A stated elevation still orders its member: 7 m is above 6 m.
+        let mixed = building(&[("g", "1", None), ("m", "2", None), ("u", "4", Some(7.0))])
+            .object("x", "storey")
+            .edge("aggregates", "b", "x")
+            .text("x", ATTR, "Name", "3");
+        let heights = [("g", 0.0), ("m", 3.0), ("x", 6.0), ("u", 100.0)];
+        let evaluation = check_placed(mixed, Some(&heights));
+        assert!(
+            evaluation.findings().is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+    }
+
+    #[test]
+    fn a_member_with_neither_an_order_value_nor_a_placement_is_not_evaluated() {
+        let storeys = || building(&[("g", "1", Some(0.0)), ("m", "2", None)]);
+        let evaluation = check_placed(storeys(), Some(&[("g", 0.0)]));
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("b".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+        // Without the object-frame service the fallback is a missing service.
+        let evaluation = check_placed(storeys(), None);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("b".to_owned(), NotEvaluatedReason::MissingService)]
+        );
+    }
+
+    #[test]
+    fn an_unknown_order_fallback_is_an_invalid_declaration() {
+        let evaluation = building(&[("g", "1", Some(0.0))]).evaluate(
+            &NameSequence,
+            &rule(
+                ID,
+                kind("building"),
+                vec![
+                    ("member_selector", selector(kind("storey"))),
+                    ("name", property(Some(ATTR), "Name")),
+                    ("order", property(Some("Levels"), "Elevation")),
+                    ("order_fallback", string("bounding_box")),
+                ],
+            ),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
 }

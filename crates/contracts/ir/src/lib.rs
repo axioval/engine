@@ -628,8 +628,10 @@ pub const BODY_KIND_EXTRUSION: &str = "extrusion";
 /// (`contract::ClassificationDefinition`); the engine answers it, never a
 /// source. A first-match classification's value is a string, an all-match
 /// one's a list of strings; an object no row matches has none (an exact
-/// absence). Names are the ruleset's own and bind to no concept. Reserved
-/// like [`ATTRIBUTE_SET`].
+/// absence). A hierarchical classification also answers `<id>;level=<n>`,
+/// the class at level `n` of its tree on the way from the assigned class to
+/// its root (`contract::ClassificationProperty`). Names are the ruleset's
+/// own and bind to no concept. Reserved like [`ATTRIBUTE_SET`].
 pub const CLASSIFICATION_SET: &str = "axioval:classification";
 
 /// Whether `set` is one of the reserved sets, which bind to themselves.

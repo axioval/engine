@@ -46,6 +46,69 @@ Every object is read as the property `space-use` in the set
           "property": "space-use"}
 ```
 
+### Class trees
+
+A classification may declare `classes`: a tree of classes, each with an
+`id`, an optional `code`, a localized `name` and an optional `parent`. A
+class without a parent is a root, at level 1; every other class is one
+level below its parent. Every row then assigns a declared class id, a
+leaf or an inner class, as far as its selector can tell. Without
+`classes` a classification is flat, its classes the names its rows
+assign, and it behaves and serializes exactly as before.
+
+```json
+"cost-group": {
+  "id": "cost-group",
+  "name": {"default": "Cost group", "translations": {}},
+  "classes": [
+    {"id": "kg-300", "code": "300", "name": {"default": "Building construction", "translations": {}}},
+    {"id": "kg-330", "code": "330", "name": {"default": "External walls", "translations": {}}, "parent": "kg-300"},
+    {"id": "kg-331", "code": "331", "name": {"default": "Load-bearing external walls", "translations": {}}, "parent": "kg-330"}
+  ],
+  "rows": [
+    {"selector": {"kind": "property", "property": "t.LoadBearing", "operator": "equals",
+                  "value": {"type": "boolean", "value": true}}, "class": "kg-331"},
+    {"selector": {"kind": "entityType", "objectType": "t.Wall"}, "class": "kg-330"}
+  ]
+}
+```
+
+A hierarchical classification reads in `axioval:classification` as:
+
+- `cost-group`: the class a row assigned, as for a flat one (`kg-331`).
+- `cost-group;level=<n>`: the class at level `n` on the way from the
+  assigned class to its root: the class itself at its own level, an
+  ancestor above it (`kg-300` at level 1). An object whose class lies above
+  the level (an inner class at level 2 read at level 3) has no class there,
+  an exact absence, as an unclassified object has none. An all-match
+  classification lists the distinct classes at that level, in row order.
+
+`n` is a positive integer written without leading zeros, at most the
+tree's depth; any other parameter, and a level on a flat classification,
+is an unknown concept. The value is the class id, so a takeoff grouped by
+`cost-group;level=1` has one group per root.
+
+A `derivedClass` selector selects the objects a classification assigns a
+class, or with `includeDescendants` that class or any below it, as the
+`classification` selector's `includeDescendants` does for a source's
+classification codes:
+
+```json
+{"kind": "derivedClass", "classification": "cost-group", "class": "kg-330",
+ "includeDescendants": true}
+```
+
+An all-match classification's object is selected when any class it
+assigns is. An unclassified object is not selected, and one whose class
+cannot be derived is not evaluated. The class must be declared (for a
+flat classification, assigned by a row, and it has no descendants), or
+compilation refuses it as an unknown concept (kind
+`axioval:classification class`, concept `<classification>/<class>`). The
+selector reads its classification, so a classification's rows may use it
+on another classification, never in a cycle.
+
+### Deriving and compiling
+
 The runtime classifies every object before any rule runs, each
 classification after those its rows read; its rows are evaluated by the
 host's outcome refiner. `axioval:capability.unclassified-object` (parameter
@@ -57,7 +120,10 @@ Compilation refuses (`EngineError::InvalidClassification`) a classification
 declared under another key than its id, without rows, with a blank class,
 with a row reading a rule's outcome (classes are derived before any rule
 runs), classifications reading one another in a cycle, a classification
-declared by two rulesets compiled together with different rows, and any
+declared by two rulesets compiled together with different rows or classes,
+declared classes with a blank or repeated id or code, a parent that is not
+declared, parents forming a cycle, a row assigning an undeclared class
+(all checked by `axioval_ir::contract::ClassTree::of`), and any
 classification when the host registered no outcome refiner. A reference to
 an undeclared classification is an unknown concept
 (`EngineError::UnknownConcept`, kind `axioval:classification`).

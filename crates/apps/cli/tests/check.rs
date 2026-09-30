@@ -1017,6 +1017,105 @@ fn walls_a_derived_classification_leaves_unclassified_are_reported() {
     );
 }
 
+/// A three-level wall classification: referenced walls in the leaf
+/// `kg-331`, the rest in `kg-332`, both below `kg-330` below `kg-300`.
+/// The reference rule selects the inner class with its descendants, and a
+/// takeoff counts the walls by level 1 and by leaf.
+#[test]
+fn a_class_tree_selects_descendants_and_groups_a_takeoff_by_level() {
+    let case = Case::new("class-tree");
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    definitions["definitions"]["axioval:example.takeoff"] = json!({
+        "id": "axioval:example.takeoff",
+        "name": {"default": "Takeoff", "translations": {}},
+        "capability": "axioval:capability.quantity-takeoff",
+        "parameters": registry_signature("axioval:capability.quantity-takeoff"),
+        "citations": [],
+        "tags": [],
+    });
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let mut reference = ruleset["root"]["rules"][0].clone();
+    reference["applicability"]["groups"]["walls"]["selector"] = json!({
+        "kind": "derivedClass", "classification": "wall-group", "class": "kg-330",
+        "includeDescendants": true});
+    let mut takeoff = reference.clone();
+    takeoff["id"] = json!("wall-takeoff");
+    takeoff["definitionId"] = json!("axioval:example.takeoff");
+    takeoff["parameters"] = json!({
+        "group_1": {"type": "propertyReference", "propertySet": "axioval:classification",
+                    "property": "wall-group;level=1"},
+        "group_1_name": {"type": "string", "value": "group"},
+        "group_2": {"type": "propertyReference", "propertySet": "axioval:classification",
+                    "property": "wall-group"},
+        "group_2_name": {"type": "string", "value": "class"},
+    });
+    ruleset["root"]["rules"] = json!([reference, takeoff]);
+    let class = |id: &str, parent: Option<&str>| {
+        let mut class = json!({"id": format!("kg-{id}"), "code": id,
+                               "name": {"default": format!("Group {id}"), "translations": {}}});
+        if let Some(parent) = parent {
+            class["parent"] = json!(format!("kg-{parent}"));
+        }
+        class
+    };
+    ruleset["classifications"] = json!({"wall-group": {
+        "id": "wall-group",
+        "name": {"default": "Wall group", "translations": {}},
+        "classes": [class("300", None), class("330", Some("300")),
+                    class("331", Some("330")), class("332", Some("330"))],
+        "rows": [
+            {"selector": {"kind": "property",
+                          "propertySet": "axioval:example.ifc.pset-wall-common",
+                          "property": "axioval:example.ifc.reference", "operator": "exists"},
+             "class": "kg-331"},
+            {"selector": {"kind": "entityType", "objectType": "axioval:example.ifc.wall"},
+             "class": "kg-332"},
+        ],
+    }});
+    let ruleset = case.write("classified.json", &ruleset.to_string());
+    let model = case.write("model.ifc", &ten_walls_two_without_reference());
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 2, "{result:#}");
+    let table = &result["report"]["tables"][0];
+    assert_eq!(table["group_by"], json!(["group", "class"]), "{result:#}");
+    let rows: Vec<(&Value, &Value)> = table["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| (&row["group"], &row["values"][0]))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                &json!(["kg-300", "kg-331"]),
+                &json!({"type": "exact", "value": 8.0})
+            ),
+            (
+                &json!(["kg-300", "kg-332"]),
+                &json!({"type": "exact", "value": 2.0})
+            ),
+        ],
+        "{result:#}"
+    );
+}
+
 #[test]
 fn a_summary_without_a_saved_result_says_how_to_get_one() {
     let case = Case::new("summary-unsaved");

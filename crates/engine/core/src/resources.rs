@@ -313,6 +313,7 @@ impl ResourceObjects {
             | Selector::Property { .. }
             | Selector::PropertyPattern { .. }
             | Selector::Classification { .. }
+            | Selector::DerivedClass { .. }
             | Selector::Discipline { .. }
             | Selector::Source { .. } => {}
         }

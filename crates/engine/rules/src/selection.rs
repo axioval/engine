@@ -2,18 +2,18 @@
 
 use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationAssignment, ClassificationError,
-    ClassificationServiceHandle, ConceptBindings, NameMatch, NamePattern, NotEvaluatedReason,
-    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, ResourceObjects, RuleContext,
-    RuleOutcomes, SourceDisciplines, SourceMetadataIndex, TypeHierarchyError,
+    ClassificationServiceHandle, Classifications, ConceptBindings, NameMatch, NamePattern,
+    NotEvaluatedReason, PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle, ResourceObjects,
+    RuleContext, RuleOutcomes, SourceDisciplines, SourceMetadataIndex, TypeHierarchyError,
     TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::{
     ComparisonOperator, ParameterValue, Quantifier, RelatedQuantifier, RuleOutcomeKind, Selector,
 };
 use axioval_ir::{
-    Date, DateTime, Discipline, Evidence, Object, ObjectId, PropertyValue, QuantityDimension,
-    SourceId, TemporalPrecision,
+    CLASSIFICATION_SET, Date, DateTime, Discipline, Evidence, Object, ObjectId, PropertyValue,
+    QuantityDimension, SourceId, TemporalPrecision,
 };
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
@@ -95,6 +95,7 @@ pub(crate) enum Selection {
 }
 
 /// Whether `object` is selected; property facts consulted are added to `evidence`.
+#[allow(clippy::too_many_lines)] // one arm per selector kind
 pub(crate) fn selector_matches(
     context: &RuleContext<'_>,
     selector: &Selector,
@@ -122,6 +123,9 @@ pub(crate) fn selector_matches(
                 *include_descendants,
             ),
         ),
+        derived @ Selector::DerivedClass { .. } => {
+            derived_class(context, object, derived, evidence)
+        }
         Selector::AllOf { operands } => all_of(
             operands
                 .iter()
@@ -199,6 +203,40 @@ pub(crate) fn selector_matches(
         Selector::RuleOutcome { rule, outcome } => {
             rule_outcome_matches(context, object, rule, *outcome)
         }
+    }
+}
+
+/// Whether a classification of the run assigned `object` the class, or a
+/// class within it, from the classes the runtime derived before any rule.
+fn derived_class(
+    context: &RuleContext<'_>,
+    object: &Object,
+    selector: &Selector,
+    evidence: &mut Vec<Evidence>,
+) -> Selection {
+    let Selector::DerivedClass {
+        classification,
+        class,
+        include_descendants,
+    } = selector
+    else {
+        unreachable!("only `derivedClass` selectors are matched here");
+    };
+    let Some(classifications) = context.services.get::<std::sync::Arc<Classifications>>() else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "no derived classes are available outside a run".into(),
+        );
+    };
+    match classifications.selects(classification, class, *include_descendants, &object.id) {
+        Ok(matches) => {
+            evidence.push(Evidence::exact(
+                object.id.source.clone(),
+                format!("{CLASSIFICATION_SET}/{classification}#class={class}"),
+            ));
+            verdict(matches)
+        }
+        Err((reason, message)) => Selection::NotEvaluated(reason, message),
     }
 }
 

@@ -273,6 +273,8 @@ A `classification` selector selects the objects carrying a classification in `sy
 
 `includeDescendants` also tests the codes of the assignment's ancestors, so a parent's code selects its children; it needs a `code` or a `codePattern`. The pattern is translated as `propertyPattern` translates names, and the system and the code are met by one assignment together. An assignment whose system the source does not state leaves the object not evaluated unless another assignment already matches. `code` together with `codePattern`, `includeDescendants` without either, or a pattern that cannot be translated exactly (character-class subtraction, `\i`/`\c`, `\p{Is…}`) is an invalid declaration.
 
+A class a ruleset's own classification derives is selected by a `derivedClass` selector instead, with the same `includeDescendants` over the classification's declared class tree ([Derived properties](./derived.md#class-trees)).
+
 ### Source selectors
 
 A `source` selector selects the objects of the sources whose metadata satisfies a comparison, such as the models an architecture application wrote:
@@ -1860,8 +1862,10 @@ the ruleset's classification `classification` (a string, its id) assigns no
 class: every row surely does not match. An object whose deciding row cannot
 be decided is not evaluated, and a classification the ruleset does not
 declare leaves the rule not evaluated. Any other check keys on the class
-itself, read as the property `<id>` in `axioval:classification` (see
-[Derived properties](./derived.md)).
+itself, read as the property `<id>` in `axioval:classification`, or on the
+class at a level of a hierarchical classification's tree, `<id>;level=<n>`,
+and a `derivedClass` selector selects a class with its descendants (see
+[Derived properties](./derived.md#class-trees)).
 
 ### Model comparison
 
@@ -1885,7 +1889,7 @@ table.
 
 | Parameter | Kind | Meaning |
 |---|---|---|
-| `group_1` to `group_3` | `propertyReference` | The group keys, outermost first, each declared only after the one before it. A key is read as a rule's [categories](./refinement.md#nested-categories) read a level: on the object, distinct values joined (`Lab, Office`), no value (absent, null, blank) `-`. A derived classification is the property `<id>` in `axioval:classification`, a type name `Name` in `axioval:type-attributes`, a material a property of `axioval:material`. |
+| `group_1` to `group_3` | `propertyReference` | The group keys, outermost first, each declared only after the one before it. A key is read as a rule's [categories](./refinement.md#nested-categories) read a level: on the object, distinct values joined (`Lab, Office`), no value (absent, null, blank) `-`. A derived classification is the property `<id>` in `axioval:classification`, and a level of a hierarchical one `<id>;level=<n>` (level 1 groups by the roots; an object classified above the level has no value there), a type name `Name` in `axioval:type-attributes`, a material a property of `axioval:material`. |
 | `group_<n>_path` | `stringList` | Read key `n` on the objects this path reaches instead (steps as in a `related` selector): `IfcRelContainedInSpatialStructure:backward` with `Name` groups by storey. |
 | `group_<n>_name` | `string` | The group column's id; `group_<n>` without it. |
 | `measure_1` to `measure_4` | `propertyReference` | The quantities aggregated, each declared only after the one before it: a stated number or quantity, or a value of `axioval:measured` (`area`, `volume`, extents). |

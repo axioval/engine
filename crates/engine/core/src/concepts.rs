@@ -10,13 +10,10 @@
 //! module a wall selector over an IFC model selected nothing and the rule
 //! reported a clean pass.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_ir::SourceId;
-use axioval_ir::contract::ExternalName;
+use axioval_ir::contract::{ClassTree, ClassificationProperty, ExternalName};
 use thiserror::Error;
 
 use crate::session::{SnapshotBoundService, SourceSnapshot};
@@ -85,8 +82,8 @@ pub enum BindingError {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ConceptCatalog {
     entries: BTreeMap<(ConceptKind, String), Vec<ExternalName>>,
-    /// The ids of the classifications the ruleset derives.
-    classifications: BTreeSet<String>,
+    /// The classifications the ruleset derives, by id, with their classes.
+    classifications: BTreeMap<String, ClassTree>,
 }
 
 impl ConceptCatalog {
@@ -107,9 +104,17 @@ impl ConceptCatalog {
 
     /// Declares the classifications the ruleset derives, so references to
     /// them in the reserved classification set resolve.
-    pub(crate) fn declare_classifications<'a>(&mut self, ids: impl IntoIterator<Item = &'a str>) {
-        self.classifications
-            .extend(ids.into_iter().map(ToOwned::to_owned));
+    pub(crate) fn declare_classifications(
+        &mut self,
+        trees: impl IntoIterator<Item = (String, ClassTree)>,
+    ) {
+        self.classifications.extend(trees);
+    }
+
+    /// The classes of the declared classification `id`.
+    #[must_use]
+    pub fn classification(&self, id: &str) -> Option<&ClassTree> {
+        self.classifications.get(id)
     }
 
     /// Whether `name` names something the engine derives in the reserved
@@ -119,7 +124,16 @@ impl ConceptCatalog {
         if set == axioval_ir::MEASURED_SET {
             return Some(crate::measured::parse(name).is_ok());
         }
-        (set == axioval_ir::CLASSIFICATION_SET).then(|| self.classifications.contains(name))
+        (set == axioval_ir::CLASSIFICATION_SET).then(|| {
+            ClassificationProperty::parse(name).is_ok_and(|read| {
+                self.classifications
+                    .get(read.classification)
+                    .is_some_and(|tree| {
+                        read.level
+                            .is_none_or(|level| tree.is_hierarchical() && level <= tree.depth())
+                    })
+            })
+        })
     }
 
     /// Whether a concept of this kind is declared.

@@ -100,6 +100,25 @@ pub enum Selector {
         #[serde(rename = "includeDescendants", default)]
         include_descendants: bool,
     },
+    /// Objects a classification of the ruleset (`classifications`)
+    /// assigns `class`, or, with `includeDescendants`, `class` or any class
+    /// below it in the classification's tree.
+    ///
+    /// An all-match classification selects an object when any class it
+    /// assigns does. An unclassified object is not selected; one whose class
+    /// cannot be derived is not evaluated. `class` is a declared class of a
+    /// hierarchical classification, or a class a flat one's rows assign,
+    /// which has no descendants.
+    DerivedClass {
+        classification: String,
+        class: String,
+        #[serde(
+            rename = "includeDescendants",
+            default,
+            skip_serializing_if = "is_false"
+        )]
+        include_descendants: bool,
+    },
     AllOf {
         operands: Vec<Selector>,
     },

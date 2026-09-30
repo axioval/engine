@@ -268,6 +268,32 @@ pub struct ClassificationDefinition {
     #[serde(default, skip_serializing_if = "ClassificationMode::is_first_match")]
     pub mode: ClassificationMode,
     pub rows: Vec<ClassificationRow>,
+    /// The classes of a hierarchical classification, a tree by their
+    /// `parent`s; see [`ClassDefinition`]. With classes declared, every
+    /// row's `class` is a declared class id, a leaf or an inner class.
+    /// Empty keeps the classification flat, its classes the names its rows
+    /// assign, and is omitted when serialized.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub classes: Vec<ClassDefinition>,
+}
+
+/// One declared class of a hierarchical [`ClassificationDefinition`].
+///
+/// A class without a `parent` is a root, at level 1; every other class is
+/// one level below its parent. Ids and codes are unique within the
+/// classification, every parent is declared, and parents form no cycle.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClassDefinition {
+    pub id: String,
+    /// The class's code in its classification system, such as `331`.
+    /// Omitted when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    pub name: LocalizedText,
+    /// The id of the class this one refines. Omitted for a root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
 }
 
 /// One row of a [`ClassificationDefinition`]: objects `selector` selects

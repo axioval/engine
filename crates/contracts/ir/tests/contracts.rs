@@ -889,3 +889,38 @@ fn an_auxiliary_rule_reads_and_writes_its_flag_only_when_set() {
             .auxiliary
     );
 }
+
+#[test]
+fn a_flat_classification_serializes_exactly_as_before_classes() {
+    use axioval_ir::contract::ClassificationDefinition;
+
+    let written = r#"{"id":"space-use","name":{"default":"Space use","translations":{}},"mode":"allMatch","rows":[{"selector":{"kind":"all"},"class":"office"}]}"#;
+    let flat: ClassificationDefinition = serde_json::from_str(written).unwrap();
+    assert!(flat.classes.is_empty());
+    assert_eq!(serde_json::to_string(&flat).unwrap(), written);
+}
+
+#[test]
+fn a_hierarchical_classification_round_trips_its_classes() {
+    use axioval_ir::contract::{ClassTree, ClassificationDefinition, Selector};
+
+    let written = r#"{"id":"cost-group","name":{"default":"Cost group","translations":{}},"rows":[{"selector":{"kind":"derivedClass","classification":"other","class":"x","includeDescendants":true},"class":"kg-331"}],"classes":[{"id":"kg-300","code":"300","name":{"default":"Building construction","translations":{"de":"Bauwerk"}}},{"id":"kg-330","code":"330","name":{"default":"External walls","translations":{}},"parent":"kg-300"},{"id":"kg-331","name":{"default":"Load-bearing external walls","translations":{}},"parent":"kg-330"}]}"#;
+    let tree: ClassificationDefinition = serde_json::from_str(written).unwrap();
+    assert_eq!(serde_json::to_string(&tree).unwrap(), written);
+    assert!(matches!(
+        tree.rows[0].selector,
+        Selector::DerivedClass {
+            include_descendants: true,
+            ..
+        }
+    ));
+    let classes = ClassTree::of(&tree).unwrap();
+    assert_eq!(classes.at_level("kg-331", 1), Some("kg-300"));
+    // A derived-class selector without descendants omits the flag.
+    let own = r#"{"kind":"derivedClass","classification":"cost-group","class":"kg-330"}"#;
+    let selector: Selector = serde_json::from_str(own).unwrap();
+    assert_eq!(serde_json::to_string(&selector).unwrap(), own);
+    // Unknown class fields are refused.
+    let levelled = written.replace(r#""parent":"kg-300""#, r#""parent":"kg-300","level":2"#);
+    assert!(serde_json::from_str::<ClassificationDefinition>(&levelled).is_err());
+}

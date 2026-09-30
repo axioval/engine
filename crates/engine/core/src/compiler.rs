@@ -6,9 +6,9 @@ use std::{
 };
 
 use axioval_ir::contract::{
-    ClassificationDefinition, ColumnKind, GateCondition, ParameterKind, ParameterValue,
-    RuleApplicability, RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector,
-    TableColumnDefinition, TableRow,
+    ClassTree, ClassificationDefinition, ClassificationProperty, ColumnKind, GateCondition,
+    ParameterKind, ParameterValue, RuleApplicability, RuleDefinition, RuleFolder, RuleGate,
+    RuleInstance, Selector, TableColumnDefinition, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
@@ -38,7 +38,7 @@ pub fn compile(
     }
     let catalog = definition_catalog(ruleset, &packages)?;
     let mut concepts = concept_catalog(ruleset, &packages)?;
-    concepts.declare_classifications(ruleset.classifications.keys().map(String::as_str));
+    concepts.declare_classifications(class_trees(ruleset.classifications.iter())?);
     let classifications = classifications(registry, &concepts, ruleset)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
@@ -129,6 +129,35 @@ pub fn compile(
     })
 }
 
+/// The class tree of every classification, by id, refusing a
+/// classification declared under another key than its id, one without an
+/// id or rows, and a malformed tree ([`ClassTree::of`]).
+fn class_trees<'a>(
+    classifications: impl Iterator<Item = (&'a String, &'a ClassificationDefinition)>,
+) -> Result<Vec<(String, ClassTree)>, EngineError> {
+    classifications
+        .map(|(key, definition)| {
+            let invalid = |detail: String| EngineError::InvalidClassification {
+                classification: key.clone(),
+                detail,
+            };
+            if *key != definition.id {
+                return Err(invalid(format!(
+                    "is declared under the key `{key}`, not its id"
+                )));
+            }
+            if definition.id.trim().is_empty() {
+                return Err(invalid("its id is blank".into()));
+            }
+            if definition.rows.is_empty() {
+                return Err(invalid("it has no rows".into()));
+            }
+            let tree = ClassTree::of(definition).map_err(invalid)?;
+            Ok((key.clone(), tree))
+        })
+        .collect()
+}
+
 /// The ruleset's classifications, checked and ordered so each follows the
 /// classifications its rows read.
 fn classifications(
@@ -142,17 +171,6 @@ fn classifications(
             classification: key.clone(),
             detail,
         };
-        if *key != definition.id {
-            return Err(invalid(format!(
-                "is declared under the key `{key}`, not its id"
-            )));
-        }
-        if definition.id.trim().is_empty() {
-            return Err(invalid("its id is blank".into()));
-        }
-        if definition.rows.is_empty() {
-            return Err(invalid("it has no rows".into()));
-        }
         if registry.refiner().is_none() {
             return Err(invalid(
                 "the host registered no outcome refiner to evaluate its rows".into(),
@@ -203,7 +221,8 @@ fn classifications(
     Ok(ordered)
 }
 
-/// Every classification a property selector in `selector` reads.
+/// Every classification a property or derived-class selector in
+/// `selector` reads.
 fn classifications_read<'a>(selector: &'a Selector, out: &mut BTreeSet<&'a str>) {
     match selector {
         Selector::Property {
@@ -211,7 +230,12 @@ fn classifications_read<'a>(selector: &'a Selector, out: &mut BTreeSet<&'a str>)
             property,
             ..
         } if set == axioval_ir::CLASSIFICATION_SET => {
-            out.insert(property);
+            let read = ClassificationProperty::parse(property)
+                .map_or(property.as_str(), |read| read.classification);
+            out.insert(read);
+        }
+        Selector::DerivedClass { classification, .. } => {
+            out.insert(classification);
         }
         Selector::AllOf { operands } | Selector::AnyOf { operands } => {
             for operand in operands {
@@ -538,7 +562,7 @@ pub fn compile_rulesets(
                 Some(_) => {
                     return Err(EngineError::InvalidClassification {
                         classification: definition.id,
-                        detail: "two rulesets declare it with different rows".into(),
+                        detail: "two rulesets declare it with different rows or classes".into(),
                     });
                 }
                 None => classifications.push(definition),
@@ -555,7 +579,11 @@ pub fn compile_rulesets(
     deferred.sort_by(|left, right| left.id.cmp(&right.id));
     let packages = collect_definition_packages(definitions)?;
     let mut concepts = concepts_of(declared.into_iter(), &packages)?;
-    concepts.declare_classifications(classifications.iter().map(|c| c.id.as_str()));
+    concepts.declare_classifications(class_trees(
+        classifications
+            .iter()
+            .map(|definition| (&definition.id, definition)),
+    )?);
     Ok(ExecutionPlan {
         rules,
         deferred,
@@ -804,6 +832,23 @@ fn validate_selector_concepts(
         Selector::EntityType { object_type, .. } => {
             require_concept(concepts, rule, ConceptKind::ObjectType, object_type)
         }
+        Selector::DerivedClass {
+            classification,
+            class,
+            ..
+        } => match concepts.classification(classification) {
+            None => Err(EngineError::UnknownConcept {
+                rule: rule.into(),
+                kind: axioval_ir::CLASSIFICATION_SET.into(),
+                concept: classification.clone(),
+            }),
+            Some(tree) if !tree.contains(class) => Err(EngineError::UnknownConcept {
+                rule: rule.into(),
+                kind: format!("{} class", axioval_ir::CLASSIFICATION_SET),
+                concept: format!("{classification}/{class}"),
+            }),
+            Some(_) => Ok(()),
+        },
         Selector::Property {
             property_set,
             property,

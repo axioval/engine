@@ -26,6 +26,13 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   change a selection, evidence or outcome. `axioval-ids` keeps an IDS
   specification's origin there so it can be exported again. The MCS rule
   folder must mirror this field.
+- `ClassificationDefinition::classes` makes a classification hierarchical
+  (ids, optional codes, localized names, optional parents); empty is
+  omitted, so flat classifications serialize byte-identically. Keep tree
+  validation, levels and ancestry in `contract::ClassTree` and the
+  `<id>;level=<n>` name in `contract::ClassificationProperty`, the one
+  place each is decided. The MCS classification and the `derivedClass`
+  selector must mirror these fields.
 - A decision's `comments` is a thread. Its wire form is a compatibility
   contract: exactly one comment by the decision's author at its date and
   without `id` is written as the legacy `comment` string, anything else as

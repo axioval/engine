@@ -25,6 +25,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   behaves exactly like `axioval ids export`, which stays as an alias. A
   host application implements its own format's profile out of tree,
   depending on `axioval-export` and `axioval-ir` only.
+- **Hierarchical classifications.** (Closes #198) A ruleset classification
+  may declare `classes`: a tree of classes with an id, an optional code, a
+  localized name and an optional parent, the roots at level 1. Rows then
+  assign declared classes, leaves or inner ones. The class at a level of
+  the tree reads as `<id>;level=<n>` in `axioval:classification` (an object
+  classified above the level has no class there), so `quantity-takeoff`
+  groups by any level with no new parameter or column. The new
+  `derivedClass` selector selects a derived class, with
+  `includeDescendants` together with every class below it. Compilation
+  refuses blank or repeated class ids and codes, undeclared parents,
+  cyclic parents, rows assigning undeclared classes, levels beyond the
+  tree and a `derivedClass` naming an undeclared class
+  (`axioval_ir::contract::ClassTree` checks the tree). A classification
+  without `classes` is flat and behaves and serializes as before.
+  **Breaking:** `ClassificationDefinition` has a `classes` field, which a
+  struct literal must name, and `Selector` has the variant `DerivedClass`,
+  which an exhaustive match must handle.
 
 - **Exporting rules as IDS.** (Closes #196; with it #165)
   `axioval_ids::export` and `axioval ids export --definitions d.json

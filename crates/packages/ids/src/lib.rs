@@ -896,6 +896,7 @@ impl<'o> Writer<'o> {
             Selector::All
             | Selector::PropertyPattern { .. }
             | Selector::Classification { .. }
+            | Selector::DerivedClass { .. }
             | Selector::Discipline { .. }
             | Selector::Source { .. }
             | Selector::RuleOutcome { .. } => filter.clone(),

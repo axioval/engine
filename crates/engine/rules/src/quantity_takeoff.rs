@@ -33,7 +33,8 @@ const MEASURES: usize = 4;
 /// each read on the object or, with `group_<n>_path`, on the objects the
 /// path reaches (the storey), as a rule's categories read them: distinct
 /// values join in one text, no value is `-`. A derived classification is
-/// the property `<id>` in `axioval:classification`. Each row counts its
+/// the property `<id>` in `axioval:classification`, and a level of a
+/// hierarchical one `<id>;level=<n>`. Each row counts its
 /// group (`count`) and aggregates up to four quantities (`measure_1` to
 /// `measure_4`) by `sum` (the default), `min`, `max` or `mean`.
 ///

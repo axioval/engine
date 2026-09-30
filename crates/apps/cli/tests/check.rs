@@ -1202,6 +1202,57 @@ fn a_storey_is_selected_by_its_height_to_the_next_storey() {
     assert_eq!(findings[0]["object_id"]["local_id"], "#12", "{result:#}");
 }
 
+/// Site #10 has a body, site #20 none, and site #30 a body that cannot be
+/// read (an open profile swept as a solid): only #20 lacks geometry, and #30
+/// is not evaluated.
+#[test]
+fn a_site_without_geometry_is_found_from_its_representations() {
+    let case = Case::new("site-geometry");
+    let model = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCCARTESIANPOINT((10.,0.));\n\
+         #7=IFCPOLYLINE((#6,#6));\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCUNITASSIGNMENT((#20));\n\
+         #22=IFCPROJECT('0000000000000000000022',$,'P',$,$,$,$,(#5),#21);\n\
+         #11=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,100.,50.);\n\
+         #12=IFCEXTRUDEDAREASOLID(#11,#2,#4,1.);\n\
+         #13=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#12));\n\
+         #14=IFCPRODUCTDEFINITIONSHAPE($,$,(#13));\n\
+         #10=IFCSITE('0000000000000000000010',$,'S1',$,$,#3,#14,$,.ELEMENT.,$,$,$,$,$);\n\
+         #30=IFCSITE('0000000000000000000030',$,'S3',$,$,#3,#34,$,.ELEMENT.,$,$,$,$,$);\n\
+         #31=IFCARBITRARYOPENPROFILEDEF(.CURVE.,$,#7);\n\
+         #32=IFCEXTRUDEDAREASOLID(#31,#2,#4,1.);\n\
+         #33=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#32));\n\
+         #34=IFCPRODUCTDEFINITIONSHAPE($,$,(#33));\n\
+         #40=IFCSITE('0000000000000000000040',$,'S2',$,$,#3,$,$,.ELEMENT.,$,$,$,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n";
+    let (output, result) = case.geometry_rule(
+        model,
+        &[("site", "IfcSite")],
+        "axioval:capability.property-required",
+        &registry_signature("axioval:capability.property-required"),
+        entity("site"),
+        json!({"property": {"type": "propertyReference", "propertySet": "axioval:body",
+                            "property": "axioval:example.ifc.body-count"}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#40", "{result:#}");
+    let open: Vec<&Value> = result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|outcome| &outcome["object_id"]["local_id"])
+        .collect();
+    assert_eq!(open, [&json!("#30")], "{result:#}");
+}
+
 /// A clash that is a warning in general is an error where a selected wall
 /// is involved.
 #[test]
@@ -3162,6 +3213,13 @@ impl Case {
             "name": {"default": "TotalThickness", "translations": {}},
             "valueKind": "quantity",
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "TotalThickness"}],
+            "citations": [],
+        });
+        definitions["properties"]["axioval:example.ifc.body-count"] = json!({
+            "id": "axioval:example.ifc.body-count",
+            "name": {"default": "Count", "translations": {}},
+            "valueKind": "integer",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Count"}],
             "citations": [],
         });
         declare_name(&mut definitions);

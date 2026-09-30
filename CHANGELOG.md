@@ -22,6 +22,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   against 0.799 m and 0.8005 m, which its chord mesh leaves open. Plan
   projections of curved footprints stay chord-widened, since the published
   distance is in space.
+- **Site geometry presence.** (Closes #161) Whether a site has geometry is
+  decided by `property-required` on `axioval:body.Count` over the sites: a
+  site whose representations state no body (none at all, or only a
+  footprint or an axis) is a finding, and one whose body is stated but
+  cannot be read is not evaluated. The adapter already stated that absence
+  exactly; tests now pin it for sites, and the migration table no longer
+  lists it as undecidable.
 
 ### Changed
 

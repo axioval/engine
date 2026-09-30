@@ -520,3 +520,54 @@ fn a_mapping_states_whether_it_mirrors_any_item_kind() {
         Err(PropertyResolutionError::Conflicting(_))
     ));
 }
+
+/// Site #200 is a 100 m x 50 m plot 1 m thick; site #210 states no shape;
+/// site #220 states a footprint alone; site #230 an open profile swept as a
+/// solid, which cannot be described.
+const SITES: &str = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#4=IFCDIRECTION((0.,0.,1.));
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#3=IFCLOCALPLACEMENT($,#2);
+#201=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,100.,50.);
+#202=IFCEXTRUDEDAREASOLID(#201,#2,#4,1.);
+#203=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#202));
+#204=IFCPRODUCTDEFINITIONSHAPE($,$,(#203));
+#200=IFCSITE('0000000000000000000200',$,'S1',$,$,#3,#204,$,.ELEMENT.,$,$,$,$,$);
+#210=IFCSITE('0000000000000000000210',$,'S2',$,$,#3,$,$,.ELEMENT.,$,$,$,$,$);
+#221=IFCCARTESIANPOINT((100.,0.));
+#222=IFCCARTESIANPOINT((100.,50.));
+#223=IFCCARTESIANPOINT((0.,50.));
+#224=IFCCARTESIANPOINT((0.,0.));
+#225=IFCPOLYLINE((#224,#221,#222,#223,#224));
+#226=IFCSHAPEREPRESENTATION(#5,'FootPrint','Curve2D',(#225));
+#227=IFCPRODUCTDEFINITIONSHAPE($,$,(#226));
+#220=IFCSITE('0000000000000000000220',$,'S3',$,$,#3,#227,$,.ELEMENT.,$,$,$,$,$);
+#231=IFCPOLYLINE((#224,#221));
+#232=IFCARBITRARYOPENPROFILEDEF(.CURVE.,$,#231);
+#233=IFCEXTRUDEDAREASOLID(#232,#2,#4,1.);
+#234=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#233));
+#235=IFCPRODUCTDEFINITIONSHAPE($,$,(#234));
+#230=IFCSITE('0000000000000000000230',$,'S4',$,$,#3,#235,$,.ELEMENT.,$,$,$,$,$);
+";
+
+/// Whether a site has geometry is whether it states `axioval:body.Count`:
+/// its absence is read from the representations, never from a missing
+/// service.
+#[test]
+fn a_site_has_a_body_only_where_its_representations_state_one() {
+    let site = |local| value_in("IFC4", SITES, local, "Count");
+    assert_eq!(site("#200"), Some(PropertyValue::Integer(1)));
+    // No shape, and a footprint that is no body, are exact absences.
+    assert_eq!(site("#210"), None);
+    assert_eq!(site("#220"), None);
+    // A body the source states but that cannot be read is refused.
+    assert!(matches!(
+        resolve_in("IFC4", SITES, "#230", "Count"),
+        Err(PropertyResolutionError::Unavailable(_))
+    ));
+}

@@ -775,6 +775,39 @@ mod name_sequence {
     }
 }
 
+/// Model architecture: whether a site has geometry is whether it states a
+/// body count in the reserved body set.
+mod site_geometry {
+    use super::*;
+    use axioval_ir::BODY_SET;
+    use axioval_rules::PropertyRequired;
+
+    const ID: &str = "axioval:capability.property-required";
+
+    #[test]
+    fn a_site_without_a_body_is_a_finding_and_an_unreadable_one_is_not_evaluated() {
+        let model = Model::default()
+            .object("built", "site")
+            .object("bare", "site")
+            .object("unread", "site")
+            .value("built", BODY_SET, "Count", PropertyValue::Integer(1))
+            .unreadable("unread");
+        let evaluation = model.evaluate(
+            &PropertyRequired,
+            &rule(
+                ID,
+                kind("site"),
+                vec![("property", property(Some(BODY_SET), "Count"))],
+            ),
+        );
+        assert_eq!(flagged(&evaluation), ["bare"]);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("unread".to_owned(), NotEvaluatedReason::BackendUnavailable)]
+        );
+    }
+}
+
 mod numbering {
     use super::*;
 

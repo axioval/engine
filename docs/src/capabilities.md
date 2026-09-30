@@ -1667,7 +1667,7 @@ Rules on how structural members and walls are built read the reserved body set (
 |---|---|
 | Allowed representation kinds | `selector-conformance` or `property-value` on `axioval:body.Kinds` with `quantifier: all` and `oneOf`. |
 | Extruded along the vertical | `property-predicate` on `axioval:body.Extrusion.Inclination`, `less_or_equal` a small angle. |
-| Element without a body | `property-required` on `axioval:body.Count`. |
+| Element without a body (a site without geometry, too) | `property-required` on `axioval:body.Count`: a body the representations do not state (none, or only a footprint or an axis) is an exact absence, a body stated but unreadable is not evaluated. |
 | Empty wall: its face wholly voided by its openings | `empty-host`. |
 | Profile from a table | `allowed-profile`. |
 | Openings within their host, clear of its ends, edges, flanges and each other | `opening-zone`. |

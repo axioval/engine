@@ -39,11 +39,14 @@ use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYP
 use openbim_ids::{
     Applicability, Attribute, Classification, Entity, Facet, IfcVersion, Info, Material,
     Occurrence, PartOf, Property, Relation, Requirement, Requirements, Restriction, Specification,
-    Value,
+    Value, WriteError,
 };
 use regex::Regex;
 
-use crate::{INFO_ANNOTATION, Options, SPECIFICATION_ANNOTATION, translate_parts, write};
+use crate::{
+    INFO_ANNOTATION, Options, SPECIFICATION_ANNOTATION, UNWRITABLE_ANNOTATION, translate_parts,
+    write,
+};
 
 /// A ruleset written as IDS: the specifications it states exactly, and the
 /// rules it could not state.
@@ -67,17 +70,26 @@ impl Export {
 
     /// The IDS 1.0 document, `None` when no specification was exported: IDS
     /// requires at least one.
-    #[must_use]
-    pub fn to_xml(&self) -> Option<String> {
+    ///
+    /// Every specification [`export()`] exports is one IDS 1.0 writes, so
+    /// only the `<info>` can make this fail: an author that is no e-mail
+    /// address or a date that is no `xs:date`, as a root folder's
+    /// [`INFO_ANNOTATION`] may hold them.
+    ///
+    /// # Errors
+    ///
+    /// The [`WriteError`] of the `openbim-ids` writer, with the location of
+    /// the part of the document it refused.
+    pub fn to_xml(&self) -> Result<Option<String>, WriteError> {
         if self.specifications.is_empty() {
-            return None;
+            return Ok(None);
         }
         let specifications: Vec<&Specification> = self
             .specifications
             .iter()
             .map(|exported| &exported.specification)
             .collect();
-        Some(write::document(&self.info, &specifications))
+        write::document(&self.info, &specifications).map(Some)
     }
 }
 
@@ -143,6 +155,17 @@ pub enum Refusal {
         /// Why not.
         why: String,
     },
+    /// The specification the rule reads as is one the IDS 1.0 writer
+    /// refuses.
+    Unwritable {
+        /// The specification's name.
+        specification: String,
+        /// The refused part, as a path within the specification such as
+        /// `applicability/facets[1]`; empty for the specification itself.
+        location: String,
+        /// What the writer refused.
+        why: String,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -185,6 +208,22 @@ impl fmt::Display for Refusal {
             Refusal::Origin { specification, why } => write!(
                 f,
                 "IDS specification {specification:?}, which the rule was translated from, cannot be written back: {why}"
+            ),
+            Refusal::Unwritable {
+                specification,
+                location,
+                why,
+            } if location.is_empty() => write!(
+                f,
+                "IDS 1.0 cannot write the specification {specification:?} it reads as: {why}"
+            ),
+            Refusal::Unwritable {
+                specification,
+                location,
+                why,
+            } => write!(
+                f,
+                "IDS 1.0 cannot write the specification {specification:?} it reads as, at {location}: {why}"
             ),
         }
     }
@@ -272,9 +311,35 @@ impl ExportProfile for IdsProfile {
 }
 
 impl From<Export> for ExportOutcome {
+    /// The document and its losses; a document IDS 1.0 cannot write (see
+    /// [`Export::to_xml`]) is no artifact, and every rule is refused with
+    /// the location the writer names.
     fn from(export: Export) -> Self {
+        let artifact = match export.to_xml() {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                let reason = format!("IDS 1.0 cannot write the document: {error}");
+                return ExportOutcome {
+                    artifact: None,
+                    exported: Vec::new(),
+                    losses: export
+                        .specifications
+                        .iter()
+                        .flat_map(|specification| &specification.rules)
+                        .map(|rule| Loss::refused(rule, reason.clone()))
+                        .chain(
+                            export
+                                .not_exported
+                                .iter()
+                                .map(|entry| Loss::refused(&entry.rule, entry.reason.to_string())),
+                        )
+                        .collect(),
+                    contents: Some("0 specification(s)".to_owned()),
+                };
+            }
+        };
         ExportOutcome {
-            artifact: export.to_xml().map(String::into_bytes),
+            artifact: artifact.map(String::into_bytes),
             exported: export
                 .specifications
                 .iter()
@@ -287,6 +352,30 @@ impl From<Export> for ExportOutcome {
                 .collect(),
             contents: Some(format!("{} specification(s)", export.specifications.len())),
         }
+    }
+}
+
+/// Whether the IDS 1.0 writer writes `specification`.
+fn writable(specification: &Specification) -> Result<(), Refusal> {
+    write::specification(specification)
+        .map(drop)
+        .map_err(|unwritable| Refusal::Unwritable {
+            specification: specification.name.clone(),
+            location: unwritable.location,
+            why: unwritable.why,
+        })
+}
+
+/// A facet's place in the applicability sequence `ids.xsd` declares:
+/// entity, partOf, classification, attribute, property, material.
+fn sequence(facet: &Facet) -> u8 {
+    match facet {
+        Facet::Entity(_) => 0,
+        Facet::PartOf(_) => 1,
+        Facet::Classification(_) => 2,
+        Facet::Attribute(_) => 3,
+        Facet::Property(_) => 4,
+        Facet::Material(_) => 5,
     }
 }
 
@@ -354,7 +443,23 @@ impl<'p> Catalog<'p> {
     /// has a gate.
     fn folder(&self, folder: &RuleFolder, gated: bool, export: &mut Export) {
         let gated = precheck::is_folder_gated(folder, gated);
-        if let Some(fragment) = folder.annotations.get(SPECIFICATION_ANNOTATION) {
+        if let Some(unwritable) = folder.annotations.get(UNWRITABLE_ANNOTATION) {
+            // `<location>: <why>`; a location holds no space.
+            let (location, why) = unwritable
+                .split_once(": ")
+                .unwrap_or(("", unwritable.as_str()));
+            let reason = Refusal::Unwritable {
+                specification: folder.name.default.clone(),
+                location: location.to_owned(),
+                why: why.to_owned(),
+            };
+            export
+                .not_exported
+                .extend(folder.rules.iter().map(|rule| NotExported {
+                    rule: rule.id.clone(),
+                    reason: reason.clone(),
+                }));
+        } else if let Some(fragment) = folder.annotations.get(SPECIFICATION_ANNOTATION) {
             match self.origin(folder, fragment, gated) {
                 Ok(specification) => export.specifications.push(ExportedSpecification {
                     specification,
@@ -424,6 +529,7 @@ impl<'p> Catalog<'p> {
             };
             refused(&name, why)
         })?;
+        writable(&specification)?;
         Ok(specification)
     }
 
@@ -437,7 +543,9 @@ impl<'p> Catalog<'p> {
             .get(rule.definition_id.as_str())
             .ok_or_else(|| Refusal::UnknownDefinition(rule.definition_id.clone()))?;
         let reading = self.reading(&definition.capability, &rule.parameters)?;
-        let facets = self.applicability(selector)?;
+        let mut facets = self.applicability(selector)?;
+        // The order `ids.xsd` requires; the translation is checked on it.
+        facets.sort_by_key(sequence);
         let (min_occurs, max_occurs, requirement) = match reading {
             Reading::Requirement(requirement) => (0, None, Some(requirement)),
             Reading::Count { minimum, maximum } => (minimum, maximum, None),
@@ -459,6 +567,7 @@ impl<'p> Catalog<'p> {
             }),
         };
         self.matches(&specification, &[rule])?;
+        writable(&specification)?;
         Ok(specification)
     }
 

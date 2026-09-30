@@ -78,8 +78,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   without rules now writes an empty folder. All 307 buildingSMART test
   cases that translate without a gap round-trip to the same
   specifications, packages and findings, and validate against `ids.xsd`.
-  `openbim-ids` does not write IDS yet (openbimrs/ids#10); a small writer
-  in `axioval-ids` stands in behind two functions.
+  Documents are written by the `openbim-ids` writer (see Changed).
   **Breaking:** `RuleFolder` has an `annotations` field (namespaced keys,
   text values, omitted when empty), which a struct literal must name; the
   engine never reads it.
@@ -254,6 +253,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
   through zip 8, so the workspace carries a single zip version. Archives are
   byte-identical to those written with 0.4.
+- **IDS is written by the `openbim-ids` writer.** The workspace moves to
+  `openbim-ids` 0.1.4, whose `to_string` writes IDS 1.0 that validates
+  against `ids.xsd`, and `axioval-ids` drops its stand-in writer. Exported
+  documents change byte-wise (two-space indentation, `minOccurs` and
+  `maxOccurs` only where they differ from 1) and read back to the same
+  specifications; the corpus round trip stays 307 of 307 with identical
+  findings. The `ids:specification` annotation is now the element as the
+  upstream writer writes it, across lines; annotations the stand-in wrote
+  still read. A specification the writer refuses (a restriction without
+  facets) is refused as `Refusal::Unwritable` with its location, and its
+  translated folder keeps `ids:unwritable` instead of the specification,
+  so its rules are refused rather than exported one by one. A rule read as
+  one specification lists its applicability facets in the schema's order.
+  `Export::to_xml` returns `Result<Option<String>,
+  openbim_ids::WriteError>`, failing when the kept `<info>` cannot be
+  written; the `ids` profile then writes no document and refuses every
+  rule with the writer's location.
 - The BCF crates move to `openbim-bcf` 0.6, whose reader parses with
   quick-xml 0.42 (RUSTSEC-2026-0194 and RUSTSEC-2026-0195 fixed), so
   `deny.toml` no longer ignores either advisory. Archives written without

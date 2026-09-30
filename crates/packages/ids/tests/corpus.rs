@@ -296,7 +296,10 @@ fn round_trip() {
             failures.push(format!("{name}: not exported: {}", listed.join("; ")));
             continue;
         }
-        let xml = export.to_xml().expect("a specification");
+        let xml = export
+            .to_xml()
+            .expect("a writable document")
+            .expect("a specification");
         // The profile every export target shares writes the same document
         // and loses nothing.
         let outcome = axioval_export::ExportProfile::export(
@@ -401,7 +404,7 @@ fn one_by_one(
         file: None,
         failure: None,
     };
-    let Some(xml) = export.to_xml() else {
+    let Some(xml) = export.to_xml().expect("a writable document") else {
         return outcome;
     };
     let path = written.join(format!("{name}.rules.ids"));

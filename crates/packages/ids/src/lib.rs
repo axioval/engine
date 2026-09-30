@@ -455,8 +455,16 @@ pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsErr
 
 /// The annotation key of the folder a specification's rules are written
 /// to, holding the specification as IDS XML, so [`export()`] can write it
-/// back.
+/// back: one `<specification>` element in the IDS namespace, without
+/// declaring it. Annotations written by earlier releases still read.
 pub const SPECIFICATION_ANNOTATION: &str = "ids:specification";
+
+/// The annotation key a folder keeps instead of the
+/// [`SPECIFICATION_ANNOTATION`] when the IDS 1.0 writer refuses its
+/// specification (a restriction without facets, say): where in the
+/// specification, a colon and a space, and why; the location is empty for
+/// the specification itself. [`export()`] refuses the folder's rules with it.
+pub const UNWRITABLE_ANNOTATION: &str = "ids:unwritable";
 
 /// The prefix of the root folder's annotation keys holding the document's
 /// `<info>`, one per field present: `ids:info.title`, `ids:info.author`,
@@ -518,10 +526,16 @@ fn translate_parts(
                 rules,
                 folders: Vec::new(),
                 gate: None,
-                annotations: BTreeMap::from([(
-                    SPECIFICATION_ANNOTATION.to_owned(),
-                    write::specification(specification),
-                )]),
+                // A specification IDS 1.0 cannot write back keeps why
+                // instead, so its rules are refused, never exported one by
+                // one.
+                annotations: BTreeMap::from([match write::specification(specification) {
+                    Ok(fragment) => (SPECIFICATION_ANNOTATION.to_owned(), fragment),
+                    Err(unwritable) => (
+                        UNWRITABLE_ANNOTATION.to_owned(),
+                        format!("{}: {}", unwritable.location, unwritable.why),
+                    ),
+                }]),
             });
         }
         outcomes.push(outcome);

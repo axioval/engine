@@ -12,7 +12,7 @@ use axioval::ir::{MATERIAL_SET, Report};
 use axioval_export::{ExportProfile, LossKind};
 use axioval_ids::{
     Export, IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, IdsProfile, Options, Refusal,
-    SPECIFICATION_ANNOTATION, export, translate,
+    SPECIFICATION_ANNOTATION, UNWRITABLE_ANNOTATION, export, translate,
 };
 use openbim_ids::{Facet, Occurrence, Value};
 use serde_json::{Value as Json, json};
@@ -389,7 +389,7 @@ fn a_mixed_package_exports_its_property_rules_and_lists_the_clash_rule() {
     assert_eq!(export.info.version.as_deref(), Some("1.2.0"));
     assert_eq!(export.info.author.as_deref(), Some("someone@example.org"));
     // The document reads back as written.
-    let xml = export.to_xml().unwrap();
+    let xml = export.to_xml().unwrap().unwrap();
     let read = openbim_ids::from_str(&xml).unwrap_or_else(|error| panic!("{error}\n{xml}"));
     assert_eq!(read.info, export.info);
     let written: Vec<_> = export
@@ -471,7 +471,7 @@ fn an_export_translated_back_reports_what_the_package_did() {
     let package = ruleset(alphanumerical());
     let export = export(std::slice::from_ref(&definitions), &package);
     assert!(export.is_complete(), "{:?}", export.not_exported);
-    let xml = export.to_xml().unwrap();
+    let xml = export.to_xml().unwrap().unwrap();
     let ids = openbim_ids::from_str(&xml).unwrap();
     let translation = translate(&ids, &Options::new("ids:back", "1.0.0")).unwrap();
     assert!(translation.is_complete());
@@ -529,7 +529,7 @@ fn a_translated_document_is_exported_as_it_was_written() {
         serde_json::from_str(&serde_json::to_string(&translation.ruleset).unwrap()).unwrap();
     let export = export(&[definitions], &ruleset);
     assert!(export.is_complete(), "{:?}", export.not_exported);
-    let again = openbim_ids::from_str(&export.to_xml().unwrap()).unwrap();
+    let again = openbim_ids::from_str(&export.to_xml().unwrap().unwrap()).unwrap();
     assert_eq!(again.info, ids.info);
     assert_eq!(again.specifications, ids.specifications);
 }
@@ -550,7 +550,7 @@ fn an_edited_or_prefiltered_translation_is_not_written_back() {
     };
     let refused = export_of(&edited, &translation.definitions);
     assert!(refused.specifications.is_empty());
-    assert!(refused.to_xml().is_none());
+    assert!(refused.to_xml().unwrap().is_none());
     let Refusal::Origin { specification, why } = &refused.not_exported[0].reason else {
         panic!("{:?}", refused.not_exported);
     };
@@ -655,7 +655,7 @@ fn the_writer_keeps_every_character() {
         std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     );
-    let again = openbim_ids::from_str(&export.to_xml().unwrap()).unwrap();
+    let again = openbim_ids::from_str(&export.to_xml().unwrap().unwrap()).unwrap();
     assert_eq!(again.info, ids.info);
     assert_eq!(again.specifications, ids.specifications);
     assert_eq!(again.specifications[0].name, "x\"y\nz\tw\r");
@@ -680,6 +680,7 @@ fn the_ids_profile_refuses_every_verdict_changing_edit() {
         outcome.artifact,
         export(definitions, &translation.ruleset)
             .to_xml()
+            .unwrap()
             .map(String::into_bytes)
     );
 
@@ -699,4 +700,100 @@ fn the_ids_profile_refuses_every_verdict_changing_edit() {
     assert_eq!(loss.kind, LossKind::Refused);
     assert_eq!(loss.path, rule);
     assert!(loss.reason.contains("parameters.values"), "{}", loss.reason);
+}
+
+/// A document of one specification translated to one rule.
+const RATED: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS"><info><title>T</title></info><specifications><specification name="Rated" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName><value><xs:restriction xmlns:xs="http://www.w3.org/2001/XMLSchema" base="xs:string"><xs:enumeration value="EI 90"/><xs:enumeration value="EI 120"/></xs:restriction></value></property></requirements></specification></specifications></ids>"#;
+
+#[test]
+fn annotations_written_by_earlier_releases_still_export() {
+    let ids = openbim_ids::from_str(RATED).unwrap();
+    let translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
+    assert!(translation.is_complete());
+    let annotation = &translation.ruleset.root.folders[0].annotations[SPECIFICATION_ANNOTATION];
+    // Today's form: the element as the IDS 1.0 writer writes it.
+    assert!(
+        annotation.starts_with("<specification name=\"Rated\""),
+        "{annotation}"
+    );
+    assert!(annotation.ends_with("</specification>"), "{annotation}");
+    // The single-line form earlier releases wrote, `xs` undeclared, reads
+    // as well.
+    let mut earlier = translation.ruleset.clone();
+    earlier.root.folders[0].annotations.insert(
+        SPECIFICATION_ANNOTATION.to_owned(),
+        r#"<specification name="Rated" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability><requirements><property cardinality="required"><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName><value><xs:restriction base="xs:string"><xs:enumeration value="EI 90"/><xs:enumeration value="EI 120"/></xs:restriction></value></property></requirements></specification>"#.to_owned(),
+    );
+    for ruleset in [&translation.ruleset, &earlier] {
+        let export = export(std::slice::from_ref(&translation.definitions), ruleset);
+        assert!(export.is_complete(), "{:?}", export.not_exported);
+        let again = openbim_ids::from_str(&export.to_xml().unwrap().unwrap()).unwrap();
+        assert_eq!(again.specifications, ids.specifications);
+    }
+}
+
+#[test]
+fn an_info_ids_cannot_write_refuses_the_document_where_it_fails() {
+    let ids = openbim_ids::from_str(RATED).unwrap();
+    let translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
+    let mut ruleset = translation.ruleset.clone();
+    ruleset.root.annotations.insert(
+        format!("{}date", axioval_ids::INFO_ANNOTATION),
+        "yesterday".to_owned(),
+    );
+    let definitions = std::slice::from_ref(&translation.definitions);
+    let error = export(definitions, &ruleset).to_xml().unwrap_err();
+    assert_eq!(error.location(), "info/date");
+    // The profile writes no document and refuses every rule, saying where.
+    let outcome = IdsProfile.export(definitions, &ruleset);
+    assert!(outcome.artifact.is_none());
+    assert!(outcome.exported.is_empty());
+    let rule = &ruleset.root.folders[0].rules[0].id;
+    assert_eq!(outcome.losses.len(), 1);
+    assert_eq!(&outcome.losses[0].path, rule);
+    assert_eq!(outcome.losses[0].kind, LossKind::Refused);
+    assert!(
+        outcome.losses[0].reason.contains("info/date"),
+        "{}",
+        outcome.losses[0].reason
+    );
+}
+
+#[test]
+fn a_specification_ids_cannot_write_back_is_refused_where_it_fails() {
+    let text = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema"><info><title>T</title></info><specifications><specification name="Loose" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName></property><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>AcousticRating</simpleValue></baseName><value><xs:restriction base="xs:string"/></value></property></requirements></specification></specifications></ids>"#;
+    let ids = openbim_ids::from_str(text).unwrap();
+    let translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
+    // The first requirement translates; the empty restriction is a gap and
+    // one the IDS 1.0 writer refuses, so the folder keeps why.
+    let folder = &translation.ruleset.root.folders[0];
+    assert!(!folder.rules.is_empty());
+    assert!(!folder.annotations.contains_key(SPECIFICATION_ANNOTATION));
+    assert_eq!(
+        folder.annotations[UNWRITABLE_ANNOTATION]
+            .split_once(": ")
+            .unwrap()
+            .0,
+        "requirements/facets[1]/value/xs:restriction"
+    );
+    // Its rules are refused, never exported one by one.
+    let export = export(
+        std::slice::from_ref(&translation.definitions),
+        &translation.ruleset,
+    );
+    assert!(export.specifications.is_empty());
+    assert_eq!(export.not_exported.len(), folder.rules.len());
+    for entry in &export.not_exported {
+        let Refusal::Unwritable {
+            specification,
+            location,
+            why,
+        } = &entry.reason
+        else {
+            panic!("{entry}");
+        };
+        assert_eq!(specification, "Loose");
+        assert_eq!(location, "requirements/facets[1]/value/xs:restriction");
+        assert!(why.contains("restriction"), "{why}");
+    }
 }

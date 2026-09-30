@@ -150,16 +150,32 @@ corpus checkout's `ids.xsd`.
 
 ### Writing IDS
 
-`openbim-ids` reads IDS but does not write it yet; openbimrs/ids#10 asks for
-a writer. Until it is released, a small writer inside `axioval-ids`
-(`src/write.rs`) produces the XML behind two functions, so switching to
-the upstream writer changes only them. It writes the elements in the order
-`ids.xsd` requires, sorts applicability facets into the schema's sequence,
-writes only the attributes each requirement facet may carry, and escapes
-every text so it reads back unchanged, surrounding whitespace, quotes and
-line breaks included. The schema is CC BY-ND 4.0 and not vendored: unit
-tests check what they write by reading it back, and the corpus test
-validates against the checkout's schema with Python's `lxml`.
+Documents are written by the `openbim-ids` writer (`openbim_ids::to_string`,
+0.1.4 or later), which checks the whole model against `ids.xsd` 1.0 before
+writing and escapes every text so it reads back unchanged. A rule read as
+one specification lists its applicability facets in the schema's sequence
+(entity, partOf, classification, attribute, property, material) before its
+translation is checked. The writer also refuses two schema-valid shapes
+that express nothing, an applicability without facets and a restriction
+without facets; a specification it refuses is not exported
+(`Refusal::Unwritable`, with the location in the specification, such as
+`requirements/facets[1]/value/xs:restriction`). `Export::to_xml` returns
+the writer's `WriteError` when the `<info>` a root folder keeps cannot be
+written (an author that is no e-mail address, a date that is no
+`xs:date`); the `ids` profile then writes no document and refuses every
+rule, naming the location.
+
+The one thing `axioval-ids` still writes itself (`src/write.rs`) is the
+`ids:specification` annotation: the `<specification>` element cut out of a
+one-specification document the upstream writer wrote, since `openbim-ids`
+reads and writes whole documents only. It is read back by wrapping it in a
+document, so annotations written by earlier releases, on one line, still
+read. A folder whose specification the writer refuses keeps
+`ids:unwritable` (`<location>: <why>`) instead, and the export refuses its
+rules with it rather than exporting them one by one. The schema is CC BY-ND
+4.0 and not vendored: unit tests check what they write by reading it back,
+and the corpus test validates against the checkout's schema with Python's
+`lxml`.
 
 ### Folder annotations
 
@@ -199,7 +215,7 @@ A complex property or quantity (`IfcComplexProperty`, `IfcPhysicalComplexQuantit
 
 ## Publishing
 
-`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with `openbim-ids` 0.1.3 or later, the first release carrying the reader (`openbim_ids::read`, `from_str`, `from_slice`). `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
+`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with `openbim-ids` 0.1.4 or later, the first release carrying both the reader (`openbim_ids::read`, `from_str`, `from_slice`) and the writer (`openbim_ids::to_string`). `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
 
 It is a package importer, not a source adapter, so the architecture gate treats it as core: it may not depend on any source adapter, format library or geometry kernel, with one narrow exemption in `scripts/architecture.py` (`PERMITTED_COUPLINGS`). The importer alone may depend on `openbim-ids`, to parse IDS, and `ifc-schema`, to ask which IDS classes are occurrences in each IFC release, and may use `openbim_ids::` and `ifc_schema::` paths; every other coupling still fails it, and both crates stay forbidden to every other core crate.
 

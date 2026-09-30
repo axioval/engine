@@ -36,15 +36,23 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   writes keeps its specification in the `ids:specification` annotation
   and the root the `<info>` under `ids:info.*`; changing what `translate`
   writes for a facet must keep the corpus round trip passing.
-- `src/write.rs` is the only IDS writer, a stand-in until `openbim-ids`
-  writes IDS (openbimrs/ids#10): keep it behind `document`,
-  `specification` and `read_specification` so switching changes only
-  them. `ids.xsd` is CC BY-ND 4.0 and not vendored.
+- IDS is written by `openbim_ids::to_string` only, reached through
+  `src/write.rs` (`document`, `specification`, `read_specification`).
+  That module keeps only what upstream lacks: cutting one
+  `<specification>` out of a written document for the
+  `ids:specification` annotation, and reading such a fragment (earlier
+  releases' single-line ones too) by wrapping it in a document. Never
+  write XML by hand. A `WriteError` is never a panic: a refused
+  specification is `Refusal::Unwritable` (and `ids:unwritable` on the
+  translated folder), a refused `<info>` an `Export::to_xml` error that
+  the profile turns into refused losses. Applicability facets must be in
+  `ids.xsd` order before the translation is checked. `ids.xsd` is CC
+  BY-ND 4.0 and not vendored.
 - Depends on `axioval-ir` (the package contracts), `axioval-export` (the
   profile and the comparator), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),
-  `openbim-ids` (the reader) and `ifc-schema` (which IDS classes are
+  `openbim-ids` (the reader and writer) and `ifc-schema` (which IDS classes are
   occurrences, per release). Never a source adapter: the architecture gate
   exempts exactly `openbim-ids` and `ifc-schema` for this crate
   (`PERMITTED_COUPLINGS` in `scripts/architecture.py`). The facade is a

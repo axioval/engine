@@ -17,7 +17,10 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   counts); never compare evidence locators, which renumber on re-export.
   A missing basis is `unknown`, never `unchanged`.
 - `Finding::id`, `Finding::decision` and `Report::stale_decisions` are absent
-  on the wire when unset, so reports serialize as before.
+  on the wire when unset, so reports serialize as before. So are a
+  decision's `assigned_to`, `due_date`, `priority` and `labels`; blank ones
+  are refused (`DecisionError::Blank`), and `FindingDecision` carries them
+  unchanged.
 - `RuleFolder::annotations` is provenance only (namespaced keys, text
   values, omitted when empty): nothing in the engine may read it or let it
   change a selection, evidence or outcome. `axioval-ids` keeps an IDS

@@ -808,6 +808,30 @@ fn decision_text(
     text
 }
 
+/// `; assigned to A; due D; priority P; labels a, b`, each part only when
+/// set.
+fn review_text(
+    assigned_to: Option<&str>,
+    due_date: Option<&axioval::ir::DateTime>,
+    priority: Option<&str>,
+    labels: &[String],
+) -> String {
+    let mut text = String::new();
+    if let Some(assignee) = assigned_to {
+        let _ = write!(text, "; assigned to {assignee}");
+    }
+    if let Some(due) = due_date {
+        let _ = write!(text, "; due {due}");
+    }
+    if let Some(priority) = priority {
+        let _ = write!(text, "; priority {priority}");
+    }
+    if !labels.is_empty() {
+        let _ = write!(text, "; labels {}", labels.join(", "));
+    }
+    text
+}
+
 fn carried_text(decision: &FindingDecision) -> String {
     let mut text = decision_text(
         decision.status,
@@ -815,6 +839,12 @@ fn carried_text(decision: &FindingDecision) -> String {
         &decision.date,
         &decision.comment,
     );
+    text.push_str(&review_text(
+        decision.assigned_to.as_deref(),
+        decision.due_date.as_ref(),
+        decision.priority.as_deref(),
+        &decision.labels,
+    ));
     match decision.evidence {
         EvidenceCheck::Unchanged => {}
         EvidenceCheck::Unknown => text.push_str(" (changes unknown: no basis recorded)"),
@@ -1598,12 +1628,19 @@ pub fn list(
                 location: None,
                 message,
                 id: Some(decision.finding.to_string()),
-                decision: Some(decision_text(
-                    decision.status,
-                    &decision.author,
-                    &decision.date,
-                    &decision.comment,
-                )),
+                decision: Some(
+                    decision_text(
+                        decision.status,
+                        &decision.author,
+                        &decision.date,
+                        &decision.comment,
+                    ) + &review_text(
+                        decision.assigned_to.as_deref(),
+                        decision.due_date.as_ref(),
+                        decision.priority.as_deref(),
+                        &decision.labels,
+                    ),
+                ),
                 evidence: vec![],
             });
         }

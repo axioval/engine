@@ -60,6 +60,10 @@ A `Decision` names the finding it is about and records:
 | `author` | who decided; never blank |
 | `date` | when, an ISO 8601 date-time with offset |
 | `comment` | why; optional |
+| `assigned_to` | who deals with the finding; optional, never blank |
+| `due_date` | by when, an ISO 8601 date-time with offset; optional |
+| `priority` | how urgent, in the project's own vocabulary (`High`, `Critical`); optional, never blank |
+| `labels` | the reviewer's labels, in order; optional, none blank |
 | `basis` | the finding as decided: rule, message, severity, evidence count and inexact evidence count; optional |
 
 `Decisions` holds at most one per finding, ordered by identity. Its file
@@ -86,7 +90,9 @@ without offset and two decisions about one finding are all refused.
 
 `Report::apply_decisions(&decisions)` marks every finding whose identity a
 decision names with a `FindingDecision`: its status, author, date and
-comment, and whether the finding changed since. Decisions naming no finding
+comment, its assignee, due date, priority and labels, and whether the
+finding changed since. A decision or report without assignee, due date,
+priority or labels serializes byte for byte as before they existed. Decisions naming no finding
 are **stale** and listed in `Report::stale_decisions`, by identity: the
 finding was fixed, or changed enough to be a new finding. Applying again
 replaces what was applied before.
@@ -143,12 +149,19 @@ A decided finding's topic carries the decision (see
 [Report sinks](./sinks.md#decisions)): `TopicStatus` `Accepted` or
 `Rejected` (an open decision keeps the host's status), one comment by the
 decision's author at its date, and the label `Decision changed` when its
-evidence changed. Stale decisions have no topic.
+evidence changed. A decision's priority replaces the one the severity
+gives, and its labels follow the topic's own. Its assignee and due date
+belong in the topic's `AssignedTo` and `DueDate`, which the BCF writer
+cannot write yet (openbimrs/bcf#11): they are listed in `Export::unwritten`
+and the CLI warns, rather than dropping them silently. Stale decisions have
+no topic.
 
 The way back is [`axioval_bcf::import`](./sinks.md#import): a topic reviewed
 in another BCF tool becomes a decision about the finding whose identity is
 its GUID. A closed, resolved, done or accepted topic accepts it, a rejected
 one rejects it, and a topic with comments but another status is `open`,
-with the latest comment. Topics that decide no current finding are listed
+with the latest comment. `AssignedTo`, `DueDate`, a priority other than the
+severity's and labels the export does not write are read back as the
+decision's. Topics that decide no current finding are listed
 as unmatched, like stale decisions, and never dropped. `axioval check
 --decisions-from reviewed.bcfzip` applies them in place of a decisions file.

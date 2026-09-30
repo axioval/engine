@@ -96,7 +96,12 @@ writes it into its topic:
 
 Every decided topic gets one comment: the status, then `: ` and the
 decision's comment when it has one (`Accepted: agreed with the engineer`),
-by the decision's author at its date. When the finding changed since the
+by the decision's author at its date. A decision's `priority` replaces the
+topic's `Priority`, and its `labels` follow the topic's own labels, each
+once. Its `assigned_to` and `due_date` belong in `AssignedTo` and `DueDate`,
+which `openbim-bcf` cannot write yet (openbimrs/bcf#11): every one is
+listed in `Export::unwritten` (topic GUID and field), never dropped
+silently. When the finding changed since the
 decision, the comment adds a line `Changed since the decision: severity
 warning -> error` and the topic gets the label `Decision changed`
 (`DECISION_CHANGED_LABEL`), so a reviewer can filter what to look at again.
@@ -113,7 +118,12 @@ its topics onto [review decisions](./decisions.md) about a report's
 findings. `import_topics` does the same for topics already read.
 
 ```rust,ignore
-let imported = axioval_bcf::import(&std::fs::read("reviewed.bcfzip")?, &report, project)?;
+let imported = axioval_bcf::import(
+    &std::fs::read("reviewed.bcfzip")?,
+    &report,
+    project,
+    &options.rule_labels, // as exported
+)?;
 report.apply_decisions(&imported.decisions)?;
 for topic in &imported.unmatched {
     eprintln!("{:?} decided nothing: {:?}", topic.title, topic.reason);
@@ -124,7 +134,8 @@ for topic in &imported.unmatched {
 `ifc-globalid` scheme is its GUID, the identity the export wrote it under.
 
 **What a matched topic decides.** It yields a decision only when it carries
-review state; an untouched topic yields none, so exporting and importing
+review state (a status, a comment, an assignee, a due date, its own
+priority or labels); an untouched topic yields none, so exporting and importing
 again decides nothing.
 
 | Topic | Decision |
@@ -134,6 +145,9 @@ again decides nothing.
 | any other status, with the export's decision comment or any other comment | `open` |
 | author and date | of the latest of the export's decision comment and the topic's `ModifiedAuthor`/`ModifiedDate`; without either, of its last comment; without comments, of its creation |
 | comment | the latest comment the export did not write; else the text of the export's decision comment, without its status word and change note |
+| assignee, due date | `AssignedTo`, `DueDate` (a date without UTC offset is unreadable) |
+| priority | `Priority`, when it differs from the one the finding's severity gives |
+| labels | every label the export does not write for the finding: not the rule id, not the `rule_labels` passed to `import` (pass those the archive was exported with), not `Decision changed`, and no `Folder: `, `Category: `, `Storey: ` or `Space: ` label |
 
 The status comes from `TopicStatus`, never from comment text, so a status
 changed in another tool wins. An imported decision has no basis, so whether

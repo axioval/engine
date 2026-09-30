@@ -12646,3 +12646,107 @@ fn a_quantity_takeoff_is_listed_by_group_and_exported_as_csv() {
         stderr(&missing)
     );
 }
+
+#[test]
+fn a_decision_assigns_a_finding_with_due_date_priority_and_labels() {
+    let case = Case::new("decisions-review");
+    let axioval = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .current_dir(case.path("."))
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let read = |name: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(case.path(name)).unwrap()).unwrap()
+    };
+    let r1 = case.path("r1.json");
+    let output = case.check(&revision(1, &[]), true, &["--report", r1.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let id = read("r1.json")["report"]["findings"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let decide = |extra: &[&str]| {
+        let mut args = vec![
+            "decide",
+            "r1.json",
+            "--decisions",
+            "decisions.json",
+            "--finding",
+            &id,
+            "--author",
+            "A. Reviewer",
+            "--date",
+            "2026-09-27T08:00:00Z",
+        ];
+        args.extend_from_slice(extra);
+        axioval(&args)
+    };
+    let output = decide(&[
+        "--status",
+        "open",
+        "--assign-to",
+        "C. Engineer",
+        "--due",
+        "2026-10-15T17:00:00+02:00",
+        "--priority",
+        "Critical",
+        "--label",
+        "site visit",
+    ]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    // A later decision that does not restate them keeps them.
+    let output = decide(&["--status", "accepted", "--comment", "fixed on site"]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let decision = read("decisions.json")["decisions"][0].clone();
+    assert_eq!(decision["status"], "accepted");
+    assert_eq!(decision["assigned_to"], "C. Engineer");
+    assert_eq!(decision["due_date"], "2026-10-15T17:00:00+02:00");
+    assert_eq!(decision["priority"], "Critical");
+    assert_eq!(decision["labels"], json!(["site visit"]));
+
+    let bcf = case.path("r2.bcfzip");
+    let output = case.check(
+        &revision(1, &[]),
+        true,
+        &[
+            "--report",
+            case.path("r2.json").to_str().unwrap(),
+            "--decisions",
+            case.path("decisions.json").to_str().unwrap(),
+            "--bcf",
+            bcf.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let carried = read("r2.json")["report"]["findings"][0]["decision"].clone();
+    assert_eq!(carried["assigned_to"], "C. Engineer");
+    assert_eq!(carried["priority"], "Critical");
+    // Priority and labels are in the topic; the assignee and due date wait
+    // for the BCF writer (openbimrs/bcf#11), and the run says so.
+    let archive = openbim_bcf::read_path(&bcf).unwrap();
+    let topic = &archive
+        .topics()
+        .find(|markup| markup.topic.guid.as_deref() == Some(id.as_str()))
+        .unwrap()
+        .topic;
+    assert_eq!(topic.priority.as_deref(), Some("Critical"));
+    assert!(topic.labels.contains(&"site visit".to_owned()), "{topic:?}");
+    assert!(
+        stderr(&output).contains(
+            "warning: 2 decision field(s) are not in the BCF archive (AssignedTo, DueDate)"
+        ),
+        "{}",
+        stderr(&output)
+    );
+    let listing =
+        String::from_utf8(axioval(&["report", "r2.json", "--decision", "accepted"]).stdout)
+            .unwrap();
+    assert!(
+        listing.contains(
+            "fixed on site; assigned to C. Engineer; due 2026-10-15T17:00:00+02:00; priority Critical; labels site visit"
+        ),
+        "{listing}"
+    );
+}

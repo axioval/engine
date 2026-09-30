@@ -187,6 +187,18 @@ struct DecideArgs {
     /// Why.
     #[arg(long, default_value = "")]
     comment: String,
+    /// Who the finding is assigned to.
+    #[arg(long, value_name = "NAME")]
+    assign_to: Option<String>,
+    /// When the finding is due, an ISO 8601 date-time with offset.
+    #[arg(long, value_name = "DATE-TIME")]
+    due: Option<DateTime>,
+    /// How urgent, in the project's vocabulary (such as `High`).
+    #[arg(long)]
+    priority: Option<String>,
+    /// A label; repeat for several. Replaces the earlier decision's labels.
+    #[arg(long = "label", value_name = "LABEL")]
+    labels: Vec<String>,
     /// When, an ISO 8601 date-time with offset. Defaults to
     /// `SOURCE_DATE_EPOCH` when set, else the current time, in UTC.
     #[arg(long)]
@@ -591,9 +603,31 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
             .iter()
             .find(|finding| finding.id == Some(*id))
             .ok_or_else(|| format!("{}: no finding has id {id}", args.result.display()))?;
-        let decision = Decision::new(*id, args.status.into(), &args.author, date)?
+        let mut decision = Decision::new(*id, args.status.into(), &args.author, date)?
             .with_comment(args.comment.trim())
             .with_basis(finding);
+        // What the reviewer does not restate is kept from the earlier
+        // decision: an assignment outlives a status change.
+        let earlier = decisions.get(*id);
+        decision.assigned_to = args
+            .assign_to
+            .as_deref()
+            .map(|name| name.trim().to_owned())
+            .or_else(|| earlier.and_then(|e| e.assigned_to.clone()));
+        decision.due_date = args.due.or_else(|| earlier.and_then(|e| e.due_date));
+        decision.priority = args
+            .priority
+            .as_deref()
+            .map(|priority| priority.trim().to_owned())
+            .or_else(|| earlier.and_then(|e| e.priority.clone()));
+        decision.labels = if args.labels.is_empty() {
+            earlier.map(|e| e.labels.clone()).unwrap_or_default()
+        } else {
+            args.labels
+                .iter()
+                .map(|label| label.trim().to_owned())
+                .collect()
+        };
         decisions.record(decision)?;
     }
     let json = serde_json::to_string_pretty(&decisions)? + "\n";
@@ -662,7 +696,7 @@ fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let mut unmatched = Vec::new();
     if let (Some(bytes), Some(path)) = (&reviewed, &args.decisions_from) {
-        let imported = bcf::import(bytes, &result, session.project())
+        let imported = bcf::import(bytes, &result, session.project(), &labels)
             .map_err(|error| format!("{}: {error}", path.display()))?;
         result.apply_decisions(&imported.decisions)?;
         unmatched = imported.unmatched.into_iter().map(Into::into).collect();
@@ -757,6 +791,19 @@ pub(crate) fn emit(
                 ..bcf::Options::new(args.bcf_author, date)
             };
             let export = bcf::export(&output.report, project, &options)?;
+            if !export.unwritten.is_empty() {
+                let fields: std::collections::BTreeSet<&str> = export
+                    .unwritten
+                    .iter()
+                    .map(|unwritten| unwritten.field)
+                    .collect();
+                let fields: Vec<&str> = fields.into_iter().collect();
+                eprintln!(
+                    "warning: {} decision field(s) are not in the BCF archive ({}): the BCF writer cannot write them yet",
+                    export.unwritten.len(),
+                    fields.join(", ")
+                );
+            }
             Some((path, export.to_bytes()?, export.unanchored, export.unframed))
         }
         None => None,

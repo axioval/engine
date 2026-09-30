@@ -1,6 +1,7 @@
 //! BCF archives read back into review decisions.
 #![allow(missing_docs, clippy::doc_markdown)]
 
+use std::collections::BTreeMap;
 use std::io::{Cursor, Write};
 
 use axioval_bcf::{
@@ -101,7 +102,7 @@ fn a_topic_closed_elsewhere_is_accepted_and_a_comment_made_elsewhere_is_carried(
     });
     let bytes = write::to_vec(&exported).unwrap();
 
-    let imported = import(&bytes, &report, &model()).unwrap();
+    let imported = import(&bytes, &report, &model(), &BTreeMap::new()).unwrap();
     let wall = report.findings[0].id.unwrap();
     let door = report.findings[1].id.unwrap();
     let decided = imported.decisions.get(wall).unwrap();
@@ -149,7 +150,7 @@ fn an_untouched_export_decides_nothing() {
         .unwrap()
         .to_bytes()
         .unwrap();
-    let imported = import(&bytes, &report, &model()).unwrap();
+    let imported = import(&bytes, &report, &model(), &BTreeMap::new()).unwrap();
     assert!(imported.decisions.is_empty());
     assert_eq!(imported.unmatched.len(), 1);
 }
@@ -180,7 +181,7 @@ fn exported_decisions_read_back_unchanged() {
         .unwrap()
         .to_bytes()
         .unwrap();
-    let imported = import(&bytes, &report, &model()).unwrap();
+    let imported = import(&bytes, &report, &model(), &BTreeMap::new()).unwrap();
     assert_eq!(imported.decisions, decisions);
 }
 
@@ -200,7 +201,7 @@ fn topics_of_other_tools_and_of_fixed_findings_are_listed_not_dropped() {
     // The door was fixed: the next report has only the wall.
     let mut fixed = report.clone();
     fixed.findings.truncate(1);
-    let imported = import(&bytes, &fixed, &model()).unwrap();
+    let imported = import(&bytes, &fixed, &model(), &BTreeMap::new()).unwrap();
     assert!(imported.decisions.is_empty());
     let listed: Vec<_> = imported
         .unmatched
@@ -238,7 +239,7 @@ fn a_topic_without_a_guid_or_with_an_unreadable_date_is_listed() {
         modified_author: None,
     });
     markups[1].topic.guid = Some("not-a-guid".into());
-    let imported = import_topics(&markups, &report, &model()).unwrap();
+    let imported = import_topics(&markups, &report, &model(), &BTreeMap::new()).unwrap();
     assert!(imported.decisions.is_empty());
     assert!(
         matches!(&imported.unmatched[0].reason, Unmatched::Unreadable(why) if why.contains("UTC offset")),
@@ -255,7 +256,7 @@ fn two_topics_about_one_finding_are_refused() {
     exported.topics[0].topic_status = Some("Closed".into());
     let archive = openbim_bcf::read_slice(&write::to_vec(&exported).unwrap()).unwrap();
     let markup = archive.topics().next().unwrap().clone();
-    let result = import_topics([&markup, &markup], &report, &model());
+    let result = import_topics([&markup, &markup], &report, &model(), &BTreeMap::new());
     assert!(
         matches!(result, Err(ImportError::Decisions(_))),
         "{result:?}"
@@ -277,7 +278,7 @@ fn a_tag_with_too_many_attributes_is_refused_before_parsing() {
     .unwrap();
     write!(zip, "<Markup{attributes}/>").unwrap();
     zip.finish().unwrap();
-    let result = import(bytes.get_ref(), &report(), &model());
+    let result = import(bytes.get_ref(), &report(), &model(), &BTreeMap::new());
     assert!(
         matches!(result, Err(ImportError::TooManyAttributes { .. })),
         "{result:?}"
@@ -286,6 +287,138 @@ fn a_tag_with_too_many_attributes_is_refused_before_parsing() {
 
 #[test]
 fn bytes_that_are_no_archive_are_refused() {
-    let result = import(b"not a zip", &report(), &model());
+    let result = import(b"not a zip", &report(), &model(), &BTreeMap::new());
     assert!(matches!(result, Err(ImportError::Archive(_))), "{result:?}");
+}
+
+/// Assignee, due date, priority and labels of a review.
+mod review {
+    use super::{BTreeMap, model, options, report};
+    use axioval_bcf::{Unmatched, Unwritten, export, import, import_topics};
+    use axioval_ir::{Decision, DecisionStatus, Decisions};
+
+    fn reviewed() -> (axioval_ir::Report, Decisions) {
+        let mut report = report();
+        let wall = report.findings[0].id.unwrap();
+        let decisions = Decisions::new([Decision::new(
+            wall,
+            DecisionStatus::Open,
+            "A. Reviewer",
+            "2026-09-27T08:00:00Z".parse().unwrap(),
+        )
+        .unwrap()
+        .with_comment("needs a site visit")
+        .with_assignee("C. Engineer")
+        .with_due_date("2026-10-15T17:00:00+02:00".parse().unwrap())
+        .with_priority("Critical")
+        .with_labels(["structure", "site visit"])])
+        .unwrap();
+        report.apply_decisions(&decisions).unwrap();
+        (report, decisions)
+    }
+
+    #[test]
+    fn priority_and_labels_are_written_and_read_back_unchanged() {
+        let (report, decisions) = reviewed();
+        let export = export(&report, &model(), &options()).unwrap();
+        let wall = &export.document.topics[0];
+        assert_eq!(wall.priority.as_deref(), Some("Critical"));
+        assert_eq!(wall.labels, ["slab-contact", "structure", "site visit"]);
+        // The door keeps the priority of its severity.
+        assert_eq!(
+            export.document.topics[1].priority.as_deref(),
+            Some("Normal")
+        );
+
+        let imported = import(
+            &export.to_bytes().unwrap(),
+            &report,
+            &model(),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let expected = decisions.decisions()[0].clone();
+        let back = imported.decisions.get(expected.finding).unwrap();
+        assert_eq!(back.priority, expected.priority);
+        assert_eq!(back.labels, expected.labels);
+        assert_eq!(back.comment, expected.comment);
+        assert_eq!(
+            (&back.author, back.date, back.status),
+            (&expected.author, expected.date, expected.status)
+        );
+    }
+
+    #[test]
+    fn an_assignee_and_due_date_the_writer_cannot_write_are_listed_never_dropped() {
+        // openbimrs/bcf#11: the writer has no `AssignedTo` and `DueDate`.
+        let (report, _) = reviewed();
+        let export = export(&report, &model(), &options()).unwrap();
+        let wall = report.findings[0].id.unwrap().uuid();
+        assert_eq!(
+            export.unwritten,
+            [
+                Unwritten {
+                    topic: wall,
+                    field: "AssignedTo"
+                },
+                Unwritten {
+                    topic: wall,
+                    field: "DueDate"
+                },
+            ]
+        );
+        // Without them nothing is listed.
+        let plain = export_of(&super::report());
+        assert!(plain.unwritten.is_empty());
+    }
+
+    fn export_of(report: &axioval_ir::Report) -> axioval_bcf::Export {
+        export(report, &model(), &options()).unwrap()
+    }
+
+    #[test]
+    fn assignee_due_date_and_reviewer_labels_are_read_from_their_topic_fields() {
+        let report = report();
+        let bytes = export_of(&report).to_bytes().unwrap();
+        let archive = openbim_bcf::read_slice(&bytes).unwrap();
+        let mut markups: Vec<_> = archive.topics().cloned().collect();
+        // Another tool assigns the untouched wall topic, sets a due date and
+        // labels it beside the export's own labels.
+        let topic = &mut markups[0].topic;
+        topic.assigned_to = Some("C. Engineer".into());
+        topic.due_date = Some("2026-10-15T17:00:00+02:00".into());
+        topic.labels = vec![
+            "slab-contact".into(),
+            "Folder: Structure".into(),
+            "structural".into(),
+            "Storey: Level 1".into(),
+            "site visit".into(),
+            "Decision changed".into(),
+        ];
+        let rule_labels = BTreeMap::from([("slab-contact".to_owned(), vec!["structural".into()])]);
+        let imported = import_topics(&markups, &report, &model(), &rule_labels).unwrap();
+        let wall = imported
+            .decisions
+            .get(report.findings[0].id.unwrap())
+            .unwrap();
+        assert_eq!(wall.status, DecisionStatus::Open);
+        assert_eq!(wall.assigned_to.as_deref(), Some("C. Engineer"));
+        assert_eq!(
+            wall.due_date.unwrap().to_string(),
+            "2026-10-15T17:00:00+02:00"
+        );
+        assert_eq!(wall.labels, ["site visit"]);
+        assert_eq!(wall.priority, None);
+        assert_eq!(wall.author, "axioval-check");
+
+        // A due date without a UTC offset cannot be placed in time.
+        markups[0].topic.due_date = Some("2026-10-15".into());
+        let imported = import_topics(&markups, &report, &model(), &rule_labels).unwrap();
+        assert!(imported.decisions.is_empty());
+        assert!(
+            matches!(&imported.unmatched[0].reason, Unmatched::Unreadable(why) if why.contains("due date")),
+            "{:?}",
+            imported.unmatched
+        );
+    }
 }

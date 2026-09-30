@@ -372,7 +372,13 @@ axioval check --model rev2.ifc ... --decisions decisions.json --report r2.json -
 `accepted`, `rejected` or `open`. The file is created when missing, and a
 decision about a finding already decided replaces the earlier one. Each
 decision records the finding's basis (rule, message, severity, evidence
-counts), so a re-check can tell whether it changed. `--date` is an ISO 8601
+counts), so a re-check can tell whether it changed. `--assign-to NAME`,
+`--due DATE-TIME`, `--priority P` and `--label L` (repeated) record who
+deals with it, by when, how urgent and how it is labelled; a later decision
+about the same finding that does not restate them keeps them (`--label`
+replaces all labels). `check --decisions` carries them to the finding and
+the BCF topic: priority and labels are written, and assignee and due date,
+which the BCF writer cannot write yet, are counted in a warning. `--date` is an ISO 8601
 date-time with offset, else `SOURCE_DATE_EPOCH` when set, else now, in UTC.
 A finding the result does not contain fails the command (status 1) and
 nothing is written.

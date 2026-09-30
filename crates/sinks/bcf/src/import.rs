@@ -9,14 +9,19 @@ use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
 use axioval_ir::{
-    DateTime, Decision, DecisionError, DecisionStatus, Decisions, FindingId, IdentityError,
-    Project, Report, finding_ids, not_evaluated_ids,
+    DateTime, Decision, DecisionError, DecisionStatus, Decisions, Finding, FindingId,
+    IdentityError, Project, Report, finding_ids, not_evaluated_ids,
 };
 use openbim_bcf::{BcfError, Comment, Limits, Markup};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::IFC_GLOBAL_ID_SCHEME;
+use crate::{IFC_GLOBAL_ID_SCHEME, exported_labels, priority};
+
+/// Label prefixes the export writes itself (folder, category, storey,
+/// space), never read as a reviewer's labels, even when the importing host
+/// would not write them now.
+const EXPORTED_LABEL_PREFIXES: [&str; 4] = ["Folder: ", "Category: ", "Storey: ", "Space: "];
 
 /// Topic statuses read as an accepted finding, compared ignoring ASCII case:
 /// a topic closed or resolved in another tool is a finding the reviewer
@@ -135,10 +140,15 @@ impl Unmatched {
 /// [`ImportError::Read`] or [`ImportError::Archive`] when it is not a
 /// readable BCF archive, [`ImportError::TooManyAttributes`] as above, and as
 /// [`import_topics`].
-pub fn import(bytes: &[u8], report: &Report, project: &Project) -> Result<Import, ImportError> {
+pub fn import(
+    bytes: &[u8],
+    report: &Report,
+    project: &Project,
+    rule_labels: &BTreeMap<String, Vec<String>>,
+) -> Result<Import, ImportError> {
     scan(bytes)?;
     let archive = openbim_bcf::read_slice_with(bytes, IMPORT_LIMITS)?;
-    import_topics(archive.topics(), report, project)
+    import_topics(archive.topics(), report, project, rule_labels)
 }
 
 /// Maps BCF topics onto decisions about `report`'s findings.
@@ -147,9 +157,11 @@ pub fn import(bytes: &[u8], report: &Report, project: &Project) -> Result<Import
 /// [`IFC_GLOBAL_ID_SCHEME`] is its GUID, the identity the export wrote it
 /// under. A matched topic yields a decision when it carries review state: a
 /// status in [`ACCEPTED_STATUSES`] or [`REJECTED_STATUSES`] (any other
-/// status is open), the comment the export wrote for a decision, or any
-/// other comment. An untouched topic yields none, so exporting and
-/// importing again decides nothing.
+/// status is open), the comment the export wrote for a decision, any other
+/// comment, an assignee, a due date, a priority other than the one the
+/// finding's severity gives, or a label the export does not write. An
+/// untouched topic yields none, so exporting and importing again decides
+/// nothing.
 ///
 /// - **Status** from the topic status, never from comment text: a status
 ///   changed in another tool wins.
@@ -159,6 +171,13 @@ pub fn import(bytes: &[u8], report: &Report, project: &Project) -> Result<Import
 /// - **Comment**: the latest comment the export did not write, or else the
 ///   text of the export's decision comment without its status prefix and
 ///   change note.
+/// - **Assignee** and **due date** from `AssignedTo` and `DueDate`.
+/// - **Priority** from `Priority` when it differs from the one the export
+///   derives from the finding's severity.
+/// - **Labels**: the topic's labels the export does not write for the
+///   finding with `rule_labels` (the rule id, its rule labels, `Decision
+///   changed`), nor any `Folder: `, `Category: `, `Storey: ` or `Space: `
+///   label; pass the `rule_labels` the archive was exported with.
 ///
 /// Every other topic is listed in [`Import::unmatched`], with why.
 ///
@@ -171,12 +190,15 @@ pub fn import_topics<'a>(
     topics: impl IntoIterator<Item = &'a Markup>,
     report: &Report,
     project: &Project,
+    rule_labels: &BTreeMap<String, Vec<String>>,
 ) -> Result<Import, ImportError> {
-    let findings: BTreeMap<Uuid, FindingId> = finding_ids(report, project, IFC_GLOBAL_ID_SCHEME)
-        .map_err(unknown)?
-        .into_iter()
-        .map(|id| (id.uuid(), id))
-        .collect();
+    let findings: BTreeMap<Uuid, (FindingId, &Finding)> =
+        finding_ids(report, project, IFC_GLOBAL_ID_SCHEME)
+            .map_err(unknown)?
+            .into_iter()
+            .zip(report.findings())
+            .map(|(id, finding)| (id.uuid(), (id, finding)))
+            .collect();
     let outcomes = not_evaluated_ids(report, project, IFC_GLOBAL_ID_SCHEME).map_err(unknown)?;
     let mut decisions = Vec::new();
     let mut unmatched = Vec::new();
@@ -201,7 +223,7 @@ pub fn import_topics<'a>(
             unmatched.push(skip(reason));
             continue;
         };
-        match decision(markup, *finding) {
+        match decision(markup, finding.0, finding.1, rule_labels) {
             Ok(Some(decision)) => decisions.push(decision),
             Ok(None) => {}
             Err(why) => unmatched.push(skip(Unmatched::Unreadable(why))),
@@ -282,29 +304,73 @@ fn decision_text(comment: &str) -> &str {
     text.trim()
 }
 
-/// The decision a topic about `finding` carries; `None` when it carries no
-/// review state.
-fn decision(markup: &Markup, finding: FindingId) -> Result<Option<Decision>, String> {
-    let own_guid = decision_comment_guid(finding.uuid());
-    let is_own = |comment: &Comment| {
-        comment
-            .guid
-            .as_deref()
-            .and_then(|guid| Uuid::try_parse(guid).ok())
-            == Some(own_guid)
-    };
-    let own = markup.comments.iter().find(|comment| is_own(comment));
-    let others: Vec<&Comment> = markup
-        .comments
-        .iter()
-        .filter(|comment| !is_own(comment))
-        .collect();
-    let status = status(markup.topic.topic_status.as_deref());
-    if status == DecisionStatus::Open && own.is_none() && others.is_empty() {
-        return Ok(None);
+/// What a topic sets beside status and comments.
+struct Review {
+    assigned_to: Option<String>,
+    due_date: Option<DateTime>,
+    priority: Option<String>,
+    labels: Vec<String>,
+}
+
+impl Review {
+    fn read(
+        topic: &openbim_bcf::Topic,
+        found: &Finding,
+        rule_labels: &BTreeMap<String, Vec<String>>,
+    ) -> Result<Self, String> {
+        let text = |value: Option<&str>| {
+            value
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+        };
+        let due_date = text(topic.due_date.as_deref())
+            .map(|date| {
+                date.parse()
+                    .map_err(|error| format!("the due date: {error}"))
+            })
+            .transpose()?;
+        let exported = exported_labels(found, rule_labels);
+        let mut labels: Vec<String> = Vec::new();
+        for label in topic.labels.iter().map(|label| label.trim()) {
+            let exporters = label.is_empty()
+                || exported.iter().any(|known| known == label)
+                || EXPORTED_LABEL_PREFIXES
+                    .iter()
+                    .any(|prefix| label.starts_with(prefix))
+                || labels.iter().any(|known| known == label);
+            if !exporters {
+                labels.push(label.to_owned());
+            }
+        }
+        Ok(Self {
+            assigned_to: text(topic.assigned_to.as_deref()),
+            due_date,
+            priority: text(topic.priority.as_deref())
+                .filter(|given| given != priority(&found.severity)),
+            labels,
+        })
     }
 
-    let topic = &markup.topic;
+    fn is_empty(&self) -> bool {
+        self.assigned_to.is_none()
+            && self.due_date.is_none()
+            && self.priority.is_none()
+            && self.labels.is_empty()
+    }
+}
+
+/// A reviewer's comment: author, date and trimmed text.
+type Said<'a> = (String, DateTime, &'a str);
+
+/// Who decided when: the latest of the export's decision comment and the
+/// topic's modification; without either, the last comment; without
+/// comments, the topic's creation.
+fn decided_by(
+    topic: &openbim_bcf::Topic,
+    own: Option<&Comment>,
+    comments: &[Said<'_>],
+) -> Result<(String, DateTime), String> {
     let mut candidates = Vec::new();
     if let Some(own) = own {
         candidates.push(stamp(
@@ -320,8 +386,47 @@ fn decision(markup: &Markup, finding: FindingId) -> Result<Option<Decision>, Str
             "the topic's modification",
         )?);
     }
-    let mut comments = Vec::with_capacity(others.len());
-    for comment in &others {
+    if candidates.is_empty() {
+        return match comments.last() {
+            Some((author, date, _)) => Ok((author.clone(), *date)),
+            None => stamp(
+                topic.creation_author.as_deref(),
+                topic.creation_date.as_deref(),
+                "the topic",
+            ),
+        };
+    }
+    Ok(candidates
+        .into_iter()
+        .reduce(|latest, next| {
+            if next.1.cmp_instant(latest.1).is_gt() {
+                next
+            } else {
+                latest
+            }
+        })
+        .expect("a candidate was pushed"))
+}
+
+/// The decision a topic about `finding` carries; `None` when it carries no
+/// review state.
+fn decision(
+    markup: &Markup,
+    finding: FindingId,
+    found: &Finding,
+    rule_labels: &BTreeMap<String, Vec<String>>,
+) -> Result<Option<Decision>, String> {
+    let own_guid = decision_comment_guid(finding.uuid());
+    let is_own = |comment: &Comment| {
+        comment
+            .guid
+            .as_deref()
+            .and_then(|guid| Uuid::try_parse(guid).ok())
+            == Some(own_guid)
+    };
+    let own = markup.comments.iter().find(|comment| is_own(comment));
+    let mut comments: Vec<Said<'_>> = Vec::new();
+    for comment in markup.comments.iter().filter(|comment| !is_own(comment)) {
         let (author, date) = stamp(
             comment.author.as_deref(),
             comment.date.as_deref(),
@@ -334,27 +439,13 @@ fn decision(markup: &Markup, finding: FindingId) -> Result<Option<Decision>, Str
             .unwrap_or_default();
         comments.push((author, date, text));
     }
-    if candidates.is_empty() {
-        match comments.last() {
-            Some((author, date, _)) => candidates.push((author.clone(), *date)),
-            None => candidates.push(stamp(
-                topic.creation_author.as_deref(),
-                topic.creation_date.as_deref(),
-                "the topic",
-            )?),
-        }
+    let topic = &markup.topic;
+    let status = status(topic.topic_status.as_deref());
+    let review = Review::read(topic, found, rule_labels)?;
+    if status == DecisionStatus::Open && own.is_none() && comments.is_empty() && review.is_empty() {
+        return Ok(None);
     }
-    let (author, date) = candidates
-        .into_iter()
-        .reduce(|latest, next| {
-            if next.1.cmp_instant(latest.1).is_gt() {
-                next
-            } else {
-                latest
-            }
-        })
-        .expect("a candidate was pushed");
-
+    let (author, date) = decided_by(topic, own, &comments)?;
     let comment = match comments.iter().rev().find(|(_, _, text)| !text.is_empty()) {
         Some((_, _, text)) => (*text).to_owned(),
         None => own
@@ -363,9 +454,14 @@ fn decision(markup: &Markup, finding: FindingId) -> Result<Option<Decision>, Str
             .unwrap_or_default()
             .to_owned(),
     };
-    Decision::new(finding, status, author, date)
-        .map(|decision| Some(decision.with_comment(comment)))
-        .map_err(|error| error.to_string())
+    let mut decision = Decision::new(finding, status, author, date)
+        .map_err(|error| error.to_string())?
+        .with_comment(comment)
+        .with_labels(review.labels);
+    decision.assigned_to = review.assigned_to;
+    decision.due_date = review.due_date;
+    decision.priority = review.priority;
+    Ok(Some(decision))
 }
 
 /// Refuses an archive with an entry whose tags carry more attributes than

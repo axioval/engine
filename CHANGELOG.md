@@ -124,6 +124,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   `MAX_ATTRIBUTES_PER_TAG` attributes, which bounds the XML reader's
   quadratic duplicate-attribute check (RUSTSEC-2026-0194). `zip` 8 becomes
   a normal dependency of the sink (`deflate` only).
+- **Review metadata.** (Refs #170) A decision records an optional
+  assignee, due date, priority and labels (`Decision::assigned_to`,
+  `due_date`, `priority`, `labels`, with `with_assignee`, `with_due_date`,
+  `with_priority`, `with_labels`); `Report::apply_decisions` carries them to
+  `FindingDecision`. A decisions file or report without them serializes
+  byte-identically. The BCF export writes a decision's priority in place of
+  the severity's and appends its labels; `import` reads `AssignedTo`,
+  `DueDate`, a priority other than the severity's and labels the export
+  does not write (it takes the `rule_labels` the archive was exported
+  with). The BCF writer cannot write `AssignedTo` and `DueDate` yet
+  (openbimrs/bcf#11), so the export lists them in `Export::unwritten` and
+  the CLI warns. `axioval decide` takes `--assign-to`, `--due`,
+  `--priority` and `--label`, and keeps them across later decisions.
+  **Breaking:** `Decision` and `FindingDecision` gain public fields,
+  `DecisionError` gains `Blank`, `Export` gains `unwritten`, and `import`
+  and `import_topics` take `rule_labels`.
 
 ### Changed
 

@@ -1,6 +1,7 @@
 //! Reviewers' decisions about findings, kept across re-checks.
 //!
-//! A reviewer accepts or rejects a finding, with a comment. The decision is
+//! A reviewer accepts or rejects a finding, with a comment, and may assign
+//! it to someone, set a due date and a priority, and label it. The decision is
 //! keyed by the finding's [`FindingId`], so checking a revised model carries
 //! it over to the finding with the same identity. A decision whose finding is
 //! gone is *stale* and listed apart; a decision whose finding is still there
@@ -147,6 +148,19 @@ pub struct Decision {
     /// Why; may be empty, and is then absent on the wire.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub comment: String,
+    /// Who the finding is assigned to; never blank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assigned_to: Option<String>,
+    /// When the finding is due to be dealt with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<DateTime>,
+    /// How urgent, in the project's own vocabulary (`High`, `Normal`, ...);
+    /// never blank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    /// Labels the reviewer gave the finding, in order; none blank.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
     /// The finding as it was decided, when recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub basis: Option<DecisionBasis>,
@@ -174,6 +188,10 @@ impl Decision {
             author,
             date,
             comment: String::new(),
+            assigned_to: None,
+            due_date: None,
+            priority: None,
+            labels: Vec::new(),
             basis: None,
         })
     }
@@ -191,6 +209,65 @@ impl Decision {
         self.basis = Some(DecisionBasis::of(finding));
         self
     }
+
+    /// The same decision assigning the finding to `assignee`.
+    #[must_use]
+    pub fn with_assignee(mut self, assignee: impl Into<String>) -> Self {
+        self.assigned_to = Some(assignee.into());
+        self
+    }
+
+    /// The same decision due at `date`.
+    #[must_use]
+    pub fn with_due_date(mut self, date: DateTime) -> Self {
+        self.due_date = Some(date);
+        self
+    }
+
+    /// The same decision with a priority.
+    #[must_use]
+    pub fn with_priority(mut self, priority: impl Into<String>) -> Self {
+        self.priority = Some(priority.into());
+        self
+    }
+
+    /// The same decision with labels, in order.
+    #[must_use]
+    pub fn with_labels(mut self, labels: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.labels = labels.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Refuses a blank author, assignee, priority or label.
+    fn validate(&self) -> Result<(), DecisionError> {
+        if self.author.trim().is_empty() {
+            return Err(DecisionError::BlankAuthor(self.finding));
+        }
+        let blank = |field| {
+            Err(DecisionError::Blank {
+                finding: self.finding,
+                field,
+            })
+        };
+        if self
+            .assigned_to
+            .as_deref()
+            .is_some_and(|a| a.trim().is_empty())
+        {
+            return blank("assigned_to");
+        }
+        if self
+            .priority
+            .as_deref()
+            .is_some_and(|p| p.trim().is_empty())
+        {
+            return blank("priority");
+        }
+        if self.labels.iter().any(|label| label.trim().is_empty()) {
+            return blank("labels");
+        }
+        Ok(())
+    }
 }
 
 /// Why decisions were refused.
@@ -202,6 +279,14 @@ pub enum DecisionError {
     /// A decision names nobody who made it.
     #[error("the decision about finding {0} has a blank author")]
     BlankAuthor(FindingId),
+    /// A decision's assignee, priority or a label is blank.
+    #[error("the decision about finding {finding} has a blank {field}")]
+    Blank {
+        /// The finding decided about.
+        finding: FindingId,
+        /// `assigned_to`, `priority` or `labels`.
+        field: &'static str,
+    },
     /// A finding of the report has no identity, so no decision can be
     /// matched to it; see [`Report::identify_findings`].
     #[error("finding of rule {0} has no identity; identify the report's findings first")]
@@ -244,8 +329,10 @@ impl Decisions {
     ///
     /// # Errors
     ///
-    /// [`DecisionError::Duplicate`] when two name one finding, and
-    /// [`DecisionError::BlankAuthor`] when one has a blank author.
+    /// [`DecisionError::Duplicate`] when two name one finding,
+    /// [`DecisionError::BlankAuthor`] when one has a blank author, and
+    /// [`DecisionError::Blank`] when one has a blank assignee, priority or
+    /// label.
     pub fn new(decisions: impl IntoIterator<Item = Decision>) -> Result<Self, DecisionError> {
         let mut decisions: Vec<Decision> = decisions.into_iter().collect();
         decisions.sort_by_key(|decision| decision.finding);
@@ -254,8 +341,8 @@ impl Decisions {
                 return Err(DecisionError::Duplicate(pair[0].finding));
             }
         }
-        if let Some(blank) = decisions.iter().find(|d| d.author.trim().is_empty()) {
-            return Err(DecisionError::BlankAuthor(blank.finding));
+        for decision in &decisions {
+            decision.validate()?;
         }
         Ok(Self { decisions })
     }
@@ -286,11 +373,10 @@ impl Decisions {
     ///
     /// # Errors
     ///
-    /// [`DecisionError::BlankAuthor`] when its author is blank.
+    /// [`DecisionError::BlankAuthor`] when its author is blank, and
+    /// [`DecisionError::Blank`] when its assignee, priority or a label is.
     pub fn record(&mut self, decision: Decision) -> Result<Option<Decision>, DecisionError> {
-        if decision.author.trim().is_empty() {
-            return Err(DecisionError::BlankAuthor(decision.finding));
-        }
+        decision.validate()?;
         match self
             .decisions
             .binary_search_by_key(&decision.finding, |existing| existing.finding)
@@ -361,6 +447,18 @@ pub struct FindingDecision {
     pub date: DateTime,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub comment: String,
+    /// Who the finding is assigned to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assigned_to: Option<String>,
+    /// When the finding is due.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<DateTime>,
+    /// How urgent, in the project's own vocabulary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    /// The reviewer's labels, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
     /// Whether the finding changed since it was decided.
     pub evidence: EvidenceCheck,
     /// What changed, when [`EvidenceCheck::Changed`]; empty otherwise.
@@ -388,6 +486,10 @@ impl FindingDecision {
             author: decision.author.clone(),
             date: decision.date,
             comment: decision.comment.clone(),
+            assigned_to: decision.assigned_to.clone(),
+            due_date: decision.due_date,
+            priority: decision.priority.clone(),
+            labels: decision.labels.clone(),
             evidence,
             changes,
         }

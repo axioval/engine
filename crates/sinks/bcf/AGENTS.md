@@ -34,8 +34,16 @@ review decisions read back from them (`src/import.rs`).
   decision's author at its date, GUID `v5(topic, "decision")`; a changed one
   adds the `Decision changed` label. Not-evaluated outcomes are never
   decided. Without decisions the archive is byte-identical.
-- A finding's `Priority` follows its severity; a not-evaluated outcome has
-  none, because no severity was decided. Never invent one for it.
+- A finding's `Priority` follows its severity, unless its decision sets
+  one; a not-evaluated outcome has none, because no severity was decided.
+  Never invent one for it. A decision's labels follow the topic's own.
+- A decision's `assigned_to` and `due_date` cannot be written until
+  openbimrs/bcf#11 ships: list each in `Export::unwritten`, never drop it
+  silently and never smuggle it into comment text. Import reads them from
+  `AssignedTo`/`DueDate`, a priority only when it differs from the
+  severity's, and only labels the export does not write
+  (`exported_labels` plus the `Folder:`/`Category:`/`Storey:`/`Space:`
+  families).
 - Labels are the rule id first, then the host's `rule_labels` for that
   rule (`ruleset_labels`: folder path, tags), then `Category: a / b` from
   `Finding::categories`, then the location's, each once. Labels never enter the GUID key: relabelling a rule must not change

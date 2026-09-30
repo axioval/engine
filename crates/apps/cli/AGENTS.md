@@ -40,5 +40,10 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   after identification and applies the decisions; it conflicts with
   `--decisions`. Unmatched topics go to the additive `unmatched_topics`
   field (`digest::UnmatchedTopicRecord`), the `unmatched-topics` section and
-  one stderr warning; they never change the exit status.
+  one stderr warning; they never change the exit status. It imports with
+  the run's `rule_labels`, so the export's own labels are not read back as
+  a reviewer's.
+- `decide --assign-to/--due/--priority/--label` keep their earlier values
+  when a later decision does not restate them. BCF decision fields the
+  writer cannot write (`Export::unwritten`) are one stderr warning.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

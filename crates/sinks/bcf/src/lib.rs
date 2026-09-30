@@ -396,6 +396,19 @@ pub struct Export {
     /// has none for them. Empty when no bounds were supplied at all. Sorted
     /// and deduplicated.
     pub unframed: Vec<ObjectId>,
+    /// Decision fields the archive does not carry, in topic order: the BCF
+    /// writer cannot write a topic's `AssignedTo` or `DueDate` yet
+    /// (openbimrs/bcf#11). Never dropped silently: a host says so.
+    pub unwritten: Vec<Unwritten>,
+}
+
+/// A decision field a topic does not carry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unwritten {
+    /// The topic's GUID, the finding's identity.
+    pub topic: Uuid,
+    /// The BCF field, `AssignedTo` or `DueDate`.
+    pub field: &'static str,
 }
 
 impl Export {
@@ -439,9 +452,24 @@ pub fn export(
 
     let mut unanchored = BTreeSet::new();
     let mut unframed = BTreeSet::new();
+    let mut unwritten = Vec::new();
     let mut topics = Vec::with_capacity(entries.len());
     for (entry, guid) in &entries {
         unanchored.extend(entry.unanchored.iter().cloned());
+        if let Some(decision) = &entry.decision {
+            let fields = [
+                ("AssignedTo", decision.assigned_to.is_some()),
+                ("DueDate", decision.due_date.is_some()),
+            ];
+            for (field, set) in fields {
+                if set {
+                    unwritten.push(Unwritten {
+                        topic: *guid,
+                        field,
+                    });
+                }
+            }
+        }
         let (topic, uncamered) = entry.topic(*guid, options);
         match uncamered {
             Uncamered::No => {}
@@ -465,6 +493,7 @@ pub fn export(
         },
         unanchored: unanchored.into_iter().collect(),
         unframed: unframed.into_iter().collect(),
+        unwritten,
     })
 }
 
@@ -528,14 +557,7 @@ impl Entry {
             title: title(&finding.message, &finding.rule_id.to_string()),
             topic_type: severity(&finding.severity).to_owned(),
             priority: Some(priority(&finding.severity)),
-            labels: {
-                let mut labels = labels(&finding.rule_id.to_string(), finding.location.as_ref());
-                if !finding.categories.is_empty() {
-                    let path = finding.categories.join(" / ");
-                    labels.insert(1, format!("Category: {path}"));
-                }
-                labels
-            },
+            labels: finding_labels(finding),
             description: description.join("\n"),
             decision: finding.decision.clone(),
             selection: resolved.selection,
@@ -637,15 +659,28 @@ impl Entry {
             if decision.evidence == EvidenceCheck::Changed {
                 labels.push(DECISION_CHANGED_LABEL.to_owned());
             }
+            for label in &decision.labels {
+                let label = label.trim();
+                if !label.is_empty() && !labels.iter().any(|known| known == label) {
+                    labels.push(label.to_owned());
+                }
+            }
             comments.push(decision_comment(decision, guid));
         }
+        let priority = self
+            .decision
+            .as_ref()
+            .and_then(|decision| decision.priority.as_deref())
+            .map(str::trim)
+            .filter(|priority| !priority.is_empty())
+            .or(self.priority);
         let topic = Topic {
             guid: guid.to_string(),
             title: self.title.clone(),
             description: Some(self.description.clone()),
             topic_type: Some(self.topic_type.clone()),
             topic_status: Some(status),
-            priority: self.priority.map(str::to_owned),
+            priority: priority.map(str::to_owned),
             labels,
             creation_date: options.date.clone(),
             creation_author: options.author.clone(),
@@ -866,6 +901,28 @@ impl Resolved {
     }
 }
 
+/// A finding's own labels: the rule id, `Category: a / b` from its
+/// categories, then its location's.
+fn finding_labels(finding: &Finding) -> Vec<String> {
+    let mut labels = labels(&finding.rule_id.to_string(), finding.location.as_ref());
+    if !finding.categories.is_empty() {
+        let path = finding.categories.join(" / ");
+        labels.insert(1, format!("Category: {path}"));
+    }
+    labels
+}
+
+/// Every label the export writes on `finding`'s topic by itself, without
+/// the decision's own: see [`merged_labels`], and [`DECISION_CHANGED_LABEL`].
+pub(crate) fn exported_labels(
+    finding: &Finding,
+    rule_labels: &BTreeMap<String, Vec<String>>,
+) -> Vec<String> {
+    let mut labels = merged_labels(&finding_labels(finding), rule_labels);
+    labels.push(DECISION_CHANGED_LABEL.to_owned());
+    labels
+}
+
 /// A topic's labels: the rule id, then `Storey: <name>` for each storey and
 /// `Space: <name>` for each space the entry is located in (the place's id
 /// when it has no name). An unlocated entry has the rule id alone, as
@@ -975,7 +1032,7 @@ fn severity(severity: &Severity) -> &'static str {
 }
 
 /// `Priority` of a finding's topic, from its severity.
-fn priority(severity: &Severity) -> &'static str {
+pub(crate) fn priority(severity: &Severity) -> &'static str {
     match severity {
         Severity::Error => PRIORITY_HIGH,
         Severity::Warning => PRIORITY_NORMAL,

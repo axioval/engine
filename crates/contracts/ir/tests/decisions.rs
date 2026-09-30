@@ -340,3 +340,66 @@ fn a_decisions_file_is_read_strictly() {
         );
     }
 }
+
+#[test]
+fn assignee_due_date_priority_and_labels_are_carried_to_the_finding() {
+    let mut report = identified("a", 1);
+    let decided = decision(&report.findings[0], DecisionStatus::Open)
+        .with_assignee("C. Engineer")
+        .with_due_date(at("2026-10-15T17:00:00+02:00"))
+        .with_priority("Critical")
+        .with_labels(["structure", "site visit"]);
+    let decisions = Decisions::new([decided.clone()]).unwrap();
+    let text = serde_json::to_value(&decisions).unwrap();
+    assert_eq!(text["decisions"][0]["assigned_to"], "C. Engineer");
+    assert_eq!(
+        text["decisions"][0]["due_date"],
+        "2026-10-15T17:00:00+02:00"
+    );
+    let back: Decisions = serde_json::from_value(text).unwrap();
+    assert_eq!(back, decisions);
+
+    report.apply_decisions(&decisions).unwrap();
+    let carried = report.findings[0].decision.as_ref().unwrap();
+    assert_eq!(carried.assigned_to.as_deref(), Some("C. Engineer"));
+    assert_eq!(carried.due_date, decided.due_date);
+    assert_eq!(carried.priority.as_deref(), Some("Critical"));
+    assert_eq!(carried.labels, ["structure", "site visit"]);
+    let text = serde_json::to_value(&report).unwrap();
+    assert_eq!(
+        text["findings"][0]["decision"]["labels"],
+        json!(["structure", "site visit"])
+    );
+    let back: Report = serde_json::from_value(text).unwrap();
+    assert_eq!(back, report);
+}
+
+#[test]
+fn decisions_without_review_fields_serialize_byte_identically() {
+    let file = r#"{"decisions":[{"finding":"5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20","status":"rejected","author":"A. Reviewer","date":"2026-09-27T08:00:00Z","comment":"a lining","basis":{"rule_id":"contact","message":"m","severity":"error","evidence":3,"inexact_evidence":0}}]}"#;
+    let decisions: Decisions = serde_json::from_str(file).unwrap();
+    assert_eq!(serde_json::to_string(&decisions).unwrap(), file);
+    let report = r##"{"findings":[{"id":"5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20","rule_id":"contact","object_id":{"source":{"system":"test","document":"a"},"local_id":"#1"},"severity":"error","message":"m","evidence":[],"decision":{"status":"accepted","author":"A. Reviewer","date":"2026-09-27T08:00:00Z","comment":"agreed","evidence":"unknown"}}],"not_evaluated":[]}"##;
+    let parsed: Report = serde_json::from_str(report).unwrap();
+    assert_eq!(serde_json::to_string(&parsed).unwrap(), report);
+}
+
+#[test]
+fn a_blank_assignee_priority_or_label_is_refused() {
+    let report = identified("a", 1);
+    let base = decision(&report.findings[0], DecisionStatus::Open);
+    for (decided, field) in [
+        (base.clone().with_assignee(" "), "assigned_to"),
+        (base.clone().with_priority(""), "priority"),
+        (base.clone().with_labels(["ok", " "]), "labels"),
+    ] {
+        assert_eq!(
+            Decisions::new([decided.clone()]),
+            Err(DecisionError::Blank {
+                finding: decided.finding,
+                field
+            })
+        );
+        assert!(Decisions::default().record(decided).is_err());
+    }
+}

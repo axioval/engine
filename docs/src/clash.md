@@ -194,8 +194,10 @@ distances. Seen from the counterpart, above is below.
 
 Exact evidence is a point, related or not. A tessellation widens each
 distance by the combined chord deviation and may leave the relation open: its
-interval then reaches infinity. A `Minimum3d` distance between bodies with
-certified boundaries is narrowed as the separation is. A direction is open in the same way when
+interval then reaches infinity. Between bodies with certified boundaries, a
+`Minimum3d` distance is narrowed as the separation is, and a `Horizontal`
+distance, a plan overlap and the footprint relation of a `Vertical`
+distance by the certified plan measurements. A direction is open in the same way when
 either end of the counterpart lies within the combined deviation of the
 subject's and no end is decided beyond it. `measure_proximity` refuses a projected
 request, and the default `measure_distance` answers `Minimum3d` from the full
@@ -300,10 +302,8 @@ Projected distances reuse the same pieces:
   meshes' overlap farther than the deviations from its boundary (the overlap's
   centroid and the centroids of its fan triangles are tried), and denied only
   when the plan distance exceeds the combined deviation. Anything between is
-  reported open. The certified boundary distance below is a distance in
-  space, not between footprints, so it does not narrow any of these: a
-  certified plan distance between exact footprints is not published by the
-  kernel, and curved footprints stay open within their deviation in plan.
+  reported open. Exact boundaries narrow each of these (see **Certified
+  plan relations** below).
 
 Points are tested only against closed two-manifold meshes. A pair needs at
 least one of them to report a penetration. Hosts declare curved parts with
@@ -329,6 +329,40 @@ whose axis stands 1 m from a wall is 0.8 m from it; its 16-chord mesh
 leaves that within about 4 mm, the certified distance within a
 micrometre, so a bound of 0.799 m or 0.8005 m is judged instead of left
 open. An exact pair is already a point and is not certified.
+
+**Certified plan relations.** The same pairs are certified in plan by
+`axiolid-measure`'s plan measurements, the same branch and bound with every
+gap, direction and enclosing disc horizontal. A solid's shadow on the XY
+plane is its boundary's, so they measure between footprints whatever the
+heights, and are zero when the shadows overlap, also when one body stands
+inside the other's footprint. The rules are those of the distance in space:
+each certified answer is intersected with the chord-widened one, a
+contradiction refuses the pair, and a kernel refusal or an undecided answer
+keeps the chord-widened one.
+
+- **Horizontal** distance is also measured with `plan_boundary_distance`
+  to `CERTIFIED_ACCURACY_METRES`, widened by the rounding of its witness
+  points. Two round columns of radius 0.2 m whose axes stand 1 m apart are
+  0.6 m apart in plan, even on different storeys; their 16-chord meshes
+  leave that within about 8 mm, the certificate within a micrometre.
+- **Plan overlap**, and the footprint relation of a `Vertical` distance
+  with no offset, also asks `plan_overlap`. It shows overlap from two
+  planar faces, not vertical, sharing an open patch in plan (a column's
+  base over a slab), and shows the shadows apart by a certified gap; a gap
+  within rounding decides nothing. Its search depends on the order of the
+  two bodies, so an undecided order is asked the other way round. It
+  never shows overlap between curved faces alone, and a sliver narrower
+  than the chord deviation, such as a column reaching a few millimetres
+  over a slab's edge, stays open. A column standing 3 mm off a slab's edge
+  is certainly beside it, not over it.
+- With a positive footprint offset, the relation comes from
+  `plan_boundary_clearance` against the offset, intersected with the
+  chord-widened plan distance: two columns 0.6 m apart in plan are
+  related within an offset of 0.605 m and not within 0.595 m, both of which
+  their meshes leave open.
+
+`Vertical`'s `Nearest` surface is still found on the meshes, as are the
+vertical extents and the side a counterpart lies on.
 
 The other Axiolid services only produce exact evidence, so they refuse when a
 tessellation could change their answer. That is the case when the subject is

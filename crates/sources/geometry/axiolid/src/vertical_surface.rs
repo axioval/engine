@@ -27,7 +27,7 @@ use axioval_engine::{
 
 use crate::geometry::Triangle;
 use crate::planar::{Disc, boundary_rings, grown_polygons, projected_polygons, ring_segments};
-use crate::proximity::{Body, Relation, relation, tolerance};
+use crate::proximity::{Body, Boundaries, Relation, relation, tolerance};
 
 /// Plan area below which a clipped piece only touches the footprint.
 const TOUCH_AREA: f64 = 1e-12;
@@ -38,6 +38,8 @@ pub(crate) struct Pair<'p, 'a> {
     pub(crate) counterpart: &'p Body<'a>,
     pub(crate) subject_fidelity: GeometryFidelity,
     pub(crate) counterpart_fidelity: GeometryFidelity,
+    /// The exact boundaries that certify the footprint relation, if any.
+    pub(crate) boundaries: Option<Boundaries<'a>>,
 }
 
 /// The distance from `from` of the subject to `to` of the counterpart in
@@ -106,6 +108,7 @@ pub(crate) fn interval(
             offset,
             pair.subject_fidelity,
             pair.counterpart_fidelity,
+            pair.boundaries,
         )? {
             Relation::Unrelated => (f64::INFINITY, f64::INFINITY),
             Relation::Related => (lower, upper),

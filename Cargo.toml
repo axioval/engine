@@ -56,8 +56,10 @@ axiolid-construct = "0.3.5"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.2"
 axiolid-mesh = "0.3.0"
-axiolid-measure = "0.3.2"
-axiolid-overlay = "0.3.3"
+axiolid-measure = "0.3.4"
+# Bounded below 0.3.5: 0.3.5 and later regress the accessible-route
+# tests (axiolid/kernel#219). Do not update past it until that is fixed.
+axiolid-overlay = ">=0.3.3, <0.3.5"
 axiolid-ray-mesh = "0.3.0"
 axiolid-route = "0.3.5"
 axiolid-spatial = "0.3.0"

@@ -42,9 +42,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   on a certified separation as an interval (a clash below, a pass above,
   not evaluated when it straddles), and `distance` decides bounds the
   certified interval clears: a round column 0.8 m from a wall is judged
-  against 0.799 m and 0.8005 m, which its chord mesh leaves open. Plan
-  projections of curved footprints stay chord-widened, since the published
-  distance is in space.
+  against 0.799 m and 0.8005 m, which its chord mesh leaves open.
+- **Certified plan relations for curved bodies.** (Refs #185) The same
+  pairs are certified in plan with `axiolid-measure` 0.3.4
+  (axiolid/kernel#217): a `Horizontal` distance by `plan_boundary_distance`,
+  a plan overlap and the footprint relation of a `Vertical` distance by
+  `plan_overlap` (`Undecided` keeps the chord-widened relation), and a
+  positive footprint offset by `plan_boundary_clearance`. Each is
+  intersected with the chord-widened answer, a contradiction refuses the
+  pair, and exact pairs are left uncertified. Two round columns whose axes
+  stand 1 m apart are 0.6 m apart in plan to a micrometre whatever their
+  heights, so `distance` with `projection: horizontal` judges 0.5995 m and
+  0.6005 m, which their chord meshes leave open; a column 3 mm off a
+  slab's edge is certainly beside it. A sliver of overlap narrower than the
+  chord deviation stays open: the kernel shows overlap only from planar
+  patches it isolates.
 - **Site geometry presence.** (Closes #161) Whether a site has geometry is
   decided by `property-required` on `axioval:body.Count` over the sites: a
   site whose representations state no body (none at all, or only a
@@ -181,6 +193,9 @@ All notable changes are documented here. This project follows Semantic Versionin
 - **Breaking:** `axioval_ids::Options` gains the public field `filter` and
   is no longer `Eq`; construct it with `Options::new`, or add
   `filter: None`.
+- The workspace moves to `axiolid-measure` 0.3.4 (certified plan
+  measurements); the lockfile follows with matching patch releases of the
+  other `axiolid-*` crates.
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
   through zip 8, so the workspace carries a single zip version. Archives are
   byte-identical to those written with 0.4.

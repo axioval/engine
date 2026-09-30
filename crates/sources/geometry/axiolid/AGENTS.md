@@ -292,15 +292,22 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   never `Unavailable`, so a comparison can tell "no body" from "unmeasured".
   A tessellated pair whose objects both have an exact boundary
   (`AxiolidGeometry::with_exact_boundary`) also gets the kernel's certified
-  `boundary_distance` (axiolid-measure 0.3.2, `exact` feature) to
+  `boundary_distance` (axiolid-measure 0.3.4, `exact` feature) to
   `CERTIFIED_ACCURACY_METRES`, widened by a rounding bound on its witness
   points, and reports the intersection with the chord-widened interval
   (`with_certified_separation` in `measure_proximity`, the interval itself
   for `Minimum3d` in `measure_distance`); an empty intersection refuses
   (boundary and mesh disagree), a kernel refusal keeps the chord interval.
-  Never report the certified interval alone, never certify an exact pair
-  (its evidence is a point) and never use it for a plan projection: it is
-  the distance in space between boundaries, not between footprints.
+  The same pair's plan relations (`proximity::Boundaries`) are certified
+  by the kernel's plan measurements under the same rules: `Horizontal` by
+  `plan_boundary_distance`; the footprint relation of `PlanOverlap` and
+  zero-offset `Vertical` (`relation`) by `plan_overlap`, asked in both
+  orders because its search is order-dependent (`Undecided` keeps the
+  mesh's relation, a contradiction of a decided one refuses); a positive
+  offset by `plan_boundary_clearance`, intersected with the chord-widened
+  plan distance. Never report a certified interval alone, never certify an
+  exact pair (its evidence is a point), and never use the distance in space
+  for a plan projection or the plan distance for one in space.
   `measure_region_distance` folds the same 2D closest points between a
   stated region's fan triangles and the counterpart's footprint, widened by
   the counterpart's chord deviation.
@@ -379,10 +386,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-measure` 0.3.2 with the `exact` feature (certified
-`boundary_distance`, with `axiolid-brep` 0.3.1 for the `ExactBRep` hosts
-register; tests build exact solids with `axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.3 (`minimum_area_rectangle`, the
-Minkowski and dilation family, settled `union_soup` output), `axiolid-route`
+0.3.0, except `axiolid-measure` 0.3.4 with the `exact` feature (certified
+`boundary_distance`, and the plan measurements `plan_boundary_distance`,
+`plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.1 for
+the `ExactBRep` hosts register; tests build exact solids with
+`axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.8 (`minimum_area_rectangle`, the
+Minkowski and dilation family, settled `union_soup` output, fast on mesh
+soups), `axiolid-route`
 0.3.5 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
 maps and corridor ends, with `axiolid-triangulate` 0.3.1) and
 `axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). Check the
@@ -392,10 +402,11 @@ registry source, not the kernel checkout, before relying on an API.
 
 - axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
   plan areas here are off by ~1.5e-8 of the extent while reported exact.
-- A certified distance between plan footprints of exact bodies: the
-  published `boundary_distance` is in space, so horizontal distance, plan
-  overlap and the footprint relation of vertical distance stay chord-widened
-  and open within the deviation for curved footprints.
+- `plan_overlap` (axiolid-measure 0.3.4) shows overlap only from planar
+  patches its bounded search isolates, and depends on argument order: a
+  column's base over a slab is found with the slab first only, and a sliver
+  over a slab's edge narrower than the chord deviation not at all, so such
+  a relation stays open. Overlap between curved faces alone is never shown.
 - One-sided disc morphology (`Region::erode_inner` and friends, #163) is
   published in axiolid-overlay 0.3.2. Walkability splits surfaces touching
   nothing into possible pieces with it; surfaces touching others stay

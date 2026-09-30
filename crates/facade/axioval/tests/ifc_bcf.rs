@@ -1,4 +1,4 @@
-//! End to end: IFC GlobalIds through the IFC adapter into BCF viewpoints.
+//! End to end: IFC `GlobalId`s through the IFC adapter into BCF viewpoints.
 //!
 //! Lives in the facade because it spans the IFC adapter and the BCF sink,
 //! which must not depend on each other: a dev-dependency between unpublished

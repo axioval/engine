@@ -155,11 +155,15 @@ impl AxiolidGeometry {
     /// too, typically a tessellated one.
     ///
     /// The mesh stays the basis of every measurement. The boundary only
-    /// narrows the distance in space between two objects that both have one
+    /// narrows proximity between two objects that both have one
     /// ([`crate::AxiolidProximityService`]): the kernel's certified
-    /// `boundary_distance` bounds it where the chord deviation would leave it
-    /// wide. The host asserts that boundary and mesh describe one body; a
-    /// pair whose certified interval misses the mesh's widened one refuses.
+    /// `boundary_distance` bounds the distance in space, and its plan
+    /// measurements (`plan_boundary_distance`, `plan_boundary_clearance`,
+    /// `plan_overlap`) the horizontal distance, plan overlap and the
+    /// footprint relation of vertical distances, where the chord deviation
+    /// would leave them wide or open. The host asserts that boundary and
+    /// mesh describe one body; a pair whose certified answer contradicts the
+    /// mesh's widened one refuses.
     #[must_use]
     pub fn with_exact_boundary(mut self, object: ObjectId, boundary: ExactBRep) -> Self {
         self.boundaries.insert(object, Arc::new(boundary));

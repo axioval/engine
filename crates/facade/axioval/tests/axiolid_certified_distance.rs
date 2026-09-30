@@ -5,6 +5,10 @@
 //! a bound of 0.799 m or 0.8005 m lies inside the mesh's interval and cannot
 //! be judged. With both exact boundaries registered the certified boundary
 //! distance clears either bound, and `distance` and `clash` decide.
+//!
+//! In plan the same holds for two columns at different heights whose axes
+//! stand 1 m apart: `distance` with `projection: horizontal` judges their
+//! certified plan distance of 0.6 m against bounds the chords leave open.
 #![cfg(feature = "axiolid")]
 #![allow(missing_docs)]
 
@@ -35,10 +39,14 @@ fn id(local: &str) -> ObjectId {
 }
 
 fn exact_prism(section: impl Fn(f64) -> ArcRing) -> ExactBRep {
+    exact_prism_between(section, [0.0, HEIGHT])
+}
+
+fn exact_prism_between(section: impl Fn(f64) -> ArcRing, [bottom, top]: [f64; 2]) -> ExactBRep {
     let prism = |scale: f64| ArcPrism {
         section: section(scale),
-        bottom: 0.0,
-        top: HEIGHT,
+        bottom,
+        top,
     };
     boolean_arc_prisms_exact(
         &prism(1.0),
@@ -77,19 +85,25 @@ fn cuboid(min: [f64; 3], max: [f64; 3]) -> TriMesh {
 
 /// The column's chords, a vertex facing the wall.
 fn column_mesh() -> TriMesh {
+    column_mesh_at(0.0, [0.0, HEIGHT])
+}
+
+/// A column's chords with its axis at `x` on the x axis, between `levels`,
+/// vertices at angles zero and π.
+fn column_mesh_at(x: f64, levels: [f64; 2]) -> TriMesh {
     let mut positions = Vec::new();
-    for level in [0.0, HEIGHT] {
+    for level in levels {
         for side in 0..SIDES {
             let angle = TAU * f64::from(side) / f64::from(SIDES);
             positions.push(Point3::new(
-                RADIUS * angle.cos(),
+                x + RADIUS * angle.cos(),
                 RADIUS * angle.sin(),
                 level,
             ));
         }
     }
-    positions.push(Point3::new(0.0, 0.0, 0.0));
-    positions.push(Point3::new(0.0, 0.0, HEIGHT));
+    positions.push(Point3::new(x, 0.0, levels[0]));
+    positions.push(Point3::new(x, 0.0, levels[1]));
     let (bottom_centre, top_centre) = (2 * SIDES, 2 * SIDES + 1);
     let mut indices = Vec::new();
     for side in 0..SIDES {
@@ -102,10 +116,13 @@ fn column_mesh() -> TriMesh {
     TriMesh::new(positions, indices)
 }
 
+fn chord_deviation() -> f64 {
+    RADIUS * (1.0 - (PI / f64::from(SIDES)).cos())
+}
+
 fn geometry(certified: bool) -> AxiolidGeometry {
-    let deviation = RADIUS * (1.0 - (PI / f64::from(SIDES)).cos());
     let meshes = AxiolidGeometry::new()
-        .with_tessellated_mesh(id("column"), column_mesh(), deviation)
+        .with_tessellated_mesh(id("column"), column_mesh(), chord_deviation())
         .with_mesh(id("wall"), cuboid([1.0, -2.0, 0.0], [1.2, 2.0, HEIGHT]));
     if !certified {
         return meshes;
@@ -129,36 +146,78 @@ fn geometry(certified: bool) -> AxiolidGeometry {
         )
 }
 
+/// Two columns whose axes stand 1 m apart in plan, `low` from 0 to 3 m and
+/// `high` from 4 to 6 m: 0.6 m apart in plan, farther in space.
+fn two_columns(certified: bool) -> AxiolidGeometry {
+    let meshes = AxiolidGeometry::new()
+        .with_tessellated_mesh(
+            id("low"),
+            column_mesh_at(0.0, [0.0, HEIGHT]),
+            chord_deviation(),
+        )
+        .with_tessellated_mesh(
+            id("high"),
+            column_mesh_at(1.0, [4.0, 6.0]),
+            chord_deviation(),
+        );
+    if !certified {
+        return meshes;
+    }
+    let circle = |x: f64| move |scale: f64| ArcRing::circle(Point2::new(x, 0.0), RADIUS * scale);
+    meshes
+        .with_exact_boundary(id("low"), exact_prism(circle(0.0)))
+        .with_exact_boundary(id("high"), exact_prism_between(circle(1.0), [4.0, 6.0]))
+}
+
 fn check(
     capability: &dyn RuleCapability,
     certified: bool,
     parameters: &[(&str, f64)],
 ) -> CapabilityEvaluation {
+    let numbers = parameters
+        .iter()
+        .map(|(name, value)| (*name, ParameterValue::Number { value: *value }));
+    evaluate(
+        capability,
+        geometry(certified),
+        ["column", "wall"],
+        numbers.collect(),
+    )
+}
+
+/// Evaluates `capability` for objects of the first kind against the second,
+/// each object named and typed by its kind.
+fn evaluate(
+    capability: &dyn RuleCapability,
+    geometry: AxiolidGeometry,
+    [subject, counterpart]: [&str; 2],
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
     let mut bound = BTreeMap::from([(
         "counterparts".to_owned(),
         ParameterValue::Selector {
-            value: Box::new(kind("wall")),
+            value: Box::new(kind(counterpart)),
         },
     )]);
     for (name, value) in parameters {
-        bound.insert((*name).to_owned(), ParameterValue::Number { value: *value });
+        bound.insert(name.to_owned(), value);
     }
     let rule = CompiledRule {
         id: RuleId::new("check").unwrap(),
         capability: capability.id().into(),
         severity: Severity::Error,
-        selector: kind("column"),
+        selector: kind(subject),
         parameters: bound,
     };
     let project = Project::new(vec![
-        Object::new(id("column"), "column"),
-        Object::new(id("wall"), "wall"),
+        Object::new(id(subject), subject),
+        Object::new(id(counterpart), counterpart),
     ])
     .unwrap();
     let mut services = ServiceRegistry::new();
     services
         .register(ProximityServiceHandle::new(Arc::new(
-            AxiolidProximityService::new(geometry(certified)),
+            AxiolidProximityService::new(geometry),
         )))
         .unwrap();
     capability.evaluate(
@@ -226,4 +285,57 @@ fn a_round_column_breaks_a_clearance_it_only_just_misses() {
     );
     let chords = check(&Distance, false, &[("minimum_metres", 0.8005)]);
     assert!(chords.findings().is_empty() && !decided(&chords));
+}
+
+#[test]
+fn two_round_columns_are_judged_by_their_certified_plan_distance() {
+    // 0.6 m apart in plan; the chords leave 0.5995 m and 0.6005 m open.
+    let horizontal = |minimum: f64| {
+        vec![
+            (
+                "projection",
+                ParameterValue::String {
+                    value: "horizontal".into(),
+                },
+            ),
+            ("minimum_metres", ParameterValue::Number { value: minimum }),
+        ]
+    };
+    for minimum in [0.5995, 0.6005] {
+        let chords = evaluate(
+            &Distance,
+            two_columns(false),
+            ["low", "high"],
+            horizontal(minimum),
+        );
+        assert!(
+            chords.findings().is_empty() && !decided(&chords),
+            "{minimum}"
+        );
+    }
+
+    let clear = evaluate(
+        &Distance,
+        two_columns(true),
+        ["low", "high"],
+        horizontal(0.5995),
+    );
+    assert!(clear.findings().is_empty(), "{clear:?}");
+    assert!(decided(&clear), "{:?}", clear.not_evaluated_outcomes());
+
+    let close = evaluate(
+        &Distance,
+        two_columns(true),
+        ["low", "high"],
+        horizontal(0.6005),
+    );
+    let [finding] = close.findings() else {
+        panic!("one distance finding expected: {close:?}");
+    };
+    assert!(
+        finding.message.contains("closer than"),
+        "{}",
+        finding.message
+    );
+    assert!(!finding.evidence[0].exact, "the pair is still tessellated");
 }

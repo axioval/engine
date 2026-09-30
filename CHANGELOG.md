@@ -40,6 +40,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   `name-sequence` declares `order_fallback` (`string`) beside its other
   optional parameters.
 
+- **Date windows in property comparison.** (Closes #157)
+  `property-comparison`'s `between` takes date and date-time bounds
+  (`minimum_date`, `maximum_date`, `minimum_date_time`,
+  `maximum_date_time`) and bounds read from the checked object
+  (`minimum_property`, `maximum_property`), compared in the XML Schema
+  temporal order the other date comparisons use. A value outside either
+  bound is outside the range; one whose order against a bound is
+  undetermined (a zoned date within 14 hours of an unzoned bound) is
+  otherwise not evaluated. Constant bounds of mixed kinds are refused at
+  binding. **Breaking:** a definition bound to `property-comparison`
+  declares the six new optional parameters.
+
 ### Changed
 
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes

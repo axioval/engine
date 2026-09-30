@@ -478,6 +478,42 @@ fn a_date_stating_a_time_zone_is_not_the_unzoned_date() {
     assert!(open.is_empty(), "{result:#}");
 }
 
+/// Walls #1, #11 and #21 state 15 March, 1 July and a zoned first of
+/// January: only #11 is outside the first half of 2026, and #21 lies within
+/// 14 hours of the unzoned start, in no order.
+#[test]
+fn a_date_between_two_date_bounds_is_compared_as_xml_schema_orders_it() {
+    let case = Case::new("date-window");
+    let reference = json!({"type": "propertyReference",
+                           "property": "axioval:example.ifc.reference",
+                           "propertySet": "axioval:example.ifc.pset-wall-common"});
+    let (output, result) = case.geometry_rule(
+        &walls_with_references(&[
+            "IFCDATE('2026-03-15')",
+            "IFCDATE('2026-07-01')",
+            "IFCDATE('2026-01-01Z')",
+        ]),
+        &[],
+        "axioval:capability.property-comparison",
+        &registry_signature("axioval:capability.property-comparison"),
+        entity("wall"),
+        json!({
+            "compared_selector": {"type": "selector", "value": entity("wall")},
+            "compared_property": reference,
+            "operator": {"type": "string", "value": "between"},
+            "minimum_date": {"type": "date", "value": "2026-01-01"},
+            "maximum_date": {"type": "date", "value": "2026-06-30"},
+            "factor": {"type": "number", "value": 1},
+            "component_mode": {"type": "string", "value": "checked"},
+            "quantifier": {"type": "string", "value": "each"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = subjects_of(&result);
+    assert_eq!(findings, ["#11"], "{result:#}");
+    assert_eq!(open, ["#21"], "{result:#}");
+}
+
 #[test]
 fn a_measure_of_unknown_unit_is_judged_by_its_declared_type_alone() {
     // The file has no project, so no measure's unit resolves: the value of

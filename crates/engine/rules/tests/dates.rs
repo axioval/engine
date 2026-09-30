@@ -431,6 +431,177 @@ fn property_comparison_orders_dates_against_a_constant_or_a_property() {
     assert!(by_day.not_evaluated_outcomes().is_empty());
 }
 
+/// Inspections `in` on 15 March and `out` on 1 July; `edge`, a zoned first
+/// of January, lies within 14 hours of an unzoned one; `late` is zoned but
+/// surely after the window; the phase `Start` and `End` of each are stated
+/// alongside, except on `open`, which states no end.
+fn phases() -> Model {
+    let mut model = Model::default();
+    for (local, inspected) in [
+        ("in", "2026-03-15"),
+        ("out", "2026-07-01"),
+        ("edge", "2026-01-01Z"),
+        ("late", "2026-07-02+01:00"),
+        ("open", "2026-03-15"),
+    ] {
+        model = model
+            .object(local, "door")
+            .value(local, SET, "Inspected", date(inspected))
+            .value(local, SET, "Start", date("2026-01-01"));
+        if local != "open" {
+            model = model.value(local, SET, "End", date("2026-06-30"));
+        }
+    }
+    model
+}
+
+fn between(bounds: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    let mut parameters = vec![
+        ("compared_selector", common::selector(Selector::All)),
+        ("compared_property", property(Some(SET), "Inspected")),
+        ("operator", string("between")),
+        ("factor", number(1.0)),
+        ("component_mode", string("checked")),
+        ("quantifier", string("each")),
+    ];
+    parameters.extend(bounds);
+    phases().evaluate(
+        &PropertyComparison,
+        &rule(
+            "axioval:capability.property-comparison",
+            Selector::All,
+            parameters,
+        ),
+    )
+}
+
+#[test]
+fn property_comparison_takes_a_date_window_as_constants_or_properties() {
+    let literal = between(vec![
+        ("minimum_date", date_literal("2026-01-01")),
+        ("maximum_date", date_literal("2026-06-30")),
+    ]);
+    assert_eq!(flagged(&literal), ["late", "out"]);
+    // A zoned date within 14 hours of the unzoned start is in no order.
+    assert_eq!(not_evaluated(&literal), ["edge"]);
+
+    let stated = between(vec![
+        ("minimum_property", property(Some(SET), "Start")),
+        ("maximum_property", property(Some(SET), "End")),
+    ]);
+    // `open` states no end: its window is incomplete, a finding.
+    assert_eq!(flagged(&stated), ["late", "open", "out"]);
+    assert_eq!(not_evaluated(&stated), ["edge"]);
+    // A stated bound is cited.
+    let out = stated
+        .findings()
+        .iter()
+        .find(|finding| common::subject(finding) == "out")
+        .unwrap();
+    assert!(
+        out.evidence
+            .iter()
+            .any(|evidence| evidence.locator.ends_with("Pset.End")),
+        "{:?}",
+        out.evidence
+    );
+
+    // One constant bound and one stated bound mix.
+    let mixed = between(vec![
+        ("minimum_date", date_literal("2026-03-16")),
+        ("maximum_property", property(Some(SET), "End")),
+    ]);
+    assert_eq!(flagged(&mixed), ["edge", "in", "late", "open", "out"]);
+}
+
+#[test]
+fn property_comparison_orders_date_time_bounds_as_instants() {
+    let window = |precision: Option<&str>| {
+        let mut bounds = vec![
+            (
+                "minimum_date_time",
+                date_time_literal("2026-03-15T00:00:00Z"),
+            ),
+            (
+                "maximum_date_time",
+                date_time_literal("2026-03-15T23:59:59Z"),
+            ),
+        ];
+        if let Some(precision) = precision {
+            bounds.push(("precision", string(precision)));
+        }
+        let mut parameters = vec![
+            ("compared_selector", common::selector(Selector::All)),
+            ("compared_property", property(Some(SET), "Done")),
+            ("operator", string("between")),
+            ("factor", number(1.0)),
+            ("component_mode", string("checked")),
+            ("quantifier", string("each")),
+        ];
+        parameters.extend(bounds);
+        Model::default()
+            .object("utc", "door")
+            .object("east", "door")
+            .object("day", "door")
+            .value("utc", SET, "Done", date_time("2026-03-15T12:00:00Z"))
+            // 22:30 UTC on the 14th.
+            .value("east", SET, "Done", date_time("2026-03-15T00:30:00+02:00"))
+            .value("day", SET, "Done", date("2026-03-15"))
+            .evaluate(
+                &PropertyComparison,
+                &rule(
+                    "axioval:capability.property-comparison",
+                    Selector::All,
+                    parameters,
+                ),
+            )
+    };
+    let exact = window(None);
+    assert_eq!(flagged(&exact), ["east"]);
+    // A date against date-time bounds compares only by day.
+    assert_eq!(not_evaluated(&exact), ["day"]);
+    let by_day = window(Some("day"));
+    assert!(by_day.findings().is_empty(), "{:?}", findings(&by_day));
+    assert!(by_day.not_evaluated_outcomes().is_empty());
+}
+
+#[test]
+fn property_comparison_refuses_date_bounds_of_mixed_kinds_or_in_reverse() {
+    for bounds in [
+        vec![
+            ("minimum_date", date_literal("2026-01-01")),
+            (
+                "maximum_date_time",
+                date_time_literal("2026-06-30T00:00:00Z"),
+            ),
+        ],
+        vec![
+            ("minimum_date", date_literal("2026-01-01")),
+            ("maximum_number", number(3.0)),
+        ],
+        vec![
+            ("minimum_date", date_literal("2026-06-30")),
+            ("maximum_date", date_literal("2026-01-01")),
+        ],
+        vec![
+            ("minimum_date", date_literal("2026-01-01")),
+            ("minimum_property", property(Some(SET), "Start")),
+            ("maximum_date", date_literal("2026-06-30")),
+        ],
+        vec![
+            ("minimum_date", date_literal("2026-01-01")),
+            ("maximum_date", date_literal("2026-06-30")),
+            ("tolerance", number(1.0)),
+        ],
+    ] {
+        assert_eq!(
+            unevaluated(&between(bounds.clone())),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)],
+            "{bounds:?}"
+        );
+    }
+}
+
 #[test]
 fn property_comparison_refuses_precision_off_dates_and_a_factor_on_them() {
     let precision_on_text = comparison(vec![

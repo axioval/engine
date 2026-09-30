@@ -37,6 +37,12 @@ use crate::support::{
 /// evaluated. A factor other than 1 or a tolerance does not apply to them,
 /// and `precision` applies to nothing else.
 ///
+/// `between` takes one minimum and one maximum: numbers, quantities, dates
+/// or date-times, or properties of the checked object. Two constant bounds
+/// must be of one kind. A value outside either bound is outside the range,
+/// whatever the other bound leaves undecided; otherwise an undecided order
+/// leaves the candidate not evaluated.
+///
 /// Candidates are the checked object itself (`checked`), the members of a
 /// group it shares (`shared`), the objects a relationship or `path` reaches
 /// from it (`related`), or the objects in the same space or building as it
@@ -134,7 +140,31 @@ enum Target<'a> {
     /// A declared list of texts or patterns; any one of them is enough.
     Texts(&'a [String]),
     /// Declared inclusive bounds, for `between`.
-    Range(PropertyValue, PropertyValue),
+    Range(Bound<'a>, Bound<'a>),
+}
+
+/// One bound of a `between` range: a declared constant or a property of the
+/// checked object.
+enum Bound<'a> {
+    Value(PropertyValue),
+    Property(PropertyRef<'a>),
+}
+
+impl Target<'_> {
+    /// The declared constant bounds of a range.
+    fn literal_bounds(&self) -> impl Iterator<Item = &PropertyValue> {
+        let bounds = match self {
+            Self::Range(lower, upper) => [Some(lower), Some(upper)],
+            _ => [None, None],
+        };
+        bounds
+            .into_iter()
+            .flatten()
+            .filter_map(|bound| match bound {
+                Bound::Value(value) => Some(value),
+                Bound::Property(_) => None,
+            })
+    }
 }
 
 impl RuleCapability for PropertyComparison {
@@ -161,6 +191,12 @@ impl RuleCapability for PropertyComparison {
             ParameterDescriptor::optional("maximum_number", ParameterType::Number),
             ParameterDescriptor::optional("minimum_quantity", ParameterType::Quantity),
             ParameterDescriptor::optional("maximum_quantity", ParameterType::Quantity),
+            ParameterDescriptor::optional("minimum_date", ParameterType::Date),
+            ParameterDescriptor::optional("maximum_date", ParameterType::Date),
+            ParameterDescriptor::optional("minimum_date_time", ParameterType::DateTime),
+            ParameterDescriptor::optional("maximum_date_time", ParameterType::DateTime),
+            ParameterDescriptor::optional("minimum_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("maximum_property", ParameterType::PropertyReference),
             ParameterDescriptor::required("operator", ParameterType::String),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
             ParameterDescriptor::required("factor", ParameterType::Number),
@@ -348,7 +384,8 @@ impl<'a> Config<'a> {
                             | PropertyValue::Date(_)
                             | PropertyValue::DateTime(_)
                     )
-                ))
+                )
+                || target.literal_bounds().any(temporal))
         {
             return Err(invalid("a tolerance applies to numbers only"));
         }
@@ -358,7 +395,8 @@ impl<'a> Config<'a> {
                 || operator.judges_presence()
                 || matches!(quantifier, Quantifier::Count | Quantifier::Sum)
                 || matches!(&target, Target::Value(value) if !temporal(value))
-                || matches!(target, Target::Texts(_) | Target::Range(..)))
+                || matches!(target, Target::Texts(_))
+                || target.literal_bounds().any(|bound| !temporal(bound)))
         {
             return Err(invalid(
                 "`precision` applies to comparing dates and date-times only",
@@ -451,6 +489,67 @@ impl<'a> Config<'a> {
         })
     }
 
+    /// The one declared `side` (`minimum` or `maximum`) bound of a range.
+    fn bound(parameters: &Parameters<'a>, side: &str) -> Result<Option<Bound<'a>>, Unavailable> {
+        let mut bounds = Vec::new();
+        if let Some(value) = parameters.number(&format!("{side}_number"))? {
+            bounds.push(Bound::Value(PropertyValue::Decimal(value)));
+        }
+        if let Some((value, dimension)) = parameters.quantity(&format!("{side}_quantity"))? {
+            bounds.push(Bound::Value(PropertyValue::Quantity { value, dimension }));
+        }
+        if let Some(value) = parameters.date(&format!("{side}_date"))? {
+            bounds.push(Bound::Value(PropertyValue::Date(value)));
+        }
+        if let Some(value) = parameters.date_time(&format!("{side}_date_time"))? {
+            bounds.push(Bound::Value(PropertyValue::DateTime(value)));
+        }
+        if let Some(property) = parameters.property(&format!("{side}_property"))? {
+            bounds.push(Bound::Property(property));
+        }
+        match <[Bound<'a>; 1]>::try_from(bounds) {
+            Ok([bound]) => Ok(Some(bound)),
+            Err(bounds) if bounds.is_empty() => Ok(None),
+            Err(_) => Err(invalid(format!("declare exactly one {side} bound"))),
+        }
+    }
+
+    /// Two declared constant bounds: of one kind, the minimum not above the
+    /// maximum.
+    fn check_range(low: &PropertyValue, high: &PropertyValue) -> Result<(), Unavailable> {
+        let ordering = match (low, high) {
+            (PropertyValue::Decimal(low), PropertyValue::Decimal(high)) => low.partial_cmp(high),
+            (
+                PropertyValue::Quantity {
+                    value: low,
+                    dimension: from,
+                },
+                PropertyValue::Quantity {
+                    value: high,
+                    dimension: to,
+                },
+            ) if from == to => low.partial_cmp(high),
+            (PropertyValue::Date(_), PropertyValue::Date(_))
+            | (PropertyValue::DateTime(_), PropertyValue::DateTime(_)) => {
+                // A zoned and an unzoned date may lie in no order; neither
+                // then lies above the other.
+                temporal_order(low, high, None)
+                    .and_then(Result::ok)
+                    .flatten()
+            }
+            _ => {
+                return Err(invalid(
+                    "a range needs both bounds of one kind: numbers, quantities of one \
+                     dimension, dates or date-times",
+                ));
+            }
+        };
+        if ordering == Some(Ordering::Greater) {
+            return Err(invalid("the range minimum is above its maximum"));
+        }
+        Ok(())
+    }
+
     /// The one declared target; none at all is `Target::None`.
     fn target(parameters: &Parameters<'a>) -> Result<Target<'a>, Unavailable> {
         let mut targets = Vec::new();
@@ -481,45 +580,18 @@ impl<'a> Config<'a> {
             }
             targets.push(Target::Texts(texts));
         }
-        let numbers = (
-            parameters.number("minimum_number")?,
-            parameters.number("maximum_number")?,
-        );
-        let quantities = (
-            parameters.quantity("minimum_quantity")?,
-            parameters.quantity("maximum_quantity")?,
-        );
-        let range = match (numbers, quantities) {
-            ((None, None), (None, None)) => None,
-            ((Some(low), Some(high)), (None, None)) => Some((
-                low,
-                high,
-                PropertyValue::Decimal(low),
-                PropertyValue::Decimal(high),
-            )),
-            ((None, None), (Some((low, from)), Some((high, to)))) if from == to => Some((
-                low,
-                high,
-                PropertyValue::Quantity {
-                    value: low,
-                    dimension: from,
-                },
-                PropertyValue::Quantity {
-                    value: high,
-                    dimension: to,
-                },
-            )),
-            _ => {
-                return Err(invalid(
-                    "a range needs both bounds, as numbers or as quantities of one dimension",
-                ));
+        match (
+            Self::bound(parameters, "minimum")?,
+            Self::bound(parameters, "maximum")?,
+        ) {
+            (None, None) => {}
+            (Some(lower), Some(upper)) => {
+                if let (Bound::Value(low), Bound::Value(high)) = (&lower, &upper) {
+                    Self::check_range(low, high)?;
+                }
+                targets.push(Target::Range(lower, upper));
             }
-        };
-        if let Some((low, high, lower, upper)) = range {
-            if low > high {
-                return Err(invalid("the range minimum is above its maximum"));
-            }
-            targets.push(Target::Range(lower, upper));
+            _ => return Err(invalid("a range needs both bounds")),
         }
         match <[Target<'a>; 1]>::try_from(targets) {
             Ok([target]) => Ok(target),
@@ -840,7 +912,8 @@ enum Side<'a> {
     None,
     Value(PropertyValue, Vec<Evidence>),
     Texts(&'a [String]),
-    Range(PropertyValue, PropertyValue),
+    /// Both bounds, with the evidence of those read from properties.
+    Range(PropertyValue, PropertyValue, Vec<Evidence>),
 }
 
 impl Side<'_> {
@@ -854,8 +927,8 @@ impl Side<'_> {
 
     fn evidence(&self) -> &[Evidence] {
         match self {
-            Self::Value(_, evidence) => evidence,
-            Self::None | Self::Texts(_) | Self::Range(..) => &[],
+            Self::Value(_, evidence) | Self::Range(_, _, evidence) => evidence,
+            Self::None | Self::Texts(_) => &[],
         }
     }
 
@@ -864,7 +937,7 @@ impl Side<'_> {
             Self::None => String::new(),
             Self::Value(value, _) => format!("{factor}{}", crate::support::display(Some(value))),
             Self::Texts(texts) => format!("[{}]", texts.join(", ")),
-            Self::Range(lower, upper) => format!(
+            Self::Range(lower, upper, _) => format!(
                 "{factor}{} and {factor}{}",
                 crate::support::display(Some(lower)),
                 crate::support::display(Some(upper))
@@ -894,7 +967,24 @@ fn target_side<'a>(
         Target::Value(value) => Ok((Some(Side::Value(value.clone(), Vec::new())), Vec::new())),
         Target::Texts(texts) => Ok((Some(Side::Texts(texts)), Vec::new())),
         Target::Range(lower, upper) => {
-            Ok((Some(Side::Range(lower.clone(), upper.clone())), Vec::new()))
+            let mut values = Vec::with_capacity(2);
+            let mut evidence = Vec::new();
+            for bound in [lower, upper] {
+                match bound {
+                    Bound::Value(value) => values.push(value.clone()),
+                    Bound::Property(property) => {
+                        let resolved = resolve(context, object, *property)?;
+                        let Some(value) = resolved.value() else {
+                            return Ok((None, resolved.evidence()));
+                        };
+                        values.push(value.clone());
+                        evidence.extend(resolved.evidence());
+                    }
+                }
+            }
+            let [lower, upper] = <[PropertyValue; 2]>::try_from(values)
+                .unwrap_or_else(|_| unreachable!("a range has two bounds"));
+            Ok((Some(Side::Range(lower, upper, evidence)), Vec::new()))
         }
     }
 }
@@ -961,8 +1051,17 @@ fn compare_side(
             }
         }
         Side::Value(right, _) => at(right, config.operator),
-        Side::Range(lower, upper) => {
-            Ok(at(lower, Operator::GreaterOrEqual)? && at(upper, Operator::LessOrEqual)?)
+        Side::Range(lower, upper, _) => {
+            // Outside either bound is outside the range, whatever the other
+            // one leaves undecided.
+            match (
+                at(lower, Operator::GreaterOrEqual),
+                at(upper, Operator::LessOrEqual),
+            ) {
+                (Ok(false), _) | (_, Ok(false)) => Ok(false),
+                (Err(message), _) | (_, Err(message)) => Err(message),
+                (Ok(true), Ok(true)) => Ok(true),
+            }
         }
         Side::Texts(texts) => {
             let PropertyValue::String(text) = left else {

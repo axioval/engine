@@ -4,9 +4,10 @@
 mod threshold;
 
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeaf, DoorLeaves,
+    AdjacentSide, CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeaf, DoorLeaves,
     DoorLeavesError, LeafMotion, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn, VerticalExtent,
+    ParameterType, RuleCapability, RuleContext, TableColumn, TraversalDirection, VerticalExtent,
+    adjacent_side,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
@@ -15,6 +16,7 @@ use crate::counts::{Population, relation_text};
 use crate::door_swing;
 use crate::level_spacing::{extent, extents};
 use crate::light_area::{LightArea, length};
+use crate::opening_spaces::is_adjacency;
 use crate::plan_area::{Measure, Verdict, deviation, footprint, judge, member_areas, shown};
 use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
@@ -29,11 +31,19 @@ const KEYS: usize = 4;
 const KEY_COLUMNS: [&str; KEYS] = ["key_1", "key_2", "key_3", "key_4"];
 const KEY_PATHS: [&str; KEYS] = ["key_1_path", "key_2_path", "key_3_path", "key_4_path"];
 
+/// The reserved key of a face that opens to the outside, for the pair key.
+const EXTERIOR: &str = "exterior";
+
+/// How far the number of sides a row names of the pair key is shifted
+/// above the other keys' specificity, so that it ranks rows first.
+const PAIR_RANK: u32 = 16;
+
 const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("key_1", ColumnKind::TextPattern),
     TableColumn::optional("key_2", ColumnKind::TextPattern),
     TableColumn::optional("key_3", ColumnKind::TextPattern),
     TableColumn::optional("key_4", ColumnKind::TextPattern),
+    TableColumn::optional("other_side", ColumnKind::TextPattern),
     TableColumn::optional("minimum", ColumnKind::Number),
     TableColumn::optional("maximum", ColumnKind::Number),
 ];
@@ -54,9 +64,18 @@ impl KeySource<'_> {
     }
 }
 
+/// The declared keys, and which of them, if any, is read as the unordered
+/// pair of the spaces on either face of the object.
+struct Declared<'a> {
+    sources: Vec<Option<KeySource<'a>>>,
+    pair: Option<usize>,
+}
+
 /// One row of the limit table, its key patterns compiled.
 struct Limit {
     keys: [Option<TextPattern>; KEYS],
+    /// The pattern of the pair key's other side.
+    other: Option<TextPattern>,
     minimum: Option<f64>,
     maximum: Option<f64>,
 }
@@ -559,6 +578,19 @@ fn thickness(
 enum Key {
     Known(String),
     Unknown(String),
+    /// The pair key: the key of each face of the object, each known or
+    /// unknown, in no particular order.
+    Pair(Box<[Self; 2]>),
+}
+
+impl Key {
+    fn shown(&self) -> String {
+        match self {
+            Self::Known(text) => format!("`{text}`"),
+            Self::Unknown(_) => "unknown".into(),
+            Self::Pair(sides) => format!("{} and {}", sides[0].shown(), sides[1].shown()),
+        }
+    }
 }
 
 /// Checks a quantity of each object against the limits of the single row of
@@ -613,6 +645,14 @@ enum Key {
 /// disagree is unknown; when a row that tests it could apply, the object is
 /// not evaluated, and so it is when rows tie for most specific. A measured
 /// area straddling a bound is not evaluated.
+///
+/// `pair_key` names a key read on each face of the object along the
+/// derived adjacency, giving the unordered pair of space types it connects;
+/// a face to the outside is the reserved key `exterior`. A row names one
+/// side in that key's column and the other in `other_side`, either blank or
+/// a wildcard, and applies in either order. Rows rank first by how many
+/// sides they name; equally specific rows apply only when their bounds
+/// agree.
 pub struct KeyedLimit;
 
 impl RuleCapability for KeyedLimit {
@@ -640,6 +680,7 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::optional("ramp_reach", ParameterType::Quantity),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
             ParameterDescriptor::optional("member_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("pair_key", ParameterType::String),
         ];
         parameters.extend(traversal_parameters());
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -688,7 +729,7 @@ impl RuleCapability for KeyedLimit {
     }
 }
 
-type Parsed<'a> = (Vec<Option<KeySource<'a>>>, Vec<Limit>, Quantity<'a>);
+type Parsed<'a> = (Declared<'a>, Vec<Limit>, Quantity<'a>);
 
 fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
     let mut keys = Vec::with_capacity(KEYS);
@@ -709,6 +750,7 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
     if keys[0].is_none() {
         return Err(invalid("parameter `key_1` is required"));
     }
+    let pair = pair_key(parameters, &keys)?;
     let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
     let rows = parameters
         .table("limits")?
@@ -724,6 +766,12 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
                 )));
             }
         }
+        let other = row.pattern("other_side", case_sensitive)?;
+        if other.is_some() && pair.is_none() {
+            return Err(invalid(format!(
+                "limit row {index} keys `other_side`, which needs `pair_key`"
+            )));
+        }
         let minimum = row.number("minimum")?;
         let maximum = row.number("maximum")?;
         if matches!((minimum, maximum), (Some(low), Some(high)) if low > high) {
@@ -733,11 +781,48 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
         }
         limits.push(Limit {
             keys: patterns,
+            other,
             minimum,
             maximum,
         });
     }
-    Ok((keys, limits, quantity(parameters)?))
+    let declared = Declared {
+        sources: keys,
+        pair,
+    };
+    Ok((declared, limits, quantity(parameters)?))
+}
+
+/// The slot of the key `pair_key` names, read as the unordered pair of the
+/// spaces on either face of the object. Its path must be the derived
+/// adjacency alone, forward, since only that records the faces.
+fn pair_key(
+    parameters: &Parameters<'_>,
+    keys: &[Option<KeySource<'_>>],
+) -> Result<Option<usize>, Unavailable> {
+    let Some(name) = parameters.string("pair_key")? else {
+        return Ok(None);
+    };
+    let slot = KEY_COLUMNS
+        .iter()
+        .position(|column| *column == name)
+        .ok_or_else(|| invalid(format!("`pair_key` `{name}` is none of `key_1` … `key_4`")))?;
+    let source = keys[slot]
+        .as_ref()
+        .ok_or_else(|| invalid(format!("`pair_key` names `{name}`, which is not declared")))?;
+    let sided = source.path.as_ref().is_some_and(|path| {
+        matches!(path.steps(), [step]
+            if step.direction() == TraversalDirection::Forward
+                && matches!(step.relationships(), [relationship]
+                    if is_adjacency(relationship.as_str())))
+    });
+    if !sided {
+        return Err(invalid(format!(
+            "`pair_key` `{name}` reads the spaces on each face of the object, so `{name}_path` \
+             must be `axioval:derived.adjacent-space` alone, forward"
+        )));
+    }
+    Ok(Some(slot))
 }
 
 /// Which quantities each quantity-specific parameter applies to.
@@ -854,16 +939,19 @@ struct Keys {
 impl Keys {
     fn read(
         context: &RuleContext<'_>,
-        declared: &[Option<KeySource<'_>>],
+        declared: &Declared<'_>,
         object: &Object,
     ) -> Result<Self, Unavailable> {
         let mut keys = Self {
-            values: Vec::with_capacity(declared.len()),
+            values: Vec::with_capacity(declared.sources.len()),
             evidence: Vec::new(),
             sources: Vec::new(),
         };
-        for source in declared {
+        for (slot, source) in declared.sources.iter().enumerate() {
             let value = match source {
+                Some(source) if declared.pair == Some(slot) => {
+                    Some(keys.pair(context, source, object)?)
+                }
                 Some(source) => Some(keys.value(context, source, object)?),
                 None => None,
             };
@@ -895,22 +983,114 @@ impl Keys {
                 reached
             }
         };
+        self.agreed(context, source.property, holders, &object.id)
+    }
+
+    /// The pair key of `object`: the key of the spaces on each of its faces,
+    /// as the derived adjacency records them, or the reserved `exterior` for
+    /// a face that opens to the outside. A face's spaces must agree; a face
+    /// recorded both ways or neither, a space recorded on no face or both,
+    /// and a space stating the reserved key itself leave that side unknown.
+    fn pair(
+        &mut self,
+        context: &RuleContext<'_>,
+        source: &KeySource<'_>,
+        object: &Object,
+    ) -> Result<Key, Unavailable> {
+        let Some(path) = &source.path else {
+            return Err(invalid("the pair key has no path"));
+        };
+        let everything: Vec<&Object> = context.project.objects().collect();
+        let (reached, cited) = path.related(context, &object.id, &everything)?;
+        let faces = [AdjacentSide::Positive, AdjacentSide::Negative];
+        let mut spaces: [Vec<ObjectId>; 2] = Default::default();
+        let mut misplaced = None;
+        for space in reached {
+            let sides: Vec<AdjacentSide> = cited
+                .iter()
+                .filter_map(|item| adjacent_side(&item.locator, &object.id, Some(&space)))
+                .collect();
+            match sides.as_slice() {
+                [side] => spaces[usize::from(*side == AdjacentSide::Negative)].push(space),
+                [] => {
+                    misplaced.get_or_insert_with(|| {
+                        format!(
+                            "the adjacency evidence of {} records no face for {space}",
+                            object.id
+                        )
+                    });
+                }
+                _ => {
+                    misplaced.get_or_insert_with(|| {
+                        format!("{space} lies on both faces of {}", object.id)
+                    });
+                }
+            }
+        }
+        let outside: Vec<AdjacentSide> = cited
+            .iter()
+            .filter_map(|item| adjacent_side(&item.locator, &object.id, None))
+            .collect();
+        self.evidence.extend(cited);
+        if let Some(why) = misplaced {
+            return Ok(Key::Unknown(why));
+        }
+        let mut sides = Vec::with_capacity(2);
+        for (face, held) in faces.into_iter().zip(spaces) {
+            let open = outside.contains(&face);
+            sides.push(match (held.is_empty(), open) {
+                (true, true) => Key::Known(EXTERIOR.into()),
+                (true, false) => Key::Unknown(format!(
+                    "the adjacency evidence of {} records neither a space nor the outside on \
+                     its {face} face",
+                    object.id
+                )),
+                (false, true) => Key::Unknown(format!(
+                    "the adjacency evidence of {} records both a space and the outside on its \
+                     {face} face",
+                    object.id
+                )),
+                (false, false) => match self.agreed(context, source.property, held, &object.id)? {
+                    Key::Known(text) if text.eq_ignore_ascii_case(EXTERIOR) => {
+                        Key::Unknown(format!(
+                            "{} on the {face} face of {} states the reserved key `{EXTERIOR}`",
+                            source.property, object.id
+                        ))
+                    }
+                    other => other,
+                },
+            });
+        }
+        let negative = sides.pop().unwrap_or_else(|| Key::Unknown(String::new()));
+        let positive = sides.pop().unwrap_or_else(|| Key::Unknown(String::new()));
+        Ok(Key::Pair(Box::new([positive, negative])))
+    }
+
+    /// The one value `property` states on every holder, or why it is
+    /// unknown: absent, of another type, or differing between holders.
+    fn agreed(
+        &mut self,
+        context: &RuleContext<'_>,
+        property: PropertyRef<'_>,
+        holders: Vec<ObjectId>,
+        object: &ObjectId,
+    ) -> Result<Key, Unavailable> {
         let mut found: Option<(String, ObjectId)> = None;
         for holder in holders {
             let target = context
                 .project
                 .object(&holder)
                 .ok_or_else(|| invalid(format!("{holder} is not in the project")))?;
-            let resolved = resolve(context, target, source.property)?;
+            let resolved = resolve(context, target, property)?;
             self.evidence.extend(resolved.evidence());
-            if holder != object.id {
+            if holder != *object {
                 self.sources.push(holder.clone());
             }
             let text = match resolved.value() {
                 value if undefined(value) => {
                     return Ok(Key::Unknown(format!(
                         "{} of {holder} is {}",
-                        source.property,
+                        property,
                         display(value)
                     )));
                 }
@@ -920,7 +1100,7 @@ impl Keys {
                 other => {
                     return Ok(Key::Unknown(format!(
                         "{} of {holder} is {}, not text, a boolean or an integer",
-                        source.property,
+                        property,
                         display(other)
                     )));
                 }
@@ -928,8 +1108,7 @@ impl Keys {
             match &found {
                 Some((held, first)) if *held != text => {
                     return Ok(Key::Unknown(format!(
-                        "{} differs between {first} (`{held}`) and {holder} (`{text}`)",
-                        source.property
+                        "{property} differs between {first} (`{held}`) and {holder} (`{text}`)"
                     )));
                 }
                 Some(_) => {}
@@ -937,7 +1116,7 @@ impl Keys {
             }
         }
         Ok(found.map_or_else(
-            || Key::Unknown(format!("{} has no value", source.property)),
+            || Key::Unknown(format!("{property} has no value")),
             |(text, _)| Key::Known(text),
         ))
     }
@@ -949,6 +1128,9 @@ impl Keys {
             .zip(&limit.keys)
             .fold(RowTest::Match(0), |outcome, (value, pattern)| {
                 outcome.and(match (pattern, value) {
+                    (_, Some(Key::Pair(sides))) => {
+                        pair_test(pattern.as_ref(), limit.other.as_ref(), sides)
+                    }
                     (None, _) => RowTest::Match(0),
                     (Some(pattern), Some(Key::Known(text))) => pattern.test(text),
                     (Some(_), Some(Key::Unknown(_)) | None) => RowTest::Undecided,
@@ -957,15 +1139,16 @@ impl Keys {
     }
 
     /// The keys as a reviewer reads them: each property and its value.
-    fn describe(&self, declared: &[Option<KeySource<'_>>]) -> String {
+    fn describe(&self, declared: &Declared<'_>) -> String {
         declared
+            .sources
             .iter()
             .zip(&self.values)
             .filter_map(|(source, value)| {
                 let source = source.as_ref()?;
                 Some(match value {
-                    Some(Key::Known(text)) => format!("{} `{text}`", source.describe()),
-                    _ => format!("{} unknown", source.describe()),
+                    Some(value) => format!("{} {}", source.describe(), value.shown()),
+                    None => format!("{} unknown", source.describe()),
                 })
             })
             .collect::<Vec<_>>()
@@ -975,12 +1158,57 @@ impl Keys {
     fn unknown(&self) -> Vec<&str> {
         self.values
             .iter()
-            .filter_map(|value| match value {
-                Some(Key::Unknown(why)) => Some(why.as_str()),
-                _ => None,
+            .flat_map(|value| match value {
+                Some(Key::Unknown(why)) => vec![why.as_str()],
+                Some(Key::Pair(sides)) => sides
+                    .iter()
+                    .filter_map(|side| match side {
+                        Key::Unknown(why) => Some(why.as_str()),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
             })
             .collect()
     }
+}
+
+/// Whether a row applies to the pair key's two sides, in either order.
+/// Its specificity is the number of sides the row names (a pattern holding
+/// a literal character), ranked above every other key's.
+fn pair_test(
+    first: Option<&TextPattern>,
+    second: Option<&TextPattern>,
+    sides: &[Key; 2],
+) -> RowTest {
+    let side = |pattern: Option<&TextPattern>, key: &Key| match (pattern, key) {
+        (None, _) => RowTest::Match(0),
+        (Some(pattern), Key::Known(text)) => pattern.test(text),
+        (Some(_), _) => RowTest::Undecided,
+    };
+    let straight = side(first, &sides[0]).and(side(second, &sides[1]));
+    let crossed = side(first, &sides[1]).and(side(second, &sides[0]));
+    let named: u32 = [first, second]
+        .into_iter()
+        .map(|pattern| u32::from(pattern.is_some_and(|pattern| pattern.literals() > 0)))
+        .sum();
+    match (straight, crossed) {
+        (RowTest::Match(_), _) | (_, RowTest::Match(_)) => RowTest::Match(named << PAIR_RANK),
+        (RowTest::Undecided, _) | (_, RowTest::Undecided) => RowTest::Undecided,
+        _ => RowTest::NoMatch,
+    }
+}
+
+/// Whether the rows tied for most specific all set the same bounds.
+fn agree(limits: &[Limit], rows: &[usize]) -> bool {
+    let bounds = |limit: &Limit| {
+        (
+            limit.minimum.map(f64::to_bits),
+            limit.maximum.map(f64::to_bits),
+        )
+    };
+    rows.windows(2)
+        .all(|pair| bounds(&limits[pair[0]]) == bounds(&limits[pair[1]]))
 }
 
 /// A measured or stated quantity as an interval, its unit and evidence.
@@ -1120,53 +1348,59 @@ fn only_an_excess(
     Ok(())
 }
 
+/// The single row that applies to `keys`, `None` when no row matches.
+/// Rows tied for most specific are refused, unless the pair key is
+/// declared and their bounds agree.
+fn select<'l>(
+    limits: &'l [Limit],
+    declared: &Declared<'_>,
+    keys: &Keys,
+) -> Result<Option<(usize, &'l Limit)>, Unavailable> {
+    match match_rows(limits, RowSelection::MostSpecific, |limit| keys.test(limit)) {
+        Matched::Rows(rows) => Ok(rows.first().copied()),
+        Matched::Undecided => Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "the applicable limit row cannot be decided: {}",
+                keys.unknown().join("; ")
+            ),
+        )),
+        Matched::Ambiguous(rows) if declared.pair.is_some() && agree(limits, &rows) => {
+            Ok(Some((rows[0], &limits[rows[0]])))
+        }
+        Matched::Ambiguous(rows) => Err(invalid(format!(
+            "limit rows {} apply equally to {}",
+            rows.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+            keys.describe(declared)
+        ))),
+    }
+}
+
 fn check(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
-    declared: &[Option<KeySource<'_>>],
+    declared: &Declared<'_>,
     limits: &[Limit],
     measuring: &Measuring<'_, '_>,
     subject: &Object,
 ) -> Result<Option<Graded>, Unavailable> {
     let quantity = measuring.quantity;
     let keys = Keys::read(context, declared, subject)?;
-    let (index, limit) =
-        match match_rows(limits, RowSelection::MostSpecific, |limit| keys.test(limit)) {
-            Matched::Rows(rows) => match rows.first() {
-                Some(&(index, limit)) => (index, limit),
-                None => {
-                    return Ok(Some((
-                        finding(
-                            rule,
-                            &subject.id,
-                            format!("no limit defined for {}", keys.describe(declared)),
-                            keys.evidence,
-                            keys.sources,
-                        ),
-                        None,
-                    )));
-                }
-            },
-            Matched::Undecided => {
-                return Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "the applicable limit row cannot be decided: {}",
-                        keys.unknown().join("; ")
-                    ),
-                ));
-            }
-            Matched::Ambiguous(rows) => {
-                return Err(invalid(format!(
-                    "limit rows {} apply equally to {}",
-                    rows.iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    keys.describe(declared)
-                )));
-            }
-        };
+    let Some((index, limit)) = select(limits, declared, &keys)? else {
+        return Ok(Some((
+            finding(
+                rule,
+                &subject.id,
+                format!("no limit defined for {}", keys.describe(declared)),
+                keys.evidence,
+                keys.sources,
+            ),
+            None,
+        )));
+    };
     if limit.minimum.is_none() && limit.maximum.is_none() {
         return Ok(None);
     }

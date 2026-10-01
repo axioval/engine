@@ -1227,6 +1227,12 @@ pub(crate) mod table {
             Ok(Self { regex, literals })
         }
 
+        /// How many literal characters the pattern holds: none for a bare
+        /// wildcard.
+        pub(crate) fn literals(&self) -> u32 {
+            self.literals
+        }
+
         /// Whether `text` matches, weighted by this pattern's specificity.
         pub(crate) fn test(&self, text: &str) -> RowTest {
             if self.regex.is_match(text) {

@@ -511,6 +511,7 @@ fn a_package_binds_the_limit_table() {
         column("key_2", "textPattern"),
         column("key_3", "textPattern"),
         column("key_4", "textPattern"),
+        column("other_side", "textPattern"),
         column("minimum", "number"),
         column("maximum", "number"),
     ]);
@@ -534,6 +535,7 @@ fn a_package_binds_the_limit_table() {
     parameters.insert("ramp_selector".into(), parameter("selector", false));
     parameters.insert("ramp_reach".into(), parameter("quantity", false));
     parameters.insert("member_selector".into(), parameter("selector", false));
+    parameters.insert("pair_key".into(), parameter("string", false));
     for (name, kind) in [
         ("relationship", "string"),
         ("direction", "string"),

@@ -3852,6 +3852,77 @@ fn with_geometry_a_window_too_high_above_one_rooms_floor_is_found() {
     );
 }
 
+/// A window between an office and a corridor is judged by the row for that
+/// pair of space types, and a window in the facade by the row for the
+/// outside, the reserved key `exterior`.
+#[test]
+fn with_geometry_a_window_is_limited_by_the_pair_of_spaces_it_joins() {
+    let case = Case::new("geometry-sill-height-pairs");
+    let reference = json!({"type": "propertyReference",
+                           "property": "axioval:example.ifc.reference",
+                           "propertySet": "axioval:example.ifc.pset-space-common"});
+    // #29 becomes a corridor; #19 stays an office.
+    let model = offices_with_windows().replace(
+        "#202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19,#29),#201);\n",
+        "#202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Corridor'),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceCommon',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#29),#211);\n",
+    );
+    let adjacent = json!(["axioval:derived.adjacent-space"]);
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[("window", "IfcWindow"), ("space", "IfcSpace")],
+        "axioval:capability.keyed-limit",
+        &registry_signature("axioval:capability.keyed-limit"),
+        entity("window"),
+        json!({
+            "limits": {"type": "table", "value": [
+                {"key_1": {"type": "string", "value": "Corridor"},
+                 "other_side": {"type": "string", "value": "Office"},
+                 "maximum": {"type": "number", "value": 1.0}},
+                {"key_1": {"type": "string", "value": "exterior"},
+                 "other_side": {"type": "string", "value": "*"},
+                 "maximum": {"type": "number", "value": 0.7}},
+            ]},
+            "quantity": {"type": "string", "value": "sill-height"},
+            "floor_path": {"type": "stringList", "value": adjacent},
+            "key_1": reference,
+            "key_1_path": {"type": "stringList", "value": adjacent},
+            "pair_key": {"type": "string", "value": "key_1"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #39 is 1.2 m above the office's floor, beyond the 1 m of its pair
+    // row; #49 is 0.8 m above it, beyond the 0.7 m towards the outside.
+    let mut findings = finding_messages(&result);
+    findings.sort();
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .contains("#19 is 1.2 m; required at most 1 m (limit row 0: ")
+            && findings[0].1.contains("`Office`")
+            && findings[0].1.contains("`Corridor`"),
+        "{result:#}"
+    );
+    assert_eq!(findings[1].0, "#49", "{result:#}");
+    assert!(
+        findings[1]
+            .1
+            .contains("is 0.8 m; required at most 0.7 m (limit row 1: ")
+            && findings[1].1.contains("`exterior`"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// The window found too high is filed under the type of the spaces it
 /// adjoins.
 #[test]

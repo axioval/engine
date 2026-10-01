@@ -601,7 +601,36 @@ The `limits` table has the optional columns `key_1` … `key_4` (text patterns, 
 - Each reached floor is judged on its own against the one row the keys select. A window between two spaces whose floors lie at different elevations is too high when it is too high above either: one failing floor is a finding naming that floor, relating its space and citing the window's and that floor's extents.
 - Elevations are intervals, and a tessellated body's are never points. The sill height runs from the window's lowest possible bottom less the floor's highest possible bottom to the reverse, widened by one rounding step wherever the subtraction rounded, so it always holds the exact difference. A sill height straddling a bound is not evaluated.
 - A floor that cannot be measured, or straddles a bound, leaves the window not evaluated unless another floor already fails it. A window that cannot be measured, or whose `floor_path` reaches nothing, is not evaluated.
-- The keys must agree across the reached spaces, as for any key: a window between an office and a corridor, whose rows differ, is not evaluated rather than judged against either.
+- The keys must agree across the reached spaces, as for any key: a window between an office and a corridor, whose rows differ, is not evaluated rather than judged against either, unless the key is the pair key below.
+
+**Pairs of space types.** Door and window tables are commonly keyed on the *pair* of space types an element connects, in either order. `pair_key` (`key_1` … `key_4`) names the key read that way: its `key_<n>_path` must be `axioval:derived.adjacent-space` alone, forward, since only the derived adjacency records which face each space lies on. The key is then read separately on each face of the object, giving an unordered pair: the spaces on one face must agree, as for any key, and a face whose probe entered no space (`:outside` in the adjacency evidence) is the reserved key `exterior`, so a door from a corridor to the outside is the pair `corridor` and `exterior`, and one reaching no space at all `exterior` and `exterior`. A row names one side in its `key_<n>` cell and the other in the `other_side` column; either may be blank or `*`, a wildcard, and the row applies whichever side is which.
+
+- Rows are ranked first by how many sides they name (a pattern holding a literal character), then by the other keys' specificity: between two offices the row `office` / `office` wins over `office` / `*`.
+- Equally specific rows that set the same bounds apply as one (the first is named); rows that disagree leave the object not evaluated as an invalid declaration, naming them. `office` / `*` and `corridor` / `*` are equally specific for a door between an office and a corridor; the table needs an `office` / `corridor` row.
+- A side whose key is unknown (absent, disagreeing spaces, a face the evidence records both as a space and as the outside, or neither, a space on both faces or none) leaves the object not evaluated when a row that could apply tests it; the other side's known key may already rule every row out. A space stating `exterior` itself (in any case) is unknown, never taken for the outside.
+- No matching row is the usual "no limit defined" finding, so a door to the outside with no `exterior` row is reported, not passed.
+
+A finding names the pair as the faces record it (``Pset.Use (via axioval:derived.adjacent-space) `corridor` and `office` ``). Every quantity reads the row the pair selects, so a window between an office and a corridor is judged by its `office` / `corridor` sill-height row on each floor:
+
+```json
+{"limits": {"type": "table", "value": [
+   {"key_1": {"type": "string", "value": "office"},
+    "other_side": {"type": "string", "value": "corridor"},
+    "minimum": {"type": "number", "value": 0.9}},
+   {"key_1": {"type": "string", "value": "office"},
+    "minimum": {"type": "number", "value": 1.0}},
+   {"key_1": {"type": "string", "value": "corridor"},
+    "other_side": {"type": "string", "value": "exterior"},
+    "minimum": {"type": "number", "value": 1.2}}]},
+ "quantity": {"type": "string", "value": "clear-width"},
+ "quantity_property": {"type": "propertyReference", "propertySet": "…door-accessibility",
+                       "property": "…clear-width"},
+ "key_1": {"type": "propertyReference", "propertySet": "…space-use", "property": "…use"},
+ "key_1_path": {"type": "stringList", "value": ["axioval:derived.adjacent-space"]},
+ "pair_key": {"type": "string", "value": "key_1"}}
+```
+
+Without `pair_key` nothing changes, and an `other_side` cell is refused.
 
 Whether a window sits at the end of a corridor is not decided: it needs the corridor's axis (a medial axis of its footprint), which no service provides yet.
 
@@ -631,7 +660,7 @@ At least one step is declared; `overall_width` and `width_deduction` are refused
 | `ramp_selector` | `selector` | `threshold-step`: the ramps that may be a side's floor; declared with `ramp_reach`. |
 | `ramp_reach` | `quantity` | How far in plan from the door a ramp may lie and still be its floor, such as 0.4 m. |
 
-A threshold step is judged per side, like a sill height: one side failing is a finding naming its floor (`the step from the floor of … to the door's bottom is 0.04 m; required at most 0.02 m …`), relating the space or ramp and citing the door's and the floor's extents. A ramp that only may be near, may overlap, or whose selection is undecided leaves both it and the space's own floor possible: the side fails only when every possible floor does, and passes only when every one passes. A floor or ramp top that cannot be measured leaves its side undecided, and a door that cannot be measured, or whose `floor_path` reaches nothing, is not evaluated. Without the proximity service every ramp is possible. A definition bound to `keyed-limit` must declare `clear_width_from_leaves` (a `string`), `overall_height`, `lining_thickness`, `threshold_thickness`, `ramp_selector` and `ramp_reach` as optional.
+A threshold step is judged per side, like a sill height: one side failing is a finding naming its floor (`the step from the floor of … to the door's bottom is 0.04 m; required at most 0.02 m …`), relating the space or ramp and citing the door's and the floor's extents. A ramp that only may be near, may overlap, or whose selection is undecided leaves both it and the space's own floor possible: the side fails only when every possible floor does, and passes only when every one passes. A floor or ramp top that cannot be measured leaves its side undecided, and a door that cannot be measured, or whose `floor_path` reaches nothing, is not evaluated. Without the proximity service every ramp is possible. A definition bound to `keyed-limit` must declare `clear_width_from_leaves` (a `string`), `overall_height`, `lining_thickness`, `threshold_thickness`, `ramp_selector`, `ramp_reach` and `pair_key` (a `string`) as optional, and the optional `other_side` column (a `textPattern`) of `limits`.
 
 ### Exit separation
 
@@ -1575,6 +1604,7 @@ Door accessibility checks are compositions of the capabilities above; `door-swin
 | Glazing ratio | A stated fraction, such as `GlazingAreaFraction` in `Pset_DoorCommon`: a `property-requirements` row with `minimum`/`maximum` and no `unit`, or `keyed-limit` with `quantity: property` per type. Deriving it from the panels is not implemented. |
 | Minimum distance to other doors | `distance` with `counterparts` the doors, `mode: none_closer_than`, `projection: horizontal` and `minimum_metres`. With `relationship: axioval:derived.adjacent-space`, only doors opening into a common space count. |
 | Which spaces a door connects, and their types | `opening-spaces`, or a key read along `axioval:derived.adjacent-space` (as for sill heights); the side facing `outside` is recorded in the adjacency evidence. |
+| Requirements per pair of space types (office to corridor, corridor to outside) | Any `keyed-limit` quantity with `pair_key`: rows name both sides (`key_1`, `other_side`) or one side and a wildcard, the most specific wins, and the outside is the reserved key `exterior` (see [Keyed limits](#keyed-limits)). |
 | Door width on an accessible route | Walkability (#76) with the clear widths the host states per portal; the CLI states none, since `OverallWidth` includes the lining. |
 | Clear areas in front of, behind and beside the leaf (handle side), with a floor under them | `component-clearance` with `front_axis` `swing` (the side the leaf opens into) or `-swing`, one rule per side and size; `align` `handle` puts the area flush with the handle edge, and `lateral_offset` moves it beyond; `within_space` asks for the floor under it. A double-acting, sliding or multi-leaf door leaves what it cannot place not evaluated. |
 | Opening direction relative to the space type | `door-swing` with `swing_into` or `swing_not_into` selecting spaces by type: a WC door `swing_not_into` the WC (it opens outward), a corridor door `swing_not_into` the corridor. See [Door swing](#door-swing). |

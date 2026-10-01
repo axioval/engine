@@ -6,6 +6,24 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Door and window limits per pair of space types.** (Closes #149)
+  `keyed-limit` gains `pair_key`, naming a key read as the unordered pair
+  of the space types on either face of the object along
+  `axioval:derived.adjacent-space` (alone, forward), and the `limits`
+  column `other_side`. A row names one side in `key_<n>` and the other in
+  `other_side`, either blank or `*` for any, and applies in either order:
+  an `office` / `corridor` row takes a door between a corridor and an
+  office whichever side is which. Rows rank by how many sides they name
+  first, so a door between two offices takes `office` / `office` over
+  `office` / `*`; equally specific rows apply only when their bounds agree
+  and otherwise leave the object not evaluated. A face that opens to the
+  outside is the reserved key `exterior` (a door reaching no space is
+  `exterior` and `exterior`), and a space stating `exterior` itself is
+  unknown. Every quantity uses it, so a window between two differently
+  typed spaces is judged by its pair row instead of being not evaluated.
+  Without `pair_key` nothing changes. **Breaking:** definitions bound to
+  `keyed-limit` must declare the optional `string` parameter `pair_key`
+  and the optional `textPattern` column `other_side` of `limits`.
 - **Export profiles, shared by every target.** (Closes #197) The new core
   crate `axioval-export` holds the `ExportProfile` trait (an open string
   id, `export(definitions, ruleset) -> ExportOutcome`, and optional report,

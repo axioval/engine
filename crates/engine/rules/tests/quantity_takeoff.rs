@@ -1109,3 +1109,252 @@ fn malformed_column_kinds_leave_the_rule_not_evaluated() {
     }));
     assert!(message.contains("twice"), "{message}");
 }
+
+/// Walls by type with their net side area (declared in m²) and a column
+/// computed by `expression`, named `computed`, with `extra` parameters (a
+/// null one removed).
+fn computed_takeoff(expression: &str, extra: Value) -> RuleSetPackage {
+    computed_rule(entity("wall"), expression, extra)
+}
+
+fn computed_rule(selector: Value, expression: &str, extra: Value) -> RuleSetPackage {
+    let mut parameters = json!({
+        "group_1": reference(None, "t.TypeName"),
+        "group_1_name": text("type"),
+        "measure_1": reference(None, "t.NetSideArea"),
+        "measure_1_name": text("area"),
+        "measure_1_unit": text("m2"),
+        "measure_2_kind": text("computed"),
+        "measure_2_expression": text(expression),
+        "measure_2_name": text("computed"),
+    });
+    for (key, value) in extra.as_object().unwrap() {
+        if value.is_null() {
+            parameters.as_object_mut().unwrap().remove(key);
+        } else {
+            parameters[key] = value.clone();
+        }
+    }
+    ruleset(vec![rule(
+        "computed",
+        TAKEOFF,
+        "info",
+        selector,
+        parameters,
+        json!({}),
+    )])
+}
+
+#[test]
+fn a_cost_computed_per_member_fills_each_row_and_sums() {
+    let report = check(
+        &computed_takeoff("area × 42.5 EUR/m²", json!({})),
+        &session(walls()),
+    );
+    let table = report
+        .table(&RuleId::new("computed").unwrap(), "takeoff")
+        .unwrap();
+    assert_eq!(
+        table.columns()[1..],
+        [
+            ReportColumn::quantity("sum_area", QuantityDimension::Area)
+                .with_exactness(ColumnExactness::Exact),
+            ReportColumn::amount("sum_computed", "EUR").with_exactness(ColumnExactness::Exact),
+        ]
+    );
+    // 10, 12.5 and 8 m² of type A, 20 m² of type B, at 42.5 EUR/m².
+    assert_eq!(
+        rows(&report, "computed"),
+        [
+            row(&["A"], &[exact(3.0), exact(30.5), exact(1296.25)]),
+            row(&["B"], &[exact(1.0), exact(20.0), exact(850.0)]),
+        ]
+    );
+    assert!(report.not_evaluated.is_empty());
+}
+
+#[test]
+fn a_computed_value_over_a_missing_input_is_none_and_never_zero() {
+    let model = wall(walls(), "w5", "B", "l2", None);
+    let report = check(
+        &computed_takeoff("area × 42.5 EUR/m²", json!({})),
+        &session(model),
+    );
+    assert_eq!(
+        rows(&report, "computed")[1],
+        row(
+            &["B"],
+            &[exact(2.0), ReportValue::Unknown, ReportValue::Unknown]
+        )
+    );
+    assert_eq!(open(&report).len(), 1);
+    let message = &report.not_evaluated[0].message;
+    assert!(
+        message.contains("so its group's `computed` is unknown"),
+        "{message}"
+    );
+}
+
+#[test]
+fn undecided_members_widen_a_computed_sum() {
+    // `w6` may or may not be a new wall: its 5 m² may add 212.5 EUR.
+    let model = wall(walls(), "w6", "A", "l1", Some(5.0)).value(
+        "w6",
+        "Pset",
+        "Status",
+        PropertyValue::List(vec![PropertyValue::String("new".into())]),
+    );
+    let new_walls = json!({ "kind": "allOf", "operands": [
+        entity("wall"),
+        { "kind": "property", "property": "t.Status", "operator": "equals",
+          "value": { "type": "string", "value": "new" } },
+    ] });
+    let set = computed_rule(new_walls, "area × 42.5 EUR/m²", json!({}));
+    let report = check(&set, &session(model));
+    assert_eq!(
+        rows(&report, "computed")[0],
+        row(
+            &["A"],
+            &[
+                between(3.0, 4.0),
+                between(30.5, 35.5),
+                between(1296.25, 1508.75)
+            ]
+        )
+    );
+}
+
+#[test]
+fn a_divisor_that_may_be_zero_gives_no_value() {
+    // `w1` states 10 m², so its divisor is zero.
+    let report = check(
+        &computed_takeoff("area / (area - 10 m2)", json!({})),
+        &session(walls()),
+    );
+    let table = report
+        .table(&RuleId::new("computed").unwrap(), "takeoff")
+        .unwrap();
+    assert_eq!(
+        table.columns()[2],
+        ReportColumn::number("sum_computed").with_exactness(ColumnExactness::Exact)
+    );
+    assert_eq!(
+        rows(&report, "computed"),
+        [
+            row(&["A"], &[exact(3.0), exact(30.5), ReportValue::Unknown]),
+            row(&["B"], &[exact(1.0), exact(20.0), exact(2.0)]),
+        ]
+    );
+    assert_eq!(
+        open(&report),
+        [(
+            Scope::Object(id("w1")),
+            NotEvaluatedReason::IncompleteEvidence
+        )]
+    );
+    assert!(report.not_evaluated[0].message.contains("holds zero"));
+}
+
+#[test]
+fn net_area_is_gross_less_the_openings_reached() {
+    // `w1` holds openings of 2 and 1.5 m²; the other walls reach none,
+    // which with a declared unit sums to an exact zero.
+    let model = walls()
+        .object("o1", "space")
+        .object("o2", "space")
+        .value("o1", "Qto", "NetSideArea", area(2.0))
+        .value("o2", "Qto", "NetSideArea", area(1.5))
+        .edge("voids", "w1", "o1")
+        .edge("voids", "w1", "o2");
+    let report = check(
+        &computed_takeoff(
+            "area − openings",
+            json!({
+                "measure_3_kind": text("related"),
+                "measure_3": reference(None, "t.NetSideArea"),
+                "measure_3_path": strings(&["voids:forward"]),
+                "measure_3_name": text("openings"),
+                "measure_3_unit": text("m²"),
+                "measure_3_aggregates": strings(&["sum"]),
+            }),
+        ),
+        &session(model),
+    );
+    assert_eq!(
+        rows(&report, "computed"),
+        [
+            row(&["A"], &[exact(3.0), exact(30.5), exact(27.0), exact(3.5)]),
+            row(&["B"], &[exact(1.0), exact(20.0), exact(20.0), exact(0.0)]),
+        ]
+    );
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+}
+
+#[test]
+fn a_value_in_another_unit_than_declared_is_unreadable() {
+    let model = walls().value(
+        "w4",
+        "Qto",
+        "NetSideArea",
+        PropertyValue::Quantity {
+            value: 20.0,
+            dimension: QuantityDimension::Length,
+        },
+    );
+    let report = check(&computed_takeoff("area × 2", json!({})), &session(model));
+    assert_eq!(
+        rows(&report, "computed")[1],
+        row(
+            &["B"],
+            &[exact(1.0), ReportValue::Unknown, ReportValue::Unknown]
+        )
+    );
+    assert!(
+        report.not_evaluated[0]
+            .message
+            .contains("is stated in m, not m²"),
+        "{}",
+        report.not_evaluated[0].message
+    );
+}
+
+#[test]
+fn computed_columns_are_checked_when_bound() {
+    let refused = |expression: &str, extra: Value| {
+        let report = check(&computed_takeoff(expression, extra), &session(walls()));
+        assert!(report.tables().is_empty());
+        assert_eq!(
+            open(&report),
+            [(Scope::Project, NotEvaluatedReason::InvalidDeclaration)]
+        );
+        report.not_evaluated[0].message.clone()
+    };
+    // A length and an area do not add.
+    let message = refused("area + 2 m", json!({}));
+    assert!(message.contains("adds m and m²"), "{message}");
+    let message = refused("max(area, 1)", json!({}));
+    assert!(message.contains("differ"), "{message}");
+    let message = refused("area × 2", json!({ "measure_1_unit": null }));
+    assert!(message.contains("declare `measure_1_unit`"), "{message}");
+    let message = refused("width × 2", json!({}));
+    assert!(message.contains("`width` names no column"), "{message}");
+    let message = refused("area × 2 EUR + 3 USD", json!({}));
+    assert!(message.contains("adds USD and"), "{message}");
+    let message = refused("area ×", json!({}));
+    assert!(message.contains("ends early"), "{message}");
+    let message = refused("area; drop", json!({}));
+    assert!(message.contains("no part of an expression"), "{message}");
+    let message = refused("area", json!({ "measure_2_name": null }));
+    assert!(message.contains("declare `measure_2_name`"), "{message}");
+    let message = refused("area", json!({ "measure_1_unit": text("parsec") }));
+    assert!(message.contains("`measure_1_unit`"), "{message}");
+    let message = refused("area", json!({ "measure_2_unit": text("m2") }));
+    assert!(
+        message.contains("does not apply to a `computed`"),
+        "{message}"
+    );
+}

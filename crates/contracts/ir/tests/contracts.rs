@@ -606,6 +606,18 @@ mod tables {
         );
         assert_eq!(column(wire).unwrap(), bounded);
         assert!(column(json!({"id": "a", "kind": "text", "exactness": "rough"})).is_err());
+        // A number column counting a currency carries its unit.
+        let cost = ReportColumn::amount("cost", "EUR");
+        let wire = serde_json::to_value(&cost).unwrap();
+        assert_eq!(wire, json!({"id": "cost", "kind": "number", "unit": "EUR"}));
+        assert_eq!(column(wire).unwrap(), cost);
+        assert_eq!(cost.unit_symbol().as_deref(), Some("EUR"));
+        assert_eq!(
+            ReportColumn::amount("plain", " "),
+            ReportColumn::number("plain")
+        );
+        assert!(column(json!({"id": "a", "kind": "text", "unit": "EUR"})).is_err());
+        assert!(column(json!({"id": "a", "kind": "number", "unit": " "})).is_err());
     }
 
     fn takeoff() -> ReportTable {

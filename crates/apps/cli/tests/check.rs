@@ -13073,6 +13073,61 @@ fn with_geometry_a_space_takeoff_sums_its_wall_boundary_areas() {
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
+/// The wall lining of spaces #39 and #69 priced per square metre: a
+/// computed column over the boundary area, reported in its currency and
+/// exported with it.
+#[test]
+fn with_geometry_a_computed_column_prices_the_wall_lining() {
+    let case = Case::new("takeoff-computed");
+    let (output, result) = case.geometry_rule(
+        &spaces_with_boundaries(),
+        &[("space", "IfcSpace")],
+        "axioval:capability.quantity-takeoff",
+        &registry_signature("axioval:capability.quantity-takeoff"),
+        entity("space"),
+        json!({
+            "measure_1_kind": {"type": "string", "value": "boundary_area"},
+            "measure_1_bounding": {"type": "selector", "value": entity("wall")},
+            "measure_1_name": {"type": "string", "value": "wall_area"},
+            "measure_2_kind": {"type": "string", "value": "computed"},
+            "measure_2_expression": {"type": "string", "value": "wall_area × 30 EUR/m²"},
+            "measure_2_name": {"type": "string", "value": "lining"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let table = takeoff_table(&result);
+    assert_eq!(
+        table["columns"][2],
+        json!({"id": "sum_lining", "kind": "number", "unit": "EUR", "exactness": "exact"}),
+        "{result:#}"
+    );
+    // 50.5 m² of #39 and 6 m² of #69 at 30 EUR/m².
+    assert_eq!(
+        table["rows"][0]["values"][2],
+        json!({"type": "exact", "value": 1695.0}),
+        "{result:#}"
+    );
+    let saved = case.path("result.json");
+    let saved = saved.to_str().unwrap();
+    let csv = stdout(&report(&[
+        saved,
+        "--csv",
+        "--rule",
+        "under-test",
+        "--table",
+        "takeoff",
+    ]));
+    assert!(
+        csv.lines()
+            .next()
+            .unwrap()
+            .ends_with("sum_lining_lower [EUR],sum_lining_upper [EUR]"),
+        "{csv}"
+    );
+    let summary = stdout(&report(&[saved]));
+    assert!(summary.contains("sum_lining (EUR)"), "{summary}");
+}
+
 #[test]
 fn a_decision_assigns_a_finding_with_due_date_priority_and_labels() {
     let case = Case::new("decisions-review");

@@ -1938,11 +1938,13 @@ table.
 | `group_<n>_name` | `string` | The group column's id; `group_<n>` without it. |
 | `measure_1` to `measure_8` | `propertyReference` | The property a `property` or `related` column reads, each column declared (by this or its `_kind`) only after the one before it: a stated number, quantity or text, or a value of `axioval:measured` (`area`, `volume`, extents). |
 | `measure_<n>_kind` | `string` | The column kind (below); `property` without it. |
-| `measure_<n>_aggregates` | `stringList` | Any of `sum`, `min`, `max`, `mean` and `values` (the distinct values, listed), once each; without it `sum` for a `property` or `boundary_area` column, `values` for the others. |
+| `measure_<n>_aggregates` | `stringList` | Any of `sum`, `min`, `max`, `mean` and `values` (the distinct values, listed), once each; without it `sum` for a `property`, `boundary_area` or `computed` column, `values` for the others. |
 | `measure_<n>_name` | `string` | The column name after the aggregate (`sum_<name>`); without it the property's name after its last `.`, split at case changes, lowercase (`t.NetSideArea` is `net_side_area`), `boundary_area` or `profile`. An expanding column prefixes it to each part (`<name>_<part>`); a `property_set` column without it names its parts alone. |
 | `measure_<n>_path` | `stringList` | The relationship path of a `related` column, steps as in a `related` selector (alternation and derived relationships included). |
 | `measure_<n>_bounding` | `selector` | The bounding elements of a `boundary_area` column: `entityType` of walls, of windows. |
 | `measure_<n>_property_set` | `string` | The property set a `property_set` column expands. |
+| `measure_<n>_expression` | `string` | The expression of a `computed` column (below). |
+| `measure_<n>_unit` | `string` | The unit a `property` or `related` column's values are stated in (`m2`, `EUR/m²`, `1` for a plain number), so an expression can use it: a quantity of another dimension is unreadable, and a plain number is read in this unit only when it counts a currency or is a plain number. A `related` column with a unit sums to an exact zero over no object reached. |
 | `across_sources` | `boolean` | One set of groups for the whole project; per source without it. |
 | `boundary_plane_tolerance` | `quantity` | How far from a face plane of the space's body a boundary surface may lie and still count on it (`boundary_area`); zero without it. |
 
@@ -1955,12 +1957,43 @@ Column kinds:
 | `boundary_area` | The area (m²) of the space's declared boundaries whose bounding element `measure_<n>_bounding` selects, as the space-boundary coverage service measures them (see [Model quality](#model-quality)). A boundary bounding against no element counts in no column; one whose element's selection is undecided may add its area and leaves the space not evaluated; one of the kind on no face of the body leaves the area unknown. |
 | `property_set` | Every property of `measure_<n>_property_set`, one column per property found on any member, in property-name order (`FireRating` is `fire_rating`). A part with a text value lists `values`; a numeric one takes the declared aggregates. |
 | `profile` | The body's one swept profile, read as `allowed-profile` reads it: `type` and `name` listed, then every dimension found (`width`, `depth`, `web_thickness`, …, in that capability's order), lengths and plane angles taking the declared aggregates. A body that is no single swept profile has no value. |
+| `computed` | `measure_<n>_expression` over the other columns of the same member, computed per member and then aggregated like any column (below). |
 
 A `values` aggregate lists the distinct values of the group's members,
 sorted and joined (`F30, F90`), numbers with their unit (`0.3 m`), `-` for
 none. A possible member's value counts only where it is listed already: one
 that may add a value leaves the list `unknown`, as does a value that cannot
 be read.
+
+#### Computed columns
+
+A `computed` column's expression names other columns of the takeoff by
+their names (`area`, a profile's `profile_width`; not a `property_set`
+column, nor a `computed` one declared after it) and combines them with `+`,
+`-` (or `−`), `×` (`*`, `·`), `÷` (`/`), `min(…)`, `max(…)`, parentheses and
+literals: a number, or a quantity with its unit written right after it
+(`42.5 EUR/m²`, `2 m`, `0.5 m2`; a unit runs to the next space or operator,
+and every factor after its `/` divides). Units are the SI units and their
+common multiples (`mm`, `cm`, `km`, `l`, `g`, `t`, `min`, `h`, `deg`, `N`,
+`kN`, `Pa`, `kPa`, `MPa`, `J`, `kWh`, `W`, `kW`) and a currency, three
+capital letters (`EUR`).
+
+The expression is parsed and checked when the rule is bound, never run as
+code: an unknown name or unit, a column whose unit is not known (declare
+`measure_<n>_unit`), `+`, `-`, `min` or `max` over different units (a
+length plus an area), two currencies, or a result in no reportable
+dimension leave the rule not evaluated as an invalid declaration. The
+column's unit is the expression's: a quantity column in its dimension, a
+number column for a plain number, or a number column carrying its `unit`
+(`EUR`) when it counts a currency.
+
+It is computed for each member over the intervals of its inputs, so the
+result is an interval sure to hold every value they allow (up to binary
+rounding, as every takeoff sum is), and the group's `sum` of the computed
+values bounds the true total: `cost = area × 42.5 EUR/m²` fills per member
+and sums per group. A member missing an input has no value, never zero, and
+leaves the group's aggregate unknown; a divisor whose interval holds zero
+gives no value either, and the member is reported not evaluated.
 
 Every column states its exactness (`exactness` on the wire, see
 [Tables](./ir.md#tables)): `exact` when every value it read is exact, stated

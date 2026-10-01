@@ -23,6 +23,10 @@ use crate::support::{
     invalid, resolve, undefined,
 };
 
+mod expression;
+
+use expression::{Expression, Failure, Interval, Unit};
+
 /// The name of the table a takeoff reports.
 pub const TAKEOFF_TABLE: &str = "takeoff";
 /// How many group keys a takeoff declares at most (`group_1` ...).
@@ -30,7 +34,7 @@ const GROUPS: usize = 3;
 /// How many columns a takeoff declares at most (`measure_1` ...).
 const MEASURES: usize = 8;
 /// The column kinds a measure may declare (`measure_<n>_kind`).
-const KINDS: &str = "property, related, boundary_area, property_set or profile";
+const KINDS: &str = "property, related, boundary_area, property_set, profile or computed";
 
 /// Counts the rule's selection per group and aggregates values of each
 /// group into the report table `takeoff`.
@@ -51,7 +55,10 @@ const KINDS: &str = "property, related, boundary_area, property_set or profile";
 /// element a selector selects (`boundary_area`); every property of a
 /// property set (`property_set`), one column per property found; or the
 /// swept profile of the body (`profile`), its type, name and every
-/// dimension found. Each column states its exactness.
+/// dimension found; or `computed`, a checked arithmetic expression over
+/// other columns of the member (`area × 42.5 EUR/m²`), parsed and
+/// unit-checked when the rule is bound and evaluated over intervals. Each
+/// column states its exactness.
 ///
 /// Values are intervals sure to hold the exact value, so aggregates are
 /// too. An object whose selection cannot be decided may or may not belong
@@ -92,6 +99,8 @@ impl RuleCapability for QuantityTakeoff {
                 ("_path", ParameterType::StringList),
                 ("_bounding", ParameterType::Selector),
                 ("_property_set", ParameterType::String),
+                ("_expression", ParameterType::String),
+                ("_unit", ParameterType::String),
             ] {
                 parameters.push(ParameterDescriptor::optional(
                     format!("measure_{n}{suffix}"),
@@ -212,6 +221,118 @@ enum Source<'a> {
     PropertySet(&'a str),
     /// The body's swept profile: type, name and dimensions.
     Profile,
+    /// An expression over other columns of the member, as written and,
+    /// once every column is declared, bound.
+    Computed {
+        text: &'a str,
+        bound: Option<Box<Computed>>,
+    },
+}
+
+/// A bound computed column: its expression and the column each input of
+/// it reads, in the expression's order.
+struct Computed {
+    expression: Expression,
+    inputs: Vec<Input>,
+}
+
+/// A column an expression reads: a measure or one part of a profile, the
+/// unit its values must be stated in, and its name in the expression.
+struct Input {
+    measure: usize,
+    part: Option<String>,
+    unit: Unit,
+    name: String,
+}
+
+impl Computed {
+    /// The expression's value for a member that read `reads`: no value
+    /// when an input has none, never zero; unreadable when one cannot be
+    /// read, is no number of its unit, or a divisor may be zero.
+    fn cell(&self, reads: &[Read]) -> Cell {
+        let mut values = Vec::with_capacity(self.inputs.len());
+        let mut all_exact = true;
+        let mut absent = false;
+        for input in &self.inputs {
+            let cell = match (&reads[input.measure], &input.part) {
+                (Read::Single(cell), _) => cell.clone(),
+                (Read::Parts(Ok(parts)), Some(part)) => {
+                    parts.get(part).cloned().unwrap_or(Cell::Absent)
+                }
+                (Read::Parts(Ok(_)), None) => Cell::Absent,
+                (Read::Parts(Err((reason, message))), _) => {
+                    Cell::Unreadable(reason.clone(), format!("cannot be read ({message})"))
+                }
+            };
+            match cell {
+                Cell::Number {
+                    lower,
+                    upper,
+                    kind,
+                    exact,
+                } => {
+                    let fits = match kind {
+                        Some(dimension) => input.unit.takes(dimension),
+                        None => input.unit.takes_plain_numbers(),
+                    };
+                    if !fits {
+                        return Cell::Unreadable(
+                            NotEvaluatedReason::InvalidEvidence,
+                            format!(
+                                "cannot be computed: `{}` is stated as {}, not in {}",
+                                input.name,
+                                kind_text(kind),
+                                input.unit
+                            ),
+                        );
+                    }
+                    all_exact &= exact;
+                    values.push(Interval { lower, upper });
+                }
+                Cell::Absent => {
+                    absent = true;
+                    values.push(Interval {
+                        lower: 0.0,
+                        upper: 0.0,
+                    });
+                }
+                Cell::Text(texts) => {
+                    return Cell::Unreadable(
+                        NotEvaluatedReason::InvalidEvidence,
+                        format!(
+                            "cannot be computed: `{}` states `{}`, not a number",
+                            input.name,
+                            texts.join(", ")
+                        ),
+                    );
+                }
+                Cell::Unreadable(reason, why) => {
+                    return Cell::Unreadable(
+                        reason,
+                        format!("cannot be computed: `{}` {why}", input.name),
+                    );
+                }
+            }
+        }
+        if absent {
+            return Cell::Absent;
+        }
+        match self.expression.evaluate(&values) {
+            Ok(value) => Cell::number(
+                value.lower,
+                value.upper,
+                self.expression.unit().dimension().ok().flatten(),
+                all_exact,
+            ),
+            Err(Failure::ZeroDivisor) => Cell::Unreadable(
+                NotEvaluatedReason::IncompleteEvidence,
+                "cannot be computed: it divides by an interval that holds zero".into(),
+            ),
+            Err(Failure::Overflow) => {
+                Cell::Unreadable(NotEvaluatedReason::InvalidEvidence, "is not finite".into())
+            }
+        }
+    }
 }
 
 impl Source<'_> {
@@ -225,7 +346,9 @@ impl Source<'_> {
         match self {
             Self::Property(property) => measured_kind(*property),
             Self::BoundaryArea(_) => Some(QuantityDimension::Area),
-            Self::Related { .. } | Self::PropertySet(_) | Self::Profile => None,
+            Self::Related { .. } | Self::PropertySet(_) | Self::Profile | Self::Computed { .. } => {
+                None
+            }
         }
     }
 
@@ -251,9 +374,51 @@ struct Measure<'a> {
     name: String,
     /// How messages name the values read.
     what: String,
+    /// The unit its values are stated in, with its scale to the coherent
+    /// unit: declared (`measure_<n>_unit`), or a computed column's.
+    unit: Option<(f64, Unit)>,
 }
 
 impl Measure<'_> {
+    /// `cell` in the declared unit: a quantity of its dimension, or a
+    /// plain number scaled from it where the unit counts a currency or is
+    /// a plain number; any other number is unreadable.
+    fn in_unit(&self, cell: Cell) -> Cell {
+        let Some((scale, unit)) = &self.unit else {
+            return cell;
+        };
+        match cell {
+            Cell::Number {
+                kind: Some(dimension),
+                ..
+            } if !unit.takes(dimension) => Cell::Unreadable(
+                NotEvaluatedReason::InvalidEvidence,
+                format!("is stated in {}, not {unit}", dimension.unit_symbol()),
+            ),
+            Cell::Number {
+                lower,
+                upper,
+                kind: None,
+                exact,
+            } => {
+                if unit.takes_plain_numbers() {
+                    Cell::number(
+                        lower * scale,
+                        upper * scale,
+                        unit.dimension().ok().flatten(),
+                        exact,
+                    )
+                } else {
+                    Cell::Unreadable(
+                        NotEvaluatedReason::InvalidEvidence,
+                        format!("is a plain number, not {unit}"),
+                    )
+                }
+            }
+            cell => cell,
+        }
+    }
+
     /// The aggregates of a column of it whose values are text (`text`) or
     /// numbers.
     fn aggregates(&self, text: bool) -> Vec<Aggregate> {
@@ -262,7 +427,9 @@ impl Measure<'_> {
         }
         match (&self.aggregates, &self.source) {
             (Some(declared), _) => declared.clone(),
-            (None, Source::Property(_) | Source::BoundaryArea(_)) => vec![Aggregate::Sum],
+            (None, Source::Property(_) | Source::BoundaryArea(_) | Source::Computed { .. }) => {
+                vec![Aggregate::Sum]
+            }
             (None, _) => vec![Aggregate::Values],
         }
     }
@@ -373,6 +540,8 @@ struct Field {
     aggregates: Vec<Aggregate>,
     /// The numeric kind, or `None` when values disagree.
     kind: Option<Kind>,
+    /// The unit of a number column counting a currency (`EUR`).
+    label: Option<String>,
     exactness: ColumnExactness,
 }
 
@@ -477,7 +646,7 @@ impl<'a> Declaration<'a> {
                 path,
             });
         }
-        let measures = measures(&parameters)?;
+        let measures = bind_computed(measures(&parameters)?)?;
         let plane_tolerance = match parameters.quantity("boundary_plane_tolerance")? {
             None => 0.0,
             Some((value, QuantityDimension::Length)) if value >= 0.0 => value,
@@ -508,6 +677,7 @@ impl<'a> Declaration<'a> {
                 what: measure.what.clone(),
                 aggregates: measure.aggregates(false),
                 kind: None,
+                label: currency_label(measure),
                 exactness: ColumnExactness::Exact,
             })
             .collect();
@@ -552,15 +722,21 @@ impl<'a> Declaration<'a> {
             }
         };
         let mut coverage: Option<Result<BoundaryCoverage, Unavailable>> = None;
-        let reads = self
+        let mut reads: Vec<Read> = self
             .measures
             .iter()
             .map(|measure| match &measure.source {
                 Source::Property(property) => {
-                    Read::Single(property_cell(context, object, *property))
+                    Read::Single(measure.in_unit(property_cell(context, object, *property)))
                 }
                 Source::Related { property, path } => {
-                    Read::Single(related_cell(context, object, *property, path, universe))
+                    let zero = measure
+                        .unit
+                        .as_ref()
+                        .map(|(_, unit)| unit.dimension().ok().flatten());
+                    Read::Single(measure.in_unit(related_cell(
+                        context, object, *property, path, universe, zero,
+                    )))
                 }
                 Source::BoundaryArea(bounding) => {
                     let coverage = coverage.get_or_insert_with(|| {
@@ -580,8 +756,19 @@ impl<'a> Declaration<'a> {
                 }
                 Source::PropertySet(set) => Read::Parts(set_parts(context, object, set)),
                 Source::Profile => Read::Parts(profile_parts(context, object)),
+                // Computed below, once every column it reads is read.
+                Source::Computed { .. } => Read::Single(Cell::Absent),
             })
             .collect();
+        for (index, measure) in self.measures.iter().enumerate() {
+            if let Source::Computed {
+                bound: Some(computed),
+                ..
+            } = &measure.source
+            {
+                reads[index] = Read::Single(computed.cell(&reads));
+            }
+        }
         Some(Member {
             object: object.id.clone(),
             group,
@@ -626,6 +813,7 @@ impl<'a> Declaration<'a> {
                     what,
                     aggregates: Vec::new(),
                     kind: None,
+                    label: currency_label(measure),
                     exactness: ColumnExactness::Exact,
                 };
                 let cells: Vec<Cell> = members.iter().map(|member| member.cell(&field)).collect();
@@ -654,15 +842,18 @@ impl<'a> Declaration<'a> {
                     measure.source.fallback_exactness()
                 };
                 let mut kinds = kinds.into_iter();
-                field.kind = match (kinds.next(), kinds.next()) {
-                    (None, _) => Some(match &measure.source {
-                        Source::Profile => Some(profile_kind(field.part.as_deref())),
-                        source => source.fallback_kind(),
-                    }),
-                    (Some(kind), None) => Some(kind),
-                    (Some(first), Some(second)) => {
-                        if field.aggregates.iter().any(|aggregate| aggregate.numeric()) {
-                            evaluation.push_not_evaluated(
+                field.kind = if let Some((_, unit)) = &measure.unit {
+                    Some(unit.dimension().ok().flatten())
+                } else {
+                    match (kinds.next(), kinds.next()) {
+                        (None, _) => Some(match &measure.source {
+                            Source::Profile => Some(profile_kind(field.part.as_deref())),
+                            source => source.fallback_kind(),
+                        }),
+                        (Some(kind), None) => Some(kind),
+                        (Some(first), Some(second)) => {
+                            if field.aggregates.iter().any(|aggregate| aggregate.numeric()) {
+                                evaluation.push_not_evaluated(
                                 NotEvaluatedReason::InvalidEvidence,
                                 format!(
                                     "quantity-takeoff: `{}` is stated as {} and as {}, so no `{}` is aggregated",
@@ -672,8 +863,9 @@ impl<'a> Declaration<'a> {
                                     field.name
                                 ),
                             );
+                            }
+                            None
                         }
-                        None
                     }
                 };
                 fields.push(field);
@@ -695,7 +887,10 @@ impl<'a> Declaration<'a> {
                 let column = match (aggregate, field.kind.flatten()) {
                     (Aggregate::Values, _) => ReportColumn::text(id),
                     (_, Some(dimension)) => ReportColumn::quantity(id, dimension),
-                    (_, None) => ReportColumn::number(id),
+                    (_, None) => match &field.label {
+                        Some(unit) => ReportColumn::amount(id, unit),
+                        None => ReportColumn::number(id),
+                    },
                 };
                 columns.push(column.with_exactness(field.exactness));
             }
@@ -775,12 +970,16 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
         let path = parameters.strings(&format!("{key}_path"))?;
         let bounding = parameters.selector(&format!("{key}_bounding"))?;
         let set = parameters.string(&format!("{key}_property_set"))?;
+        let expression = parameters.string(&format!("{key}_expression"))?;
+        let unit = parameters.string(&format!("{key}_unit"))?;
         if property.is_none() && kind.is_none() {
             if aggregates.is_some()
                 || name.is_some()
                 || path.is_some()
                 || bounding.is_some()
                 || set.is_some()
+                || expression.is_some()
+                || unit.is_some()
             {
                 return Err(invalid(format!(
                     "a parameter of `{key}` is declared without `{key}` or `{key}_kind`"
@@ -802,8 +1001,20 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
                 path,
                 bounding,
                 set,
+                expression,
+                unit,
             },
         )?;
+        let unit = match unit {
+            None => None,
+            Some(text) => {
+                let (scale, unit) = expression::parse_unit(text)
+                    .map_err(|why| invalid(format!("`{key}_unit`: {why}")))?;
+                unit.dimension()
+                    .map_err(|why| invalid(format!("`{key}_unit`: {why}")))?;
+                Some((scale, unit))
+            }
+        };
         let aggregates = aggregates
             .map(|names| parse_aggregates(&key, names))
             .transpose()?;
@@ -816,6 +1027,7 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
             Source::BoundaryArea(_) => ("boundary_area".to_owned(), "boundary area".to_owned()),
             Source::PropertySet(set) => (String::new(), (*set).to_owned()),
             Source::Profile => ("profile".to_owned(), "profile".to_owned()),
+            Source::Computed { text, .. } => (String::new(), (*text).to_owned()),
         };
         let name = name.map_or(default_name, str::to_owned);
         if name.is_empty() && !matches!(source, Source::PropertySet(_)) {
@@ -828,9 +1040,120 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
             aggregates,
             name,
             what,
+            unit,
         });
     }
     Ok(measures)
+}
+
+/// Binds every computed column's expression, now that every column is
+/// declared: its names resolve to the other columns (a computed one only
+/// before it), whose units must be known, and its units must agree.
+fn bind_computed(mut measures: Vec<Measure<'_>>) -> Result<Vec<Measure<'_>>, Unavailable> {
+    for at in 0..measures.len() {
+        let Source::Computed { text, .. } = &measures[at].source else {
+            continue;
+        };
+        let text = *text;
+        let key = format!("measure_{}_expression", at + 1);
+        let mut inputs: Vec<Input> = Vec::new();
+        let bound = {
+            let declared = &measures;
+            let mut resolve = |name: &str| -> Result<(usize, Unit), String> {
+                if let Some(index) = inputs.iter().position(|input| input.name == name) {
+                    return Ok((index, inputs[index].unit.clone()));
+                }
+                let (measure, part, unit) = input_of(declared, at, name)?;
+                inputs.push(Input {
+                    measure,
+                    part,
+                    unit: unit.clone(),
+                    name: name.to_owned(),
+                });
+                Ok((inputs.len() - 1, unit))
+            };
+            expression::bind(text, &mut resolve)
+        }
+        .map_err(|why| invalid(format!("`{key}` `{text}`: {why}")))?;
+        bound
+            .unit()
+            .dimension()
+            .map_err(|why| invalid(format!("`{key}` `{text}`: {why}")))?;
+        measures[at].unit = Some((1.0, bound.unit().clone()));
+        measures[at].source = Source::Computed {
+            text,
+            bound: Some(Box::new(Computed {
+                expression: bound,
+                inputs,
+            })),
+        };
+    }
+    Ok(measures)
+}
+
+/// The column `name` names for the computed column `at`: a measure and,
+/// for a profile's dimension (`profile_width`), the part, with the unit
+/// its values are stated in.
+fn input_of(
+    measures: &[Measure<'_>],
+    at: usize,
+    name: &str,
+) -> Result<(usize, Option<String>, Unit), String> {
+    if measures[at].name == name {
+        return Err(format!("`{name}` is the computed column itself"));
+    }
+    for (index, measure) in measures.iter().enumerate() {
+        if index == at {
+            continue;
+        }
+        if let Source::Profile = measure.source {
+            let dimension = name
+                .strip_prefix(measure.name.as_str())
+                .and_then(|rest| rest.strip_prefix('_'))
+                .and_then(|part| dimension_columns().find(|(column, _)| *column == part));
+            if let Some((column, _)) = dimension {
+                let unit = Unit::of(Some(profile_kind(Some(column))));
+                return Ok((index, Some(column.to_owned()), unit));
+            }
+            continue;
+        }
+        if measure.name != name {
+            continue;
+        }
+        let unit = match (&measure.source, &measure.unit) {
+            (Source::PropertySet(_), _) => {
+                return Err(format!(
+                    "`{name}` expands into one column per property, which an expression cannot name"
+                ));
+            }
+            (Source::Computed { .. }, _) if index > at => {
+                return Err(format!("`{name}` is computed after this column"));
+            }
+            (_, Some((_, unit))) => unit.clone(),
+            (Source::BoundaryArea(_), None) => Unit::of(Some(QuantityDimension::Area)),
+            (Source::Property(property), None) if property.set == Some(MEASURED_SET) => {
+                Unit::of(measured_kind(*property))
+            }
+            _ => {
+                return Err(format!(
+                    "the unit of `{name}` is unknown; declare `measure_{}_unit`",
+                    index + 1
+                ));
+            }
+        };
+        return Ok((index, None, unit));
+    }
+    Err(format!("`{name}` names no column"))
+}
+
+/// The unit a number column of `measure` names: its own where it counts a
+/// currency, which no dimension does.
+fn currency_label(measure: &Measure<'_>) -> Option<String> {
+    measure
+        .unit
+        .as_ref()
+        .filter(|(_, unit)| unit.counts_currency())
+        .map(|(_, unit)| unit.to_string())
 }
 
 /// What a column declares beside its kind.
@@ -840,6 +1163,8 @@ struct Declared<'a> {
     path: Option<&'a [String]>,
     bounding: Option<&'a Selector>,
     set: Option<&'a str>,
+    expression: Option<&'a str>,
+    unit: Option<&'a str>,
 }
 
 /// Where the column `key` of `kind` takes its values from, refusing a
@@ -850,6 +1175,8 @@ fn source<'a>(key: &str, kind: &str, declared: Declared<'a>) -> Result<Source<'a
         path,
         bounding,
         set,
+        expression,
+        unit,
     } = declared;
     let unused = |what: &str, present: bool| -> Result<(), Unavailable> {
         if present {
@@ -861,6 +1188,12 @@ fn source<'a>(key: &str, kind: &str, declared: Declared<'a>) -> Result<Source<'a
         }
     };
     let required = |what: &str| invalid(format!("a `{kind}` column requires `{key}{what}`"));
+    if kind != "computed" {
+        unused("_expression", expression.is_some())?;
+    }
+    if !matches!(kind, "property" | "related") {
+        unused("_unit", unit.is_some())?;
+    }
     Ok(match kind {
         "property" | "related" => {
             let property = property.ok_or_else(|| required(""))?;
@@ -898,6 +1231,16 @@ fn source<'a>(key: &str, kind: &str, declared: Declared<'a>) -> Result<Source<'a
             unused("_bounding", bounding.is_some())?;
             unused("_property_set", set.is_some())?;
             Source::Profile
+        }
+        "computed" => {
+            unused("", property.is_some())?;
+            unused("_path", path.is_some())?;
+            unused("_bounding", bounding.is_some())?;
+            unused("_property_set", set.is_some())?;
+            Source::Computed {
+                text: expression.ok_or_else(|| required("_expression"))?,
+                bound: None,
+            }
         }
         other => {
             return Err(invalid(format!(
@@ -958,13 +1301,15 @@ fn value_cell(value: Option<&PropertyValue>) -> Cell {
 
 /// `property` on the objects `path` reaches from `object`: numbers of one
 /// kind summed (every reached object must state one), texts listed; none
-/// reached or stated is no value.
+/// reached or stated is no value. With `zero` (a declared unit's kind),
+/// reaching no object at all is an exact zero: the sum over nothing.
 fn related_cell(
     context: &RuleContext<'_>,
     object: &Object,
     property: PropertyRef<'_>,
     path: &Traversal,
     universe: &[&Object],
+    zero: Option<Kind>,
 ) -> Cell {
     let reached = match path.related(context, &object.id, universe) {
         Ok((reached, _)) => reached,
@@ -972,6 +1317,9 @@ fn related_cell(
             return Cell::Unreadable(reason, format!("cannot be followed ({message})"));
         }
     };
+    if let (true, Some(kind)) = (reached.is_empty(), zero) {
+        return Cell::number(0.0, 0.0, kind, true);
+    }
     let mut numbers = Vec::new();
     let mut texts = BTreeSet::new();
     let mut without = Vec::new();

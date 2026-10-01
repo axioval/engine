@@ -84,11 +84,12 @@ pub enum ColumnExactness {
 }
 
 /// One column: a lowercase id, unique in its table, its kind and, when the
-/// capability states it, its exactness.
+/// capability states them, its exactness and a number column's unit.
 ///
 /// On the wire `{"id": "height", "kind": "quantity", "dimension": "length"}`;
 /// `dimension` is written for a quantity column only, `exactness` (`exact`
-/// or `bounded`) only when stated.
+/// or `bounded`) only when stated, `unit` only for a number column counting
+/// a unit outside SI (`{"id": "sum_cost", "kind": "number", "unit": "EUR"}`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ColumnWire", into = "ColumnWire")]
 pub struct ReportColumn {
@@ -96,6 +97,10 @@ pub struct ReportColumn {
     pub kind: ReportColumnKind,
     /// How exact the values are; `None` when the capability does not say.
     pub exactness: Option<ColumnExactness>,
+    /// The unit of a number column counting a unit outside SI, such as a
+    /// currency (`EUR`, `EUR·m⁻²`); `None` for a dimensionless number and
+    /// for every other kind.
+    pub unit: Option<String>,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -115,6 +120,8 @@ struct ColumnWire {
     dimension: Option<QuantityDimension>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     exactness: Option<ColumnExactness>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unit: Option<String>,
 }
 
 impl From<ReportColumn> for ColumnWire {
@@ -129,6 +136,7 @@ impl From<ReportColumn> for ColumnWire {
             kind,
             dimension,
             exactness: column.exactness,
+            unit: column.unit,
         }
     }
 }
@@ -150,10 +158,23 @@ impl TryFrom<ColumnWire> for ReportColumn {
                 ));
             }
         };
+        match &wire.unit {
+            Some(_) if kind != ReportColumnKind::Number => {
+                return Err(format!(
+                    "column `{}` states a unit but is not a number column",
+                    wire.id
+                ));
+            }
+            Some(unit) if unit.trim().is_empty() => {
+                return Err(format!("column `{}` states a blank unit", wire.id));
+            }
+            _ => {}
+        }
         Ok(Self {
             id: wire.id,
             kind,
             exactness: wire.exactness,
+            unit: wire.unit,
         })
     }
 }
@@ -166,6 +187,7 @@ impl ReportColumn {
             id: id.into(),
             kind: ReportColumnKind::Quantity { dimension },
             exactness: None,
+            unit: None,
         }
     }
     /// A dimensionless number column.
@@ -175,6 +197,7 @@ impl ReportColumn {
             id: id.into(),
             kind: ReportColumnKind::Number,
             exactness: None,
+            unit: None,
         }
     }
     /// A text column.
@@ -184,7 +207,26 @@ impl ReportColumn {
             id: id.into(),
             kind: ReportColumnKind::Text,
             exactness: None,
+            unit: None,
         }
+    }
+    /// A number column counting `unit`, a unit outside SI such as a
+    /// currency (`EUR`); a blank unit is a dimensionless number column.
+    #[must_use]
+    pub fn amount(id: impl Into<String>, unit: impl Into<String>) -> Self {
+        let unit = unit.into();
+        Self {
+            id: id.into(),
+            kind: ReportColumnKind::Number,
+            exactness: None,
+            unit: (!unit.trim().is_empty()).then_some(unit),
+        }
+    }
+    /// The unit symbol its values are stated in, if any: a quantity's SI
+    /// unit, or a number column's own unit.
+    #[must_use]
+    pub fn unit_symbol(&self) -> Option<String> {
+        self.kind.unit_symbol().or_else(|| self.unit.clone())
     }
     /// The same column, stating how exact its values are.
     #[must_use]

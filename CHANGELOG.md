@@ -52,6 +52,27 @@ All notable changes are documented here. This project follows Semantic Versionin
   Without `pair_key` nothing changes. **Breaking:** definitions bound to
   `keyed-limit` must declare the optional `string` parameter `pair_key`
   and the optional `textPattern` column `other_side` of `limits`.
+- **Computed takeoff columns.** (Closes #176) A `quantity-takeoff`
+  column of kind `computed` derives its values from other columns of the
+  same member with `measure_<n>_expression`: `+`, `-`, `×`, `÷`, `min`,
+  `max`, parentheses, and number and quantity literals (`42.5 EUR/m²`).
+  The expression is parsed and unit-checked when the rule is bound, never
+  run as code: an unknown name or unit, mixing dimensions in `+`, `-`,
+  `min` or `max` (a length plus an area), two currencies or a result in no
+  reportable dimension are invalid declarations. A `property` or `related`
+  column declares the unit its values are stated in with
+  `measure_<n>_unit` (a value in another dimension is unreadable; a
+  `related` column with a unit sums to an exact zero over no object
+  reached). Values are computed per member over intervals and aggregated
+  like any column, so `cost = area × 42.5 EUR/m²` fills per member and sums
+  per group; a missing input gives no value, never zero, and a divisor
+  whose interval holds zero gives none. A number column counting a
+  currency carries its unit: `ReportColumn` has `unit: Option<String>`
+  (`ReportColumn::amount`, `ReportColumn::unit_symbol`), written on the
+  wire only for such a column and shown in summaries and CSV headers.
+  **Breaking:** `ReportColumn` has a public `unit` field, which a struct
+  literal must name; `quantity-takeoff` declares the new optional
+  parameters `measure_<n>_expression` and `measure_<n>_unit`.
 - **Takeoff column kinds.** (Closes #175) A `quantity-takeoff` column
   declares its kind with `measure_<n>_kind`: `property` (the default, as
   before), `related` (a property of the objects a relationship path

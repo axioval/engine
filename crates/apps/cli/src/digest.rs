@@ -557,7 +557,7 @@ fn table_objects(report: &Report) -> impl Iterator<Item = &ObjectId> {
 
 /// A column as a summary names it: `height (m)`.
 fn column_text(column: &ReportColumn) -> String {
-    match column.kind.unit_symbol() {
+    match column.unit_symbol() {
         Some(unit) => format!("{} ({unit})", column.id),
         None => column.id.clone(),
     }
@@ -599,7 +599,6 @@ pub fn table_csv(table: &ReportTable) -> String {
             header.push(column.id.clone());
         } else {
             let unit = column
-                .kind
                 .unit_symbol()
                 .map(|unit| format!(" [{unit}]"))
                 .unwrap_or_default();
@@ -658,7 +657,6 @@ fn row_text(table: &ReportTable, values: &[ReportValue]) -> String {
         .zip(values)
         .map(|(column, value)| {
             let unit = column
-                .kind
                 .unit_symbol()
                 .map(|unit| format!(" {unit}"))
                 .unwrap_or_default();

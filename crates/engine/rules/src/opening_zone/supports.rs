@@ -13,9 +13,9 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use super::distance;
-use super::face::{Extent, FaceAxes, Host, ROUNDING, Solid, Span, gap, separation};
+use super::face::{Axis, Extent, FaceAxes, Host, ROUNDING, Solid, Span, gap, separation};
 use crate::counts::Population;
-use crate::level_spacing::metres;
+use crate::level_spacing::{metres, shown};
 use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
 /// How a rule finds a host's supports and what it requires of them.
@@ -24,7 +24,52 @@ pub(super) struct SupportConfig<'a> {
     pub(super) selector: &'a Selector,
     contact: Option<f64>,
     distance: Option<f64>,
+    /// The distance as a fraction of the host's span or depth.
+    ratio: Option<(f64, Reference)>,
     clearance: Option<f64>,
+}
+
+/// The host extent a support distance ratio multiplies.
+#[derive(Clone, Copy)]
+enum Reference {
+    /// Along the face's length axis: the host's length.
+    Span,
+    /// Along the face's height axis: the host's depth.
+    Depth,
+}
+
+impl Reference {
+    fn parse(value: &str) -> Result<Self, Unavailable> {
+        match value {
+            "span" => Ok(Self::Span),
+            "depth" => Ok(Self::Depth),
+            other => Err(invalid(format!(
+                "`support_distance_reference` `{other}` is unsupported; use `span` or `depth`"
+            ))),
+        }
+    }
+
+    fn axis(self, axes: FaceAxes) -> Axis {
+        match self {
+            Self::Span => axes.length,
+            Self::Depth => axes.height,
+        }
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Span => "span",
+            Self::Depth => "depth",
+        }
+    }
+}
+
+/// The distance an opening must keep from each support of one host, as an
+/// interval sure to hold the exact requirement, and how a message words it.
+struct Required {
+    low: f64,
+    high: f64,
+    text: String,
 }
 
 impl<'a> SupportConfig<'a> {
@@ -34,6 +79,8 @@ impl<'a> SupportConfig<'a> {
             ParameterDescriptor::optional("support_selector", ParameterType::Selector),
             ParameterDescriptor::optional("support_gap", ParameterType::Quantity),
             ParameterDescriptor::optional("support_distance", ParameterType::Quantity),
+            ParameterDescriptor::optional("support_distance_ratio", ParameterType::Number),
+            ParameterDescriptor::optional("support_distance_reference", ParameterType::String),
             ParameterDescriptor::optional("support_clearance", ParameterType::Quantity),
         ]
     }
@@ -48,7 +95,24 @@ impl<'a> SupportConfig<'a> {
         let contact = distance(parameters, "support_gap")?;
         let required = distance(parameters, "support_distance")?;
         let clearance = distance(parameters, "support_clearance")?;
-        let checks = required.is_some() || clearance.is_some();
+        let ratio = match (
+            parameters.number("support_distance_ratio")?,
+            parameters.string("support_distance_reference")?,
+        ) {
+            (None, None) => None,
+            (Some(ratio), Some(reference)) if ratio.is_finite() && ratio > 0.0 => {
+                Some((ratio, Reference::parse(reference)?))
+            }
+            (Some(_), Some(_)) => {
+                return Err(invalid("`support_distance_ratio` must be positive"));
+            }
+            _ => {
+                return Err(invalid(
+                    "`support_distance_ratio` and `support_distance_reference` go together",
+                ));
+            }
+        };
+        let checks = required.is_some() || ratio.is_some() || clearance.is_some();
         let found = path.is_some() || contact.is_some();
         match (checks, found) {
             (false, false) if selector.is_none() => Ok(None),
@@ -57,6 +121,7 @@ impl<'a> SupportConfig<'a> {
                 selector: selector.unwrap_or(&Selector::All),
                 contact,
                 distance: required,
+                ratio,
                 clearance,
             })),
             (true, false) => Err(invalid(
@@ -68,6 +133,41 @@ impl<'a> SupportConfig<'a> {
                  `support_distance` or `support_clearance`",
             )),
         }
+    }
+}
+
+impl SupportConfig<'_> {
+    /// The distance an opening must keep from the supports of `host`: the
+    /// fixed `support_distance`, or the larger of it and the ratio times
+    /// the host's extent along the reference axis, widened by a rounding
+    /// step each way wherever the arithmetic rounded. `None` without either.
+    fn required(&self, host: &Host, axes: FaceAxes) -> Option<Required> {
+        let Some((ratio, reference)) = self.ratio else {
+            return self.distance.map(|fixed| Required {
+                low: fixed,
+                high: fixed,
+                text: metres(fixed),
+            });
+        };
+        let (_, bounds) = host.axis(reference.axis(axes));
+        let extent = bounds.1 - bounds.0;
+        let floor = self.distance.unwrap_or(0.0);
+        let low = floor.max((extent.next_down() * ratio).next_down().max(0.0));
+        let high = floor.max((extent.next_up() * ratio).next_up());
+        let scaled = format!(
+            "{ratio} × the host's {} {}",
+            reference.noun(),
+            metres(extent)
+        );
+        let why = match self.distance {
+            Some(fixed) => format!("the larger of {} and {scaled}", metres(fixed)),
+            None => scaled,
+        };
+        Some(Required {
+            low,
+            high,
+            text: format!("{} ({why})", shown(low, high)),
+        })
     }
 }
 
@@ -292,15 +392,22 @@ impl<'r, 'c> Supports<'r, 'c> {
             }
         };
         let host_id = &opening.host.local_id;
-        if let Some(required) = self.config.distance {
-            let limit = required - ROUNDING;
+        if let Some(required) = self.config.required(host, axes) {
+            let (low, high) = (required.low - ROUNDING, required.high - ROUNDING);
+            let text = &required.text;
             check(Check {
-                required,
+                required: text.clone(),
+                bounds: if self.config.ratio.is_some() {
+                    "the shapes, or the required distance from the host's extent, are known \
+                     only within bounds"
+                } else {
+                    "the shapes are known only within bounds"
+                },
                 near: &|footprint| {
                     let near = gap(opening.length, footprint.length.inner);
-                    (near < limit).then_some(near)
+                    (near < low).then_some(near)
                 },
-                clear: &|footprint| gap(opening.length, footprint.length.outer) >= limit,
+                clear: &|footprint| gap(opening.length, footprint.length.outer) >= high,
                 message: &|member, near, footprint| {
                     let bound = if footprint.length.is_exact() {
                         ""
@@ -308,11 +415,10 @@ impl<'r, 'c> Supports<'r, 'c> {
                         "at most "
                     };
                     format!(
-                        "opening is {bound}{} from support {} along its host {host_id}; {} \
+                        "opening is {bound}{} from support {} along its host {host_id}; {text} \
                          required",
                         metres(near),
                         member.local_id,
-                        metres(required)
                     )
                 },
                 what: "distance along its host from its supports",
@@ -322,7 +428,8 @@ impl<'r, 'c> Supports<'r, 'c> {
             let limit = required - ROUNDING;
             let face = [opening.length, opening.height];
             check(Check {
-                required,
+                required: metres(required),
+                bounds: "the shapes are known only within bounds",
                 near: &|footprint| {
                     let near = separation(face, footprint.inner?);
                     (opening.exact && near < limit).then_some(near)
@@ -364,7 +471,10 @@ struct Measured<'m> {
 
 /// One requirement an opening must meet against every member.
 struct Check<'f> {
-    required: f64,
+    /// The requirement as a message words it.
+    required: String,
+    /// Why a decided member may still be too close.
+    bounds: &'static str,
     /// What is measured, in a message.
     what: &'static str,
     /// The measure against the inner footprint, when it surely falls short.
@@ -391,10 +501,9 @@ impl Check<'_> {
                 Ok((footprint, solid)) => match (self.near)(footprint).filter(|_| member.decided) {
                     Some(near) => sure.push((member, near, footprint, solid)),
                     None if (self.clear)(footprint) => {}
-                    None if member.decided => unknown.push(format!(
-                        "{} (the shapes are known only within bounds)",
-                        member.id
-                    )),
+                    None if member.decided => {
+                        unknown.push(format!("{} ({})", member.id, self.bounds));
+                    }
                     None => unknown.push(format!(
                         "{} (whether it is a selected support of the host is undecided)",
                         member.id
@@ -414,7 +523,7 @@ impl Check<'_> {
                     format!(
                         "its {} may be under {}: {}",
                         self.what,
-                        metres(self.required),
+                        self.required,
                         unknown.join("; ")
                     ),
                 );

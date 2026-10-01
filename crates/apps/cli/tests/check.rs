@@ -10422,6 +10422,47 @@ fn beam_holes_are_checked_against_the_beams_supports() {
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
+/// The distance from supports as the depth of the 300 mm beam, at least
+/// 0.25 m: #900, 0.3 m from its support, now meets it.
+#[test]
+fn beam_holes_keep_a_distance_from_supports_scaled_by_the_beam_depth() {
+    let case = Case::new("opening-zone-supports-ratio");
+    let (output, result) = case.geometry_rule(
+        &supported_beam_and_walls_with_areas(),
+        &[
+            ("opening", "IfcOpeningElement"),
+            ("beam", "IfcBeam"),
+            ("column", "IfcColumn"),
+        ],
+        "axioval:capability.opening-zone",
+        &registry_signature("axioval:capability.opening-zone"),
+        entity("opening"),
+        json!({
+            "host_path": {"type": "stringList", "value": ["IfcRelVoidsElement:backward"]},
+            "host_selector": {"type": "selector", "value": entity("beam")},
+            "length_axis": {"type": "string", "value": "extrusion"},
+            "height_axis": {"type": "string", "value": "profile-y"},
+            "support_path": {"type": "stringList", "value": ["IfcRelConnectsElements:either"]},
+            "support_selector": {"type": "selector", "value": entity("column")},
+            "support_distance": {"type": "quantity", "value": 250.0, "unit": "mm"},
+            "support_distance_ratio": {"type": "number", "value": 1.0},
+            "support_distance_reference": {"type": "string", "value": "depth"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#500".to_owned(),
+            "opening is 0.1 m from support #700 along its host #50; 0.3 m (the larger of \
+             0.25 m and 1 × the host's depth 0.3 m) required"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
 #[test]
 fn wall_openings_are_summed_against_gross_less_net_side_area() {
     let case = Case::new("opening-area-walls");

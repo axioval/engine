@@ -588,6 +588,127 @@ fn supports_need_a_way_to_be_found_and_a_requirement() {
     }
 }
 
+/// A beam `b` like [`beam`] but `depth` deep, on a square column `c1`
+/// (x 0.35 to 0.65) with holes 0.28 m (`close`) and 0.32 m (`farther`)
+/// clear of it along the beam.
+fn deep_beam(depth: f64) -> Model {
+    let model = extrusion(
+        Model::default(),
+        "b",
+        "beam",
+        [0.0; 3],
+        [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        6.0,
+        "i-shape",
+        &[
+            ("OverallWidth", 0.3),
+            ("OverallDepth", depth),
+            ("WebThickness", 0.01),
+            ("FlangeThickness", 0.02),
+        ],
+    );
+    let model = square(model, "c1", 0.5).edge("connects", "b", "c1");
+    let model = circle(model, "close", 0.98);
+    circle(model, "farther", 1.02)
+}
+
+fn ratio(value: f64, reference: &str) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        ("support_distance_ratio", number(value)),
+        ("support_distance_reference", string(reference)),
+    ]
+}
+
+#[test]
+fn a_support_distance_scales_with_each_beams_depth_above_a_minimum() {
+    // 0.5 × 0.6 m = 0.3 m exceeds the 0.25 m minimum.
+    let evaluation = supported(
+        deep_beam(0.6),
+        [
+            vec![("support_distance", metres(0.25))],
+            ratio(0.5, "depth"),
+        ]
+        .concat(),
+    );
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "close".into(),
+            "opening is 0.28 m from support c1 along its host b; 0.3 m (the larger of 0.25 m \
+             and 0.5 × the host's depth 0.6 m) required"
+                .into()
+        )]
+    );
+    assert!(
+        unevaluated(&evaluation).is_empty(),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    // 0.5 × 0.4 m = 0.2 m falls below it, so 0.25 m applies.
+    let evaluation = supported(
+        deep_beam(0.4),
+        [
+            vec![("support_distance", metres(0.25))],
+            ratio(0.5, "depth"),
+        ]
+        .concat(),
+    );
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_support_distance_may_be_a_fraction_of_the_span_alone() {
+    // A tenth of the 6 m span: both holes are too close.
+    let mut parameters = ratio(0.1, "span");
+    parameters.extend([
+        ("support_path", strings(&["connects:either"])),
+        ("support_selector", selector(kind("column"))),
+    ]);
+    let evaluation = check(deep_beam(0.3), parameters);
+    assert_eq!(
+        sorted(&evaluation),
+        [
+            (
+                "close".into(),
+                "opening is 0.28 m from support c1 along its host b; 0.6 m (0.1 × the host's \
+                 span 6 m) required"
+                    .into()
+            ),
+            (
+                "farther".into(),
+                "opening is 0.32 m from support c1 along its host b; 0.6 m (0.1 × the host's \
+                 span 6 m) required"
+                    .into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_support_distance_ratio_declaration_is_checked() {
+    for parameters in [
+        vec![("support_distance_ratio", number(0.5))],
+        vec![("support_distance_reference", string("depth"))],
+        ratio(0.5, "width"),
+        ratio(-0.5, "depth"),
+    ] {
+        assert_eq!(
+            unevaluated(&supported(deep_beam(0.6), parameters)),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+    // Without a way to find the supports the ratio is refused too.
+    assert_eq!(
+        unevaluated(&check(deep_beam(0.6), ratio(0.5, "depth"))),
+        [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+    );
+}
+
 /// Answers the distance between the beam and each column from a table;
 /// a column not in it is far away.
 struct Touching(BTreeMap<String, (f64, f64)>);

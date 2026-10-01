@@ -33,7 +33,8 @@ use supports::{Opening, SupportConfig, Supports};
 /// of `height_axis`; `both` by default), `opening_spacing` clear of every
 /// other opening in the
 /// same host, `support_distance` along the host from each of its supports
-/// and `support_clearance` clear of their footprints in the face, and
+/// (with `support_distance_ratio`, at least that fraction of the host's
+/// `span` or `depth`, `support_distance_reference`) and `support_clearance` clear of their footprints in the face, and
 /// inside one of the allowed `zones`: rows of insets from the ends, the
 /// bottom and the top, each the larger of a fraction of the host's span or
 /// depth and a minimum length; and the distances the `dimensions` table

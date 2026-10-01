@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Opening distance from supports scaled by the beam.** (Closes #156)
+  `opening-zone` gains `support_distance_ratio` and
+  `support_distance_reference` (`span` or `depth`): the distance an opening
+  keeps from each support is `max(support_distance, ratio × reference)`,
+  measured per beam from its body's extent along `length_axis` (span) or
+  `height_axis` (depth). With `max(0.5 × depth, 0.25 m)`, a 0.60 m deep beam
+  requires 0.30 m and a 0.40 m deep one 0.25 m; the finding names both.
+  The requirement is an interval holding the exact product, and a distance
+  it straddles is not evaluated. A fixed `support_distance` alone behaves
+  as before. **Breaking:** definitions bound to `opening-zone` must declare
+  the optional parameters `support_distance_ratio` (`number`) and
+  `support_distance_reference` (`string`).
 - **Entrance checks in local circulation.** (Closes #152)
   `local-circulation` gains two space-level checks, both off by default so
   existing rules are unchanged. `require_entrances` makes a space no door

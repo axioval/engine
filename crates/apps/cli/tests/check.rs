@@ -11442,6 +11442,95 @@ fn with_geometry_local_circulation_ignores_a_skirting_below_the_band() {
     );
 }
 
+/// The room with a skirting, its door #29 stating a clear width of 0.8 m
+/// in `Access.ClearWidth`, and store #59 (x 10..14) reached by no door.
+fn rooms_with_a_narrow_door_and_a_store() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    let wc = "IFCFURNITURE('GID',$,$,$,$,PL,REP,$,$)";
+    let skirting = "IFCBUILDINGELEMENTPROXY('GID',$,$,$,$,PL,REP,$,$)";
+    model_with(&format!(
+        "{}{}{}{}{}\
+         #300=IFCRELSPACEBOUNDARY('0000000000000000000300',$,$,$,#19,#29,$,.PHYSICAL.,.INTERNAL.);\n\
+         #310=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(0.8),$);\n\
+         #311=IFCPROPERTYSET('0000000000000000000311',$,'Access',$,(#310));\n\
+         #312=IFCRELDEFINESBYPROPERTIES('0000000000000000000312',$,$,$,(#29),#311);\n",
+        placed_box(10, [3.0, 2.0, 0.0], [6.0, 4.0, 3.0], space),
+        placed_box(20, [1.0, -0.1, 0.0], [1.0, 0.2, 2.1], door),
+        placed_box(30, [5.6, 0.55, 0.0], [0.6, 0.7, 0.8], wc),
+        placed_box(40, [3.05, 2.0, 0.0], [0.1, 4.0, 0.1], skirting),
+        placed_box(50, [12.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+    ))
+}
+
+#[test]
+fn with_geometry_local_circulation_requires_entrances_as_wide_as_the_path() {
+    let case = Case::new("geometry-local-circulation-entrances");
+    let check = |extra: Value| {
+        let mut parameters = json!({
+            "component_selector": {"type": "selector", "value": entity("furniture")},
+            "space_path": {"type": "stringList", "value": ["axioval:derived.contained-in-space"]},
+            "access_path": {"type": "stringList", "value": ["IfcRelSpaceBoundary:backward"]},
+            "door_selector": {"type": "selector", "value": entity("door")},
+            "width_metres": {"type": "number", "value": 0.9},
+            "clear_height_metres": {"type": "number", "value": 2.0},
+            "band_from_metres": {"type": "number", "value": 0.2},
+        });
+        for (name, value) in extra.as_object().unwrap() {
+            parameters[name] = value.clone();
+        }
+        case.geometry_rule(
+            &rooms_with_a_narrow_door_and_a_store(),
+            &[
+                ("door", "IfcDoor"),
+                ("space", "IfcSpace"),
+                ("furniture", "IfcFurniture"),
+            ],
+            "axioval:capability.local-circulation",
+            &registry_signature("axioval:capability.local-circulation"),
+            entity("space"),
+            parameters,
+        )
+    };
+    // Off by default: the WC is reached and the empty store has nothing to
+    // judge.
+    let (output, result) = check(json!({}));
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let (output, result) = check(json!({
+        "require_entrances": {"type": "boolean", "value": true},
+        "check_entrance_width": {"type": "boolean", "value": true},
+        "clear_width_property": {"type": "propertyReference",
+                                 "property": "axioval:example.ifc.clear-width",
+                                 "propertySet": "axioval:example.ifc.pset-access"},
+    }));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(findings[0].0, "#19", "{result:#}");
+    assert!(
+        findings[0].1.starts_with(
+            "entrance ifc-step:model.ifc/#29 is narrower than the path: clear width ("
+        ) && findings[0]
+            .1
+            .ends_with("is 0.8 m; required at least 0.9 m, the path's width"),
+        "{result:#}"
+    );
+    assert_eq!(findings[1].0, "#59", "{result:#}");
+    assert!(
+        findings[1]
+            .1
+            .starts_with("ifc-step:model.ifc/#59 has no entrance: no door or opening reaches it"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 /// Rooms #19 (x 0..4) and #29 (x 4.2..8.2), both with their floor at 0 m,
 /// 3 m high and 4 m deep. Door #39 between them, at y 0.5..1.5,
 /// has its bottom 4 cm above the floors; door #49, at y 2.5..3.5, stands on

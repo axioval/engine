@@ -6,6 +6,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Entrance checks in local circulation.** (Closes #152)
+  `local-circulation` gains two space-level checks, both off by default so
+  existing rules are unchanged. `require_entrances` makes a space no door
+  or opening reaches along `access_path` a finding on the space, even when
+  it holds no component. `check_entrance_width` judges each entrance's
+  clear width against `width_metres`: a 0.80 m door into a room whose path
+  must be 0.90 m wide is a finding relating the door. The width is read
+  through the same steps as `keyed-limit`'s `clear-width`
+  (`clear_width_property`, `clear_width_from_leaves`, `overall_width` with
+  `width_deduction`). An undecided entrance, an unreadable width or one
+  straddling the path width leaves the space not evaluated.
+  **Breaking:** definitions bound to `local-circulation` must declare the
+  optional parameters `require_entrances` and `check_entrance_width`
+  (`boolean`), `clear_width_property` and `overall_width`
+  (`propertyReference`), `clear_width_from_leaves` (`string`) and
+  `width_deduction` (`quantity`).
 - **Door and window limits per pair of space types.** (Closes #149)
   `keyed-limit` gains `pair_key`, naming a key read as the unordered pair
   of the space types on either face of the object along

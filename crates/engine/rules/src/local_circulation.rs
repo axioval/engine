@@ -41,6 +41,12 @@
 //! are obstacles too, for the path, its end areas and its passing spaces;
 //! an entrance of the space is walked through, so its own swing never is.
 //!
+//! Two space-level checks, both off by default, judge the entrances
+//! themselves before any map: with `require_entrances` a space no door or
+//! opening reaches is a finding, and with `check_entrance_width` an
+//! entrance whose clear width (read as `keyed-limit`'s `clear-width` reads
+//! it) is below `width_metres` is one.
+//!
 //! Three-valued throughout: a proof is a finding, a witness passes, and
 //! anything between is not evaluated. An obstacle the selection cannot
 //! decide, and a door whose swing may count but is unknown, leave every
@@ -60,8 +66,10 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::door_swing::Swings;
+use crate::keyed_limit::{CLEAR_WIDTH_SOURCES, DoorClearWidth};
 use crate::level_spacing::metres;
 use crate::passing_spaces::{self, PassingSpaces, Spacing};
+use crate::plan_area::Verdict;
 use crate::selection::select_objects;
 use crate::space_access::{AccessDeclaration, AccessIndex, AccessType};
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
@@ -116,6 +124,11 @@ struct Declaration<'a> {
     short_end: Option<f64>,
     narrow_end: Option<f64>,
     passing: Option<PassingSpaces>,
+    /// Whether a space without an entrance is a finding.
+    require_entrances: bool,
+    /// How entrance clear widths are read, when they are checked against
+    /// the path width.
+    entrance_widths: Option<DoorClearWidth<'a>>,
 }
 
 fn positive(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
@@ -212,6 +225,26 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
              from the free area `end_width_metres` and `end_length_metres` declare",
         ));
     }
+    let widths = DoorClearWidth::parse(&parameters, "clear_width_property")?;
+    let entrance_widths = match (
+        parameters.boolean("check_entrance_width")?.unwrap_or(false),
+        widths,
+    ) {
+        (true, Some(widths)) => Some(widths),
+        (true, None) => {
+            return Err(invalid(
+                "`check_entrance_width` needs `clear_width_property`, \
+                 `clear_width_from_leaves`, or `overall_width` with `width_deduction`",
+            ));
+        }
+        (false, Some(_)) => {
+            return Err(invalid(
+                "`clear_width_property`, `clear_width_from_leaves`, `overall_width` and \
+                 `width_deduction` read entrance widths, which `check_entrance_width` checks",
+            ));
+        }
+        (false, None) => None,
+    };
     Ok(Declaration {
         components: parameters.required_selector("component_selector")?,
         spaces,
@@ -231,6 +264,8 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         short_end,
         narrow_end,
         passing: PassingSpaces::parse(&parameters, Some(height))?,
+        require_entrances: parameters.boolean("require_entrances")?.unwrap_or(false),
+        entrance_widths,
     })
 }
 
@@ -263,7 +298,20 @@ impl RuleCapability for LocalCirculation {
             ParameterDescriptor::optional("end_exempt_selector", ParameterType::Selector),
             ParameterDescriptor::optional("end_exempt_reach_metres", ParameterType::Number),
             ParameterDescriptor::optional("partner_selector", ParameterType::Selector),
+            ParameterDescriptor::optional("require_entrances", ParameterType::Boolean),
+            ParameterDescriptor::optional("check_entrance_width", ParameterType::Boolean),
+            ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
         ];
+        parameters.extend(CLEAR_WIDTH_SOURCES.into_iter().map(|name| {
+            ParameterDescriptor::optional(
+                name,
+                match name {
+                    "clear_width_from_leaves" => ParameterType::String,
+                    "overall_width" => ParameterType::PropertyReference,
+                    _ => ParameterType::Quantity,
+                },
+            )
+        }));
         parameters.extend(passing_spaces::parameters());
         parameters
     }
@@ -614,15 +662,11 @@ impl Judge<'_> {
             .collect();
         components.sort();
         components.dedup();
-        // Nothing to reach and no ends to check: the space has no path to
-        // judge.
-        if components.is_empty() && self.declared.end.is_none() {
-            return;
-        }
         let mut doors = Doors {
             sure: Vec::new(),
             all: Vec::new(),
         };
+        let mut maybe: Vec<(ObjectId, String)> = Vec::new();
         for part in &area {
             let entrances = self.index.entrances(part, AccessType::Any);
             doors
@@ -636,10 +680,21 @@ impl Judge<'_> {
                     doors.sure.push((door, cited));
                 }
             }
+            maybe.extend(entrances.maybe);
         }
         doors.all.sort();
         doors.all.dedup();
         doors.sure.sort_by(|a, b| a.0.cmp(&b.0));
+        maybe.retain(|(door, _)| !doors.sure.iter().any(|(known, _)| known == door));
+        maybe.sort();
+        maybe.dedup_by(|a, b| a.0 == b.0);
+        let mut verdicts = self.entrances(space, &doors, &maybe);
+        // Nothing to reach and no ends to check: the space has no path to
+        // judge.
+        if components.is_empty() && self.declared.end.is_none() {
+            verdicts.push_into(self.rule, space, evaluation);
+            return;
+        }
         let (partners, maybe_partners) = self.partners.of(&area);
         let obstacles: Vec<ObjectId> = self
             .obstacles
@@ -672,11 +727,8 @@ impl Judge<'_> {
             Err(failure) => {
                 let (reason, message) = error(&failure);
                 let message = format!("the circulation of {space} is not mapped: {message}");
-                evaluation.push_object_not_evaluated(
-                    space.clone(),
-                    reason.clone(),
-                    message.clone(),
-                );
+                verdicts.unknown.push((reason.clone(), message.clone()));
+                verdicts.push_into(self.rule, space, evaluation);
                 for component in &components {
                     evaluation.push_object_not_evaluated(
                         component.clone(),
@@ -705,7 +757,85 @@ impl Judge<'_> {
             };
             verdicts.push_into(self.rule, component, evaluation);
         }
-        context.ends().push_into(self.rule, space, evaluation);
+        let ends = context.ends();
+        verdicts.findings.extend(ends.findings);
+        verdicts.unknown.extend(ends.unknown);
+        verdicts.push_into(self.rule, space, evaluation);
+    }
+
+    /// The space's own checks on its entrances: with `require_entrances`,
+    /// that a door or opening reaches it along `access_path` (none surely,
+    /// none possibly is a finding); with `check_entrance_width`, that each
+    /// entrance is at least as wide as the path. A possible entrance too
+    /// narrow, or of unknown width, leaves the space not evaluated.
+    fn entrances(&self, space: &ObjectId, doors: &Doors, maybe: &[(ObjectId, String)]) -> Verdicts {
+        let mut verdicts = Verdicts::default();
+        if self.declared.require_entrances && doors.sure.is_empty() {
+            if maybe.is_empty() {
+                verdicts.findings.push((
+                    format!(
+                        "{space} has no entrance: no door or opening reaches it along {}",
+                        self.index.relationship
+                    ),
+                    Vec::new(),
+                    Vec::new(),
+                ));
+            } else {
+                let why: Vec<&str> = maybe.iter().map(|(_, why)| why.as_str()).collect();
+                verdicts.unknown.push(incomplete(format!(
+                    "whether {space} has an entrance is undecided: {}",
+                    why.join("; ")
+                )));
+            }
+        }
+        let Some(widths) = &self.declared.entrance_widths else {
+            return verdicts;
+        };
+        let width = self.declared.width;
+        let entrances = doors
+            .sure
+            .iter()
+            .map(|(door, cited)| (door, Ok(cited)))
+            .chain(maybe.iter().map(|(door, why)| (door, Err(why))));
+        for (door, sure) in entrances {
+            let Some(object) = self.context.project.object(door) else {
+                verdicts
+                    .unknown
+                    .push(incomplete(format!("entrance {door} is not in the project")));
+                continue;
+            };
+            let judged = widths.judge(self.context, object, width);
+            match (judged, sure) {
+                (Ok((Verdict::Pass, _, _)), _) => {}
+                (Ok((Verdict::Fail(bound), what, measured)), Ok(cited)) => {
+                    let mut evidence = cited.clone();
+                    evidence.extend(measured);
+                    verdicts.findings.push((
+                        format!(
+                            "entrance {door} is narrower than the path: {what}; required \
+                             {bound} m, the path's width"
+                        ),
+                        evidence,
+                        vec![door.clone()],
+                    ));
+                }
+                (Ok((Verdict::Undecided(bound), what, _)), _) => {
+                    verdicts.unknown.push(incomplete(format!(
+                        "entrance {door}: {what}, which straddles the bound {bound} m"
+                    )));
+                }
+                (Ok((Verdict::Fail(bound), what, _)), Err(why)) => {
+                    verdicts.unknown.push(incomplete(format!(
+                        "{door} may be an entrance ({why}), and {what}; required {bound} m"
+                    )));
+                }
+                (Err((reason, message)), _) => verdicts.unknown.push((
+                    reason,
+                    format!("the clear width of entrance {door} cannot be judged: {message}"),
+                )),
+            }
+        }
+        verdicts
     }
 }
 

@@ -321,6 +321,58 @@ impl<'a> ClearWidth<'a> {
     }
 }
 
+/// A door's clear width read as the `clear-width` quantity reads it, from
+/// the same steps under the same parameter names, the stated width from a
+/// parameter the caller names. Shared with `local-circulation`, which
+/// judges entrance widths against its path width; never a second reading.
+pub(crate) struct DoorClearWidth<'a>(ClearWidth<'a>);
+
+/// The parameters a [`DoorClearWidth`] reads besides the stated width.
+pub(crate) const CLEAR_WIDTH_SOURCES: [&str; 3] = [
+    "clear_width_from_leaves",
+    "overall_width",
+    "width_deduction",
+];
+
+impl<'a> DoorClearWidth<'a> {
+    /// The declared steps, `None` when none is declared.
+    pub(crate) fn parse(
+        parameters: &Parameters<'a>,
+        stated: &str,
+    ) -> Result<Option<Self>, Unavailable> {
+        let stated = parameters.property(stated)?;
+        let leaves = LeafMode::parse(parameters.string("clear_width_from_leaves")?)?;
+        let overall = parameters.property("overall_width")?;
+        let deduction = length(parameters, "width_deduction")?;
+        if stated.is_none() && leaves.is_none() && overall.is_none() && deduction.is_none() {
+            return Ok(None);
+        }
+        ClearWidth::declared(stated, leaves, overall, deduction).map(|steps| Some(Self(steps)))
+    }
+
+    /// Judges the clear width of `door` against `minimum`, read as the
+    /// decimals it displays: the verdict, the width as a finding words it
+    /// (`clear width (…) is 0.8 m`), and the evidence.
+    pub(crate) fn judge(
+        &self,
+        context: &RuleContext<'_>,
+        door: &Object,
+        minimum: f64,
+    ) -> Result<(Verdict, String, Vec<Evidence>), Unavailable> {
+        let measured = self.0.measure(context, door)?;
+        let verdict = judge_as_displayed(measured.lower, measured.upper, Some(minimum), None);
+        Ok((
+            verdict,
+            format!(
+                "{} is {} m",
+                measured.what,
+                shown(measured.lower, measured.upper)
+            ),
+            measured.evidence,
+        ))
+    }
+}
+
 /// A clear width derived from a door's leaves: what it is taken from, the
 /// deduction, and how a finding words it.
 struct FromLeaves {

@@ -486,7 +486,11 @@ revisions usually do, the sources are named `model.ifc@base` and
 
 Compared facets:
 
-- kind, classifications and relationships, always;
+- kind, classifications and relationships, always; relationships per
+  [relationship kind](./comparison.md#relationship-kinds) (containment,
+  aggregation, voids, fills, space boundaries, type, group membership,
+  connections), so a door moved to another storey is a `containment` change
+  and a window moved into another wall's opening a `fills` change;
 - each `--property`, as `SET.NAME` (split at the first `.`, so
   `Pset_WallCommon.FireRating` or `axioval:attributes.Name`) or a bare `NAME`;
 - every property of each `--property-set`, or with `--all-property-sets` of

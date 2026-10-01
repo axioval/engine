@@ -1,7 +1,8 @@
 //! `axioval compare`: two revisions of a model, object by object.
 //!
 //! Each revision is imported as its own session and matched by IFC
-//! `GlobalId` through `axioval_rules::compare_sessions`. The comparison is
+//! `GlobalId` through `axioval_rules::compare_sessions`, its related objects
+//! compared per relationship kind (containment, fills, ...). The comparison is
 //! projected into an ordinary report, one rule id per facet, so the saved
 //! result reads back with `axioval report` and travels through the BCF sink
 //! like a check's; the structured comparison rides beside it in the
@@ -71,6 +72,7 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
         ComparisonTolerance::try_new(args.length_tolerance, args.angle_tolerance.to_radians())
             .map_err(|error| format!("--length-tolerance/--angle-tolerance: {error}"))?;
     let mut request = ComparisonRequest::new(IFC_GLOBAL_ID)?
+        .with_relationships()
         .with_placement(tolerance)
         .with_coordinate_systems(tolerance);
     if args.geometry {

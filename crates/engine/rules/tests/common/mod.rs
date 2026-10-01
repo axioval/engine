@@ -5,12 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, CompletePropertyAbsenceEvidence,
+    CapabilityEvaluation, CompiledRule, CompletePropertyAbsenceEvidence, CompleteRelationshipEdges,
     CompleteRelationshipSelection, PropertyEnumeration, PropertyEnumerationRequest,
     PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    ResolvedProperty, RuleCapability, RuleContext, ServiceRegistry, TraversalDirection,
+    PropertyResolutionServiceHandle, RelationshipEdge, RelationshipEdgesRequest, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
+    RelationshipSelectionServiceHandle, ResolvedProperty, RuleCapability, RuleContext,
+    ServiceRegistry, TraversalDirection,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId, SourceId};
@@ -105,6 +106,12 @@ impl Model {
             .entry(relationship.into())
             .or_default()
             .push((relating, related));
+        self
+    }
+
+    /// A relationship the model answers, with no edges of its own yet.
+    pub fn known(mut self, relationship: &str) -> Self {
+        self.edges.entry(relationship.into()).or_default();
         self
     }
 
@@ -373,6 +380,32 @@ impl RelationshipSelectionService for Model {
                 .map(|(_, locator)| Evidence::exact(source(), locator.clone())),
         );
         CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
+    }
+
+    fn edges(
+        &self,
+        request: &RelationshipEdgesRequest,
+    ) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+        let relationship = request.relationship().as_str();
+        let Some(edges) = self.edges.get(relationship) else {
+            return Err(RelationshipSelectionError::Unavailable(format!(
+                "unknown relationship {relationship}"
+            )));
+        };
+        let held = |object: &ObjectId| request.universe().binary_search(object).is_ok();
+        let listed: BTreeSet<RelationshipEdge> = edges
+            .iter()
+            .filter(|(relating, related)| held(relating) && held(related))
+            .map(|(relating, related)| RelationshipEdge {
+                relating: relating.clone(),
+                related: related.clone(),
+            })
+            .collect();
+        CompleteRelationshipEdges::try_new(
+            request.clone(),
+            listed.into_iter().collect(),
+            vec![Evidence::exact(source(), format!("scan:{relationship}"))],
+        )
     }
 }
 

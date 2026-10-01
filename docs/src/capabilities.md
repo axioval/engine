@@ -1920,8 +1920,16 @@ are matched by an identity scheme, a property (a door number, when a
 re-export regenerates identities) or both in a declared order; whole
 property sets are compared through property enumeration. Objects without
 stable identities are matched by their bodies or a related object, and a
-revised model older than its base is an error finding. See [The
-comparison as a rule](./comparison.md#the-comparison-as-a-rule).
+revised model older than its base is an error finding. With
+`compare_relationships`, each matched object's related objects are
+compared per relationship kind (containment, aggregation, voids, fills,
+space boundaries, type assignment, group membership and connections),
+mapped through the matching: a door moved to another storey is a
+`containment` change. A related object that is itself unmatched, or whose
+match is undecided, is not evaluated, never a change. A definition bound
+to `model-comparison` must declare `compare_relationships` as optional.
+See [The comparison as a rule](./comparison.md#the-comparison-as-a-rule)
+and [Relationship kinds](./comparison.md#relationship-kinds).
 
 ### Information takeoff
 

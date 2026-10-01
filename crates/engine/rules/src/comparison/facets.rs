@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use axioval_engine::{
     ClassificationServiceHandle, CoordinateFrame, CoordinateSystemServiceHandle, MetricDirection,
     ObjectFrameError, ObjectFrameServiceHandle, PropertyResolutionServiceHandle, ProximityError,
-    ProximityServiceHandle, SourceCoordinateSystem,
+    ProximityServiceHandle, RelationshipEdgesRequest, RelationshipKind,
+    RelationshipSelectionServiceHandle, SourceCoordinateSystem,
 };
 use axioval_ir::{DateTime, Object, ObjectId, Property, PropertyValue, SourceId};
 
@@ -125,11 +126,111 @@ pub(super) struct TargetNames<'o> {
     pub(super) revised: BTreeMap<&'o ObjectId, String>,
 }
 
+/// How a related object is named when two related-object sets are compared.
+#[derive(Clone, Debug)]
+pub(super) enum RelatedName {
+    /// The same name on both sides: a matched pair's identity, or the
+    /// scheme identity of an object the comparison does not match.
+    Same(String),
+    /// An object matched with nothing, held by its own side only.
+    Unmatched(String),
+}
+
+/// What one side's objects relate to, one set per object at either end.
+type Related = BTreeMap<ObjectId, BTreeSet<ObjectId>>;
+
+/// One side's related objects per object, for every relationship kind.
+pub(super) struct KindSide {
+    /// Per kind, every object's related objects, or why the kind could not
+    /// be listed.
+    related: BTreeMap<RelationshipKind, Result<Related, String>>,
+    /// The names related objects are compared by; an object missing here
+    /// has no decided match.
+    names: BTreeMap<ObjectId, RelatedName>,
+}
+
+/// The objects related to one object through one kind, by how they are
+/// named: matched, unmatched, and undecided.
+type Sorted = (BTreeSet<String>, Vec<String>, Vec<String>);
+
+impl KindSide {
+    /// Lists every kind's edges among `revision`'s objects once, through the
+    /// revision's relationship service.
+    pub(super) fn of(revision: &Revision<'_>, names: BTreeMap<ObjectId, RelatedName>) -> Self {
+        let universe: Vec<ObjectId> = revision
+            .objects
+            .iter()
+            .map(|object| object.id.clone())
+            .collect();
+        let service = revision
+            .context
+            .services
+            .get::<RelationshipSelectionServiceHandle>();
+        let related = RelationshipKind::ALL
+            .into_iter()
+            .map(|kind| {
+                let listed = service
+                    .ok_or_else(|| "a session has no relationship-selection service".to_owned())
+                    .and_then(|service| {
+                        RelationshipEdgesRequest::try_new(universe.clone(), kind.relationship())
+                            .and_then(|request| service.edges(&request))
+                            .map_err(|error| error.to_string())
+                    })
+                    .map(|listing| {
+                        let mut related = Related::new();
+                        for edge in listing.edges() {
+                            if edge.relating == edge.related {
+                                continue;
+                            }
+                            related
+                                .entry(edge.relating.clone())
+                                .or_default()
+                                .insert(edge.related.clone());
+                            related
+                                .entry(edge.related.clone())
+                                .or_default()
+                                .insert(edge.relating.clone());
+                        }
+                        related
+                    });
+                (kind, listed)
+            })
+            .collect();
+        Self { related, names }
+    }
+
+    fn sorted(&self, kind: RelationshipKind, object: &ObjectId) -> Result<Sorted, String> {
+        let related = match self.related.get(&kind) {
+            Some(Ok(related)) => related.get(object),
+            Some(Err(reason)) => return Err(reason.clone()),
+            None => None,
+        };
+        let (mut same, mut unmatched, mut undecided) = (BTreeSet::new(), Vec::new(), Vec::new());
+        for target in related.into_iter().flatten() {
+            match self.names.get(target) {
+                Some(RelatedName::Same(name)) => {
+                    same.insert(name.clone());
+                }
+                Some(RelatedName::Unmatched(name)) => unmatched.push(name.clone()),
+                None => undecided.push(target.to_string()),
+            }
+        }
+        Ok((same, unmatched, undecided))
+    }
+}
+
+/// Both sides' related objects per relationship kind.
+pub(super) struct KindRelations {
+    pub(super) base: KindSide,
+    pub(super) revised: KindSide,
+}
+
 struct Pair<'r, 'a> {
     base: &'r Revision<'a>,
     revised: &'r Revision<'a>,
     request: &'r ComparisonRequest,
     names: &'r TargetNames<'a>,
+    kinds: Option<&'r KindRelations>,
     outcome: Outcome,
 }
 
@@ -389,6 +490,64 @@ impl Pair<'_, '_> {
                     name.clone(),
                     "a target has no unique identity in the scheme",
                 ),
+            }
+        }
+    }
+
+    /// Related objects per relationship kind, mapped through the matching.
+    ///
+    /// Matched related objects are compared by their pair's identity, so a
+    /// difference among them is a change. A related object matched with
+    /// nothing (added or removed itself) is listed as unmatched, and one
+    /// whose match is undecided as undecided: neither is a change of the
+    /// relationship, and both leave the kind not compared beyond the
+    /// matched objects.
+    fn relationship_kinds(&mut self, base: &Object, revised: &Object) {
+        let Some(kinds) = self.kinds else {
+            return;
+        };
+        for kind in RelationshipKind::ALL {
+            let (before, after) = match (
+                kinds.base.sorted(kind, &base.id),
+                kinds.revised.sorted(kind, &revised.id),
+            ) {
+                (Ok(before), Ok(after)) => (before, after),
+                (Err(reason), _) | (_, Err(reason)) => {
+                    self.unresolved(Facet::Relationship, kind.name(), reason);
+                    continue;
+                }
+            };
+            let ((before, base_unmatched, base_undecided), (after, unmatched, undecided)) =
+                (before, after);
+            if before != after {
+                self.differ(Difference::Relationship {
+                    name: kind.name().to_owned(),
+                    removed: before.difference(&after).cloned().collect(),
+                    added: after.difference(&before).cloned().collect(),
+                });
+            }
+            let mut gaps = Vec::new();
+            for (what, base_list, revised_list) in [
+                ("unmatched", &base_unmatched, &unmatched),
+                ("undecided", &base_undecided, &undecided),
+            ] {
+                let mut sides = Vec::new();
+                if !base_list.is_empty() {
+                    sides.push(format!("base {}", base_list.join(", ")));
+                }
+                if !revised_list.is_empty() {
+                    sides.push(format!("revised {}", revised_list.join(", ")));
+                }
+                if !sides.is_empty() {
+                    gaps.push(format!("{what} related objects ({})", sides.join("; ")));
+                }
+            }
+            if !gaps.is_empty() {
+                self.unresolved(
+                    Facet::Relationship,
+                    kind.name(),
+                    format!("{}; compared through matched objects only", gaps.join(", ")),
+                );
             }
         }
     }
@@ -828,7 +987,7 @@ fn same_optional(a: Option<&PropertyValue>, b: Option<&PropertyValue>) -> bool {
 pub(super) fn matched<'a>(
     (base, revised): (&Revision<'a>, &Revision<'a>),
     request: &ComparisonRequest,
-    names: &TargetNames<'a>,
+    (names, kinds): (&TargetNames<'a>, Option<&KindRelations>),
     old: &Object,
     new: &Object,
 ) -> ObjectChange {
@@ -837,6 +996,7 @@ pub(super) fn matched<'a>(
         revised,
         request,
         names,
+        kinds,
         outcome: Outcome::default(),
     };
     if old.kind != new.kind {
@@ -852,6 +1012,7 @@ pub(super) fn matched<'a>(
         pair.property_sets(old, new);
     }
     pair.relationships(old, new);
+    pair.relationship_kinds(old, new);
     if let Some(tolerance) = request.placement {
         pair.placement(old, new, tolerance);
     }

@@ -334,8 +334,36 @@ All notable changes are documented here. This project follows Semantic Versionin
   the CLI `axioval bcf push` and `axioval bcf pull` (with a `tls`
   feature).
 
+- **Relationship differences in model comparison.** (Closes #164)
+  `axioval_engine::RelationshipKind` names eight source-neutral kinds of
+  stated relationship (`containment`, `aggregation`, `voids`, `fills`,
+  `space-boundary`, `type`, `group`, `connection`), answered under the
+  identities `axioval:relationship.<kind>` through the existing
+  relationship-selection service, so a kind is also a `related` selector
+  or traversal `path` step. The service gains `edges`
+  (`RelationshipEdgesRequest`, `CompleteRelationshipEdges`,
+  `RelationshipEdge`): every stated edge among a universe of objects in one
+  answer; its default refuses, federation lists each member's part, and
+  derived relationships are not listed. The IFC adapter maps each kind onto
+  one relationship type of every release (`IfcRelContainedInSpatialStructure`,
+  `IfcRelAggregates`, `IfcRelVoidsElement`, `IfcRelFillsElement`,
+  `IfcRelSpaceBoundary`, `IfcRelDefinesByType`, `IfcRelAssignsToGroup`,
+  `IfcRelConnectsElements`) and lists edges from the same index and with the
+  same refusals as a selection. `ComparisonRequest::with_relationships()`
+  compares each matched object's related objects per kind, mapped through
+  the matching: `containment -[S1] +[S2]` for a door moved to another storey,
+  `fills -[O1] +[O2]` for a window moved into another wall's opening. A
+  related object that is itself added or removed, or whose match is
+  undecided, is never a change: the kind is reported not evaluated beyond
+  the matched related objects, naming it. `axioval compare` compares
+  relationship kinds always, and `model-comparison` with
+  `compare_relationships`.
+
 ### Changed
 
+- **Breaking:** `model-comparison` gains the optional parameter
+  `compare_relationships`; a definition bound to it must declare the new
+  parameter.
 - **Breaking:** `axioval_ids::Options` gains the public field `filter` and
   is no longer `Eq`; construct it with `Options::new`, or add
   `filter: None`.

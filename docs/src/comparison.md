@@ -7,7 +7,8 @@ through typed host services only. It runs two ways:
 
 - `axioval_rules::compare_sessions(base, revised, request)` compares two
   evidence sessions. It is a host entry point: `axioval compare` runs it over
-  two IFC revisions (see [Command line](./cli.md#axioval-compare)), and
+  two IFC revisions, relationship kinds included (see
+  [Command line](./cli.md#axioval-compare)), and
   projects the result into an ordinary `Report`, so everything that reads
   reports (the saved result, `axioval report`, the BCF sink) reads a
   comparison too.
@@ -100,12 +101,49 @@ one no matcher could key is unidentified.
   added` or `removed`, not one per property.
   An enumeration the resolver refuses leaves that set unresolved; a property
   also named with `with_property` is compared through resolution alone.
-- **Relationships.** Targets are named by their identity in the scheme, so a
-  renumbered target is not a change. A target without a unique identity leaves
-  that relationship unresolved.
+- **Relationships.** Relationships an object carries (`Object.relationships`)
+  name their targets by identity in the scheme, so a renumbered target is not
+  a change. A target without a unique identity leaves that relationship
+  unresolved. Sources that answer relationships on request, such as IFC, are
+  compared per [relationship kind](#relationship-kinds) when the request asks
+  (`ComparisonRequest::with_relationships()`).
 
 Values are compared exactly, except that a value equals itself (NaN included)
 and the two zeros are equal.
+
+### Relationship kinds
+
+`ComparisonRequest::with_relationships()` compares, for every matched pair,
+the objects related to each side through each `RelationshipKind`:
+`containment`, `aggregation`, `voids`, `fills`, `space-boundary`, `type`,
+`group` and `connection`. A related object is any object at the other end of
+an edge of the kind, whichever end the matched object holds: a door's
+`containment` is its storey, a storey's the elements it contains. Each
+revision lists every kind's edges among its objects once, through its
+relationship-selection service (`RelationshipSelectionServiceHandle::edges`),
+so the cost follows the number of edges, not the number of pairs. The IFC
+adapter maps each kind onto one relationship type (see
+[Adapters](./adapters.md)).
+
+Related objects are mapped through the matching, never by `ObjectId`:
+
+- a **matched** related object is named by its pair's identity, so the two
+  sides' sets compare directly, and a difference is a change:
+  `containment -[S1] +[S2]` for a door moved from storey `S1` to `S2`;
+- an object the comparison does not match (outside the rule's selection) is
+  named by its unique identity in the first scheme matched by, as carried
+  relationship targets are;
+- a related object that is itself **unmatched** (added or removed) is never
+  a change of the relationship: the revision may have regenerated the same
+  object. It is listed as unmatched, and the kind is unresolved beyond the
+  matched related objects;
+- a related object whose match is **undecided** (unidentified, ambiguous or
+  undecided itself) leaves the kind unresolved the same way, naming it.
+
+A kind the service refuses (an unknown kind, a malformed relationship, an
+absent required end) or a session without a relationship-selection service
+leaves that kind unresolved for every matched object, never compared as
+empty. An unchanged model reports no relationship differences.
 
 ## Spatial facets and tolerances
 
@@ -261,6 +299,7 @@ declaration.
 | `revised_selector` | `selector` | Restricts the revised model instead of the rule's selector. |
 | `compare_placement`, `compare_geometry`, `compare_coordinate_systems` | `boolean` | The spatial facets, as above. |
 | `compare_timestamps` | `boolean` | The header timestamps, as above. |
+| `compare_relationships` | `boolean` | The related objects per [relationship kind](#relationship-kinds). |
 | `length_tolerance` | `number` | Metres; default 0. |
 | `angle_tolerance` | `number` | Degrees; default 0. |
 
@@ -279,6 +318,3 @@ those of the [report](#reports) under the rule's id.
 - **Mesh difference.** A certified two-sided Hausdorff distance between two
   revisions of a body is axiolid/kernel#148. Until it is published, geometry
   compares bounds only.
-- **Relationships of IFC sessions.** IFC relationships are answered on
-  request through the relationship-selection service, not carried on the
-  object, so the relationship facet compares nothing for them yet.

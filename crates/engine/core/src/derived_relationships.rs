@@ -513,6 +513,28 @@ impl RelationshipSelectionService for RoutedRelationships {
             )),
         }
     }
+
+    fn edges(
+        &self,
+        request: &crate::RelationshipEdgesRequest,
+    ) -> Result<crate::CompleteRelationshipEdges, RelationshipSelectionError> {
+        if request
+            .relationship()
+            .as_str()
+            .starts_with(DERIVED_RELATIONSHIP_PREFIX)
+        {
+            return Err(RelationshipSelectionError::Unavailable(format!(
+                "derived relationships are answered per object; the edges of `{}` are not listed",
+                request.relationship().as_str()
+            )));
+        }
+        match &self.semantic {
+            Some(semantic) => semantic.edges(request),
+            None => Err(RelationshipSelectionError::Unavailable(
+                "no semantic relationship service is registered".into(),
+            )),
+        }
+    }
 }
 
 fn is_derived(query: &RelationshipQuery) -> bool {

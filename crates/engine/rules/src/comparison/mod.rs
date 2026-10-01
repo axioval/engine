@@ -250,6 +250,7 @@ pub struct ComparisonRequest {
     properties: BTreeSet<ComparedProperty>,
     property_sets: BTreeSet<String>,
     all_property_sets: bool,
+    relationships: bool,
     timestamps: bool,
     placement: Option<ComparisonTolerance>,
     geometry: Option<ComparisonTolerance>,
@@ -286,6 +287,7 @@ impl ComparisonRequest {
             properties: BTreeSet::new(),
             property_sets: BTreeSet::new(),
             all_property_sets: false,
+            relationships: false,
             timestamps: false,
             placement: None,
             geometry: None,
@@ -332,6 +334,28 @@ impl ComparisonRequest {
     pub fn with_all_property_sets(mut self) -> Self {
         self.all_property_sets = true;
         self
+    }
+
+    /// Also compares each matched object's related objects per
+    /// [`RelationshipKind`](axioval_engine::RelationshipKind) (containment,
+    /// aggregation, voids, fills, space boundaries, type assignment, group
+    /// membership and connections), listed through each session's
+    /// relationship-selection service and mapped through the matching.
+    ///
+    /// A related object that is itself unmatched, or whose match is
+    /// undecided, is never a change: it leaves that kind unresolved beyond
+    /// the matched related objects. A session whose service does not answer
+    /// a kind leaves the kind unresolved for every matched object.
+    #[must_use]
+    pub fn with_relationships(mut self) -> Self {
+        self.relationships = true;
+        self
+    }
+
+    /// Whether related objects are compared per relationship kind.
+    #[must_use]
+    pub fn compares_relationships(&self) -> bool {
+        self.relationships
     }
 
     /// Also compares each matched object's placement frame: the distance
@@ -1397,6 +1421,59 @@ fn target_names<'a>(
     names
 }
 
+/// Lists both revisions' related objects per relationship kind and names
+/// them for comparison: a matched object by its pair's identity, an added
+/// or removed one as unmatched, an object the comparison does not match by
+/// its unique scheme identity. A compared object whose match is undecided
+/// (unidentified, ambiguous, undecided) gets no name.
+fn related_names<'a>(
+    (base, revised): (&Revision<'a>, &Revision<'a>),
+    matching: &matching::Matching<'a>,
+    names: &facets::TargetNames<'a>,
+) -> facets::KindRelations {
+    let side = |revision: &Revision<'a>,
+                named: &BTreeMap<&'a ObjectId, String>,
+                singles: &[matching::Single<'a>],
+                state: &str| {
+        let candidates: BTreeSet<&ObjectId> = revision
+            .candidates
+            .iter()
+            .map(|object| &object.id)
+            .collect();
+        let mut related: BTreeMap<ObjectId, facets::RelatedName> = named
+            .iter()
+            .filter(|(object, _)| !candidates.contains(*object))
+            .map(|(object, name)| ((*object).clone(), facets::RelatedName::Same(name.clone())))
+            .collect();
+        for single in singles {
+            related.insert(
+                single.object.id.clone(),
+                facets::RelatedName::Unmatched(format!(
+                    "{state} {}:{}",
+                    single.matcher, single.identity
+                )),
+            );
+        }
+        related
+    };
+    let mut base_names = side(base, &names.base, &matching.removed, "removed");
+    let mut revised_names = side(revised, &names.revised, &matching.added, "added");
+    for pair in &matching.pairs {
+        base_names.insert(
+            pair.base.id.clone(),
+            facets::RelatedName::Same(pair.identity.clone()),
+        );
+        revised_names.insert(
+            pair.revised.id.clone(),
+            facets::RelatedName::Same(pair.identity.clone()),
+        );
+    }
+    facets::KindRelations {
+        base: facets::KindSide::of(base, base_names),
+        revised: facets::KindSide::of(revised, revised_names),
+    }
+}
+
 /// Compares two sessions object by object, matched by `request`'s matchers.
 #[must_use]
 pub fn compare_sessions(
@@ -1427,12 +1504,20 @@ fn compare<'a>(
 ) -> ModelComparison {
     let matching = matching::match_objects(base, revised, &request.matchers);
     let names = target_names((base, revised), request, &matching);
+    let kinds = (request.relationships && !matching.pairs.is_empty())
+        .then(|| related_names((base, revised), &matching, &names));
     let mut objects: Vec<ComparedObject> = Vec::new();
     for pair in &matching.pairs {
         objects.push(ComparedObject {
             identity: pair.identity.clone(),
             matcher: pair.matcher.clone(),
-            change: facets::matched((base, revised), request, &names, pair.base, pair.revised),
+            change: facets::matched(
+                (base, revised),
+                request,
+                (&names, kinds.as_ref()),
+                pair.base,
+                pair.revised,
+            ),
         });
     }
     for single in &matching.removed {

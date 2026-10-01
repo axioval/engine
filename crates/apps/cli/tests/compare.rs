@@ -473,6 +473,125 @@ fn unreadable_input_and_bad_tolerances_exit_1() {
     assert_eq!(output.status.code(), Some(2), "BCF options need --bcf");
 }
 
+const STOREY_1: &str = "0000000000000000000S01";
+const STOREY_2: &str = "0000000000000000000S02";
+const DOOR: &str = "0000000000000000000D01";
+const WINDOW: &str = "0000000000000000000N01";
+const OPENING_1: &str = "0000000000000000000O01";
+const OPENING_2: &str = "0000000000000000000O02";
+
+/// A building without geometry: two storeys, walls A and B in the first
+/// voided by one opening each, the door in `door_storey` (`1` or `2`) and
+/// the window filling opening `window_opening` (`1` or `2`). `first`
+/// offsets every entity number, as a re-export renumbers.
+fn building(first: u32, door_storey: u32, window_opening: u32) -> String {
+    let n = |k: u32| first + k;
+    let storey = |which: u32| n(2 + which);
+    let opening = |which: u32| n(29 + which);
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #{p}=IFCPROJECT('0000000000000000000P01',$,'P',$,$,$,$,$,$);\n\
+         #{b}=IFCBUILDING('0000000000000000000B01',$,'B',$,$,$,$,$,$,$,$,$);\n\
+         #{s1}=IFCBUILDINGSTOREY('{STOREY_1}',$,'EG',$,$,$,$,$,$,$);\n\
+         #{s2}=IFCBUILDINGSTOREY('{STOREY_2}',$,'OG',$,$,$,$,$,$,$);\n\
+         #{a1}=IFCRELAGGREGATES('0000000000000000000R01',$,$,$,#{p},(#{b}));\n\
+         #{a2}=IFCRELAGGREGATES('0000000000000000000R02',$,$,$,#{b},(#{s1},#{s2}));\n\
+         #{wa}=IFCWALL('0000000000000000000W01',$,'A',$,$,$,$,$,$);\n\
+         #{wb}=IFCWALL('0000000000000000000W02',$,'B',$,$,$,$,$,$);\n\
+         #{o1}=IFCOPENINGELEMENT('{OPENING_1}',$,$,$,$,$,$,$,$);\n\
+         #{o2}=IFCOPENINGELEMENT('{OPENING_2}',$,$,$,$,$,$,$,$);\n\
+         #{d}=IFCDOOR('{DOOR}',$,'D',$,$,$,$,$,$,$,$,$,$);\n\
+         #{w}=IFCWINDOW('{WINDOW}',$,'W',$,$,$,$,$,$,$,$,$,$);\n\
+         #{c1}=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000R03',$,$,$,(#{wa},#{wb}),#{s1});\n\
+         #{c2}=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000R04',$,$,$,(#{d}),#{ds});\n\
+         #{v1}=IFCRELVOIDSELEMENT('0000000000000000000R05',$,$,$,#{wa},#{o1});\n\
+         #{v2}=IFCRELVOIDSELEMENT('0000000000000000000R06',$,$,$,#{wb},#{o2});\n\
+         #{f}=IFCRELFILLSELEMENT('0000000000000000000R07',$,$,$,#{wo},#{w});\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        p = n(1),
+        b = n(2),
+        s1 = storey(1),
+        s2 = storey(2),
+        a1 = n(5),
+        a2 = n(6),
+        wa = n(20),
+        wb = n(21),
+        o1 = opening(1),
+        o2 = opening(2),
+        d = n(40),
+        w = n(41),
+        c1 = n(50),
+        c2 = n(51),
+        ds = storey(door_storey),
+        v1 = n(52),
+        v2 = n(53),
+        f = n(54),
+        wo = opening(window_opening),
+    )
+}
+
+/// `detail` of every change of `identity`'s comparison entry.
+fn details(comparison: &Value, identity: &str) -> Vec<String> {
+    object(comparison, identity)["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|change| {
+            assert_eq!(change["facet"], "relationship", "{change:#}");
+            change["detail"].as_str().unwrap().to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn a_door_moved_to_another_storey_and_a_window_to_another_wall_change_relationships() {
+    let case = Case::new("relationships");
+    let before = case.write("r1/model.ifc", &building(100, 1, 1));
+    let after = case.write("r2/model.ifc", &building(500, 2, 2));
+    let saved = case.path("comparison.json");
+    let output = case.compare(&before, &after, &["--report", saved.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let comparison = &result["comparison"];
+    assert_eq!(
+        details(comparison, DOOR),
+        vec![format!("containment -[{STOREY_1}] +[{STOREY_2}]")]
+    );
+    assert_eq!(
+        details(comparison, WINDOW),
+        vec![format!("fills -[{OPENING_1}] +[{OPENING_2}]")]
+    );
+    assert_eq!(
+        details(comparison, STOREY_2),
+        vec![format!("containment -[] +[{DOOR}]")]
+    );
+    assert_eq!(
+        comparison["counts"],
+        serde_json::json!({"added": 0, "removed": 0, "changed": 6, "unchanged": 4,
+                           "incomplete": 0, "unidentified": 0, "ambiguous": 0}),
+        "{comparison:#}"
+    );
+    let relationship_findings: Vec<(String, String)> = findings(&result)
+        .into_iter()
+        .filter(|(rule, _)| rule == "compare.relationship")
+        .collect();
+    assert_eq!(relationship_findings.len(), 6, "{result:#}");
+}
+
+#[test]
+fn an_unchanged_model_reports_no_relationship_difference() {
+    let case = Case::new("relationships-unchanged");
+    let before = case.write("r1/model.ifc", &building(100, 1, 1));
+    let after = case.write("r2/model.ifc", &building(700, 1, 1));
+    let output = case.compare(&before, &after, &["--summary"]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(
+        text.contains("objects: 0 added · 0 removed · 0 changed · 10 unchanged"),
+        "{text}"
+    );
+}
+
 #[test]
 fn every_property_set_is_listed_and_compared_on_request() {
     let case = Case::new("revisions-property-sets");

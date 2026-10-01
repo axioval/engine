@@ -25,8 +25,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use axioval_engine::{
-    AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, SourceSnapshot, TraversalDirection,
+    AbsentEndPolicy, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, SourceSnapshot, TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId};
 use ifc_model::{EntityId, Model, Value};
@@ -94,6 +96,7 @@ impl IfcRelationshipService {
     }
 
     fn index(&self, relationship: &str) -> Result<Arc<EdgeIndex>, RelationshipSelectionError> {
+        let relationship = entity_of(relationship)?;
         let key = relationship.to_ascii_uppercase();
         let mut cache = self
             .cache
@@ -155,24 +158,54 @@ impl RelationshipSelectionService for IfcRelationshipService {
                 (index, reached, used)
             }
         };
-        if !relationship.absent.is_empty() && request.absent_ends() == AbsentEndPolicy::Refuse {
-            let first = &relationship.absent[0];
-            return Err(unavailable(format!(
-                "{} instance(s) of `{}` omit a required end (first: {} {} has no `{}`); the \
-                 missing edges could touch any object, so no answer is complete. Opt in to \
-                 skipping them to answer from the edges that exist",
-                relationship.absent.len(),
-                relationship.type_name,
-                first.type_name,
-                first.instance,
-                first.attribute,
-            )));
-        }
+        refuse_absent_ends(&relationship, request.absent_ends())?;
         let candidates = reached
             .iter()
             .filter(|entity| **entity != anchor)
             .filter_map(|entity| universe.get(entity).cloned())
             .collect();
+        let evidence = self.evidence(&relationship, used);
+        CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
+    }
+
+    /// Every edge of the type whose two ends lie in the universe, read from
+    /// the same index and refused on the same grounds as a selection.
+    fn edges(
+        &self,
+        request: &RelationshipEdgesRequest,
+    ) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+        let universe = request
+            .universe()
+            .iter()
+            .map(|object| Ok((self.entity(object)?, object.clone())))
+            .collect::<Result<BTreeMap<_, _>, RelationshipSelectionError>>()?;
+        let relationship = self.index(request.relationship().as_str())?;
+        refuse_absent_ends(&relationship, request.absent_ends())?;
+        let mut edges = BTreeSet::new();
+        let mut used = BTreeSet::new();
+        for (relating, related) in &relationship.forward {
+            let Some(relating) = universe.get(relating) else {
+                continue;
+            };
+            for (related, instance) in related {
+                if let Some(related) = universe.get(related) {
+                    used.insert(*instance);
+                    edges.insert(RelationshipEdge {
+                        relating: relating.clone(),
+                        related: related.clone(),
+                    });
+                }
+            }
+        }
+        let evidence = self.evidence(&relationship, used);
+        CompleteRelationshipEdges::try_new(request.clone(), edges.into_iter().collect(), evidence)
+    }
+}
+
+impl IfcRelationshipService {
+    /// The completeness proof of an answer from `relationship`, the
+    /// instances it used, and every instance skipped for an absent end.
+    fn evidence(&self, relationship: &EdgeIndex, used: BTreeSet<EntityId>) -> Vec<Evidence> {
         let source = self.snapshots[0].source().clone();
         // The scan locator is the completeness proof: every instance of the
         // type was read and none was malformed. It is present even when
@@ -202,8 +235,62 @@ impl RelationshipSelectionService for IfcRelationshipService {
                 )),
             )
         }));
-        CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
+        evidence
     }
+}
+
+/// Refuses an answer from a type with instances lacking a required end,
+/// unless the request opts into skipping them.
+fn refuse_absent_ends(
+    relationship: &EdgeIndex,
+    policy: AbsentEndPolicy,
+) -> Result<(), RelationshipSelectionError> {
+    let Some(first) = relationship.absent.first() else {
+        return Ok(());
+    };
+    if policy == AbsentEndPolicy::Skip {
+        return Ok(());
+    }
+    Err(unavailable(format!(
+        "{} instance(s) of `{}` omit a required end (first: {} {} has no `{}`); the \
+         missing edges could touch any object, so no answer is complete. Opt in to \
+         skipping them to answer from the edges that exist",
+        relationship.absent.len(),
+        relationship.type_name,
+        first.type_name,
+        first.instance,
+        first.attribute,
+    )))
+}
+
+/// The IFC relationship entity a requested identity names: a
+/// [`RelationshipKind`] identity maps onto the one objectified relationship
+/// type stating that kind in every release, any other identity is an entity
+/// name itself.
+fn entity_of(relationship: &str) -> Result<&str, RelationshipSelectionError> {
+    if !relationship.starts_with(RELATIONSHIP_KIND_PREFIX) {
+        return Ok(relationship);
+    }
+    let kind = RelationshipKind::of(relationship).ok_or_else(|| {
+        unavailable(format!(
+            "`{relationship}` is not a relationship kind the IFC adapter answers"
+        ))
+    })?;
+    Ok(match kind {
+        RelationshipKind::Containment => "IfcRelContainedInSpatialStructure",
+        RelationshipKind::Aggregation => "IfcRelAggregates",
+        RelationshipKind::Voids => "IfcRelVoidsElement",
+        RelationshipKind::Fills => "IfcRelFillsElement",
+        RelationshipKind::SpaceBoundary => "IfcRelSpaceBoundary",
+        RelationshipKind::TypeAssignment => "IfcRelDefinesByType",
+        RelationshipKind::GroupMembership => "IfcRelAssignsToGroup",
+        RelationshipKind::Connection => "IfcRelConnectsElements",
+        _ => {
+            return Err(unavailable(format!(
+                "`{relationship}` is not a relationship kind the IFC adapter answers"
+            )));
+        }
+    })
 }
 
 type Reached = (BTreeSet<EntityId>, BTreeSet<EntityId>);

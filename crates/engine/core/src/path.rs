@@ -15,7 +15,8 @@
 //! through the opening it fills to the wall the opening voids. Where the
 //! chain changes relationship it passes through objects of the project.
 //!
-//! A derived identity (`axioval:derived.…`) holds a colon of its own, so in
+//! A derived identity (`axioval:derived.…`) or a relationship kind
+//! (`axioval:relationship.…`) holds a colon of its own, so in
 //! the last alternative only a colon followed by a direction word ends it.
 
 use std::collections::BTreeSet;
@@ -24,8 +25,9 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::derived_relationships::DERIVED_RELATIONSHIP_PREFIX;
 use crate::relationships::{
-    AbsentEndPolicy, RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
+    AbsentEndPolicy, RELATIONSHIP_KIND_PREFIX, RelationshipQuery, RelationshipSelectionError,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    TraversalDirection,
 };
 
 const DIRECTIONS: [&str; 3] = ["forward", "backward", "either"];
@@ -54,7 +56,9 @@ impl PathSegment {
         };
         let mut alternatives: Vec<&str> = body.split('|').collect();
         let last = alternatives.pop().unwrap_or_default();
-        let derived = last.trim().starts_with(DERIVED_RELATIONSHIP_PREFIX);
+        let derived = [DERIVED_RELATIONSHIP_PREFIX, RELATIONSHIP_KIND_PREFIX]
+            .iter()
+            .any(|prefix| last.trim().starts_with(prefix));
         let (last, stated) = match last.rsplit_once(':') {
             Some((_, stated)) if derived && !DIRECTIONS.contains(&stated.trim()) => (last, None),
             Some((relationship, stated)) => (relationship, Some(stated.trim())),
@@ -240,6 +244,12 @@ mod tests {
             ["IfcRelNests", "axioval:derived.same-level;by=name"]
         );
         assert_eq!(step.direction(), TraversalDirection::Either);
+        let step = PathSegment::parse("axioval:relationship.containment").unwrap();
+        assert_eq!(names(&step), ["axioval:relationship.containment"]);
+        assert_eq!(step.direction(), TraversalDirection::Forward);
+        let step = PathSegment::parse("axioval:relationship.fills:backward").unwrap();
+        assert_eq!(names(&step), ["axioval:relationship.fills"]);
+        assert_eq!(step.direction(), TraversalDirection::Backward);
         let step = PathSegment::parse("axioval:derived.intersects|IfcRelNests").unwrap();
         assert_eq!(names(&step), ["axioval:derived.intersects", "IfcRelNests"]);
     }

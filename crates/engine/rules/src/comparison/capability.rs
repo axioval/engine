@@ -41,7 +41,8 @@ use crate::support::{Parameters, PropertyRef, Unavailable, invalid};
 /// before its base is an error finding. Compared are the kind, the
 /// classifications, the carried properties and relationships, the named
 /// `properties`, the `property_sets` (or, with `all_property_sets`, every
-/// set) listed through property enumeration, and, when asked, placement,
+/// set) listed through property enumeration, and, when asked, the related
+/// objects per relationship kind (`compare_relationships`), placement,
 /// geometry and coordinate systems within `length_tolerance` (metres) and
 /// `angle_tolerance` (degrees).
 pub struct CompareModels;
@@ -208,6 +209,12 @@ impl<'a> Declaration<'a> {
         {
             request = request.with_coordinate_systems(tolerance);
         }
+        if parameters
+            .boolean("compare_relationships")?
+            .unwrap_or(false)
+        {
+            request = request.with_relationships();
+        }
         if parameters.boolean("compare_timestamps")?.unwrap_or(false) {
             request = request.with_timestamps();
         }
@@ -331,6 +338,7 @@ impl RuleCapability for CompareModels {
             ParameterDescriptor::optional("minimum_overlap_ratio", ParameterType::Number),
             ParameterDescriptor::optional("match_path", ParameterType::StringList),
             ParameterDescriptor::optional("compare_timestamps", ParameterType::Boolean),
+            ParameterDescriptor::optional("compare_relationships", ParameterType::Boolean),
         ]
     }
 

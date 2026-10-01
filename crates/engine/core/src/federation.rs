@@ -12,15 +12,16 @@ use axioval_ir::{Object, ObjectId, SourceId};
 
 use crate::{
     ClassificationAssignment, ClassificationError, ClassificationService,
-    ClassificationServiceHandle, CompleteRelationshipSelection, CoordinateSystemError,
-    CoordinateSystemService, CoordinateSystemServiceHandle, DoorLeaves, DoorLeavesError,
-    EvidenceSessionError, IntegrityError, IntegrityIssue, ObjectFrame, ObjectFrameError,
-    ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration, PropertyEnumerationRequest,
-    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
-    PropertyResolutionServiceHandle, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionService, RelationshipSelectionServiceHandle, ResourceError,
-    ResourceRequest, ResourceService, ResourceServiceHandle, ServiceRegistry, SnapshotBoundService,
-    SourceCoordinateSystem, SourceIntegrityService, SourceIntegrityServiceHandle, SourceSnapshot,
+    ClassificationServiceHandle, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle, DoorLeaves,
+    DoorLeavesError, EvidenceSessionError, IntegrityError, IntegrityIssue, ObjectFrame,
+    ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration,
+    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipEdgesRequest,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
+    RelationshipSelectionServiceHandle, ResourceError, ResourceRequest, ResourceService,
+    ResourceServiceHandle, ServiceRegistry, SnapshotBoundService, SourceCoordinateSystem,
+    SourceIntegrityService, SourceIntegrityServiceHandle, SourceSnapshot,
     TypeHierarchyServiceHandle,
 };
 
@@ -177,6 +178,43 @@ impl RelationshipSelectionService for Router<RelationshipSelectionServiceHandle>
             selection.candidates().to_vec(),
             selection.evidence().to_vec(),
         )
+    }
+
+    /// Each member lists the edges among its own part of the universe; no
+    /// member relates objects it does not hold, so the union is complete.
+    fn edges(
+        &self,
+        request: &RelationshipEdgesRequest,
+    ) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+        if let Some(object) = request
+            .universe()
+            .iter()
+            .find(|object| self.member(&object.source).is_none())
+        {
+            return Err(RelationshipSelectionError::Unavailable(uncovered(
+                &object.source,
+            )));
+        }
+        let mut edges = Vec::new();
+        let mut evidence = Vec::new();
+        for (sources, member) in &self.members {
+            let universe: Vec<ObjectId> = request
+                .universe()
+                .iter()
+                .filter(|object| sources.contains(&object.source))
+                .cloned()
+                .collect();
+            if universe.is_empty() {
+                continue;
+            }
+            let narrowed =
+                RelationshipEdgesRequest::try_new(universe, request.relationship().clone())?
+                    .with_absent_ends(request.absent_ends());
+            let listing = member.edges(&narrowed)?;
+            edges.extend(listing.edges().iter().cloned());
+            evidence.extend(listing.evidence().iter().cloned());
+        }
+        CompleteRelationshipEdges::try_new(request.clone(), edges, evidence)
     }
 }
 

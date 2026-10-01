@@ -13,7 +13,8 @@ use std::sync::Arc;
 use axioval_engine::{
     Bounds3, CapabilityEvaluation, GeometryFidelity, IntersectionVolume, LengthInterval,
     ObjectBounds, ProximityError, ProximityEvidence, ProximityRequest, ProximityService,
-    ProximityServiceHandle, SourceDisciplines, SourceMetadata, SourceMetadataIndex, VolumeInterval,
+    ProximityServiceHandle, RelationshipKind, SourceDisciplines, SourceMetadata,
+    SourceMetadataIndex, VolumeInterval,
 };
 use axioval_ir::contract::SourceField;
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
@@ -679,5 +680,231 @@ fn a_set_on_one_side_only_is_added_or_removed_whole() {
             "property changed: property set Pset_New added; property set Pset_Old removed"
                 .to_owned()
         )]
+    );
+}
+
+/// The base of a small building, `(local, kind, guid)`: storeys `S1` and
+/// `S2`, door `D` in `S1`, walls `A` and `B` in `S1` voided by openings
+/// `O1` and `O2`, window `W` filling `O1`.
+const BUILDING: [(&str, &str, &str); 8] = [
+    ("#1", "storey", "S1"),
+    ("#2", "storey", "S2"),
+    ("#10", "door", "D"),
+    ("#20", "wall", "A"),
+    ("#21", "wall", "B"),
+    ("#30", "opening", "O1"),
+    ("#31", "opening", "O2"),
+    ("#40", "window", "W"),
+];
+
+use RelationshipKind::{Containment, Fills, Voids};
+
+/// An edge of a kind, from relating to related local id.
+type Edge = (RelationshipKind, String, String);
+
+/// A revision's objects (`(local, kind, guid)`) and edges.
+type Revised = (Vec<(String, &'static str, Option<&'static str>)>, Vec<Edge>);
+
+/// The building's edges, with the door in `storey` and the window in
+/// `opening`, by local id.
+fn building_edges(storey: &str, opening: &str) -> Vec<Edge> {
+    [
+        (Containment, "#1", "#20"),
+        (Containment, "#1", "#21"),
+        (Containment, storey, "#10"),
+        (Voids, "#20", "#30"),
+        (Voids, "#21", "#31"),
+        (Fills, opening, "#40"),
+    ]
+    .into_iter()
+    .map(|(kind, relating, related)| (kind, relating.to_owned(), related.to_owned()))
+    .collect()
+}
+
+/// The building's revision renumbered (`#10` becomes `#910`), its objects
+/// and edges, each object with its `guid`.
+fn renumbered(edges: &[Edge]) -> Revised {
+    let local = |local: &str| format!("#9{}", &local[1..]);
+    (
+        BUILDING
+            .iter()
+            .map(|(id, kind, guid)| (local(id), *kind, Some(*guid)))
+            .collect(),
+        edges
+            .iter()
+            .map(|(kind, a, b)| (*kind, local(a), local(b)))
+            .collect(),
+    )
+}
+
+/// Both revisions in one model: the base building and the given revision,
+/// answering the relationship kinds in `known`.
+fn building(known: &[RelationshipKind], (objects, edges): Revised) -> Model {
+    let mut model = Model::default();
+    for kind in known {
+        model = model.known(kind.relationship().as_str());
+    }
+    let mut ids = Vec::new();
+    for (local, kind, guid) in BUILDING {
+        model = model.object_in("base", local, kind);
+        ids.push((in_base(local), ExternalId::new("guid", guid).unwrap()));
+    }
+    for (kind, relating, related) in building_edges("#1", "#30") {
+        model = model.edge_of(
+            kind.relationship().as_str(),
+            in_base(&relating),
+            in_base(&related),
+        );
+    }
+    for (local, kind, guid) in &objects {
+        model = model.object_in("revised", local, kind);
+        if let Some(guid) = guid {
+            ids.push((in_revised(local), ExternalId::new("guid", *guid).unwrap()));
+        }
+    }
+    for (kind, relating, related) in edges {
+        model = model.edge_of(
+            kind.relationship().as_str(),
+            in_revised(&relating),
+            in_revised(&related),
+        );
+    }
+    model.with_external_ids(&ids)
+}
+
+fn compare_relationships(model: Model) -> CapabilityEvaluation {
+    compare(
+        model,
+        Selector::All,
+        vec![
+            ("identity_scheme", string("guid")),
+            ("compare_relationships", boolean(true)),
+        ],
+    )
+}
+
+/// `(object, message)` of every not-evaluated outcome, sorted.
+fn gaps(evaluation: &CapabilityEvaluation) -> Vec<(String, String)> {
+    let mut gaps: Vec<(String, String)> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .map(|outcome| {
+            (
+                outcome
+                    .object_id()
+                    .map_or_else(|| "-".to_owned(), |object| object.local_id.clone()),
+                outcome.message().to_owned(),
+            )
+        })
+        .collect();
+    gaps.sort();
+    gaps
+}
+
+fn pair(object: &str, message: &str) -> (String, String) {
+    (object.to_owned(), message.to_owned())
+}
+
+#[test]
+fn a_door_moved_to_another_storey_and_a_window_to_another_wall_change_relationships() {
+    let evaluation = compare_relationships(building(
+        &RelationshipKind::ALL,
+        renumbered(&building_edges("#2", "#31")),
+    ));
+    assert_eq!(gaps(&evaluation), Vec::new());
+    assert_eq!(
+        found(&evaluation),
+        vec![
+            pair("#91", "relationship changed: containment -[D] +[]"),
+            pair("#910", "relationship changed: containment -[S1] +[S2]"),
+            pair("#92", "relationship changed: containment -[] +[D]"),
+            pair("#930", "relationship changed: fills -[W] +[]"),
+            pair("#931", "relationship changed: fills -[] +[W]"),
+            pair("#940", "relationship changed: fills -[O1] +[O2]"),
+        ]
+    );
+}
+
+#[test]
+fn an_unchanged_model_reports_no_relationship_difference() {
+    let evaluation = compare_relationships(building(
+        &RelationshipKind::ALL,
+        renumbered(&building_edges("#1", "#30")),
+    ));
+    assert_eq!(found(&evaluation), Vec::new());
+    assert_eq!(gaps(&evaluation), Vec::new());
+}
+
+#[test]
+fn an_unmatched_related_object_is_reported_as_such_never_as_a_change() {
+    // The window now fills a new opening `O3`, and `O1` is gone: the
+    // revision may have regenerated the same opening, so the window's fills
+    // are no change, and both openings are named unmatched.
+    let (mut objects, mut edges) = renumbered(&building_edges("#1", "#30"));
+    objects.retain(|(local, _, _)| local != "#930");
+    objects.push(("#932".to_owned(), "opening", Some("O3")));
+    edges.retain(|(_, a, b)| a != "#930" && b != "#930");
+    edges.push((Fills, "#932".to_owned(), "#940".to_owned()));
+    let evaluation = compare_relationships(building(&RelationshipKind::ALL, (objects, edges)));
+    let found = found(&evaluation);
+    assert_eq!(
+        found,
+        vec![
+            pair("#30", "removed (guid:O1)"),
+            pair("#932", "added (guid:O3)"),
+        ]
+    );
+    // Wall `A` lost a removed opening: unmatched too, not a change.
+    assert_eq!(
+        gaps(&evaluation),
+        vec![
+            pair(
+                "#920",
+                "relationship voids not compared: unmatched related objects (base removed \
+                 guid:O1); compared through matched objects only"
+            ),
+            pair(
+                "#940",
+                "relationship fills not compared: unmatched related objects (base removed \
+                 guid:O1; revised added guid:O3); compared through matched objects only"
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_related_object_without_a_decided_match_leaves_the_kind_not_evaluated() {
+    // The revised door is also contained in a storey nothing identifies.
+    let (mut objects, mut edges) = renumbered(&building_edges("#1", "#30"));
+    objects.push(("#99".to_owned(), "storey", None));
+    edges.push((Containment, "#99".to_owned(), "#910".to_owned()));
+    let evaluation = compare_relationships(building(&RelationshipKind::ALL, (objects, edges)));
+    assert_eq!(found(&evaluation), Vec::new());
+    let gaps = gaps(&evaluation);
+    assert!(
+        gaps.contains(&pair(
+            "#910",
+            "relationship containment not compared: undecided related objects (revised \
+             test:revised/#99); compared through matched objects only"
+        )),
+        "{gaps:?}"
+    );
+}
+
+#[test]
+fn a_kind_the_source_cannot_list_is_not_evaluated_for_every_matched_object() {
+    let known: Vec<RelationshipKind> = RelationshipKind::ALL
+        .into_iter()
+        .filter(|kind| *kind != RelationshipKind::Connection)
+        .collect();
+    let evaluation =
+        compare_relationships(building(&known, renumbered(&building_edges("#1", "#30"))));
+    assert_eq!(found(&evaluation), Vec::new());
+    let gaps = gaps(&evaluation);
+    assert_eq!(gaps.len(), BUILDING.len(), "{gaps:?}");
+    assert!(
+        gaps.iter()
+            .all(|(_, message)| message.starts_with("relationship connection not compared")),
+        "{gaps:?}"
     );
 }

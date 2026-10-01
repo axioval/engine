@@ -5,7 +5,8 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    EvidenceSession, RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    CompleteRelationshipEdges, EvidenceSession, RelationshipEdgesRequest, RelationshipKind,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
     RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
 };
 use axioval_ifc::import_ifc_session;
@@ -352,6 +353,151 @@ fn relationship_types_whose_ends_are_not_plain_references_are_refused() {
             related(
                 "IfcRelDefinesByProperties",
                 TraversalDirection::Backward,
+                false
+            ),
+        ),
+        Err(RelationshipSelectionError::Unavailable(_))
+    ));
+}
+
+/// `BUILDING` with one stated instance of every other relationship kind: a
+/// door type, a system of walls 10 and 11, a connection between them, and a
+/// space bounded by wall 10.
+fn every_kind() -> String {
+    format!(
+        "{BUILDING}\
+#50=IFCDOORTYPE('dt',$,'T',$,$,$,$,$,$,.DOOR.,.SINGLE_SWING_LEFT.,$,$);
+#51=IFCRELDEFINESBYTYPE('t1',$,$,$,(#21),#50);
+#52=IFCSYSTEM('sy',$,'S',$,$);
+#53=IFCRELASSIGNSTOGROUP('g1',$,$,$,(#10,#11),$,#52);
+#54=IFCRELCONNECTSELEMENTS('ce',$,$,$,$,#10,#11);
+#55=IFCSPACE('sp',$,$,$,$,$,$,$,$,$,$);
+#56=IFCRELSPACEBOUNDARY('sb',$,$,$,#55,#10,$,.PHYSICAL.,.INTERNAL.);
+"
+    )
+}
+
+fn edges(
+    session: &EvidenceSession,
+    kind: RelationshipKind,
+    universe: Vec<ObjectId>,
+) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+    let request = RelationshipEdgesRequest::try_new(universe, kind.relationship()).unwrap();
+    session
+        .service::<RelationshipSelectionServiceHandle>()
+        .unwrap()
+        .edges(&request)
+}
+
+fn pairs(listing: &CompleteRelationshipEdges) -> Vec<(String, String)> {
+    listing
+        .edges()
+        .iter()
+        .map(|edge| {
+            (
+                edge.relating.local_id.clone(),
+                edge.related.local_id.clone(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn every_relationship_kind_lists_its_edges_as_source_neutral_object_pairs() {
+    let session = session(&every_kind());
+    let expected: [(RelationshipKind, &[(&str, &str)]); 8] = [
+        (
+            RelationshipKind::Containment,
+            &[("#3", "#10"), ("#3", "#11"), ("#3", "#12"), ("#4", "#13")],
+        ),
+        (
+            RelationshipKind::Aggregation,
+            &[("#1", "#2"), ("#2", "#3"), ("#2", "#4")],
+        ),
+        (RelationshipKind::Voids, &[("#10", "#20")]),
+        (RelationshipKind::Fills, &[("#20", "#21")]),
+        (RelationshipKind::SpaceBoundary, &[("#55", "#10")]),
+        (RelationshipKind::TypeAssignment, &[("#50", "#21")]),
+        (
+            RelationshipKind::GroupMembership,
+            &[("#52", "#10"), ("#52", "#11")],
+        ),
+        (RelationshipKind::Connection, &[("#10", "#11")]),
+    ];
+    for (kind, stated) in expected {
+        let listing = edges(&session, kind, every_object(&session))
+            .unwrap_or_else(|error| panic!("{}: {error}", kind.name()));
+        let stated: Vec<(String, String)> = stated
+            .iter()
+            .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+            .collect();
+        assert_eq!(pairs(&listing), stated, "{}", kind.name());
+        assert!(
+            listing
+                .evidence()
+                .iter()
+                .any(|evidence| evidence.locator.contains("relationship-scan:")),
+            "{}: {:?}",
+            kind.name(),
+            listing.evidence()
+        );
+    }
+}
+
+#[test]
+fn every_relationship_kind_is_answered_in_every_release() {
+    for schema in ["IFC2X3", "IFC4", "IFC4X3_ADD2"] {
+        let text = String::from_utf8(step("#1=IFCPROJECT('p',$,'P',$,$,$,$,$,$);\n"))
+            .unwrap()
+            .replace("'IFC4'", &format!("'{schema}'"));
+        let session = import_ifc_session("model.ifc", text.as_bytes()).unwrap();
+        for kind in RelationshipKind::ALL {
+            let listing = edges(&session, kind, every_object(&session))
+                .unwrap_or_else(|error| panic!("{schema} {}: {error}", kind.name()));
+            assert!(listing.edges().is_empty(), "{schema} {}", kind.name());
+        }
+    }
+}
+
+#[test]
+fn edges_stay_within_the_universe() {
+    let session = session(BUILDING);
+    let universe: Vec<ObjectId> = every_object(&session)
+        .into_iter()
+        .filter(|object| object.local_id != "#13")
+        .collect();
+    let listing = edges(&session, RelationshipKind::Containment, universe).unwrap();
+    assert_eq!(
+        pairs(&listing),
+        vec![
+            ("#3".to_owned(), "#10".to_owned()),
+            ("#3".to_owned(), "#11".to_owned()),
+            ("#3".to_owned(), "#12".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn a_relationship_kind_is_also_a_traversal_step() {
+    let session = session(BUILDING);
+    let selection = select(
+        &session,
+        "#21",
+        RelationshipQuery::Related {
+            relationship: RelationshipKind::Fills.relationship(),
+            direction: TraversalDirection::Backward,
+            follow_chain: false,
+        },
+    )
+    .unwrap();
+    assert_eq!(selection.candidates(), ids(&["#20"]).as_slice());
+    assert!(matches!(
+        select(
+            &session,
+            "#21",
+            related(
+                "axioval:relationship.nothing",
+                TraversalDirection::Forward,
                 false
             ),
         ),

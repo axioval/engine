@@ -51,6 +51,81 @@ impl SemanticRelationship {
     }
 }
 
+/// Prefix of the source-neutral [`RelationshipKind`] identities.
+pub const RELATIONSHIP_KIND_PREFIX: &str = "axioval:relationship.";
+
+/// A source-neutral kind of stated relationship.
+///
+/// Each kind is a directed relationship from a relating end to its related
+/// ends, as a source states it. A source answers a kind under its identity
+/// ([`RelationshipKind::relationship`], `axioval:relationship.<name>`) through
+/// the same [`RelationshipSelectionService`] as its own relationships,
+/// mapping it onto its native relationships; one that does not know a kind
+/// refuses it, never answers it empty.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum RelationshipKind {
+    /// A spatial structure element to the elements it contains.
+    Containment,
+    /// A whole to its parts.
+    Aggregation,
+    /// An element to the openings voiding it.
+    Voids,
+    /// An opening to the elements filling it.
+    Fills,
+    /// A space to the elements bounding it.
+    SpaceBoundary,
+    /// A type to the occurrences it is assigned to.
+    TypeAssignment,
+    /// A group, system or zone to its members.
+    GroupMembership,
+    /// An element to the elements it is connected to.
+    Connection,
+}
+
+impl RelationshipKind {
+    /// Every kind, in a stable order.
+    pub const ALL: [Self; 8] = [
+        Self::Containment,
+        Self::Aggregation,
+        Self::Voids,
+        Self::Fills,
+        Self::SpaceBoundary,
+        Self::TypeAssignment,
+        Self::GroupMembership,
+        Self::Connection,
+    ];
+
+    /// Stable lowercase name, used in identities and reports.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Containment => "containment",
+            Self::Aggregation => "aggregation",
+            Self::Voids => "voids",
+            Self::Fills => "fills",
+            Self::SpaceBoundary => "space-boundary",
+            Self::TypeAssignment => "type",
+            Self::GroupMembership => "group",
+            Self::Connection => "connection",
+        }
+    }
+
+    /// The identity a source answers the kind under:
+    /// `axioval:relationship.<name>`.
+    #[must_use]
+    pub fn relationship(self) -> SemanticRelationship {
+        SemanticRelationship(format!("{RELATIONSHIP_KIND_PREFIX}{}", self.name()))
+    }
+
+    /// The kind an identity names, if it names one.
+    #[must_use]
+    pub fn of(relationship: &str) -> Option<Self> {
+        let name = relationship.strip_prefix(RELATIONSHIP_KIND_PREFIX)?;
+        Self::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+}
+
 /// Direction used when traversing a directed semantic relationship.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TraversalDirection {
@@ -232,6 +307,149 @@ impl CompleteRelationshipSelection {
     }
 }
 
+/// Request for every edge of one relationship within a caller-bound universe.
+///
+/// Where a [`RelationshipSelectionRequest`] asks what one anchor reaches, an
+/// edges request lists every stated edge whose two ends both lie in the
+/// universe, so a caller relating every object of a model asks once per
+/// relationship rather than once per object.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RelationshipEdgesRequest {
+    universe: Vec<ObjectId>,
+    relationship: SemanticRelationship,
+    absent_ends: AbsentEndPolicy,
+}
+
+impl RelationshipEdgesRequest {
+    /// Creates a request with a canonical, duplicate-free universe.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RelationshipSelectionError::DuplicateCandidate`] when the
+    /// universe holds an object twice.
+    pub fn try_new(
+        mut universe: Vec<ObjectId>,
+        relationship: SemanticRelationship,
+    ) -> Result<Self, RelationshipSelectionError> {
+        universe.sort();
+        if universe.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(RelationshipSelectionError::DuplicateCandidate);
+        }
+        Ok(Self {
+            universe,
+            relationship,
+            absent_ends: AbsentEndPolicy::default(),
+        })
+    }
+
+    /// Sets how instances with an absent required end are treated.
+    #[must_use]
+    pub fn with_absent_ends(mut self, policy: AbsentEndPolicy) -> Self {
+        self.absent_ends = policy;
+        self
+    }
+
+    /// How instances with an absent required end are treated.
+    #[must_use]
+    pub fn absent_ends(&self) -> AbsentEndPolicy {
+        self.absent_ends
+    }
+
+    /// The canonically ordered objects both ends of every edge lie in.
+    #[must_use]
+    pub fn universe(&self) -> &[ObjectId] {
+        &self.universe
+    }
+
+    /// The relationship whose edges are listed.
+    #[must_use]
+    pub fn relationship(&self) -> &SemanticRelationship {
+        &self.relationship
+    }
+
+    fn contains(&self, object: &ObjectId) -> bool {
+        self.universe.binary_search(object).is_ok()
+    }
+}
+
+/// One stated edge, from its relating end to one related end.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RelationshipEdge {
+    /// The relating end.
+    pub relating: ObjectId,
+    /// The related end.
+    pub related: ObjectId,
+}
+
+/// Every edge of one relationship within a universe, bound to its request.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompleteRelationshipEdges {
+    request: RelationshipEdgesRequest,
+    edges: Vec<RelationshipEdge>,
+    evidence: Vec<Evidence>,
+}
+
+impl CompleteRelationshipEdges {
+    /// Creates a request-bound complete listing with canonical edge order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an edge repeats or leaves the universe, or the
+    /// evidence is empty, inexact or repeated.
+    pub fn try_new(
+        request: RelationshipEdgesRequest,
+        mut edges: Vec<RelationshipEdge>,
+        mut evidence: Vec<Evidence>,
+    ) -> Result<Self, RelationshipSelectionError> {
+        edges.sort();
+        if edges.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(RelationshipSelectionError::DuplicateCandidate);
+        }
+        if edges.iter().any(|edge| !request.holds(edge)) {
+            return Err(RelationshipSelectionError::ResponseRequestMismatch);
+        }
+        if evidence.is_empty() || evidence.iter().any(|item| !reviewable(item)) {
+            return Err(RelationshipSelectionError::InexactEvidence);
+        }
+        evidence.sort_by(|left, right| {
+            (&left.source, &left.locator).cmp(&(&right.source, &right.locator))
+        });
+        if evidence.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(RelationshipSelectionError::DuplicateEvidence);
+        }
+        Ok(Self {
+            request,
+            edges,
+            evidence,
+        })
+    }
+
+    /// The request answered.
+    #[must_use]
+    pub fn request(&self) -> &RelationshipEdgesRequest {
+        &self.request
+    }
+
+    /// Canonically ordered edges.
+    #[must_use]
+    pub fn edges(&self) -> &[RelationshipEdge] {
+        &self.edges
+    }
+
+    /// Exact reviewable evidence proving the listing is complete.
+    #[must_use]
+    pub fn evidence(&self) -> &[Evidence] {
+        &self.evidence
+    }
+}
+
+impl RelationshipEdgesRequest {
+    /// Whether both ends of `edge` lie in the universe.
+    fn holds(&self, edge: &RelationshipEdge) -> bool {
+        self.contains(&edge.relating) && self.contains(&edge.related)
+    }
+}
+
 /// Trusted adapter seam for complete relationship-based candidate selection.
 pub trait RelationshipSelectionService: Send + Sync {
     /// Exact source snapshots used to construct this service.
@@ -246,6 +464,20 @@ pub trait RelationshipSelectionService: Send + Sync {
         &self,
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError>;
+
+    /// Lists every edge of a relationship within the request's universe.
+    ///
+    /// The default refuses: a service that cannot list edges is never read
+    /// as one stating none.
+    fn edges(
+        &self,
+        request: &RelationshipEdgesRequest,
+    ) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+        Err(RelationshipSelectionError::Unavailable(format!(
+            "the relationship service cannot list the edges of `{}`",
+            request.relationship().as_str()
+        )))
+    }
 }
 
 /// Cloneable, type-erased relationship service registered by the host.
@@ -265,6 +497,30 @@ impl RelationshipSelectionServiceHandle {
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
         validate_selection(request, self.0.select(request)?)
+    }
+
+    /// Lists edges and validates their request binding, order and evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns the service's refusal, or why its answer does not answer the
+    /// request exactly.
+    pub fn edges(
+        &self,
+        request: &RelationshipEdgesRequest,
+    ) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+        let listing = self.0.edges(request)?;
+        if listing.request() != request || listing.edges().iter().any(|e| !request.holds(e)) {
+            return Err(RelationshipSelectionError::ResponseRequestMismatch);
+        }
+        if listing.edges().windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err(RelationshipSelectionError::DuplicateCandidate);
+        }
+        if listing.evidence().is_empty() || listing.evidence().iter().any(|item| !reviewable(item))
+        {
+            return Err(RelationshipSelectionError::InexactEvidence);
+        }
+        Ok(listing)
     }
 }
 

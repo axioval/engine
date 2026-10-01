@@ -12720,6 +12720,65 @@ fn with_geometry_doors_with_fresh_identities_match_by_their_bodies() {
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
+/// [`door_export`] with two storeys of stable `GlobalId`s, the first door
+/// contained in storey `storey` (`1` or `2`).
+fn doors_on_storeys(first: u32, doors: &[(&str, &str)], storey: u32) -> String {
+    let (one, two, relation, door) = (first + 900, first + 901, first + 902, first + 29);
+    let contained = if storey == 1 { one } else { two };
+    door_export(first, doors).replace(
+        "ENDSEC;\nEND-ISO-10303-21;",
+        &format!(
+            "#{one}=IFCBUILDINGSTOREY('0000000000000000000S01',$,'EG',$,$,$,$,$,$,$);\n\
+             #{two}=IFCBUILDINGSTOREY('0000000000000000000S02',$,'OG',$,$,$,$,$,$,$);\n\
+             #{relation}=IFCRELCONTAINEDINSPATIALSTRUCTURE('{relation:022}',$,$,$,(#{door}),#{contained});\n\
+             ENDSEC;\nEND-ISO-10303-21;"
+        ),
+    )
+}
+
+#[test]
+fn a_model_comparison_rule_reports_a_door_moved_to_another_storey() {
+    let case = Case::new("model-comparison-relationships");
+    let doors = [("D1", "EI30"), ("D2", "EI30")];
+    case.write("base.ifc", &doors_on_storeys(100, &doors, 1));
+    case.write("revised.ifc", &doors_on_storeys(500, &doors, 2));
+    let parameters = json!({
+        "identity_scheme": {"type": "string", "value": "ifc-globalid"},
+        "identity_property": {"type": "propertyReference",
+                              "property": "axioval:example.ifc.reference"},
+        "compare_relationships": {"type": "boolean", "value": true},
+    });
+    let (output, result) = door_comparison(&case, parameters);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let messages: Vec<String> = finding_messages(&result)
+        .into_iter()
+        .map(|(_, message)| message)
+        .collect();
+    assert_eq!(
+        messages,
+        vec![
+            "relationship changed: containment -[0000000000000000000S01] \
+             +[0000000000000000000S02]"
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+
+    // The same storey in both: nothing changed.
+    case.write("revised.ifc", &doors_on_storeys(500, &doors, 1));
+    let (output, result) = door_comparison(
+        &case,
+        json!({
+            "identity_scheme": {"type": "string", "value": "ifc-globalid"},
+            "identity_property": {"type": "propertyReference",
+                                  "property": "axioval:example.ifc.reference"},
+            "compare_relationships": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+}
+
 #[test]
 fn a_revised_model_older_than_its_base_is_an_error_finding() {
     let case = Case::new("model-comparison-timestamps");

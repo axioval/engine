@@ -135,6 +135,30 @@ a relationship type whose ends are not object references (such as
 answer rather than dropping an edge. The adapter does not depend on Axiolid and
 does not own geometry policy.
 
+The same service answers the source-neutral relationship kinds
+(`RelationshipKind`, identities `axioval:relationship.<kind>`), each mapped
+onto the one objectified relationship type stating it in every release:
+
+| Kind | IFC relationship (relating end to related ends) |
+|---|---|
+| `containment` | `IfcRelContainedInSpatialStructure` (spatial structure to elements) |
+| `aggregation` | `IfcRelAggregates` (whole to parts) |
+| `voids` | `IfcRelVoidsElement` (element to opening) |
+| `fills` | `IfcRelFillsElement` (opening to filling element) |
+| `space-boundary` | `IfcRelSpaceBoundary` and its subtypes (space to bounding element) |
+| `type` | `IfcRelDefinesByType` (type to occurrences) |
+| `group` | `IfcRelAssignsToGroup` and its subtypes (group, system or zone to members) |
+| `connection` | `IfcRelConnectsElements` and its subtypes (element to element) |
+
+A kind is an ordinary relationship identity: it is a step of a `related`
+selector or traversal `path` (`axioval:relationship.fills:backward`), and it
+is refused exactly as its IFC type is. Besides per-anchor selection, the
+service lists every edge of a relationship among a universe of objects at
+once (`RelationshipSelectionServiceHandle::edges`, a
+`RelationshipEdgesRequest` answered by `CompleteRelationshipEdges`): the
+same index, the same scan locator and the same refusals, so model
+comparison relates every object of a revision with one request per kind.
+
 An instance that leaves a schema-required end empty (`$`) is handled
 separately, because real exporters do it routinely: second-level virtual space
 boundaries often carry no `RelatedBuildingElement`. By default such an instance

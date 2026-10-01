@@ -775,9 +775,11 @@ pub use refinement::{
     report_severity,
 };
 pub use relationships::{
-    AbsentEndPolicy, CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    SemanticRelationship, TraversalDirection,
+    AbsentEndPolicy, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, SemanticRelationship,
+    TraversalDirection,
 };
 pub use resources::{
     Reached, ResourceError, ResourceObjects, ResourceRequest, ResourceService,

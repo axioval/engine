@@ -3,9 +3,10 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    SemanticRelationship, TraversalDirection,
+    CompleteRelationshipEdges, CompleteRelationshipSelection, RELATIONSHIP_KIND_PREFIX,
+    RelationshipEdge, RelationshipEdgesRequest, RelationshipKind, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
+    RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -177,4 +178,99 @@ fn response_evidence_is_canonical_and_unique() {
         .unwrap_err(),
         RelationshipSelectionError::DuplicateEvidence
     );
+}
+
+#[test]
+fn relationship_kinds_have_stable_identities() {
+    for kind in RelationshipKind::ALL {
+        let identity = kind.relationship();
+        assert!(identity.as_str().starts_with(RELATIONSHIP_KIND_PREFIX));
+        assert_eq!(RelationshipKind::of(identity.as_str()), Some(kind));
+    }
+    assert_eq!(
+        RelationshipKind::Containment.relationship().as_str(),
+        "axioval:relationship.containment"
+    );
+    assert_eq!(RelationshipKind::of("axioval:relationship.nothing"), None);
+    assert_eq!(RelationshipKind::of("IfcRelAggregates"), None);
+}
+
+/// Answers every edges request with `edges` bound to `request`.
+struct FixedEdges {
+    request: RelationshipEdgesRequest,
+    edges: Vec<RelationshipEdge>,
+}
+
+impl RelationshipSelectionService for FixedEdges {
+    fn select(
+        &self,
+        _request: &RelationshipSelectionRequest,
+    ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
+        Err(RelationshipSelectionError::Unavailable("edges only".into()))
+    }
+
+    fn edges(
+        &self,
+        _request: &RelationshipEdgesRequest,
+    ) -> Result<CompleteRelationshipEdges, RelationshipSelectionError> {
+        CompleteRelationshipEdges::try_new(
+            self.request.clone(),
+            self.edges.clone(),
+            vec![Evidence::exact(source(), "scan")],
+        )
+    }
+}
+
+fn edge(relating: &str, related: &str) -> RelationshipEdge {
+    RelationshipEdge {
+        relating: object(relating),
+        related: object(related),
+    }
+}
+
+fn edges_request(universe: &[&str]) -> RelationshipEdgesRequest {
+    RelationshipEdgesRequest::try_new(
+        universe.iter().map(|id| object(id)).collect(),
+        RelationshipKind::Containment.relationship(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn edges_are_bound_to_their_request_and_stay_in_its_universe() {
+    let request = edges_request(&["#1", "#2", "#3"]);
+    let answer = |edges: Vec<RelationshipEdge>, bound: &RelationshipEdgesRequest| {
+        RelationshipSelectionServiceHandle::new(Arc::new(FixedEdges {
+            request: bound.clone(),
+            edges,
+        }))
+        .edges(&request)
+    };
+    let listing = answer(vec![edge("#1", "#3"), edge("#1", "#2")], &request).unwrap();
+    assert_eq!(listing.edges(), [edge("#1", "#2"), edge("#1", "#3")]);
+    assert_eq!(
+        answer(vec![edge("#1", "#2")], &edges_request(&["#1", "#2"])).unwrap_err(),
+        RelationshipSelectionError::ResponseRequestMismatch
+    );
+    assert_eq!(
+        CompleteRelationshipEdges::try_new(
+            request.clone(),
+            vec![edge("#1", "#4")],
+            vec![Evidence::exact(source(), "scan")],
+        )
+        .unwrap_err(),
+        RelationshipSelectionError::ResponseRequestMismatch
+    );
+    assert_eq!(
+        CompleteRelationshipEdges::try_new(request.clone(), Vec::new(), Vec::new()).unwrap_err(),
+        RelationshipSelectionError::InexactEvidence
+    );
+    // A service that cannot list edges refuses, never answers none.
+    let selection_only = RelationshipSelectionServiceHandle::new(Arc::new(FixedSelection(Err(
+        RelationshipSelectionError::Unavailable("no".into()),
+    ))));
+    assert!(matches!(
+        selection_only.edges(&request),
+        Err(RelationshipSelectionError::Unavailable(_))
+    ));
 }

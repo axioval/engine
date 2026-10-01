@@ -823,6 +823,17 @@ blocker is skipped and a bodiless target refused.
 
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate; with `with_exact_boundary` beside the mesh, the distance in space, the horizontal distance, plan overlap and the footprint relation of vertical distances between two such objects are also certified on their exact boundaries. See [Clash, interference and distance](./clash.md).
 
+The same service compares two revisions of a body, possibly from two
+sessions: `body_surface` hands out the registered mesh as it stands, in the
+host's world coordinates, and `measure_surface_distance` measures the
+service's own body against such a surface with the kernel's certified
+`hausdorff_distance` (axiolid-measure 0.3.5), refined to the request's
+accuracy. Both one-sided intervals come back with their witness points; a
+re-export of the same shape is zero apart up to rounding. Only exact meshes
+are measured: a tessellated subject or counterpart refuses
+(`EvidenceFidelityMismatch`), never widened into an interval the kernel did
+not certify. See [Model comparison](./comparison.md#geometry).
+
 ## ICDD
 
 `axioval-icdd` opens an ICDD package, dispatches member payloads to registered source decoders, maps linksets, and assembles a project. ICDD serialization types do not cross into the engine IR.

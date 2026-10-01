@@ -121,6 +121,7 @@ use axioval_engine::{
     ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
     RegionDistanceRequest, VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
+use axioval_engine::{BodySurface, SurfaceDistanceEvidence, SurfaceDistanceRequest};
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
@@ -1495,6 +1496,31 @@ fn hausdorff(first: &Body<'_>, second: &Body<'_>) -> Result<(f64, f64), Proximit
     Ok((snap(lower), snap(upper)))
 }
 
+/// A surface handed over by another service, as the kernel's mesh.
+fn counterpart_mesh(surface: &BodySurface) -> TriMesh {
+    TriMesh::new(
+        surface
+            .positions()
+            .iter()
+            .map(|[x, y, z]| Point3::new(*x, *y, *z))
+            .collect(),
+        surface.triangles().iter().flatten().copied().collect(),
+    )
+}
+
+/// One side of the kernel's certified Hausdorff distance as evidence.
+fn directed(
+    bounds: &axiolid_measure::HausdorffBounds,
+) -> Result<axioval_engine::DirectedDistance, ProximityError> {
+    let point = |point: Point3| [point.x, point.y, point.z];
+    axioval_engine::DirectedDistance::try_new(
+        LengthInterval::try_new(bounds.lower.max(0.0), bounds.upper)
+            .map_err(|_| ProximityError::InvalidMeasurement)?,
+        point(bounds.point_from),
+        point(bounds.point_to),
+    )
+}
+
 impl ProximityService for AxiolidProximityService {
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.body(object)?;
@@ -1502,6 +1528,65 @@ impl ProximityService for AxiolidProximityService {
             object.clone(),
             body.soup.bounds,
             self.geometry.fidelity(object)?,
+        )
+    }
+
+    /// The registered mesh as it stands, in the host's world coordinates.
+    fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
+        let body = self.body(object)?;
+        let triangles = body
+            .mesh
+            .indices
+            .chunks_exact(3)
+            .map(|corners| [corners[0], corners[1], corners[2]])
+            .collect();
+        BodySurface::try_new(
+            object.clone(),
+            body.mesh
+                .positions
+                .iter()
+                .map(|point| [point.x, point.y, point.z])
+                .collect(),
+            triangles,
+            self.geometry.fidelity(object)?,
+        )
+    }
+
+    /// The kernel's certified two-sided Hausdorff distance
+    /// (`hausdorff_distance`), between exact surfaces only: a tessellation
+    /// bounds its true surface's distance from the mesh one way only, so
+    /// either side tessellated refuses rather than widen an uncertified
+    /// interval.
+    fn measure_surface_distance(
+        &self,
+        request: &SurfaceDistanceRequest,
+    ) -> Result<SurfaceDistanceEvidence, ProximityError> {
+        let subject = self.body(request.subject())?;
+        if !self.geometry.fidelity(request.subject())?.is_exact()
+            || !request.counterpart().fidelity().is_exact()
+        {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        let counterpart = counterpart_mesh(request.counterpart());
+        let measured = axiolid_measure::hausdorff_distance(
+            subject.mesh,
+            &counterpart,
+            request.accuracy_metres(),
+        )
+        .map_err(|_| ProximityError::InvalidMeasurement)?;
+        SurfaceDistanceEvidence::try_new(
+            request.clone(),
+            directed(&measured.forward)?,
+            directed(&measured.backward)?,
+            Evidence {
+                source: request.subject().source.clone(),
+                locator: format!(
+                    "axiolid:hausdorff:{}:{}",
+                    request.subject(),
+                    request.counterpart().object()
+                ),
+                exact: true,
+            },
         )
     }
 

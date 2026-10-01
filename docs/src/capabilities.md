@@ -1926,10 +1926,16 @@ compared per relationship kind (containment, aggregation, voids, fills,
 space boundaries, type assignment, group membership and connections),
 mapped through the matching: a door moved to another storey is a
 `containment` change. A related object that is itself unmatched, or whose
-match is undecided, is not evaluated, never a change. A definition bound
-to `model-comparison` must declare `compare_relationships` as optional.
-See [The comparison as a rule](./comparison.md#the-comparison-as-a-rule)
-and [Relationship kinds](./comparison.md#relationship-kinds).
+match is undecided, is not evaluated, never a change. Geometry is compared
+by bounds, or with `geometry: mesh` by the certified distance between the
+two surfaces within `tolerance_metres`, which finds an opening moved inside
+unchanged bounds and reports where as witness evidence; a distance
+straddling the tolerance, or a tessellated body, is not evaluated. A
+definition bound to `model-comparison` must declare `compare_relationships`,
+`geometry` and `tolerance_metres` as optional. See [The comparison as a
+rule](./comparison.md#the-comparison-as-a-rule), [Relationship
+kinds](./comparison.md#relationship-kinds) and
+[Mesh](./comparison.md#mesh).
 
 ### Information takeoff
 

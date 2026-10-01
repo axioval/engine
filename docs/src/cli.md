@@ -501,7 +501,12 @@ Compared facets:
 - with `--timestamps`, the header timestamps: a revised file written before
   the base is an error finding;
 - with `--geometry`, both revisions are meshed as for `check --geometry` and
-  each object's measured bounds are compared.
+  each object's measured bounds are compared; with `--geometry-mode mesh`
+  instead the certified distance between the two surfaces in world
+  coordinates, which also sees a reshaping inside unchanged bounds (an
+  opening moved along its wall). A tessellated body is not certified, so
+  its geometry is not compared in that mode. `--geometry-mode` without
+  `--geometry` is a usage error (status 2).
 
 A length differs when it exceeds `--length-tolerance` (default 0.005 m) and an
 angle when it exceeds `--angle-tolerance` (default 0.01°). The length default
@@ -560,7 +565,11 @@ The result also has a `comparison` field with the structured comparison:
 measure undetermined), in identity order; unchanged identities are only
 counted. Each change carries its `facet` and a `detail`; a measured change
 also its `measure`, the interval `lower`–`upper` it lies in, the `tolerance`
-and the `unit` (`m`, `rad`, or empty for the map scale). `unresolved` and
+and the `unit` (`m`, `rad`, or empty for the map scale); a `mesh` change or
+undetermined measure also its `witness`: `from`, a point of the `side`
+revision's body that far from the other body, and `to`, its nearest point
+found there, in world metres. With `--geometry-mode mesh` the comparison
+states `"geometry_mode": "mesh"`. `unresolved` and
 `undetermined` list what was not decided. A result without a `comparison`
 field is a check's; the field is additive.
 

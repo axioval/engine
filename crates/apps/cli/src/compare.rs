@@ -16,14 +16,15 @@ use axioval::engine::EvidenceSession;
 use axioval::ifc::IFC_GLOBAL_ID;
 use axioval::ir::{Object, ObjectId, Project, RuleId, Severity};
 use axioval::rules::{
-    ComparisonRequest, ComparisonTolerance, Difference, Facet, Measurement, ModelComparison,
-    ObjectChange, Side, Unresolved, compare_sessions,
+    ComparisonRequest, ComparisonTolerance, Difference, Facet, GeometryMode, Measurement,
+    ModelComparison, ObjectChange, Side, Unresolved, compare_sessions,
 };
 use clap::Args;
 
 use crate::digest::{
     AmbiguousRecord, ChangeRecord, CheckOutput, ComparedRecord, ComparisonCounts, ComparisonRecord,
     GapRecord, GeometryRecord, SideObject, SourceRecord, ToleranceRecord, Unmeasured,
+    WitnessRecord,
 };
 use crate::{Outcome, OutputArgs, emit, geometry, integrity};
 
@@ -54,9 +55,21 @@ pub struct CompareArgs {
     /// the base is an error finding.
     #[arg(long)]
     timestamps: bool,
-    /// Also mesh both revisions and compare each object's measured bounds.
+    /// Also mesh both revisions and compare each object's body: its
+    /// measured bounds, or as `--geometry-mode` says.
     #[arg(long)]
     geometry: bool,
+    /// How `--geometry` compares bodies: `bounds`, the largest shift of any
+    /// face of the bounds, or `mesh`, the certified distance between the
+    /// two surfaces, which also sees a reshaping inside unchanged bounds.
+    #[arg(
+        long,
+        value_name = "MODE",
+        default_value = "bounds",
+        value_parser = ["bounds", "mesh"],
+        requires = "geometry"
+    )]
+    geometry_mode: String,
     /// Largest length difference that counts as unchanged, in metres.
     #[arg(long, default_value_t = 0.005, value_name = "METRES")]
     length_tolerance: f64,
@@ -76,7 +89,11 @@ pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
         .with_placement(tolerance)
         .with_coordinate_systems(tolerance);
     if args.geometry {
-        request = request.with_geometry(tolerance);
+        request = if args.geometry_mode == "mesh" {
+            request.with_mesh_geometry(tolerance)
+        } else {
+            request.with_geometry(tolerance)
+        };
     }
     for set in &args.property_sets {
         request = request
@@ -217,6 +234,7 @@ fn change(difference: &Difference) -> ChangeRecord {
             upper: None,
             tolerance: None,
             unit: None,
+            witness: None,
         },
     }
 }
@@ -230,6 +248,11 @@ fn measured(measurement: &Measurement) -> ChangeRecord {
         upper: Some(measurement.upper),
         tolerance: Some(measurement.tolerance),
         unit: Some(measurement.measure.unit().to_owned()),
+        witness: measurement.witness.map(|witness| WitnessRecord {
+            side: side(witness.side),
+            from: witness.from,
+            to: witness.to,
+        }),
     }
 }
 
@@ -382,6 +405,9 @@ fn record(
         revised: source(revised),
         scheme: comparison.scheme().to_owned(),
         facets: facets(request),
+        geometry_mode: (request.geometry().is_some()
+            && request.geometry_mode() == GeometryMode::Mesh)
+            .then(|| GeometryMode::Mesh.name().to_owned()),
         tolerance: ToleranceRecord {
             length_metres: tolerance.length_metres(),
             angle_degrees: tolerance.angle_radians().to_degrees(),

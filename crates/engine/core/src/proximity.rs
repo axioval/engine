@@ -775,6 +775,230 @@ impl BodyVolume {
     }
 }
 
+/// One object's measured surface: a triangle mesh in world metres.
+///
+/// What [`ProximityService::body_surface`] hands out so another service,
+/// possibly of another session, can measure its own body against it
+/// ([`SurfaceDistanceRequest`]). Positions are in the session's world
+/// coordinates, so two sessions' surfaces compare where they stand.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodySurface {
+    object: ObjectId,
+    positions: Vec<[f64; 3]>,
+    triangles: Vec<[u32; 3]>,
+    fidelity: GeometryFidelity,
+}
+
+impl BodySurface {
+    /// The surface of `object`. Refuses a surface without triangles, a
+    /// corner naming no position, a non-finite position, or an invalid
+    /// chord deviation.
+    pub fn try_new(
+        object: ObjectId,
+        positions: Vec<[f64; 3]>,
+        triangles: Vec<[u32; 3]>,
+        fidelity: GeometryFidelity,
+    ) -> Result<Self, ProximityError> {
+        let deviation = fidelity.deviation_metres();
+        let coherent = !triangles.is_empty()
+            && deviation.is_finite()
+            && deviation >= 0.0
+            && positions.iter().flatten().all(|value| value.is_finite())
+            && triangles.iter().flatten().all(|corner| {
+                usize::try_from(*corner).is_ok_and(|corner| corner < positions.len())
+            });
+        if !coherent {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self {
+            object,
+            positions,
+            triangles,
+            fidelity,
+        })
+    }
+    /// The object the surface bounds.
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+    /// Vertex positions in world metres.
+    pub fn positions(&self) -> &[[f64; 3]] {
+        &self.positions
+    }
+    /// Triangles as three indices into [`Self::positions`].
+    pub fn triangles(&self) -> &[[u32; 3]] {
+        &self.triangles
+    }
+    /// How faithfully the mesh represents the object's true surface.
+    pub fn fidelity(&self) -> GeometryFidelity {
+        self.fidelity
+    }
+}
+
+/// How far one body's surface lies from another's: the Hausdorff distance
+/// between `subject` and the `counterpart` surface, refined to within
+/// `accuracy_metres` where the backend can.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceDistanceRequest {
+    subject: ObjectId,
+    counterpart: Arc<BodySurface>,
+    accuracy_metres: f64,
+}
+
+impl SurfaceDistanceRequest {
+    /// Measures `subject` against `counterpart`. Refuses a negative or
+    /// non-finite accuracy, and a counterpart that is the subject's own
+    /// surface.
+    pub fn try_new(
+        subject: ObjectId,
+        counterpart: Arc<BodySurface>,
+        accuracy_metres: f64,
+    ) -> Result<Self, ProximityError> {
+        if !accuracy_metres.is_finite() || accuracy_metres < 0.0 {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if counterpart.object() == &subject {
+            return Err(ProximityError::SameObject);
+        }
+        Ok(Self {
+            subject,
+            counterpart,
+            accuracy_metres,
+        })
+    }
+    /// The object the service measures from its own geometry.
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+    /// The surface it is measured against.
+    pub fn counterpart(&self) -> &BodySurface {
+        &self.counterpart
+    }
+    /// The interval width the request asks for; a backend may stop wider.
+    pub fn accuracy_metres(&self) -> f64 {
+        self.accuracy_metres
+    }
+}
+
+/// A one-sided Hausdorff distance, `max over a in A of min over b in B of
+/// |a - b|`, as an interval with its witness: `from`, a point of `A` at
+/// least the lower bound from every point of `B`, and `to`, the nearest
+/// point found to it on `B`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DirectedDistance {
+    interval: LengthInterval,
+    from: [f64; 3],
+    to: [f64; 3],
+}
+
+impl DirectedDistance {
+    /// Refuses a non-finite witness.
+    pub fn try_new(
+        interval: LengthInterval,
+        from: [f64; 3],
+        to: [f64; 3],
+    ) -> Result<Self, ProximityError> {
+        if !from.iter().chain(&to).all(|value| value.is_finite()) {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self { interval, from, to })
+    }
+    /// Bounds on the distance.
+    pub fn interval(&self) -> LengthInterval {
+        self.interval
+    }
+    /// The witness on the side measured from, in world metres.
+    pub fn from(&self) -> [f64; 3] {
+        self.from
+    }
+    /// Its nearest point found on the other side, in world metres.
+    pub fn to(&self) -> [f64; 3] {
+        self.to
+    }
+}
+
+/// Which way a [`DirectedDistance`] runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SurfaceDirection {
+    /// From the subject to the counterpart.
+    FromSubject,
+    /// From the counterpart to the subject.
+    FromCounterpart,
+}
+
+/// The certified Hausdorff distance between a subject's surface and a
+/// counterpart surface.
+///
+/// Only exact surfaces are measured. A tessellation bounds how far its true
+/// surface may lie from the mesh, not how far the mesh may lie from the true
+/// surface, so no distance between tessellations is certified: evidence for
+/// a tessellated counterpart, or evidence that is not exact, is refused.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceDistanceEvidence {
+    request: SurfaceDistanceRequest,
+    forward: DirectedDistance,
+    backward: DirectedDistance,
+    evidence: Evidence,
+}
+
+impl SurfaceDistanceEvidence {
+    /// `forward` runs from the subject to the counterpart, `backward` the
+    /// other way. Refuses a tessellated counterpart and evidence that is
+    /// not exact or has no reviewable locator.
+    pub fn try_new(
+        request: SurfaceDistanceRequest,
+        forward: DirectedDistance,
+        backward: DirectedDistance,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        if !evidence.exact
+            || !request.counterpart().fidelity().is_exact()
+            || evidence.locator.trim().is_empty()
+        {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            forward,
+            backward,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &SurfaceDistanceRequest {
+        &self.request
+    }
+    /// How far the subject strays from the counterpart.
+    pub fn forward(&self) -> DirectedDistance {
+        self.forward
+    }
+    /// How far the counterpart strays from the subject.
+    pub fn backward(&self) -> DirectedDistance {
+        self.backward
+    }
+    /// The two-sided distance, `max(forward, backward)`: each bound is the
+    /// larger of the two sides'.
+    pub fn distance(&self) -> LengthInterval {
+        let (forward, backward) = (self.forward.interval, self.backward.interval);
+        LengthInterval::try_new(
+            forward.lower_metres().max(backward.lower_metres()),
+            forward.upper_metres().max(backward.upper_metres()),
+        )
+        .unwrap_or(forward)
+    }
+    /// The witness of the two-sided distance: the side with the larger
+    /// lower bound, the subject's on a tie.
+    pub fn witness(&self) -> (SurfaceDirection, DirectedDistance) {
+        if self.backward.interval.lower_metres() > self.forward.interval.lower_metres() {
+            (SurfaceDirection::FromCounterpart, self.backward)
+        } else {
+            (SurfaceDirection::FromSubject, self.forward)
+        }
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// How close two bodies come and how far they overlap.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProximityEvidence {
@@ -1394,6 +1618,32 @@ pub trait ProximityService: Send + Sync + 'static {
         let _ = object;
         Err(ProximityError::Unavailable)
     }
+
+    /// One object's measured surface in world metres, for another service
+    /// to measure against ([`Self::measure_surface_distance`]).
+    ///
+    /// The default refuses with [`ProximityError::Unavailable`], so a
+    /// service that does not hand out surfaces fails closed.
+    fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
+        let _ = object;
+        Err(ProximityError::Unavailable)
+    }
+
+    /// The certified Hausdorff distance between the subject's surface and
+    /// the request's counterpart surface, which may come from another
+    /// session. Only exact surfaces are measured: a service refuses a
+    /// tessellated subject or counterpart rather than widen a distance it
+    /// cannot certify.
+    ///
+    /// The default refuses with [`ProximityError::Unavailable`], so a
+    /// service that does not measure surface distances fails closed.
+    fn measure_surface_distance(
+        &self,
+        request: &SurfaceDistanceRequest,
+    ) -> Result<SurfaceDistanceEvidence, ProximityError> {
+        let _ = request;
+        Err(ProximityError::Unavailable)
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -1454,6 +1704,26 @@ impl ProximityServiceHandle {
     pub fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
         let measured = self.0.measure_body_volume(object)?;
         if measured.object() != object {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
+    /// The surface of `object`. A surface of another object is refused.
+    pub fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
+        let surface = self.0.body_surface(object)?;
+        if surface.object() != object {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(surface)
+    }
+    /// The certified surface distance. Evidence answering another request
+    /// is refused.
+    pub fn measure_surface_distance(
+        &self,
+        request: &SurfaceDistanceRequest,
+    ) -> Result<SurfaceDistanceEvidence, ProximityError> {
+        let measured = self.0.measure_surface_distance(request)?;
+        if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
         Ok(measured)
@@ -1520,6 +1790,151 @@ mod tests {
             Ok(self.0.clone())
         }
     }
+    fn triangle(object: &str, fidelity: GeometryFidelity) -> BodySurface {
+        BodySurface::try_new(
+            id(object),
+            vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            vec![[0, 1, 2]],
+            fidelity,
+        )
+        .unwrap()
+    }
+
+    fn directed(lower: f64, upper: f64) -> DirectedDistance {
+        DirectedDistance::try_new(
+            LengthInterval::try_new(lower, upper).unwrap(),
+            [lower, 0.0, 0.0],
+            [0.0; 3],
+        )
+        .unwrap()
+    }
+
+    /// A service answering one surface and one distance whatever it is asked.
+    struct OneSurface(BodySurface, SurfaceDistanceEvidence);
+
+    impl ProximityService for OneSurface {
+        fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_proximity(
+            &self,
+            _: &ProximityRequest,
+        ) -> Result<ProximityEvidence, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn body_surface(&self, _: &ObjectId) -> Result<BodySurface, ProximityError> {
+            Ok(self.0.clone())
+        }
+        fn measure_surface_distance(
+            &self,
+            _: &SurfaceDistanceRequest,
+        ) -> Result<SurfaceDistanceEvidence, ProximityError> {
+            Ok(self.1.clone())
+        }
+    }
+
+    #[test]
+    fn a_surface_refuses_corners_it_does_not_have() {
+        assert_eq!(
+            BodySurface::try_new(
+                id("wall"),
+                vec![[0.0; 3]],
+                vec![[0, 1, 2]],
+                GeometryFidelity::Exact
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            BodySurface::try_new(id("wall"), vec![], vec![], GeometryFidelity::Exact),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            BodySurface::try_new(
+                id("wall"),
+                vec![[f64::NAN, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                vec![[0, 1, 2]],
+                GeometryFidelity::Exact
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn a_surface_distance_is_certified_on_exact_surfaces_only() {
+        let surface = Arc::new(triangle("revised", GeometryFidelity::Exact));
+        let request = SurfaceDistanceRequest::try_new(id("base"), surface.clone(), 0.001).unwrap();
+        assert_eq!(
+            SurfaceDistanceRequest::try_new(id("revised"), surface.clone(), 0.001),
+            Err(ProximityError::SameObject)
+        );
+        assert_eq!(
+            SurfaceDistanceRequest::try_new(id("base"), surface, -1.0),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(
+            SurfaceDistanceEvidence::try_new(
+                request.clone(),
+                directed(0.1, 0.2),
+                directed(0.0, 0.1),
+                approximate()
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        let tessellated = Arc::new(triangle(
+            "revised",
+            GeometryFidelity::tessellated(0.001).unwrap(),
+        ));
+        let curved = SurfaceDistanceRequest::try_new(id("base"), tessellated, 0.001).unwrap();
+        assert_eq!(
+            SurfaceDistanceEvidence::try_new(
+                curved,
+                directed(0.1, 0.2),
+                directed(0.0, 0.1),
+                exact()
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+
+        // The two-sided distance takes each bound from the larger side, and
+        // its witness from the side with the larger lower bound.
+        let measured = SurfaceDistanceEvidence::try_new(
+            request.clone(),
+            directed(0.1, 0.15),
+            directed(0.12, 0.13),
+            exact(),
+        )
+        .unwrap();
+        assert_eq!(
+            measured.distance(),
+            LengthInterval::try_new(0.12, 0.15).unwrap()
+        );
+        assert_eq!(
+            measured.witness(),
+            (SurfaceDirection::FromCounterpart, directed(0.12, 0.13))
+        );
+
+        let handle = ProximityServiceHandle::new(Arc::new(OneSurface(
+            triangle("revised", GeometryFidelity::Exact),
+            measured.clone(),
+        )));
+        assert!(handle.body_surface(&id("revised")).is_ok());
+        assert_eq!(
+            handle.body_surface(&id("other")),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        assert_eq!(handle.measure_surface_distance(&request), Ok(measured));
+        let other = SurfaceDistanceRequest::try_new(
+            id("other"),
+            Arc::new(triangle("revised", GeometryFidelity::Exact)),
+            0.001,
+        )
+        .unwrap();
+        assert_eq!(
+            handle.measure_surface_distance(&other),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
     fn exact() -> Evidence {
         Evidence::exact(SourceId::new("cad", "m").unwrap(), "proximity:pipe:wall")
     }

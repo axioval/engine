@@ -158,6 +158,11 @@ pub struct ComparisonRecord {
     pub scheme: String,
     /// The facets compared, in order.
     pub facets: Vec<String>,
+    /// `mesh` when geometry was compared by surface distance; absent when
+    /// it was compared by bounds or not at all, so earlier results read
+    /// unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry_mode: Option<String>,
     pub tolerance: ToleranceRecord,
     pub counts: ComparisonCounts,
     /// Added, removed, changed and incomplete identities, by identity.
@@ -227,6 +232,19 @@ pub struct ChangeRecord {
     /// `m`, `rad`, or empty for a ratio.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
+    /// Where a surface distance is realised (`geometry` `mesh`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub witness: Option<WitnessRecord>,
+}
+
+/// A point of one revision's body and its nearest point found on the
+/// other's, in world metres.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WitnessRecord {
+    /// `base` or `revised`: the revision `from` lies on.
+    pub side: String,
+    pub from: [f64; 3],
+    pub to: [f64; 3],
 }
 
 /// A facet that could not be compared.

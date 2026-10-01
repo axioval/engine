@@ -290,6 +290,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`. A
   host-declared bodiless object is refused with `ProximityError::NoBody`,
   never `Unavailable`, so a comparison can tell "no body" from "unmeasured".
+  `body_surface` hands out the registered mesh unchanged (world
+  coordinates, its fidelity), and `measure_surface_distance` measures the
+  service's own body against a surface from any session with the kernel's
+  certified `hausdorff_distance` (axiolid-measure 0.3.5, both one-sided
+  intervals with their witnesses). A tessellated subject or counterpart
+  refuses (`EvidenceFidelityMismatch`): a chord deviation bounds the true
+  surface from the mesh one way only, so never widen it into a surface
+  distance. `tests/surface_distance.rs` measures two sessions' walls.
   A tessellated pair whose objects both have an exact boundary
   (`AxiolidGeometry::with_exact_boundary`) also gets the kernel's certified
   `boundary_distance` (axiolid-measure 0.3.4, `exact` feature) to

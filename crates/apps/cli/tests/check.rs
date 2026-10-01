@@ -12812,6 +12812,160 @@ fn a_revised_model_older_than_its_base_is_an_error_finding() {
     );
 }
 
+/// Walls 4 m long, 0.2 m thick and 3 m high, each with a 1 m wide, 2 m
+/// high opening voiding it. A wall is `(GlobalId, y, x)`: placed at `y`,
+/// starting at `x`, its opening `opening` metres along it. `first` offsets
+/// every entity number, so each export numbers its entities afresh while
+/// the walls keep their `GlobalId`s.
+fn voided_wall_export(first: u32, walls: &[(&str, f64, f64, f64)]) -> String {
+    let mut data = String::new();
+    for (index, (global_id, y, x, opening)) in walls.iter().enumerate() {
+        let base = first + 30 * u32::try_from(index).unwrap();
+        data.push_str(&placed_box(
+            base,
+            [x + 2.0, y + 0.1, 0.0],
+            [4.0, 0.2, 3.0],
+            &format!("IFCWALL('{global_id}',$,$,$,$,PL,REP,$,$)"),
+        ));
+        data.push_str(&placed_box(
+            base + 10,
+            [x + opening + 0.5, y + 0.1, 0.5],
+            [1.0, 0.4, 2.0],
+            "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)",
+        ));
+        let _ = writeln!(
+            data,
+            "#{v}=IFCRELVOIDSELEMENT('{v:022}',$,$,$,#{wall},#{hole});",
+            v = base + 20,
+            wall = base + 9,
+            hole = base + 19,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+const MOVED_OPENING: &str = "1WallMovedOpening00001";
+const RE_EXPORTED: &str = "1WallReExported0000001";
+const SHIFTED: &str = "1WallShifted0000000001";
+
+/// The base of [`voided_wall_export`] and its revision: the first wall's
+/// opening moved 0.5 m within unchanged bounds, the second re-exported as
+/// it was, the third moved 0.25 m along itself, exactly the tolerance.
+fn wall_revisions(case: &Case) {
+    case.write(
+        "base.ifc",
+        &voided_wall_export(
+            100,
+            &[
+                (MOVED_OPENING, 0.0, 0.0, 1.0),
+                (RE_EXPORTED, 5.0, 0.0, 1.0),
+                (SHIFTED, 10.0, 0.0, 1.0),
+            ],
+        ),
+    );
+    case.write(
+        "revised.ifc",
+        &voided_wall_export(
+            700,
+            &[
+                (SHIFTED, 10.0, 0.25, 1.0),
+                (RE_EXPORTED, 5.0, 0.0, 1.0),
+                (MOVED_OPENING, 0.0, 0.0, 1.5),
+            ],
+        ),
+    );
+}
+
+#[test]
+fn a_mesh_comparison_finds_a_moved_opening_inside_unchanged_bounds() {
+    let case = Case::new("model-comparison-mesh");
+    wall_revisions(&case);
+    let (output, result) = case.geometry_rule_over(
+        &["base.ifc:base", "revised.ifc:revised"],
+        &[("wall", "IfcWall")],
+        "axioval:capability.model-comparison",
+        &registry_signature("axioval:capability.model-comparison"),
+        entity("wall"),
+        json!({
+            "base": {"type": "string", "value": "base"},
+            "revised": {"type": "string", "value": "revised"},
+            "identity_scheme": {"type": "string", "value": "ifc-globalid"},
+            "geometry": {"type": "string", "value": "mesh"},
+            "tolerance_metres": {"type": "number", "value": 0.25},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    // Only the moved opening: the re-export is unchanged, the shift by the
+    // tolerance undecided.
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("geometry changed: geometry mesh differs by 0.5000 m"),
+        "{result:#}"
+    );
+    let witness = findings[0]["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|evidence| evidence["locator"].as_str())
+        .find(|locator| locator.starts_with("comparison:witness:mesh:"));
+    assert!(witness.is_some(), "{result:#}");
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert!(
+        not_evaluated[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("geometry mesh differs by"),
+        "{result:#}"
+    );
+    assert!(
+        not_evaluated[0]["message"]
+            .as_str()
+            .unwrap()
+            .ends_with("undetermined"),
+        "{result:#}"
+    );
+
+    // Bounds alone see the shift, never the moved opening.
+    let (output, result) = case.geometry_rule_over(
+        &["base.ifc:base", "revised.ifc:revised"],
+        &[("wall", "IfcWall")],
+        "axioval:capability.model-comparison",
+        &registry_signature("axioval:capability.model-comparison"),
+        entity("wall"),
+        json!({
+            "base": {"type": "string", "value": "base"},
+            "revised": {"type": "string", "value": "revised"},
+            "identity_scheme": {"type": "string", "value": "ifc-globalid"},
+            "compare_geometry": {"type": "boolean", "value": true},
+            "length_tolerance": {"type": "number", "value": 0.1},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("geometry changed: geometry bounds differs by 0.2500 m"),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn an_auxiliary_rule_chooses_the_walls_another_checks_and_reports_nothing() {
     let case = Case::new("auxiliary-rule");

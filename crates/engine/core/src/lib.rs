@@ -763,12 +763,13 @@ pub use properties::{
     PropertyResolutionService, PropertyResolutionServiceHandle, ResolvedProperty, UnreadableValue,
 };
 pub use proximity::{
-    BodyContainment, BodyVolume, Bounds3, CounterpartSurface, FaceClass, FaceDistanceError,
-    FaceDistanceEvidence, FaceDistanceRequest, GeometryFidelity, IntersectionVolume, ObjectBounds,
-    OverlapAlongEvidence, OverlapAlongRequest, OverlapExtents, ProjectedDistanceEvidence,
-    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
-    ProximityServiceHandle, RegionDistanceEvidence, RegionDistanceRequest, SubjectSurface,
-    VerticalDirection, VerticalSurfaces, VolumeInterval,
+    BodyContainment, BodySurface, BodyVolume, Bounds3, CounterpartSurface, DirectedDistance,
+    FaceClass, FaceDistanceError, FaceDistanceEvidence, FaceDistanceRequest, GeometryFidelity,
+    IntersectionVolume, ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest, OverlapExtents,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, ProximityServiceHandle, RegionDistanceEvidence,
+    RegionDistanceRequest, SubjectSurface, SurfaceDirection, SurfaceDistanceEvidence,
+    SurfaceDistanceRequest, VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
 pub use refinement::{
     Deviation, LocationMethod, LocationPolicy, OutcomeRefiner, Refining, RuleRefinement,

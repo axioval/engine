@@ -154,6 +154,7 @@ finite and non-negative. Each spatial facet is opt-in with its own tolerance:
 |---|---|---|---|
 | `with_placement` | `placement` | `ObjectFrameServiceHandle` | `origin`: distance between frame origins; `orientation`: rotation between axis triples |
 | `with_geometry` | `geometry` | `ProximityServiceHandle` | `bounds`: largest shift of any face of the axis-aligned bounds |
+| `with_mesh_geometry` | `geometry` | `ProximityServiceHandle` | `mesh`: certified two-sided Hausdorff distance between the two surfaces |
 | `with_coordinate_systems` | `coordinate-system` | `CoordinateSystemServiceHandle` | `world-origin`, `world-orientation`, `true-north`, `map-offset`, `map-rotation`, `map-scale` |
 
 A session without the service a requested facet needs leaves that facet
@@ -205,10 +206,39 @@ a body on one side only is a `geometry` difference; an unmeasured body leaves
 the facet unresolved.
 
 Bounds see a move, a resize and a reshaping that changes the extent. A
-reshaping inside unchanged bounds (a hole cut, a profile changed within its
-envelope) is not seen. That needs a certified two-sided distance between the
-two surfaces, a Hausdorff distance, which the geometry kernel does not yet
-provide (axiolid/kernel#148). The engine does not approximate one.
+reshaping inside unchanged bounds (a hole cut, an opening moved along its
+wall, a profile changed within its envelope) is not seen by them; the mesh
+mode sees it.
+
+#### Mesh
+
+`ComparisonRequest::with_mesh_geometry(tolerance)` (`GeometryMode::Mesh`)
+compares the two surfaces themselves: the certified two-sided Hausdorff
+distance between the base body and the revised body, in world coordinates,
+judged against the length tolerance as measure `mesh`. The revised session's
+proximity service hands out its body's surface (`body_surface`), and the
+base session's service measures its own body against it
+(`measure_surface_distance`), so the two revisions may be two sessions. The
+distance is the farthest any point of either surface lies from the other: an
+opening moved 0.5 m along a wall leaves the old opening's far reveal 0.5 m
+inside the new opening, so the wall has changed though its bounds have not,
+and a re-export of the same shape is zero apart up to rounding, unchanged.
+The interval is refined to a tenth of the tolerance where the kernel can,
+and judged like every measure: one straddling the tolerance is undetermined
+and reported not evaluated.
+
+A changed `mesh` finding carries its witness as evidence,
+`comparison:witness:mesh:base(x,y,z)->revised(x,y,z)` (or the other way
+round): the point of one body that strays farthest found, which is at least
+the lower bound from the other body, and its nearest point found on that
+body, in metres, citing the source of the body the first lies on. The
+witness is also the measurement's `witness` (`Witness`).
+
+Only exact surfaces are certified. A tessellation bounds how far its true
+surface lies from the mesh, not how far the mesh lies from the true surface,
+so a body on either side registered as a tessellation leaves the `geometry`
+facet unresolved (`mesh` not compared), never unchanged. Bodiless and
+unmeasured bodies are judged as in the bounds mode.
 
 ### Coordinate systems
 
@@ -302,6 +332,12 @@ declaration.
 | `compare_relationships` | `boolean` | The related objects per [relationship kind](#relationship-kinds). |
 | `length_tolerance` | `number` | Metres; default 0. |
 | `angle_tolerance` | `number` | Degrees; default 0. |
+| `geometry` | `string` | Compares geometry in this mode: `bounds` (as `compare_geometry`, within `length_tolerance`) or `mesh` (the certified surface distance, see [Mesh](#mesh)). Contradicting `compare_geometry: false` is an invalid declaration. |
+| `tolerance_metres` | `number` | Required with `geometry: mesh`, and only with it: the largest surface distance that counts as unchanged. |
+
+`geometry: mesh` with `tolerance_metres: 0.01` reports a wall whose opening
+moved 0.5 m as `geometry changed: geometry mesh differs by …`, its witness
+points as evidence, and leaves a re-exported identical wall unchanged.
 
 The rule's selector restricts the objects compared, on both sides. An object
 the selector cannot decide is compared all the same; a change involving only
@@ -315,6 +351,6 @@ those of the [report](#reports) under the rule's id.
 
 ## Open
 
-- **Mesh difference.** A certified two-sided Hausdorff distance between two
-  revisions of a body is axiolid/kernel#148. Until it is published, geometry
-  compares bounds only.
+- **Tessellated mesh difference.** The mesh mode certifies exact surfaces
+  only; a curved body's surface distance needs a certified distance between
+  exact boundaries, so its geometry stays unresolved in that mode.

@@ -11,10 +11,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    Bounds3, CapabilityEvaluation, GeometryFidelity, IntersectionVolume, LengthInterval,
-    ObjectBounds, ProximityError, ProximityEvidence, ProximityRequest, ProximityService,
-    ProximityServiceHandle, RelationshipKind, SourceDisciplines, SourceMetadata,
-    SourceMetadataIndex, VolumeInterval,
+    BodySurface, Bounds3, CapabilityEvaluation, DirectedDistance, GeometryFidelity,
+    IntersectionVolume, LengthInterval, ObjectBounds, ProximityError, ProximityEvidence,
+    ProximityRequest, ProximityService, ProximityServiceHandle, RelationshipKind,
+    SourceDisciplines, SourceMetadata, SourceMetadataIndex, SurfaceDistanceEvidence,
+    SurfaceDistanceRequest, VolumeInterval,
 };
 use axioval_ir::contract::SourceField;
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
@@ -907,4 +908,238 @@ fn a_kind_the_source_cannot_list_is_not_evaluated_for_every_matched_object() {
             .all(|(_, message)| message.starts_with("relationship connection not compared")),
         "{gaps:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Geometry by certified surface distance.
+// ---------------------------------------------------------------------------
+
+/// One wall per revision, `W1`, its bounds the same 4 x 0.2 x 3 m box on
+/// both sides, and the certified surface distance between the two stated:
+/// `(lower, upper)`, measured from the base wall's service.
+struct Walls {
+    distance: (f64, f64),
+    /// Whether each side's mesh is the wall's exact shape.
+    exact: (bool, bool),
+}
+
+impl Walls {
+    fn fidelity(&self, object: &ObjectId) -> GeometryFidelity {
+        let exact = if object == &in_base("#1") {
+            self.exact.0
+        } else {
+            self.exact.1
+        };
+        if exact {
+            GeometryFidelity::Exact
+        } else {
+            GeometryFidelity::tessellated(0.001).unwrap()
+        }
+    }
+}
+
+impl ProximityService for Walls {
+    fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        ObjectBounds::try_new(
+            object.clone(),
+            Bounds3::try_new([0.0; 3], [4.0, 0.2, 3.0])?,
+            self.fidelity(object),
+        )
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
+        BodySurface::try_new(
+            object.clone(),
+            vec![[0.0; 3], [4.0, 0.0, 0.0], [4.0, 0.0, 3.0]],
+            vec![[0, 1, 2]],
+            self.fidelity(object),
+        )
+    }
+
+    fn measure_surface_distance(
+        &self,
+        request: &SurfaceDistanceRequest,
+    ) -> Result<SurfaceDistanceEvidence, ProximityError> {
+        assert_eq!(request.subject(), &in_base("#1"), "measured from the base");
+        assert_eq!(request.counterpart().object(), &in_revised("#9"));
+        let (lower, upper) = self.distance;
+        let directed = |lower: f64, upper: f64| {
+            DirectedDistance::try_new(
+                LengthInterval::try_new(lower, upper).unwrap(),
+                [2.0, 0.1, 1.5],
+                [2.5, 0.1, 1.5],
+            )
+        };
+        SurfaceDistanceEvidence::try_new(
+            request.clone(),
+            directed(lower, upper)?,
+            directed(0.0, upper)?,
+            Evidence::exact(document("base"), "surfaces"),
+        )
+    }
+}
+
+/// `model-comparison` of `W1` in both revisions, matched by its number,
+/// with `parameters` and `walls` as the geometry service.
+fn compare_walls(walls: Walls, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    let model = Model::default()
+        .object_in("base", "#1", "wall")
+        .object_in("revised", "#9", "wall")
+        .value_of(in_base("#1"), "Pset_WallCommon", "Reference", text("W1"))
+        .value_of(in_revised("#9"), "Pset_WallCommon", "Reference", text("W1"));
+    let mut parameters = parameters;
+    parameters.extend([
+        ("base", string("base")),
+        ("revised", string("revised")),
+        (
+            "identity_property",
+            property(Some("Pset_WallCommon"), "Reference"),
+        ),
+    ]);
+    model.evaluate_with(
+        &CompareModels,
+        &rule(ID, kind("wall"), parameters),
+        |services| {
+            services.register(disciplines()).unwrap();
+            services
+                .register(ProximityServiceHandle::new(Arc::new(walls)))
+                .unwrap();
+        },
+    )
+}
+
+fn by_mesh(tolerance: f64) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        ("geometry", string("mesh")),
+        ("tolerance_metres", number(tolerance)),
+    ]
+}
+
+/// The opening moved half a metre along the wall: the bounds did not move,
+/// the surfaces did.
+#[test]
+fn a_wall_whose_opening_moved_within_unchanged_bounds_has_changed() {
+    let moved = || Walls {
+        distance: (0.4999, 0.5001),
+        exact: (true, true),
+    };
+    let evaluation = compare_walls(moved(), by_mesh(0.01));
+    assert_eq!(
+        found(&evaluation),
+        vec![(
+            "#9".to_owned(),
+            "geometry changed: geometry mesh differs by 0.4999 m to 0.5001 m (tolerance 0.0100 m)"
+                .to_owned()
+        )]
+    );
+    let finding = &evaluation.findings()[0];
+    assert_eq!(finding.related, vec![in_base("#1")]);
+    // The witness: a point of the base wall, half a metre from the revised.
+    let witness = finding
+        .evidence
+        .iter()
+        .find(|evidence| evidence.locator.starts_with("comparison:witness:"))
+        .unwrap();
+    assert_eq!(
+        witness.locator,
+        "comparison:witness:mesh:base(2.0000,0.1000,1.5000)->revised(2.5000,0.1000,1.5000)"
+    );
+    assert_eq!(witness.source, document("base"));
+    assert!(!witness.exact);
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // Bounds alone see nothing.
+    let bounds = compare_walls(moved(), vec![("compare_geometry", boolean(true))]);
+    assert!(found(&bounds).is_empty(), "{bounds:?}");
+    assert!(unevaluated(&bounds).is_empty(), "{bounds:?}");
+}
+
+#[test]
+fn a_re_exported_identical_wall_is_unchanged() {
+    let evaluation = compare_walls(
+        Walls {
+            distance: (0.0, 1e-15),
+            exact: (true, true),
+        },
+        by_mesh(0.001),
+    );
+    assert!(found(&evaluation).is_empty(), "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+}
+
+#[test]
+fn a_distance_straddling_the_tolerance_is_not_evaluated() {
+    let evaluation = compare_walls(
+        Walls {
+            distance: (0.005, 0.015),
+            exact: (true, true),
+        },
+        by_mesh(0.01),
+    );
+    assert!(found(&evaluation).is_empty(), "{evaluation:?}");
+    let outcomes = evaluation.not_evaluated_outcomes();
+    assert_eq!(outcomes.len(), 1, "{evaluation:?}");
+    assert_eq!(
+        outcomes[0].message(),
+        "geometry mesh differs by 0.0050 m to 0.0150 m (tolerance 0.0100 m): undetermined"
+    );
+}
+
+/// A tessellation's mesh bounds its true surface one way only: no distance
+/// to it is certified, and the pair is not evaluated, never unchanged.
+#[test]
+fn a_tessellated_wall_is_not_evaluated() {
+    for exact in [(false, true), (true, false)] {
+        let evaluation = compare_walls(
+            Walls {
+                distance: (0.0, 0.0),
+                exact,
+            },
+            by_mesh(0.01),
+        );
+        assert!(found(&evaluation).is_empty(), "{evaluation:?}");
+        let outcomes = evaluation.not_evaluated_outcomes();
+        assert_eq!(outcomes.len(), 1, "{evaluation:?}");
+        assert!(
+            outcomes[0].message().contains("is a tessellation"),
+            "{evaluation:?}"
+        );
+    }
+}
+
+#[test]
+fn a_mesh_mode_needs_its_own_tolerance_and_nothing_contradicting_it() {
+    let exact = || Walls {
+        distance: (0.0, 0.0),
+        exact: (true, true),
+    };
+    for parameters in [
+        vec![("geometry", string("mesh"))],
+        vec![("tolerance_metres", number(0.01))],
+        vec![
+            ("geometry", string("bounds")),
+            ("tolerance_metres", number(0.01)),
+        ],
+        vec![
+            ("geometry", string("mesh")),
+            ("tolerance_metres", number(-0.01)),
+        ],
+        vec![("geometry", string("volume"))],
+        vec![
+            ("geometry", string("mesh")),
+            ("tolerance_metres", number(0.01)),
+            ("compare_geometry", boolean(false)),
+        ],
+    ] {
+        let evaluation = compare_walls(exact(), parameters.clone());
+        assert_eq!(
+            unevaluated(&evaluation),
+            vec![("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)],
+            "{parameters:?}"
+        );
+    }
 }

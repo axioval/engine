@@ -2,17 +2,20 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use std::sync::Arc;
+
 use axioval_engine::{
     ClassificationServiceHandle, CoordinateFrame, CoordinateSystemServiceHandle, MetricDirection,
     ObjectFrameError, ObjectFrameServiceHandle, PropertyResolutionServiceHandle, ProximityError,
     ProximityServiceHandle, RelationshipEdgesRequest, RelationshipKind,
-    RelationshipSelectionServiceHandle, SourceCoordinateSystem,
+    RelationshipSelectionServiceHandle, SourceCoordinateSystem, SurfaceDirection,
+    SurfaceDistanceRequest,
 };
 use axioval_ir::{DateTime, Object, ObjectId, Property, PropertyValue, SourceId};
 
 use super::{
-    ComparedProperty, ComparisonRequest, ComparisonTolerance, Difference, Facet, Measure,
-    Measurement, ObjectChange, Revision, SourceComparison, Unresolved,
+    ComparedProperty, ComparisonRequest, ComparisonTolerance, Difference, Facet, GeometryMode,
+    Measure, Measurement, ObjectChange, Revision, Side, SourceComparison, Unresolved, Witness,
 };
 use crate::body_facts::BodyFacts;
 use crate::selection::{NameSpec, enumerate};
@@ -99,11 +102,23 @@ impl Outcome {
     /// all of it exceeds the tolerance, unchanged when none of it does,
     /// otherwise undetermined.
     pub(super) fn measured(&mut self, measure: Measure, lower: f64, upper: f64, tolerance: f64) {
+        self.witnessed(measure, (lower, upper), tolerance, None);
+    }
+
+    /// As [`Self::measured`], with where the difference is realised.
+    pub(super) fn witnessed(
+        &mut self,
+        measure: Measure,
+        (lower, upper): (f64, f64),
+        tolerance: f64,
+        witness: Option<Witness>,
+    ) {
         let measurement = Measurement {
             measure,
             lower,
             upper,
             tolerance,
+            witness,
         };
         if lower > tolerance {
             self.differences.push(Difference::Measured(measurement));
@@ -625,8 +640,7 @@ impl Pair<'_, '_> {
         }
     }
 
-    /// Measured bounds: the largest shift of any bound, widened by both
-    /// tessellations' chord deviations.
+    /// The geometry facet in the request's mode.
     fn geometry(&mut self, base: &Object, revised: &Object, tolerance: ComparisonTolerance) {
         let (Some(base_bodies), Some(revised_bodies)) = (
             self.base.context.services.get::<ProximityServiceHandle>(),
@@ -638,6 +652,101 @@ impl Pair<'_, '_> {
             self.unresolved(Facet::Geometry, "", "a session has no geometry service");
             return;
         };
+        match self.request.geometry_mode {
+            GeometryMode::Bounds => {
+                self.bounds(base, revised, (base_bodies, revised_bodies), tolerance);
+            }
+            GeometryMode::Mesh => {
+                self.mesh(base, revised, (base_bodies, revised_bodies), tolerance);
+            }
+        }
+    }
+
+    /// The certified two-sided Hausdorff distance between the two surfaces,
+    /// in world coordinates: the revised body's surface, handed out by its
+    /// session, measured against the base body by the base session's
+    /// service. Only exact bodies are measured; a tessellation leaves the
+    /// facet unresolved, never unchanged.
+    fn mesh(
+        &mut self,
+        base: &Object,
+        revised: &Object,
+        (base_bodies, revised_bodies): (&ProximityServiceHandle, &ProximityServiceHandle),
+        tolerance: ComparisonTolerance,
+    ) {
+        let facet = Facet::Geometry;
+        match (
+            base_bodies.bounds(&base.id),
+            revised_bodies.body_surface(&revised.id),
+        ) {
+            (Err(ProximityError::NoBody), Err(ProximityError::NoBody)) => {}
+            (Ok(_), Err(ProximityError::NoBody)) => {
+                self.outcome.stated(facet, "body", "present", "none");
+            }
+            (Err(ProximityError::NoBody), Ok(_)) => {
+                self.outcome.stated(facet, "body", "none", "present");
+            }
+            (Ok(before), Ok(after)) => {
+                for (side, exact) in [
+                    (Side::Base, before.fidelity().is_exact()),
+                    (Side::Revised, after.fidelity().is_exact()),
+                ] {
+                    if !exact {
+                        self.unresolved(
+                            facet,
+                            "mesh",
+                            format!(
+                                "the {} body is a tessellation, so its surface distance cannot be certified",
+                                side.name()
+                            ),
+                        );
+                        return;
+                    }
+                }
+                let length = tolerance.length_metres;
+                let measured = SurfaceDistanceRequest::try_new(
+                    base.id.clone(),
+                    Arc::new(after),
+                    mesh_accuracy(length),
+                )
+                .and_then(|request| base_bodies.measure_surface_distance(&request));
+                match measured {
+                    Ok(measured) => {
+                        let distance = measured.distance();
+                        let (direction, directed) = measured.witness();
+                        let witness = Witness {
+                            side: match direction {
+                                SurfaceDirection::FromSubject => Side::Base,
+                                SurfaceDirection::FromCounterpart => Side::Revised,
+                            },
+                            from: directed.from(),
+                            to: directed.to(),
+                        };
+                        self.outcome.witnessed(
+                            Measure::Mesh,
+                            (distance.lower_metres(), distance.upper_metres()),
+                            length,
+                            Some(witness),
+                        );
+                    }
+                    Err(error) => self.unresolved(facet, "mesh", error.to_string()),
+                }
+            }
+            (Err(error), _) | (_, Err(error)) => {
+                self.unresolved(facet, "", error.to_string());
+            }
+        }
+    }
+
+    /// Measured bounds: the largest shift of any bound, widened by both
+    /// tessellations' chord deviations.
+    fn bounds(
+        &mut self,
+        base: &Object,
+        revised: &Object,
+        (base_bodies, revised_bodies): (&ProximityServiceHandle, &ProximityServiceHandle),
+        tolerance: ComparisonTolerance,
+    ) {
         match (
             base_bodies.bounds(&base.id),
             revised_bodies.bounds(&revised.id),
@@ -684,6 +793,12 @@ fn mirrored(revision: &Revision<'_>, object: &Object) -> Result<bool, String> {
             display(Some(&other))
         )),
     }
+}
+
+/// How tight a surface distance is asked for: a tenth of the tolerance, so
+/// an interval rarely straddles it, and no tighter than rounding allows.
+fn mesh_accuracy(tolerance_metres: f64) -> f64 {
+    (tolerance_metres / 10.0).max(1e-9)
 }
 
 /// The largest shift of any face of two axis-aligned bounds.

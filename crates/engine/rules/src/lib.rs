@@ -95,9 +95,9 @@ pub use clash_matrix::ClashMatrix;
 pub use classification_requirement::ClassificationRequirement;
 pub use comparison::{
     AmbiguousIdentity, CompareModels, ComparedObject, ComparedProperty, ComparisonError,
-    ComparisonRequest, ComparisonTolerance, Difference, Facet, Matcher, Measure, Measurement,
-    ModelComparison, ObjectChange, Side, SourceComparison, UndecidedMatch, Unresolved,
-    compare_sessions,
+    ComparisonRequest, ComparisonTolerance, Difference, Facet, GeometryMode, Matcher, Measure,
+    Measurement, ModelComparison, ObjectChange, Side, SourceComparison, UndecidedMatch, Unresolved,
+    Witness, compare_sessions,
 };
 pub use component_clearance::ComponentClearance;
 pub use component_visibility::ComponentVisibility;

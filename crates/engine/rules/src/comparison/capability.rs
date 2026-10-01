@@ -44,7 +44,9 @@ use crate::support::{Parameters, PropertyRef, Unavailable, invalid};
 /// set) listed through property enumeration, and, when asked, the related
 /// objects per relationship kind (`compare_relationships`), placement,
 /// geometry and coordinate systems within `length_tolerance` (metres) and
-/// `angle_tolerance` (degrees).
+/// `angle_tolerance` (degrees). Geometry compares bounds, or with
+/// `geometry: mesh` the certified distance between the two surfaces within
+/// `tolerance_metres`.
 pub struct CompareModels;
 
 const PROPERTIES: &[TableColumn] = &[
@@ -200,9 +202,7 @@ impl<'a> Declaration<'a> {
         if parameters.boolean("compare_placement")?.unwrap_or(false) {
             request = request.with_placement(tolerance);
         }
-        if parameters.boolean("compare_geometry")?.unwrap_or(false) {
-            request = request.with_geometry(tolerance);
-        }
+        request = Self::geometry(parameters, request, tolerance)?;
         if parameters
             .boolean("compare_coordinate_systems")?
             .unwrap_or(false)
@@ -219,6 +219,49 @@ impl<'a> Declaration<'a> {
             request = request.with_timestamps();
         }
         Ok(request)
+    }
+
+    /// The geometry facet: `compare_geometry` compares bounds within
+    /// `length_tolerance`; `geometry` names the mode (`bounds`, or `mesh`
+    /// within `tolerance_metres`) and compares geometry by itself.
+    fn geometry(
+        parameters: &Parameters<'a>,
+        request: ComparisonRequest,
+        tolerance: ComparisonTolerance,
+    ) -> Result<ComparisonRequest, Unavailable> {
+        let compare = parameters.boolean("compare_geometry")?;
+        let mesh_tolerance = parameters.number("tolerance_metres")?;
+        let Some(mode) = parameters.string("geometry")? else {
+            if mesh_tolerance.is_some() {
+                return Err(invalid("`tolerance_metres` needs `geometry: mesh`"));
+            }
+            return Ok(if compare.unwrap_or(false) {
+                request.with_geometry(tolerance)
+            } else {
+                request
+            });
+        };
+        if compare == Some(false) {
+            return Err(invalid(format!(
+                "`geometry: {mode}` compares geometry, but `compare_geometry` is false"
+            )));
+        }
+        match mode {
+            "bounds" if mesh_tolerance.is_some() => {
+                Err(invalid("`tolerance_metres` needs `geometry: mesh`"))
+            }
+            "bounds" => Ok(request.with_geometry(tolerance)),
+            "mesh" => {
+                let length = mesh_tolerance
+                    .ok_or_else(|| invalid("`geometry: mesh` needs `tolerance_metres`"))?;
+                let tolerance = ComparisonTolerance::try_new(length, tolerance.angle_radians())
+                    .map_err(|error| invalid(format!("`tolerance_metres`: {error}")))?;
+                Ok(request.with_mesh_geometry(tolerance))
+            }
+            other => Err(invalid(format!(
+                "`geometry` is `{other}`; the modes are `bounds` and `mesh`"
+            ))),
+        }
     }
 
     /// The one source of each named discipline.
@@ -339,6 +382,8 @@ impl RuleCapability for CompareModels {
             ParameterDescriptor::optional("match_path", ParameterType::StringList),
             ParameterDescriptor::optional("compare_timestamps", ParameterType::Boolean),
             ParameterDescriptor::optional("compare_relationships", ParameterType::Boolean),
+            ParameterDescriptor::optional("geometry", ParameterType::String),
+            ParameterDescriptor::optional("tolerance_metres", ParameterType::Number),
         ]
     }
 

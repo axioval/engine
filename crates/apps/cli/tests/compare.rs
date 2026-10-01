@@ -592,6 +592,185 @@ fn an_unchanged_model_reports_no_relationship_difference() {
     );
 }
 
+/// One extruded box, `size` long, wide and deep, centred in plan at `at`'s
+/// `x`, `y` and resting at its `z`; `product` names `PL` and `REP`.
+fn solid(
+    base: u32,
+    [x, y, z]: [f64; 3],
+    [length, width, depth]: [f64; 3],
+    product: &str,
+) -> String {
+    let [
+        origin,
+        frame,
+        placement,
+        centre,
+        position,
+        profile,
+        extrusion,
+        shape,
+        definition,
+        object,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|offset| base + offset);
+    format!(
+        "#{origin}=IFCCARTESIANPOINT((0.,0.,{z:.2}));\n\
+         #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+         #{centre}=IFCCARTESIANPOINT(({x:.2},{y:.2}));\n\
+         #{position}=IFCAXIS2PLACEMENT2D(#{centre},$);\n\
+         #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{position},{length:.2},{width:.2});\n\
+         #{extrusion}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth:.2});\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{extrusion}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        product
+            .replace("PL", &format!("#{placement}"))
+            .replace("REP", &format!("#{definition}")),
+    )
+}
+
+/// Walls 4 m long, 0.2 m thick and 3 m high, each voided by a 1 m wide, 2 m
+/// high opening. A wall is `(wall GlobalId, opening GlobalId, y, x,
+/// opening)`: placed at `y`, starting at `x`, its opening `opening` metres
+/// along it. `first` offsets every entity number.
+fn walls_with_openings(first: u32, walls: &[(&str, &str, f64, f64, f64)]) -> String {
+    let mut data = String::new();
+    for (index, (wall, opening_id, y, x, opening)) in walls.iter().enumerate() {
+        let base = first + 30 * u32::try_from(index).unwrap();
+        data.push_str(&solid(
+            base,
+            [x + 2.0, y + 0.1, 0.0],
+            [4.0, 0.2, 3.0],
+            &format!("IFCWALL('{wall}',$,$,$,$,PL,REP,$,$)"),
+        ));
+        data.push_str(&solid(
+            base + 10,
+            [x + opening + 0.5, y + 0.1, 0.5],
+            [1.0, 0.4, 2.0],
+            &format!("IFCOPENINGELEMENT('{opening_id}',$,$,$,$,PL,REP,$,.OPENING.)"),
+        ));
+        let _ = writeln!(
+            data,
+            "#{v}=IFCRELVOIDSELEMENT('{v:022}',$,$,$,#{w},#{h});",
+            v = base + 20,
+            w = base + 9,
+            h = base + 19,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #7=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #8=IFCUNITASSIGNMENT((#7));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#8);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+const MOVED_OPENING: &str = "1WallMovedOpening00001";
+const RE_EXPORTED: &str = "1WallReExported0000001";
+const SHIFTED: &str = "1WallShifted0000000001";
+
+#[test]
+fn a_mesh_comparison_sees_a_moved_opening_inside_unchanged_bounds() {
+    let case = Case::new("mesh");
+    let before = case.write(
+        "r1/model.ifc",
+        &walls_with_openings(
+            100,
+            &[
+                (MOVED_OPENING, "1OpeningMoved000000001", 0.0, 0.0, 1.0),
+                (RE_EXPORTED, "1OpeningReExported0001", 5.0, 0.0, 1.0),
+                (SHIFTED, "1OpeningShifted0000001", 10.0, 0.0, 1.0),
+            ],
+        ),
+    );
+    // Renumbered: the first opening moved 0.5 m, the second wall exported
+    // again as it was, the third moved 0.25 m along itself, exactly the
+    // tolerance.
+    let after = case.write(
+        "r2/model.ifc",
+        &walls_with_openings(
+            700,
+            &[
+                (SHIFTED, "1OpeningShifted0000001", 10.0, 0.25, 1.0),
+                (RE_EXPORTED, "1OpeningReExported0001", 5.0, 0.0, 1.0),
+                (MOVED_OPENING, "1OpeningMoved000000001", 0.0, 0.0, 1.5),
+            ],
+        ),
+    );
+    let saved = case.path("comparison.json");
+    let output = case.compare(
+        &before,
+        &after,
+        &[
+            "--geometry",
+            "--geometry-mode",
+            "mesh",
+            "--length-tolerance",
+            "0.25",
+            "--report",
+            saved.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let comparison = &result["comparison"];
+    assert_eq!(comparison["geometry_mode"], "mesh", "{comparison:#}");
+
+    let moved = object(comparison, MOVED_OPENING);
+    assert_eq!(moved["state"], "changed", "{moved:#}");
+    let change = &moved["changes"][0];
+    assert_eq!(
+        (&change["facet"], &change["measure"]),
+        (&"geometry".into(), &"mesh".into())
+    );
+    assert!(
+        (change["lower"].as_f64().unwrap() - 0.5).abs() < 1e-3,
+        "{moved:#}"
+    );
+    assert!(change["witness"]["from"].is_array(), "{moved:#}");
+
+    // The re-export is unchanged, so only counted; the shift by the
+    // tolerance is undetermined, never unchanged.
+    assert!(
+        comparison["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|object| object["identity"] != RE_EXPORTED),
+        "{comparison:#}"
+    );
+    let shifted = object(comparison, SHIFTED);
+    assert_eq!(shifted["state"], "incomplete", "{shifted:#}");
+    assert_eq!(shifted["undetermined"][0]["measure"], "mesh", "{shifted:#}");
+
+    assert_eq!(
+        findings(&result),
+        vec![("compare.geometry".into(), "#769".into())]
+    );
+    let evidence = result["report"]["findings"][0]["evidence"]
+        .as_array()
+        .unwrap();
+    assert!(
+        evidence.iter().any(|entry| entry["locator"]
+            .as_str()
+            .unwrap()
+            .starts_with("comparison:witness:mesh:")),
+        "{evidence:#?}"
+    );
+    let gaps = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(gaps.len(), 1, "{gaps:#?}");
+    assert_eq!(gaps[0]["rule_id"], "compare.geometry");
+
+    // Without `--geometry` a mode is a usage error.
+    let output = case.compare(&before, &after, &["--geometry-mode", "mesh"]);
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+}
+
 #[test]
 fn every_property_set_is_listed_and_compared_on_request() {
     let case = Case::new("revisions-property-sets");

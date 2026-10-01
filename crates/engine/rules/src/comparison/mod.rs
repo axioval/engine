@@ -18,8 +18,10 @@
 //!
 //! - **placement** compares object frames ([`ObjectFrameServiceHandle`]): the
 //!   distance between origins and the rotation between axis triples;
-//! - **geometry** compares measured extents ([`ProximityServiceHandle`]):
-//!   the largest shift of any face of the axis-aligned bounds;
+//! - **geometry** compares measured bodies ([`ProximityServiceHandle`]):
+//!   by default the largest shift of any face of the axis-aligned bounds,
+//!   or, in [`GeometryMode::Mesh`], the certified Hausdorff distance between
+//!   the two surfaces in world coordinates, with its witness points;
 //! - **coordinate systems** compare each pair of sources
 //!   ([`CoordinateSystemServiceHandle`]): world frame, true north and map
 //!   conversion.
@@ -243,6 +245,32 @@ impl Matcher {
     }
 }
 
+/// How the geometry facet compares two bodies.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GeometryMode {
+    /// The largest shift of any face of the axis-aligned bounds
+    /// ([`Measure::Bounds`]). Sees a move, a resize and a reshaping that
+    /// changes the extent, not one inside it.
+    #[default]
+    Bounds,
+    /// The certified two-sided Hausdorff distance between the two surfaces
+    /// in world coordinates ([`Measure::Mesh`]), with the witness points it
+    /// is realised at. Sees a reshaping inside unchanged bounds, such as a
+    /// moved opening; refuses tessellated bodies, which it cannot certify.
+    Mesh,
+}
+
+impl GeometryMode {
+    /// `bounds` or `mesh`.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bounds => "bounds",
+            Self::Mesh => "mesh",
+        }
+    }
+}
+
 /// What to compare and how to match objects.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComparisonRequest {
@@ -254,6 +282,7 @@ pub struct ComparisonRequest {
     timestamps: bool,
     placement: Option<ComparisonTolerance>,
     geometry: Option<ComparisonTolerance>,
+    geometry_mode: GeometryMode,
     coordinate_systems: Option<ComparisonTolerance>,
 }
 
@@ -291,6 +320,7 @@ impl ComparisonRequest {
             timestamps: false,
             placement: None,
             geometry: None,
+            geometry_mode: GeometryMode::Bounds,
             coordinate_systems: None,
         })
     }
@@ -372,7 +402,24 @@ impl ComparisonRequest {
     #[must_use]
     pub fn with_geometry(mut self, tolerance: ComparisonTolerance) -> Self {
         self.geometry = Some(tolerance);
+        self.geometry_mode = GeometryMode::Bounds;
         self
+    }
+
+    /// Also compares each matched object's surface: the certified Hausdorff
+    /// distance between the two bodies in world coordinates against the
+    /// length tolerance ([`GeometryMode::Mesh`]).
+    #[must_use]
+    pub fn with_mesh_geometry(mut self, tolerance: ComparisonTolerance) -> Self {
+        self.geometry = Some(tolerance);
+        self.geometry_mode = GeometryMode::Mesh;
+        self
+    }
+
+    /// How geometry is compared, when it is.
+    #[must_use]
+    pub fn geometry_mode(&self) -> GeometryMode {
+        self.geometry_mode
     }
 
     /// Also compares the header timestamps of each pair of sources: a
@@ -497,6 +544,8 @@ pub enum Measure {
     Orientation,
     /// Largest shift of any face of the bounds, in metres.
     Bounds,
+    /// Two-sided Hausdorff distance between the surfaces, in metres.
+    Mesh,
     /// Distance between world-frame origins, in metres.
     WorldOrigin,
     /// Rotation between world-frame axes, in radians.
@@ -517,7 +566,7 @@ impl Measure {
     pub fn facet(self) -> Facet {
         match self {
             Self::Origin | Self::Orientation => Facet::Placement,
-            Self::Bounds => Facet::Geometry,
+            Self::Bounds | Self::Mesh => Facet::Geometry,
             Self::WorldOrigin
             | Self::WorldOrientation
             | Self::TrueNorth
@@ -534,6 +583,7 @@ impl Measure {
             Self::Origin => "origin",
             Self::Orientation => "orientation",
             Self::Bounds => "bounds",
+            Self::Mesh => "mesh",
             Self::WorldOrigin => "world-origin",
             Self::WorldOrientation => "world-orientation",
             Self::TrueNorth => "true-north",
@@ -566,7 +616,7 @@ impl Measure {
     fn is_length(self) -> bool {
         matches!(
             self,
-            Self::Origin | Self::Bounds | Self::WorldOrigin | Self::MapOffset
+            Self::Origin | Self::Bounds | Self::Mesh | Self::WorldOrigin | Self::MapOffset
         )
     }
 
@@ -595,6 +645,46 @@ pub struct Measurement {
     pub upper: f64,
     /// The tolerance it was compared with, in the measure's unit.
     pub tolerance: f64,
+    /// Where the difference is realised, for a measure that says
+    /// ([`Measure::Mesh`]).
+    pub witness: Option<Witness>,
+}
+
+/// Where a surface distance is realised: `from`, a point of the `side`
+/// revision's body at least the lower bound from the other body, and `to`,
+/// the nearest point found to it on the other body. World metres.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Witness {
+    /// The revision `from` lies on.
+    pub side: Side,
+    /// The point that strays farthest found, on `side`.
+    pub from: [f64; 3],
+    /// Its nearest point found on the other revision's body.
+    pub to: [f64; 3],
+}
+
+impl Witness {
+    /// The evidence entry naming both points, citing `source`, the source
+    /// of the body `from` lies on.
+    fn evidence(&self, measure: Measure, source: &SourceId) -> Evidence {
+        let point = |[x, y, z]: [f64; 3]| format!("({x:.4},{y:.4},{z:.4})");
+        let other = match self.side {
+            Side::Base => Side::Revised,
+            Side::Revised => Side::Base,
+        };
+        Evidence {
+            source: source.clone(),
+            locator: format!(
+                "comparison:witness:{}:{}{}->{}{}",
+                measure.name(),
+                self.side.name(),
+                point(self.from),
+                other.name(),
+                point(self.to)
+            ),
+            exact: false,
+        }
+    }
 }
 
 impl Measurement {
@@ -1233,6 +1323,27 @@ impl Projection<'_> {
                         message,
                         (&revised.source, matcher, identity),
                     );
+                    // Where a measured difference is realised, as evidence
+                    // on the finding just made.
+                    let witnesses = differences
+                        .iter()
+                        .filter_map(|difference| match difference {
+                            Difference::Measured(Measurement {
+                                measure,
+                                witness: Some(witness),
+                                ..
+                            }) if measure.facet() == facet => {
+                                let source = match witness.side {
+                                    Side::Base => &base.source,
+                                    Side::Revised => &revised.source,
+                                };
+                                Some(witness.evidence(*measure, source))
+                            }
+                            _ => None,
+                        });
+                    if let Some(finding) = self.findings.last_mut() {
+                        finding.evidence.extend(witnesses);
+                    }
                 }
                 self.gaps(&Scope::Object(revised.clone()), unresolved, undetermined);
             }

@@ -6,6 +6,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Geometry differences by certified surface distance.** (Closes #163)
+  `model-comparison` gains `geometry` (`bounds` or `mesh`) and
+  `tolerance_metres`: with `geometry: mesh` each matched pair is compared by
+  the certified two-sided Hausdorff distance between the two bodies'
+  surfaces in world coordinates, so a wall whose opening moved 0.5 m inside
+  unchanged bounds has changed geometry, and a re-exported identical wall is
+  unchanged. A distance straddling the tolerance is not evaluated, a
+  tessellated body is refused (not evaluated, never unchanged), and a
+  change carries its witness points as evidence
+  (`comparison:witness:mesh:…`). `ComparisonRequest::with_mesh_geometry`,
+  `GeometryMode`, `Measure::Mesh` and `Witness` expose it to hosts, and
+  `axioval compare --geometry --geometry-mode mesh` runs it over two files,
+  recording each change's `witness` and the comparison's `geometry_mode`.
+  The proximity contract gains `body_surface` and `measure_surface_distance`
+  (`BodySurface`, `SurfaceDistanceRequest`, `SurfaceDistanceEvidence`,
+  `DirectedDistance`, `SurfaceDirection`), defaulting to `Unavailable`, so
+  one session's service can measure its body against another session's;
+  `AxiolidProximityService` answers them with axiolid-measure's
+  `hausdorff_distance` for exact meshes only. **Breaking:** definitions
+  bound to `model-comparison` must declare the optional parameters
+  `geometry` (`string`) and `tolerance_metres` (`number`); `Measurement`
+  gains the public field `witness` and `Measure` the variant `Mesh`.
+
 - **Opening distance from supports scaled by the beam.** (Closes #156)
   `opening-zone` gains `support_distance_ratio` and
   `support_distance_reference` (`span` or `depth`): the distance an opening

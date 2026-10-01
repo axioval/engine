@@ -596,6 +596,16 @@ mod tables {
             column(json!({"id": "a", "kind": "quantity", "dimension": "area"})).unwrap(),
             ReportColumn::quantity("a", QuantityDimension::Area)
         );
+        // A column states its exactness only when the capability does.
+        let bounded = ReportColumn::quantity("a", QuantityDimension::Area)
+            .with_exactness(axioval_ir::ColumnExactness::Bounded);
+        let wire = serde_json::to_value(&bounded).unwrap();
+        assert_eq!(
+            wire,
+            json!({"id": "a", "kind": "quantity", "dimension": "area", "exactness": "bounded"})
+        );
+        assert_eq!(column(wire).unwrap(), bounded);
+        assert!(column(json!({"id": "a", "kind": "text", "exactness": "rough"})).is_err());
     }
 
     fn takeoff() -> ReportTable {

@@ -33,7 +33,8 @@ pub use decision::{
 /// Named tables of measured values reported beside findings.
 pub mod table;
 pub use table::{
-    ReportColumn, ReportColumnKind, ReportRow, ReportTable, ReportTableError, ReportValue,
+    ColumnExactness, ReportColumn, ReportColumnKind, ReportRow, ReportTable, ReportTableError,
+    ReportValue,
 };
 
 /// Validation error for source-neutral contracts.

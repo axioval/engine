@@ -431,9 +431,9 @@ enum Fit {
 
 /// The profile as the table reads it: family, name, and where its
 /// dimensions are stated in the body set.
-struct Profile {
-    family: String,
-    name: Option<String>,
+pub(crate) struct Profile {
+    pub(crate) family: String,
+    pub(crate) name: Option<String>,
     /// `Profile.`, or `Profile.Parent.` … for a mirrored profile.
     prefix: String,
     mirrored: bool,
@@ -458,26 +458,35 @@ fn profile(
     object: &Object,
     body: &mut BodyFacts<'_>,
 ) -> Result<Result<Profile, Finding>, Unavailable> {
-    let wrong = |body: &BodyFacts<'_>, message: String| {
-        Ok(Err(finding(
+    Ok(read_profile(body)?.map_err(|message| {
+        finding(
             rule,
             &object.id,
             format!("wrong geometry: {message}; a single swept profile is required"),
             body.evidence().to_vec(),
             vec![],
-        )))
-    };
+        )
+    }))
+}
+
+/// Reads the body's one swept profile, following a mirror to its parent;
+/// why the body has none (no body, several items, no swept solid), or a
+/// refusal when that cannot be read or a derived profile's operator may
+/// scale its parent.
+pub(crate) fn read_profile(
+    body: &mut BodyFacts<'_>,
+) -> Result<Result<Profile, String>, Unavailable> {
     let Some(count) = body.integer("Count")? else {
-        return wrong(body, "the object has no body".into());
+        return Ok(Err("the object has no body".into()));
     };
     if count != 1 {
-        return wrong(body, format!("the body has {count} items"));
+        return Ok(Err(format!("the body has {count} items")));
     }
     let Some(family) = body.text("Profile.Type")? else {
         let kind = body
             .text("Kind")?
             .unwrap_or_else(|| "of an unstated kind".into());
-        return wrong(body, format!("the body is a `{kind}`, not a swept profile"));
+        return Ok(Err(format!("the body is a `{kind}`, not a swept profile")));
     };
     let name = body.text("Profile.Name")?;
     let mut profile = Profile {
@@ -511,6 +520,35 @@ fn profile(
         ));
     }
     Ok(Ok(profile))
+}
+
+/// The dimension columns, in the order a finding lists them: each name and
+/// whether it is a plane angle (otherwise a length).
+pub(crate) fn dimension_columns() -> impl Iterator<Item = (&'static str, bool)> {
+    DIMENSIONS
+        .iter()
+        .map(|dimension| (dimension.column, dimension.angle))
+}
+
+/// `profile`'s value of the dimension column `column` in metres or
+/// radians: `None` when its family has no such dimension or the source
+/// leaves it unset.
+pub(crate) fn dimension_value(
+    profile: &Profile,
+    column: &str,
+    body: &mut BodyFacts<'_>,
+) -> Result<Option<f64>, Unavailable> {
+    let Some(dimension) = DIMENSIONS
+        .iter()
+        .find(|dimension| dimension.column == column)
+    else {
+        return Ok(None);
+    };
+    match measure(profile, dimension, body) {
+        Measured::Value(value) => Ok(Some(value)),
+        Measured::Missing(_) => Ok(None),
+        Measured::Undecided(unavailable) => Err(unavailable),
+    }
 }
 
 /// A profile's value of one dimension column.

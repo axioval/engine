@@ -279,7 +279,7 @@ fn elements<'a>(boundaries: impl Iterator<Item = &'a MeasuredBoundary>) -> Vec<O
     elements
 }
 
-fn coverage_error(error: &BoundaryCoverageError) -> Unavailable {
+pub(crate) fn coverage_error(error: &BoundaryCoverageError) -> Unavailable {
     let reason = match error {
         BoundaryCoverageError::UnknownSpace(_)
         | BoundaryCoverageError::NoBody(_)

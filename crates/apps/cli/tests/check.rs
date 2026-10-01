@@ -12802,23 +12802,7 @@ fn takeoff_definitions(case: &Case) -> PathBuf {
     definitions["properties"]["axioval:example.ifc.Name"] = json!({
         "id": "axioval:example.ifc.Name", "name": text("Name"), "valueKind": "string",
         "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "Name"}], "citations": []});
-    let mut parameters = serde_json::Map::new();
-    let mut declare = |id: String, kind: &str| {
-        let declared = json!({"id": id, "name": text(&id), "kind": kind, "required": false,
-                              "allowedValues": [], "citations": []});
-        parameters.insert(id, declared);
-    };
-    for n in 1..=3 {
-        declare(format!("group_{n}"), "propertyReference");
-        declare(format!("group_{n}_path"), "stringList");
-        declare(format!("group_{n}_name"), "string");
-    }
-    for n in 1..=4 {
-        declare(format!("measure_{n}"), "propertyReference");
-        declare(format!("measure_{n}_aggregates"), "stringList");
-        declare(format!("measure_{n}_name"), "string");
-    }
-    declare("across_sources".to_owned(), "boolean");
+    let parameters = registry_signature("axioval:capability.quantity-takeoff");
     definitions["definitions"]["axioval:example.takeoff"] = json!({
         "id": "axioval:example.takeoff", "name": text("takeoff"), "description": text("takeoff"),
         "capability": "axioval:capability.quantity-takeoff", "parameters": parameters,
@@ -12947,6 +12931,146 @@ fn a_quantity_takeoff_is_listed_by_group_and_exported_as_csv() {
         "{}",
         stderr(&missing)
     );
+}
+
+/// The `takeoff` table of the rule under test.
+fn takeoff_table(result: &Value) -> &Value {
+    result["report"]["tables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|table| table["rule_id"] == "under-test" && table["name"] == "takeoff")
+        .unwrap_or_else(|| panic!("no takeoff table: {result:#}"))
+}
+
+/// Storeys `EG` and `OG`, wall `W1` and door `D1` in `EG`, door `D2` in
+/// `OG`; only the wall states `Pset_WallCommon`.
+fn walls_and_doors_on_storeys() -> String {
+    "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+     #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+     #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+     #3=IFCLOCALPLACEMENT($,#2);\n\
+     #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+     #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+     #7=IFCUNITASSIGNMENT((#6));\n\
+     #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+     #10=IFCBUILDINGSTOREY('0000000000000000000010',$,'EG',$,$,#3,$,$,.ELEMENT.,0.);\n\
+     #11=IFCBUILDINGSTOREY('0000000000000000000011',$,'OG',$,$,#3,$,$,.ELEMENT.,3.);\n\
+     #20=IFCWALL('0000000000000000000020',$,'W1',$,$,#3,$,$,.STANDARD.);\n\
+     #21=IFCDOOR('0000000000000000000021',$,'D1',$,$,#3,$,$,2.1,0.9,.DOOR.,.SINGLE_SWING.,$);\n\
+     #22=IFCDOOR('0000000000000000000022',$,'D2',$,$,#3,$,$,2.1,0.9,.DOOR.,.SINGLE_SWING.,$);\n\
+     #30=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000030',$,$,$,(#20,#21),#10);\n\
+     #31=IFCRELCONTAINEDINSPATIALSTRUCTURE('0000000000000000000031',$,$,$,(#22),#11);\n\
+     #40=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('F90'),$);\n\
+     #41=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);\n\
+     #42=IFCPROPERTYSET('0000000000000000000042',$,'Pset_WallCommon',$,(#40,#41));\n\
+     #43=IFCRELDEFINESBYPROPERTIES('0000000000000000000043',$,$,$,(#20),#42);\n\
+     ENDSEC;\nEND-ISO-10303-21;\n"
+        .to_owned()
+}
+
+/// An itemised takeoff of walls and doors: each element's storey through
+/// a `related` column, and the wall's `Pset_WallCommon` expanded into one
+/// column per property.
+#[test]
+fn a_takeoff_lists_related_storeys_and_expands_a_property_set() {
+    let case = Case::new("takeoff-related-property-set");
+    let name = json!({"type": "propertyReference", "propertySet": "axioval:attributes",
+                      "property": "axioval:example.ifc.name"});
+    let (output, result) = case.geometry_rule(
+        &walls_and_doors_on_storeys(),
+        &[("door", "IfcDoor")],
+        "axioval:capability.quantity-takeoff",
+        &registry_signature("axioval:capability.quantity-takeoff"),
+        json!({"kind": "anyOf", "operands": [entity("wall"), entity("door")]}),
+        json!({
+            "group_1": name,
+            "group_1_name": {"type": "string", "value": "element"},
+            "measure_1_kind": {"type": "string", "value": "related"},
+            "measure_1": name,
+            "measure_1_path": {"type": "stringList",
+                               "value": ["IfcRelContainedInSpatialStructure:backward"]},
+            "measure_1_name": {"type": "string", "value": "storey"},
+            "measure_2_kind": {"type": "string", "value": "property_set"},
+            "measure_2_property_set": {"type": "string",
+                                       "value": "axioval:example.ifc.pset-wall-common"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let table = takeoff_table(&result);
+    assert_eq!(
+        table["columns"],
+        json!([
+            {"id": "count", "kind": "number", "exactness": "exact"},
+            {"id": "values_storey", "kind": "text", "exactness": "exact"},
+            {"id": "values_fire_rating", "kind": "text", "exactness": "exact"},
+            {"id": "values_is_external", "kind": "text", "exactness": "exact"},
+        ]),
+        "{result:#}"
+    );
+    let rows: Vec<(Value, Vec<Value>)> = table["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let values = row["values"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .skip(1)
+                .map(|value| value["value"].clone())
+                .collect();
+            (row["group"].clone(), values)
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (json!(["D1"]), vec![json!("EG"), json!("-"), json!("-")]),
+            (json!(["D2"]), vec![json!("OG"), json!("-"), json!("-")]),
+            (
+                json!(["W1"]),
+                vec![json!("EG"), json!("F90"), json!("true")]
+            ),
+        ],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+/// Spaces #39 and #69 take off the area of their boundaries against walls,
+/// measured from the connection surfaces the model declares.
+#[test]
+fn with_geometry_a_space_takeoff_sums_its_wall_boundary_areas() {
+    let case = Case::new("takeoff-boundary-areas");
+    let (output, result) = case.geometry_rule(
+        &spaces_with_boundaries(),
+        &[("space", "IfcSpace")],
+        "axioval:capability.quantity-takeoff",
+        &registry_signature("axioval:capability.quantity-takeoff"),
+        entity("space"),
+        json!({
+            "measure_1_kind": {"type": "string", "value": "boundary_area"},
+            "measure_1_bounding": {"type": "selector", "value": entity("wall")},
+            "measure_1_name": {"type": "string", "value": "wall_area"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let table = takeoff_table(&result);
+    assert_eq!(
+        table["columns"][1],
+        json!({"id": "sum_wall_area", "kind": "quantity", "dimension": "area",
+               "exactness": "exact"}),
+        "{result:#}"
+    );
+    // #39: the floor less its 1 m² hole, the ceiling and three walls
+    // (11 + 12 + 10 + 10 + 7.5 m²); #69: a 6 m² triangle.
+    assert_eq!(
+        table["rows"][0]["values"],
+        json!([{"type": "exact", "value": 2.0}, {"type": "exact", "value": 56.5}]),
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
 #[test]

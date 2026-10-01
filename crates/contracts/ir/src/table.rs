@@ -68,15 +68,34 @@ impl ReportColumnKind {
     }
 }
 
-/// One column: a lowercase id, unique in its table, and its kind.
+/// How exact a column's values are, as the column states it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColumnExactness {
+    /// Every value derives from exact inputs, stated or measured exactly,
+    /// by exact arithmetic up to binary rounding: a value is an interval
+    /// only where an undecided input (a possible member of a group, say)
+    /// widens it.
+    Exact,
+    /// Some value derives from an input known only within bounds, such as
+    /// an area measured on a tessellated body: each value is an interval
+    /// sure to hold the exact one.
+    Bounded,
+}
+
+/// One column: a lowercase id, unique in its table, its kind and, when the
+/// capability states it, its exactness.
 ///
 /// On the wire `{"id": "height", "kind": "quantity", "dimension": "length"}`;
-/// `dimension` is written for a quantity column only.
+/// `dimension` is written for a quantity column only, `exactness` (`exact`
+/// or `bounded`) only when stated.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ColumnWire", into = "ColumnWire")]
 pub struct ReportColumn {
     pub id: String,
     pub kind: ReportColumnKind,
+    /// How exact the values are; `None` when the capability does not say.
+    pub exactness: Option<ColumnExactness>,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -94,6 +113,8 @@ struct ColumnWire {
     kind: KindTag,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dimension: Option<QuantityDimension>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    exactness: Option<ColumnExactness>,
 }
 
 impl From<ReportColumn> for ColumnWire {
@@ -107,6 +128,7 @@ impl From<ReportColumn> for ColumnWire {
             id: column.id,
             kind,
             dimension,
+            exactness: column.exactness,
         }
     }
 }
@@ -128,7 +150,11 @@ impl TryFrom<ColumnWire> for ReportColumn {
                 ));
             }
         };
-        Ok(Self { id: wire.id, kind })
+        Ok(Self {
+            id: wire.id,
+            kind,
+            exactness: wire.exactness,
+        })
     }
 }
 
@@ -139,6 +165,7 @@ impl ReportColumn {
         Self {
             id: id.into(),
             kind: ReportColumnKind::Quantity { dimension },
+            exactness: None,
         }
     }
     /// A dimensionless number column.
@@ -147,6 +174,7 @@ impl ReportColumn {
         Self {
             id: id.into(),
             kind: ReportColumnKind::Number,
+            exactness: None,
         }
     }
     /// A text column.
@@ -155,7 +183,14 @@ impl ReportColumn {
         Self {
             id: id.into(),
             kind: ReportColumnKind::Text,
+            exactness: None,
         }
+    }
+    /// The same column, stating how exact its values are.
+    #[must_use]
+    pub fn with_exactness(mut self, exactness: ColumnExactness) -> Self {
+        self.exactness = Some(exactness);
+        self
     }
 }
 

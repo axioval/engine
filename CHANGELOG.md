@@ -52,6 +52,31 @@ All notable changes are documented here. This project follows Semantic Versionin
   Without `pair_key` nothing changes. **Breaking:** definitions bound to
   `keyed-limit` must declare the optional `string` parameter `pair_key`
   and the optional `textPattern` column `other_side` of `limits`.
+- **Takeoff column kinds.** (Closes #175) A `quantity-takeoff` column
+  declares its kind with `measure_<n>_kind`: `property` (the default, as
+  before), `related` (a property of the objects a relationship path
+  reaches, `measure_<n>_path` in the selector path grammar: numbers of one
+  dimension summed, texts listed, so a door's storey name reads through
+  `IfcRelContainedInSpatialStructure:backward`), `boundary_area` (the area
+  of a space's declared boundaries whose bounding element
+  `measure_<n>_bounding` selects, measured by the space-boundary coverage
+  service within `boundary_plane_tolerance`), `property_set` (every
+  property of `measure_<n>_property_set`, one column per property found, in
+  property-name order) and `profile` (the body's swept profile as
+  `allowed-profile` reads it: type, name and every dimension found). A
+  takeoff declares up to eight columns (`measure_1` to `measure_8`). The
+  new aggregate `values` lists a column's distinct values (`F30, F90`),
+  counting a possible member's value only where it is listed already, and
+  is the default for `related`, `property_set` and `profile`. Undecided
+  bounding elements widen a boundary area and leave the space not
+  evaluated; an absent value is never zero. Every takeoff column states its
+  exactness: `ReportColumn` has `exactness: Option<ColumnExactness>`
+  (`exact` or `bounded`, written on the wire only when stated). The table
+  name and the existing column ids are unchanged.
+  **Breaking:** `ReportColumn` has a public `exactness` field, which a
+  struct literal must name; `quantity-takeoff` declares new optional
+  parameters, so a definition package declaring its signature by hand must
+  add them.
 - **Export profiles, shared by every target.** (Closes #197) The new core
   crate `axioval-export` holds the `ExportProfile` trait (an open string
   id, `export(definitions, ruleset) -> ExportOutcome`, and optional report,

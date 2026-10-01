@@ -518,7 +518,7 @@ Every metric reports what it measured beside its findings, passing or not, as ta
 | `level-spacing` with `space_selector` | `spaces` | `level` (its id), `height` (m), `level_height` (m) |
 | `plan-area` | `areas` | `plan_area` or, with `measure: facade`, `facade_area` (m²); a subject with undecided members has no row |
 | `area-ratio` | `ratios` | `numerator_area` (m²), `denominator_area` (m²), `ratio` (unknown when the denominator may be zero) |
-| `quantity-takeoff` | `takeoff` | grouped by its keys: `count`, then `<aggregate>_<name>` per measure (see [Information takeoff](#information-takeoff)) |
+| `quantity-takeoff` | `takeoff` | grouped by its keys: `count`, then `<aggregate>_<name>` per column and aggregate (each part of a `property_set` or `profile` column), every column stating its exactness (see [Information takeoff](#information-takeoff)) |
 
 Tables need no parameter: a definition's signature is unchanged. An anchor that could not be measured has no row, and its not-evaluated outcome says why.
 
@@ -1926,8 +1926,8 @@ comparison as a rule](./comparison.md#the-comparison-as-a-rule).
 ### Information takeoff
 
 `axioval:capability.quantity-takeoff` counts the rule's selection per group
-and aggregates stated or measured quantities of each group into the report
-table `takeoff` (see [Report tables](./ir.md#tables)). It raises no finding:
+and aggregates stated, measured and related values of each group into the
+report table `takeoff` (see [Report tables](./ir.md#tables)). It raises no finding:
 quantity takeoff, model value reports and degree-of-detail reports read the
 table.
 
@@ -1936,15 +1936,42 @@ table.
 | `group_1` to `group_3` | `propertyReference` | The group keys, outermost first, each declared only after the one before it. A key is read as a rule's [categories](./refinement.md#nested-categories) read a level: on the object, distinct values joined (`Lab, Office`), no value (absent, null, blank) `-`. A derived classification is the property `<id>` in `axioval:classification`, and a level of a hierarchical one `<id>;level=<n>` (level 1 groups by the roots; an object classified above the level has no value there), a type name `Name` in `axioval:type-attributes`, a material a property of `axioval:material`. |
 | `group_<n>_path` | `stringList` | Read key `n` on the objects this path reaches instead (steps as in a `related` selector): `IfcRelContainedInSpatialStructure:backward` with `Name` groups by storey. |
 | `group_<n>_name` | `string` | The group column's id; `group_<n>` without it. |
-| `measure_1` to `measure_4` | `propertyReference` | The quantities aggregated, each declared only after the one before it: a stated number or quantity, or a value of `axioval:measured` (`area`, `volume`, extents). |
-| `measure_<n>_aggregates` | `stringList` | Any of `sum`, `min`, `max`, `mean`, once each; `sum` without it. |
-| `measure_<n>_name` | `string` | The column name after the aggregate (`sum_<name>`); without it the property's name after its last `.`, split at case changes, lowercase (`t.NetSideArea` is `net_side_area`). |
+| `measure_1` to `measure_8` | `propertyReference` | The property a `property` or `related` column reads, each column declared (by this or its `_kind`) only after the one before it: a stated number, quantity or text, or a value of `axioval:measured` (`area`, `volume`, extents). |
+| `measure_<n>_kind` | `string` | The column kind (below); `property` without it. |
+| `measure_<n>_aggregates` | `stringList` | Any of `sum`, `min`, `max`, `mean` and `values` (the distinct values, listed), once each; without it `sum` for a `property` or `boundary_area` column, `values` for the others. |
+| `measure_<n>_name` | `string` | The column name after the aggregate (`sum_<name>`); without it the property's name after its last `.`, split at case changes, lowercase (`t.NetSideArea` is `net_side_area`), `boundary_area` or `profile`. An expanding column prefixes it to each part (`<name>_<part>`); a `property_set` column without it names its parts alone. |
+| `measure_<n>_path` | `stringList` | The relationship path of a `related` column, steps as in a `related` selector (alternation and derived relationships included). |
+| `measure_<n>_bounding` | `selector` | The bounding elements of a `boundary_area` column: `entityType` of walls, of windows. |
+| `measure_<n>_property_set` | `string` | The property set a `property_set` column expands. |
 | `across_sources` | `boolean` | One set of groups for the whole project; per source without it. |
+| `boundary_plane_tolerance` | `quantity` | How far from a face plane of the space's body a boundary surface may lie and still count on it (`boundary_area`); zero without it. |
+
+Column kinds:
+
+| Kind | Values |
+|---|---|
+| `property` | `measure_<n>` on the object. |
+| `related` | `measure_<n>` on every object `measure_<n>_path` reaches: numbers of one dimension summed (each object reached must state one), texts listed; reaching none, or none stating it, is no value. `IfcRelContainedInSpatialStructure:backward` with `Name` gives the storey's name, `IfcRelDefinesByType:backward` with `Name` the type's. |
+| `boundary_area` | The area (m²) of the space's declared boundaries whose bounding element `measure_<n>_bounding` selects, as the space-boundary coverage service measures them (see [Model quality](#model-quality)). A boundary bounding against no element counts in no column; one whose element's selection is undecided may add its area and leaves the space not evaluated; one of the kind on no face of the body leaves the area unknown. |
+| `property_set` | Every property of `measure_<n>_property_set`, one column per property found on any member, in property-name order (`FireRating` is `fire_rating`). A part with a text value lists `values`; a numeric one takes the declared aggregates. |
+| `profile` | The body's one swept profile, read as `allowed-profile` reads it: `type` and `name` listed, then every dimension found (`width`, `depth`, `web_thickness`, …, in that capability's order), lengths and plane angles taking the declared aggregates. A body that is no single swept profile has no value. |
+
+A `values` aggregate lists the distinct values of the group's members,
+sorted and joined (`F30, F90`), numbers with their unit (`0.3 m`), `-` for
+none. A possible member's value counts only where it is listed already: one
+that may add a value leaves the list `unknown`, as does a value that cannot
+be read.
+
+Every column states its exactness (`exactness` on the wire, see
+[Tables](./ir.md#tables)): `exact` when every value it read is exact, stated
+or measured exactly; `bounded` when one is known only within bounds (a
+tessellated body, a measured interval).
 
 The table's group columns are the keys' ids, its columns `count` and one
-`<aggregate>_<name>` per measure and aggregate, a quantity in the dimension
-its values state (a plain number for unitless values). Rows are keyed by
-the source (or the project) and the group, in group order.
+`<aggregate>_<name>` per column (each part of an expanding one) and
+aggregate: a quantity in the dimension its values state (a plain number for
+unitless values), text for `values`. Rows are keyed by the source (or the
+project) and the group, in group order.
 
 Every value is an interval sure to hold the exact one, so every aggregate is
 too: a tessellated footprint sums to an interval.
@@ -1955,8 +1982,9 @@ too: a tessellated footprint sums to an interval.
 - An object whose group cannot be read (its key unreadable, a
   classification row undecided) may belong to **any** group of its scope,
   and widens every one of them the same way.
-- A member whose quantity is absent, null, not numeric or unreadable makes
-  its group's aggregate of that quantity `unknown`; its count stands.
+- A member whose value is absent, null, not numeric or unreadable makes its
+  group's numeric aggregate of that column `unknown`, never zero; its count
+  stands.
 - `min`, `max` and `mean` of a group that may be empty (no sure member) are
   unknown; a `mean` is bounded over every membership the undecided members
   allow.
@@ -1982,7 +2010,19 @@ not evaluated as an invalid declaration.
 ```
 
 reports one row per wall type and storey with `count` and
-`sum_net_side_area` (m²). `axioval report RESULT --section tables` lists the
+`sum_net_side_area` (m²). A space takeoff lists its boundary areas against
+walls, windows and doors with three `boundary_area` columns:
+
+```json
+"measure_1_kind": {"type": "string", "value": "boundary_area"},
+"measure_1_bounding": {"type": "selector", "value": {"kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true}},
+"measure_1_name": {"type": "string", "value": "wall_area"},
+"measure_2_kind": {"type": "string", "value": "property_set"},
+"measure_2_property_set": {"type": "string", "value": "Pset_SpaceCommon"}
+```
+
+gives `sum_wall_area` (m²) and one `values_<property>` column per property
+of `Pset_SpaceCommon` found. `axioval report RESULT --section tables` lists the
 rows with their groups, and `--csv` exports the table (see
 [Command line](./cli.md)).
 

@@ -1,49 +1,64 @@
-//! Information takeoff: stated and measured quantities counted and summed
-//! per group of objects.
+//! Information takeoff: the selection counted, and stated, measured and
+//! related values aggregated per group of objects.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
+    BoundaryCoverage, BoundaryCoverageRequest, BoundaryCoverageServiceHandle, BoundaryPlacement,
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext,
 };
-use axioval_ir::contract::CategoryLevel;
+use axioval_ir::contract::{CategoryLevel, Selector};
 use axioval_ir::{
-    MEASURED_AREA, MEASURED_SET, MEASURED_VOLUME, Object, PropertyValue, QuantityDimension,
-    ReportColumn, ReportTable, ReportValue, Scope,
+    ColumnExactness, MEASURED_AREA, MEASURED_SET, MEASURED_VOLUME, Object, ObjectId, PropertyValue,
+    QuantityDimension, ReportColumn, ReportTable, ReportValue, Scope,
 };
 
-use crate::selection::{Selection, selector_matches};
+use crate::allowed_profile::{dimension_columns, dimension_value, read_profile};
+use crate::body_facts::BodyFacts;
+use crate::selection::{NameSpec, Selection, enumerate, object_by_id, selector_matches};
+use crate::space_boundary_coverage::coverage_error;
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, category_headings, display, exact_f64,
-    invalid, resolve,
+    invalid, resolve, undefined,
 };
 
 /// The name of the table a takeoff reports.
 pub const TAKEOFF_TABLE: &str = "takeoff";
 /// How many group keys a takeoff declares at most (`group_1` ...).
 const GROUPS: usize = 3;
-/// How many quantities a takeoff measures at most (`measure_1` ...).
-const MEASURES: usize = 4;
+/// How many columns a takeoff declares at most (`measure_1` ...).
+const MEASURES: usize = 8;
+/// The column kinds a measure may declare (`measure_<n>_kind`).
+const KINDS: &str = "property, related, boundary_area, property_set or profile";
 
-/// Counts the rule's selection per group and aggregates stated or measured
-/// quantities of each group into the report table `takeoff`.
+/// Counts the rule's selection per group and aggregates values of each
+/// group into the report table `takeoff`.
 ///
 /// Groups are keyed by up to three properties (`group_1` to `group_3`),
 /// each read on the object or, with `group_<n>_path`, on the objects the
 /// path reaches (the storey), as a rule's categories read them: distinct
 /// values join in one text, no value is `-`. A derived classification is
 /// the property `<id>` in `axioval:classification`, and a level of a
-/// hierarchical one `<id>;level=<n>`. Each row counts its
-/// group (`count`) and aggregates up to four quantities (`measure_1` to
-/// `measure_4`) by `sum` (the default), `min`, `max` or `mean`.
+/// hierarchical one `<id>;level=<n>`. Each row counts its group (`count`)
+/// and aggregates up to eight columns (`measure_1` to `measure_8`) by
+/// `sum`, `min`, `max`, `mean` or `values` (the distinct values, listed).
+///
+/// A column is of one kind (`measure_<n>_kind`): a `property` of the
+/// object (the default), stated or measured; a property of the objects a
+/// relationship path reaches (`related`, summed over them when numeric,
+/// listed otherwise); the area of the space boundaries whose bounding
+/// element a selector selects (`boundary_area`); every property of a
+/// property set (`property_set`), one column per property found; or the
+/// swept profile of the body (`profile`), its type, name and every
+/// dimension found. Each column states its exactness.
 ///
 /// Values are intervals sure to hold the exact value, so aggregates are
 /// too. An object whose selection cannot be decided may or may not belong
 /// to its group, and one whose group cannot be read may belong to any group
 /// of its scope: either widens the count and the aggregates of every group
-/// it may belong to, and is reported not evaluated. A member whose quantity
-/// is absent or unreadable makes its group's aggregate unknown. The
+/// it may belong to, and is reported not evaluated. A member whose value is
+/// absent or unreadable makes its group's numeric aggregate unknown. The
 /// takeoff raises no finding.
 pub struct QuantityTakeoff;
 
@@ -69,22 +84,28 @@ impl RuleCapability for QuantityTakeoff {
             ));
         }
         for n in 1..=MEASURES {
-            parameters.push(ParameterDescriptor::optional(
-                format!("measure_{n}"),
-                ParameterType::PropertyReference,
-            ));
-            parameters.push(ParameterDescriptor::optional(
-                format!("measure_{n}_aggregates"),
-                ParameterType::StringList,
-            ));
-            parameters.push(ParameterDescriptor::optional(
-                format!("measure_{n}_name"),
-                ParameterType::String,
-            ));
+            for (suffix, kind) in [
+                ("", ParameterType::PropertyReference),
+                ("_aggregates", ParameterType::StringList),
+                ("_name", ParameterType::String),
+                ("_kind", ParameterType::String),
+                ("_path", ParameterType::StringList),
+                ("_bounding", ParameterType::Selector),
+                ("_property_set", ParameterType::String),
+            ] {
+                parameters.push(ParameterDescriptor::optional(
+                    format!("measure_{n}{suffix}"),
+                    kind,
+                ));
+            }
         }
         parameters.push(ParameterDescriptor::optional(
             "across_sources",
             ParameterType::Boolean,
+        ));
+        parameters.push(ParameterDescriptor::optional(
+            "boundary_plane_tolerance",
+            ParameterType::Quantity,
         ));
         parameters
     }
@@ -100,9 +121,11 @@ impl RuleCapability for QuantityTakeoff {
             }
         };
         let mut evaluation = CapabilityEvaluation::default();
-        let mut scopes: BTreeMap<Scope, Vec<Member>> = BTreeMap::new();
+        let universe: Vec<&Object> = context.project.objects().collect();
+        let mut members = Vec::new();
+        let mut scopes: BTreeMap<Scope, Vec<usize>> = BTreeMap::new();
         for object in context.project.objects() {
-            let Some(member) = declaration.member(context, rule, object, &mut evaluation) else {
+            let Some(member) = declaration.member(context, rule, object, &universe) else {
                 continue;
             };
             let scope = if declaration.across_sources {
@@ -110,10 +133,14 @@ impl RuleCapability for QuantityTakeoff {
             } else {
                 Scope::Source(object.id.source.clone())
             };
-            scopes.entry(scope).or_default().push(member);
+            scopes.entry(scope).or_default().push(members.len());
+            members.push(member);
         }
-        let kinds = declaration.column_kinds(&scopes, &mut evaluation);
-        let table = match declaration.table(rule, &kinds, &scopes) {
+        let fields = declaration.fields(&members, &mut evaluation);
+        for member in &members {
+            member.report(&fields, &mut evaluation);
+        }
+        let table = match declaration.table(rule, &fields, &members, &scopes) {
             Ok(table) => table,
             Err(error) => {
                 return CapabilityEvaluation::not_evaluated(
@@ -127,13 +154,15 @@ impl RuleCapability for QuantityTakeoff {
     }
 }
 
-/// How a measure's values are combined per group.
+/// How a column's values are combined per group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Aggregate {
     Sum,
     Min,
     Max,
     Mean,
+    /// The distinct values, listed as text.
+    Values,
 }
 
 impl Aggregate {
@@ -143,9 +172,10 @@ impl Aggregate {
             "min" => Self::Min,
             "max" => Self::Max,
             "mean" => Self::Mean,
+            "values" => Self::Values,
             other => {
                 return Err(invalid(format!(
-                    "aggregate `{other}` is unsupported; use sum, min, max or mean"
+                    "aggregate `{other}` is unsupported; use sum, min, max, mean or values"
                 )));
             }
         })
@@ -157,16 +187,98 @@ impl Aggregate {
             Self::Min => "min",
             Self::Max => "max",
             Self::Mean => "mean",
+            Self::Values => "values",
+        }
+    }
+
+    /// Whether it combines numbers (otherwise it lists values).
+    fn numeric(self) -> bool {
+        self != Self::Values
+    }
+}
+
+/// Where a column's values come from.
+enum Source<'a> {
+    /// A property of the object.
+    Property(PropertyRef<'a>),
+    /// A property of the objects a path reaches.
+    Related {
+        property: PropertyRef<'a>,
+        path: Traversal,
+    },
+    /// The area of the boundaries whose element the selector selects.
+    BoundaryArea(&'a Selector),
+    /// Every property of a set, one column each.
+    PropertySet(&'a str),
+    /// The body's swept profile: type, name and dimensions.
+    Profile,
+}
+
+impl Source<'_> {
+    /// Whether it expands to one column per part found.
+    fn expands(&self) -> bool {
+        matches!(self, Self::PropertySet(_) | Self::Profile)
+    }
+
+    /// The kind a numeric column of it answers in when no value says.
+    fn fallback_kind(&self) -> Kind {
+        match self {
+            Self::Property(property) => measured_kind(*property),
+            Self::BoundaryArea(_) => Some(QuantityDimension::Area),
+            Self::Related { .. } | Self::PropertySet(_) | Self::Profile => None,
+        }
+    }
+
+    /// How exact its values are when no value says.
+    fn fallback_exactness(&self) -> ColumnExactness {
+        match self {
+            Self::Property(property) if property.set == Some(MEASURED_SET) => {
+                ColumnExactness::Bounded
+            }
+            Self::BoundaryArea(_) => ColumnExactness::Bounded,
+            _ => ColumnExactness::Exact,
         }
     }
 }
 
-/// One quantity a takeoff aggregates.
+/// One declared column (`measure_<n>`).
 struct Measure<'a> {
-    property: PropertyRef<'a>,
-    aggregates: Vec<Aggregate>,
-    /// The column name after the aggregate: `sum_<name>`.
+    source: Source<'a>,
+    /// The declared aggregates, if any.
+    aggregates: Option<Vec<Aggregate>>,
+    /// The column name after the aggregate (`sum_<name>`); an expanding
+    /// column's prefix before each part (`<name>_<part>`), none when empty.
     name: String,
+    /// How messages name the values read.
+    what: String,
+}
+
+impl Measure<'_> {
+    /// The aggregates of a column of it whose values are text (`text`) or
+    /// numbers.
+    fn aggregates(&self, text: bool) -> Vec<Aggregate> {
+        if text && self.source.expands() {
+            return vec![Aggregate::Values];
+        }
+        match (&self.aggregates, &self.source) {
+            (Some(declared), _) => declared.clone(),
+            (None, Source::Property(_) | Source::BoundaryArea(_)) => vec![Aggregate::Sum],
+            (None, _) => vec![Aggregate::Values],
+        }
+    }
+
+    /// The column name of `part` of an expanding column.
+    fn part_name(&self, part: &str) -> String {
+        let part = match &self.source {
+            Source::PropertySet(_) => column_name(part),
+            _ => part.to_owned(),
+        };
+        if self.name.is_empty() {
+            part
+        } else {
+            format!("{}_{part}", self.name)
+        }
+    }
 }
 
 struct Declaration<'a> {
@@ -175,25 +287,154 @@ struct Declaration<'a> {
     levels: Vec<CategoryLevel>,
     measures: Vec<Measure<'a>>,
     across_sources: bool,
+    /// How far from a face plane a boundary surface may lie, in metres.
+    plane_tolerance: f64,
 }
 
-/// A value's interval and kind: a dimension, or `None` for a plain number.
+/// A value's kind: a dimension, or `None` for a plain number.
 type Kind = Option<QuantityDimension>;
 
-#[derive(Clone, Copy)]
-enum Value {
-    Known { lower: f64, upper: f64, kind: Kind },
-    Unknown,
+/// One member's value of one column.
+#[derive(Clone, Debug)]
+enum Cell {
+    /// A number or quantity in `lower..=upper`, read exactly or measured.
+    Number {
+        lower: f64,
+        upper: f64,
+        kind: Kind,
+        exact: bool,
+    },
+    /// Distinct texts, sorted.
+    Text(Vec<String>),
+    /// Nothing stated.
+    Absent,
+    /// It cannot be read: why, worded after what was read
+    /// (`cannot be read (…)`).
+    Unreadable(NotEvaluatedReason, String),
+}
+
+impl Cell {
+    fn number(lower: f64, upper: f64, kind: Kind, exact: bool) -> Self {
+        if lower.is_finite() && upper.is_finite() && lower <= upper {
+            Self::Number {
+                lower,
+                upper,
+                kind,
+                exact,
+            }
+        } else {
+            Self::Unreadable(NotEvaluatedReason::InvalidEvidence, "is not finite".into())
+        }
+    }
+
+    /// The texts `values` lists for it.
+    fn texts(&self) -> Vec<String> {
+        match self {
+            Self::Number {
+                lower, upper, kind, ..
+            } => vec![number_text(*lower, *upper, *kind)],
+            Self::Text(texts) => texts.clone(),
+            Self::Absent | Self::Unreadable(..) => Vec::new(),
+        }
+    }
+}
+
+/// What a member read for one column.
+enum Read {
+    /// One value.
+    Single(Cell),
+    /// One value per part found (an expanding column), or why none could
+    /// be read.
+    Parts(Result<BTreeMap<String, Cell>, Unavailable>),
 }
 
 /// One object the selection may hold.
 struct Member {
+    object: ObjectId,
     /// Its group, or `None` when it cannot be read.
     group: Option<Vec<String>>,
     /// Whether the selection surely holds it.
     certain: bool,
-    /// One value per measure.
-    values: Vec<Value>,
+    /// What leaves its membership, its group or a value open.
+    problems: Vec<(NotEvaluatedReason, String)>,
+    /// One read per measure.
+    reads: Vec<Read>,
+}
+
+/// One column of values before aggregation: a measure, or one part of an
+/// expanding measure.
+struct Field {
+    measure: usize,
+    part: Option<String>,
+    /// The column name after the aggregate.
+    name: String,
+    /// How messages name the values.
+    what: String,
+    aggregates: Vec<Aggregate>,
+    /// The numeric kind, or `None` when values disagree.
+    kind: Option<Kind>,
+    exactness: ColumnExactness,
+}
+
+impl Member {
+    fn cell(&self, field: &Field) -> Cell {
+        match (&self.reads[field.measure], &field.part) {
+            (Read::Single(cell), _) => cell.clone(),
+            (Read::Parts(Ok(parts)), Some(part)) => {
+                parts.get(part).cloned().unwrap_or(Cell::Absent)
+            }
+            (Read::Parts(Err((reason, message))), _) => {
+                Cell::Unreadable(reason.clone(), format!("cannot be read ({message})"))
+            }
+            (Read::Parts(Ok(_)), None) => Cell::Absent,
+        }
+    }
+
+    /// Reports the member not evaluated with every reason it is open:
+    /// membership, group, and each value an aggregate of its group cannot
+    /// do without.
+    fn report(&self, fields: &[Field], evaluation: &mut CapabilityEvaluation) {
+        let mut problems = self.problems.clone();
+        for field in fields {
+            let cell = self.cell(field);
+            let numeric = field.kind.is_some()
+                && field.aggregates.iter().any(|aggregate| aggregate.numeric());
+            let why = match cell {
+                Cell::Unreadable(reason, why) => Some((reason, why)),
+                Cell::Absent if numeric => Some((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "has no value".into(),
+                )),
+                Cell::Text(texts) if numeric => Some((
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("states `{}`, not a number or quantity", texts.join(", ")),
+                )),
+                _ => None,
+            };
+            if let Some((reason, why)) = why {
+                problems.push((
+                    reason,
+                    format!(
+                        "`{}` {why}, so its group's `{}` is unknown",
+                        field.what, field.name
+                    ),
+                ));
+            }
+        }
+        if let Some((reason, _)) = problems.first() {
+            let reason = reason.clone();
+            let message = problems
+                .into_iter()
+                .map(|(_, message)| message)
+                .collect::<Vec<_>>()
+                .join("; ");
+            evaluation.push_object_not_evaluated(
+                self.object.clone(),
+                reason,
+                format!("quantity-takeoff: {message}"),
+            );
+        }
+    }
 }
 
 impl<'a> Declaration<'a> {
@@ -237,31 +478,55 @@ impl<'a> Declaration<'a> {
             });
         }
         let measures = measures(&parameters)?;
+        let plane_tolerance = match parameters.quantity("boundary_plane_tolerance")? {
+            None => 0.0,
+            Some((value, QuantityDimension::Length)) if value >= 0.0 => value,
+            Some(_) => {
+                return Err(invalid(
+                    "`boundary_plane_tolerance` is not a non-negative length",
+                ));
+            }
+        };
         let declaration = Self {
             group_ids,
             levels,
             measures,
             across_sources: parameters.boolean("across_sources")?.unwrap_or(false),
+            plane_tolerance,
         };
-        // Names, lengths and clashes of the columns are refused up front.
-        declaration
-            .empty_table(rule, &vec![None; declaration.measures.len()])
-            .map_err(|error| {
-                invalid(format!(
-                    "{error}; name the columns with `group_<n>_name` or `measure_<n>_name`"
-                ))
-            })?;
+        // Names, lengths and clashes of the columns known before any value
+        // is read are refused up front.
+        let fields: Vec<Field> = declaration
+            .measures
+            .iter()
+            .enumerate()
+            .filter(|(_, measure)| !measure.source.expands())
+            .map(|(index, measure)| Field {
+                measure: index,
+                part: None,
+                name: measure.name.clone(),
+                what: measure.what.clone(),
+                aggregates: measure.aggregates(false),
+                kind: None,
+                exactness: ColumnExactness::Exact,
+            })
+            .collect();
+        declaration.empty_table(rule, &fields).map_err(|error| {
+            invalid(format!(
+                "{error}; name the columns with `group_<n>_name` or `measure_<n>_name`"
+            ))
+        })?;
         Ok(declaration)
     }
 
-    /// The member `object` may be, if the selection may hold it; outcomes
-    /// that leave it undecided are pushed to `evaluation`.
+    /// The member `object` may be, if the selection may hold it, with
+    /// every value it reads.
     fn member(
         &self,
         context: &RuleContext<'_>,
         rule: &CompiledRule,
         object: &Object,
-        evaluation: &mut CapabilityEvaluation,
+        universe: &[&Object],
     ) -> Option<Member> {
         let mut evidence = Vec::new();
         let mut problems: Vec<(NotEvaluatedReason, String)> = Vec::new();
@@ -286,110 +551,153 @@ impl<'a> Declaration<'a> {
                 None
             }
         };
-        let values = self
+        let mut coverage: Option<Result<BoundaryCoverage, Unavailable>> = None;
+        let reads = self
             .measures
             .iter()
-            .map(|measure| match resolve(context, object, measure.property) {
-                Ok(resolved) => match numeric(resolved.value()) {
-                    Ok(value) => value,
-                    Err((reason, why)) => {
-                        problems.push((
+            .map(|measure| match &measure.source {
+                Source::Property(property) => {
+                    Read::Single(property_cell(context, object, *property))
+                }
+                Source::Related { property, path } => {
+                    Read::Single(related_cell(context, object, *property, path, universe))
+                }
+                Source::BoundaryArea(bounding) => {
+                    let coverage = coverage.get_or_insert_with(|| {
+                        measure_coverage(context, &object.id, self.plane_tolerance)
+                    });
+                    let (cell, open) = boundary_cell(context, coverage, bounding);
+                    problems.extend(open.into_iter().map(|(reason, message)| {
+                        (
                             reason,
                             format!(
-                                "`{}` {why}, so its group's `{}` is unknown",
-                                measure.property, measure.name
+                                "{message}, so its `{}` may or may not include it",
+                                measure.what
                             ),
-                        ));
-                        Value::Unknown
-                    }
-                },
-                Err((reason, message)) => {
-                    problems.push((
-                        reason,
-                        format!(
-                            "`{}` cannot be read ({message}), so its group's `{}` is unknown",
-                            measure.property, measure.name
-                        ),
-                    ));
-                    Value::Unknown
+                        )
+                    }));
+                    Read::Single(cell)
                 }
+                Source::PropertySet(set) => Read::Parts(set_parts(context, object, set)),
+                Source::Profile => Read::Parts(profile_parts(context, object)),
             })
             .collect();
-        if let Some((reason, _)) = problems.first() {
-            let reason = reason.clone();
-            let message = problems
-                .into_iter()
-                .map(|(_, message)| message)
-                .collect::<Vec<_>>()
-                .join("; ");
-            evaluation.push_object_not_evaluated(
-                object.id.clone(),
-                reason,
-                format!("quantity-takeoff: {message}"),
-            );
-        }
         Some(Member {
+            object: object.id.clone(),
             group,
             certain,
-            values,
+            problems,
+            reads,
         })
     }
 
-    /// The column kind of each measure: the one kind its values state, or
-    /// the kind of its measured name when none is read. Values of several
-    /// kinds leave the measure unknown (`None`) and the rule not evaluated.
-    fn column_kinds(
-        &self,
-        scopes: &BTreeMap<Scope, Vec<Member>>,
-        evaluation: &mut CapabilityEvaluation,
-    ) -> Vec<Option<Kind>> {
-        self.measures
-            .iter()
-            .enumerate()
-            .map(|(index, measure)| {
-                let mut kinds: Vec<Kind> = Vec::new();
-                for member in scopes.values().flatten() {
-                    if let Value::Known { kind, .. } = member.values[index]
-                        && !kinds.contains(&kind)
-                    {
-                        kinds.push(kind);
+    /// The columns of values: one per measure, and one per part an
+    /// expanding measure found on any member, in a stable order. A numeric
+    /// column's kind is the one kind its values state, or the measure's
+    /// own when none is read; values of several kinds leave it unknown
+    /// (`None`) and the rule not evaluated.
+    fn fields(&self, members: &[Member], evaluation: &mut CapabilityEvaluation) -> Vec<Field> {
+        let mut fields = Vec::new();
+        for (index, measure) in self.measures.iter().enumerate() {
+            let parts: Vec<Option<String>> = if measure.source.expands() {
+                let mut found = BTreeSet::new();
+                for member in members {
+                    if let Read::Parts(Ok(parts)) = &member.reads[index] {
+                        found.extend(parts.keys().cloned());
                     }
                 }
+                let mut found: Vec<String> = found.into_iter().collect();
+                if matches!(measure.source, Source::Profile) {
+                    found.sort_by_key(|part| profile_order(part));
+                }
+                found.into_iter().map(Some).collect()
+            } else {
+                vec![None]
+            };
+            for part in parts {
+                let (name, what) = match &part {
+                    Some(part) => (measure.part_name(part), format!("{} {part}", measure.what)),
+                    None => (measure.name.clone(), measure.what.clone()),
+                };
+                let mut field = Field {
+                    measure: index,
+                    part,
+                    name,
+                    what,
+                    aggregates: Vec::new(),
+                    kind: None,
+                    exactness: ColumnExactness::Exact,
+                };
+                let cells: Vec<Cell> = members.iter().map(|member| member.cell(&field)).collect();
+                let text = cells.iter().any(|cell| matches!(cell, Cell::Text(_)))
+                    || (measure.source.expands()
+                        && !cells.iter().any(|cell| matches!(cell, Cell::Number { .. }))
+                        && !profile_dimension(field.part.as_deref()));
+                field.aggregates = measure.aggregates(text);
+                let mut kinds: Vec<Kind> = Vec::new();
+                let mut measured = false;
+                let mut numbers = false;
+                for cell in &cells {
+                    if let Cell::Number { kind, exact, .. } = cell {
+                        numbers = true;
+                        measured |= !exact;
+                        if !kinds.contains(kind) {
+                            kinds.push(*kind);
+                        }
+                    }
+                }
+                field.exactness = if measured {
+                    ColumnExactness::Bounded
+                } else if numbers {
+                    ColumnExactness::Exact
+                } else {
+                    measure.source.fallback_exactness()
+                };
                 let mut kinds = kinds.into_iter();
-                match (kinds.next(), kinds.next()) {
-                    (None, _) => Some(measured_kind(measure.property)),
+                field.kind = match (kinds.next(), kinds.next()) {
+                    (None, _) => Some(match &measure.source {
+                        Source::Profile => Some(profile_kind(field.part.as_deref())),
+                        source => source.fallback_kind(),
+                    }),
                     (Some(kind), None) => Some(kind),
                     (Some(first), Some(second)) => {
-                        evaluation.push_not_evaluated(
-                            NotEvaluatedReason::InvalidEvidence,
-                            format!(
-                                "quantity-takeoff: `{}` is stated as {} and as {}, so no `{}` is aggregated",
-                                measure.property,
-                                kind_text(first),
-                                kind_text(second),
-                                measure.name
-                            ),
-                        );
+                        if field.aggregates.iter().any(|aggregate| aggregate.numeric()) {
+                            evaluation.push_not_evaluated(
+                                NotEvaluatedReason::InvalidEvidence,
+                                format!(
+                                    "quantity-takeoff: `{}` is stated as {} and as {}, so no `{}` is aggregated",
+                                    field.what,
+                                    kind_text(first),
+                                    kind_text(second),
+                                    field.name
+                                ),
+                            );
+                        }
                         None
                     }
-                }
-            })
-            .collect()
+                };
+                fields.push(field);
+            }
+        }
+        fields
     }
 
     fn empty_table(
         &self,
         rule: &CompiledRule,
-        kinds: &[Option<Kind>],
+        fields: &[Field],
     ) -> Result<ReportTable, axioval_ir::ReportTableError> {
-        let mut columns = vec![ReportColumn::number("count")];
-        for (measure, kind) in self.measures.iter().zip(kinds) {
-            for aggregate in &measure.aggregates {
-                let id = format!("{}_{}", aggregate.name(), measure.name);
-                columns.push(match kind.flatten() {
-                    Some(dimension) => ReportColumn::quantity(id, dimension),
-                    None => ReportColumn::number(id),
-                });
+        let mut columns =
+            vec![ReportColumn::number("count").with_exactness(ColumnExactness::Exact)];
+        for field in fields {
+            for aggregate in &field.aggregates {
+                let id = format!("{}_{}", aggregate.name(), field.name);
+                let column = match (aggregate, field.kind.flatten()) {
+                    (Aggregate::Values, _) => ReportColumn::text(id),
+                    (_, Some(dimension)) => ReportColumn::quantity(id, dimension),
+                    (_, None) => ReportColumn::number(id),
+                };
+                columns.push(column.with_exactness(field.exactness));
             }
         }
         ReportTable::grouped(
@@ -404,11 +712,13 @@ impl<'a> Declaration<'a> {
     fn table(
         &self,
         rule: &CompiledRule,
-        kinds: &[Option<Kind>],
-        scopes: &BTreeMap<Scope, Vec<Member>>,
+        fields: &[Field],
+        members: &[Member],
+        scopes: &BTreeMap<Scope, Vec<usize>>,
     ) -> Result<ReportTable, axioval_ir::ReportTableError> {
-        let mut table = self.empty_table(rule, kinds)?;
-        for (scope, members) in scopes {
+        let mut table = self.empty_table(rule, fields)?;
+        for (scope, indices) in scopes {
+            let members: Vec<&Member> = indices.iter().map(|&index| &members[index]).collect();
             let groups: BTreeSet<&Vec<String>> = members
                 .iter()
                 .filter_map(|member| member.group.as_ref())
@@ -423,21 +733,26 @@ impl<'a> Declaration<'a> {
                     sure.len() as f64,
                     (sure.len() + maybe.len()) as f64,
                 )];
-                for (index, (measure, kind)) in self.measures.iter().zip(kinds).enumerate() {
-                    let read = |members: &[&Member]| -> Option<Vec<(f64, f64)>> {
-                        members
+                for field in fields {
+                    let sure_cells: Vec<Cell> =
+                        sure.iter().map(|member| member.cell(field)).collect();
+                    let maybe_cells: Vec<Cell> =
+                        maybe.iter().map(|member| member.cell(field)).collect();
+                    let read = |cells: &[Cell]| -> Option<Vec<(f64, f64)>> {
+                        cells
                             .iter()
-                            .map(|member| match member.values[index] {
-                                Value::Known { lower, upper, .. } => Some((lower, upper)),
-                                Value::Unknown => None,
+                            .map(|cell| match cell {
+                                Cell::Number { lower, upper, .. } => Some((*lower, *upper)),
+                                _ => None,
                             })
                             .collect()
                     };
-                    let bounds = kind.and(read(&sure)).zip(read(&maybe));
-                    for aggregate in &measure.aggregates {
-                        values.push(match &bounds {
-                            Some((sure, maybe)) => aggregated(*aggregate, sure, maybe),
-                            None => ReportValue::Unknown,
+                    let bounds = field.kind.and(read(&sure_cells)).zip(read(&maybe_cells));
+                    for aggregate in &field.aggregates {
+                        values.push(match (aggregate, &bounds) {
+                            (Aggregate::Values, _) => listed(&sure_cells, &maybe_cells),
+                            (_, Some((sure, maybe))) => aggregated(*aggregate, sure, maybe),
+                            (_, None) => ReportValue::Unknown,
                         });
                     }
                 }
@@ -456,50 +771,474 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
         let property = parameters.property(&key)?;
         let aggregates = parameters.strings(&format!("{key}_aggregates"))?;
         let name = parameters.string(&format!("{key}_name"))?;
-        let Some(property) = property else {
-            if aggregates.is_some() || name.is_some() {
+        let kind = parameters.string(&format!("{key}_kind"))?;
+        let path = parameters.strings(&format!("{key}_path"))?;
+        let bounding = parameters.selector(&format!("{key}_bounding"))?;
+        let set = parameters.string(&format!("{key}_property_set"))?;
+        if property.is_none() && kind.is_none() {
+            if aggregates.is_some()
+                || name.is_some()
+                || path.is_some()
+                || bounding.is_some()
+                || set.is_some()
+            {
                 return Err(invalid(format!(
-                    "`{key}_aggregates` or `{key}_name` without `{key}`"
+                    "a parameter of `{key}` is declared without `{key}` or `{key}_kind`"
                 )));
             }
             continue;
-        };
+        }
         if measures.len() + 1 != n {
             return Err(invalid(format!(
                 "`{key}` is declared without `measure_{}`",
                 measures.len() + 1
             )));
         }
-        let aggregates = match aggregates {
-            None => vec![Aggregate::Sum],
-            Some([]) => return Err(invalid(format!("`{key}_aggregates` is empty"))),
-            Some(names) => {
-                let parsed = names
-                    .iter()
-                    .map(|name| Aggregate::parse(name.trim()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                if parsed.iter().collect::<BTreeSet<_>>().len() != parsed.len() {
-                    return Err(invalid(format!("`{key}_aggregates` repeats an aggregate")));
-                }
-                parsed
-            }
+        let source = source(
+            &key,
+            kind.unwrap_or("property"),
+            Declared {
+                property,
+                path,
+                bounding,
+                set,
+            },
+        )?;
+        let aggregates = aggregates
+            .map(|names| parse_aggregates(&key, names))
+            .transpose()?;
+        let (default_name, what) = match &source {
+            Source::Property(property) => (column_name(property.name), property.to_string()),
+            Source::Related { property, path } => (
+                column_name(property.name),
+                format!("{property} via {}", path.relationship),
+            ),
+            Source::BoundaryArea(_) => ("boundary_area".to_owned(), "boundary area".to_owned()),
+            Source::PropertySet(set) => (String::new(), (*set).to_owned()),
+            Source::Profile => ("profile".to_owned(), "profile".to_owned()),
         };
-        let name = match name {
-            Some(name) => name.to_owned(),
-            None => column_name(property.name),
-        };
-        if name.is_empty() {
+        let name = name.map_or(default_name, str::to_owned);
+        if name.is_empty() && !matches!(source, Source::PropertySet(_)) {
             return Err(invalid(format!(
                 "`{key}` gives no column name; declare `{key}_name`"
             )));
         }
         measures.push(Measure {
-            property,
+            source,
             aggregates,
             name,
+            what,
         });
     }
     Ok(measures)
+}
+
+/// What a column declares beside its kind.
+#[derive(Clone, Copy)]
+struct Declared<'a> {
+    property: Option<PropertyRef<'a>>,
+    path: Option<&'a [String]>,
+    bounding: Option<&'a Selector>,
+    set: Option<&'a str>,
+}
+
+/// Where the column `key` of `kind` takes its values from, refusing a
+/// parameter the kind requires and lacks or does not take.
+fn source<'a>(key: &str, kind: &str, declared: Declared<'a>) -> Result<Source<'a>, Unavailable> {
+    let Declared {
+        property,
+        path,
+        bounding,
+        set,
+    } = declared;
+    let unused = |what: &str, present: bool| -> Result<(), Unavailable> {
+        if present {
+            Err(invalid(format!(
+                "`{key}{what}` does not apply to a `{kind}` column"
+            )))
+        } else {
+            Ok(())
+        }
+    };
+    let required = |what: &str| invalid(format!("a `{kind}` column requires `{key}{what}`"));
+    Ok(match kind {
+        "property" | "related" => {
+            let property = property.ok_or_else(|| required(""))?;
+            unused("_bounding", bounding.is_some())?;
+            unused("_property_set", set.is_some())?;
+            if kind == "property" {
+                unused("_path", path.is_some())?;
+                Source::Property(property)
+            } else {
+                let path = path.ok_or_else(|| required("_path"))?;
+                let path = Traversal::path(path)
+                    .map_err(|(reason, message)| (reason, format!("`{key}_path`: {message}")))?;
+                Source::Related { property, path }
+            }
+        }
+        "boundary_area" => {
+            unused("", property.is_some())?;
+            unused("_path", path.is_some())?;
+            unused("_property_set", set.is_some())?;
+            Source::BoundaryArea(bounding.ok_or_else(|| required("_bounding"))?)
+        }
+        "property_set" => {
+            unused("", property.is_some())?;
+            unused("_path", path.is_some())?;
+            unused("_bounding", bounding.is_some())?;
+            let set = set.ok_or_else(|| required("_property_set"))?;
+            if set.trim().is_empty() {
+                return Err(invalid(format!("`{key}_property_set` is blank")));
+            }
+            Source::PropertySet(set)
+        }
+        "profile" => {
+            unused("", property.is_some())?;
+            unused("_path", path.is_some())?;
+            unused("_bounding", bounding.is_some())?;
+            unused("_property_set", set.is_some())?;
+            Source::Profile
+        }
+        other => {
+            return Err(invalid(format!(
+                "`{key}_kind` `{other}` is unsupported; use {KINDS}"
+            )));
+        }
+    })
+}
+
+/// The declared aggregates of the column `key`, each once.
+fn parse_aggregates(key: &str, names: &[String]) -> Result<Vec<Aggregate>, Unavailable> {
+    if names.is_empty() {
+        return Err(invalid(format!("`{key}_aggregates` is empty")));
+    }
+    let parsed = names
+        .iter()
+        .map(|name| Aggregate::parse(name.trim()))
+        .collect::<Result<Vec<_>, _>>()?;
+    if parsed.iter().collect::<BTreeSet<_>>().len() != parsed.len() {
+        return Err(invalid(format!("`{key}_aggregates` repeats an aggregate")));
+    }
+    Ok(parsed)
+}
+
+/// A property of `object` as a cell.
+fn property_cell(context: &RuleContext<'_>, object: &Object, property: PropertyRef<'_>) -> Cell {
+    match resolve(context, object, property) {
+        Ok(resolved) => value_cell(resolved.value()),
+        Err((reason, message)) => Cell::Unreadable(reason, format!("cannot be read ({message})")),
+    }
+}
+
+/// A value as a cell: a number or quantity, text (a value of another type
+/// as messages show it), or nothing stated.
+fn value_cell(value: Option<&PropertyValue>) -> Cell {
+    match value {
+        value if undefined(value) => Cell::Absent,
+        Some(PropertyValue::Integer(value)) => match exact_f64(*value) {
+            Some(value) => Cell::number(value, value, None, true),
+            None => Cell::Unreadable(
+                NotEvaluatedReason::InvalidEvidence,
+                "is too large to add exactly".into(),
+            ),
+        },
+        Some(PropertyValue::Decimal(value)) => Cell::number(*value, *value, None, true),
+        Some(PropertyValue::Quantity { value, dimension }) => {
+            Cell::number(*value, *value, Some(*dimension), true)
+        }
+        Some(PropertyValue::Measured {
+            lower,
+            upper,
+            dimension,
+        }) => Cell::number(*lower, *upper, Some(*dimension), false),
+        Some(PropertyValue::String(text)) => Cell::Text(vec![text.trim().to_owned()]),
+        value => Cell::Text(vec![display(value)]),
+    }
+}
+
+/// `property` on the objects `path` reaches from `object`: numbers of one
+/// kind summed (every reached object must state one), texts listed; none
+/// reached or stated is no value.
+fn related_cell(
+    context: &RuleContext<'_>,
+    object: &Object,
+    property: PropertyRef<'_>,
+    path: &Traversal,
+    universe: &[&Object],
+) -> Cell {
+    let reached = match path.related(context, &object.id, universe) {
+        Ok((reached, _)) => reached,
+        Err((reason, message)) => {
+            return Cell::Unreadable(reason, format!("cannot be followed ({message})"));
+        }
+    };
+    let mut numbers = Vec::new();
+    let mut texts = BTreeSet::new();
+    let mut without = Vec::new();
+    for id in &reached {
+        let Some(holder) = context.project.object(id) else {
+            continue;
+        };
+        match property_cell(context, holder, property) {
+            Cell::Unreadable(reason, why) => {
+                return Cell::Unreadable(reason, format!("{why} on {id}"));
+            }
+            Cell::Absent => without.push(id),
+            Cell::Text(found) => texts.extend(found),
+            number @ Cell::Number { .. } => numbers.push(number),
+        }
+    }
+    if !texts.is_empty() {
+        texts.extend(numbers.iter().flat_map(Cell::texts));
+        return Cell::Text(texts.into_iter().collect());
+    }
+    if numbers.is_empty() {
+        return Cell::Absent;
+    }
+    if let Some(id) = without.first() {
+        return Cell::Unreadable(
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("has no value on {id}, so the values reached cannot be added"),
+        );
+    }
+    let (mut lower, mut upper, mut all_exact) = (0.0, 0.0, true);
+    let mut kinds = BTreeSet::new();
+    for number in &numbers {
+        if let Cell::Number {
+            lower: low,
+            upper: high,
+            kind,
+            exact,
+        } = number
+        {
+            lower += low;
+            upper += high;
+            all_exact &= exact;
+            kinds.insert(kind_text(*kind));
+        }
+    }
+    let kind = match numbers.first() {
+        Some(Cell::Number { kind, .. }) if kinds.len() == 1 => *kind,
+        _ => {
+            return Cell::Unreadable(
+                NotEvaluatedReason::InvalidEvidence,
+                format!(
+                    "is stated as {} on the objects reached, so they cannot be added",
+                    kinds.into_iter().collect::<Vec<_>>().join(" and as ")
+                ),
+            );
+        }
+    };
+    Cell::number(lower, upper, kind, all_exact)
+}
+
+/// The boundary coverage of `space`, as the coverage service measures it.
+fn measure_coverage(
+    context: &RuleContext<'_>,
+    space: &ObjectId,
+    plane_tolerance: f64,
+) -> Result<BoundaryCoverage, Unavailable> {
+    let Some(service) = context.services.get::<BoundaryCoverageServiceHandle>() else {
+        return Err((
+            NotEvaluatedReason::MissingService,
+            "space-boundary coverage service is not registered".into(),
+        ));
+    };
+    BoundaryCoverageRequest::try_new(space.clone(), plane_tolerance)
+        .and_then(|request| service.measure_boundary_coverage(&request))
+        .map_err(|error| coverage_error(&error))
+}
+
+/// The area of the space's declared boundaries whose bounding element
+/// `bounding` selects, and why a boundary may or may not count. A boundary
+/// whose element's selection is undecided may add its area; one of the
+/// kind lying on no face of the space's body leaves the area unknown.
+fn boundary_cell(
+    context: &RuleContext<'_>,
+    coverage: &Result<BoundaryCoverage, Unavailable>,
+    bounding: &Selector,
+) -> (Cell, Vec<(NotEvaluatedReason, String)>) {
+    let coverage = match coverage {
+        Ok(coverage) => coverage,
+        Err((reason, message)) => {
+            return (
+                Cell::Unreadable(reason.clone(), format!("cannot be measured ({message})")),
+                Vec::new(),
+            );
+        }
+    };
+    let (mut lower, mut upper) = (0.0, 0.0);
+    let mut open = Vec::new();
+    for boundary in coverage.boundaries() {
+        let Some(element) = boundary.element() else {
+            continue;
+        };
+        let Some(object) = object_by_id(context, element) else {
+            return (
+                Cell::Unreadable(
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "cannot be measured: boundary {} bounds against {element}, which is not in the model",
+                        boundary.boundary()
+                    ),
+                ),
+                Vec::new(),
+            );
+        };
+        let sure = match selector_matches(context, bounding, object, &mut Vec::new()) {
+            Selection::NoMatch => continue,
+            Selection::Match => true,
+            Selection::NotEvaluated(reason, message) => {
+                open.push((
+                    reason,
+                    format!(
+                        "whether boundary {}'s element {element} is of the kind is undecided ({message})",
+                        boundary.boundary()
+                    ),
+                ));
+                false
+            }
+        };
+        let BoundaryPlacement::OnSurface { area } = boundary.placement() else {
+            return (
+                Cell::Unreadable(
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!(
+                        "cannot be measured: boundary {} lies on no face of the space's body",
+                        boundary.boundary()
+                    ),
+                ),
+                Vec::new(),
+            );
+        };
+        if sure {
+            lower += area.lower_square_metres();
+        }
+        upper += area.upper_square_metres();
+    }
+    let exact = coverage.evidence().exact && open.is_empty();
+    (
+        Cell::number(lower, upper, Some(QuantityDimension::Area), exact),
+        open,
+    )
+}
+
+/// Every property of `set` on `object`, by its source name.
+fn set_parts(
+    context: &RuleContext<'_>,
+    object: &Object,
+    set: &str,
+) -> Result<BTreeMap<String, Cell>, Unavailable> {
+    let enumeration = enumerate(context, object, NameSpec::Exact(set), NameSpec::Any)?;
+    Ok(enumeration
+        .properties()
+        .iter()
+        .map(|property| (property.name.clone(), value_cell(Some(&property.value))))
+        .collect())
+}
+
+/// The body's swept profile: `type`, `name` and every dimension it states;
+/// nothing for a body that is no single swept profile.
+fn profile_parts(
+    context: &RuleContext<'_>,
+    object: &Object,
+) -> Result<BTreeMap<String, Cell>, Unavailable> {
+    let mut body = BodyFacts::of(context, object)?;
+    let Ok(profile) = read_profile(&mut body)? else {
+        return Ok(BTreeMap::new());
+    };
+    let mut parts = BTreeMap::new();
+    parts.insert("type".to_owned(), Cell::Text(vec![profile.family.clone()]));
+    if let Some(name) = &profile.name {
+        parts.insert("name".to_owned(), Cell::Text(vec![name.clone()]));
+    }
+    for (column, angle) in dimension_columns() {
+        let cell = match dimension_value(&profile, column, &mut body) {
+            Ok(None) => continue,
+            Ok(Some(value)) => {
+                let kind = if angle {
+                    QuantityDimension::PlaneAngle
+                } else {
+                    QuantityDimension::Length
+                };
+                Cell::number(value, value, Some(kind), true)
+            }
+            Err((reason, message)) => {
+                Cell::Unreadable(reason, format!("cannot be read ({message})"))
+            }
+        };
+        parts.insert(column.to_owned(), cell);
+    }
+    Ok(parts)
+}
+
+/// A profile part's place: type, name, then the dimensions in their order.
+fn profile_order(part: &str) -> usize {
+    match part {
+        "type" => 0,
+        "name" => 1,
+        part => {
+            2 + dimension_columns()
+                .position(|(column, _)| column == part)
+                .unwrap_or(usize::MAX - 2)
+        }
+    }
+}
+
+/// Whether a profile part is a dimension.
+fn profile_dimension(part: Option<&str>) -> bool {
+    part.is_some_and(|part| dimension_columns().any(|(column, _)| column == part))
+}
+
+/// The kind of a profile part: a length, or a plane angle.
+fn profile_kind(part: Option<&str>) -> QuantityDimension {
+    let angle =
+        part.is_some_and(|part| dimension_columns().any(|(column, angle)| column == part && angle));
+    if angle {
+        QuantityDimension::PlaneAngle
+    } else {
+        QuantityDimension::Length
+    }
+}
+
+/// The distinct values of a group's members, listed: every value of a sure
+/// member, and a possible member's only where it is listed already, since
+/// whether it adds one is undecided; `-` for none. Unknown when a value
+/// cannot be read.
+fn listed(sure: &[Cell], maybe: &[Cell]) -> ReportValue {
+    let mut texts = BTreeSet::new();
+    for cell in sure {
+        if matches!(cell, Cell::Unreadable(..)) {
+            return ReportValue::Unknown;
+        }
+        texts.extend(cell.texts());
+    }
+    for cell in maybe {
+        if matches!(cell, Cell::Unreadable(..))
+            || cell.texts().iter().any(|text| !texts.contains(text))
+        {
+            return ReportValue::Unknown;
+        }
+    }
+    if texts.is_empty() {
+        ReportValue::text("-")
+    } else {
+        ReportValue::text(texts.into_iter().collect::<Vec<_>>().join(", "))
+    }
+}
+
+/// A number as `values` lists it: `0.3 m`, `9.5..10.5 m²`.
+fn number_text(lower: f64, upper: f64, kind: Kind) -> String {
+    #[allow(clippy::float_cmp)]
+    let number = if lower == upper {
+        lower.to_string()
+    } else {
+        format!("{lower}..{upper}")
+    };
+    match kind {
+        Some(dimension) => format!("{number} {}", dimension.unit_symbol()),
+        None => number,
+    }
 }
 
 /// `values` combined by `aggregate`, where `sure` surely belong to the group
@@ -514,6 +1253,8 @@ fn aggregated(aggregate: Aggregate, sure: &[(f64, f64)], maybe: &[(f64, f64)]) -
                 + maybe.iter().map(|value| value.1.max(0.0)).sum::<f64>();
             ReportValue::measured(lower, upper)
         }
+        // Values are listed, never aggregated as numbers.
+        Aggregate::Values => ReportValue::Unknown,
         // With no sure member the group may hold no value at all.
         _ if sure.is_empty() => ReportValue::Unknown,
         Aggregate::Min => {
@@ -584,46 +1325,6 @@ fn extreme_mean(
     total / count
 }
 
-/// A value as a number or quantity interval, or why it is none.
-fn numeric(value: Option<&PropertyValue>) -> Result<Value, (NotEvaluatedReason, String)> {
-    let known = |lower: f64, upper: f64, kind: Kind| {
-        if lower.is_finite() && upper.is_finite() && lower <= upper {
-            Ok(Value::Known { lower, upper, kind })
-        } else {
-            Err((
-                NotEvaluatedReason::InvalidEvidence,
-                "is not finite".to_owned(),
-            ))
-        }
-    };
-    match value {
-        None | Some(PropertyValue::Null) => Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            "has no value".to_owned(),
-        )),
-        Some(PropertyValue::Integer(value)) => match exact_f64(*value) {
-            Some(value) => known(value, value, None),
-            None => Err((
-                NotEvaluatedReason::InvalidEvidence,
-                "is too large to add exactly".to_owned(),
-            )),
-        },
-        Some(PropertyValue::Decimal(value)) => known(*value, *value, None),
-        Some(PropertyValue::Quantity { value, dimension }) => {
-            known(*value, *value, Some(*dimension))
-        }
-        Some(PropertyValue::Measured {
-            lower,
-            upper,
-            dimension,
-        }) => known(*lower, *upper, Some(*dimension)),
-        Some(other) => Err((
-            NotEvaluatedReason::InvalidEvidence,
-            format!("states {}, not a number or quantity", display(Some(other))),
-        )),
-    }
-}
-
 /// The kind a measured name answers in, a length unless an area or volume;
 /// a plain number for any other property.
 fn measured_kind(property: PropertyRef<'_>) -> Kind {
@@ -672,8 +1373,8 @@ fn column_name(property: &str) -> String {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
-    use super::{Aggregate, aggregated, column_name};
-    use axioval_ir::ReportValue;
+    use super::{Aggregate, Cell, aggregated, column_name, listed};
+    use axioval_ir::{QuantityDimension, ReportValue};
 
     #[test]
     fn column_names_follow_the_property_name() {
@@ -732,5 +1433,37 @@ mod tests {
         for aggregate in [Aggregate::Min, Aggregate::Max, Aggregate::Mean] {
             assert_eq!(aggregated(aggregate, &[], &maybe), ReportValue::Unknown);
         }
+    }
+
+    #[test]
+    fn listed_values_are_sure_only_where_a_possible_member_adds_none() {
+        let text = |value: &str| Cell::Text(vec![value.to_owned()]);
+        let length = Cell::number(0.3, 0.3, Some(QuantityDimension::Length), true);
+        assert_eq!(
+            listed(&[text("EG"), text("OG"), text("EG")], &[]),
+            ReportValue::text("EG, OG")
+        );
+        assert_eq!(
+            listed(&[length.clone(), Cell::Absent], &[]),
+            ReportValue::text("0.3 m")
+        );
+        assert_eq!(listed(&[Cell::Absent], &[]), ReportValue::text("-"));
+        // A possible member stating a listed value, or none, changes nothing.
+        assert_eq!(
+            listed(&[text("EG")], &[text("EG"), Cell::Absent]),
+            ReportValue::text("EG")
+        );
+        // One that may add a value leaves the list open.
+        assert_eq!(listed(&[text("EG")], &[text("OG")]), ReportValue::Unknown);
+        assert_eq!(
+            listed(
+                &[text("EG")],
+                &[Cell::Unreadable(
+                    axioval_ir::NotEvaluatedReason::IncompleteEvidence,
+                    String::new()
+                )]
+            ),
+            ReportValue::Unknown
+        );
     }
 }

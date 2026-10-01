@@ -36,7 +36,7 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::ring_perimeter;
+use crate::planar::{collinear, ring_perimeter};
 
 /// Body triangles whose normals differ by less than this (as `1 − cos`) and
 /// whose corners lie within [`FACE_PLANE_METRES`] of one plane form one face
@@ -558,7 +558,8 @@ fn region(
                 .collect();
             let [a, b, c] = [points[0], points[1], points[2]];
             let signed = (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
-            if signed.abs() <= 2.0 * DEGENERATE_M2 {
+            // A shadow without area (a face seen edge-on) covers nothing.
+            if signed.abs() <= 2.0 * DEGENERATE_M2 || collinear(&points) {
                 return None;
             }
             if signed < 0.0 {

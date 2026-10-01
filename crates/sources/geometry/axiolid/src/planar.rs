@@ -44,7 +44,7 @@ pub(crate) fn projected_polygons(triangles: &[Triangle]) -> Vec<Polygon> {
             if area < 0.0 {
                 ring.points.reverse();
             }
-            (area.abs() > f64::EPSILON).then_some(Polygon {
+            (area.abs() > f64::EPSILON && !collinear(&ring.points)).then_some(Polygon {
                 outer: ring,
                 holes: Vec::new(),
             })
@@ -63,6 +63,42 @@ pub(crate) fn polygon_area(polygon: &Polygon) -> f64 {
     let outer = ring_area(&polygon.outer).abs();
     let holes: f64 = polygon.holes.iter().map(|r| ring_area(r).abs()).sum();
     (outer - holes).max(0.0)
+}
+
+/// Whether a ring's vertices lie on one line, up to the rounding of their
+/// coordinates: a shadow with no plan area, such as a vertical face's.
+///
+/// Such rings are left out before any union or region is built from plan
+/// shadows. The overlay leaves exactly collinear rings out of its booleans
+/// since axiolid-overlay 0.3.9 (axiolid/kernel#219, where they emptied whole
+/// unions), but rounded coordinates rarely stay exactly collinear, and a
+/// shadow without area covers nothing whatever the kernel does with it.
+pub(crate) fn collinear(points: &[Point2]) -> bool {
+    let Some((&first, rest)) = points.split_first() else {
+        return true;
+    };
+    // The farthest vertex from the first fixes the line, so every other
+    // vertex is tested against a well-conditioned direction.
+    let Some(&far) = rest
+        .iter()
+        .max_by(|a, b| (**a - first).length().total_cmp(&(**b - first).length()))
+    else {
+        return true;
+    };
+    let along = far - first;
+    let length = along.length();
+    if length == 0.0 {
+        return true;
+    }
+    // A coordinate of magnitude m is rounded by up to half an ulp of m, so
+    // a vertex within a few ulps of the line is on it.
+    let magnitude = points
+        .iter()
+        .flat_map(|point| [point.x.abs(), point.y.abs()])
+        .fold(0.0, f64::max);
+    let reach = 8.0 * f64::EPSILON * magnitude;
+    rest.iter()
+        .all(|point| along.perp_dot(*point - first).abs() <= reach * length)
 }
 
 /// Signed shoelace area of a ring.
@@ -403,9 +439,55 @@ pub(crate) fn polygons_overlap_area(
 
 #[cfg(test)]
 mod polygon_area_tests {
-    use super::{Disc, grown_polygons, polygon_area, polygon_moments, ring_area};
-    use axiolid_core::Point2;
+    use super::{
+        Disc, collinear, footprint_polygons, grown_polygons, polygon_area, polygon_moments,
+        projected_polygons, ring_area,
+    };
+    use axiolid_core::{Point2, Point3, Tolerance};
     use axiolid_overlay::{Polygon, Ring};
+
+    /// A vertical face along a diagonal away from the origin: its corners
+    /// project onto one line, but the shoelace sum over its rounded
+    /// coordinates gives its shadow an area well above `f64::EPSILON`.
+    fn vertical_face() -> [[Point3; 3]; 2] {
+        let (sin, cos) = 1.1_f64.sin_cos();
+        let at = |t: f64, z: f64| Point3::new(101.3 + cos * t, 202.6 + sin * t, z);
+        [
+            [at(0.0, 0.0), at(1.0, 0.0), at(3.0, 3.0)],
+            [at(0.0, 0.0), at(3.0, 3.0), at(0.0, 3.0)],
+        ]
+    }
+
+    #[test]
+    fn a_vertical_faces_shadow_is_left_out() {
+        let face = vertical_face();
+        let shadow: Vec<Point2> = face[0].iter().map(|p| Point2::new(p.x, p.y)).collect();
+        assert!(collinear(&shadow));
+        assert!(ring_area(&Ring { points: shadow }).abs() > f64::EPSILON);
+        assert!(projected_polygons(&face).is_empty());
+        // Beside a body with a footprint, the face adds nothing to it.
+        let floor = [
+            Point3::new(101.0, 202.0, 0.0),
+            Point3::new(102.0, 202.0, 0.0),
+            Point3::new(101.0, 203.0, 0.0),
+        ];
+        let tolerance = Tolerance::METRE;
+        let alone = footprint_polygons(&[floor], tolerance).unwrap();
+        let with_face = footprint_polygons(&[floor, face[0], face[1]], tolerance).unwrap();
+        assert_eq!(alone, with_face);
+        assert!((polygon_area(&with_face[0]) - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_thin_triangle_is_not_collinear() {
+        let points = [
+            Point2::new(0.0, 0.0),
+            Point2::new(10.0, 0.0),
+            Point2::new(5.0, 1e-9),
+        ];
+        assert!(!collinear(&points));
+        assert!(collinear(&[Point2::new(1.0, 1.0); 3]));
+    }
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Ring {
         Ring {

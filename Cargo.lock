@@ -261,9 +261,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-measure"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35f05401305118948dc335bfe634dc88fc54e959f78ad12042f15553f31d9481"
+checksum = "672d1d72e12f66bb889a72329bd816be884de0a226c3ba0053e30bfe4939a599"
 dependencies = [
  "axiolid-brep",
  "axiolid-core",

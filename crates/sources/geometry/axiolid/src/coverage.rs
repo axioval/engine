@@ -51,7 +51,7 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::triangles;
 use crate::plan_area::{AxiolidPlanAreaService, tolerance};
-use crate::planar::{footprint_polygons, polygon_moments, ring_area};
+use crate::planar::{collinear, footprint_polygons, polygon_moments, ring_area};
 use crate::walkable::{Plan, trapezoids};
 
 /// Sides of the regular polygons bracketing the range's disc.
@@ -531,7 +531,9 @@ fn travel(
             }
         }
     }
-    reached.retain(|ring| ring_area(ring).abs() > 0.0);
+    // A cell without area covers nothing; footprints are built from
+    // shadows filtered the same way (`planar::projected_polygons`).
+    reached.retain(|ring| ring_area(ring).abs() > 0.0 && !collinear(&ring.points));
     let cells = |error| format!("the travel cells within range: {error:?}");
     Region::new(union_soup(&reached, tolerance).map_err(cells)?, tolerance).map_err(cells)
 }

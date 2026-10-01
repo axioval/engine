@@ -342,6 +342,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 - The workspace moves to `axiolid-measure` 0.3.4 (certified plan
   measurements); the lockfile follows with matching patch releases of the
   other `axiolid-*` crates.
+- The workspace moves to `axiolid-measure` 0.3.5. `axiolid-overlay` stays
+  below 0.3.5: 0.3.9 fixes axiolid/kernel#219 (collinear rings left out of
+  every boolean, the accessible-route results as on 0.3.4) but still
+  turns coverage through an opening into a false finding and leaves a
+  sliver along a turned wall when cutting cost regions. As defence in
+  depth the Axiolid adapter leaves plan shadows without area (every vertex
+  on one line, up to the rounding of the coordinates, such as a vertical
+  face's) out of every footprint, coverage and space-boundary union itself
+  (`planar::collinear`).
 - The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
   through zip 8, so the workspace carries a single zip version. Archives are
   byte-identical to those written with 0.4.

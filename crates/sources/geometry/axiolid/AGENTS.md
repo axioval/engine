@@ -356,7 +356,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   closed solid's top and bottom faces project with opposite windings and,
   under the non-zero fill every service uses, cancel to no footprint at all.
   Test fixtures with same-winding caps hid this; use closed, outward-oriented
-  boxes when testing plan measurements.
+  boxes when testing plan measurements. It also leaves out every shadow
+  without area (`planar::collinear`: all vertices on one line up to the
+  rounding of their coordinates, such as a vertical face's), and so do the
+  space-boundary projection and coverage's travel cells, before any
+  `union_soup`, `Region` or overlay union. Overlay 0.3.5 to 0.3.8 emptied
+  whole unions over exactly collinear rings (axiolid/kernel#219, fixed in
+  0.3.9), and rounded ones are rarely exact; never hand a shadow without
+  area to a union.
 - **Bodiless and unmeasured are different facts.** `with_no_body` says the
   object occupies no volume; `with_unmeasured` says it has a body the host
   could not mesh. Never let a service skip an unmeasured object as if it were
@@ -386,19 +393,27 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-measure` 0.3.4 with the `exact` feature (certified
+0.3.0, except `axiolid-measure` 0.3.5 with the `exact` feature (certified
 `boundary_distance`, and the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.1 for
 the `ExactBRep` hosts register; tests build exact solids with
 `axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.8 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
-soups), `axiolid-route`
+soups; bounded below 0.3.5, see below), `axiolid-route`
 0.3.5 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
 maps and corridor ends, with `axiolid-triangulate` 0.3.1) and
 `axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). Check the
 registry source, not the kernel checkout, before relying on an API.
 
 ## Waiting on upstream
+
+- axiolid-overlay 0.3.5 to 0.3.9 (0.3.9 fixes axiolid/kernel#219) still
+  regress two results, so the workspace stays below 0.3.5: coverage
+  through a bodiless opening (`effective-coverage` with `access_path`)
+  reads zero, a false finding in the CLI test
+  `with_geometry_an_effect_continues_through_an_opening_into_the_next_room`;
+  and a costed region cut flush with a turned wall leaves a sliver along
+  it, loosening `tests/weighted_angled.rs` to a lower bound of 9.28 m.
 
 - axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
   plan areas here are off by ~1.5e-8 of the extent while reported exact.

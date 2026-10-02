@@ -1650,6 +1650,206 @@ impl ClearWidthEvidence {
     }
 }
 
+/// A request for the clear width of the landing at one end of a flight or
+/// run: the free width across the direction leaving it that the requested
+/// obstacles (walls, handrails, anything standing beside or over the
+/// landing) leave between two heights above the landing's level.
+///
+/// The landing is looked for as [`LandingRequest`] says, among its
+/// candidates. The obstacles are the rule's selection, sorted, deduplicated
+/// and without the subject. `band` is `(from, to)` above the landing's
+/// level, `0 <= from < to`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LandingClearWidthRequest {
+    landing: LandingRequest,
+    obstacles: Vec<ObjectId>,
+    band: (f64, f64),
+}
+
+impl LandingClearWidthRequest {
+    /// The clear width of the landing `landing` asks for that `obstacles`
+    /// leave within `band` above its level.
+    pub fn try_new(
+        landing: LandingRequest,
+        obstacles: impl IntoIterator<Item = ObjectId>,
+        band: (f64, f64),
+    ) -> Result<Self, WalkingSurfaceError> {
+        let (from, to) = band;
+        if !from.is_finite() || !to.is_finite() || from < 0.0 || to <= from {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        let subject = landing.subject().clone();
+        let mut obstacles: Vec<ObjectId> = obstacles
+            .into_iter()
+            .filter(|obstacle| *obstacle != subject)
+            .collect();
+        obstacles.sort();
+        obstacles.dedup();
+        Ok(Self {
+            landing,
+            obstacles,
+            band,
+        })
+    }
+
+    /// The landing measured: the subject, its end and the candidates that
+    /// may carry it.
+    #[must_use]
+    pub fn landing(&self) -> &LandingRequest {
+        &self.landing
+    }
+
+    /// The flight or ramp whose landing is measured.
+    #[must_use]
+    pub fn subject(&self) -> &ObjectId {
+        self.landing.subject()
+    }
+
+    /// The objects that may bound or narrow it.
+    #[must_use]
+    pub fn obstacles(&self) -> &[ObjectId] {
+        &self.obstacles
+    }
+
+    /// How far above the landing's level the band starts and ends.
+    #[must_use]
+    pub fn band(&self) -> (f64, f64) {
+        self.band
+    }
+}
+
+/// The clear width of a measured landing.
+///
+/// Over the landing's rectangle ([`LandingExtent`]), from the arrival line
+/// to its far side, the free width at each position along the leaving
+/// direction is the distance across between the innermost points the
+/// requested obstacles reach within the band from either side, the
+/// landing's own side where none reaches in; the clear width is the least
+/// of these. `bounds` names the obstacles reaching the landing's lower and
+/// higher side across (the order of [`LandingExtent::sides`]) anywhere
+/// along it: a side none reaches is bounded by nothing selected, which a
+/// rule judges. `governing` names the obstacles bounding the narrowest
+/// place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LandingClearWidth {
+    carrier: ObjectId,
+    width: MeasuredInterval,
+    governing: Vec<ObjectId>,
+    bounds: (Vec<ObjectId>, Vec<ObjectId>),
+}
+
+impl LandingClearWidth {
+    /// The clear width `width` of the landing on `carrier`, bounded by
+    /// `bounds` on its two sides and at its narrowest by `governing`.
+    #[must_use]
+    pub fn new(
+        carrier: ObjectId,
+        width: MeasuredInterval,
+        mut governing: Vec<ObjectId>,
+        (mut low, mut high): (Vec<ObjectId>, Vec<ObjectId>),
+    ) -> Self {
+        for objects in [&mut governing, &mut low, &mut high] {
+            objects.sort();
+            objects.dedup();
+        }
+        Self {
+            carrier,
+            width,
+            governing,
+            bounds: (low, high),
+        }
+    }
+
+    /// The object carrying the landing.
+    #[must_use]
+    pub fn carrier(&self) -> &ObjectId {
+        &self.carrier
+    }
+
+    /// The narrowest clear width over the landing.
+    #[must_use]
+    pub fn width(&self) -> MeasuredInterval {
+        self.width
+    }
+
+    /// The obstacles bounding the narrowest place.
+    #[must_use]
+    pub fn governing(&self) -> &[ObjectId] {
+        &self.governing
+    }
+
+    /// The obstacles reaching the landing's lower and higher side across.
+    #[must_use]
+    pub fn bounds(&self) -> (&[ObjectId], &[ObjectId]) {
+        (&self.bounds.0, &self.bounds.1)
+    }
+}
+
+/// The clear width of the landing at one end of a flight or run, `None`
+/// when no candidate carries a landing there.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LandingClearWidthEvidence {
+    request: LandingClearWidthRequest,
+    landing: Option<LandingClearWidth>,
+    evidence: Evidence,
+}
+
+impl LandingClearWidthEvidence {
+    /// The landing clear width answering `request`: its carrier the subject
+    /// or a requested candidate, every named obstacle requested, the width
+    /// never negative and exact evidence only for a point.
+    pub fn try_new(
+        request: LandingClearWidthRequest,
+        landing: Option<LandingClearWidth>,
+        evidence: Evidence,
+    ) -> Result<Self, WalkingSurfaceError> {
+        if let Some(landing) = &landing {
+            let carrier = &landing.carrier;
+            let named = carrier == request.subject()
+                || request.landing.candidates.binary_search(carrier).is_ok();
+            let requested = landing
+                .governing
+                .iter()
+                .chain(&landing.bounds.0)
+                .chain(&landing.bounds.1)
+                .all(|object| request.obstacles.binary_search(object).is_ok());
+            if !named || !requested || landing.width.lower < 0.0 {
+                return Err(WalkingSurfaceError::InvalidMeasurement);
+            }
+        }
+        let exact = landing
+            .as_ref()
+            .is_none_or(|landing| landing.width.is_point());
+        if evidence.locator.trim().is_empty() || (evidence.exact && !exact) {
+            return Err(WalkingSurfaceError::InexactEvidence);
+        }
+        Ok(Self {
+            request,
+            landing,
+            evidence,
+        })
+    }
+
+    /// The request this answers.
+    #[must_use]
+    pub fn request(&self) -> &LandingClearWidthRequest {
+        &self.request
+    }
+
+    /// The landing's clear width, or `None` when nothing requested carries
+    /// a landing at the end.
+    #[must_use]
+    pub fn landing(&self) -> Option<&LandingClearWidth> {
+        self.landing.as_ref()
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// The side of a flight or run a handrail runs along, as seen by someone
 /// climbing it. [`across`] points to the climber's left, so the left side
 /// lies at the higher positions across.
@@ -2162,6 +2362,19 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
             request.subject()
         )))
     }
+
+    /// The clear width of the requested landing. The default refuses: a
+    /// service that does not measure landings' clear widths never answers
+    /// with the landing's own width or that there is no landing.
+    fn measure_landing_clear_width(
+        &self,
+        request: &LandingClearWidthRequest,
+    ) -> Result<LandingClearWidthEvidence, WalkingSurfaceError> {
+        Err(WalkingSurfaceError::Unsupported(format!(
+            "the clear width of the landing at the end of {} is not measured by this service",
+            request.subject()
+        )))
+    }
 }
 
 /// Registry handle for a [`WalkingSurfaceService`].
@@ -2259,6 +2472,19 @@ impl WalkingSurfaceServiceHandle {
         request: &ClearWidthRequest,
     ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
         let width = self.0.measure_clear_width(request)?;
+        if width.request() != request {
+            return Err(WalkingSurfaceError::InvalidMeasurement);
+        }
+        Ok(width)
+    }
+
+    /// The landing clear width answering `request`; an answer to another
+    /// request is refused.
+    pub fn measure_landing_clear_width(
+        &self,
+        request: &LandingClearWidthRequest,
+    ) -> Result<LandingClearWidthEvidence, WalkingSurfaceError> {
+        let width = self.0.measure_landing_clear_width(request)?;
         if width.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -3062,6 +3288,61 @@ mod tests {
             ClearWidthEvidence::try_new(request, width, vec![], evidence(true)),
             Err(WalkingSurfaceError::InexactEvidence)
         );
+    }
+
+    #[test]
+    fn landing_clear_widths_name_a_carrier_and_requested_bounds() {
+        let landing = LandingRequest::new(id("f"), WalkingEnd::FlightTop, [id("slab")]);
+        let request = LandingClearWidthRequest::try_new(
+            landing.clone(),
+            [id("wall"), id("f"), id("rail"), id("wall")],
+            (0.5, 1.5),
+        )
+        .unwrap();
+        assert_eq!(request.obstacles(), [id("rail"), id("wall")]);
+        assert_eq!(request.subject(), &id("f"));
+        for band in [(1.5, 0.5), (-0.1, 1.0), (0.5, f64::INFINITY)] {
+            assert!(LandingClearWidthRequest::try_new(landing.clone(), [], band).is_err());
+        }
+        let width = MeasuredInterval::try_new(0.99, 1.01).unwrap();
+        let measured = |carrier: &str, bounds: (Vec<ObjectId>, Vec<ObjectId>), exact: bool| {
+            LandingClearWidthEvidence::try_new(
+                request.clone(),
+                Some(LandingClearWidth::new(
+                    id(carrier),
+                    width,
+                    vec![id("wall")],
+                    bounds,
+                )),
+                evidence(exact),
+            )
+        };
+        let found = measured(
+            "slab",
+            (vec![id("wall"), id("wall")], vec![id("rail")]),
+            false,
+        )
+        .unwrap();
+        let landing = found.landing().unwrap();
+        assert_eq!(landing.bounds(), (&[id("wall")][..], &[id("rail")][..]));
+        assert_eq!(landing.governing(), [id("wall")]);
+        // The carrier is a candidate or the subject, every bound requested.
+        assert!(measured("f", (vec![], vec![]), false).is_ok());
+        assert_eq!(
+            measured("floor", (vec![], vec![]), false),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            measured("slab", (vec![id("door")], vec![]), false),
+            Err(WalkingSurfaceError::InvalidMeasurement)
+        );
+        assert_eq!(
+            measured("slab", (vec![], vec![]), true),
+            Err(WalkingSurfaceError::InexactEvidence)
+        );
+        // No landing is an answer of its own.
+        let none = LandingClearWidthEvidence::try_new(request, None, evidence(true)).unwrap();
+        assert!(none.landing().is_none());
     }
 
     #[test]

@@ -20,10 +20,11 @@ use axioval_engine::{
     WalkingSurfaceServiceHandle,
 };
 use axioval_engine::{
-    ClearWidthEvidence, ClearWidthRequest, PlanArea, PlanAreaError, PlanAreaService,
-    PlanAreaServiceHandle, PlanLength, PlanRectangle, PlanSpan, PlanSpanError, PlanSpanService,
-    PlanSpanServiceHandle, RectangleOrientation, VerticalExtent, VerticalExtentError,
-    VerticalExtentService, VerticalExtentServiceHandle,
+    ClearWidthEvidence, ClearWidthRequest, LandingClearWidth, LandingClearWidthEvidence,
+    LandingClearWidthRequest, PlanArea, PlanAreaError, PlanAreaService, PlanAreaServiceHandle,
+    PlanLength, PlanRectangle, PlanSpan, PlanSpanError, PlanSpanService, PlanSpanServiceHandle,
+    RectangleOrientation, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
@@ -2982,7 +2983,13 @@ type Narrowing = (f64, Vec<ObjectId>);
 struct Narrowed {
     stairs: Stairs,
     widths: BTreeMap<(ObjectId, WalkingStretch), Vec<Narrowing>>,
+    /// Landing clear widths per subject and end: the carrier, the width and
+    /// the obstacles reaching its lower and higher side.
+    landings: BTreeMap<(ObjectId, WalkingEnd), StatedClearLanding>,
 }
+
+/// A landing's carrier, clear width and the obstacles bounding its sides.
+type StatedClearLanding = (ObjectId, f64, Vec<ObjectId>, Vec<ObjectId>);
 
 impl Narrowed {
     fn width(mut self, subject: &str, stretch: WalkingStretch, width: f64, by: &[&str]) -> Self {
@@ -2990,6 +2997,21 @@ impl Narrowed {
             .entry((id(subject), stretch))
             .or_default()
             .push((width, by.iter().map(|local| id(local)).collect()));
+        self
+    }
+
+    fn landing(
+        mut self,
+        subject: &str,
+        end: WalkingEnd,
+        (carrier, width): (&str, f64),
+        (low, high): (&[&str], &[&str]),
+    ) -> Self {
+        let ids = |locals: &[&str]| locals.iter().map(|local| id(local)).collect();
+        self.landings.insert(
+            (id(subject), end),
+            (id(carrier), width, ids(low), ids(high)),
+        );
         self
     }
 }
@@ -3034,6 +3056,45 @@ impl WalkingSurfaceService for Narrowed {
             },
         )
     }
+
+    /// Landings stated per end, found only when their carrier is requested,
+    /// bounded by the requested obstacles stated for each side.
+    fn measure_landing_clear_width(
+        &self,
+        request: &LandingClearWidthRequest,
+    ) -> Result<LandingClearWidthEvidence, WalkingSurfaceError> {
+        let landing = request.landing();
+        let found = self
+            .landings
+            .get(&(landing.subject().clone(), landing.end()))
+            .filter(|(carrier, ..)| landing.candidates().contains(carrier))
+            .map(|(carrier, width, low, high)| {
+                let requested = |objects: &Vec<ObjectId>| -> Vec<ObjectId> {
+                    objects
+                        .iter()
+                        .filter(|object| request.obstacles().contains(object))
+                        .cloned()
+                        .collect()
+                };
+                let (low, high) = (requested(low), requested(high));
+                let governing = low.iter().chain(&high).cloned().collect();
+                LandingClearWidth::new(
+                    carrier.clone(),
+                    MeasuredInterval::try_new(width - 1e-9, width + 1e-9).unwrap(),
+                    governing,
+                    (low, high),
+                )
+            });
+        LandingClearWidthEvidence::try_new(
+            request.clone(),
+            found,
+            Evidence {
+                source: source(),
+                locator: format!("landing-clear-width:{}", request.subject().local_id),
+                exact: false,
+            },
+        )
+    }
 }
 
 fn check_clear(
@@ -3070,7 +3131,7 @@ fn a_flight_narrowed_by_its_rails_fails_its_clear_width() {
     let narrowed = || {
         Narrowed {
             stairs: stairs(),
-            widths: BTreeMap::new(),
+            ..Narrowed::default()
         }
         .width(
             "regular",
@@ -3133,4 +3194,166 @@ fn a_flight_narrowed_by_its_rails_fails_its_clear_width() {
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
+}
+
+fn landing_clear_parameters(landing: f64, total: f64) -> Vec<(&'static str, ParameterValue)> {
+    let mut parameters = clear_parameters(1.1);
+    parameters.extend([
+        ("landing_clear_width_minimum", metres(landing)),
+        ("total_clear_width_minimum", metres(total)),
+        ("landing_objects", slabs()),
+    ]);
+    parameters
+}
+
+/// A 1.2 m flight arriving at a landing 1 m wide between its rails fails a
+/// 1.1 m landing minimum and a 1.1 m total, and passes a 1.1 m flight
+/// minimum.
+#[test]
+fn a_narrow_landing_fails_its_own_and_the_total_clear_width() {
+    let narrowed = |high: &'static [&'static str]| {
+        Narrowed {
+            stairs: stairs(),
+            ..Narrowed::default()
+        }
+        .landing(
+            "regular",
+            WalkingEnd::FlightTop,
+            ("slab", 1.0),
+            (&["left_rail"], high),
+        )
+    };
+    let evaluation = check_clear(
+        narrowed(&["low_rail"]),
+        &StairGeometryCheck,
+        "flight",
+        landing_clear_parameters(1.1, 1.1),
+    );
+    let (left, low) = (id("left_rail"), id("low_rail"));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "regular".into(),
+                format!(
+                    "the clear width of the landing at the top of the flight 0.5 m to 1.5 m \
+                     above its level is 1 m beside {left} and {low}; at least 1.1 m required"
+                )
+            ),
+            (
+                "regular".into(),
+                "the least clear width of the flight and its landings is 1 m, at the landing at \
+                 the top of the flight; at least 1.1 m required"
+                    .into()
+            ),
+        ]
+    );
+    // The fixture's winder is never measured.
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("winder".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // The flight alone is wide enough.
+    let evaluation = check_clear(
+        narrowed(&["low_rail"]),
+        &StairGeometryCheck,
+        "flight",
+        clear_parameters(1.1),
+    );
+    assert!(findings(&evaluation).is_empty());
+    // A landing a side of which nothing selected bounds is not evaluated;
+    // its total is not decided either.
+    let evaluation = check_clear(
+        narrowed(&[]),
+        &StairGeometryCheck,
+        "flight",
+        landing_clear_parameters(0.9, 0.9),
+    );
+    assert!(findings(&evaluation).is_empty());
+    let open = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| outcome.object_id() == Some(&id("regular")))
+        .map(|outcome| outcome.message().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(open.len(), 2, "{open:?}");
+    assert!(
+        open[0].starts_with(
+            "no selected obstacle bounds the left side of the landing at the top of the flight"
+        ),
+        "{open:?}"
+    );
+    assert!(open[1].contains("but a width may be narrower"), "{open:?}");
+    // The landing minimum needs landing_objects and a clear-width band.
+    for parameters in [
+        {
+            let mut parameters = landing_clear_parameters(1.1, 1.1);
+            parameters.retain(|(name, _)| *name != "landing_objects");
+            parameters
+        },
+        vec![
+            ("landing_clear_width_minimum", metres(1.1)),
+            ("landing_objects", slabs()),
+        ],
+        {
+            let mut parameters = landing_clear_parameters(1.1, 1.1);
+            parameters.push(("landing_clear_width_minimum", metres(-1.0)));
+            parameters.retain(|(name, value)| {
+                *name != "landing_clear_width_minimum" || *value == metres(-1.0)
+            });
+            parameters
+        },
+    ] {
+        let evaluation = check_clear(narrowed(&[]), &StairGeometryCheck, "flight", parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+/// In whole-stair mode the total is the least over the stair's flights
+/// and the landings between them, reported on the stair.
+#[test]
+fn a_stairs_least_clear_width_includes_its_intermediate_landing() {
+    let narrowed = Narrowed {
+        stairs: two_flight_stairs(),
+        ..Narrowed::default()
+    }
+    .landing(
+        "lower",
+        WalkingEnd::FlightTop,
+        ("landing", 1.0),
+        (&["r3"], &["l1"]),
+    );
+    let mut parameters = whole_parameters(vec![
+        ("clear_width_obstacles", selector(kind("railing"))),
+        ("clear_width_band_from", metres(0.5)),
+        ("clear_width_band_to", metres(1.5)),
+        ("total_clear_width_minimum", metres(1.1)),
+        ("landing_objects", slabs()),
+    ]);
+    parameters.push(("landing_objects", slabs()));
+    parameters.dedup_by(|a, b| a.0 == b.0);
+    let evaluation = two_flights().evaluate_with(
+        &StairGeometryCheck,
+        &rule(STAIR, kind("stair"), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(narrowed)))
+                .unwrap();
+        },
+    );
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "stair".into(),
+            format!(
+                "the least clear width of the stair's flights and the landings between them is \
+                 1 m, at the landing at the top of flight {}; at least 1.1 m required",
+                id("lower")
+            )
+        )]
+    );
+    assert!(evaluation.findings()[0].related.contains(&id("lower")));
 }

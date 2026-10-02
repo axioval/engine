@@ -7,8 +7,8 @@ use axiolid_mesh::{TriMesh, audit_mesh, compose};
 use axioval_axiolid::{AxiolidGeometry, AxiolidWalkingSurfaceService};
 use axioval_engine::{
     ClearWidthEvidence, ClearWidthRequest, ClearanceBelowRequest, HandrailEvidence,
-    HandrailRequest, HeadroomRequest, LandingEvidence, LandingRequest, MeasuredInterval,
-    MetricDirection, RailMeasurement, RailSide, RiserClosure, Tread, TreadFlight,
+    HandrailRequest, HeadroomRequest, LandingClearWidthRequest, LandingEvidence, LandingRequest,
+    MeasuredInterval, MetricDirection, RailMeasurement, RailSide, RiserClosure, Tread, TreadFlight,
     TreadFlightRequest, WalkingEnd, WalkingLine, WalkingStretch, WalkingSurfaceError,
     WalkingSurfaceService,
 };
@@ -1834,4 +1834,52 @@ fn the_clear_width_along_a_ramp_follows_its_surface() {
         .unwrap();
     assert!(holds(measured.width(), 1.35), "{measured:?}");
     assert_eq!(measured.governing(), [id("rail")]);
+}
+
+fn landing_clear_width(
+    stairs: &AxiolidWalkingSurfaceService,
+    candidates: &[&str],
+    obstacles: &[&str],
+) -> Result<axioval_engine::LandingClearWidthEvidence, WalkingSurfaceError> {
+    stairs.measure_landing_clear_width(
+        &LandingClearWidthRequest::try_new(
+            LandingRequest::new(
+                id("flight"),
+                WalkingEnd::FlightTop,
+                candidates.iter().map(|local| id(local)),
+            ),
+            obstacles.iter().map(|local| id(local)),
+            (0.5, 1.5),
+        )
+        .unwrap(),
+    )
+}
+
+#[test]
+fn a_landings_clear_width_lies_between_the_walls_bounding_it() {
+    // A 1.2 m flight (y 0 .. 1.2) arrives at a 1.5 m slab (y -0.1 .. 1.4)
+    // with walls standing on it 1 m apart (y 0.1 and 1.1), and a wall too
+    // low for the band.
+    let stairs = flight_with(vec![
+        ("landing", cuboid([1.12, -0.1, 0.52], [2.12, 1.4, 0.72])),
+        ("right", cuboid([1.12, -0.1, 0.72], [2.12, 0.1, 3.0])),
+        ("left", cuboid([1.12, 1.1, 0.72], [2.12, 1.4, 3.0])),
+        ("kerb", cuboid([1.12, 1.0, 0.72], [2.12, 1.1, 0.82])),
+    ]);
+    let measured = landing_clear_width(&stairs, &["landing"], &["right", "left", "kerb"]).unwrap();
+    assert!(!measured.evidence().exact);
+    let landing = measured.landing().unwrap();
+    assert_eq!(landing.carrier(), &id("landing"));
+    assert!(holds(landing.width(), 1.0), "{landing:?}");
+    assert!(landing.width().upper() - landing.width().lower() < 1e-6);
+    assert_eq!(landing.governing(), [id("left"), id("right")]);
+    assert_eq!(landing.bounds(), (&[id("right")][..], &[id("left")][..]));
+    // One wall bounds one side only; the slab's own edge bounds the other.
+    let one = landing_clear_width(&stairs, &["landing"], &["right"]).unwrap();
+    let one = one.landing().unwrap();
+    assert!(holds(one.width(), 1.3), "{one:?}");
+    assert_eq!(one.bounds(), (&[id("right")][..], &[][..]));
+    // Without a candidate there is no landing.
+    let none = landing_clear_width(&stairs, &[], &["right", "left"]).unwrap();
+    assert!(none.landing().is_none());
 }

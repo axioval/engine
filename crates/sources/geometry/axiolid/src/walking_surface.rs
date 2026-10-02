@@ -61,9 +61,9 @@ use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh, component_count};
 use axioval_engine::{
     ClearWidthEvidence, ClearWidthRequest, ClearanceBelow, ClearanceBelowRequest,
     ElevationInterval, HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing,
-    LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval, MetricDirection, SlopedRun,
-    SlopedSurface, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine, WalkingSurfaceError,
-    WalkingSurfaceService,
+    LandingClearWidthEvidence, LandingClearWidthRequest, LandingEvidence, LandingExtent,
+    LandingRequest, MeasuredInterval, MetricDirection, SlopedRun, SlopedSurface, TreadFlight,
+    TreadFlightRequest, WalkingEnd, WalkingLine, WalkingSurfaceError, WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -703,6 +703,13 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
         request: &ClearWidthRequest,
     ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
         self.clear_width(request)
+    }
+
+    fn measure_landing_clear_width(
+        &self,
+        request: &LandingClearWidthRequest,
+    ) -> Result<LandingClearWidthEvidence, WalkingSurfaceError> {
+        self.landing_clear_width(request)
     }
 }
 

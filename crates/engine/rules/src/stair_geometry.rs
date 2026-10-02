@@ -248,6 +248,10 @@ struct LandingCheck<'a> {
     end_width: Option<f64>,
     at_least_walking_width: bool,
     required: bool,
+    /// Whether a landing door check asks for each landing; without it and
+    /// without a size or presence check, the landings are selected only for
+    /// their clear widths.
+    doors: bool,
 }
 
 impl LandingCheck<'_> {
@@ -257,6 +261,11 @@ impl LandingCheck<'_> {
             || self.end_depth.is_some()
             || self.end_width.is_some()
             || self.at_least_walking_width
+    }
+
+    /// Whether each landing is measured for its size, presence or doors.
+    fn measured(&self) -> bool {
+        self.sizes() || self.required || self.doors
     }
 
     /// The depth and width minimums at a landing: a ramp's end landing takes
@@ -273,6 +282,7 @@ impl LandingCheck<'_> {
 fn landing_check<'a>(
     parameters: &Parameters<'a>,
     doors: bool,
+    clear: bool,
 ) -> Result<Option<LandingCheck<'a>>, Unavailable> {
     let objects = parameters.selector("landing_objects")?;
     let depth = length(parameters, "landing_depth_minimum")?;
@@ -289,7 +299,8 @@ fn landing_check<'a>(
         || end_width.is_some()
         || at_least_walking_width
         || required
-        || doors;
+        || doors
+        || clear;
     match (objects, declared) {
         (Some(objects), true) => Ok(Some(LandingCheck {
             objects,
@@ -299,6 +310,7 @@ fn landing_check<'a>(
             end_width,
             at_least_walking_width,
             required,
+            doors,
         })),
         (None, false) => Ok(None),
         (None, true) => Err(invalid("a landing check needs `landing_objects`")),
@@ -343,14 +355,18 @@ impl<'a> WalkingConfig<'a> {
         let end_space = ramp_ends::parse_end_space(parameters)?;
         let break_doors = parameters.selector("handrail_break_doors")?.is_some();
         let doors = ramp_ends::parse_doors(parameters, break_doors)?;
+        let clear = clear_width::parse(parameters)?;
+        let landings = clear
+            .as_ref()
+            .is_some_and(clear_width::ClearWidthCheck::landings);
         Ok(Self {
             width: range(parameters, "width")?,
-            landing: landing_check(parameters, doors.is_some() || break_doors)?,
+            landing: landing_check(parameters, doors.is_some() || break_doors, landings)?,
             below: below_check(parameters)?,
             handrail: handrails::parse(parameters, ramp)?,
             end_space,
             doors,
-            clear: clear_width::parse(parameters)?,
+            clear,
         })
     }
 
@@ -1222,6 +1238,7 @@ impl RuleCapability for StairGeometryCheck {
         parameters.extend(walking_descriptors());
         parameters.extend(whole::descriptors());
         parameters.extend(tactile::descriptors());
+        parameters.extend(clear_width::stair_descriptors());
         parameters
     }
 
@@ -1271,7 +1288,7 @@ impl RuleCapability for StairGeometryCheck {
                 &mut evaluation,
                 rule,
                 &object.id,
-                flights.checks(&flight, Intermediate::default()),
+                flights.checks(&flight, Intermediate::default()).0,
             );
         }
         evaluation
@@ -1309,8 +1326,14 @@ impl Flights<'_, '_> {
 
     /// Every check the rule declares on one flight, each citing it; the
     /// tactile strips on `intermediate` ends only where the rule asks for
-    /// them.
-    fn checks(&self, flight: &TreadFlight, intermediate: Intermediate) -> Checks {
+    /// them. In whole-stair mode the landings' clear widths are measured on
+    /// `intermediate` ends only, and returned with the flight's own for the
+    /// stair's total.
+    fn checks(
+        &self,
+        flight: &TreadFlight,
+        intermediate: Intermediate,
+    ) -> (Checks, Vec<clear_width::Width>) {
         let (stairs, config, selections) = (self.stairs, self.config, self.selections);
         let object = flight.object();
         let mut checks = stair_checks(config, flight);
@@ -1382,15 +1405,8 @@ impl Flights<'_, '_> {
         if let (Some(check), Some(spaces)) = (&config.walking.below, &selections.below) {
             checks.push(below(stairs, check, spaces, object, "flight"));
         }
-        if let (Some(check), Some(obstacles)) = (&config.walking.clear, &selections.clear) {
-            checks.push(clear_width::clear_width(
-                stairs,
-                check,
-                obstacles,
-                (object, WalkingStretch::Flight),
-                "the flight",
-            ));
-        }
+        let (found, widths) = self.clear_widths(object, intermediate);
+        checks.extend(found);
         if let (Some(check), Some(rails)) = (&config.walking.handrail, &selections.rails) {
             let along = handrails::Along {
                 object,
@@ -1401,13 +1417,56 @@ impl Flights<'_, '_> {
             };
             checks.extend(handrails::handrails(stairs, check, rails, &along));
         }
-        checks
+        let checks = checks
             .into_iter()
             .map(|(check, mut evidence, related)| {
                 evidence.insert(0, flight.evidence().clone());
                 (check, evidence, related)
             })
-            .collect()
+            .collect();
+        (checks, widths)
+    }
+
+    /// The clear widths of a flight and its landings against the rule's
+    /// minimums, and the widths measured.
+    fn clear_widths(
+        &self,
+        object: &ObjectId,
+        intermediate: Intermediate,
+    ) -> (Checks, Vec<clear_width::Width>) {
+        let (stairs, config, selections) = (self.stairs, self.config, self.selections);
+        let mut checks = Vec::new();
+        let mut widths = Vec::new();
+        if let (Some(check), Some(obstacles)) = (&config.walking.clear, &selections.clear) {
+            let whole = config.stair.is_some();
+            let ends = if whole {
+                [intermediate.bottom, intermediate.top]
+            } else {
+                [true, true]
+            };
+            match clear_width::flight_widths(
+                stairs,
+                check,
+                (obstacles, selections.landings.as_ref()),
+                object,
+                ends,
+            ) {
+                Ok(measured) => widths = measured,
+                Err(message) => checks.push((Check::Undecided(message), vec![], vec![])),
+            }
+            let undecided = matches!(obstacles, Ok((_, true)));
+            checks.extend(clear_width::judge_each(check, &widths, undecided));
+            if let (Some(total), false, Ok(_)) = (check.total(), whole, obstacles) {
+                checks.push(clear_width::judge_total(
+                    total,
+                    &widths,
+                    undecided,
+                    ("the flight and its landings", false),
+                    &[],
+                ));
+            }
+        }
+        (checks, widths)
     }
 }
 
@@ -1421,6 +1480,9 @@ fn flight_landings(
     let (Some(check), Some(candidates)) = (&door.walking.landing, &door.selections.landings) else {
         return Vec::new();
     };
+    if !check.measured() {
+        return Vec::new();
+    }
     let mut checks = Vec::new();
     for (end, label) in [
         (WalkingEnd::FlightBottom, "the bottom of the flight"),
@@ -1856,7 +1918,9 @@ fn ramp(
         };
         checks.push((check, vec![evidence.clone()], vec![]));
     }
-    if let (Some(check), Some(candidates)) = (&config.walking.landing, &selections.landings) {
+    if let (Some(check), Some(candidates)) = (&config.walking.landing, &selections.landings)
+        && check.measured()
+    {
         let total = runs.len();
         for (index, run) in runs.iter().enumerate() {
             for (end, place) in [
@@ -1969,15 +2033,23 @@ fn rails_and_ends(
         }
     }
     if let (Some(check), Some(obstacles)) = (&config.walking.clear, &selections.clear) {
-        let total = runs.len();
-        for index in 0..total {
-            checks.push(clear_width::clear_width(
-                stairs,
-                check,
-                obstacles,
-                (&object.id, WalkingStretch::Run(index)),
-                &format!("run {} of {total}", index + 1),
-            ));
+        match obstacles {
+            Ok((candidates, undecided)) => {
+                let total = runs.len();
+                let widths: Vec<clear_width::Width> = (0..total)
+                    .map(|index| {
+                        clear_width::stretch_width(
+                            stairs,
+                            check,
+                            candidates,
+                            (&object.id, WalkingStretch::Run(index)),
+                            &format!("run {} of {total}", index + 1),
+                        )
+                    })
+                    .collect();
+                checks.extend(clear_width::judge_each(check, &widths, *undecided));
+            }
+            Err((_, message)) => checks.push((Check::Undecided(message.clone()), vec![], vec![])),
         }
     }
     if let (Some(check), Some(obstacles)) = (&config.walking.end_space, &selections.ends) {

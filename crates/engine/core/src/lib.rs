@@ -872,7 +872,8 @@ pub use walkability::{
 };
 pub use walking_surface::{
     ClearWidthEvidence, ClearWidthRequest, ClearanceBelow, ClearanceBelowRequest, HandrailEvidence,
-    HandrailRequest, Headroom, HeadroomRequest, Landing, LandingEvidence, LandingExtent,
+    HandrailRequest, Headroom, HeadroomRequest, Landing, LandingClearWidth,
+    LandingClearWidthEvidence, LandingClearWidthRequest, LandingEvidence, LandingExtent,
     LandingRequest, MeasuredInterval, PlanSegment, RailMeasurement, RailSide, RiserClosure,
     SlopedRun, SlopedSurface, StretchPart, Tread, TreadFlight, TreadFlightRequest, WalkingEnd,
     WalkingLine, WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,

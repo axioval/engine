@@ -6322,6 +6322,108 @@ fn with_geometry_a_shallow_landing_and_a_low_soffit_are_found() {
     );
 }
 
+/// Stair flight #108 (1.2 m wide, y -1.2 to 0) arriving at landing slab
+/// #200 as wide, with walls #300 and #400 standing on the landing 1 m apart.
+fn a_narrow_landing() -> String {
+    let flight = "IFCSTAIRFLIGHT('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &stair_profile(&[0.17; 4]), flight),
+        placed_box(
+            200,
+            [1.72, -0.6, 0.48],
+            [1.2, 1.2, 0.2],
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.LANDING.)"
+        ),
+        placed_box(300, [1.72, -1.15, 0.68], [1.2, 0.1, 2.0], wall),
+        placed_box(400, [1.72, -0.05, 0.68], [1.2, 0.1, 2.0], wall),
+    )
+}
+
+#[test]
+fn with_geometry_a_landing_narrower_than_its_flight_fails_its_clear_widths() {
+    let case = Case::new("geometry-stair-landing-clear-width");
+    let run = |parameters: Value| {
+        case.geometry_rule(
+            &a_narrow_landing(),
+            &[
+                ("flight", "IfcStairFlight"),
+                ("slab", "IfcSlab"),
+                ("wall", "IfcWall"),
+            ],
+            "axioval:capability.stair-geometry",
+            &registry_signature("axioval:capability.stair-geometry"),
+            entity("flight"),
+            parameters,
+        )
+    };
+    let band = || {
+        json!({
+            "clear_width_minimum": {"type": "quantity", "value": 1.1, "unit": "m"},
+            "clear_width_obstacles": {"type": "selector", "value": entity("wall")},
+            "clear_width_band_from": {"type": "quantity", "value": 0.5, "unit": "m"},
+            "clear_width_band_to": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "landing_objects": {"type": "selector", "value": entity("slab")},
+        })
+    };
+    let mut parameters = band();
+    parameters["landing_clear_width_minimum"] =
+        json!({"type": "quantity", "value": 1.1, "unit": "m"});
+    parameters["total_clear_width_minimum"] =
+        json!({"type": "quantity", "value": 1.1, "unit": "m"});
+    let (output, result) = run(parameters);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The flight is 1.2 m clear; the walls leave the landing 1 m.
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert!(
+        findings.iter().all(|(object, _)| object == "#108"),
+        "{result:#}"
+    );
+    assert!(
+        findings[0].1.starts_with(
+            "the clear width of the landing at the top of the flight 0.5 m to 1.5 m above its \
+             level is 1 m beside "
+        ) && findings[0].1.ends_with("; at least 1.1 m required"),
+        "{result:#}"
+    );
+    assert!(
+        findings[1].1.starts_with(
+            "the least clear width of the flight and its landings is 1 m, at the landing at the \
+             top of the flight"
+        ),
+        "{result:#}"
+    );
+    // Its bottom has no selected landing, which is nothing to measure.
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    // The flight's own minimum passes.
+    let mut parameters = band();
+    parameters
+        .as_object_mut()
+        .unwrap()
+        .remove("landing_objects");
+    let (output, result) = run(parameters);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
 /// The side profile of a rail 0.05 m deep whose top runs `height` above
 /// the nosing line of a four-riser flight with 0.17 m risers (nosings from
 /// x 0 at 0.17 m to x 0.84 at 0.68 m), level for 0.3 m beyond either end.

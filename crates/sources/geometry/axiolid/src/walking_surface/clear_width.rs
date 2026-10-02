@@ -22,7 +22,9 @@
 //! width is never exact.
 
 use axioval_engine::{
-    ClearWidthEvidence, ClearWidthRequest, MeasuredInterval, WalkingStretch, WalkingSurfaceError,
+    ClearWidthEvidence, ClearWidthRequest, LandingClearWidth, LandingClearWidthEvidence,
+    LandingClearWidthRequest, MeasuredInterval, WalkingStretch, WalkingSurfaceError,
+    WalkingSurfaceService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -263,6 +265,93 @@ impl AxiolidWalkingSurfaceService {
             }
             WalkingStretch::Run(index) => self.run_pitch(subject, index)?,
         };
+        let (width, governing, _) = self.narrowest_over(
+            &subject.to_string(),
+            &pitch,
+            request.obstacles(),
+            request.band(),
+        )?;
+        ClearWidthEvidence::try_new(
+            request.clone(),
+            width,
+            governing,
+            Evidence {
+                source: subject.source.clone(),
+                locator: format!("clear-width:{subject}"),
+                exact: false,
+            },
+        )
+    }
+
+    /// The clear width of the landing the request asks for, along the
+    /// direction leaving its flight or run: the band lies over the landing's
+    /// rectangle, from the arrival line to its far side, between its sides,
+    /// above the end's level. Which obstacles reach each side within the
+    /// grown band is reported, so a rule can tell a side nothing bounds.
+    pub(super) fn landing_clear_width(
+        &self,
+        request: &LandingClearWidthRequest,
+    ) -> Result<LandingClearWidthEvidence, WalkingSurfaceError> {
+        let subject = request.subject();
+        let landing = self.measure_landing(request.landing())?;
+        let evidence = Evidence {
+            source: subject.source.clone(),
+            locator: format!("landing-clear-width:{subject}"),
+            exact: false,
+        };
+        let Some(found) = landing.landing() else {
+            return LandingClearWidthEvidence::try_new(request.clone(), None, evidence);
+        };
+        let Some(extent) = found.extent() else {
+            return Err(WalkingSurfaceError::Unsupported(format!(
+                "the landing {} at the end of {subject} fills no rectangle along the leaving \
+                 direction, so its clear width is not measured",
+                found.carrier()
+            )));
+        };
+        let end = self.walking_end(subject, request.landing().end())?;
+        let pitch = Pitch::straight(
+            landing.direction(),
+            vec![
+                (landing.edge(), end.elevation),
+                (extent.far(), end.elevation),
+            ],
+            extent.sides(),
+        );
+        let what = format!("the landing {} at the end of {subject}", found.carrier());
+        let (width, governing, bounds) =
+            self.narrowest_over(&what, &pitch, request.obstacles(), request.band())?;
+        LandingClearWidthEvidence::try_new(
+            request.clone(),
+            Some(LandingClearWidth::new(
+                found.carrier().clone(),
+                width,
+                governing,
+                bounds,
+            )),
+            evidence,
+        )
+    }
+
+    /// The narrowest free width the `obstacles` leave within `band` above
+    /// `pitch` over `what`, the obstacles bounding it there, and the
+    /// obstacles reaching the lower and the higher side anywhere.
+    #[allow(clippy::too_many_lines, clippy::type_complexity)]
+    fn narrowest_over(
+        &self,
+        what: &str,
+        pitch: &Pitch,
+        requested: &[ObjectId],
+        band: (f64, f64),
+    ) -> Result<
+        (
+            MeasuredInterval,
+            Vec<ObjectId>,
+            (Vec<ObjectId>, Vec<ObjectId>),
+        ),
+        WalkingSurfaceError,
+    > {
+        let subject = what;
         let line = pitch.nominal();
         let (Some(first), Some(last)) = (line.first(), line.last()) else {
             return Err(WalkingSurfaceError::InvalidMeasurement);
@@ -277,7 +366,6 @@ impl AxiolidWalkingSurfaceService {
         let along_error = pitch.along_error();
         let (left, right) = pitch.sides;
         let frame = PlanFrame::new(pitch.direction);
-        let band = request.band();
         let mut exact = Vec::new();
         let mut scale = first
             .0
@@ -289,7 +377,7 @@ impl AxiolidWalkingSurfaceService {
             .max(right.upper_metres().abs())
             .max(1.0);
         let mut obstacles = Vec::new();
-        for obstacle in request.obstacles() {
+        for obstacle in requested {
             let Some((soup, deviation)) = self.obstacle(obstacle)? else {
                 continue;
             };
@@ -392,16 +480,17 @@ impl AxiolidWalkingSurfaceService {
         };
         let width =
             MeasuredInterval::try_new((lower - margin).max(0.0), upper.max(lower) + margin)?;
-        ClearWidthEvidence::try_new(
-            request.clone(),
+        let reaching = |wanted: Side| -> Vec<ObjectId> {
+            near.iter()
+                .filter(|(side, _, _)| *side == wanted)
+                .map(|(_, sections, _)| sections.obstacle.clone())
+                .collect()
+        };
+        Ok((
             width,
             governing,
-            Evidence {
-                source: subject.source.clone(),
-                locator: format!("clear-width:{subject}"),
-                exact: false,
-            },
-        )
+            (reaching(Side::Low), reaching(Side::High)),
+        ))
     }
 
     /// An obstacle's triangles and chord deviation, `None` without a body.

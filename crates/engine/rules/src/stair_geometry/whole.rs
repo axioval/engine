@@ -22,6 +22,7 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
+use super::clear_width::{self, Width};
 use super::handrails::{self, HandrailCheck};
 use super::ramp_ends;
 use super::{
@@ -142,6 +143,7 @@ pub(super) fn evaluate(
         .map(|(doors, _)| selected(context, doors, "break door selection"));
     let mut measured: BTreeMap<ObjectId, Result<TreadFlight, Unavailable>> = BTreeMap::new();
     let mut reported = BTreeSet::new();
+    let mut widths: BTreeMap<ObjectId, Vec<Width>> = BTreeMap::new();
     for stair in stairs {
         let (parts, cited) = match mode.path.related(context, &stair.id, &everything) {
             Ok(reached) => reached,
@@ -179,7 +181,9 @@ pub(super) fn evaluate(
                 match &measured[*id] {
                     Ok(flight) => {
                         let ends = between.get(*id).copied().unwrap_or_default();
-                        report(evaluation, rule, id, flights.checks(flight, ends));
+                        let (checks, measured) = flights.checks(flight, ends);
+                        widths.insert((*id).clone(), measured);
+                        report(evaluation, rule, id, checks);
                     }
                     Err((reason, message)) => evaluation.push_object_not_evaluated(
                         (*id).clone(),
@@ -208,6 +212,10 @@ pub(super) fn evaluate(
                 mode.path.relationship
             ));
         }
+        let stair_widths: Vec<Width> = ok
+            .iter()
+            .flat_map(|flight| widths.get(flight.object()).into_iter().flatten().cloned())
+            .collect();
         let whole = Whole {
             context,
             mode,
@@ -215,6 +223,7 @@ pub(super) fn evaluate(
             ok: &ok,
             missing: &missing,
             doors: doors.as_ref(),
+            widths: &stair_widths,
         };
         let mut checks = whole.checks();
         for (_, evidence, _) in &mut checks {
@@ -235,6 +244,9 @@ struct Whole<'w, 's, 'a> {
     /// Why flights may be missing: undecided or unmeasured ones.
     missing: &'w [String],
     doors: Option<&'w Selected>,
+    /// The clear widths of the measured flights and of the landings
+    /// between them.
+    widths: &'w [Width],
 }
 
 impl Whole<'_, '_, '_> {
@@ -247,6 +259,21 @@ impl Whole<'_, '_, '_> {
             && check.continuous
         {
             checks.extend(self.continuity(check));
+        }
+        if let Some(check) = &self.flights.config.walking.clear
+            && let Some(total) = check.total()
+        {
+            checks.push(match &self.flights.selections.clear {
+                Some(Ok((_, undecided))) => clear_width::judge_total(
+                    total,
+                    self.widths,
+                    *undecided,
+                    ("the stair's flights and the landings between them", true),
+                    self.missing,
+                ),
+                Some(Err((_, message))) => (Check::Undecided(message.clone()), vec![], vec![]),
+                None => unreachable!("a clear-width check selects its obstacles"),
+            });
         }
         checks
     }

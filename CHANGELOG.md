@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Stair landing clear width and the least clear width of a stair.** (Closes #155)
+  `stair-geometry` gains `landing_clear_width_minimum`: the landing
+  at each end of a flight (in whole-stair mode, each landing between
+  flights) is measured across the direction leaving the flight between
+  the `clear_width_obstacles` bounding it, within the clear-width band
+  above its level; a landing a side of which no selected obstacle
+  reaches is not evaluated. `total_clear_width_minimum` bounds the
+  least of the flight's and its landings' clear widths, or in whole-stair
+  mode the least over the stair's flights and intermediate landings, on
+  the stair; an unmeasured width leaves a pass not evaluated. Both need
+  `landing_objects` and the clear-width obstacles and band.
+  `WalkingSurfaceService` gains the defaulted `measure_landing_clear_width`
+  (`LandingClearWidthRequest`, `LandingClearWidthEvidence`,
+  `LandingClearWidth`), answered by the Axiolid adapter. **Breaking:** the
+  capability's signature gains two optional parameters.
 - **User-defined relations between objects.** (Refs #181)
   A ruleset's `relations` declare relations the model does not state,
   such as the pumps serving each room: `from` and `to` selectors and

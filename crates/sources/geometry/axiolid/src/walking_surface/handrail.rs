@@ -96,7 +96,7 @@ fn half_width(value: ElevationInterval) -> f64 {
 
 impl Pitch {
     /// A straight stretch's pitch line: its points only, the stretch's ends.
-    fn straight(
+    pub(super) fn straight(
         direction: MetricDirection,
         points: Vec<(ElevationInterval, ElevationInterval)>,
         sides: (ElevationInterval, ElevationInterval),

@@ -7,9 +7,18 @@
 //! IFC session already uses.
 //!
 //! With several models, every source is meshed into one geometry set under
-//! its own source-qualified identities, in one shared coordinate system, and
-//! every service is bound to all the session's snapshots. A clash between
-//! objects of two files is then an ordinary pair of the set.
+//! its own source-qualified identities, and every service is bound to all
+//! the session's snapshots. A clash between objects of two files is then an
+//! ordinary pair of the set.
+//!
+//! Geometry is never re-aligned: each source is meshed in its own model
+//! coordinates, so the set is one frame only for sources that share the
+//! first source's coordinate system (`compare_coordinate_systems` with the
+//! default tolerances: the same world frame, and the same map conversion or
+//! none on either side). A source that does not, or whose coordinate system
+//! cannot be read, contributes its physical objects as unmeasured with the
+//! reason, so every geometric check touching them is not evaluated rather
+//! than measured in the wrong place.
 //!
 //! Every object ends up in exactly one of three states, because the geometry
 //! services treat them differently:
@@ -48,17 +57,18 @@ use axioval::axiolid::{
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
 };
 use axioval::engine::{
-    BoundaryCoverageServiceHandle, ContactServiceHandle, DerivedRelationshipServiceHandle,
-    EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
-    FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
-    MetricRoutingServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle, RelationshipQuery,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    SightServiceHandle, SourceSnapshot, SpaceServiceHandle, TraversalDirection,
-    TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
-    WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    BoundaryCoverageServiceHandle, ContactServiceHandle, CoordinateSystemServiceHandle,
+    DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession,
+    FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
+    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
+    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
+    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
+    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
+use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
 use axioval::{bcf, bcf_snapshot};
 use ifc_geometry::lower::{LoweringSession, lower_connection_surface, lower_product_net};
 use ifc_geometry::{RepresentationPurpose, Transform};
@@ -111,6 +121,57 @@ pub type ModelBytes = BTreeMap<SourceId, Vec<u8>>;
 struct Parsed {
     model: Model,
     units: ifc_geometry::units::UnitScale,
+}
+
+/// The sources whose geometry is not in the first source's frame, with
+/// the reason. Empty for a single source.
+fn unaligned(
+    session: &EvidenceSession,
+    snapshots: &[SourceSnapshot],
+) -> BTreeMap<SourceId, String> {
+    let Some((first, others)) = snapshots.split_first() else {
+        return BTreeMap::new();
+    };
+    let reference = first.source();
+    let others = others.iter().map(SourceSnapshot::source);
+    let Some(service) = session.service::<CoordinateSystemServiceHandle>() else {
+        return others
+            .map(|source| {
+                (
+                    source.clone(),
+                    "no coordinate-system service states whether its geometry shares the frame of the other models".to_owned(),
+                )
+            })
+            .collect();
+    };
+    let base = service.coordinate_system(reference);
+    others
+        .filter_map(|source| {
+            let base = match &base {
+                Ok(base) => base,
+                Err(error) => {
+                    return Some((
+                        source.clone(),
+                        format!(
+                            "the coordinate system of `{reference}` cannot be read, so its frame and this model's are not known to be one: {error}"
+                        ),
+                    ));
+                }
+            };
+            let reason = match service.coordinate_system(source) {
+                Ok(system) => {
+                    compare_coordinate_systems(base, &system, CoordinateTolerance::default())
+                        .shares_frame()
+                        .err()?
+                }
+                Err(error) => format!("its coordinate system cannot be read: {error}"),
+            };
+            Some((
+                source.clone(),
+                format!("not in the coordinate system of `{reference}`: {reason}"),
+            ))
+        })
+        .collect()
 }
 
 /// Parses the model of every snapshot's source.
@@ -179,6 +240,7 @@ pub fn attach(
         .collect();
     let is_a = |id: &ObjectId, ancestor: &str| is_a(id, ancestor, &kinds);
 
+    let unaligned = unaligned(&session, &snapshots);
     let backend = ifc_geometry::compile::default_backend();
     let mut geometry = AxiolidGeometry::new();
     let mut report = GeometryReport::default();
@@ -192,8 +254,11 @@ pub fn attach(
         let is_space = is_a(&id, "IfcSpace");
         let bodiless = !is_a(&id, "IfcProduct")
             || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&id, ancestor)));
+        let unaligned = unaligned.get(&id.source);
         if bodiless {
-            if is_a(&id, "IfcOpeningElement") {
+            if let (true, Some(reason)) = (is_a(&id, "IfcOpeningElement"), unaligned) {
+                voids.push((id.clone(), Err(reason.clone())));
+            } else if is_a(&id, "IfcOpeningElement") {
                 let void = entity_id(&id)
                     .ok_or_else(|| "not a STEP instance id".to_owned())
                     .and_then(|entity| mesh(&backend, model, units, entity))
@@ -202,6 +267,11 @@ pub fn attach(
             }
             geometry = geometry.with_no_body(id);
             report.no_body += 1;
+            continue;
+        }
+        if let Some(reason) = unaligned {
+            report.unmeasured.push((id.clone(), reason.clone()));
+            geometry = geometry.with_unmeasured(id, reason.clone());
             continue;
         }
         let Some(entity) = entity_id(&id) else {

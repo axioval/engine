@@ -813,7 +813,7 @@ pub(super) fn bounds_shift(a: &axioval_engine::Bounds3, b: &axioval_engine::Boun
         .fold(0.0_f64, f64::max)
 }
 
-pub(super) fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
+pub(crate) fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
 }
 
@@ -822,7 +822,7 @@ pub(super) fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
 /// For a rotation by θ, the Frobenius norm of the difference of the two
 /// rotation matrices is `2·√2·sin(θ/2)`; unlike the trace formula this stays
 /// accurate for the small angles a tolerance is about.
-pub(super) fn rotation(a: [MetricDirection; 3], b: [MetricDirection; 3]) -> f64 {
+pub(crate) fn rotation(a: [MetricDirection; 3], b: [MetricDirection; 3]) -> f64 {
     let squared: f64 = a
         .iter()
         .zip(&b)
@@ -837,7 +837,7 @@ pub(super) fn rotation(a: [MetricDirection; 3], b: [MetricDirection; 3]) -> f64 
 }
 
 /// The angle between two unit plan directions.
-fn plan_angle(a: [f64; 2], b: [f64; 2]) -> f64 {
+pub(crate) fn plan_angle(a: [f64; 2], b: [f64; 2]) -> f64 {
     let cross = a[0] * b[1] - a[1] * b[0];
     let dot = a[0] * b[0] + a[1] * b[1];
     cross.abs().atan2(dot)

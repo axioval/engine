@@ -1937,6 +1937,41 @@ rule](./comparison.md#the-comparison-as-a-rule), [Relationship
 kinds](./comparison.md#relationship-kinds) and
 [Mesh](./comparison.md#mesh).
 
+### Coordinate consistency
+
+`axioval:capability.coordinate-consistency` checks that the sources of a
+federation share one coordinate system before their geometry is compared.
+Each source's coordinate system (`CoordinateSystemServiceHandle`) is
+compared with a reference source's: the one source of discipline
+`reference`, or without it the first source in identity order. Compared
+are the world frame (origin and orientation), true north, the map
+conversion (target system, offset in metres, rotation and scale) and the
+site placement, within `length_tolerance` (metres, default 0.001),
+`angle_tolerance` (degrees, default 0.01) and `scale_tolerance` (absolute,
+default 0). Map offsets stated in different units are compared in metres,
+so a model georeferenced in millimetres agrees with one in metres. A source
+that differs is a finding against that source naming every difference
+(`` `struct.ifc` does not share the coordinate system of `arch.ifc`: map
+offset moved by 1.0000 m ``), citing both coordinate systems.
+
+Nothing unstated is assumed to agree. A statement only one of the two
+sources makes (true north, a site), an unknown site placement, a map unit
+not known exactly and an unreadable coordinate system leave the source not
+evaluated. A source without a map conversion is not georeferenced: it is not
+evaluated (`NotRecorded`), or with `require_map_conversion` a finding, the
+reference included. One source, or no coordinate-system service, leaves the
+rule not evaluated.
+
+Federated geometry is never re-aligned. A host meshes each source in its own
+model coordinates, and the set is one frame only for sources whose world
+frames agree and whose map conversions agree or are both absent
+(`CoordinateConsistency::shares_frame`, with the default tolerances). The
+CLI declares every physical object of a source that does not share the
+first source's frame, or whose coordinate system cannot be read, unmeasured
+with the reason, so a clash or distance between it and another model is not
+evaluated rather than measured in the wrong place (see [Several models and
+disciplines](./cli.md#several-models-and-disciplines)).
+
 ### Information takeoff
 
 `axioval:capability.quantity-takeoff` counts the rule's selection per group

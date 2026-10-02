@@ -688,7 +688,7 @@ pub use contact::{
 };
 pub use coordinate_system::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
-    MapConversion, SourceCoordinateSystem,
+    MapConversion, SitePlacement, SourceCoordinateSystem,
 };
 pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, WallContact};
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};

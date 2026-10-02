@@ -54,6 +54,7 @@ mod facets;
 mod matching;
 
 pub use capability::CompareModels;
+pub(crate) use facets::{distance, plan_angle, rotation};
 
 /// A declaration the comparison cannot run with.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]

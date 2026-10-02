@@ -120,8 +120,18 @@ not evaluated, once for the model, and the check exits 4 rather than pass.
 
 With `--geometry`, every model is meshed into one geometry set, so a clash
 between an object of one file and an object of another is an ordinary pair.
-The models must share one coordinate system, as models exchanged for
-coordination do; the CLI does not move one onto another.
+The CLI never moves one model onto another: each is meshed in its own model
+coordinates, which are one frame only when the models share a coordinate
+system. Every model is therefore compared with the first `--model` (world
+frame within 1 mm and 0.01°, and the same map conversion, or none in
+either): a model that does not share it, or whose coordinate system cannot
+be read, has every physical object unmeasured with the reason (`not in the
+coordinate system of ``arch.ifc``: map offset moved by 1.0000 m`), so its
+clashes and distances with the other models, and its own geometric checks,
+are not evaluated rather than measured in the wrong place. Check such a
+model alone, or fix its georeference; a `coordinate-consistency` rule
+reports the difference as a finding (see [Coordinate
+consistency](./capabilities.md#coordinate-consistency)).
 
 Each model's file name is stated as its source's `fileName` metadata, beside the application and project the IFC adapter reads, for `source` selectors (see
 [Source selectors](./capabilities.md#source-selectors)).

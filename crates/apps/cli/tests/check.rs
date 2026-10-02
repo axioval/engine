@@ -4716,6 +4716,9 @@ fn walls_of_height(walls: &[(u32, f64, f64, f64, f64, &str)], height: f64) -> St
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
          {data}ENDSEC;\nEND-ISO-10303-21;\n"
     )
 }
@@ -4724,20 +4727,14 @@ impl Case {
     /// Architectural walls (subjects) against structural bodies
     /// (counterparts), in two files of one check.
     fn discipline_clash(&self, models: &[&str], extra: &[&str]) -> Output {
-        // Two crossing architectural walls: they clash with each other, but
-        // the rule only compares architecture with structure.
-        self.write(
-            "arch.ifc",
-            &walls_file(&[
-                (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000A16"),
-                (20, 2.0, 0.0, 0.2, 4.0, "0000000000000000000A26"),
-            ]),
-        );
-        // A structural wall through the first architectural wall at x = 0.5.
-        self.write(
-            "struct.ifc",
-            &walls_file(&[(10, 0.5, 0.0, 0.2, 4.0, "0000000000000000000S16")]),
-        );
+        self.write("arch.ifc", &discipline_walls().0);
+        self.write("struct.ifc", &discipline_walls().1);
+        self.clash_across(models, extra)
+    }
+
+    /// The clash rule of [`Case::discipline_clash`] over the files already
+    /// written.
+    fn clash_across(&self, models: &[&str], extra: &[&str]) -> Output {
         let (definitions, ruleset) = self.clash_packages();
         let mut ruleset: Value =
             serde_json::from_str(&std::fs::read_to_string(&ruleset).unwrap()).unwrap();
@@ -4746,8 +4743,10 @@ impl Case {
             {"kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true},
             {"kind": "discipline", "value": "architecture"},
         ]});
-        rule["parameters"]["counterparts"]["value"] =
-            json!({"kind": "discipline", "value": "structure"});
+        rule["parameters"]["counterparts"]["value"] = json!({"kind": "allOf", "operands": [
+            {"kind": "entityType", "objectType": "axioval:example.ifc.wall", "includeSubtypes": true},
+            {"kind": "discipline", "value": "structure"},
+        ]});
         let ruleset = self.write("ruleset.json", &ruleset.to_string());
         let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
         command.current_dir(&self.dir).arg("check");
@@ -4819,6 +4818,120 @@ fn a_clash_rule_between_two_disciplines_finds_a_clash_across_files() {
         "arch.ifc/#16",
     ]));
     assert!(listing.contains("showing 1–1 of 1"), "{listing}");
+}
+
+/// Two crossing architectural walls, which clash with each other although
+/// the rule only compares architecture with structure, and a structural wall
+/// through the first architectural wall at x = 0.5.
+fn discipline_walls() -> (String, String) {
+    (
+        walls_file(&[
+            (10, 2.0, 0.0, 4.0, 0.2, "0000000000000000000A16"),
+            (20, 2.0, 0.0, 0.2, 4.0, "0000000000000000000A26"),
+        ]),
+        walls_file(&[(10, 0.5, 0.0, 0.2, 4.0, "0000000000000000000S16")]),
+    )
+}
+
+/// `model` georeferenced onto EPSG:25832 at `easting` metres.
+fn georeferenced(model: &str, easting: f64) -> String {
+    model.replace(
+        "ENDSEC;\nEND-ISO",
+        &format!(
+            "#90=IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,#6);\n\
+             #91=IFCMAPCONVERSION(#5,#90,{easting:?},5600000.,50.,$,$,$);\n\
+             ENDSEC;\nEND-ISO"
+        ),
+    )
+}
+
+/// A `coordinate-consistency` rule over the architecture and structure
+/// models, the architecture the reference.
+fn coordinate_consistency(case: &Case) -> (Output, Value) {
+    case.geometry_rule_over(
+        &["arch.ifc:architecture", "struct.ifc:structure"],
+        &[],
+        "axioval:capability.coordinate-consistency",
+        &registry_signature("axioval:capability.coordinate-consistency"),
+        entity("wall"),
+        json!({"reference": {"type": "string", "value": "architecture"}}),
+    )
+}
+
+#[test]
+fn federated_models_with_one_georeference_pass_and_a_shifted_one_is_named() {
+    let case = Case::new("coordinate-consistency");
+    let (arch, structure) = discipline_walls();
+    case.write("arch.ifc", &georeferenced(&arch, 500_000.0));
+    case.write("struct.ifc", &georeferenced(&structure, 500_000.0));
+    let (output, result) = coordinate_consistency(&case);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+
+    case.write("struct.ifc", &georeferenced(&structure, 500_001.0));
+    let (output, result) = coordinate_consistency(&case);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(
+        findings[0]["source"]["document"], "struct.ifc",
+        "{result:#}"
+    );
+    assert_eq!(
+        findings[0]["message"],
+        "`ifc-step:struct.ifc` does not share the coordinate system of `ifc-step:arch.ifc`: map offset moved by 1.0000 m"
+    );
+
+    // Not georeferenced: never assumed to agree.
+    case.write("struct.ifc", &structure);
+    let (output, result) = coordinate_consistency(&case);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let outcomes = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(outcomes.len(), 1, "{result:#}");
+    assert_eq!(outcomes[0]["source"]["document"], "struct.ifc");
+    assert_eq!(outcomes[0]["reason"], "not_recorded");
+}
+
+#[test]
+fn a_clash_with_a_model_in_another_coordinate_system_is_not_evaluated() {
+    let case = Case::new("discipline-clash-shifted");
+    let (arch, structure) = discipline_walls();
+    case.write("arch.ifc", &georeferenced(&arch, 500_000.0));
+    case.write("struct.ifc", &georeferenced(&structure, 500_000.0));
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+    let output = case.clash_across(&models, &["--geometry"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        json(&output)["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // The structural model's georeference is 1 m east: its walls are not in
+    // the architecture's frame, so the clash is neither found nor passed.
+    case.write("struct.ifc", &georeferenced(&structure, 500_001.0));
+    let output = case.clash_across(&models, &["--geometry"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 2, "{result:#}");
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    assert_eq!(unmeasured.len(), 1, "{result:#}");
+    assert!(
+        unmeasured[0]["reason"].as_str().unwrap().contains(
+            "not in the coordinate system of `ifc-step:arch.ifc`: map offset moved by 1.0000 m"
+        ),
+        "{result:#}"
+    );
+    assert!(
+        !result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "{result:#}"
+    );
 }
 
 #[test]

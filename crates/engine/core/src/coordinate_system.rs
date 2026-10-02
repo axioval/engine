@@ -12,11 +12,14 @@
 //! - **true north**: the plan direction of geographic north in those
 //!   coordinates;
 //! - a **map conversion**: how its coordinates map onto a named map
-//!   coordinate reference system (offset, rotation, scale).
+//!   coordinate reference system (offset, rotation, scale);
+//! - its **site placement**: the frame of the one site the source places
+//!   its building on, in the world frame's coordinates ([`SitePlacement`]).
 //!
 //! What a source does not state is `None`, never a default: a missing map
 //! conversion means the source is not georeferenced, not that it sits at the
-//! map origin.
+//! map origin. A service that does not read sites reports the site placement
+//! unknown, never absent.
 
 use std::sync::Arc;
 
@@ -192,6 +195,19 @@ impl MapConversion {
     }
 }
 
+/// Where a source places its site.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SitePlacement {
+    /// The source holds no site.
+    Absent,
+    /// The frame of the source's one site, origin in canonical metres.
+    Stated(CoordinateFrame),
+    /// The placement is not known: several sites, a placement that cannot be
+    /// resolved exactly, or a service that does not read sites. Never read
+    /// as absent or as any frame.
+    Unknown(String),
+}
+
 /// One source's coordinate system, as far as the source states it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceCoordinateSystem {
@@ -199,6 +215,7 @@ pub struct SourceCoordinateSystem {
     world: Option<CoordinateFrame>,
     true_north: Option<[f64; 2]>,
     map: Option<MapConversion>,
+    site: SitePlacement,
     evidence: Evidence,
 }
 
@@ -233,8 +250,18 @@ impl SourceCoordinateSystem {
             world,
             true_north,
             map,
+            site: SitePlacement::Unknown(
+                "the coordinate-system service does not report site placements".into(),
+            ),
             evidence,
         })
+    }
+
+    /// The same coordinate system with the source's site placement.
+    #[must_use]
+    pub fn with_site(mut self, site: SitePlacement) -> Self {
+        self.site = site;
+        self
     }
 
     /// The source this coordinate system belongs to.
@@ -259,6 +286,13 @@ impl SourceCoordinateSystem {
     #[must_use]
     pub fn map(&self) -> Option<&MapConversion> {
         self.map.as_ref()
+    }
+
+    /// Where the source places its site; unknown unless the service stated
+    /// it ([`Self::with_site`]).
+    #[must_use]
+    pub fn site(&self) -> &SitePlacement {
+        &self.site
     }
 
     /// Reviewable provenance of the statements.
@@ -388,6 +422,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(system.true_north(), Some([0.0, 1.0]));
+        assert!(
+            matches!(system.site(), SitePlacement::Unknown(_)),
+            "a site the service did not state is unknown, never absent"
+        );
+        let [x, y, z] = identity();
+        let frame = CoordinateFrame::try_new([1.0, 2.0, 0.0], x, y, z).unwrap();
+        assert_eq!(
+            system.with_site(SitePlacement::Stated(frame)).site(),
+            &SitePlacement::Stated(frame)
+        );
     }
 
     struct Fixed(Vec<SourceSnapshot>, SourceCoordinateSystem);

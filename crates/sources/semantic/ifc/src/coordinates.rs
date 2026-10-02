@@ -15,6 +15,12 @@
 //!   is not stated, or cannot be resolved exactly, the unit is reported
 //!   unknown rather than assumed.
 //!
+//! - The site placement is the `ObjectPlacement` of the file's one `IfcSite`,
+//!   composed by `ifc-geometry`'s `PlacementResolver` as object frames are,
+//!   origin in metres through the exact project length unit. No site is
+//!   absent; several sites, a grid placement or a placement that cannot be
+//!   resolved exactly leave it unknown, with the reason.
+//!
 //! A file without a model context states no coordinate system; several model
 //! contexts, or several conversions of the one context, are ambiguous and
 //! refused. IFC2X3 has no map conversion, so its files state none.
@@ -23,9 +29,10 @@ use std::sync::Arc;
 
 use axioval_engine::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, MapConversion,
-    MetricDirection, SourceCoordinateSystem, SourceSnapshot,
+    MetricDirection, SitePlacement, SourceCoordinateSystem, SourceSnapshot,
 };
 use axioval_ir::{Evidence, SourceId};
+use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::resource::{Direction, axis_placement_transform};
 use ifc_geometry::{RepresentationContext, all_contexts};
 use ifc_model::{Entity, EntityId, Model, Value};
@@ -142,31 +149,77 @@ impl IfcCoordinateSystem {
             .ok_or_else(|| CoordinateSystemError::Unreadable(format!("{id} is missing")))?;
         let transform = axis_placement_transform(&self.model, id, entity)
             .map_err(|error| CoordinateSystemError::Unsupported(error.to_string()))?;
-        let metres = match exact_unit(&self.model, "IFCLENGTHMEASURE", None) {
+        frame(transform.origin, transform.basis, self.metres()?)
+    }
+
+    /// Metres per project length unit, resolved exactly.
+    fn metres(&self) -> Result<f64, CoordinateSystemError> {
+        match exact_unit(&self.model, "IFCLENGTHMEASURE", None) {
             Ok(unit) if unit.offset == 0.0 && unit.scale.is_finite() && unit.scale > 0.0 => {
-                unit.scale
+                Ok(unit.scale)
             }
-            Ok(_) => {
-                return Err(CoordinateSystemError::Unreadable(
-                    "the project length unit has no positive finite scale".into(),
-                ));
-            }
-            Err(error) => {
-                return Err(CoordinateSystemError::Unreadable(format!(
-                    "the project length unit cannot be resolved exactly: {error}"
-                )));
+            Ok(_) => Err(CoordinateSystemError::Unreadable(
+                "the project length unit has no positive finite scale".into(),
+            )),
+            Err(error) => Err(CoordinateSystemError::Unreadable(format!(
+                "the project length unit cannot be resolved exactly: {error}"
+            ))),
+        }
+    }
+
+    /// The placement of the file's one site, and the site's id.
+    fn site(&self) -> (SitePlacement, Option<EntityId>) {
+        let sites = self.model.ids_of_type("IFCSITE");
+        let id = match sites {
+            [] => return (SitePlacement::Absent, None),
+            [id] => *id,
+            several => {
+                return (
+                    SitePlacement::Unknown(format!(
+                        "{} sites ({}); none of them is the source's site",
+                        several.len(),
+                        several
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                    None,
+                );
             }
         };
-        let axis = |vector: [f64; 3]| {
-            MetricDirection::try_new(vector).map_err(|_| CoordinateSystemError::InvalidMeasurement)
+        match self.site_frame(id) {
+            Ok(frame) => (SitePlacement::Stated(frame), Some(id)),
+            Err(reason) => (SitePlacement::Unknown(reason), Some(id)),
+        }
+    }
+
+    fn site_frame(&self, id: EntityId) -> Result<CoordinateFrame, String> {
+        let entity = self
+            .model
+            .get(id)
+            .ok_or_else(|| format!("{id} is missing"))?;
+        let placement = match self.attribute(entity, "ObjectPlacement") {
+            Some(Value::Ref(placement)) => *placement,
+            Some(Value::Null) | None => return Err(format!("{id}.ObjectPlacement is not set")),
+            Some(_) => return Err(format!("{id}.ObjectPlacement is not a reference")),
         };
-        let [x, y, z] = transform.basis;
-        CoordinateFrame::try_new(
-            transform.origin.map(|value| value * metres),
-            axis(x)?,
-            axis(y)?,
-            axis(z)?,
-        )
+        let kind = self
+            .model
+            .get(placement)
+            .map(|entity| entity.type_name.to_ascii_uppercase())
+            .ok_or_else(|| format!("{id}.ObjectPlacement {placement} is missing"))?;
+        if kind != "IFCLOCALPLACEMENT" {
+            return Err(format!(
+                "{id} is placed by {kind} {placement}; only IfcLocalPlacement chains are resolved"
+            ));
+        }
+        let transform = PlacementResolver::new()
+            .world_transform(&self.model, placement)
+            .map_err(|error| error.to_string())?;
+        let metres = self.metres().map_err(|error| error.to_string())?;
+        frame(transform.origin, transform.basis, metres)
+            .map_err(|error| format!("{id}'s placement: {error}"))
     }
 
     fn true_north(
@@ -275,6 +328,24 @@ impl IfcCoordinateSystem {
     }
 }
 
+/// A frame from a composed placement, its origin scaled to metres.
+fn frame(
+    origin: [f64; 3],
+    basis: [[f64; 3]; 3],
+    metres: f64,
+) -> Result<CoordinateFrame, CoordinateSystemError> {
+    let axis = |vector: [f64; 3]| {
+        MetricDirection::try_new(vector).map_err(|_| CoordinateSystemError::InvalidMeasurement)
+    };
+    let [x, y, z] = basis;
+    CoordinateFrame::try_new(
+        origin.map(|value| value * metres),
+        axis(x)?,
+        axis(y)?,
+        axis(z)?,
+    )
+}
+
 impl CoordinateSystemService for IfcCoordinateSystem {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &self.snapshots
@@ -285,33 +356,37 @@ impl CoordinateSystemService for IfcCoordinateSystem {
         source: &SourceId,
     ) -> Result<SourceCoordinateSystem, CoordinateSystemError> {
         let fingerprint = self.snapshots[0].fingerprint();
+        let (site, site_id) = self.site();
+        let site_locator = site_id.map_or_else(String::new, |id| format!(":site:{id}"));
         let Some(context) = self.model_context()? else {
-            return SourceCoordinateSystem::try_new(
+            return Ok(SourceCoordinateSystem::try_new(
                 source.clone(),
                 None,
                 None,
                 None,
                 Evidence::exact(
                     source.clone(),
-                    format!("ifc:{fingerprint}:coordinate-system:no-model-context"),
+                    format!("ifc:{fingerprint}:coordinate-system:no-model-context{site_locator}"),
                 ),
-            );
+            )?
+            .with_site(site));
         };
         let world = self.world(&context)?;
         let true_north = self.true_north(&context)?;
         let map = self.map(context.id())?;
         let locator = format!(
-            "ifc:{fingerprint}:coordinate-system:{}:{}",
+            "ifc:{fingerprint}:coordinate-system:{}:{}{site_locator}",
             context.id(),
             map.as_ref()
                 .map_or_else(|| "no-map-conversion".to_owned(), |(id, _)| id.to_string())
         );
-        SourceCoordinateSystem::try_new(
+        Ok(SourceCoordinateSystem::try_new(
             source.clone(),
             Some(world),
             true_north,
             map.map(|(_, map)| map),
             Evidence::exact(source.clone(), locator),
-        )
+        )?
+        .with_site(site))
     }
 }

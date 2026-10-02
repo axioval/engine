@@ -4,7 +4,7 @@
 #![allow(clippy::float_cmp)]
 
 use axioval_engine::{
-    CoordinateSystemError, CoordinateSystemServiceHandle, SourceCoordinateSystem,
+    CoordinateSystemError, CoordinateSystemServiceHandle, SitePlacement, SourceCoordinateSystem,
 };
 use axioval_ifc::import_ifc_session;
 use axioval_ir::SourceId;
@@ -154,5 +154,50 @@ fn a_world_frame_without_an_exact_length_unit_is_refused() {
     assert!(matches!(
         system("IFC4", &data),
         Err(CoordinateSystemError::Unreadable(_))
+    ));
+}
+
+/// A site placed 3 m east of the origin (in millimetres), turned a quarter.
+const SITE: &str = "\
+#30=IFCCARTESIANPOINT((3000.,0.,0.));
+#31=IFCAXIS2PLACEMENT3D(#30,#11,#12);
+#32=IFCLOCALPLACEMENT($,#31);
+#33=IFCSITE('0000000000000000000033',$,'Site',$,$,#32,$,$,.ELEMENT.,$,$,$,$,$);
+";
+
+#[test]
+fn the_one_site_states_its_placement_in_metres() {
+    let system = system("IFC4", &format!("{CONTEXT}{SITE}")).unwrap();
+    let SitePlacement::Stated(site) = system.site() else {
+        panic!("one site is stated: {:?}", system.site());
+    };
+    assert!(close(&site.origin_metres(), &[3.0, 0.0, 0.0]));
+    assert!(close(&site.axes()[0].components(), &[0.0, 1.0, 0.0]));
+    assert!(
+        system.evidence().locator.ends_with(":site:#33"),
+        "{}",
+        system.evidence().locator
+    );
+}
+
+#[test]
+fn no_site_is_absent_and_several_or_unplaced_sites_are_unknown() {
+    assert_eq!(
+        system("IFC4", CONTEXT).unwrap().site(),
+        &SitePlacement::Absent
+    );
+    let second = format!(
+        "{CONTEXT}{SITE}#34=IFCSITE('0000000000000000000034',$,'Other',$,$,#32,$,$,.ELEMENT.,$,$,$,$,$);\n"
+    );
+    assert!(matches!(
+        system("IFC4", &second).unwrap().site(),
+        SitePlacement::Unknown(reason) if reason.contains("2 sites")
+    ));
+    let unplaced = format!(
+        "{CONTEXT}#33=IFCSITE('0000000000000000000033',$,'Site',$,$,$,$,$,.ELEMENT.,$,$,$,$,$);\n"
+    );
+    assert!(matches!(
+        system("IFC4", &unplaced).unwrap().site(),
+        SitePlacement::Unknown(reason) if reason.contains("ObjectPlacement is not set")
     ));
 }

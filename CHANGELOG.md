@@ -32,6 +32,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   The caller supplies the creation time, so identical input writes
   identical bytes. `axioval check` and `compare` write it with
   `--xlsx FILE`, created at `SOURCE_DATE_EPOCH` when set.
+- **Coordinate consistency across federated models.** (Closes #194)
+  The new `coordinate-consistency` capability compares every source's
+  coordinate system with a reference source's (`reference`, a discipline,
+  or the first source): world frame, true north, map conversion (target
+  system, offset in metres, rotation, scale) and site placement, within
+  `length_tolerance`, `angle_tolerance` and `scale_tolerance`. A source that
+  differs is a finding naming it and every difference; a statement only one
+  side makes, an unknown site or map unit and an unreadable system are not
+  evaluated; a source without a map conversion is not evaluated
+  (`NotRecorded`), or a finding with `require_map_conversion`.
+  `compare_coordinate_systems`, `CoordinateConsistency` (with
+  `shares_frame`), `CoordinateAspect` and `CoordinateTolerance` expose the
+  comparison to hosts. `SourceCoordinateSystem` gains the site placement
+  (`SitePlacement`, `with_site`, `site`), unknown unless the service states
+  it; the IFC adapter reads the one `IfcSite`'s placement, and its
+  coordinate-system evidence locator gains `:site:#<id>`. Federated geometry
+  is never re-aligned: `axioval check --geometry` declares every physical
+  object of a model that does not share the first model's frame (world
+  frame and map conversion), or whose coordinate system cannot be read,
+  unmeasured with the reason, so a clash with it is not evaluated rather
+  than measured in the wrong place. Models without a project length unit
+  state no exact frame, so their geometry is no longer combined with
+  another model's.
 
 - **Geometry differences by certified surface distance.** (Closes #163)
   `model-comparison` gains `geometry` (`bounds` or `mesh`) and

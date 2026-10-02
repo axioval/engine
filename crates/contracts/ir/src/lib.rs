@@ -635,6 +635,18 @@ pub const BODY_KIND_EXTRUSION: &str = "extrusion";
 /// own and bind to no concept. Reserved like [`ATTRIBUTE_SET`].
 pub const CLASSIFICATION_SET: &str = "axioval:classification";
 
+/// Property set that states what the engine knows of a derived group
+/// (`contract::GroupingDefinition`): [`GROUP_KEY`] and [`GROUP_MEMBERS`].
+/// Any other object has neither, and a derived group states nothing in any
+/// other set but [`MEASURED_SET`]. Reserved like [`ATTRIBUTE_SET`].
+pub const GROUP_SET: &str = "axioval:group";
+/// The value a derived group's members share, as text, in [`GROUP_SET`].
+pub const GROUP_KEY: &str = "key";
+/// How many members a derived group has, an integer, in [`GROUP_SET`].
+pub const GROUP_MEMBERS: &str = "members";
+/// The kind of every derived group object.
+pub const DERIVED_GROUP_KIND: &str = "axioval:group";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
@@ -727,7 +739,7 @@ pub const MEASURED_NAMES: [&str; 11] = [
 /// no concept.
 #[must_use]
 pub fn is_derived_set(set: &str) -> bool {
-    set == CLASSIFICATION_SET || set == MEASURED_SET
+    set == CLASSIFICATION_SET || set == MEASURED_SET || set == GROUP_SET
 }
 
 /// A named semantic property.

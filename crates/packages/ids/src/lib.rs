@@ -581,6 +581,7 @@ fn translate_parts(
                 annotations,
             },
             classifications: BTreeMap::new(),
+            groupings: BTreeMap::new(),
         },
         specifications: outcomes,
     })
@@ -911,6 +912,7 @@ impl<'o> Writer<'o> {
             | Selector::PropertyPattern { .. }
             | Selector::Classification { .. }
             | Selector::DerivedClass { .. }
+            | Selector::DerivedGroup { .. }
             | Selector::Discipline { .. }
             | Selector::Source { .. }
             | Selector::RuleOutcome { .. } => filter.clone(),

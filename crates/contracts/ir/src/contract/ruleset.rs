@@ -244,6 +244,55 @@ pub struct RuleSetPackage {
     /// [`ClassificationDefinition`]. Omitted when empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub classifications: BTreeMap<String, ClassificationDefinition>,
+    /// Groups the ruleset derives from its members, by id; see
+    /// [`GroupingDefinition`]. Omitted when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub groupings: BTreeMap<String, GroupingDefinition>,
+}
+
+/// A named set of groups the ruleset derives from its members, such as the
+/// flats implied by a flat number on every room.
+///
+/// Each group is a derived object of kind [`crate::DERIVED_GROUP_KIND`]
+/// with the members that share its key; a `derivedGroup` selector selects
+/// them, the relationship `axioval:derived.group;by=<id>` runs from each
+/// member to its group (`backward` from a group to its members), and the
+/// reserved set `axioval:group` states each group's `key` and `members`
+/// count. A member without a key is ungrouped; one whose key or membership
+/// cannot be read leaves its groups undecided, never ungrouped.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GroupingDefinition {
+    pub id: String,
+    pub name: LocalizedText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<LocalizedText>,
+    /// The objects grouped, such as the spaces.
+    pub members: Selector,
+    /// What members are grouped by.
+    pub by: GroupingKey,
+}
+
+/// What a [`GroupingDefinition`] groups its members by.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum GroupingKey {
+    /// Equal values of one property, read as a property selector reads it:
+    /// text as stated, an integer, a boolean or a number. Members of one
+    /// source with one value form one group. A derived class is read in the
+    /// set `axioval:classification`.
+    Property {
+        #[serde(
+            rename = "propertySet",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        property_set: Option<String>,
+        property: String,
+    },
+    /// Equal codes in one classification system, as the source states
+    /// them: the code the member's assignment in `system` carries.
+    Classification { system: String },
 }
 
 /// A named classification of objects the ruleset derives: ordered rows,

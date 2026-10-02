@@ -26,6 +26,11 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   change a selection, evidence or outcome. `axioval-ids` keeps an IDS
   specification's origin there so it can be exported again. The MCS rule
   folder must mirror this field.
+- `RuleSetPackage::groupings` (`GroupingDefinition`: `members` selector
+  and a `GroupingKey`, `property` or `classification`) and
+  `Selector::DerivedGroup` are omitted when empty / absent so rulesets
+  serialize as before; `GROUP_SET` is a derived set (`is_derived_set`).
+  The MCS ruleset and selector schemas must mirror them.
 - `ClassificationDefinition::classes` makes a classification hierarchical
   (ids, optional codes, localized names, optional parents); empty is
   omitted, so flat classifications serialize byte-identically. Keep tree

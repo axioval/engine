@@ -186,8 +186,14 @@ pub struct ResourceObjects {
     /// Per source, the class as a selector writes it and whether subtypes
     /// are included: the listed identities, or why they could not be read.
     classes: BTreeMap<(SourceId, String, bool), Result<Vec<ObjectId>, String>>,
+    /// The derived groups of each grouping the run derives, by grouping id.
+    groups: BTreeMap<String, Listed>,
     objects: BTreeMap<ObjectId, Object>,
 }
+
+/// The derived groups of one grouping, and the sources whose groups could
+/// not all be listed, with why.
+type Listed = (Vec<ObjectId>, Vec<(SourceId, String)>);
 
 /// The resource objects a selector reaches.
 #[derive(Debug, Default)]
@@ -231,10 +237,32 @@ impl ResourceObjects {
         self
     }
 
+    /// Records the derived groups of the grouping `grouping`, which only a
+    /// `derivedGroup` selector naming it reaches, and the sources whose
+    /// groups could not all be listed, with why.
+    #[must_use]
+    pub fn with_groups(
+        mut self,
+        grouping: impl Into<String>,
+        groups: Vec<Object>,
+        incomplete: Vec<(SourceId, String)>,
+    ) -> Self {
+        let ids = groups
+            .into_iter()
+            .map(|object| {
+                let id = object.id.clone();
+                self.objects.entry(id.clone()).or_insert(object);
+                id
+            })
+            .collect();
+        self.groups.insert(grouping.into(), (ids, incomplete));
+        self
+    }
+
     /// Whether no class was answered at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.classes.is_empty()
+        self.classes.is_empty() && self.groups.is_empty()
     }
 
     /// The resource object `id`, if a class listed it.
@@ -289,6 +317,12 @@ impl ResourceObjects {
                             unreadable.insert((source.clone(), why.clone()));
                         }
                     }
+                }
+            }
+            Selector::DerivedGroup { grouping } => {
+                if let Some((listed, incomplete)) = self.groups.get(grouping) {
+                    ids.extend(listed);
+                    unreadable.extend(incomplete.iter().cloned());
                 }
             }
             Selector::AllOf { operands } | Selector::AnyOf { operands } => {

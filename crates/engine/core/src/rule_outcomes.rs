@@ -408,6 +408,7 @@ pub(crate) fn selector_references<'a>(selector: &'a Selector, out: &mut BTreeSet
         | Selector::PropertyPattern { .. }
         | Selector::Classification { .. }
         | Selector::DerivedClass { .. }
+        | Selector::DerivedGroup { .. }
         | Selector::Discipline { .. }
         | Selector::Source { .. } => {}
     }
@@ -443,6 +444,7 @@ pub(crate) fn rename_selector(selector: &mut Selector, rename: &dyn Fn(&str) -> 
         | Selector::PropertyPattern { .. }
         | Selector::Classification { .. }
         | Selector::DerivedClass { .. }
+        | Selector::DerivedGroup { .. }
         | Selector::Discipline { .. }
         | Selector::Source { .. } => {}
     }

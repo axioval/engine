@@ -119,6 +119,12 @@ pub enum Selector {
         )]
         include_descendants: bool,
     },
+    /// The groups a grouping of the ruleset (`groupings`) derives: derived
+    /// objects, one per group, never a model object. Only this selector
+    /// reaches them, as only an `entityType` reaches resource objects.
+    DerivedGroup {
+        grouping: String,
+    },
     AllOf {
         operands: Vec<Selector>,
     },

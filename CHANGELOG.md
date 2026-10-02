@@ -55,6 +55,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   than measured in the wrong place. Models without a project length unit
   state no exact frame, so their geometry is no longer combined with
   another model's.
+- **Derived groups by property value or classification.** (Closes #183)
+  A ruleset's `groupings` group selected `members` by equal values of a
+  property (`by: {kind: property}`, a derived class included) or equal
+  codes in a classification system (`by: {kind: classification}`). Each
+  group is a derived object `axioval:group/<grouping>/<value>`, selected
+  by the new `derivedGroup` selector, reached from its members through
+  `axioval:derived.group;by=<grouping>`, stating its `key` and `members`
+  count in the reserved set `axioval:group`, and measured (`area`,
+  `plan-area`) as the union of its members' footprints. Rooms with flat
+  number 1, 1 and 2 form two flats, and `group-composition` checks each
+  flat's rooms and reports a room without a number through
+  `ungrouped_selector`. A member whose value cannot be read leaves every
+  group of its source undecided, never ungrouped. `keyed-limit` keys and
+  `plan-area` property sums now read resource objects and derived groups
+  too. **Breaking:** `RuleSetPackage` gains `groupings`, `Selector` the
+  variant `DerivedGroup`, `EngineError` the variant `InvalidGrouping`,
+  `ResourceObjects` the method `with_groups`, and `OutcomeRefiner` the
+  defaulted method `read_property`; `is_derived_set` holds for
+  `axioval:group`.
+
 - **Spaces adjacent across a wall or slab without stated boundaries.**
   (Closes #160) The derived relationship
   `axioval:derived.adjacent-across;tolerance=<m>;overlap=<m>` (defaults

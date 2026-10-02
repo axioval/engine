@@ -130,6 +130,12 @@ pub enum EngineError {
         classification: String,
         detail: String,
     },
+    /// A grouping the ruleset derives is malformed, reads a rule's outcome
+    /// or another grouping's groups, is declared twice with different
+    /// definitions, or the host registered no outcome refiner to select its
+    /// members.
+    #[error("grouping `{grouping}`: {detail}")]
+    InvalidGrouping { grouping: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -586,6 +592,8 @@ pub struct ExecutionPlan {
     /// Classifications to derive before any rule runs, each after those
     /// its rows read.
     classifications: Vec<schema::ClassificationDefinition>,
+    /// Groupings to derive after the classifications, before any rule runs.
+    groupings: Vec<schema::GroupingDefinition>,
 }
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
@@ -608,6 +616,10 @@ impl ExecutionPlan {
     /// The classifications the plan derives, in the order they are derived.
     pub fn classifications(&self) -> &[schema::ClassificationDefinition] {
         &self.classifications
+    }
+    /// The groupings the plan derives, by id.
+    pub fn groupings(&self) -> &[schema::GroupingDefinition] {
+        &self.groupings
     }
     /// The whole-rule gates of `rule`: each parent rule and the condition
     /// on its outcome. Empty for an ungated rule.
@@ -638,6 +650,7 @@ mod envelope_membership;
 mod facade_area;
 mod federation;
 mod free_space;
+mod groupings;
 mod guard;
 mod integrity;
 mod linear_quantity;
@@ -720,6 +733,9 @@ pub use free_space::{
     PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
     SignedDistanceInterval, SupportCoverageEvidence, SupportCoverageOutcome,
     SupportCoverageRequest, SupportedPlacement,
+};
+pub use groupings::{
+    DerivedGroups, GROUP_RELATIONSHIP_PREFIX, Group, Grouping, Membership, PropertyRead, group_id,
 };
 pub use guard::{
     ClimbableCandidate, GuardCandidate, GuardEdge, GuardError, GuardEvidence, GuardSearch,
@@ -1027,6 +1043,9 @@ impl Runtime {
         if !plan.classifications.is_empty() {
             return Err(EngineError::MissingRefiner("deriving classifications"));
         }
+        if !plan.groupings.is_empty() {
+            return Err(EngineError::MissingRefiner("deriving groups"));
+        }
         if self.locations.is_some() {
             return Err(EngineError::MissingRefiner("locating outcomes"));
         }
@@ -1110,19 +1129,12 @@ impl Runtime {
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
         // any.
-        if plan.classifications.is_empty()
-            && let Some(host) = services.get::<PropertyResolutionServiceHandle>().cloned()
-        {
-            derived::install(&mut services, Some(&host), Arc::default(), project);
-        }
-        if let Some(refiner) = refiner.filter(|_| !plan.classifications.is_empty()) {
-            derive_classifications(
-                refiner.as_ref(),
-                project,
-                &mut services,
-                &plan.classifications,
-            );
-        }
+        derive_before_rules(
+            refiner.map(AsRef::as_ref),
+            project,
+            &mut services,
+            (&plan.classifications, &plan.groupings),
+        );
         // What every completed rule reported, for the rules that read it.
         let mut outcomes = RuleOutcomes::default();
         for rule in plan.rules {
@@ -1222,6 +1234,42 @@ fn named_resources(
         .collect()
 }
 
+/// Installs the run's derived properties over the host's resolver: the
+/// classes of the plan's classifications, then its groups, derived after
+/// the classes their members and keys may read and installed beside the
+/// host's services.
+fn derive_before_rules(
+    refiner: Option<&dyn OutcomeRefiner>,
+    project: &Project,
+    services: &mut ServiceRegistry,
+    (classifications, groupings): (
+        &[schema::ClassificationDefinition],
+        &[schema::GroupingDefinition],
+    ),
+) {
+    let host = services.get::<PropertyResolutionServiceHandle>().cloned();
+    let mut classes = Arc::<Classifications>::default();
+    if classifications.is_empty()
+        && let Some(host) = &host
+    {
+        derived::install(
+            services,
+            Some(host),
+            Arc::default(),
+            Arc::default(),
+            project,
+        );
+    }
+    if let Some(refiner) = refiner.filter(|_| !classifications.is_empty()) {
+        classes = derive_classifications(refiner, project, services, classifications);
+    }
+    if let Some(refiner) = refiner.filter(|_| !groupings.is_empty()) {
+        let groups = Arc::new(groupings::derive_all(refiner, project, services, groupings));
+        groupings::install(services, &groups);
+        derived::install(services, host.as_ref(), classes, groups, project);
+    }
+}
+
 /// Classifies every object by each of `definitions`, in order, and installs
 /// the run's property resolver answering the classification set: each
 /// classification's rows read the ones derived before it.
@@ -1230,15 +1278,29 @@ fn derive_classifications(
     project: &Project,
     services: &mut ServiceRegistry,
     definitions: &[schema::ClassificationDefinition],
-) {
+) -> Arc<Classifications> {
     let host = services.get::<PropertyResolutionServiceHandle>().cloned();
     let mut derived = Classifications::default();
     for definition in definitions {
-        derived::install(services, host.as_ref(), Arc::new(derived.clone()), project);
+        derived::install(
+            services,
+            host.as_ref(),
+            Arc::new(derived.clone()),
+            Arc::default(),
+            project,
+        );
         let context = RuleContext { project, services };
         derived.classify(refiner, &context, definition);
     }
-    derived::install(services, host.as_ref(), Arc::new(derived), project);
+    let derived = Arc::new(derived);
+    derived::install(
+        services,
+        host.as_ref(),
+        derived.clone(),
+        Arc::default(),
+        project,
+    );
+    derived
 }
 
 /// The report of every rule's outcomes, each part in its deterministic

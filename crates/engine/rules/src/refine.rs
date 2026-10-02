@@ -8,7 +8,7 @@
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, LocationPolicy, NotEvaluatedReason, OutcomeRefiner,
-    Refining, RuleContext, SelectorVerdict, report_severity,
+    PropertyRead, Refining, RuleContext, SelectorVerdict, report_severity,
 };
 use axioval_ir::contract::{CategoryLevel, Selector, SeverityOverride};
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope, Severity};
@@ -80,6 +80,27 @@ impl OutcomeRefiner for Refiner {
             Selection::Match => SelectorVerdict::Match(evidence),
             Selection::NoMatch => SelectorVerdict::NoMatch(evidence),
             Selection::NotEvaluated(reason, message) => SelectorVerdict::Undecided(reason, message),
+        }
+    }
+
+    fn read_property(
+        &self,
+        context: &RuleContext<'_>,
+        object: &Object,
+        property_set: Option<&str>,
+        property: &str,
+    ) -> PropertyRead {
+        let reference = crate::support::PropertyRef {
+            set: property_set,
+            name: property,
+        };
+        match crate::support::resolve(context, object, reference) {
+            Ok(crate::support::Resolved::Present(property)) => PropertyRead::Present(
+                property.value.clone(),
+                property.evidence.into_iter().collect(),
+            ),
+            Ok(crate::support::Resolved::Absent(evidence)) => PropertyRead::Absent(vec![evidence]),
+            Err((reason, message)) => PropertyRead::Undecided(reason, message),
         }
     }
 }

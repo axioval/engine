@@ -15,10 +15,11 @@ use axioval_ir::contract::{
     ClassTree, ClassificationDefinition, ClassificationMode, ClassificationProperty,
 };
 use axioval_ir::{
-    CLASSIFICATION_SET, Evidence, MEASURED_SET, NotEvaluatedReason, ObjectId, Property,
+    CLASSIFICATION_SET, Evidence, GROUP_SET, MEASURED_SET, NotEvaluatedReason, ObjectId, Property,
     PropertyValue,
 };
 
+use crate::groupings::DerivedGroups;
 use crate::measured::Measures;
 use crate::properties::{
     CompletePropertyAbsenceEvidence, PropertyEnumeration, PropertyEnumerationRequest,
@@ -284,6 +285,7 @@ pub(crate) struct DerivedProperties {
     pub(crate) inner: Option<PropertyResolutionServiceHandle>,
     pub(crate) measures: Measures,
     pub(crate) classifications: Arc<Classifications>,
+    pub(crate) groups: Arc<DerivedGroups>,
     pub(crate) snapshots: Vec<SourceSnapshot>,
 }
 
@@ -296,6 +298,12 @@ impl PropertyResolutionService for DerivedProperties {
         &self,
         request: &PropertyRequest,
     ) -> Result<PropertyResolution, PropertyResolutionError> {
+        if request.property_set() == Some(GROUP_SET)
+            || (request.property_set() != Some(MEASURED_SET)
+                && self.groups.group(request.object_id()).is_some())
+        {
+            return self.groups.resolve(request);
+        }
         if request.property_set() == Some(CLASSIFICATION_SET) {
             return self.classifications.resolve(request);
         }
@@ -329,6 +337,7 @@ pub(crate) fn install(
     services: &mut crate::ServiceRegistry,
     host: Option<&PropertyResolutionServiceHandle>,
     classifications: Arc<Classifications>,
+    groups: Arc<DerivedGroups>,
     project: &axioval_ir::Project,
 ) {
     use crate::SnapshotBoundService as _;
@@ -338,6 +347,7 @@ pub(crate) fn install(
             inner: host.cloned(),
             measures: Measures::of(services, host, project),
             classifications: classifications.clone(),
+            groups,
             snapshots,
         },
     )));

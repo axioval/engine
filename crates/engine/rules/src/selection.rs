@@ -126,6 +126,7 @@ pub(crate) fn selector_matches(
         derived @ Selector::DerivedClass { .. } => {
             derived_class(context, object, derived, evidence)
         }
+        Selector::DerivedGroup { grouping } => derived_group(context, object, grouping),
         Selector::AllOf { operands } => all_of(
             operands
                 .iter()
@@ -237,6 +238,26 @@ fn derived_class(
             verdict(matches)
         }
         Err((reason, message)) => Selection::NotEvaluated(reason, message),
+    }
+}
+
+/// Whether `object` is a group the run's grouping `grouping` derived.
+fn derived_group(context: &RuleContext<'_>, object: &Object, grouping: &str) -> Selection {
+    let Some(groups) = context
+        .services
+        .get::<std::sync::Arc<axioval_engine::DerivedGroups>>()
+    else {
+        return Selection::NotEvaluated(
+            NotEvaluatedReason::MissingService,
+            "no derived groups are available outside a run".into(),
+        );
+    };
+    match groups.grouping(grouping) {
+        Some(derived) => verdict(derived.group(&object.id).is_some()),
+        None => Selection::NotEvaluated(
+            NotEvaluatedReason::InvalidDeclaration,
+            format!("the run derives no grouping `{grouping}`"),
+        ),
     }
 }
 

@@ -946,3 +946,26 @@ fn a_hierarchical_classification_round_trips_its_classes() {
     let levelled = written.replace(r#""parent":"kg-300""#, r#""parent":"kg-300","level":2"#);
     assert!(serde_json::from_str::<ClassificationDefinition>(&levelled).is_err());
 }
+
+#[test]
+fn groupings_round_trip_by_property_and_by_classification() {
+    use axioval_ir::contract::{GroupingDefinition, GroupingKey, Selector};
+
+    let by_property = r#"{"id":"flats","name":{"default":"Flats","translations":{}},"members":{"kind":"entityType","objectType":"t.space","includeSubtypes":true},"by":{"kind":"property","propertySet":"t.Pset","property":"t.FlatNumber"}}"#;
+    let flats: GroupingDefinition = serde_json::from_str(by_property).unwrap();
+    assert!(matches!(flats.by, GroupingKey::Property { .. }));
+    assert_eq!(serde_json::to_string(&flats).unwrap(), by_property);
+    let by_class = r#"{"id":"zones","name":{"default":"Zones","translations":{}},"members":{"kind":"all"},"by":{"kind":"classification","system":"Uniclass"}}"#;
+    let zones: GroupingDefinition = serde_json::from_str(by_class).unwrap();
+    assert_eq!(serde_json::to_string(&zones).unwrap(), by_class);
+    let selector = r#"{"kind":"derivedGroup","grouping":"flats"}"#;
+    let parsed: Selector = serde_json::from_str(selector).unwrap();
+    assert_eq!(serde_json::to_string(&parsed).unwrap(), selector);
+    // Unknown key kinds are refused.
+    assert!(
+        serde_json::from_str::<GroupingDefinition>(
+            &by_class.replace("classification\"", "colour\"")
+        )
+        .is_err()
+    );
+}

@@ -273,7 +273,7 @@ A `classification` selector selects the objects carrying a classification in `sy
 
 `includeDescendants` also tests the codes of the assignment's ancestors, so a parent's code selects its children; it needs a `code` or a `codePattern`. The pattern is translated as `propertyPattern` translates names, and the system and the code are met by one assignment together. An assignment whose system the source does not state leaves the object not evaluated unless another assignment already matches. `code` together with `codePattern`, `includeDescendants` without either, or a pattern that cannot be translated exactly (character-class subtraction, `\i`/`\c`, `\p{Is…}`) is an invalid declaration.
 
-A class a ruleset's own classification derives is selected by a `derivedClass` selector instead, with the same `includeDescendants` over the classification's declared class tree ([Derived properties](./derived.md#class-trees)).
+A group a ruleset's own grouping derives (a flat implied by the flat number its rooms state) is selected by a `derivedGroup` selector, `{"kind": "derivedGroup", "grouping": "flats"}`, and reached from its members through `axioval:derived.group;by=<grouping>` ([Derived groups](./derived.md#derived-groups)). A class a ruleset's own classification derives is selected by a `derivedClass` selector instead, with the same `includeDescendants` over the classification's declared class tree ([Derived properties](./derived.md#class-trees)).
 
 ### Source selectors
 
@@ -557,7 +557,7 @@ Objects that may belong to a row without being decided (a tie, an undecided key,
 
 `group-composition` requires each selected group to hold a multiset of members: "two bedrooms, one kitchen and one bathroom per apartment". `related-count` checks one entry at a time and counts a member for every entry it fits; this capability allocates members across entries.
 
-The rule's selection are the groups. Each reaches its members through the traversal parameters, which are required: `relationship` (such as `IfcRelAssignsToGroup`, or the derived `axioval:derived.overlapping-group-space` walked `backward`, from a group space to the spaces it covers) or a `path`. `member_selector` restricts which reached objects are members, every one by default. The `requirements` table lists the member entries:
+The rule's selection are the groups. Each reaches its members through the traversal parameters, which are required: `relationship` (such as `IfcRelAssignsToGroup`, the derived `axioval:derived.overlapping-group-space` walked `backward`, from a group space to the spaces it covers, or a ruleset's derived groups, `axioval:derived.group;by=<grouping>` walked `backward` from groups a `derivedGroup` selector selects) or a `path`. `member_selector` restricts which reached objects are members, every one by default. The `requirements` table lists the member entries:
 
 | Column | Kind | Meaning |
 |---|---|---|

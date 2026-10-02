@@ -177,6 +177,26 @@ pub trait OutcomeRefiner: Send + Sync {
             "the host's outcome refiner evaluates no selectors".into(),
         )
     }
+
+    /// The value `object` states for a property, read as a property
+    /// selector reads it (the package's concepts bound to the object's
+    /// source), for the runtime's own reads of the model: the key a
+    /// grouping groups by.
+    ///
+    /// The default reads nothing, so every such object stays undecided.
+    fn read_property(
+        &self,
+        context: &RuleContext<'_>,
+        object: &Object,
+        property_set: Option<&str>,
+        property: &str,
+    ) -> crate::PropertyRead {
+        let _ = (context, object, property_set, property);
+        crate::PropertyRead::Undecided(
+            NotEvaluatedReason::MissingService,
+            "the host's outcome refiner reads no properties".into(),
+        )
+    }
 }
 
 /// What one call of an [`OutcomeRefiner`] applies: the rule's declarations

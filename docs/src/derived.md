@@ -1,7 +1,8 @@
 # Derived properties
 
 Some values a check needs are not stated by any source: a class a ruleset
-assigns by its own rules, or a size measured from an object's body. The engine derives them and answers them as
+assigns by its own rules, a group its members imply, or a size measured
+from an object's body. The engine derives them and answers them as
 properties of reserved sets, through the same property resolver as stated
 properties, so every selector, property reference, table key and category
 reads them unchanged. Their names are the engine's or the ruleset's own and
@@ -127,6 +128,75 @@ declared, parents forming a cycle, a row assigning an undeclared class
 classification when the host registered no outcome refiner. A reference to
 an undeclared classification is an unknown concept
 (`EngineError::UnknownConcept`, kind `axioval:classification`).
+
+## Derived groups
+
+Groups such as flats, departments or zones are often implied by a value
+every member states (a flat number on every room) rather than stated as
+groups. A ruleset declares `groupings`, by id: the objects grouped
+(`members`, a selector) and what they are grouped `by`.
+
+```json
+"groupings": {
+  "flats": {
+    "id": "flats",
+    "name": {"default": "Flats", "translations": {}},
+    "members": {"kind": "entityType", "objectType": "t.Space"},
+    "by": {"kind": "property", "propertySet": "t.Pset", "property": "t.FlatNumber"}
+  }
+}
+```
+
+- `{"kind": "property", "propertySet": …, "property": …}` groups by equal
+  values of one property, read as a property selector reads it: text as
+  stated (case and spaces count), an integer, a boolean or a number. A
+  derived class is read in the set `axioval:classification`, so rooms are
+  grouped by their space use with `"propertySet": "axioval:classification",
+  "property": "space-use"`.
+- `{"kind": "classification", "system": "Uniclass"}` groups by the code the
+  member's assignment in that system carries, as its source states it.
+
+Members of one source sharing a value form one group. Each group is a
+derived object, never a model object: its identity is
+`axioval:group/<grouping>/<value>` in its members' source, its kind
+`axioval:group`, and it states nothing a source states.
+
+- A `derivedGroup` selector selects a grouping's groups, `{"kind":
+  "derivedGroup", "grouping": "flats"}`. Only it reaches them, as only an
+  `entityType` selector reaches resource objects, so no rule written before
+  groupings existed selects a group. A report carries the groups its
+  outcomes name in `resources`.
+- The relationship `axioval:derived.group;by=<grouping>` runs from each
+  member to its group, so `backward` from a group reaches its members, and
+  a shared-group query from a member reaches the others of its group.
+  `group-composition` checks each flat's rooms with `relationship`
+  `axioval:derived.group;by=flats`, `direction` `backward`, and reports the
+  rooms in no flat through `ungrouped_selector`.
+- The reserved set `axioval:group` states a group's `key` (the value its
+  members share, as text) and `members` (how many, an integer); no other
+  object has either. `axioval:measured` `area` is the union of its members'
+  footprints, each overlap counted once, so `keyed-limit` with `plan-area`
+  bounds a flat's area.
+
+A selected object without a value (absent, null or blank text, or no code
+in the system) is ungrouped: a member of no group. One whose selection or
+value cannot be read (an unreadable or undecided property, a list or a
+quantity, several codes in the system, an assignment naming no system)
+could belong to any group of its source, or to one not listed: every group
+of that source is then undecided (its members, its count and its area are
+not evaluated), and the source's list of groups is incomplete, so a rule
+selecting them is not evaluated for that source as a whole.
+
+The runtime derives the groupings after the classifications and before any
+rule runs. Compilation refuses (`EngineError::InvalidGrouping`) a grouping
+declared under another key than its id, an id that is blank or holds `:`,
+`;`, `|`, `/` or whitespace, members reading a rule's outcome or a derived
+group, a key in the set `axioval:group`, a blank system, a grouping two
+rulesets compiled together declare differently, and any grouping when the
+host registered no outcome refiner. A classification row reading derived
+groups is refused too (`InvalidClassification`), and a `derivedGroup`
+selector naming an undeclared grouping is an unknown concept (kind
+`axioval:grouping`).
 
 ## Measured values
 

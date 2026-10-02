@@ -7,8 +7,8 @@ use std::{
 
 use axioval_ir::contract::{
     ClassTree, ClassificationDefinition, ClassificationProperty, ColumnKind, GateCondition,
-    ParameterKind, ParameterValue, RuleApplicability, RuleDefinition, RuleFolder, RuleGate,
-    RuleInstance, Selector, TableColumnDefinition, TableRow,
+    GroupingDefinition, GroupingKey, ParameterKind, ParameterValue, RuleApplicability,
+    RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector, TableColumnDefinition, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
@@ -39,7 +39,9 @@ pub fn compile(
     let catalog = definition_catalog(ruleset, &packages)?;
     let mut concepts = concept_catalog(ruleset, &packages)?;
     concepts.declare_classifications(class_trees(ruleset.classifications.iter())?);
+    concepts.declare_groupings(ruleset.groupings.keys().cloned());
     let classifications = classifications(registry, &concepts, ruleset)?;
+    let groupings = groupings(registry, &concepts, ruleset)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
     authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
@@ -126,7 +128,97 @@ pub fn compile(
         recorded,
         auxiliary,
         classifications,
+        groupings,
     })
+}
+
+/// The ruleset's groupings, checked: each declared under its id, an id
+/// usable in an identity (no `:`, `;`, `|` or `/`, not blank), members and
+/// key naming declared concepts, and neither reading a rule's outcome nor a
+/// derived group, since groups are derived before any rule runs and from
+/// the model alone.
+fn groupings(
+    registry: &CapabilityRegistry,
+    concepts: &ConceptCatalog,
+    ruleset: &RuleSetPackage,
+) -> Result<Vec<GroupingDefinition>, EngineError> {
+    let mut checked = Vec::new();
+    for (key, definition) in &ruleset.groupings {
+        let invalid = |detail: String| EngineError::InvalidGrouping {
+            grouping: key.clone(),
+            detail,
+        };
+        if *key != definition.id {
+            return Err(invalid(format!(
+                "is declared under the key `{key}`, not its id"
+            )));
+        }
+        if definition.id.trim().is_empty()
+            || definition
+                .id
+                .chars()
+                .any(|c| matches!(c, ':' | ';' | '|' | '/') || c.is_whitespace())
+        {
+            return Err(invalid(
+                "its id must not be blank or hold `:`, `;`, `|`, `/` or whitespace".into(),
+            ));
+        }
+        if registry.refiner().is_none() {
+            return Err(invalid(
+                "the host registered no outcome refiner to select its members".into(),
+            ));
+        }
+        let context = format!("{}#members", definition.id);
+        validate_selector_concepts(concepts, &context, &definition.members)?;
+        let mut rules = BTreeSet::new();
+        rule_outcomes::selector_references(&definition.members, &mut rules);
+        if !rules.is_empty() {
+            return Err(invalid(
+                "its members read a rule's outcome; groups are derived before any rule runs".into(),
+            ));
+        }
+        if reads_groups(&definition.members) {
+            return Err(invalid(
+                "its members read derived groups; groups are derived from the model alone".into(),
+            ));
+        }
+        match &definition.by {
+            GroupingKey::Property {
+                property_set,
+                property,
+            } => {
+                if property_set.as_deref() == Some(axioval_ir::GROUP_SET) {
+                    return Err(invalid("it groups by a derived group's own facts".into()));
+                }
+                require_property(concepts, &context, property_set.as_deref(), property)?;
+            }
+            GroupingKey::Classification { system } => {
+                if system.trim().is_empty() {
+                    return Err(invalid("its classification system is blank".into()));
+                }
+            }
+        }
+        checked.push(definition.clone());
+    }
+    Ok(checked)
+}
+
+/// Whether `selector` reads derived groups: a `derivedGroup` selector or a
+/// property of the reserved group set.
+fn reads_groups(selector: &Selector) -> bool {
+    match selector {
+        Selector::DerivedGroup { .. } => true,
+        Selector::Property {
+            property_set: Some(set),
+            ..
+        } => set == axioval_ir::GROUP_SET,
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            operands.iter().any(reads_groups)
+        }
+        Selector::Not { operand } => reads_groups(operand),
+        Selector::Related { selector, .. } => reads_groups(selector),
+        _ => false,
+    }
 }
 
 /// The class tree of every classification, by id, refusing a
@@ -188,6 +280,11 @@ fn classifications(
             if !rules.is_empty() {
                 return Err(invalid(format!(
                     "row {index} reads a rule's outcome; classes are derived before any rule runs"
+                )));
+            }
+            if reads_groups(&row.selector) {
+                return Err(invalid(format!(
+                    "row {index} reads derived groups, which are derived after the classes"
                 )));
             }
             classifications_read(&row.selector, &mut read);
@@ -506,6 +603,7 @@ pub fn compile_rulesets(
     let mut recorded = BTreeSet::new();
     let mut auxiliary = BTreeSet::new();
     let mut classifications: Vec<ClassificationDefinition> = Vec::new();
+    let mut groupings: Vec<GroupingDefinition> = Vec::new();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -551,23 +649,22 @@ pub fn compile_rulesets(
         for id in plan.auxiliary {
             auxiliary.insert(qualify(&id)?);
         }
-        // One run derives one class per classification id, so rulesets
-        // share a classification only when they declare it alike.
-        for definition in plan.classifications {
-            match classifications
-                .iter()
-                .find(|known| known.id == definition.id)
-            {
-                Some(known) if *known == definition => {}
-                Some(_) => {
-                    return Err(EngineError::InvalidClassification {
-                        classification: definition.id,
-                        detail: "two rulesets declare it with different rows or classes".into(),
-                    });
-                }
-                None => classifications.push(definition),
+        // One run derives one class per classification id and one set of
+        // groups per grouping id, so rulesets share either only when they
+        // declare it alike.
+        merge(&mut classifications, plan.classifications, |known| {
+            &known.id
+        })
+        .map_err(|id| EngineError::InvalidClassification {
+            classification: id,
+            detail: "two rulesets declare it with different rows or classes".into(),
+        })?;
+        merge(&mut groupings, plan.groupings, |known| &known.id).map_err(|id| {
+            EngineError::InvalidGrouping {
+                grouping: id,
+                detail: "two rulesets declare it differently".into(),
             }
-        }
+        })?;
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
             deferred.push(rule);
@@ -584,6 +681,7 @@ pub fn compile_rulesets(
             .iter()
             .map(|definition| (&definition.id, definition)),
     )?);
+    concepts.declare_groupings(groupings.iter().map(|definition| definition.id.clone()));
     Ok(ExecutionPlan {
         rules,
         deferred,
@@ -593,7 +691,25 @@ pub fn compile_rulesets(
         recorded,
         auxiliary,
         classifications,
+        groupings,
     })
+}
+
+/// Adds each of `more` to `known` unless an equal one is there; `Err` with
+/// the id of one declared differently.
+fn merge<T: PartialEq>(
+    known: &mut Vec<T>,
+    more: Vec<T>,
+    id: impl Fn(&T) -> &String,
+) -> Result<(), String> {
+    for definition in more {
+        match known.iter().find(|seen| id(seen) == id(&definition)) {
+            Some(seen) if *seen == definition => {}
+            Some(_) => return Err(id(&definition).clone()),
+            None => known.push(definition),
+        }
+    }
+    Ok(())
 }
 
 /// Every rule definition the ruleset's declared packages provide, by ID.
@@ -849,6 +965,17 @@ fn validate_selector_concepts(
             }),
             Some(_) => Ok(()),
         },
+        Selector::DerivedGroup { grouping } => {
+            if concepts.grouping(grouping) {
+                Ok(())
+            } else {
+                Err(EngineError::UnknownConcept {
+                    rule: rule.into(),
+                    kind: "axioval:grouping".into(),
+                    concept: grouping.clone(),
+                })
+            }
+        }
         Selector::Property {
             property_set,
             property,

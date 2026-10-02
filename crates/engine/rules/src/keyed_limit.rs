@@ -1129,9 +1129,7 @@ impl Keys {
     ) -> Result<Key, Unavailable> {
         let mut found: Option<(String, ObjectId)> = None;
         for holder in holders {
-            let target = context
-                .project
-                .object(&holder)
+            let target = crate::selection::object_by_id(context, &holder)
                 .ok_or_else(|| invalid(format!("{holder} is not in the project")))?;
             let resolved = resolve(context, target, property)?;
             self.evidence.extend(resolved.evidence());

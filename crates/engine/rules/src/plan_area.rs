@@ -194,9 +194,7 @@ impl Sum {
         };
         let mut sum = Self::default();
         for id in objects {
-            let object = context
-                .project
-                .object(id)
+            let object = crate::selection::object_by_id(context, id)
                 .ok_or_else(|| invalid(format!("{id} is not in the project")))?;
             let resolved = resolve(context, object, property)?;
             let Some(PropertyValue::Quantity {

@@ -84,6 +84,8 @@ pub struct ConceptCatalog {
     entries: BTreeMap<(ConceptKind, String), Vec<ExternalName>>,
     /// The classifications the ruleset derives, by id, with their classes.
     classifications: BTreeMap<String, ClassTree>,
+    /// The groupings the ruleset derives, by id.
+    groupings: std::collections::BTreeSet<String>,
 }
 
 impl ConceptCatalog {
@@ -111,6 +113,18 @@ impl ConceptCatalog {
         self.classifications.extend(trees);
     }
 
+    /// Declares the groupings the ruleset derives, so `derivedGroup`
+    /// selectors naming them resolve.
+    pub(crate) fn declare_groupings(&mut self, ids: impl IntoIterator<Item = String>) {
+        self.groupings.extend(ids);
+    }
+
+    /// Whether the ruleset derives the grouping `id`.
+    #[must_use]
+    pub fn grouping(&self, id: &str) -> bool {
+        self.groupings.contains(id)
+    }
+
     /// The classes of the declared classification `id`.
     #[must_use]
     pub fn classification(&self, id: &str) -> Option<&ClassTree> {
@@ -123,6 +137,9 @@ impl ConceptCatalog {
     pub fn derives(&self, set: &str, name: &str) -> Option<bool> {
         if set == axioval_ir::MEASURED_SET {
             return Some(crate::measured::parse(name).is_ok());
+        }
+        if set == axioval_ir::GROUP_SET {
+            return Some(name == axioval_ir::GROUP_KEY || name == axioval_ir::GROUP_MEMBERS);
         }
         (set == axioval_ir::CLASSIFICATION_SET).then(|| {
             ClassificationProperty::parse(name).is_ok_and(|read| {

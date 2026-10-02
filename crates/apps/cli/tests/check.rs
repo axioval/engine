@@ -3259,6 +3259,25 @@ fn derived_count(
     direction: &str,
     minimum: i64,
 ) -> (Output, Value) {
+    derived_count_in(
+        &rooms_without_containment(),
+        name,
+        anchor,
+        related,
+        (relationship, direction),
+        minimum,
+    )
+}
+
+/// [`derived_count`] over `model`.
+fn derived_count_in(
+    model: &str,
+    name: &str,
+    anchor: (&str, &str),
+    related: (&str, &str),
+    (relationship, direction): (&str, &str),
+    minimum: i64,
+) -> (Output, Value) {
     let case = Case::new(name);
     let definitions = case.definitions(true);
     let mut definitions: Value =
@@ -3310,7 +3329,7 @@ fn derived_count(
     });
     rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
         json!(format!("axioval:example.ifc.{}", anchor.0));
-    let model = case.write("model.ifc", &rooms_without_containment());
+    let model = case.write("model.ifc", model);
     let definitions = case.write("definitions.json", &definitions.to_string());
     let ruleset = case.write("ruleset.json", &ruleset.to_string());
     let saved = case.path("result.json");
@@ -3403,6 +3422,62 @@ fn with_geometry_a_door_connects_two_spaces_and_an_exit_one() {
         evidence.iter().any(|item| {
             let locator = item["locator"].as_str().unwrap();
             locator.contains("/#76:side=-") && locator.contains(":outside")
+        }),
+        "{result:#}"
+    );
+}
+
+/// Spaces #16 (x 0..4) and #26 (x 4.2..8.2), wall #36 between them
+/// (x 4..4.2) and wall #46 along the outside of #16 (x -0.2..0), with no
+/// space boundaries stated.
+fn rooms_between_walls() -> String {
+    let product = |first: u32, x: f64, length: f64, entity: &str| {
+        body(
+            first,
+            x,
+            length,
+            3.0,
+            &entity.replace("GID", &format!("00000000000000000000{:02}", first + 6)),
+        )
+    };
+    let space = "IFCSPACE('GID',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)";
+    let wall = "IFCWALL('GID',$,$,$,$,#3,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        product(10, 2.0, 4.0, space),
+        product(20, 6.2, 4.0, space),
+        product(30, 4.1, 0.2, wall),
+        product(40, -0.1, 0.2, wall),
+    )
+}
+
+#[test]
+fn with_geometry_a_wall_without_stated_boundaries_relates_to_the_spaces_beside_it() {
+    let (output, result) = derived_count_in(
+        &rooms_between_walls(),
+        "geometry-derived-across",
+        ("wall", "IfcWall"),
+        ("space", "IfcSpace"),
+        ("axioval:derived.adjacent-across", "forward"),
+        2,
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The wall between the rooms reaches both; the outer wall only #16.
+    assert_eq!(finding_ids(&result), ["#46"], "{result:#}");
+    let evidence = result["report"]["findings"][0]["evidence"]
+        .as_array()
+        .unwrap();
+    assert!(
+        evidence.iter().any(|item| {
+            let locator = item["locator"].as_str().unwrap();
+            locator.contains("/#46->") && locator.contains("/#16:side=+")
         }),
         "{result:#}"
     );

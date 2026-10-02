@@ -608,6 +608,11 @@ impl EvidenceSession {
                     semantic,
                     derived: service,
                     snapshots,
+                    objects: self
+                        .project
+                        .objects()
+                        .map(|object| object.id.clone())
+                        .collect(),
                 },
             )));
         Ok(self)

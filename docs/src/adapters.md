@@ -752,8 +752,9 @@ faces, so it refuses, as does a bodiless or unknown object.
 
 `AxiolidDerivedRelationshipService` derives the relationships of the
 [derived-relationship service](./services.md) from the same meshes. The host
-declares which objects are spaces (`with_space`) and which are doors,
-windows or openings (`with_opening`); an opening the geometry declares
+declares which objects are spaces (`with_space`), which are doors,
+windows or openings (`with_opening`), and which are walls and slabs
+(`with_separating_element`); an opening the geometry declares
 bodiless is probed through a void shape given with `with_opening_void`
 (`with_tessellated_opening_void`, `with_unmeasured_opening_void`). Spaces must
 be closed solids, since containment is a winding-number test.
@@ -799,6 +800,26 @@ be closed solids, since containment is a winding-number test.
   deep witness nor a volume bounded away from rounding refuses the answer.
   Each pair is decided once; tessellated bodies are measured, not refused,
   and decided only beyond their deviations.
+- **adjacent-across.** A declared element is a flat slab when every vertex
+  lies on its bottom or top plane and it is thinner than the least width of
+  its plan hull, and a straight wall when its plan has one narrowest
+  direction (rotating calipers) and its hull and footprint are that one
+  rectangle; anything else refuses. Against a wall, a space is measured in
+  the height the two share (none, beyond the deviations, is not beside it):
+  the plan footprint of its body within that band (the walkable band
+  footprint) is intersected with a strip along each face, `tolerance` deep
+  and as long as the wall, and how far the hit reaches along the wall is the
+  overlap. Against a slab, the footprint of the space's body within
+  `tolerance` above the top (below the bottom) is intersected with the
+  slab's footprint, and the overlap is its area. Each measurement is taken
+  twice: with the strip or band shrunk by a margin (1 µm of overlay rounding
+  plus both chord deviations) for a lower bound, grown by it for an upper
+  bound; a length is widened by twice the space's deviation and an area by
+  the deviation along its perimeter. A face is decided only when both
+  bounds agree with `overlap` (a slab: `overlap`²), so a room exactly at the
+  tolerance, or a tessellation within its deviation of it, refuses the
+  answer. Each edge records `side=±(nx,ny,nz):overlap=<lower bound>`, and a
+  face beside no space records `none`.
 
 Every other derivation compares exact planar bodies: a tessellated subject refuses,
 as does a tessellated space whose enclosing extent comes within the

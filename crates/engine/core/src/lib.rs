@@ -695,7 +695,8 @@ pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, 
 pub use derived::{ClassOutcome, Classifications};
 pub use derived_relationships::{
     AdjacentSide, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivedRelationshipService,
-    DerivedRelationshipServiceHandle, LevelFacts, LevelMatch, adjacent_side,
+    DerivedRelationshipServiceHandle, LevelFacts, LevelMatch, across_side, across_stated,
+    adjacent_side,
 };
 pub use discipline_map::{
     DisciplineMap, DisciplineMapError, DisciplineOrigin, DisciplineRule, UnmappedReason,

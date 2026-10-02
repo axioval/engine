@@ -528,11 +528,13 @@ fn envelope_service(
 /// An opening's meshed void and whether it is exact, or why it has none.
 type Void = Result<(axiolid_mesh::TriMesh, bool), String>;
 
-/// Relationships derived from geometry, over the model's spaces and its
-/// doors, windows and openings.
+/// Relationships derived from geometry, over the model's spaces, its
+/// doors, windows and openings, and its walls and slabs.
 ///
-/// Every `IfcSpace` is a space and every `IfcDoor`, `IfcWindow` and
-/// `IfcOpeningElement` an opening; both are IFC facts. A void that could not
+/// Every `IfcSpace` is a space, every `IfcDoor`, `IfcWindow` and
+/// `IfcOpeningElement` an opening, and every `IfcWall` and `IfcSlab` (with
+/// their subtypes) a separating element for `adjacent-across`; all are IFC
+/// facts. A void that could not
 /// be meshed is declared unmeasured, so the derivation refuses it rather than
 /// finding no space beside it.
 fn derived_service(
@@ -548,6 +550,8 @@ fn derived_service(
             service = service.with_space(id.clone());
         } else if is_a(id, "IfcDoor") || is_a(id, "IfcWindow") {
             service = service.with_opening(id.clone());
+        } else if is_a(id, "IfcWall") || is_a(id, "IfcSlab") {
+            service = service.with_separating_element(id.clone());
         }
     }
     for (id, void) in voids {

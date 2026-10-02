@@ -86,6 +86,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/support_coverage.rs` answers `assess_support_coverage` for the free-space service like `containment.rs`: every support triangle facing up (positive plan orientation) is clipped to the request's elevation band and projected, and the footprint's outer bound less those tops is `Supported` when nothing is left, its inner bound `Unsupported` when something is; a support without a mesh or tessellated refuses.
 - `src/side_distance.rs` (internal) answers `measure_side_distances` for the plan-span service from `measure_rectangle` and each candidate's plan triangles: each triangle is clipped, in the side's frame, to an inner rectangle (surely in the strip: sure presence, upper bound) and an outer one (possibly: lower bound), both moved by one slack covering the centre radius, the axis error over the reach, the chord deviation and rounding; the evidence is never exact. A slack above `MAXIMUM_SLACK` refuses. Never drop the slack or compare a strip edge exactly: a flush wall touches the neighbouring strips, which the request's inset, not a smaller slack, keeps out.
 - `src/corridor_end.rs` (internal) answers `measure_corridor_ends` for the plan-span service with `axiolid_route::skeleton` (prune 1.5; spacing refined below an eighth of the narrowest width found, at most 50 000 samples). Collinear vertices are dropped first so a straight wall is one edge. A wall is `Decided` only when the end lies within its clearance plus two spacings of the kernel's wall ahead and rays within `SPREAD` (20°) of the path's direction all meet that wall first; never widen `SPREAD` or the slack to decide more walls without a proof. A tessellated space refuses (its edges are chords); a tessellated subject widens gap by `d` and facing by `2d`. Evidence for the ends is always approximate.
+- `src/adjacent_across.rs` (internal) measures `adjacent-across` for
+  `derived_relationships.rs`: a declared separating element is a flat slab
+  or a straight wall (one plan rectangle) or refuses; spaces are measured
+  through `walkable::band_footprint` against a strip along each wall face
+  (overlap along the wall) or a band above or below a slab (overlap area
+  with its footprint), each twice, shrunk and grown by rounding plus both
+  chord deviations. Decide a face only when both brackets agree; never
+  drop the margin or decide from one bracket.
 - `src/derived_relationships.rs` implements `DerivedRelationshipService`:
   element to containing (or nearest) space, opening to the spaces a probe
   first enters on each side, space to larger covering spaces, space to the

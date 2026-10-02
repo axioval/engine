@@ -1,6 +1,6 @@
 //! Relationships derived from geometry: element to space, opening to space,
-//! space to group space, space to the levels it spans, and between two
-//! bodies sharing volume.
+//! space to group space, space to the levels it spans, between two bodies
+//! sharing volume, and a wall or slab to the spaces beside its faces.
 //!
 //! ADR 0004: this module measures which spaces an object lies in, borders or
 //! falls within; whether a count or a comparison over them passes is a
@@ -27,6 +27,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId};
 
+use crate::adjacent_across;
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::planar::{footprint_measure, plan_overlap_area};
 use crate::proximity::AxiolidProximityService;
@@ -103,6 +104,8 @@ pub struct AxiolidDerivedRelationshipService {
     /// the highest), or why it has none.
     levels: BTreeMap<ObjectId, Result<(f64, Option<f64>), String>>,
     openings: BTreeSet<ObjectId>,
+    /// Walls and slabs, the subjects of `adjacent-across`.
+    separators: BTreeSet<ObjectId>,
     voids: BTreeMap<ObjectId, Void>,
     cache: Mutex<BTreeMap<(String, ObjectId), Cached>>,
     /// The proximity measurements `intersects` reads, built on first use.
@@ -120,6 +123,7 @@ impl AxiolidDerivedRelationshipService {
             spaces: BTreeSet::new(),
             levels: BTreeMap::new(),
             openings: BTreeSet::new(),
+            separators: BTreeSet::new(),
             voids: BTreeMap::new(),
             cache: Mutex::new(BTreeMap::new()),
             proximity: OnceLock::new(),
@@ -168,6 +172,16 @@ impl AxiolidDerivedRelationshipService {
         self
     }
 
+    /// Declares a separating element, a wall or a slab, the subject of
+    /// `adjacent-across`. Which objects separate spaces is semantic, so the
+    /// host declares them; the derivation refuses one whose body is neither
+    /// a straight wall nor a flat slab.
+    #[must_use]
+    pub fn with_separating_element(mut self, element: ObjectId) -> Self {
+        self.separators.insert(element);
+        self
+    }
+
     /// Declares an opening and the exact planar shape of its void, for an
     /// opening the geometry declares bodiless.
     #[must_use]
@@ -209,6 +223,7 @@ impl AxiolidDerivedRelationshipService {
         match derivation {
             Derivation::ContainedInSpace { .. } => !self.spaces.contains(object),
             Derivation::AdjacentSpace { .. } => self.openings.contains(object),
+            Derivation::AdjacentAcross { .. } => self.separators.contains(object),
             Derivation::OverlappingGroupSpace { .. } | Derivation::SpansLevel { .. } => {
                 self.spaces.contains(object)
             }
@@ -323,6 +338,10 @@ impl AxiolidDerivedRelationshipService {
                     minimum_ratio,
                     vertical_metres,
                 } => Self::group(subject, spaces, *minimum_ratio, *vertical_metres),
+                Derivation::AdjacentAcross {
+                    tolerance_metres,
+                    overlap_metres,
+                } => self.across(subject, spaces, *tolerance_metres, *overlap_metres),
                 Derivation::SpansLevel { .. } | Derivation::Intersects => {
                     unreachable!("levels are derived above, intersections pair by pair")
                 }
@@ -531,6 +550,69 @@ impl AxiolidDerivedRelationshipService {
                     target: space.clone(),
                     note: format!("side={side}{normal_text}:entered={t:.6}"),
                 });
+            }
+        }
+        Ok(derived)
+    }
+
+    /// The spaces beside each face of a wall or slab (see
+    /// [`crate::adjacent_across`]): every space surely within `tolerance`
+    /// of a face along `overlap`, each face beside none noted. A space that
+    /// may or may not be beside a face refuses the answer.
+    fn across(
+        &self,
+        subject: &ObjectId,
+        spaces: &[SpaceBody<'_>],
+        tolerance: f64,
+        overlap: f64,
+    ) -> Result<Derived, String> {
+        let Some(shape) = self.shape(subject)? else {
+            // Declared bodiless: it has no faces, so no space is beside it.
+            return Ok(Derived {
+                edges: Vec::new(),
+                notes: vec![format!("{subject}:no-body")],
+            });
+        };
+        let deviation = |object: &ObjectId| {
+            self.geometry
+                .fidelity(object)
+                .map(|fidelity| fidelity.deviation_metres())
+                .map_err(|error| format!("the fidelity of {object} is unknown: {error:?}"))
+        };
+        let own = deviation(subject)?;
+        let separator = adjacent_across::separator(subject, shape.mesh)?;
+        let normal = separator.normal_text();
+        let extent =
+            mesh_extent(shape.mesh).ok_or_else(|| format!("{subject} has an empty mesh"))?;
+        let mut derived = Derived::default();
+        let mut sides = [false, false];
+        for space in spaces.iter().filter(|space| space.id != subject) {
+            let theirs = deviation(space.id)?;
+            if extent_gap(&extent, &space.extent, false) > tolerance + own + theirs + ON_SURFACE {
+                continue;
+            }
+            for beside in adjacent_across::beside(
+                subject,
+                &separator,
+                own,
+                space.id,
+                space.mesh,
+                theirs,
+                (tolerance, overlap),
+            )? {
+                let side = if beside.sign > 0.0 { '+' } else { '-' };
+                sides[usize::from(beside.sign < 0.0)] = true;
+                derived.edges.push(Edge {
+                    target: space.id.clone(),
+                    note: format!("side={side}{normal}:overlap={:.6}", beside.overlap),
+                });
+            }
+        }
+        for (index, side) in ['+', '-'].into_iter().enumerate() {
+            if !sides[index] {
+                derived.notes.push(format!(
+                    "{subject}:side={side}{normal}:none:tolerance={tolerance}"
+                ));
             }
         }
         Ok(derived)

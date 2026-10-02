@@ -19,19 +19,22 @@
 //!
 //! Edges always run from a subject to a space (a level, for `spans-level`),
 //! so `forward` from an element reaches its spaces and `backward` from a
-//! space reaches its subjects. `intersects` is symmetric: it runs both ways
+//! space reaches its subjects. `adjacent-across` runs from a separating
+//! element (a wall or a slab) to the spaces on its faces, and the session
+//! answers it from the space boundaries a source states wherever an element
+//! has any. `intersects` is symmetric: it runs both ways
 //! between two bodies sharing volume, so either direction reaches the same
 //! objects.
 
 use std::fmt;
 use std::sync::Arc;
 
-use axioval_ir::ObjectId;
+use axioval_ir::{Evidence, ObjectId};
 
 use crate::relationships::{
-    CompleteRelationshipSelection, RelationshipQuery, RelationshipSelectionError,
+    CompleteRelationshipSelection, RelationshipKind, RelationshipQuery, RelationshipSelectionError,
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    SemanticRelationship, validate_selection,
+    SemanticRelationship, TraversalDirection, validate_selection,
 };
 use crate::session::{SnapshotBoundService, SourceSnapshot};
 
@@ -87,6 +90,26 @@ pub enum Derivation {
     /// decide (an unmeasured body, a tessellation within its chord
     /// deviation of the other body, two open surfaces) refuses the answer.
     Intersects,
+    /// `axioval:derived.adjacent-across`: a separating element, a wall or a
+    /// slab, to the spaces lying within `tolerance` metres of either of its
+    /// faces (default 0.05) along at least `overlap` metres of it (default
+    /// 0.3, positive). A wall's faces are the two long sides of its plan;
+    /// along it is the wall's length, measured in the height the wall and
+    /// the space share. A slab's faces are its top and its bottom, and a
+    /// space beside one must share at least `overlap`² square metres of
+    /// footprint with it.
+    ///
+    /// Each edge records the face its space lies on (see [`across_side`]),
+    /// so two spaces adjacent across the element lie on opposite faces. A
+    /// space within or beyond the tolerance only as far as the geometry's
+    /// rounding or chord deviation can tell refuses the answer.
+    AdjacentAcross {
+        /// Largest gap between a face and a space's boundary, in metres.
+        tolerance_metres: f64,
+        /// Least length (for a slab, square root of the least area) the
+        /// space must share with the face, in metres.
+        overlap_metres: f64,
+    },
 }
 
 const CONTAINED_IN_SPACE: &str = "contained-in-space";
@@ -94,6 +117,7 @@ const ADJACENT_SPACE: &str = "adjacent-space";
 const OVERLAPPING_GROUP_SPACE: &str = "overlapping-group-space";
 const SPANS_LEVEL: &str = "spans-level";
 const INTERSECTS: &str = "intersects";
+const ADJACENT_ACROSS: &str = "adjacent-across";
 
 impl Derivation {
     /// The derivation a relationship identity names, `None` for an identity
@@ -136,6 +160,7 @@ impl Derivation {
             OVERLAPPING_GROUP_SPACE => &["ratio", "vertical"],
             SPANS_LEVEL => &["overlap"],
             INTERSECTS => &[],
+            ADJACENT_ACROSS => &["tolerance", "overlap"],
             _ => return Err(RelationshipSelectionError::InvalidRequest),
         };
         if parameters.iter().any(|(key, _)| !allowed.contains(key)) {
@@ -159,6 +184,10 @@ impl Derivation {
                 overlap_metres: get("overlap", 1.0),
             },
             INTERSECTS => Self::Intersects,
+            ADJACENT_ACROSS => Self::AdjacentAcross {
+                tolerance_metres: get("tolerance", 0.05),
+                overlap_metres: get("overlap", 0.3),
+            },
             _ => Self::OverlappingGroupSpace {
                 minimum_ratio: get("ratio", 0.5),
                 vertical_metres: get("vertical", 0.0),
@@ -168,7 +197,9 @@ impl Derivation {
             Self::AdjacentSpace { reach_metres } if reach_metres <= 0.0 => {
                 Err(RelationshipSelectionError::InvalidRequest)
             }
-            Self::SpansLevel { overlap_metres } if overlap_metres <= 0.0 => {
+            Self::SpansLevel { overlap_metres } | Self::AdjacentAcross { overlap_metres, .. }
+                if overlap_metres <= 0.0 =>
+            {
                 Err(RelationshipSelectionError::InvalidRequest)
             }
             Self::OverlappingGroupSpace { minimum_ratio, .. }
@@ -191,6 +222,7 @@ impl Derivation {
             Self::OverlappingGroupSpace { .. } => OVERLAPPING_GROUP_SPACE,
             Self::SpansLevel { .. } => SPANS_LEVEL,
             Self::Intersects => INTERSECTS,
+            Self::AdjacentAcross { .. } => ADJACENT_ACROSS,
         };
         format!("{DERIVED_RELATIONSHIP_PREFIX}{name}")
     }
@@ -215,6 +247,10 @@ impl fmt::Display for Derivation {
             } => write!(f, ";ratio={minimum_ratio};vertical={vertical_metres}"),
             Self::SpansLevel { overlap_metres } => write!(f, ";overlap={overlap_metres}"),
             Self::Intersects => Ok(()),
+            Self::AdjacentAcross {
+                tolerance_metres,
+                overlap_metres,
+            } => write!(f, ";tolerance={tolerance_metres};overlap={overlap_metres}"),
         }
     }
 }
@@ -399,9 +435,63 @@ pub fn adjacent_side(
     subject: &ObjectId,
     space: Option<&ObjectId>,
 ) -> Option<AdjacentSide> {
+    let tail = side_record(locator, ADJACENT_SPACE, subject, space)?;
+    let side = AdjacentSide::from_symbol(tail.chars().next()?)?;
+    if space.is_none() && !tail.contains(":outside") {
+        return None;
+    }
+    Some(side)
+}
+
+/// The face an `axioval:derived.adjacent-across` edge evidence locator
+/// records for `space` beside `element`.
+///
+/// A provider of the derivation cites every edge as
+/// `{element}->{space}:side={+|-}…` after the canonical identity and a
+/// colon, and every face beside which no space lies as
+/// `{element}:side={+|-}…:none…`. A wall's `+` face lies along the normal
+/// the record writes after the sign; a slab's `+` face is its top. A space
+/// may lie on both faces, in two records. `None` when the locator is no
+/// such edge record, such as the router's record of an element answered
+/// from its stated boundaries ([`across_stated`]), which records no face.
+#[must_use]
+pub fn across_side(locator: &str, element: &ObjectId, space: &ObjectId) -> Option<AdjacentSide> {
+    let tail = side_record(locator, ADJACENT_ACROSS, element, Some(space))?;
+    AdjacentSide::from_symbol(tail.chars().next()?)
+}
+
+/// Whether an `axioval:derived.adjacent-across` evidence locator records
+/// that `element` was answered from the space boundaries its source
+/// states, not from geometry: `{identity}:stated:{element}`.
+#[must_use]
+pub fn across_stated(locator: &str, element: &ObjectId) -> bool {
+    let Some(rest) = locator
+        .strip_prefix(DERIVED_RELATIONSHIP_PREFIX)
+        .and_then(|rest| rest.strip_prefix(ADJACENT_ACROSS))
+    else {
+        return false;
+    };
+    rest.split_once(':').is_some_and(|(tolerances, record)| {
+        (tolerances.is_empty() || tolerances.starts_with(';'))
+            && record
+                .strip_prefix(STATED)
+                .is_some_and(|tail| tail == element.to_string())
+    })
+}
+
+const STATED: &str = "stated:";
+
+/// What follows `side=` in a side record of the derivation `name` about
+/// `subject` (and `space`, for an edge).
+fn side_record<'l>(
+    locator: &'l str,
+    name: &str,
+    subject: &ObjectId,
+    space: Option<&ObjectId>,
+) -> Option<&'l str> {
     let rest = locator
         .strip_prefix(DERIVED_RELATIONSHIP_PREFIX)?
-        .strip_prefix(ADJACENT_SPACE)?;
+        .strip_prefix(name)?;
     // Tolerances are `;key=number` pairs and never hold a colon.
     let (tolerances, record) = rest.split_once(':')?;
     if !(tolerances.is_empty() || tolerances.starts_with(';')) {
@@ -411,12 +501,7 @@ pub fn adjacent_side(
         Some(space) => format!("{subject}->{space}:side="),
         None => format!("{subject}:side="),
     };
-    let tail = record.strip_prefix(&head)?;
-    let side = AdjacentSide::from_symbol(tail.chars().next()?)?;
-    if space.is_none() && !tail.contains(":outside") {
-        return None;
-    }
-    Some(side)
+    record.strip_prefix(&head)
 }
 
 /// Trusted provider of relationships derived from geometry.
@@ -492,6 +577,9 @@ pub(crate) struct RoutedRelationships {
     pub(crate) semantic: Option<RelationshipSelectionServiceHandle>,
     pub(crate) derived: DerivedRelationshipServiceHandle,
     pub(crate) snapshots: Vec<SourceSnapshot>,
+    /// Every object of the session's project: the universe a stated
+    /// boundary is looked for in, whatever universe a request names.
+    pub(crate) objects: Arc<[ObjectId]>,
 }
 
 impl RelationshipSelectionService for RoutedRelationships {
@@ -504,6 +592,19 @@ impl RelationshipSelectionService for RoutedRelationships {
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
         if is_derived(request.query()) {
+            if let (Some(semantic), Some(derivation @ Derivation::AdjacentAcross { .. })) = (
+                &self.semantic,
+                Derivation::parse(request.query().relationship())?,
+            ) {
+                return StatedFirst {
+                    semantic,
+                    derived: &self.derived,
+                    objects: &self.objects,
+                    request,
+                    identity: derivation.to_string(),
+                }
+                .select();
+            }
             return self.derived.select(request);
         }
         match &self.semantic {
@@ -534,6 +635,188 @@ impl RelationshipSelectionService for RoutedRelationships {
                 "no semantic relationship service is registered".into(),
             )),
         }
+    }
+}
+
+/// `adjacent-across` answered from stated space boundaries first.
+///
+/// An element whose source states a space boundary to it (the
+/// [`RelationshipKind::SpaceBoundary`] kind, from a space to its bounding
+/// elements) within the request's universe is answered from those spaces
+/// alone; only an element stating none is answered from geometry. Walking
+/// backward from a space reaches the elements its stated boundaries name
+/// and the elements geometry places beside it that state no boundary of
+/// their own. A refused stated answer refuses the whole answer: the stated
+/// boundary it could hold would win.
+struct StatedFirst<'r> {
+    semantic: &'r RelationshipSelectionServiceHandle,
+    derived: &'r DerivedRelationshipServiceHandle,
+    objects: &'r [ObjectId],
+    request: &'r RelationshipSelectionRequest,
+    identity: String,
+}
+
+impl StatedFirst<'_> {
+    fn select(&self) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
+        let RelationshipQuery::Related {
+            direction,
+            follow_chain,
+            ..
+        } = self.request.query()
+        else {
+            return Err(RelationshipSelectionError::Unavailable(format!(
+                "`{}` relates elements to the spaces beside them; it forms no groups",
+                self.identity
+            )));
+        };
+        let anchor = self.request.anchor();
+        let mut evidence = vec![Evidence::exact(
+            anchor.source.clone(),
+            format!("{}:stated-first:{anchor}", self.identity),
+        )];
+        let mut reached = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::from([anchor.clone()]);
+        let mut frontier = vec![anchor.clone()];
+        while !frontier.is_empty() {
+            let mut next = Vec::new();
+            for current in &frontier {
+                let mut step = Vec::new();
+                if matches!(
+                    direction,
+                    TraversalDirection::Forward | TraversalDirection::Either
+                ) {
+                    step.extend(self.forward(current, &mut evidence)?);
+                }
+                if matches!(
+                    direction,
+                    TraversalDirection::Backward | TraversalDirection::Either
+                ) {
+                    step.extend(self.backward(current, &mut evidence)?);
+                }
+                for object in step {
+                    reached.insert(object.clone());
+                    if seen.insert(object.clone()) {
+                        next.push(object);
+                    }
+                }
+            }
+            if !follow_chain {
+                break;
+            }
+            frontier = next;
+        }
+        reached.remove(anchor);
+        reached.retain(|object| {
+            self.request
+                .candidate_universe()
+                .binary_search(object)
+                .is_ok()
+        });
+        let mut unique = std::collections::BTreeSet::new();
+        evidence.retain(|item| unique.insert((item.source.clone(), item.locator.clone())));
+        CompleteRelationshipSelection::try_new(
+            self.request.clone(),
+            reached.into_iter().collect(),
+            evidence,
+        )
+    }
+
+    /// One step of a stated or derived relationship from `from`.
+    fn ask(
+        &self,
+        from: &ObjectId,
+        relationship: &SemanticRelationship,
+        direction: TraversalDirection,
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Vec<ObjectId>, RelationshipSelectionError> {
+        // Every step looks through the whole project: an element's stated
+        // boundaries win wherever they lead, and a chain passes through
+        // objects outside the request's universe.
+        let mut universe = self.objects.to_vec();
+        universe.extend(self.request.candidate_universe().iter().cloned());
+        universe.sort();
+        universe.dedup();
+        let request = RelationshipSelectionRequest::try_new(
+            from.clone(),
+            universe,
+            RelationshipQuery::Related {
+                relationship: relationship.clone(),
+                direction,
+                follow_chain: false,
+            },
+        )?
+        .with_absent_ends(self.request.absent_ends());
+        let answer = if relationship
+            .as_str()
+            .starts_with(DERIVED_RELATIONSHIP_PREFIX)
+        {
+            self.derived.select(&request)?
+        } else {
+            self.semantic.select(&request)?
+        };
+        evidence.extend(answer.evidence().iter().cloned());
+        Ok(answer.candidates().to_vec())
+    }
+
+    /// The spaces whose stated boundaries name `element`.
+    fn stated(
+        &self,
+        element: &ObjectId,
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Vec<ObjectId>, RelationshipSelectionError> {
+        self.ask(
+            element,
+            &RelationshipKind::SpaceBoundary.relationship(),
+            TraversalDirection::Backward,
+            evidence,
+        )
+    }
+
+    fn forward(
+        &self,
+        element: &ObjectId,
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Vec<ObjectId>, RelationshipSelectionError> {
+        let stated = self.stated(element, evidence)?;
+        if !stated.is_empty() {
+            evidence.push(Evidence::exact(
+                element.source.clone(),
+                format!("{}:{STATED}{element}", self.identity),
+            ));
+            return Ok(stated);
+        }
+        self.ask(
+            element,
+            self.request.query().relationship(),
+            TraversalDirection::Forward,
+            evidence,
+        )
+    }
+
+    fn backward(
+        &self,
+        space: &ObjectId,
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Vec<ObjectId>, RelationshipSelectionError> {
+        let mut elements = self.ask(
+            space,
+            &RelationshipKind::SpaceBoundary.relationship(),
+            TraversalDirection::Forward,
+            evidence,
+        )?;
+        for element in self.ask(
+            space,
+            self.request.query().relationship(),
+            TraversalDirection::Backward,
+            evidence,
+        )? {
+            // An element stating boundaries is answered by them alone, and
+            // they do not name this space, or it would be listed already.
+            if !elements.contains(&element) && self.stated(&element, evidence)?.is_empty() {
+                elements.push(element);
+            }
+        }
+        Ok(elements)
     }
 }
 
@@ -666,5 +949,50 @@ mod tests {
                 "{identity}"
             );
         }
+    }
+
+    #[test]
+    fn adjacency_across_fixes_its_tolerances_and_records_faces() {
+        let across = parse("axioval:derived.adjacent-across;overlap=0.5")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            across,
+            Derivation::AdjacentAcross {
+                tolerance_metres: 0.05,
+                overlap_metres: 0.5
+            }
+        );
+        assert_eq!(
+            across.to_string(),
+            "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.5"
+        );
+        for invalid in [
+            "axioval:derived.adjacent-across;overlap=0",
+            "axioval:derived.adjacent-across;reach=1",
+            "axioval:derived.adjacent-across;tolerance=-0.1",
+        ] {
+            assert_eq!(
+                parse(invalid),
+                Err(RelationshipSelectionError::InvalidRequest),
+                "{invalid}"
+            );
+        }
+        let source = axioval_ir::SourceId::new("ifc-step", "model.ifc").unwrap();
+        let wall = ObjectId::new(source.clone(), "#40").unwrap();
+        let room = ObjectId::new(source, "#16").unwrap();
+        let identity = across.to_string();
+        let edge =
+            format!("{identity}:{wall}->{room}:side=-(1.000000,0.000000,0.000000):overlap=4");
+        assert_eq!(
+            across_side(&edge, &wall, &room),
+            Some(AdjacentSide::Negative)
+        );
+        assert_eq!(across_side(&edge, &room, &wall), None);
+        let opening = format!("axioval:derived.adjacent-space;reach=1:{wall}->{room}:side=+");
+        assert_eq!(across_side(&opening, &wall, &room), None);
+        assert!(across_stated(&format!("{identity}:stated:{wall}"), &wall));
+        assert!(!across_stated(&format!("{identity}:stated:{wall}"), &room));
+        assert!(!across_stated(&edge, &wall));
     }
 }

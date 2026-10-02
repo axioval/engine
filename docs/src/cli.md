@@ -870,12 +870,16 @@ evaluated, never measure the group as zero.
 Relationships the model does not state can be derived from geometry. With
 `--geometry`, every relationship capability accepts the identities
 `axioval:derived.contained-in-space`, `axioval:derived.adjacent-space`,
-`axioval:derived.overlapping-group-space`, `axioval:derived.spans-level` and
-`axioval:derived.intersects` (see [typed host services](./services.md)) as its
+`axioval:derived.overlapping-group-space`, `axioval:derived.spans-level`,
+`axioval:derived.intersects` and `axioval:derived.adjacent-across` (see
+[typed host services](./services.md)) as its
 `relationship` or as a
 `path` step; every other identity still goes to the IFC relationship service.
-Every `IfcSpace` is a space, and every `IfcDoor`, `IfcWindow` and
-`IfcOpeningElement` an opening. Every `IfcBuildingStorey` is a level whose
+Every `IfcSpace` is a space, every `IfcDoor`, `IfcWindow` and
+`IfcOpeningElement` an opening, and every `IfcWall` and `IfcSlab` (with their
+subtypes) a separating element, beside which `adjacent-across` finds the
+spaces when the model states no `IfcRelSpaceBoundary` for it. Every
+`IfcBuildingStorey` is a level whose
 band runs from its placement's height up to the next storey's of the same
 parent; a storey whose placement cannot be read or is tilted, or that shares
 its height with a sibling, has no band, and a request it could answer

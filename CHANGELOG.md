@@ -55,6 +55,24 @@ All notable changes are documented here. This project follows Semantic Versionin
   than measured in the wrong place. Models without a project length unit
   state no exact frame, so their geometry is no longer combined with
   another model's.
+- **Spaces adjacent across a wall or slab without stated boundaries.**
+  (Closes #160) The derived relationship
+  `axioval:derived.adjacent-across;tolerance=<m>;overlap=<m>` (defaults
+  0.05 and 0.3) relates a separating element to every space within the
+  tolerance of one of its faces: along at least `overlap` metres of a
+  straight wall, in the height the two share, or over at least `overlap`²
+  square metres of a flat slab's footprint. Each edge records the face
+  (`across_side`), so spaces adjacent across the element are those on
+  opposite faces; a wall with a room on one side only relates to that room
+  and records its other face as `none`. The pair is three-valued: a room
+  straddling the tolerance (exactly at it, or a tessellation within its
+  chord deviation of it) refuses the answer, never counted either way.
+  Stated space boundaries win: the session answers an element from its
+  `axioval:relationship.space-boundary` edges wherever it has any
+  (`across_stated`) and asks geometry only about the others.
+  `AxiolidDerivedRelationshipService::with_separating_element` declares
+  walls and slabs; the CLI declares every `IfcWall` and `IfcSlab`.
+  **Breaking:** `Derivation` gains the variant `AdjacentAcross`.
 
 - **Geometry differences by certified surface distance.** (Closes #163)
   `model-comparison` gains `geometry` (`bounds` or `mesh`) and

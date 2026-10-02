@@ -13,10 +13,10 @@ use axioval_engine::{
     GeometryFidelity, HandrailEvidence, HandrailRequest, Headroom, HeadroomRequest, Landing,
     LandingEvidence, LandingExtent, LandingRequest, MeasuredInterval, MetricDirection,
     ObjectBounds, ObstructionEvidence, PlacementOutcome, PlacementRequest, PlanSegment,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityRequest,
-    ProximityService, ProximityServiceHandle, RailMeasurement, RiserClosure, SlopedRun,
-    SlopedSurface, StretchPart, Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingLine,
-    WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, ProximityServiceHandle, RailMeasurement, RiserClosure,
+    SlopedRun, SlopedSurface, StretchPart, Tread, TreadFlight, TreadFlightRequest, WalkingEnd,
+    WalkingLine, WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
     WalkingSurfaceServiceHandle,
 };
 use axioval_engine::{
@@ -3529,6 +3529,176 @@ fn a_ramps_rails_must_continue_across_its_landings() {
         continuity_parameters(-0.1),
     ] {
         let evaluation = check_ramps_near(ramp_in_pieces(), Rails::default(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+/// Plan overlaps per pair (`(0, 0)` overlapping, infinite apart, anything
+/// between open on a tessellation) and distances in space per pair, 5 m
+/// unless stated; nothing has a box.
+#[derive(Default)]
+struct Footprints {
+    plan: BTreeMap<(String, String), (f64, f64)>,
+    space: BTreeMap<(String, String), f64>,
+}
+
+impl Footprints {
+    fn plan(mut self, a: &str, b: &str, overlap: (f64, f64)) -> Self {
+        self.plan.insert((a.into(), b.into()), overlap);
+        self.plan.insert((b.into(), a.into()), overlap);
+        self
+    }
+
+    fn touching(mut self, a: &str, b: &str) -> Self {
+        self.space.insert((a.into(), b.into()), 0.0);
+        self.space.insert((b.into(), a.into()), 0.0);
+        self
+    }
+}
+
+impl ProximityService for Footprints {
+    fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let pair = (
+            request.subject().local_id.clone(),
+            request.counterpart().local_id.clone(),
+        );
+        let (lower, upper) = if request.projection() == ProximityProjection::PlanOverlap {
+            self.plan
+                .get(&pair)
+                .copied()
+                .unwrap_or((f64::INFINITY, f64::INFINITY))
+        } else {
+            let distance = self.space.get(&pair).copied().unwrap_or(5.0);
+            (distance, distance)
+        };
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        let fidelity = if exact {
+            GeometryFidelity::Exact
+        } else {
+            GeometryFidelity::tessellated(0.01)?
+        };
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            lower,
+            upper,
+            fidelity,
+            Evidence {
+                source: source(),
+                locator: format!("distance:{}:{}", pair.0, pair.1),
+                exact,
+            },
+        )
+    }
+}
+
+/// Ramp `gentle` with rail `ramp_rail` along its first run and
+/// `upper_piece` along its second; `lower_piece` is a separate piece only
+/// touching `ramp_rail`.
+fn railed_ramp() -> Stairs {
+    stairs()
+        .rail(
+            "gentle",
+            WalkingStretch::Run(0),
+            "ramp_rail",
+            rail((1.55, 1.6), (-0.3, 6.0), (0.9, 0.9), LEVEL),
+        )
+        .rail(
+            "gentle",
+            WalkingStretch::Run(1),
+            "upper_piece",
+            rail((1.55, 1.6), (7.5, 13.8), (0.9, 0.9), LEVEL),
+        )
+}
+
+fn obstruction_parameters() -> Vec<(&'static str, ParameterValue)> {
+    handrail_parameters(vec![
+        ("check_rails_obstruction", boolean(true)),
+        ("accessible_surface_selector", selector(kind("space"))),
+    ])
+}
+
+/// A rail extension reaching into a selected path is a finding; one
+/// turning beside it passes; an overlap a tessellation leaves open is not
+/// evaluated.
+#[test]
+fn ramp_rails_reaching_over_an_accessible_surface_are_found() {
+    let outcomes = |footprints: Footprints| {
+        let evaluation = check_ramps_near(railed_ramp(), footprints, obstruction_parameters());
+        let open: Vec<String> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .filter(|outcome| outcome.object_id() == Some(&id("gentle")))
+            .map(|outcome| outcome.message().to_owned())
+            .collect();
+        (findings(&evaluation), open, evaluation)
+    };
+    let (rail, hall) = (id("ramp_rail"), id("hall"));
+    // The rail's extension reaches 0.3 m into the hall's path.
+    let (found, open, evaluation) =
+        outcomes(Footprints::default().plan("ramp_rail", "hall", (0.0, 0.0)));
+    assert_eq!(
+        found,
+        [(
+            "gentle".into(),
+            format!(
+                "handrail {rail} of the ramp reaches over the accessible surface {hall} in plan"
+            )
+        )]
+    );
+    assert_eq!(
+        evaluation.findings()[0].related,
+        [hall.clone(), rail.clone()]
+    );
+    assert!(open.is_empty(), "{open:?}");
+    // A rail turning along the wall beside the path stays out of it.
+    let (found, open, _) = outcomes(Footprints::default());
+    assert!(found.is_empty() && open.is_empty(), "{found:?} {open:?}");
+    // A separate extension piece joined to the ramp's rail counts too.
+    let (found, _, _) = outcomes(
+        Footprints::default()
+            .touching("ramp_rail", "lower_piece")
+            .plan("lower_piece", "hall", (0.0, 0.0)),
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0]
+            .1
+            .starts_with(&format!("handrail {}", id("lower_piece")))
+    );
+    // A tessellated overlap straddling zero is not evaluated.
+    let (found, open, _) =
+        outcomes(Footprints::default().plan("ramp_rail", "hall", (0.0, f64::INFINITY)));
+    assert!(found.is_empty(), "{found:?}");
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert!(open[0].starts_with(&format!("whether handrail {rail} of the ramp reaches over")));
+    // The selector and the check come together, with the rail parameters.
+    for parameters in [
+        handrail_parameters(vec![("check_rails_obstruction", boolean(true))]),
+        vec![
+            ("check_rails_obstruction", boolean(true)),
+            ("accessible_surface_selector", selector(kind("space"))),
+        ],
+        handrail_parameters(vec![
+            ("handrail_height_minimum", metres(0.8)),
+            ("accessible_surface_selector", selector(kind("space"))),
+        ]),
+    ] {
+        let evaluation = check_ramps_near(railed_ramp(), Footprints::default(), parameters);
         assert_eq!(
             unevaluated(&evaluation),
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]

@@ -17,6 +17,7 @@ use std::fmt::Write as _;
 mod clear_width;
 mod continuity;
 mod handrails;
+mod obstruction;
 mod ramp_ends;
 mod tactile;
 mod whole;
@@ -1783,6 +1784,7 @@ struct RampConfig<'a> {
     slope_tolerance: Option<f64>,
     headroom: Option<HeadroomCheck<'a>>,
     walking: WalkingConfig<'a>,
+    obstruction: Option<obstruction::ObstructionCheck<'a>>,
 }
 
 impl<'a> RampConfig<'a> {
@@ -1800,6 +1802,7 @@ impl<'a> RampConfig<'a> {
         }
         let headroom = headroom_check(&parameters)?;
         let walking = WalkingConfig::parse(&parameters, true)?;
+        let obstruction = obstruction::parse(&parameters, walking.handrail.as_ref())?;
         if limits.is_empty()
             && slope_tolerance.is_none()
             && headroom.is_none()
@@ -1812,6 +1815,7 @@ impl<'a> RampConfig<'a> {
             slope_tolerance,
             headroom,
             walking,
+            obstruction,
         })
     }
 }
@@ -1860,8 +1864,17 @@ impl RuleCapability for RampGeometryCheck {
         let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         let free = context.services.get::<FreeSpaceServiceHandle>();
         let proximity = context.services.get::<ProximityServiceHandle>();
+        let surfaces = config
+            .obstruction
+            .as_ref()
+            .map(|check| self::selected(context, check.surfaces, "accessible surface selection"));
         for object in selected {
-            let checks = ramp((stairs, free, proximity), &config, &selections, object);
+            let checks = ramp(
+                (stairs, free, proximity),
+                &config,
+                (&selections, surfaces.as_ref()),
+                object,
+            );
             match checks {
                 Ok(checks) => report(&mut evaluation, rule, &object.id, checks),
                 Err((reason, message)) => {
@@ -1886,7 +1899,7 @@ type Services<'s> = (
 fn ramp(
     (stairs, free, proximity): Services<'_>,
     config: &RampConfig<'_>,
-    selections: &Selections,
+    (selections, surfaces): (&Selections, Option<&Selected>),
     object: &Object,
 ) -> Result<Checks, Unavailable> {
     let measured = stairs
@@ -1973,9 +1986,13 @@ fn ramp(
         cited.insert(0, evidence.clone());
         checks.push((check, cited, related));
     }
-    for (check, mut cited, related) in
-        rails_and_ends((stairs, free, proximity), config, selections, object, runs)
-    {
+    for (check, mut cited, related) in rails_and_ends(
+        (stairs, free, proximity),
+        config,
+        (selections, surfaces),
+        object,
+        runs,
+    ) {
         cited.insert(0, evidence.clone());
         checks.push((check, cited, related));
     }
@@ -2022,7 +2039,7 @@ impl LandingDoors<'_, '_> {
 fn rails_and_ends(
     (stairs, free, proximity): Services<'_>,
     config: &RampConfig<'_>,
-    selections: &Selections,
+    (selections, surfaces): (&Selections, Option<&Selected>),
     object: &Object,
     runs: &[SlopedRun],
 ) -> Checks {
@@ -2078,6 +2095,17 @@ fn rails_and_ends(
                 free, check, obstacles, &object.id, run, top,
             ));
         }
+    }
+    if let (Some(check), Some(rails), Some(surfaces)) =
+        (&config.walking.handrail, &selections.rails, surfaces)
+    {
+        checks.extend(obstruction::obstruction(
+            (stairs, proximity),
+            check,
+            (rails, surfaces),
+            &object.id,
+            runs,
+        ));
     }
     checks
 }

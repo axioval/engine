@@ -92,6 +92,8 @@ pub(super) fn ramp_descriptors() -> Vec<ParameterDescriptor> {
     vec![
         ParameterDescriptor::optional("check_continuous_handrails", ParameterType::Boolean),
         ParameterDescriptor::optional("handrail_continuity_tolerance", ParameterType::Quantity),
+        ParameterDescriptor::optional("check_rails_obstruction", ParameterType::Boolean),
+        ParameterDescriptor::optional("accessible_surface_selector", ParameterType::Selector),
     ]
 }
 
@@ -153,7 +155,10 @@ pub(super) fn parse<'a>(
         || gap.is_some()
         || sides.is_some()
         || continuous
-        || ramp_continuity.is_some();
+        || ramp_continuity.is_some()
+        || parameters
+            .boolean("check_rails_obstruction")?
+            .unwrap_or(false);
     match (rails, reach, above, declared) {
         (Some(rails), Some(reach), Some(above), true) => Ok(Some(HandrailCheck {
             rails,

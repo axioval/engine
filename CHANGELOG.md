@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Ramp rails that obstruct an adjoining accessible surface.** (Closes #154)
+  `ramp-geometry` gains `check_rails_obstruction` with
+  `accessible_surface_selector`: the ramp's rails (those measured along
+  its runs and selected pieces touching them) whose plan footprint
+  overlaps a selected surface's, by the proximity service's plan overlap
+  as `distance` with `projection: plan_overlap` measures it, are a
+  finding. A tessellated overlap left open is not evaluated.
+  **Breaking:** the capability's signature gains two optional parameters.
 - **Ramp handrail continuity across intermediate landings.** (Closes #153)
   `ramp-geometry` gains `check_continuous_handrails` and
   `handrail_continuity_tolerance` (defaulting to

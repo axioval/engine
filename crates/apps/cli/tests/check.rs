@@ -6789,6 +6789,83 @@ fn with_geometry_ramp_rails_stopping_short_on_a_landing_are_found() {
     assert_eq!(output.status.code(), Some(0), "{result:#}");
 }
 
+/// Ramp flight #108 (as [`ramp_profile`] over 6 m, y -1.2 to 0) with rails
+/// #208 beside its left side and #308 beside its right, each reaching
+/// 0.3 m level past the run's top onto its upper landing, and space #409,
+/// the clear path over that landing (x 7 to 8, y -1 to 0.03), which #208
+/// reaches into.
+fn a_ramp_with_rails_into_a_path() -> String {
+    let ramp = "IFCRAMPFLIGHT('GID',$,$,$,$,PL,REP,$,$)";
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    let top = [[0.7, 1.0], [1.0, 1.0], [7.0, 1.5], [7.3, 1.5]];
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &ramp_profile(6.0), ramp),
+        swept(200, [0.0, 0.05, 0.0], &rail_under(&top), 0.05, rail),
+        swept(300, [0.0, -1.2, 0.0], &rail_under(&top), 0.05, rail),
+        placed_box(
+            400,
+            [7.5, -0.485, 0.6],
+            [1.0, 1.03, 2.0],
+            "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_a_ramp_rail_reaching_into_an_accessible_path_is_found() {
+    let case = Case::new("geometry-ramp-rail-obstruction");
+    let (output, result) = case.geometry_rule(
+        &a_ramp_with_rails_into_a_path(),
+        &[
+            ("ramp", "IfcRampFlight"),
+            ("rail", "IfcRailing"),
+            ("space", "IfcSpace"),
+        ],
+        "axioval:capability.ramp-geometry",
+        &registry_signature("axioval:capability.ramp-geometry"),
+        entity("ramp"),
+        json!({
+            "handrail_objects": {"type": "selector", "value": entity("rail")},
+            "handrail_reach_across": {"type": "quantity", "value": 0.2, "unit": "m"},
+            "handrail_reach_above": {"type": "quantity", "value": 1.5, "unit": "m"},
+            "check_rails_obstruction": {"type": "boolean", "value": true},
+            "accessible_surface_selector": {"type": "selector", "value": entity("space")},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // #208 reaches 0.3 m into the path; #308 runs beside it.
+    let findings = finding_messages(&result);
+    assert_eq!(
+        findings,
+        [(
+            "#108".to_owned(),
+            "handrail ifc-step:model.ifc/#208 of the ramp reaches over the accessible surface \
+             ifc-step:model.ifc/#409 in plan"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
 fn stepped(points: &[[f64; 2]], cells: &[(Vec<usize>, f64)]) -> (Vec<[f64; 3]>, Vec<[usize; 3]>) {
     let mut heights: Vec<Vec<f64>> = vec![vec![0.0]; points.len()];
     for (corners, height) in cells {

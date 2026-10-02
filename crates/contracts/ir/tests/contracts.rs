@@ -982,6 +982,34 @@ fn groupings_round_trip_by_property_and_by_classification() {
 }
 
 #[test]
+fn relations_round_trip_and_are_omitted_when_empty() {
+    use axioval_ir::contract::{RelationDefinition, RelationKey};
+    let by_zone = r#"{"id":"serves","name":{"default":"Serves","translations":{}},"from":{"kind":"all"},"to":{"kind":"all"},"by":{"kind":"property","from":{"propertySet":"p","property":"zone"},"to":{"property":"zone"}}}"#;
+    let relation: RelationDefinition = serde_json::from_str(by_zone).unwrap();
+    assert!(matches!(&relation.by, RelationKey::Property { to, .. } if to.property_set.is_none()));
+    assert_eq!(serde_json::to_string(&relation).unwrap(), by_zone);
+    let listed = r#"{"id":"serves","name":{"default":"Serves","translations":{}},"from":{"kind":"all"},"to":{"kind":"all"},"by":{"kind":"pairs","pairs":{"type":"table","value":[]},"scheme":"guid"}}"#;
+    let relation: RelationDefinition = serde_json::from_str(listed).unwrap();
+    assert_eq!(serde_json::to_string(&relation).unwrap(), listed);
+    assert!(
+        serde_json::from_str::<RelationDefinition>(&listed.replace("pairs\",", "links\","))
+            .is_err()
+    );
+    let ruleset: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../fixtures/schema-v0.1.0/ruleset.json"
+    ))
+    .unwrap();
+    let parsed: axioval_ir::RuleSetPackage = serde_json::from_value(ruleset).unwrap();
+    assert!(parsed.relations.is_empty());
+    assert!(
+        serde_json::to_value(&parsed)
+            .unwrap()
+            .get("relations")
+            .is_none()
+    );
+}
+
+#[test]
 fn a_table_file_reference_keeps_its_wire_form_and_never_carries_rows() {
     use axioval_ir::contract::ParameterValue;
     let wire = r#"{"type":"tableFile","path":"tables/rooms.csv","sheet":"Rooms","sha256":"00","columns":[{"id":"key_1","header":"type","kind":"textPattern"},{"id":"area","kind":"quantity","unit":"m2"}]}"#;

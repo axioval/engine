@@ -803,6 +803,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     if args.rule_status {
         runtime = runtime.with_rule_summaries();
     }
+    let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let mut result = runtime.run_session(&session, plan)?;
     // Keyed as the BCF sink keys its topics, so a decision recorded against
     // either is the same.
@@ -817,7 +818,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         result.apply_decisions(&imported.decisions)?;
         unmatched = imported.unmatched.into_iter().map(Into::into).collect();
     }
-    let integrity = integrity(&session)?;
+    let mut integrity = integrity(&session)?;
+    integrity.extend(relation_records(unknown_pairs));
 
     let bodies = meshed
         .as_mut()
@@ -854,6 +856,29 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         Outcome::Passed if !complete => Outcome::Incomplete,
         outcome => outcome,
     })
+}
+
+/// Every end of a declared relation's listed pair naming no single object,
+/// as an integrity warning: reported, never dropped. The rules walking its
+/// relation leave the pair undecided.
+fn relation_records(unknown: Vec<axioval::engine::UnknownRelationObject>) -> Vec<IntegrityRecord> {
+    unknown
+        .into_iter()
+        .map(|unknown| IntegrityRecord {
+            code: "relation-object-unknown".into(),
+            severity: "warning".into(),
+            message: format!(
+                "relation `{}` row {} `{}`: {}",
+                unknown.relation, unknown.row, unknown.end, unknown.detail
+            ),
+            locator: format!(
+                "{}{}:pairs#row={}",
+                axioval::engine::RELATION_RELATIONSHIP_PREFIX,
+                unknown.relation,
+                unknown.row
+            ),
+        })
+        .collect()
 }
 
 /// The BCF labels of every rule: folder path and tags, keyed by rule id as

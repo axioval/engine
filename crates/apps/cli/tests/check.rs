@@ -12505,16 +12505,18 @@ fn with_geometry_a_stated_side_area_is_divided_by_the_measured_face() {
 /// [`storeys_with_facades`], applied to `applies_to`, with the storey
 /// metric definitions and the `Name` attribute bound.
 fn storey_rule(name: &str, capability: &str, applies_to: &str, parameters: Value) -> Value {
-    storey_rule_with(name, capability, applies_to, parameters, &[])
+    storey_rule_with(name, capability, applies_to, parameters, &[], Value::Null)
 }
 
-/// [`storey_rule`] with `files` written beside the ruleset, by name.
+/// [`storey_rule`] with `files` written beside the ruleset, by name, and
+/// the ruleset's `relations` unless null.
 fn storey_rule_with(
     name: &str,
     capability: &str,
     applies_to: &str,
     parameters: Value,
     files: &[(&str, &str)],
+    relations: Value,
 ) -> Value {
     let case = Case::new(name);
     for (file, contents) in files {
@@ -12541,6 +12543,9 @@ fn storey_rule_with(
     rule["definitionId"] = json!("axioval:example.under-test");
     rule["parameters"] = parameters;
     rule["applicability"]["groups"]["walls"]["selector"] = entity(applies_to);
+    if !relations.is_null() {
+        ruleset["relations"] = relations;
+    }
     let model = case.write("model.ifc", &storeys_with_facades());
     let definitions = case.write("definitions.json", &definitions.to_string());
     let ruleset = case.write("ruleset.json", &ruleset.to_string());
@@ -12561,13 +12566,18 @@ fn storey_rule_with(
     assert_eq!(
         output.status.code(),
         Some(
-            if result["report"]["findings"]
+            if !result["report"]["findings"]
                 .as_array()
                 .is_none_or(Vec::is_empty)
             {
-                0
-            } else {
                 3
+            } else if !result["report"]["not_evaluated"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+            {
+                4
+            } else {
+                0
             }
         ),
         "{}",
@@ -12636,6 +12646,7 @@ fn table_allocation_rows_read_from_a_csv_file_beside_the_ruleset() {
             "relationship": {"type": "string", "value": "IfcRelAggregates"},
         }),
         &[("programme.csv", programme)],
+        Value::Null,
     );
     // As `table_allocation_rows_are_keyed_per_storey` with the rows inline.
     assert_eq!(
@@ -12648,6 +12659,73 @@ fn table_allocation_rows_read_from_a_csv_file_beside_the_ruleset() {
         "{result:#}"
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn a_relation_listed_in_a_csv_file_is_followed_and_an_unknown_object_reported() {
+    use sha2::Digest as _;
+    let pairs = "storey,space\n\
+                 ifc-step:model.ifc/#101,ifc-step:model.ifc/#49\n\
+                 ifc-step:model.ifc/#102,ifc-step:model.ifc/#999\n";
+    let digest =
+        sha2::Sha256::digest(pairs.as_bytes())
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            });
+    let row = |anchor: &str| {
+        json!({"anchor": {"type": "string", "value": anchor},
+               "count": {"type": "integer", "value": 1}})
+    };
+    let result = storey_rule_with(
+        "relation-from-csv",
+        "table-allocation",
+        "IfcSpace",
+        json!({
+            "rows": {"type": "table", "value": [row("EG"), row("OG")]},
+            "anchor_key": name_attribute(),
+            "anchor_selector": {"type": "selector", "value": entity("IfcBuildingStorey")},
+            "relationship": {"type": "string", "value": "axioval:derived.relation;id=holds"},
+        }),
+        &[("holds.csv", pairs)],
+        json!({"holds": {
+            "id": "holds",
+            "name": {"default": "holds", "translations": {}},
+            "from": entity("IfcBuildingStorey"),
+            "to": entity("IfcSpace"),
+            "by": {"kind": "pairs", "pairs": {
+                "type": "tableFile", "path": "holds.csv", "sha256": digest, "columns": [
+                    {"id": "from", "header": "storey", "kind": "string"},
+                    {"id": "to", "header": "space", "kind": "string"},
+                ]}},
+        }}),
+    );
+    // The ground storey holds its space through the relation; the upper
+    // storey's pair names no object, so it is reported and left undecided.
+    let records = result["integrity"].as_array().unwrap();
+    assert!(
+        records
+            .iter()
+            .any(|record| record["code"] == "relation-object-unknown"
+                && record["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("`ifc-step:model.ifc/#999` is no object of the model")),
+        "{result:#}"
+    );
+    assert!(
+        !finding_messages(&result)
+            .iter()
+            .any(|(subject, _)| subject == "#101"),
+        "{result:#}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(
+        open.iter()
+            .any(|outcome| outcome["message"].as_str().unwrap().contains("#999")),
+        "{result:#}"
+    );
 }
 
 #[test]

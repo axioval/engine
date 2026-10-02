@@ -313,7 +313,43 @@ pub(crate) fn derive(
     Grouping::of(&definition.id, members, &keys)
 }
 
-type Key = Result<Option<(String, Vec<Evidence>)>, (NotEvaluatedReason, String)>;
+pub(crate) type Key = Result<Option<(String, Vec<Evidence>)>, (NotEvaluatedReason, String)>;
+
+/// One property of `object` as a key: text as stated, an integer, a
+/// boolean or a finite number; `None` when absent, `null` or blank text.
+pub(crate) fn property_key(
+    refiner: &dyn OutcomeRefiner,
+    context: &RuleContext<'_>,
+    object: &Object,
+    property_set: Option<&str>,
+    property: &str,
+) -> Key {
+    match refiner.read_property(context, object, property_set, property) {
+        PropertyRead::Present(value, evidence) => {
+            let text = match value {
+                PropertyValue::Null => return Ok(None),
+                PropertyValue::String(text) if text.trim().is_empty() => return Ok(None),
+                PropertyValue::String(text) => text,
+                PropertyValue::Integer(value) => value.to_string(),
+                PropertyValue::Boolean(value) => value.to_string(),
+                PropertyValue::Decimal(value) if value.is_finite() => value.to_string(),
+                other => {
+                    return Err((
+                        NotEvaluatedReason::InvalidEvidence,
+                        format!(
+                            "{} states {property} as {other:?}, not one text, integer, boolean \
+                             or number to key by",
+                            object.id
+                        ),
+                    ));
+                }
+            };
+            Ok(Some((text, evidence)))
+        }
+        PropertyRead::Absent(_) => Ok(None),
+        PropertyRead::Undecided(reason, why) => Err((reason, why)),
+    }
+}
 
 /// A member's key: `None` when it has none.
 fn key(
@@ -326,31 +362,7 @@ fn key(
         GroupingKey::Property {
             property_set,
             property,
-        } => match refiner.read_property(context, object, property_set.as_deref(), property) {
-            PropertyRead::Present(value, evidence) => {
-                let text = match value {
-                    PropertyValue::Null => return Ok(None),
-                    PropertyValue::String(text) if text.trim().is_empty() => return Ok(None),
-                    PropertyValue::String(text) => text,
-                    PropertyValue::Integer(value) => value.to_string(),
-                    PropertyValue::Boolean(value) => value.to_string(),
-                    PropertyValue::Decimal(value) if value.is_finite() => value.to_string(),
-                    other => {
-                        return Err((
-                            NotEvaluatedReason::InvalidEvidence,
-                            format!(
-                                "{} states {property} as {other:?}, not one text, integer, \
-                                 boolean or number to group by",
-                                object.id
-                            ),
-                        ));
-                    }
-                };
-                Ok(Some((text, evidence)))
-            }
-            PropertyRead::Absent(_) => Ok(None),
-            PropertyRead::Undecided(reason, why) => Err((reason, why)),
-        },
+        } => property_key(refiner, context, object, property_set.as_deref(), property),
         GroupingKey::Compartment { .. } => Err((
             NotEvaluatedReason::InvalidDeclaration,
             "compartments are keyed by their regions, not per member".into(),

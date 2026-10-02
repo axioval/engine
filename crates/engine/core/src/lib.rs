@@ -145,6 +145,12 @@ pub enum EngineError {
     /// members.
     #[error("grouping `{grouping}`: {detail}")]
     InvalidGrouping { grouping: String, detail: String },
+    /// A relation the ruleset declares is malformed, reads a rule's
+    /// outcome or a declared relation, lists pairs that are not text,
+    /// is declared twice with different definitions, or the host
+    /// registered no outcome refiner to select its objects.
+    #[error("relation `{relation}`: {detail}")]
+    InvalidRelation { relation: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -603,6 +609,9 @@ pub struct ExecutionPlan {
     classifications: Vec<schema::ClassificationDefinition>,
     /// Groupings to derive after the classifications, before any rule runs.
     groupings: Vec<schema::GroupingDefinition>,
+    /// Relations to derive after the groupings, before any rule runs, their
+    /// listed pairs inline.
+    relations: Vec<schema::RelationDefinition>,
 }
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
@@ -629,6 +638,10 @@ impl ExecutionPlan {
     /// The groupings the plan derives, by id.
     pub fn groupings(&self) -> &[schema::GroupingDefinition] {
         &self.groupings
+    }
+    /// The relations the plan derives, by id, their listed pairs inline.
+    pub fn relations(&self) -> &[schema::RelationDefinition] {
+        &self.relations
     }
     /// The whole-rule gates of `rule`: each parent rule and the condition
     /// on its outcome. Empty for an ungated rule.
@@ -675,6 +688,7 @@ mod plan_span;
 mod properties;
 mod proximity;
 mod refinement;
+mod relations;
 mod relationships;
 mod resources;
 mod rule_outcomes;
@@ -802,6 +816,10 @@ pub use proximity::{
 pub use refinement::{
     Deviation, LocationMethod, LocationPolicy, OutcomeRefiner, Refining, RuleRefinement,
     report_severity,
+};
+pub use relations::{
+    DeclaredRelations, RELATION_RELATIONSHIP_PREFIX, Relation, UnknownRelationObject,
+    unknown_relation_objects,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipEdges, CompleteRelationshipSelection,
@@ -1061,6 +1079,9 @@ impl Runtime {
         if !plan.groupings.is_empty() {
             return Err(EngineError::MissingRefiner("deriving groups"));
         }
+        if !plan.relations.is_empty() {
+            return Err(EngineError::MissingRefiner("deriving relations"));
+        }
         if self.locations.is_some() {
             return Err(EngineError::MissingRefiner("locating outcomes"));
         }
@@ -1148,7 +1169,7 @@ impl Runtime {
             refiner.map(AsRef::as_ref),
             project,
             &mut services,
-            (&plan.classifications, &plan.groupings),
+            (&plan.classifications, &plan.groupings, &plan.relations),
         );
         // What every completed rule reported, for the rules that read it.
         let mut outcomes = RuleOutcomes::default();
@@ -1257,9 +1278,10 @@ fn derive_before_rules(
     refiner: Option<&dyn OutcomeRefiner>,
     project: &Project,
     services: &mut ServiceRegistry,
-    (classifications, groupings): (
+    (classifications, groupings, relations): (
         &[schema::ClassificationDefinition],
         &[schema::GroupingDefinition],
+        &[schema::RelationDefinition],
     ),
 ) {
     let host = services.get::<PropertyResolutionServiceHandle>().cloned();
@@ -1282,6 +1304,11 @@ fn derive_before_rules(
         let groups = Arc::new(groupings::derive_all(refiner, project, services, groupings));
         groupings::install(services, &groups);
         derived::install(services, host.as_ref(), classes, groups, project);
+    }
+    // Relations read classes and groups, never one another.
+    if let Some(refiner) = refiner.filter(|_| !relations.is_empty()) {
+        let relations = Arc::new(relations::derive_all(refiner, project, services, relations));
+        relations::install(services, &relations);
     }
 }
 

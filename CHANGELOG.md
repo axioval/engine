@@ -6,6 +6,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **User-defined relations between objects.** (Refs #181)
+  A ruleset's `relations` declare relations the model does not state,
+  such as the pumps serving each room: `from` and `to` selectors and
+  pairs either listed (a `table` or `tableFile` of `from`/`to` text cells
+  naming objects by identity or by an external id `scheme`) or matched by
+  equal property values. The relationship
+  `axioval:derived.relation;id=<id>` follows them in every relationship
+  path, `related` selector, `property-comparison` and takeoff `related`
+  column. An unreadable selection or key leaves the pairs it could change
+  undecided; a listed pair naming an unknown object is never dropped: it
+  undecides its other end, `unknown_relation_objects` lists it and
+  `axioval check` reports it as the integrity issue
+  `relation-object-unknown`.
+  BREAKING CHANGE: `RuleSetPackage` gains `relations` and `EngineError`
+  the variant `InvalidRelation`.
+
 - **Rule parameter tables from data files in the package.** (Refs #180)
   A `table` parameter may name a CSV file, or a named sheet of an xlsx
   workbook, shipped in the package (`{"type": "tableFile", "path",

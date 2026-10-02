@@ -248,6 +248,77 @@ groups is refused too (`InvalidClassification`), and a `derivedGroup`
 selector naming an undeclared grouping is an unknown concept (kind
 `axioval:grouping`).
 
+## Declared relations
+
+Users often relate objects the model does not relate: this pump serves
+that room, this detail belongs to that wall. A ruleset's `relations`
+declare such relations, by id, so rules can follow them like any
+relationship the model states:
+
+```json
+"relations": {
+  "serves": {
+    "id": "serves",
+    "name": {"default": "Serves", "translations": {}},
+    "from": {"kind": "entityType", "objectType": "ex.pump", "includeSubtypes": true},
+    "to": {"kind": "entityType", "objectType": "ex.room", "includeSubtypes": true},
+    "by": {"kind": "pairs", "scheme": "ifc-globalid", "pairs": {
+      "type": "tableFile", "path": "serves.csv", "sha256": "…",
+      "columns": [
+        {"id": "from", "header": "pump", "kind": "string"},
+        {"id": "to", "header": "room", "kind": "string"}
+      ]}}
+  }
+}
+```
+
+The relationship `axioval:derived.relation;id=<id>` runs from each object
+`from` selects to the objects `to` selects that `by` pairs it with, and
+`backward` from a to-object to its from-objects. It is usable wherever a
+relationship is: a traversal `relationship` or `path` (so
+`property-comparison` compares each pump's capacity with the requirement of
+the rooms it serves), a `related` selector, takeoff `related` columns and
+categories. An object is never related to itself, and `follow_chain` (or a
+`+` step) follows the relation transitively.
+
+`by` pairs objects in one of two ways:
+
+- `pairs`: a `table` or `tableFile` value (see
+  [Tables from data files](./capabilities.md#tables-from-data-files)) with
+  the required text columns `from` and `to`, one pair per row. Without
+  `scheme` each cell names an object by its identity as reports write it
+  (`<system>:<document>/<local id>`, such as
+  `ifc-step:model.ifc/#4711`); with `scheme` by the external id the object
+  carries in that scheme (such as `ifc-globalid`). A blank cell or a cell
+  of another kind is refused when the package is bound.
+- `property`: equal values. A from-object relates to every to-object whose
+  `to` property states the value of its `from` property, read as a grouping
+  key is (text as stated, an integer, a boolean or a number), across
+  sources. An object without a value relates to none.
+
+Nothing undecided is guessed. A from-object whose selection or key cannot
+be read could relate to any to-object: its own partners and every
+to-object's from-objects are then undecided (and the other way round), so
+the rules walking them are not evaluated. A listed pair naming an object
+the model does not hold, an identity several objects carry, or an object
+the end's selector does not select leaves the other end's partners
+undecided (every answer, when neither end names a single object); it is
+never dropped. `axioval_engine::unknown_relation_objects` lists every end
+of a listed pair naming no single object, and `axioval check` reports each
+as an integrity issue `relation-object-unknown`.
+
+The runtime derives the relations after the groupings and before any rule
+runs; their selectors may read classifications and groups. Compilation
+refuses (`EngineError::InvalidRelation`) a relation declared under another
+key than its id, an id that is blank or holds `:`, `;`, `|`, `/` or
+whitespace, selectors reading a rule's outcome or walking a declared
+relation, undeclared property concepts, pairs that are not a table of
+non-blank text `from` and `to` cells, a blank `scheme`, a relation two
+rulesets compiled together declare differently, and any relation when the
+host registered no outcome refiner. The listing of every edge
+(`RelationshipSelectionService::edges`) is refused for declared relations,
+as for every derived relationship.
+
 ## Measured values
 
 The set `axioval:measured` (`axioval_ir::MEASURED_SET`) holds values the

@@ -582,6 +582,7 @@ fn translate_parts(
             },
             classifications: BTreeMap::new(),
             groupings: BTreeMap::new(),
+            relations: BTreeMap::new(),
         },
         specifications: outcomes,
     })

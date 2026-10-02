@@ -212,6 +212,10 @@ The JSON result goes to stdout, or to `--report`:
 `report` is the engine's `Report`; when rules measured values it also has
 `tables` (see [Tables](./ir.md#tables)). `integrity` lists irregularities of the model
 itself (see [Independent adapters](./adapters.md)); they are not rule findings.
+It also lists, as `relation-object-unknown` warnings, every listed pair of a
+ruleset's [declared relations](./derived.md#declared-relations) naming an
+object the model does not hold, or several; the rules following that pair
+are not evaluated, and the exit status follows from them.
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model. A
 resource object a rule selected by its class (an `IFCMATERIAL`; see

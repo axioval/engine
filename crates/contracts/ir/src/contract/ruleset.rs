@@ -248,6 +248,68 @@ pub struct RuleSetPackage {
     /// [`GroupingDefinition`]. Omitted when empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub groupings: BTreeMap<String, GroupingDefinition>,
+    /// Relations the ruleset declares between objects, by id; see
+    /// [`RelationDefinition`]. Omitted when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub relations: BTreeMap<String, RelationDefinition>,
+}
+
+/// A relation users declare between objects the model does not relate,
+/// such as the pumps serving each room.
+///
+/// The relationship `axioval:derived.relation;id=<id>` runs from each
+/// object `from` selects to the objects `to` selects that `by` pairs it
+/// with (`backward` from a to-object to its from-objects), usable in every
+/// relationship path. Nothing is guessed: an object whose selection or key
+/// cannot be read, and a listed pair naming an object the model does not
+/// hold, leave the pairs they could change undecided.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RelationDefinition {
+    pub id: String,
+    pub name: LocalizedText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<LocalizedText>,
+    /// The objects the relation runs from, such as the pumps.
+    pub from: Selector,
+    /// The objects the relation runs to, such as the rooms.
+    pub to: Selector,
+    /// Which pairs are related.
+    pub by: RelationKey,
+}
+
+/// Which pairs a [`RelationDefinition`] relates.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum RelationKey {
+    /// Equal values: a from-object relates to every to-object whose `to`
+    /// property states the value of its `from` property, read as a
+    /// grouping key is (text as stated, an integer, a boolean or a number).
+    /// An object without a value relates to none.
+    Property {
+        from: RelationProperty,
+        to: RelationProperty,
+    },
+    /// Listed pairs: each row of `pairs`, a `table` or `tableFile` value
+    /// with the required text columns `from` and `to`, names one
+    /// from-object and one to-object. Without `scheme` an object is named
+    /// by its identity as reports write it (`<system>:<document>/<local
+    /// id>`); with `scheme` by the external id it carries in that scheme,
+    /// such as an IFC `GlobalId`.
+    Pairs {
+        pairs: ParameterValue,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scheme: Option<String>,
+    },
+}
+
+/// One property a [`RelationKey::Property`] reads.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RelationProperty {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_set: Option<String>,
+    pub property: String,
 }
 
 /// A named set of groups the ruleset derives from its members, such as the

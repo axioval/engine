@@ -74,4 +74,9 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   `main.rs`, which load the table files they name from the directory
   holding the package file; never parse a package with `load` alone, or a
   `tableFile` parameter reaches the binder unloaded.
+- `check` reports every end of a declared relation's listed pair that names
+  no single object (`unknown_relation_objects`, taken before the run) as an
+  integrity record `relation-object-unknown` (warning, locator
+  `axioval:derived.relation;id=<id>:pairs#row=<n>`); it never changes the
+  exit status, the rules it leaves undecided do.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

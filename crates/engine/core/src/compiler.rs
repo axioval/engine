@@ -7,8 +7,9 @@ use std::{
 
 use axioval_ir::contract::{
     ClassTree, ClassificationDefinition, ClassificationProperty, ColumnKind, GateCondition,
-    GroupingDefinition, GroupingKey, ParameterKind, ParameterValue, RuleApplicability,
-    RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector, TableColumnDefinition, TableRow,
+    GroupingDefinition, GroupingKey, ParameterKind, ParameterValue, RelationDefinition,
+    RelationKey, RuleApplicability, RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector,
+    TableColumnDefinition, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
@@ -40,8 +41,7 @@ pub fn compile(
     let mut concepts = concept_catalog(ruleset, &packages)?;
     concepts.declare_classifications(class_trees(ruleset.classifications.iter())?);
     concepts.declare_groupings(ruleset.groupings.keys().cloned());
-    let classifications = classifications(registry, &concepts, ruleset)?;
-    let groupings = groupings(registry, &concepts, ruleset)?;
+    let (classifications, groupings, relations) = derivations(registry, &concepts, ruleset)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
     authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
@@ -129,7 +129,153 @@ pub fn compile(
         auxiliary,
         classifications,
         groupings,
+        relations,
     })
+}
+
+/// The ruleset's classifications, groupings and relations, each checked.
+fn derivations(
+    registry: &CapabilityRegistry,
+    concepts: &ConceptCatalog,
+    ruleset: &RuleSetPackage,
+) -> Result<Derived, EngineError> {
+    Ok((
+        classifications(registry, concepts, ruleset)?,
+        groupings(registry, concepts, ruleset)?,
+        relations(registry, concepts, ruleset)?,
+    ))
+}
+
+/// The ruleset's relations, checked: each declared under its id, an id
+/// usable in an identity, both selectors naming declared concepts and
+/// reading neither a rule's outcome nor a declared relation (relations are
+/// derived before any rule runs), and its key either two declared
+/// properties or a table of text pairs, which is bound inline.
+fn relations(
+    registry: &CapabilityRegistry,
+    concepts: &ConceptCatalog,
+    ruleset: &RuleSetPackage,
+) -> Result<Vec<RelationDefinition>, EngineError> {
+    let mut checked = Vec::new();
+    for (key, definition) in &ruleset.relations {
+        let invalid = |detail: String| EngineError::InvalidRelation {
+            relation: key.clone(),
+            detail,
+        };
+        if *key != definition.id {
+            return Err(invalid(format!(
+                "is declared under the key `{key}`, not its id"
+            )));
+        }
+        if definition.id.trim().is_empty()
+            || definition
+                .id
+                .chars()
+                .any(|c| matches!(c, ':' | ';' | '|' | '/') || c.is_whitespace())
+        {
+            return Err(invalid(
+                "its id must not be blank or hold `:`, `;`, `|`, `/` or whitespace".into(),
+            ));
+        }
+        if registry.refiner().is_none() {
+            return Err(invalid(
+                "the host registered no outcome refiner to select its objects".into(),
+            ));
+        }
+        for (end, selector) in [("from", &definition.from), ("to", &definition.to)] {
+            validate_selector_concepts(concepts, &format!("{}#{end}", definition.id), selector)?;
+            let mut rules = BTreeSet::new();
+            rule_outcomes::selector_references(selector, &mut rules);
+            if !rules.is_empty() || reads_relations(selector) {
+                return Err(invalid(format!(
+                    "its `{end}` reads a rule's outcome or a declared relation; relations are \
+                     derived before any rule runs"
+                )));
+            }
+        }
+        let mut definition = definition.clone();
+        match &mut definition.by {
+            RelationKey::Property { from, to } => {
+                for (end, property) in [("from", &*from), ("to", &*to)] {
+                    require_property(
+                        concepts,
+                        &format!("{}#{end}", definition.id),
+                        property.property_set.as_deref(),
+                        &property.property,
+                    )?;
+                }
+            }
+            RelationKey::Pairs { pairs, scheme } => {
+                if scheme
+                    .as_ref()
+                    .is_some_and(|scheme| scheme.trim().is_empty())
+                {
+                    return Err(invalid("its external id scheme is blank".into()));
+                }
+                *pairs = relation_pairs(pairs).map_err(invalid)?;
+            }
+        }
+        checked.push(definition);
+    }
+    Ok(checked)
+}
+
+/// The columns of a relation's `pairs` table.
+const RELATION_PAIR_COLUMNS: &[TableColumn] = &[
+    TableColumn::required("from", ColumnKind::String),
+    TableColumn::required("to", ColumnKind::String),
+];
+
+/// A relation's pairs as an inline table of non-blank text `from` and `to`
+/// cells, refusing any other value, an unloaded table file and a table
+/// file declaring other columns.
+fn relation_pairs(pairs: &ParameterValue) -> Result<ParameterValue, String> {
+    let pairs = match pairs {
+        ParameterValue::TableFile(_) => bind_table_file(
+            "relation",
+            "pairs",
+            &ParameterDescriptor::required("pairs", ParameterType::Table(RELATION_PAIR_COLUMNS)),
+            pairs,
+        )
+        .map_err(|error| match error {
+            EngineError::InvalidTableFile { path, detail, .. } => {
+                format!("its pairs file `{path}`: {detail}")
+            }
+            other => other.to_string(),
+        })?,
+        ParameterValue::Table { .. } => pairs.clone(),
+        _ => return Err("its pairs must be a table or a table file".into()),
+    };
+    let ParameterValue::Table { value: rows } = &pairs else {
+        return Err("its pairs must be a table or a table file".into());
+    };
+    for (index, row) in rows.iter().enumerate() {
+        validate_row(RELATION_PAIR_COLUMNS, row)
+            .map_err(|detail| format!("pairs row {}: {detail}", index + 1))?;
+        if row
+            .values()
+            .any(|cell| matches!(cell, ParameterValue::String { value } if value.trim().is_empty()))
+        {
+            return Err(format!("pairs row {} names a blank object", index + 1));
+        }
+    }
+    Ok(pairs)
+}
+
+/// Whether `selector` walks a declared relation.
+fn reads_relations(selector: &Selector) -> bool {
+    match selector {
+        Selector::Related { path, selector, .. } => {
+            path.iter()
+                .any(|step| step.contains(crate::RELATION_RELATIONSHIP_PREFIX))
+                || reads_relations(selector)
+        }
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            operands.iter().any(reads_relations)
+        }
+        Selector::Not { operand } => reads_relations(operand),
+        _ => false,
+    }
 }
 
 /// The ruleset's groupings, checked: each declared under its id, an id
@@ -632,8 +778,7 @@ pub fn compile_rulesets(
     let mut gates = BTreeMap::new();
     let mut recorded = BTreeSet::new();
     let mut auxiliary = BTreeSet::new();
-    let mut classifications: Vec<ClassificationDefinition> = Vec::new();
-    let mut groupings: Vec<GroupingDefinition> = Vec::new();
+    let mut derived: Derived = (Vec::new(), Vec::new(), Vec::new());
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -679,22 +824,10 @@ pub fn compile_rulesets(
         for id in plan.auxiliary {
             auxiliary.insert(qualify(&id)?);
         }
-        // One run derives one class per classification id and one set of
-        // groups per grouping id, so rulesets share either only when they
-        // declare it alike.
-        merge(&mut classifications, plan.classifications, |known| {
-            &known.id
-        })
-        .map_err(|id| EngineError::InvalidClassification {
-            classification: id,
-            detail: "two rulesets declare it with different rows or classes".into(),
-        })?;
-        merge(&mut groupings, plan.groupings, |known| &known.id).map_err(|id| {
-            EngineError::InvalidGrouping {
-                grouping: id,
-                detail: "two rulesets declare it differently".into(),
-            }
-        })?;
+        merge_derived(
+            &mut derived,
+            (plan.classifications, plan.groupings, plan.relations),
+        )?;
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
             deferred.push(rule);
@@ -704,6 +837,7 @@ pub fn compile_rulesets(
     // another by package ID, as their qualified IDs sort.
     let rules: Vec<CompiledRule> = by_package.into_values().flatten().collect();
     deferred.sort_by(|left, right| left.id.cmp(&right.id));
+    let (classifications, groupings, relations) = derived;
     let packages = collect_definition_packages(definitions)?;
     let mut concepts = concepts_of(declared.into_iter(), &packages)?;
     concepts.declare_classifications(class_trees(
@@ -722,6 +856,41 @@ pub fn compile_rulesets(
         auxiliary,
         classifications,
         groupings,
+        relations,
+    })
+}
+
+/// What a run derives before any rule: classifications, groupings and
+/// relations.
+type Derived = (
+    Vec<ClassificationDefinition>,
+    Vec<GroupingDefinition>,
+    Vec<RelationDefinition>,
+);
+
+/// Adds one ruleset's derived definitions to those of the rulesets before
+/// it. One run derives one class per classification id, one set of groups
+/// per grouping id and one relation per relation id, so rulesets share
+/// each only when they declare it alike.
+fn merge_derived(
+    (classifications, groupings, relations): &mut Derived,
+    (more_classifications, more_groupings, more_relations): Derived,
+) -> Result<(), EngineError> {
+    merge(classifications, more_classifications, |known| &known.id).map_err(|id| {
+        EngineError::InvalidClassification {
+            classification: id,
+            detail: "two rulesets declare it with different rows or classes".into(),
+        }
+    })?;
+    merge(groupings, more_groupings, |known| &known.id).map_err(|id| {
+        EngineError::InvalidGrouping {
+            grouping: id,
+            detail: "two rulesets declare it differently".into(),
+        }
+    })?;
+    merge(relations, more_relations, |known| &known.id).map_err(|id| EngineError::InvalidRelation {
+        relation: id,
+        detail: "two rulesets declare it differently".into(),
     })
 }
 

@@ -20,8 +20,8 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 
 use axioval_ir::contract::{
-    ColumnKind, DefinitionPackage, ParameterValue, RuleFolder, RuleSetPackage, TableFileColumn,
-    TableFileReference, TableRow,
+    ColumnKind, DefinitionPackage, ParameterValue, RelationKey, RuleFolder, RuleSetPackage,
+    TableFileColumn, TableFileReference, TableRow,
 };
 use quick_xml::XmlVersion;
 use quick_xml::events::Event;
@@ -108,7 +108,13 @@ pub fn load_table_files(
     ruleset: &mut RuleSetPackage,
     files: &dyn PackageFiles,
 ) -> Result<(), TableFileError> {
-    load_folder(&mut ruleset.root, files)
+    load_folder(&mut ruleset.root, files)?;
+    for (id, relation) in &mut ruleset.relations {
+        if let RelationKey::Pairs { pairs, .. } = &mut relation.by {
+            load_value(pairs, files, &format!("relation `{id}` pairs"))?;
+        }
+    }
+    Ok(())
 }
 
 /// Loads every table file the parameter defaults of `package` name, from

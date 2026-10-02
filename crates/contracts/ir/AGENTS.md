@@ -32,6 +32,11 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `Selector::DerivedGroup` are omitted when empty / absent so rulesets
   serialize as before; `GROUP_SET` is a derived set (`is_derived_set`).
   The MCS ruleset and selector schemas must mirror them.
+- `RuleSetPackage::relations` (`RelationDefinition`: `from` and `to`
+  selectors and a `RelationKey`, `property` with a `RelationProperty` per
+  end or `pairs`, a table value of text `from`/`to` cells with an optional
+  external id `scheme`) is omitted when empty, so rulesets serialize as
+  before. The MCS ruleset schema must mirror it.
 - `ParameterValue::TableFile` names a table parameter's rows in a package
   data file (`path`, optional xlsx `sheet`, `sha256`, declared
   `TableFileColumn`s with optional `header` and a quantity's `unit`). Its

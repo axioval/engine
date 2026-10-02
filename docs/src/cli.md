@@ -179,9 +179,11 @@ reports the difference as a finding (see [Coordinate
 consistency](./capabilities.md#coordinate-consistency)).
 
 With `--geometry`, a body whose construction is exact also gets its exact
-boundary, built from the graph its mesh is compiled from: a vertically
-placed extrusion of a rectangle, circle, section or line-and-arc profile,
-without openings or clippings. A boundary is registered only when its
+boundary, built from the graph its mesh is compiled from: an extrusion or
+revolution of a rectangle, circle, section or line-and-arc profile (an
+extrusion of an ellipse too), or a disk swept along one segment or one
+arc, under any rigid placement (tilted, horizontal, turned, mirrored or
+mapped), without openings or clippings. A boundary is registered only when its
 extent agrees with the mesh's within the chord deviation, and only when
 some curved body has one (two planar bodies are measured exactly anyway).
 Distances between such bodies are then certified to a micrometre instead
@@ -192,9 +194,10 @@ do the stderr line and the summary.
 Building them is cheap; certifying costs time per pair of curved bodies
 near each other, as the kernel's branch and bound refines each certified
 distance to a micrometre. On the buildingSMART example models a check takes
-under 0.05 s either way; on a 29 MB model with 56 curved bodies, 50 of them
-with boundaries, a column-to-wall distance rule took about twice as long
-(unoptimised build). `--no-exact-boundaries` meshes only, for a quick first
+under 0.05 s either way. On a 29 MB model with 56 curved bodies, 135
+bodies get boundaries (50 when only vertical extrusions were built), and a
+column-to-wall distance rule took 920 s against 886 s meshing only
+(unoptimised build on a loaded machine; meshing the model dominates). `--no-exact-boundaries` meshes only, for a quick first
 pass. `axioval compare` never builds them.
 
 Each model's file name is stated as its source's `fileName` metadata, beside the application and project the IFC adapter reads, for `source` selectors (see

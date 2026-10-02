@@ -170,9 +170,10 @@ struct CheckArgs {
     #[arg(long)]
     geometry: bool,
     /// With `--geometry`, mesh only: build no exact boundaries. By default a
-    /// body whose construction is exact (a vertically placed extrusion of a
-    /// rectangle, circle, section or line-and-arc profile) also gets its
-    /// exact boundary, so distances between curved bodies are certified
+    /// body whose construction is exact (a rigidly placed extrusion or
+    /// revolution of a rectangle, circle, section or line-and-arc profile,
+    /// or a disk swept along a segment or an arc) also gets its exact
+    /// boundary, so distances between curved bodies are certified
     /// instead of widened by the chord deviation.
     #[arg(long, requires = "geometry")]
     no_exact_boundaries: bool,

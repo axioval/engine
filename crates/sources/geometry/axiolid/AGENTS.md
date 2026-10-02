@@ -7,15 +7,24 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
   geometry graph a host meshes (`exact_boundary`), and
   `AxiolidGeometry::check_exact_boundary` compares its extent with the
-  registered mesh. Only a vertical prism is built: instance placements
-  composed down to an extrusion whose profile plane stays horizontal and
-  extrusion vertical exactly (no tolerance), the placement pushed onto the
-  profile with `lower_derived`, the solid from `boolean_arc_prisms_exact`
-  (the one exact constructor at any height; the polygon `Prism` path
-  must start at z = 0). Every other node refuses with the reason; never
-  approximate a placement, an ellipse or a sweep (axiolid/kernel#223 asks
-  for rigid placements, revolutions and swept disks). The extent includes
-  arc extremes; keep it computed from the section the kernel is given.
+  registered mesh. Instance placements (single-child collections looked
+  through) are composed into one transform and applied once with
+  `ExactBRep::transformed` (axiolid-brep 0.3.3, axiolid/kernel#223) to the
+  solid built in its own coordinates: an extrusion
+  (`extrude_profile_exact`; against the profile normal it is built along
+  it and mirrored in the profile plane, a hollow circle goes as its
+  contour), a revolution (`revolve_profile_exact`) or a disk swept along
+  one segment or arc (`swept_disk_along_*_exact`; the directrix read as
+  axiolid-mesh-compile's private `directrix::exact` reads it, kept in step
+  by hand). Every other node, a scale or shear, and every kernel refusal
+  refuse with the reason; never approximate a placement, an ellipse or a
+  sweep. The extent is computed in closed form from the construction and
+  the transform (support functions of the section, cosine ranges over
+  revolution and arc angles); keep it so, never from sampling, and keep
+  the reflection of a downward extrusion in both the solid's placement and
+  its extent. `tests/exact_boundary.rs` checks every family against the
+  kernel's own mesh of the same graph, the exact volume and certified
+  distances against closed forms.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
@@ -425,7 +434,9 @@ Depend only on what the registry publishes. The workspace pins `axiolid-*`
 `boundary_distance`, and the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.3 for
 the `ExactBRep` hosts register, built by `exact_boundary` with
-`axiolid-construct` 0.3.9, `axiolid-model` and `axiolid-profile`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
+`axiolid-construct` 0.3.9, `axiolid-curve`, `axiolid-evaluate` 0.3.2,
+`axiolid-model` and `axiolid-profile`; the tests compile meshes with
+`axiolid-mesh-compile` 0.3.7 and `axiolid-mesh-boolean-boolmesh`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
 soups, features within the caller's tolerance snapped before the exact
 arrangement), `axiolid-route`
@@ -454,6 +465,13 @@ registry source, not the kernel checkout, before relying on an API.
   axiolid-route 0.3.3) and needs axiolid-triangulate 0.3.1 with the fix for
   axiolid/kernel#190; it calls the skeleton directly, without a worker,
   timeout or retry spacings.
+- Exact boundaries: the kernel's exact boolean takes only unplaced sharp
+  rectangle prisms along +z, so bodies with openings or clippings (and
+  bodies of several items, which would need one B-rep of several solids)
+  keep their mesh alone. The mesh compiler's tessellation of a doubly
+  curved surface (a revolved circle, a torus) strays up to about 1.16 mm
+  on a 1 mm chord budget, so against the 1 mm a host declares such a
+  body's boundary fails `check_exact_boundary` and is not registered.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

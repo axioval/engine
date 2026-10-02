@@ -15110,3 +15110,76 @@ fn exact_boundaries_are_a_geometry_option() {
     let output = case.check(&model_with(""), true, &["--no-exact-boundaries"]);
     assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
 }
+
+/// A round member #19 (radius 0.2 m, 3 m long) tilted out of the
+/// vertical: its axis runs from (5, 3, 2) along (0, 0.6, 0.8), so its
+/// side stays 0.2 m from x 5 all along. A wall #29 stands with its face
+/// at x 6, 0.8 m from the member's surface.
+fn tilted_member_beside_a_wall() -> String {
+    model_with(&format!(
+        "#10=IFCCARTESIANPOINT((5.,3.,2.));\n\
+         #11=IFCDIRECTION((1.,0.,0.));\n\
+         #12=IFCAXIS2PLACEMENT3D(#10,#18,#11);\n\
+         #13=IFCLOCALPLACEMENT($,#12);\n\
+         #14=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.2);\n\
+         #15=IFCEXTRUDEDAREASOLID(#14,#2,#4,3.);\n\
+         #16=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#15));\n\
+         #17=IFCPRODUCTDEFINITIONSHAPE($,$,(#16));\n\
+         #18=IFCDIRECTION((0.,0.6,0.8));\n\
+         #19=IFCMEMBER('0000000000000000000019',$,$,$,$,#13,#17,$,$);\n\
+         {}",
+        placed_box(
+            20,
+            [6.1, 4.0, 0.0],
+            [0.2, 6.0, 5.0],
+            "IFCWALL('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+    ))
+}
+
+#[test]
+fn with_geometry_a_tilted_round_members_distance_is_certified() {
+    let case = Case::new("geometry-certified-tilted-member");
+    case.write("model.ifc", &tilted_member_beside_a_wall());
+    let distance = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("member", "IfcMember"), ("wall", "IfcWall")],
+            (
+                "axioval:capability.distance",
+                &registry_signature("axioval:capability.distance"),
+            ),
+            entity("member"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "mode": {"type": "string", "value": "none_closer_than"},
+                "minimum_metres": {"type": "number", "value": 0.79999},
+            }),
+            &json!({}),
+            args,
+        )
+    };
+
+    // Its mesh alone, within 1 mm of the cylinder, leaves the minimum open.
+    let (output, result) = distance(&["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
+    assert_eq!(
+        result["report"]["not_evaluated"][0]["object_id"]["local_id"],
+        json!("#19"),
+        "{result:#}"
+    );
+
+    // The tilted placement is applied to the exact cylinder as it is to
+    // the mesh, and the certified distance clears the minimum.
+    let (output, result) = distance(&[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}

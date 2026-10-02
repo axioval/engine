@@ -333,20 +333,33 @@ open. An exact pair is already a point and is not certified.
 **Exact boundaries from IFC bodies.** A host that meshes an Axiolid
 geometry graph can have the same graph node's exact solid built with
 `axioval_axiolid::exact_boundary`, so boundary and mesh share one placement.
-It is built only where the construction is exact: an extrusion whose
-placement keeps the profile plane horizontal and the extrusion vertical
-(any turn about the vertical, mirroring and mapped items included), of a
-rectangle (sharp, rounded or hollow), circle (filled or hollow), structural
-section or contour of lines and arcs, with at most one void. The placement
-is pushed onto the profile exactly, so a circle stays a circle, and the
-vertical prism is the kernel's exact arc-prism boolean. Everything else
-keeps its mesh alone: ellipses, revolutions, swept disks and directrix
-sweeps, tilted or horizontal extrusions, booleans (openings, clippings) and
-bodies of several items (axiolid/kernel#223 asks for rigid placements of
-exact solids, exact revolutions and swept disks).
-`AxiolidGeometry::check_exact_boundary` compares the solid's extent, arc
-extremes included, with the mesh's within its chord deviation and
-rounding; a boundary that fails is never registered. `axioval check
+It is built only where the construction is exact:
+
+- an extrusion of a rectangle (sharp, rounded or hollow), circle (filled or
+  hollow), ellipse, structural section or contour of lines and arcs, with
+  any number of voids, along the profile normal or against it;
+- a revolution of the same profiles (an ellipse excepted) about the
+  profile's local y axis, a full turn clear of the axis or part of one;
+- a disk, solid or bored, swept along one straight segment or one circular
+  arc (a pipe, a bar, a handrail bend).
+
+The solid is built in its own coordinates and placed once with the
+kernel's rigid placement of exact solids (`ExactBRep::transformed`,
+axiolid/kernel#223): the placements down to it (mapped items included) are
+composed into one transform, so tilted and horizontal bodies, turns and
+mirroring are all exact, each coordinate rounded once. A scale or shear has
+no exact rigid copy and is refused. Everything else keeps its mesh alone,
+with the reason: an ellipse revolved, a directrix with corners or curved
+other than by a circle, tapered sweeps and sweeps of a profile along a
+directrix, booleans (openings, clippings), and bodies of several items.
+`AxiolidGeometry::check_exact_boundary` compares the solid's extent,
+computed in closed form from the construction and its placement (arc,
+cylinder and torus extremes included), with the mesh's within its chord
+deviation and rounding; a boundary that fails is never registered. The
+kernel's mesh of a doubly curved surface (a revolved circle, a torus) can
+stray up to about 1.16 mm from it on a 1 mm chord budget, so such a body's
+boundary fails the check against a 1 mm declaration and it keeps its mesh
+alone. `axioval check
 --geometry` does all this by default (see [CLI](./cli.md)).
 
 **Certified plan relations.** The same pairs are certified in plan by

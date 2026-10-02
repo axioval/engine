@@ -3,45 +3,55 @@
 //! A host that compiles an Axiolid [`GeometryGraph`] into a tessellated mesh
 //! can ask [`exact_boundary`] for the exact solid of the same graph node, to
 //! register beside the mesh ([`AxiolidGeometry::with_exact_boundary`]). It is
-//! built only where the kernel's construction is exact and placed in world
-//! coordinates without approximation:
+//! built only where the kernel's construction is exact:
 //!
-//! - an extrusion, under any chain of instance placements (a single-child
-//!   collection is looked through), whose profile plane the placement keeps
-//!   horizontal and whose extrusion it keeps vertical: a vertical prism.
-//!   Placement and mirroring are pushed onto the profile exactly
-//!   (`axiolid_construct::profile_lower::lower_derived`), so a circle stays
-//!   a circle and an arc an arc;
-//! - over rectangle (sharp, rounded or hollow), circle (filled or hollow),
-//!   structural section and contour profiles of lines and circular arcs,
-//!   with at most one void.
+//! - a chain of instance placements (a single-child collection is looked
+//!   through), composed into one transform and applied once with
+//!   [`ExactBRep::transformed`]: any rotation, reflection and translation,
+//!   so tilted and horizontal bodies and mapped items too. A scale or shear
+//!   is refused, never approximated. The solid is exact for the composed
+//!   `f64` transform, each coordinate rounded once;
+//! - over an extrusion of a rectangle (sharp, rounded or hollow), circle
+//!   (filled or hollow), ellipse, structural section or contour of lines and
+//!   circular arcs with any number of voids, along the profile normal (or
+//!   obliquely where the kernel builds it);
+//! - a revolution of the same profiles about the profile's local y axis,
+//!   a full turn or part of one, never touching the axis on a full turn;
+//! - a disk, solid or bored, swept along one straight segment or one
+//!   circular arc.
 //!
 //! Everything else is refused with the reason, and the host keeps the mesh
-//! alone: ellipses (an arc ring cannot carry one), revolutions, swept disks
-//! and directrix sweeps, tilted or horizontal extrusions (the kernel has no
-//! rigid placement for an exact B-rep yet), booleans (openings, clippings),
-//! several items, and anything else. The vertical prism is built by the
-//! kernel's exact coaxial arc-prism boolean (`boolean_arc_prisms_exact`),
-//! the one exact constructor that takes world heights; it takes one ring per
-//! operand, so a section with several voids is refused.
+//! alone: an ellipse revolved, a directrix with corners or curved other than
+//! by a circle, tapered or directrix sweeps of a profile, booleans (openings,
+//! clippings), several items, and anything the kernel refuses.
 //!
-//! The result carries the extent of the solid it describes, so the host can
-//! check it against the mesh before registering it
+//! The result carries the axis-aligned extent of the solid it describes,
+//! computed in closed form from the construction and the transform, so the
+//! host can check it against the mesh before registering it
 //! ([`AxiolidGeometry::check_exact_boundary`]).
 
+use std::f64::consts::{PI, TAU};
+
 use axiolid_brep::ExactBRep;
-use axiolid_construct::boolean_exact::{ArcPrism, boolean_arc_prisms_exact};
-use axiolid_construct::contour_lower::contour_to_arc_ring;
-use axiolid_construct::profile_lower::lower_derived;
+use axiolid_construct::extrude::extrude_profile_exact;
+use axiolid_construct::revolve_exact::revolve_profile_exact;
 use axiolid_construct::section_lower::{circle_contour, section_contour};
-use axiolid_core::{BooleanOperator, Point2, Tolerance, Transform2, Transform3, Vec3};
-use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
-use axiolid_overlay::{ArcRing, arc_ring_area, reverse_arc_ring};
-use axiolid_profile::{ContourProfile, Profile};
+use axiolid_construct::swept_disk_exact::{
+    swept_disk_along_arc_exact, swept_disk_along_line_exact,
+};
+use axiolid_construct::{contour_lower::contour_to_arc_ring, profile_lower::lower_derived};
+use axiolid_core::{Interval, Point2, Point3, Tolerance, Transform2, Transform3, Vec2, Vec3};
+use axiolid_curve::{Circle3, Curve3};
+use axiolid_model::{
+    CurveRelation, GeometryGraph, GeometryNode, MasterRepresentation, NodeId, SolidOperation,
+    TrimSelector, TrimmingPreference,
+};
+use axiolid_overlay::ArcRing;
+use axiolid_profile::{CircleProfile, Profile};
 
 use crate::geometry::{AxiolidGeometry, Extent, mesh_extent};
 
-/// Placement and collection nodes walked before giving up on a graph.
+/// Placement, collection and curve relation nodes walked before giving up.
 const MAX_DEPTH: usize = 64;
 
 /// The kernel's tolerance for geometry already in metres.
@@ -67,8 +77,9 @@ impl ExactBoundary {
         self.brep
     }
 
-    /// The solid's axis-aligned extent as `(min, max)`, computed from the
-    /// section and heights it was built from: arc extremes included.
+    /// The solid's axis-aligned extent as `(min, max)`, computed in closed
+    /// form from its construction and placement: arc and surface extremes
+    /// included.
     #[must_use]
     pub fn extent(&self) -> ([f64; 3], [f64; 3]) {
         self.extent
@@ -79,50 +90,33 @@ impl ExactBoundary {
 ///
 /// # Errors
 ///
-/// Returns the reason whenever the node is not a vertically placed
-/// extrusion of a supported profile, or the kernel refuses to build it.
+/// Returns the reason whenever the node is not a rigidly placed extrusion,
+/// revolution or swept disk the kernel builds exactly, or the kernel
+/// refuses to build or place it.
 pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBoundary, String> {
-    let (transform, profile, direction, depth) = placed_extrusion(graph, root)?;
-    let matrix = transform.matrix3;
-    // The profile plane must stay horizontal and the extrusion vertical,
-    // exactly: any tilt would make the solid something other than the
-    // vertical prism built here.
-    if matrix.x_axis.z != 0.0 || matrix.y_axis.z != 0.0 {
-        return Err("the profile is not placed horizontally".into());
-    }
-    if !direction.is_finite() || direction.length() <= 0.0 || !depth.is_finite() || depth <= 0.0 {
-        return Err("the extrusion is degenerate".into());
-    }
-    // The mesh compiler's extrusion: the normalised direction times depth.
-    let offset = matrix * (direction.normalize() * depth);
-    if offset.x != 0.0 || offset.y != 0.0 || !offset.z.is_finite() || offset.z == 0.0 {
-        return Err("the extrusion is not vertical".into());
-    }
-    let base = transform.translation.z;
-    let (bottom, top) = if offset.z > 0.0 {
-        (base, base + offset.z)
+    let (transform, leaf) = placed_solid(graph, root)?;
+    let (local, shape, transform) = construct(graph, leaf, transform)?;
+    let brep = if transform == Transform3::IDENTITY {
+        local
     } else {
-        (base + offset.z, base)
+        local
+            .transformed(&transform)
+            .map_err(|error| format!("the placement has no exact rigid copy: {error}"))?
     };
-    if !bottom.is_finite() || !top.is_finite() || top <= bottom {
-        return Err("the extrusion is degenerate".into());
+    let extent = shape.extent(&transform);
+    if !extent
+        .0
+        .iter()
+        .chain(&extent.1)
+        .all(|value| value.is_finite())
+    {
+        return Err("the solid's extent is not finite".into());
     }
-    let plan = Transform2::from_cols(
-        matrix.x_axis.truncate(),
-        matrix.y_axis.truncate(),
-        transform.translation.truncate(),
-    );
-    let (outer, holes) = world_rings(profile, &plan)?;
-    let extent = extent(&outer, bottom, top);
-    let brep = vertical_prism(outer, holes, (bottom, top), &extent)?;
     Ok(ExactBoundary { brep, extent })
 }
 
-/// The extrusion under `root` and the placement composed down to it.
-fn placed_extrusion(
-    graph: &GeometryGraph,
-    root: NodeId,
-) -> Result<(Transform3, &Profile, Vec3, f64), String> {
+/// The solid under `root` and the placement composed down to it.
+fn placed_solid(graph: &GeometryGraph, root: NodeId) -> Result<(Transform3, NodeId), String> {
     let mut transform = Transform3::IDENTITY;
     let mut id = root;
     for _ in 0..MAX_DEPTH {
@@ -135,24 +129,7 @@ fn placed_extrusion(
                 [child] => id = *child,
                 _ => return Err("a body of several solids has no exact construction".into()),
             },
-            Some(GeometryNode::SolidOperation(SolidOperation::Extrusion {
-                profile,
-                direction,
-                depth,
-            })) => {
-                return match graph.get(*profile) {
-                    Some(GeometryNode::Profile(profile)) => {
-                        Ok((transform, profile, *direction, *depth))
-                    }
-                    _ => Err("the extrusion has no profile".into()),
-                };
-            }
-            Some(GeometryNode::SolidOperation(operation)) => {
-                return Err(format!(
-                    "{} has no exact construction with a placement",
-                    solid_family(operation)
-                ));
-            }
+            Some(GeometryNode::SolidOperation(_)) => return Ok((transform, id)),
             Some(_) => return Err("the body is not a solid with an exact construction".into()),
             None => return Err("the graph does not hold the node".into()),
         }
@@ -160,131 +137,198 @@ fn placed_extrusion(
     Err("the placement chain is too deep".into())
 }
 
+/// The solid of `leaf` in its own coordinates, the shape its extent is
+/// computed from, and the transform that places it (the given one, or with
+/// a reflection added for an extrusion against the profile normal).
+fn construct(
+    graph: &GeometryGraph,
+    leaf: NodeId,
+    transform: Transform3,
+) -> Result<(ExactBRep, Shape, Transform3), String> {
+    match graph.get(leaf) {
+        Some(GeometryNode::SolidOperation(SolidOperation::Extrusion {
+            profile,
+            direction,
+            depth,
+        })) => {
+            let profile = profile_of(graph, *profile)?;
+            if !direction.is_finite() || !depth.is_finite() || *depth <= 0.0 {
+                return Err("the extrusion is degenerate".into());
+            }
+            let length = direction.length();
+            if length <= 0.0 || direction.z == 0.0 {
+                return Err("the extrusion does not leave the profile plane".into());
+            }
+            let section = Section::of(profile)?;
+            // The kernel extrudes along the profile normal's side only; an
+            // extrusion against it is the mirror image in the profile plane
+            // of one along it, so the reflection joins the placement.
+            let (built, placement) = if direction.z > 0.0 {
+                (*direction, transform)
+            } else {
+                (
+                    Vec3::new(direction.x, direction.y, -direction.z),
+                    transform * Transform3::from_scale(Vec3::new(1.0, 1.0, -1.0)),
+                )
+            };
+            let local = extrude_profile_exact(&buildable(profile)?, built, *depth, TOLERANCE)
+                .map_err(refused)?;
+            // In the coordinates the placement (with its reflection) maps.
+            let offset = built / length * *depth;
+            Ok((local, Shape::Prism { section, offset }, placement))
+        }
+        Some(GeometryNode::SolidOperation(SolidOperation::Revolution {
+            profile,
+            axis_origin,
+            axis_direction,
+            angle,
+        })) => {
+            let profile = profile_of(graph, *profile)?;
+            let local =
+                revolve_profile_exact(profile, *axis_origin, *axis_direction, *angle, TOLERANCE)
+                    .map_err(refused)?;
+            let section = Section::of(profile)?;
+            let shape = Shape::revolved(section, *axis_origin, *axis_direction, *angle)?;
+            Ok((local, shape, transform))
+        }
+        Some(GeometryNode::SolidOperation(SolidOperation::SweptDisk {
+            directrix,
+            radius,
+            inner_radius,
+            parameter_range,
+            fillet_radius: _,
+        })) => {
+            // A single segment or arc has no corners, so a fillet radius has
+            // nothing to round.
+            let spine = Spine::of(graph, *directrix, *parameter_range, 0)?;
+            let local = match &spine {
+                Spine::Segment(start, end) => {
+                    swept_disk_along_line_exact(*start, *end, *radius, *inner_radius, TOLERANCE)
+                }
+                Spine::Arc(circle, span) => {
+                    swept_disk_along_arc_exact(circle, *span, *radius, *inner_radius, TOLERANCE)
+                }
+            }
+            .map_err(refused)?;
+            Ok((
+                local,
+                Shape::Tube {
+                    spine,
+                    radius: *radius,
+                },
+                transform,
+            ))
+        }
+        Some(GeometryNode::SolidOperation(operation)) => Err(format!(
+            "{} has no exact construction",
+            solid_family(operation)
+        )),
+        _ => Err("the body is not a solid with an exact construction".into()),
+    }
+}
+
+fn profile_of(graph: &GeometryGraph, id: NodeId) -> Result<&Profile, String> {
+    match graph.get(id) {
+        Some(GeometryNode::Profile(profile)) => Ok(profile),
+        _ => Err("the solid has no profile".into()),
+    }
+}
+
+/// The profile as the kernel's exact extrusion takes it: a hollow circle as
+/// its contour (the dedicated circle path takes a full disk only).
+fn buildable(profile: &Profile) -> Result<Profile, String> {
+    Ok(match profile {
+        Profile::Circle(
+            circle @ CircleProfile {
+                thickness: Some(_), ..
+            },
+        ) => Profile::Contour(circle_contour(circle).map_err(refused)?),
+        other => other.clone(),
+    })
+}
+
 /// A solid operation's name, for refusals.
 fn solid_family(operation: &SolidOperation) -> &'static str {
     match operation {
         SolidOperation::TaperedExtrusion { .. } => "a tapered extrusion",
-        SolidOperation::Revolution { .. } => "a revolution",
         SolidOperation::TaperedRevolution { .. } => "a tapered revolution",
-        SolidOperation::SweptDisk { .. } => "a swept disk",
+        SolidOperation::FixedReferenceSweep { .. } => "a fixed-reference sweep",
+        SolidOperation::SurfaceCurveSweep { .. } => "a surface-curve sweep",
+        SolidOperation::SectionedSpine { .. } => "a sectioned spine",
         SolidOperation::Boolean { .. } => "a boolean result (an opening or a clipping)",
+        SolidOperation::BoundedHalfSpace { .. } => "a bounded half-space",
         _ => "this solid",
     }
-}
-
-/// The profile's outer ring and holes in world plan coordinates: outer
-/// counter-clockwise, holes clockwise.
-fn world_rings(profile: &Profile, plan: &Transform2) -> Result<(ArcRing, Vec<ArcRing>), String> {
-    // A section has no derived form of its own; its exact contour does.
-    let basis = match profile {
-        Profile::Section(section) => Profile::Contour(section_contour(section).map_err(refused)?),
-        Profile::Ellipse(_) => return Err("an ellipse has no exact arc section".into()),
-        other => other.clone(),
-    };
-    let contour = match lower_derived(&basis, plan, TOLERANCE).map_err(refused)? {
-        Profile::Contour(contour) => contour,
-        Profile::Circle(circle) => circle_contour(&circle).map_err(refused)?,
-        _ => return Err("the profile has no exact contour".into()),
-    };
-    let ContourProfile { outer, holes } = contour;
-    let oriented = |ring: ArcRing, counter_clockwise: bool| {
-        if (arc_ring_area(&ring) > 0.0) == counter_clockwise {
-            ring
-        } else {
-            reverse_arc_ring(&ring)
-        }
-    };
-    let outer = oriented(
-        contour_to_arc_ring(&outer, TOLERANCE).map_err(refused)?,
-        true,
-    );
-    let holes = holes
-        .iter()
-        .map(|hole| {
-            contour_to_arc_ring(hole, TOLERANCE)
-                .map(|ring| oriented(ring, false))
-                .map_err(refused)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok((outer, holes))
 }
 
 fn refused(error: impl std::fmt::Display) -> String {
     format!("the kernel refused the exact construction: {error}")
 }
 
-/// The vertical prism over `outer` less `holes` between `bottom` and `top`.
-///
-/// The kernel's exact prism constructor at any height is the coaxial boolean
-/// of arc prisms, so the section is intersected with a box around it (which
-/// leaves it whole), or its one hole subtracted.
-fn vertical_prism(
-    outer: ArcRing,
-    holes: Vec<ArcRing>,
-    (bottom, top): (f64, f64),
-    extent: &Extent,
-) -> Result<ExactBRep, String> {
-    let (min, max) = extent;
-    let margin = 1.0 + (max[0] - min[0]).max(max[1] - min[1]);
-    let frame = [
-        Point2::new(min[0] - margin, min[1] - margin),
-        Point2::new(max[0] + margin, min[1] - margin),
-        Point2::new(max[0] + margin, max[1] + margin),
-        Point2::new(min[0] - margin, max[1] + margin),
-    ];
-    let prism = |section: ArcRing| ArcPrism {
-        section,
-        bottom,
-        top,
-    };
-    match <[ArcRing; 1]>::try_from(holes) {
-        Ok([hole]) => boolean_arc_prisms_exact(
-            &prism(outer),
-            // The hole as a region of its own, counter-clockwise.
-            &prism(reverse_arc_ring(&hole)),
-            BooleanOperator::Difference,
-            TOLERANCE,
-        ),
-        Err(holes) if holes.is_empty() => boolean_arc_prisms_exact(
-            &prism(outer),
-            &prism(ArcRing::from_points(&frame)),
-            BooleanOperator::Intersection,
-            TOLERANCE,
-        ),
-        Err(_) => return Err("a section with several voids has no exact construction".into()),
-    }
-    .map_err(refused)
+/// A profile's outer boundary in its own plane, for its extent.
+enum Section {
+    /// An outer ring of lines and arcs.
+    Ring(ArcRing),
+    /// An ellipse about the origin with these semi-axes along x and y.
+    Ellipse(f64, f64),
 }
 
-/// The extent of the prism over `outer` between `bottom` and `top`.
-fn extent(outer: &ArcRing, bottom: f64, top: f64) -> Extent {
-    let mut min = [f64::INFINITY; 2];
-    let mut max = [f64::NEG_INFINITY; 2];
-    let mut include = |point: Point2| {
-        min = [min[0].min(point.x), min[1].min(point.y)];
-        max = [max[0].max(point.x), max[1].max(point.y)];
-    };
-    let count = outer.vertices.len();
-    for (index, vertex) in outer.vertices.iter().enumerate() {
-        include(vertex.point);
-        if vertex.bulge != 0.0 {
-            let end = outer.vertices[(index + 1) % count].point;
-            for point in arc_extremes(vertex.point, end, vertex.bulge) {
-                include(point);
+impl Section {
+    fn of(profile: &Profile) -> Result<Self, String> {
+        // A section has no derived form of its own; its exact contour does.
+        let basis = match profile {
+            Profile::Section(section) => {
+                Profile::Contour(section_contour(section).map_err(refused)?)
+            }
+            Profile::Ellipse(ellipse) => {
+                return Ok(Self::Ellipse(ellipse.semi_axis_x, ellipse.semi_axis_y));
+            }
+            other => other.clone(),
+        };
+        let contour =
+            match lower_derived(&basis, &Transform2::IDENTITY, TOLERANCE).map_err(refused)? {
+                Profile::Contour(contour) => contour,
+                Profile::Circle(circle) => circle_contour(&circle).map_err(refused)?,
+                _ => return Err("the profile has no exact contour".into()),
+            };
+        Ok(Self::Ring(
+            contour_to_arc_ring(&contour.outer, TOLERANCE).map_err(refused)?,
+        ))
+    }
+
+    /// The largest `direction · p` over the section.
+    fn support(&self, direction: Vec2) -> f64 {
+        match self {
+            Self::Ellipse(a, b) => (a * direction.x).hypot(b * direction.y),
+            Self::Ring(ring) => {
+                let count = ring.vertices.len();
+                ring.vertices
+                    .iter()
+                    .enumerate()
+                    .map(|(index, vertex)| {
+                        let at_vertex = direction.dot(vertex.point);
+                        if vertex.bulge == 0.0 {
+                            return at_vertex;
+                        }
+                        let end = ring.vertices[(index + 1) % count].point;
+                        arc_support(vertex.point, end, vertex.bulge, direction)
+                            .map_or(at_vertex, |on_arc| on_arc.max(at_vertex))
+                    })
+                    .fold(f64::NEG_INFINITY, f64::max)
             }
         }
     }
-    ([min[0], min[1], bottom], [max[0], max[1], top])
 }
 
-/// The points of the arc from `start` to `end` with `bulge` (`tan` of a
-/// quarter of its signed sweep, positive counter-clockwise) that are
-/// extreme along the coordinate axes.
-fn arc_extremes(start: Point2, end: Point2, bulge: f64) -> Vec<Point2> {
+/// The largest `direction · p` over the inside of the arc from `start` to
+/// `end` with `bulge` (`tan` of a quarter of its signed sweep, positive
+/// counter-clockwise), when the arc passes the point facing `direction`.
+fn arc_support(start: Point2, end: Point2, bulge: f64, direction: Vec2) -> Option<f64> {
     let chord = end - start;
     let length = chord.length();
-    if length == 0.0 {
-        return Vec::new();
+    let reach = direction.length();
+    if length == 0.0 || reach == 0.0 {
+        return None;
     }
     let left = Point2::new(-chord.y, chord.x) / length;
     let midpoint = (start + end) / 2.0;
@@ -292,20 +336,357 @@ fn arc_extremes(start: Point2, end: Point2, bulge: f64) -> Vec<Point2> {
     let radius = (start - centre).length();
     let sweep = 4.0 * bulge.atan();
     let from = (start.y - centre.y).atan2(start.x - centre.x);
-    [
-        (0.0, Point2::X),
-        (std::f64::consts::FRAC_PI_2, Point2::Y),
-        (std::f64::consts::PI, -Point2::X),
-        (-std::f64::consts::FRAC_PI_2, -Point2::Y),
-    ]
-    .into_iter()
-    .filter(|(angle, _)| {
-        // How far along the sweep's own sense the direction lies.
-        let along = (angle - from) * sweep.signum();
-        along.rem_euclid(std::f64::consts::TAU) <= sweep.abs()
-    })
-    .map(|(_, direction)| centre + direction * radius)
-    .collect()
+    let facing = direction.y.atan2(direction.x);
+    // How far along the sweep's own sense the direction lies.
+    let along = ((facing - from) * sweep.signum()).rem_euclid(TAU);
+    (along <= sweep.abs()).then(|| direction.dot(centre) + reach * radius)
+}
+
+/// The least and largest `cos(θ − α)` for `θ` from `low` to `high`.
+fn cosine_range(low: f64, high: f64, alpha: f64) -> (f64, f64) {
+    if high - low >= TAU {
+        return (-1.0, 1.0);
+    }
+    let reaches = |angle: f64| low + (angle - low).rem_euclid(TAU) <= high;
+    let ends = [(low - alpha).cos(), (high - alpha).cos()];
+    let least = if reaches(alpha + PI) {
+        -1.0
+    } else {
+        ends[0].min(ends[1])
+    };
+    let largest = if reaches(alpha) {
+        1.0
+    } else {
+        ends[0].max(ends[1])
+    };
+    (least, largest)
+}
+
+/// A directrix an exact swept disk follows.
+enum Spine {
+    Segment(Point3, Point3),
+    /// Over an angle span of the circle, start to end.
+    Arc(Circle3, Interval),
+}
+
+impl Spine {
+    /// The directrix `id` as one segment or one arc, read as the mesh
+    /// compiler reads it; anything with corners, or curved other than by a
+    /// circle, is refused.
+    // An empty trim is exactly equal ends, as the mesh compiler reads it.
+    #[allow(clippy::float_cmp)]
+    fn of(
+        graph: &GeometryGraph,
+        id: NodeId,
+        range: Option<(f64, f64)>,
+        depth: usize,
+    ) -> Result<Self, String> {
+        const OTHER: &str = "a swept disk along a directrix other than one segment or one arc \
+                             has no exact construction";
+        if depth > MAX_DEPTH {
+            return Err("the directrix is too deeply nested".into());
+        }
+        let slack = TOLERANCE.linear();
+        match graph.get(id) {
+            Some(GeometryNode::Curve3(Curve3::Line(line))) => {
+                let (start, end) = range
+                    .ok_or_else(|| {
+                        String::from(
+                            "a swept disk along an unbounded line has no exact construction",
+                        )
+                    })
+                    .and_then(finite_range)?;
+                Ok(Self::Segment(
+                    line.origin + line.direction * start,
+                    line.origin + line.direction * end,
+                ))
+            }
+            Some(GeometryNode::Curve3(Curve3::Polyline(polyline)))
+                if polyline.points.len() == 2 && !polyline.closed && range.is_none() =>
+            {
+                Ok(Self::Segment(polyline.points[0], polyline.points[1]))
+            }
+            Some(GeometryNode::Curve3(Curve3::Circle(circle))) => {
+                let span = match range {
+                    None => Interval::new(0.0, TAU),
+                    Some(range) => {
+                        let (start, end) = finite_range(range)?;
+                        let (low, high) = (start.min(end), start.max(end));
+                        if low < -slack || high > TAU + slack {
+                            return Err("the sweep range falls outside the circle".into());
+                        }
+                        Interval::new(low.max(0.0), high.min(TAU))
+                    }
+                };
+                Ok(Self::Arc(*circle, span))
+            }
+            Some(GeometryNode::CurveRelation(CurveRelation::SurfaceCurve {
+                curve_3d,
+                master: MasterRepresentation::Curve3d,
+                ..
+            })) => Self::of(graph, *curve_3d, range, depth + 1),
+            Some(GeometryNode::CurveRelation(CurveRelation::Composite { segments }))
+                if segments.len() == 1 && range.is_none() =>
+            {
+                // One segment has no corners, and its sense does not change
+                // the swept solid.
+                Self::of(graph, segments[0].curve, None, depth + 1)
+            }
+            Some(GeometryNode::CurveRelation(CurveRelation::Trimmed {
+                basis,
+                start,
+                end,
+                sense_agreement,
+                preference,
+            })) => {
+                let Some(GeometryNode::Curve3(curve)) = graph.get(*basis) else {
+                    return Err(OTHER.into());
+                };
+                let a = trim_parameter(start, *preference, curve)?;
+                let b = trim_parameter(end, *preference, curve)?;
+                if a == b {
+                    return Err("the trimmed directrix is empty".into());
+                }
+                match curve {
+                    Curve3::Line(line) => {
+                        let (low, high) = (a.min(b), a.max(b));
+                        let (s, e) = match range {
+                            None => (a, b),
+                            Some(range) => {
+                                let (s, e) = finite_range(range)?;
+                                if s.min(e) < low - slack || s.max(e) > high + slack {
+                                    return Err("the sweep range exceeds the trim".into());
+                                }
+                                (s.clamp(low, high), e.clamp(low, high))
+                            }
+                        };
+                        Ok(Self::Segment(
+                            line.origin + line.direction * s,
+                            line.origin + line.direction * e,
+                        ))
+                    }
+                    Curve3::Circle(circle) => {
+                        let (low, high) = periodic_trim(a, b, *sense_agreement, range)?;
+                        Ok(Self::Arc(*circle, Interval::new(low, high)))
+                    }
+                    _ => Err(OTHER.into()),
+                }
+            }
+            Some(GeometryNode::Curve3(_) | GeometryNode::CurveRelation(_)) => Err(OTHER.into()),
+            _ => Err("the swept disk has no directrix curve".into()),
+        }
+    }
+}
+
+// An empty range is exactly equal ends, as the mesh compiler reads it.
+#[allow(clippy::float_cmp)]
+fn finite_range((start, end): (f64, f64)) -> Result<(f64, f64), String> {
+    if !(start.is_finite() && end.is_finite()) || start == end {
+        return Err("the sweep range is empty or not finite".into());
+    }
+    Ok((start, end))
+}
+
+/// A trim end's parameter on `basis`, preferring what the source prefers;
+/// a point is inverted onto the curve, never projected.
+fn trim_parameter(
+    selectors: &[TrimSelector],
+    preference: TrimmingPreference,
+    basis: &Curve3,
+) -> Result<f64, String> {
+    let parameter = |selector: &TrimSelector| match selector {
+        TrimSelector::Parameter(value) => Some(*value),
+        _ => None,
+    };
+    let point = || {
+        selectors.iter().find_map(|selector| match selector {
+            TrimSelector::Point3(point) => {
+                axiolid_evaluate::curve::invert3(basis, *point, TOLERANCE).ok()
+            }
+            _ => None,
+        })
+    };
+    let selected = match preference {
+        TrimmingPreference::Parameter => selectors.iter().find_map(parameter),
+        TrimmingPreference::Unspecified => selectors.first().and_then(parameter).or_else(point),
+        TrimmingPreference::Cartesian => point().or_else(|| selectors.iter().find_map(parameter)),
+    };
+    selected
+        .filter(|value| value.is_finite())
+        .ok_or_else(|| "a trim end has no parameter on its curve".into())
+}
+
+/// The trim of a circle from `a` to `b` in the circle's own parameter,
+/// unwrapped (`low` may lie below zero or `high` above a turn), and the
+/// sweep `range` within it, as the mesh compiler reads them.
+// Ends mapped onto the same angle are compared exactly, as the mesh
+// compiler compares them.
+#[allow(clippy::float_cmp)]
+fn periodic_trim(
+    a: f64,
+    b: f64,
+    sense: bool,
+    range: Option<(f64, f64)>,
+) -> Result<(f64, f64), String> {
+    // Authoring tools write a quarter as `(3pi/2, 2pi + 1e-15)`.
+    const PERIOD_SLACK: f64 = 1e-9;
+    let travelled = if sense { b - a } else { a - b };
+    let span = if travelled > 0.0 && travelled <= TAU * (1.0 + PERIOD_SLACK) {
+        travelled
+    } else {
+        match travelled.rem_euclid(TAU) {
+            0.0 => TAU,
+            wrapped => wrapped,
+        }
+    };
+    let (low, high) = if sense { (a, a + span) } else { (a - span, a) };
+    let Some(range) = range else {
+        return Ok((low, high));
+    };
+    let (start, end) = finite_range(range)?;
+    let slack = TOLERANCE.linear();
+    let into_arc = |value: f64| -> Result<f64, String> {
+        let shifted = low + (value - low).rem_euclid(TAU);
+        let shifted = if shifted > low + TAU - slack {
+            low
+        } else {
+            shifted
+        };
+        if shifted > high + slack {
+            return Err("the sweep range exceeds the trim".into());
+        }
+        Ok(shifted.min(high))
+    };
+    let (s, e) = (into_arc(start)?, into_arc(end)?);
+    let (s, e) = if s == e { (low, high) } else { (s, e) };
+    Ok((s.min(e), s.max(e)))
+}
+
+/// What a solid's extent is computed from, in its own coordinates.
+enum Shape {
+    /// The section (in the plane `z = 0`) swept by `offset`.
+    Prism { section: Section, offset: Vec3 },
+    /// The section turned about the in-plane axis through `origin` along
+    /// `axis` by every angle from zero to `angle`; `radial` is the in-plane
+    /// unit normal to the axis on the section's side.
+    Revolved {
+        section: Section,
+        origin: Point3,
+        axis: Vec3,
+        radial: Vec3,
+        angle: f64,
+    },
+    /// A disk of `radius` kept square to the spine.
+    Tube { spine: Spine, radius: f64 },
+}
+
+impl Shape {
+    fn revolved(section: Section, origin: Point3, axis: Vec3, angle: f64) -> Result<Self, String> {
+        let axis = axis.normalize();
+        let radial = Vec3::Z.cross(axis);
+        let plan = |v: Vec3| Vec2::new(v.x, v.y);
+        let at = plan(radial).dot(plan(origin));
+        // Distances from the axis on either side; the kernel has refused a
+        // section crossing it.
+        let beyond = section.support(plan(radial)) - at;
+        let short = section.support(-plan(radial)) + at;
+        let radial = if short <= TOLERANCE.linear() {
+            radial
+        } else if beyond <= TOLERANCE.linear() {
+            -radial
+        } else {
+            return Err("the section crosses the revolution's axis".into());
+        };
+        Ok(Self::Revolved {
+            section,
+            origin,
+            axis,
+            radial,
+            angle,
+        })
+    }
+
+    /// The axis-aligned extent once placed by `transform`.
+    fn extent(&self, transform: &Transform3) -> Extent {
+        let mut min = [0.0; 3];
+        let mut max = [0.0; 3];
+        let linear = |v: Vec3| transform.transform_vector3(v);
+        let plan = |v: Vec3| Vec2::new(v.x, v.y);
+        for k in 0..3 {
+            let (low, high) = match self {
+                Self::Prism { section, offset } => {
+                    let base = transform.translation[k];
+                    let across = Vec2::new(linear(Vec3::X)[k], linear(Vec3::Y)[k]);
+                    let along = linear(*offset)[k];
+                    (
+                        base - section.support(-across) + along.min(0.0),
+                        base + section.support(across) + along.max(0.0),
+                    )
+                }
+                Self::Revolved {
+                    section,
+                    origin,
+                    axis,
+                    radial,
+                    angle,
+                } => {
+                    // A point at height `h` along the axis and `ρ ≥ 0` from
+                    // it, turned by θ, lies at `h n + ρ (cos θ m + sin θ w)`
+                    // from the axis origin: `ρ A cos(θ − α)` across, so the
+                    // extremes over the turn are those of the section in
+                    // the direction `n_k n + A c m` for the extreme `c`.
+                    let base = transform.transform_point3(*origin)[k];
+                    let (n, m, w) = (
+                        linear(*axis)[k],
+                        linear(*radial)[k],
+                        linear(axis.cross(*radial))[k],
+                    );
+                    let (reach, alpha) = (m.hypot(w), w.atan2(m));
+                    let (least, largest) = cosine_range(angle.min(0.0), angle.max(0.0), alpha);
+                    let at = |c: f64| plan(*axis) * n + plan(*radial) * (reach * c);
+                    let o = plan(*origin);
+                    let (down, up) = (at(least), at(largest));
+                    (
+                        base - section.support(-down) - down.dot(o),
+                        base + section.support(up) - up.dot(o),
+                    )
+                }
+                Self::Tube { spine, radius } => match spine {
+                    Spine::Segment(start, end) => {
+                        let (start, end) = (
+                            transform.transform_point3(*start),
+                            transform.transform_point3(*end),
+                        );
+                        let direction = (end - start).normalize();
+                        let across = radius * (1.0 - direction[k] * direction[k]).max(0.0).sqrt();
+                        (start[k].min(end[k]) - across, start[k].max(end[k]) + across)
+                    }
+                    Spine::Arc(circle, span) => {
+                        let frame = &circle.frame;
+                        let centre = transform.transform_point3(frame.origin)[k];
+                        let (x, y, z) =
+                            (linear(frame.x)[k], linear(frame.y)[k], linear(frame.z)[k]);
+                        let (reach, alpha) = (x.hypot(y), y.atan2(x));
+                        let (low, high) = (span.start.min(span.end), span.start.max(span.end));
+                        let (least, largest) = cosine_range(low, high, alpha);
+                        // At angle θ the spine lies `R ρ cos(θ − α)` across
+                        // and the disk, spanning the radial direction and
+                        // the circle's normal, reaches `r √(ρ²c² + z²)`
+                        // further; both ends grow with `c` while `r < R`.
+                        let bend = circle.radius;
+                        let disk = |c: f64| radius * (reach * reach * c * c + z * z).sqrt();
+                        (
+                            centre + bend * reach * least - disk(least),
+                            centre + bend * reach * largest + disk(largest),
+                        )
+                    }
+                },
+            };
+            min[k] = low;
+            max[k] = high;
+        }
+        (min, max)
+    }
 }
 
 impl AxiolidGeometry {
@@ -358,142 +739,39 @@ impl AxiolidGeometry {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
-    use super::{arc_extremes, exact_boundary};
-    use axiolid_core::{Point2, Transform3, Vec3};
-    use axiolid_model::{GeometryGraphBuilder, GeometryNode, Instance, SolidOperation};
-    use axiolid_profile::{CircleProfile, EllipseProfile, Profile, RectangleProfile};
+    use std::f64::consts::{FRAC_PI_2, PI};
 
-    fn close(a: [f64; 3], b: [f64; 3]) -> bool {
-        a.iter().zip(b).all(|(a, b)| (a - b).abs() < 1e-12)
-    }
-
-    /// `profile` extruded by `depth` along `direction`, placed by `transform`.
-    fn placed(
-        profile: Profile,
-        direction: Vec3,
-        depth: f64,
-        transform: Transform3,
-    ) -> Result<super::ExactBoundary, String> {
-        let mut builder = GeometryGraphBuilder::new();
-        let profile = builder.push(GeometryNode::Profile(profile)).unwrap();
-        let extrusion = builder
-            .push(GeometryNode::SolidOperation(SolidOperation::Extrusion {
-                profile,
-                direction,
-                depth,
-            }))
-            .unwrap();
-        let root = builder
-            .push(GeometryNode::Instance(Instance {
-                source: extrusion,
-                transform,
-            }))
-            .unwrap();
-        let graph = builder.finish(vec![root]).unwrap();
-        exact_boundary(&graph, root)
-    }
-
-    fn circle(radius: f64) -> Profile {
-        Profile::Circle(CircleProfile {
-            radius,
-            thickness: None,
-        })
-    }
+    use super::{arc_support, cosine_range};
+    use axiolid_core::{Point2, Vec2};
 
     #[test]
-    fn a_placed_round_column_is_a_vertical_prism() {
-        let boundary = placed(
-            circle(0.2),
-            Vec3::Z,
-            3.0,
-            Transform3::from_translation(Vec3::new(5.0, -2.0, 1.5)),
-        )
-        .unwrap();
-        let (min, max) = boundary.extent();
-        assert!(close(min, [4.8, -2.2, 1.5]), "{min:?}");
-        assert!(close(max, [5.2, -1.8, 4.5]), "{max:?}");
-    }
-
-    #[test]
-    fn a_rotated_mirrored_and_flipped_rectangle_keeps_its_extent() {
-        // Mirrored in x, turned a quarter about z and extruded downwards.
-        let transform = Transform3::from_translation(Vec3::new(1.0, 2.0, 3.0))
-            * Transform3::from_rotation_z(std::f64::consts::FRAC_PI_2)
-            * Transform3::from_scale(Vec3::new(-1.0, 1.0, -1.0));
-        let boundary = placed(
-            Profile::Rectangle(RectangleProfile {
-                x: 2.0,
-                y: 0.5,
-                thickness: None,
-                outer_radius: None,
-                inner_radius: None,
-            }),
-            Vec3::Z,
-            1.0,
-            transform,
-        )
-        .unwrap();
-        let (min, max) = boundary.extent();
-        assert!(close(min, [0.75, 1.0, 2.0]), "{min:?}");
-        assert!(close(max, [1.25, 3.0, 3.0]), "{max:?}");
-    }
-
-    #[test]
-    fn a_hollow_circle_is_built_with_its_bore() {
-        let boundary = placed(
-            Profile::Circle(CircleProfile {
-                radius: 0.3,
-                thickness: Some(0.05),
-            }),
-            Vec3::Z,
-            2.0,
-            Transform3::from_translation(Vec3::new(1.0, 1.0, 0.0)),
-        )
-        .unwrap();
-        let (min, max) = boundary.extent();
-        assert!(close(min, [0.7, 0.7, 0.0]), "{min:?}");
-        assert!(close(max, [1.3, 1.3, 2.0]), "{max:?}");
-    }
-
-    #[test]
-    fn tilted_horizontal_and_elliptical_bodies_are_refused() {
-        let horizontal = Transform3::from_rotation_x(std::f64::consts::FRAC_PI_2);
-        assert!(placed(circle(0.2), Vec3::Z, 3.0, horizontal).is_err());
-        assert!(
-            placed(
-                circle(0.2),
-                Vec3::new(1.0, 0.0, 1.0),
-                3.0,
-                Transform3::IDENTITY
-            )
-            .is_err()
-        );
-        let ellipse = Profile::Ellipse(EllipseProfile {
-            semi_axis_x: 0.3,
-            semi_axis_y: 0.2,
-        });
-        assert!(placed(ellipse, Vec3::Z, 3.0, Transform3::IDENTITY).is_err());
-    }
-
-    #[test]
-    fn arc_extremes_follow_the_sweep() {
-        // A counter-clockwise quarter from +x to +y about the origin passes
-        // no other axis direction; the clockwise one the long way round
-        // passes the other three.
+    fn arc_support_follows_the_sweep() {
+        // A counter-clockwise quarter from +x to +y about the origin faces
+        // the diagonal but not -x; the clockwise one the long way round
+        // faces -x.
         let (east, north) = (Point2::new(1.0, 0.0), Point2::new(0.0, 1.0));
-        let quarter = (std::f64::consts::FRAC_PI_2 / 4.0).tan();
-        let short = arc_extremes(east, north, quarter);
-        assert!(short.iter().all(|p| p.x > -0.5 && p.y > -0.5), "{short:?}");
-        let long = arc_extremes(
-            east,
-            north,
-            -(3.0 * std::f64::consts::FRAC_PI_2 / 4.0).tan(),
-        );
-        assert_eq!(long.len(), 4, "{long:?}");
-        assert!(
-            long.iter()
-                .any(|p| (p.x + 1.0).abs() < 1e-12 && p.y.abs() < 1e-12)
-        );
+        let quarter = (FRAC_PI_2 / 4.0).tan();
+        let reach = arc_support(east, north, quarter, Vec2::new(1.0, 1.0)).unwrap();
+        assert!((reach - 2.0_f64.sqrt()).abs() < 1e-12, "{reach}");
+        assert_eq!(arc_support(east, north, quarter, -Vec2::X), None);
+        let long = -(3.0 * FRAC_PI_2 / 4.0).tan();
+        let reach = arc_support(east, north, long, -Vec2::X).unwrap();
+        assert!((reach - 1.0).abs() < 1e-12, "{reach}");
+    }
+
+    #[test]
+    fn cosine_range_spans_the_angles_reached() {
+        assert_eq!(cosine_range(0.0, 2.0 * PI, 1.0), (-1.0, 1.0));
+        // From 0 to a quarter about 0, the cosine runs from 1 down to 0.
+        let (least, largest) = cosine_range(0.0, FRAC_PI_2, 0.0);
+        assert!(least.abs() < 1e-12 && largest == 1.0);
+        // About π the same quarter runs from -1 up to 0.
+        let (least, largest) = cosine_range(0.0, FRAC_PI_2, PI);
+        assert!(least == -1.0 && largest.abs() < 1e-12);
+        // A span past a turn's end reaches angles beyond a turn.
+        let (_, largest) = cosine_range(1.5 * PI, 2.25 * PI, 0.0);
+        assert_eq!(largest, 1.0);
     }
 }

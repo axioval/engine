@@ -12,24 +12,28 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
-- **Exact boundaries for IFC bodies.** (Refs #195) `axioval check
+- **Exact boundaries for IFC bodies.** (Closes #195) `axioval check
   --geometry` now also builds the exact boundary of every body whose
   construction is exact and registers it beside the mesh, so distances
   between curved bodies are certified on IFC models: a round column 0.8 m
-  from a wall clears a 0.79999 m minimum that its mesh, within 1 mm, leaves
-  open. The new `axioval_axiolid::exact_boundary` builds the solid from
-  the same Axiolid geometry graph the mesh is compiled from: extrusions
-  whose placement keeps the profile horizontal and the extrusion vertical
-  (turns about the vertical and mirroring included), of rectangle, circle,
-  section and line-and-arc profiles with at most one void, as the kernel's
-  exact arc-prism boolean. Ellipses, revolutions, swept disks, tilted or
-  horizontal extrusions, booleans and bodies of several items keep their
-  mesh alone (axiolid/kernel#223). `AxiolidGeometry::check_exact_boundary`
-  refuses a boundary whose extent differs from the mesh's by more than its
-  chord deviation. A boundary is registered only when some tessellated
+  from a wall, or a tilted round member, clears a 0.79999 m minimum that
+  its mesh, within 1 mm, leaves open. The new
+  `axioval_axiolid::exact_boundary` builds the solid from the same Axiolid
+  geometry graph the mesh is compiled from: extrusions of rectangle,
+  circle, ellipse, section and line-and-arc profiles with any number of
+  voids, revolutions of the same profiles (an ellipse excepted), and disks
+  swept along one segment or one arc, under any rigid placement (tilted,
+  horizontal, turned, mirrored, mapped items composed), placed once with
+  the kernel's `ExactBRep::transformed` (axiolid/kernel#223). A scale or
+  shear, an ellipse revolved, a directrix with corners, booleans
+  (openings, clippings) and bodies of several items keep their mesh alone,
+  with the reason. `AxiolidGeometry::check_exact_boundary` refuses a
+  boundary whose closed-form extent differs from the mesh's by more than
+  its chord deviation. A boundary is registered only when some tessellated
   body has one. `--no-exact-boundaries` meshes only; the result's
   additive `geometry.exact_boundaries` counts them. `axioval-axiolid` now
-  depends on `axiolid-construct`, `axiolid-model` and `axiolid-profile`.
+  depends on `axiolid-construct`, `axiolid-curve`, `axiolid-evaluate`,
+  `axiolid-model` and `axiolid-profile`.
 - **Ramp rails that obstruct an adjoining accessible surface.** (Closes #154)
   `ramp-geometry` gains `check_rails_obstruction` with
   `accessible_surface_selector`: the ramp's rails (those measured along

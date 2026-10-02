@@ -33,8 +33,8 @@
 //! members', so the bridge also declares every group's membership.
 //!
 //! With [`Options::exact_boundaries`], a body whose lowered graph has an
-//! exact construction (a vertically placed extrusion, see
-//! `axioval::axiolid::exact_boundary`) also gets its exact boundary
+//! exact construction (a rigidly placed extrusion, revolution or swept disk,
+//! see `axioval::axiolid::exact_boundary`) also gets its exact boundary
 //! registered beside the mesh, built from the same graph the mesh is compiled
 //! from, so placement and mirroring are the mesh's own. The proximity service
 //! then certifies distances between curved bodies the chord deviation would

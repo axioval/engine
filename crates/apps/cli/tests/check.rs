@@ -5132,6 +5132,58 @@ fn a_clash_with_a_model_in_another_coordinate_system_is_not_evaluated() {
     );
 }
 
+/// `model`, a STEP file, written as ifcXML.
+fn as_ifc_xml(model: &str) -> Vec<u8> {
+    use ifc_model::Codec;
+    let model = ifc_step::StepCodec.read_bytes(model.as_bytes()).unwrap();
+    ifc_xml::XmlCodec::default().write_bytes(&model).unwrap()
+}
+
+/// The report with the structural model's source spelled as its STEP form
+/// and without finding ids, which are derived from it.
+fn as_step_report(result: &Value) -> Value {
+    let mut report = result["report"].clone();
+    if let Some(findings) = report["findings"].as_array_mut() {
+        for finding in findings {
+            finding.as_object_mut().unwrap().remove("id");
+        }
+    }
+    let text = report
+        .to_string()
+        .replace("struct.ifcxml", "struct.ifc")
+        .replace("ifc-xml", "ifc-step");
+    serde_json::from_str(&text).unwrap()
+}
+
+#[test]
+fn an_ifcxml_model_gives_the_report_of_its_step_form() {
+    let case = Case::new("discipline-clash-ifcxml");
+    let (arch, structure) = discipline_walls();
+    case.write("arch.ifc", &arch);
+    case.write("struct.ifc", &structure);
+    std::fs::write(case.path("struct.ifcxml"), as_ifc_xml(&structure)).unwrap();
+    let step = case.clash_across(
+        &["arch.ifc:architecture", "struct.ifc:structure"],
+        &["--geometry"],
+    );
+    assert_eq!(step.status.code(), Some(3), "{}", stderr(&step));
+    let xml = case.clash_across(
+        &["arch.ifc:architecture", "struct.ifcxml:structure"],
+        &["--geometry"],
+    );
+    assert_eq!(xml.status.code(), Some(3), "{}", stderr(&xml));
+    let (step, xml) = (json(&step), json(&xml));
+    assert_eq!(
+        xml["geometry"]["exact"], 3,
+        "the ifcXML model is meshed: {xml:#}"
+    );
+    assert_eq!(as_step_report(&xml), as_step_report(&step), "{xml:#}");
+    assert_eq!(
+        xml["report"]["findings"][0]["related"][0]["source"],
+        json!({"document": "struct.ifcxml", "system": "ifc-xml"})
+    );
+}
+
 #[test]
 fn a_discipline_scoped_rule_over_an_undeclared_model_is_not_evaluated() {
     let case = Case::new("discipline-undeclared");

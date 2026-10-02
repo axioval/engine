@@ -28,6 +28,7 @@ mod resources;
 mod styles;
 mod temporal;
 mod windows;
+mod xml;
 pub use archive::{
     IFC_ZIP_EXTENSION, IfcZipError, IfcZipMember, import_ifc_zip_session, is_ifc_zip, read_ifc_zip,
 };
@@ -38,6 +39,7 @@ pub use integrity::{
     MALFORMED_RELATIONSHIP, ZONE_MEMBER_NOT_SPATIAL,
 };
 pub use release::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM};
+pub use xml::{IFC_XML_EXTENSION, import_ifc_xml_session, is_ifc_xml, read_ifc_xml};
 
 use std::collections::BTreeSet;
 

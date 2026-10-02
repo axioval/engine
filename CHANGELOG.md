@@ -32,6 +32,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   The caller supplies the creation time, so identical input writes
   identical bytes. `axioval check` and `compare` write it with
   `--xlsx FILE`, created at `SOURCE_DATE_EPOCH` when set.
+- **ifcXML models.** (Refs #190) `import_ifc_xml_session` reads an
+  ifcXML document through `ifc-xml` into the model its STEP form parses to
+  and binds it by the STEP reader's own session path, so it answers every
+  rule as the STEP file does; `read_ifc_xml` and `is_ifc_xml` serve hosts.
+  A read is accepted only when provably as stated: one supported schema,
+  every entity declared, every value named by an attribute of its entity,
+  and every value of its declared type (`ifc-validate`); a document in
+  another arrangement is refused (`IfcSessionError::Xml`), never misread.
+  A start tag of more than 256 attributes or 8 namespace declarations is
+  refused before `ifc-xml` (0.2.2, on quick-xml 0.42) parses it.
+  `axioval check` reads ifcXML models, and meshes them, as STEP ones; the
+  source is `ifc-xml:<file>`. **Breaking:** `IfcSessionError` gains the
+  variant `Xml`.
+
 - **Coordinate consistency across federated models.** (Closes #194)
   The new `coordinate-consistency` capability compares every source's
   coordinate system with a reference source's (`reference`, a discipline,

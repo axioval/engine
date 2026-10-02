@@ -92,6 +92,11 @@ ifc-model = "0.2.3"
 ifc-properties = "0.5.3"
 ifc-schema = "0.2.2"
 ifc-step = "0.3.0"
+ifc-validate = { version = "0.3.1", default-features = false }
+# ifcXML: the codec reads its own lossless dialect; `xml.rs` proves each read.
+ifc-xml = "0.2.2"
+# `xml.rs` scans an ifcXML document with it before `ifc-xml` reads it.
+quick-xml = "0.42"
 ifc-style = "0.3.0"
 ifc-systems = "0.2.2"
 regex = "1.11.2"

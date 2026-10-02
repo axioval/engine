@@ -1239,8 +1239,12 @@ pub(crate) fn import(
     } else {
         (document.to_owned(), content)
     };
-    let session = ifc::import_ifc_session(document, &content)
-        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let session = if ifc::is_ifc_xml(&content) {
+        ifc::import_ifc_xml_session(document, &content)
+    } else {
+        ifc::import_ifc_session(document, &content)
+    }
+    .map_err(|error| format!("{}: {error}", path.display()))?;
     Ok((session, content))
 }
 

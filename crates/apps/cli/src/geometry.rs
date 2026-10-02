@@ -185,9 +185,16 @@ fn parse(
         let bytes = models
             .get(source)
             .ok_or_else(|| format!("no model bytes for source `{source}`"))?;
-        let model = StepCodec
-            .read_bytes(bytes)
-            .map_err(|error| format!("{}: {error}", source.document))?;
+        // An ifcXML source is read by the adapter's reader, with its
+        // refusals, into the model its STEP form parses to.
+        let model = if axioval::ifc::is_ifc_xml(bytes) {
+            axioval::ifc::read_ifc_xml(bytes).map_err(|error| error.to_string())
+        } else {
+            StepCodec
+                .read_bytes(bytes)
+                .map_err(|error| error.to_string())
+        }
+        .map_err(|error| format!("{}: {error}", source.document))?;
         let units = ifc_geometry::units::resolve(&model);
         parsed.insert(source.clone(), Parsed { model, units });
     }

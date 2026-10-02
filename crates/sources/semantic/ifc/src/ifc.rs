@@ -44,6 +44,10 @@ pub enum IfcSessionError {
     /// Strict STEP parsing failed.
     #[error("IFC STEP parse failed: {0}")]
     Parse(String),
+    /// The ifcXML document could not be read, or was read into values that
+    /// do not conform to its schema, so the read cannot be trusted.
+    #[error("ifcXML cannot be read exactly: {0}")]
+    Xml(String),
     /// The parser recovered with diagnostics, so the snapshot is incomplete.
     #[error("IFC model is incomplete: {diagnostics} parser diagnostics")]
     IncompleteModel {
@@ -825,7 +829,17 @@ pub fn import_ifc_session(
     let Some(release) = Release::from_header(&schemas) else {
         return Err(IfcSessionError::UnsupportedSchema(schemas));
     };
+    session(&source, release, model, bytes)
+}
 
+/// Binds a parsed model of `release`, read from `bytes`, into a session over
+/// `source`: the one path every serialization of IFC takes after parsing.
+pub(crate) fn session(
+    source: &SourceId,
+    release: Release,
+    model: Model,
+    bytes: &[u8],
+) -> Result<EvidenceSession, IfcSessionError> {
     let fingerprint: Arc<str> = Arc::from(format!("sha256:{:x}", Sha256::digest(bytes)));
     let global_ids = Arc::new(GlobalIds::read(release, &model));
     let objects = model
@@ -909,7 +923,7 @@ pub fn import_ifc_session(
         .and_then(|session| session.with_service(frames))
         .and_then(|session| session.with_service(coordinates))
         .and_then(|session| session.with_service(resources))
-        .and_then(|session| session.with_source_metadata(&source, metadata))
+        .and_then(|session| session.with_source_metadata(source, metadata))
         .map_err(|error| session_error(&error))
 }
 

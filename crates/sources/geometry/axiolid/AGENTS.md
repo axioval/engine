@@ -421,11 +421,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-measure` 0.3.5 with the `exact` feature (certified
+0.3.0, except `axiolid-measure` 0.3.6 with the `exact` feature (certified
 `boundary_distance`, and the plan measurements `plan_boundary_distance`,
-`plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.1 for
+`plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.3 for
 the `ExactBRep` hosts register, built by `exact_boundary` with
-`axiolid-construct` 0.3.5, `axiolid-model` and `axiolid-profile`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
+`axiolid-construct` 0.3.9, `axiolid-model` and `axiolid-profile`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
 soups, features within the caller's tolerance snapped before the exact
 arrangement), `axiolid-route`

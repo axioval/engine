@@ -156,6 +156,9 @@ groups. A ruleset declares `groupings`, by id: the objects grouped
 - `{"kind": "classification", "system": "Uniclass"}` groups by the code the
   member's assignment in that system carries, as its source states it.
 
+- `{"kind": "compartment", "separators": …, "boundary": …}` forms
+  compartments, below.
+
 Members of one source sharing a value form one group. Each group is a
 derived object, never a model object: its identity is
 `axioval:group/<grouping>/<value>` in its members' source, its kind
@@ -186,6 +189,53 @@ could belong to any group of its source, or to one not listed: every group
 of that source is then undecided (its members, its count and its area are
 not evaluated), and the source's list of groups is incomplete, so a rule
 selecting them is not evaluated for that source as a whole.
+
+### Compartments
+
+Fire compartments are often implied by fire-rated walls and slabs rather
+than stated as zones. A `compartment` grouping derives them: the connected
+regions of its members not separated by an element `boundary` selects.
+
+```json
+"by": {
+  "kind": "compartment",
+  "separators": {"kind": "anyOf", "operands": [
+    {"kind": "entityType", "objectType": "t.Wall"},
+    {"kind": "entityType", "objectType": "t.Slab"}]},
+  "boundary": {"kind": "property", "propertySet": "t.Pset_WallCommon",
+               "property": "t.FireRating", "operator": "matches",
+               "value": {"type": "string", "value": "EI ?(60|90|120)"}},
+  "tolerance": 0.05,
+  "overlap": 0.3
+}
+```
+
+- Two members join across a `separators` element that `boundary` surely
+  does not select when they lie on opposite faces of it, by the geometric
+  adjacency `axioval:derived.adjacent-across;tolerance=…;overlap=…`
+  (defaults 0.05 and 0.3; see [Relationships derived from
+  geometry](./capabilities.md#relationships-derived-from-geometry)). Two
+  members on the same face are not joined by it. Compartments read the
+  geometry's faces directly, since stated space boundaries record none.
+- Two members also join where they touch (within `tolerance`, by the
+  proximity service) without lying on opposite faces of a boundary element,
+  so an open-plan zone modelled as several spaces is one compartment.
+- Each connected region is a group, keyed by its least member's identity
+  (`axioval:group/<grouping>/<least member>`); a member joined to nothing is
+  a compartment of its own. Its `area` is the union of its members'
+  footprints, so `keyed-limit` with `plan-area` bounds the compartments'
+  area, and every member lies in exactly one compartment.
+
+Nothing undecided is assumed. A join that may or may not hold (an element
+whose selection by `separators` or `boundary` is undecided, a contact the
+measurement cannot settle, a contact beside a boundary element whose faces
+are unknown) leaves the compartments it could merge undecided. An element
+that may join members whose faces cannot be read (a room straddling the
+tolerance, an element neither a straight wall nor a flat slab), a member
+whose extent cannot be measured, and a missing derived-relationship or
+proximity service leave every compartment undecided. A tolerance must be
+finite and at least zero and an overlap finite and positive, or the
+grouping is invalid.
 
 The runtime derives the groupings after the classifications and before any
 rule runs. Compilation refuses (`EngineError::InvalidGrouping`) a grouping

@@ -293,6 +293,31 @@ pub enum GroupingKey {
     /// Equal codes in one classification system, as the source states
     /// them: the code the member's assignment in `system` carries.
     Classification { system: String },
+    /// Compartments: the connected regions of members not separated by a
+    /// `boundary` element, such as fire compartments enclosed by walls and
+    /// slabs rated EI 60 or better.
+    ///
+    /// Two members join across a `separators` element that `boundary` does
+    /// not select when they lie on opposite faces of it (the geometric
+    /// adjacency `axioval:derived.adjacent-across` with `tolerance` and
+    /// `overlap`), and where they touch, within `tolerance`, without lying
+    /// on opposite faces of a boundary element. Each connected region is a
+    /// group, keyed by its least member's identity. A join that may or may
+    /// not hold (an element whose selection is undecided, a contact within
+    /// the measurement's uncertainty) leaves the compartments it could
+    /// merge undecided; an element joining spaces that cannot be read
+    /// leaves every compartment undecided.
+    Compartment {
+        separators: Selector,
+        boundary: Selector,
+        /// Largest gap between a face or another member and a member, in
+        /// metres; 0.05 when omitted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tolerance: Option<f64>,
+        /// Least overlap along a face, in metres; 0.3 when omitted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        overlap: Option<f64>,
+    },
 }
 
 /// A named classification of objects the ruleset derives: ordered rows,

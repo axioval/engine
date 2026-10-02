@@ -197,6 +197,36 @@ fn groupings(
                     return Err(invalid("its classification system is blank".into()));
                 }
             }
+            GroupingKey::Compartment {
+                separators,
+                boundary,
+                tolerance,
+                overlap,
+            } => {
+                if tolerance.is_some_and(|value| !value.is_finite() || value < 0.0)
+                    || overlap.is_some_and(|value| !value.is_finite() || value <= 0.0)
+                {
+                    return Err(invalid(
+                        "its tolerance must be finite and at least zero, its overlap finite and \
+                         positive"
+                            .into(),
+                    ));
+                }
+                for (part, selector) in [("separators", separators), ("boundary", boundary)] {
+                    validate_selector_concepts(
+                        concepts,
+                        &format!("{}#{part}", definition.id),
+                        selector,
+                    )?;
+                    let mut rules = BTreeSet::new();
+                    rule_outcomes::selector_references(selector, &mut rules);
+                    if !rules.is_empty() || reads_groups(selector) {
+                        return Err(invalid(format!(
+                            "its {part} read a rule's outcome or a derived group"
+                        )));
+                    }
+                }
+            }
         }
         checked.push(definition.clone());
     }

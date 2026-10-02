@@ -961,6 +961,17 @@ fn groupings_round_trip_by_property_and_by_classification() {
     let selector = r#"{"kind":"derivedGroup","grouping":"flats"}"#;
     let parsed: Selector = serde_json::from_str(selector).unwrap();
     assert_eq!(serde_json::to_string(&parsed).unwrap(), selector);
+    let by_region = r#"{"id":"fire","name":{"default":"Fire compartments","translations":{}},"members":{"kind":"all"},"by":{"kind":"compartment","separators":{"kind":"all"},"boundary":{"kind":"all"},"tolerance":0.1}}"#;
+    let fire: GroupingDefinition = serde_json::from_str(by_region).unwrap();
+    assert!(matches!(
+        fire.by,
+        GroupingKey::Compartment {
+            tolerance: Some(_),
+            overlap: None,
+            ..
+        }
+    ));
+    assert_eq!(serde_json::to_string(&fire).unwrap(), by_region);
     // Unknown key kinds are refused.
     assert!(
         serde_json::from_str::<GroupingDefinition>(

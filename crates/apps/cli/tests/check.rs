@@ -3483,6 +3483,114 @@ fn with_geometry_a_wall_without_stated_boundaries_relates_to_the_spaces_beside_i
     );
 }
 
+/// The compartments of [`rooms_between_walls`] when the wall between the
+/// rooms states `rating` as its `FireRating`: compartments larger than
+/// `maximum` square metres are found.
+fn compartments(name: &str, rating: Option<&str>, maximum: f64) -> (Output, Value) {
+    compartments_of(name, rooms_between_walls(), rating, maximum)
+}
+
+/// [`compartments`] over `model`.
+fn compartments_of(
+    name: &str,
+    mut model: String,
+    rating: Option<&str>,
+    maximum: f64,
+) -> (Output, Value) {
+    let case = Case::new(name);
+    if let Some(rating) = rating {
+        model = model.replace(
+            "ENDSEC;\nEND-ISO-10303-21;",
+            &format!(
+                "#100=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('{rating}'),$);\n\
+                 #101=IFCPROPERTYSET('0000000000000000000101',$,'Pset_WallCommon',$,(#100));\n\
+                 #102=IFCRELDEFINESBYPROPERTIES('0000000000000000000102',$,$,$,(#36),#101);\n\
+                 ENDSEC;\nEND-ISO-10303-21;"
+            ),
+        );
+    }
+    case.write("model.ifc", &model);
+    let boundary = json!({"kind": "property",
+        "propertySet": "axioval:example.ifc.pset-wall-common",
+        "property": "axioval:example.ifc.fire-rating",
+        "operator": "like", "value": {"type": "string", "value": "EI*"}});
+    case.geometry_rule_with(
+        &["model.ifc"],
+        &[("space", "IfcSpace"), ("wall", "IfcWall")],
+        (
+            "axioval:capability.keyed-limit",
+            &registry_signature("axioval:capability.keyed-limit"),
+        ),
+        json!({"kind": "derivedGroup", "grouping": "compartments"}),
+        json!({
+            "limits": {"type": "table", "value": [
+                {"maximum": {"type": "number", "value": maximum}},
+            ]},
+            "quantity": {"type": "string", "value": "plan-area"},
+            "key_1": {"type": "propertyReference", "propertySet": "axioval:group",
+                      "property": "key"},
+        }),
+        &json!({"ruleset:groupings": {"compartments": {
+            "id": "compartments",
+            "name": {"default": "Fire compartments", "translations": {}},
+            "members": entity("space"),
+            "by": {"kind": "compartment", "separators": entity("wall"), "boundary": boundary},
+        }}}),
+        &[],
+    )
+}
+
+#[test]
+fn with_geometry_fire_rated_walls_enclose_derived_compartments() {
+    // The rated wall separates the rooms: two compartments of 16 m² each,
+    // within 20 m² and both beyond 15 m².
+    let (output, result) = compartments("geometry-compartments-rated", Some("EI 90"), 20.0);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    let (output, result) = compartments("geometry-compartments-small", Some("EI 90"), 15.0);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_ids(&result),
+        [
+            "axioval:group/compartments/#16",
+            "axioval:group/compartments/#26"
+        ],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    // A plain wall joins them: one compartment of 32 m², too large.
+    let (output, result) = compartments("geometry-compartments-plain", None, 20.0);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_ids(&result),
+        ["axioval:group/compartments/#16"],
+        "{result:#}"
+    );
+    // A room exactly the tolerance away from the plain wall may or may not
+    // be joined to the other: no compartment is decided, none is guessed.
+    let straddling = rooms_between_walls().replace(
+        "#20=IFCCARTESIANPOINT((6.2,2.));",
+        "#20=IFCCARTESIANPOINT((6.25,2.));",
+    );
+    let (output, result) =
+        compartments_of("geometry-compartments-undecided", straddling, None, 20.0);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(
+        open.iter().any(|outcome| outcome["message"]
+            .as_str()
+            .unwrap()
+            .contains("may join are unknown")),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn with_geometry_an_opening_void_connects_the_spaces_it_passes_between() {
     let (output, result) = derived_count(
@@ -3650,6 +3758,13 @@ impl Case {
             "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "SprinklerProtection"}],
             "citations": [],
         });
+        definitions["properties"]["axioval:example.ifc.fire-rating"] = json!({
+            "id": "axioval:example.ifc.fire-rating",
+            "name": {"default": "FireRating", "translations": {}},
+            "valueKind": "string",
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": "FireRating"}],
+            "citations": [],
+        });
         definitions["properties"]["axioval:example.ifc.is-external"] = json!({
             "id": "axioval:example.ifc.is-external",
             "name": {"default": "IsExternal", "translations": {}},
@@ -3718,8 +3833,16 @@ impl Case {
         rule["definitionId"] = json!("axioval:example.under-test");
         rule["parameters"] = parameters;
         rule["applicability"]["groups"]["walls"]["selector"] = applicability;
+        // A `ruleset:` field belongs to the ruleset, every other to the rule.
+        let mut outer = Vec::new();
         for (field, value) in extra.as_object().into_iter().flatten() {
-            rule[field] = value.clone();
+            match field.strip_prefix("ruleset:") {
+                Some(field) => outer.push((field.to_owned(), value.clone())),
+                None => rule[field] = value.clone(),
+            }
+        }
+        for (field, value) in outer {
+            ruleset[field] = value;
         }
         let definitions = self.write("definitions.json", &definitions.to_string());
         let ruleset = self.write("ruleset.json", &ruleset.to_string());

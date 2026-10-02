@@ -636,6 +636,7 @@ impl ExecutionPlan {
 mod boundary_coverage;
 mod circulation;
 mod classifications;
+mod compartments;
 mod compiler;
 mod concepts;
 mod contact;

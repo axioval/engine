@@ -273,6 +273,21 @@ pub(crate) fn derive(
     context: &RuleContext<'_>,
     definition: &GroupingDefinition,
 ) -> Grouping {
+    if let GroupingKey::Compartment {
+        separators,
+        boundary,
+        tolerance,
+        overlap,
+    } = &definition.by
+    {
+        return crate::compartments::derive(
+            refiner,
+            context,
+            definition,
+            (separators, boundary),
+            (*tolerance, *overlap),
+        );
+    }
     let mut keys = BTreeMap::new();
     let mut members = Vec::new();
     for object in context.project.objects() {
@@ -336,6 +351,10 @@ fn key(
             PropertyRead::Absent(_) => Ok(None),
             PropertyRead::Undecided(reason, why) => Err((reason, why)),
         },
+        GroupingKey::Compartment { .. } => Err((
+            NotEvaluatedReason::InvalidDeclaration,
+            "compartments are keyed by their regions, not per member".into(),
+        )),
         GroupingKey::Classification { system } => {
             let Some(service) = context.services.get::<ClassificationServiceHandle>() else {
                 return Err((

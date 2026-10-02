@@ -55,6 +55,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   than measured in the wrong place. Models without a project length unit
   state no exact frame, so their geometry is no longer combined with
   another model's.
+- **Derived fire compartments.** (Closes #184) A grouping
+  `by: {kind: compartment, separators, boundary, tolerance, overlap}`
+  derives the connected regions of its members not separated by a
+  `boundary` element: members join across a separator `boundary` does not
+  select when they lie on its opposite faces (`adjacent-across`), and where
+  they touch without a boundary element between them. Each region is a
+  derived group keyed by its least member, measured as the union of its
+  members' footprints, so `keyed-limit` with `plan-area` bounds the
+  compartments' area: two rooms separated by an EI 90 wall form two
+  compartments, joined by a plain wall one. A join that may or may not
+  hold leaves the compartments it could merge undecided, and faces that
+  cannot be read leave every compartment undecided. **Breaking:**
+  `GroupingKey` gains the variant `Compartment`.
+
 - **Derived groups by property value or classification.** (Closes #183)
   A ruleset's `groupings` group selected `members` by equal values of a
   property (`by: {kind: property}`, a derived class included) or equal

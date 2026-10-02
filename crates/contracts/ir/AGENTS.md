@@ -27,7 +27,8 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   specification's origin there so it can be exported again. The MCS rule
   folder must mirror this field.
 - `RuleSetPackage::groupings` (`GroupingDefinition`: `members` selector
-  and a `GroupingKey`, `property` or `classification`) and
+  and a `GroupingKey`, `property`, `classification` or `compartment` with
+  its separators, boundary and optional adjacency tolerances) and
   `Selector::DerivedGroup` are omitted when empty / absent so rulesets
   serialize as before; `GROUP_SET` is a derived set (`is_derived_set`).
   The MCS ruleset and selector schemas must mirror them.

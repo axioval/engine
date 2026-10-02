@@ -36,7 +36,7 @@ use axioval::{
         LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
         SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile_rulesets,
     },
-    ifc,
+    html, ifc,
     ir::{
         DateTime, Decision, DecisionComment, DecisionStatus, Decisions, DefinitionPackage,
         Discipline, FindingId, ObjectId, Project, Report, RuleSetPackage, SourceId,
@@ -307,6 +307,29 @@ struct OutputArgs {
     /// Created at `SOURCE_DATE_EPOCH` when set, else now.
     #[arg(long, value_name = "FILE")]
     xlsx: Option<PathBuf>,
+    /// Also write the report as one self-contained HTML file: a cover, the
+    /// summary, rules, categories, findings with their locations and
+    /// decisions, not-evaluated outcomes and report tables, laid out to
+    /// print (a browser prints it as a PDF). Dated `SOURCE_DATE_EPOCH`
+    /// when set, else now.
+    #[arg(long, value_name = "FILE")]
+    html: Option<PathBuf>,
+    /// The HTML report's template instead of the built-in one: HTML with
+    /// placeholders such as `{{summary}}`, substituted and never run. It
+    /// must place `{{summary}}` and `{{not-evaluated}}`.
+    #[arg(long, value_name = "FILE", requires = "html")]
+    html_template: Option<PathBuf>,
+    /// The HTML report's title.
+    #[arg(
+        long,
+        value_name = "TEXT",
+        default_value = "Check report",
+        requires = "html"
+    )]
+    html_title: String,
+    /// `--html-template`, parsed before the run by [`OutputArgs::prepare`].
+    #[arg(skip)]
+    template: Option<html::Template>,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -314,6 +337,22 @@ struct OutputArgs {
     /// Groups per section in the summary.
     #[arg(long, default_value_t = 10, requires = "summary")]
     top: usize,
+}
+
+impl OutputArgs {
+    /// Reads and parses `--html-template`, so a missing or invalid template
+    /// fails before any work.
+    pub(crate) fn prepare(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(path) = &self.html_template {
+            let text =
+                fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+            self.template = Some(
+                html::Template::parse(&text)
+                    .map_err(|error| format!("{}: {error}", path.display()))?,
+            );
+        }
+        Ok(())
+    }
 }
 
 /// How BCF viewpoints show the involved objects: colouring, visibility and
@@ -690,7 +729,8 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn check(args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
+fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
+    args.output.prepare()?;
     let translated = args
         .ids
         .as_deref()
@@ -826,6 +866,7 @@ pub(crate) fn emit(
     args: OutputArgs,
 ) -> Result<(), Box<dyn Error>> {
     let json = serde_json::to_string_pretty(output)? + "\n";
+    let documents = documents(output, project, &args)?;
     let archive = match &args.bcf {
         Some(path) => {
             let date = match args.bcf_date {
@@ -874,21 +915,6 @@ pub(crate) fn emit(
         }
         None => None,
     };
-    let workbook = match &args.xlsx {
-        Some(path) => {
-            let created = i64::try_from(epoch_seconds()?)?;
-            let options = xlsx::Options {
-                external_id_scheme: Some(bcf::IFC_GLOBAL_ID_SCHEME.to_owned()),
-                ..xlsx::Options::new(created)
-            };
-            Some((
-                path,
-                xlsx::export(&output.report, project, &options)
-                    .map_err(|error| format!("{}: {error}", path.display()))?,
-            ))
-        }
-        None => None,
-    };
     let summary = args.summary.then(|| {
         let saved = args
             .report
@@ -908,7 +934,7 @@ pub(crate) fn emit(
     if let Some((path, bytes, _, _)) = &archive {
         write(path, bytes)?;
     }
-    if let Some((path, bytes)) = &workbook {
+    for (path, bytes) in &documents {
         write(path, bytes)?;
     }
     let unanchored: Vec<_> = archive
@@ -921,6 +947,39 @@ pub(crate) fn emit(
         .collect();
     warn(output, summary.is_some(), &unanchored, &unframed);
     Ok(())
+}
+
+/// A document to write: its path and bytes.
+type Document = (PathBuf, Vec<u8>);
+
+/// The `--xlsx` workbook and the `--html` report, each with its path, built
+/// but not written.
+fn documents(
+    output: &CheckOutput,
+    project: &Project,
+    args: &OutputArgs,
+) -> Result<Vec<Document>, Box<dyn Error>> {
+    let mut documents = Vec::new();
+    if let Some(path) = &args.xlsx {
+        let options = xlsx::Options {
+            external_id_scheme: Some(bcf::IFC_GLOBAL_ID_SCHEME.to_owned()),
+            ..xlsx::Options::new(i64::try_from(epoch_seconds()?)?)
+        };
+        let bytes = xlsx::export(&output.report, project, &options)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        documents.push((path.clone(), bytes));
+    }
+    if let Some(path) = &args.html {
+        let options = html::Options {
+            title: args.html_title.clone(),
+            external_id_scheme: Some(bcf::IFC_GLOBAL_ID_SCHEME.to_owned()),
+            ..html::Options::new(timestamp()?)
+        };
+        let template = args.template.clone().unwrap_or_default();
+        let text = html::render(&output.report, project, &template, &options);
+        documents.push((path.clone(), text.into_bytes()));
+    }
+    Ok(documents)
 }
 
 fn report(args: ReportArgs) -> Result<(), Box<dyn Error>> {

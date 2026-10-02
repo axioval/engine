@@ -553,6 +553,7 @@ dependencies = [
  "axioval-bcf-api",
  "axioval-bcf-snapshot",
  "axioval-engine",
+ "axioval-html",
  "axioval-icdd",
  "axioval-ifc",
  "axioval-ir",
@@ -666,6 +667,14 @@ version = "0.3.0"
 dependencies = [
  "axioval-ir",
  "serde_json",
+]
+
+[[package]]
+name = "axioval-html"
+version = "0.3.0"
+dependencies = [
+ "axioval-ir",
+ "thiserror",
 ]
 
 [[package]]

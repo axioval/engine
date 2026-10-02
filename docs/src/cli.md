@@ -24,6 +24,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
+  [--html report.html [--html-template template.html] [--html-title TEXT]] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
   [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]
@@ -259,6 +260,21 @@ evaluated`; an unknown value is a shaded blank. The workbook is created at
 `SOURCE_DATE_EPOCH` when set, else now, so with it set the same inputs write
 byte-identical workbooks.
 
+`--html` also writes the report as one self-contained HTML file (see
+[HTML reports](./sinks.md#html-reports)): a cover with the title
+(`--html-title`, default `Check report`), the date and the overall status,
+then the summary, rules, categories, findings with their objects,
+locations and decisions, not-evaluated outcomes, stale decisions and report
+tables. Its style is inline and it references nothing outside itself, laid
+out for print, so a browser's print dialog (or a headless browser's print
+to PDF) makes it a PDF. `--html-template` renders through a template file
+instead of the built-in one: HTML with placeholders such as `{{summary}}`,
+substituted and never run. A template that names an unknown placeholder,
+repeats a section, or leaves out `{{summary}}` or `{{not-evaluated}}` fails
+the run with status 1 before any work, and nothing is written. The date is
+`SOURCE_DATE_EPOCH` when set, else now, so with it set the same inputs
+write byte-identical reports.
+
 `--locate` locates every finding and not-evaluated outcome by storey and
 space (see [Locations](./refinement.md#locations)): `storeys` climbs
 `IfcRelContainedInSpatialStructure` and `IfcRelAggregates` to
@@ -482,6 +498,7 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--geometry] [--timestamps] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] [--xlsx report.xlsx] \
+  [--html report.html [--html-template template.html] [--html-title TEXT]] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
   [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]

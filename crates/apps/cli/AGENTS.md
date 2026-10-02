@@ -65,4 +65,9 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   identity column, created at `SOURCE_DATE_EPOCH` or now
   (`epoch_seconds`). It is built with every other output before anything
   is written; `tests/check.rs` reads two takeoff sheets back.
+- `--html` (shared through `OutputArgs`) renders `axioval-html`'s report,
+  dated as BCF topics are (`timestamp`). `--html-template` is read and
+  parsed by `OutputArgs::prepare` at the start of `check` and `compare`,
+  so a missing or refused template fails (status 1) before any work.
+  Never run anything from a template; never print a PDF here.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

@@ -145,6 +145,105 @@ fn a_finding_exits_3_and_is_written_as_json_and_bcf() {
     assert!(stderr(&output).contains("1 finding(s), 0 not evaluated"));
 }
 
+/// The HTML report: one self-contained file through the built-in template,
+/// sections reordered by a custom one, and a template hiding the
+/// not-evaluated outcomes refused before anything is written.
+#[test]
+fn a_finding_is_written_as_an_html_report_from_a_template() {
+    let case = Case::new("html-report");
+    let model = ifc("0000000000000000000002", false);
+    let page = case.path("report.html");
+    let output = case.check(
+        &model,
+        true,
+        &[
+            "--html",
+            page.to_str().unwrap(),
+            "--html-title",
+            "Walls <A>",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let html = std::fs::read_to_string(&page).unwrap();
+    assert!(html.starts_with("<!DOCTYPE html>"), "{html}");
+    assert!(html.contains("<title>Walls &lt;A&gt;</title>"), "{html}");
+    assert!(html.contains("2026-09-26T10:00:00Z"), "{html}");
+    assert!(html.contains("Not passed: 1 finding(s)"), "{html}");
+    assert!(
+        html.contains("<code>wall-reference-required</code>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<code>0000000000000000000002</code>"),
+        "{html}"
+    );
+    for external in ["http://", "https://", "<script", "<link"] {
+        assert!(!html.contains(external), "{external}: {html}");
+    }
+    assert!(
+        html.find("id=\"summary\"").unwrap() < html.find("id=\"tables\"").unwrap(),
+        "{html}"
+    );
+    // Rendered again, the same bytes.
+    case.check(
+        &model,
+        true,
+        &[
+            "--html",
+            page.to_str().unwrap(),
+            "--html-title",
+            "Walls <A>",
+        ],
+    );
+    assert_eq!(std::fs::read_to_string(&page).unwrap(), html);
+
+    let template = case.write(
+        "template.html",
+        "<html><body>{{tables}}{{findings}}{{not-evaluated}}{{summary}}</body></html>",
+    );
+    let custom = case.path("custom.html");
+    let output = case.check(
+        &model,
+        true,
+        &[
+            "--html",
+            custom.to_str().unwrap(),
+            "--html-template",
+            template.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let html = std::fs::read_to_string(&custom).unwrap();
+    assert!(
+        html.find("id=\"findings\"").unwrap() < html.find("id=\"summary\"").unwrap(),
+        "{html}"
+    );
+    assert!(!html.contains("id=\"cover\""), "{html}");
+
+    let hiding = case.write("hiding.html", "<html><body>{{summary}}</body></html>");
+    let refused = case.path("refused.html");
+    let saved = case.path("refused.json");
+    let output = case.check(
+        &model,
+        true,
+        &[
+            "--html",
+            refused.to_str().unwrap(),
+            "--html-template",
+            hiding.to_str().unwrap(),
+            "--report",
+            saved.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("not-evaluated"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!refused.exists() && !saved.exists());
+}
+
 #[test]
 fn a_complete_clean_check_exits_0() {
     let case = Case::new("clean");

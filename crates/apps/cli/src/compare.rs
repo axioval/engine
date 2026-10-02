@@ -80,7 +80,8 @@ pub struct CompareArgs {
     output: OutputArgs,
 }
 
-pub fn compare(args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
+pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
+    args.output.prepare()?;
     let tolerance =
         ComparisonTolerance::try_new(args.length_tolerance, args.angle_tolerance.to_radians())
             .map_err(|error| format!("--length-tolerance/--angle-tolerance: {error}"))?;

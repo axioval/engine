@@ -1,7 +1,8 @@
 # Report sinks
 
 A sink turns a finished `Report` into a format other tools read: BCF
-issue archives, [spreadsheets](#spreadsheets). Sinks depend
+issue archives, [spreadsheets](#spreadsheets), [HTML
+reports](#html-reports). Sinks depend
 on `axioval-ir` alone: they see findings, not-evaluated outcomes and the
 project the report was computed over, never the engine or a source adapter.
 
@@ -391,3 +392,61 @@ the clock and the archive's entries carry a fixed date, so identical input
 writes identical bytes for a given build. Excel's limits are kept, not
 worked around: a sheet over a million rows or a text over 32 767
 characters refuses the export (`ExportError::Write`) rather than truncate.
+
+## HTML reports
+
+`axioval-html` renders a report as one self-contained HTML document from a
+template.
+
+```rust,ignore
+let template = match custom {
+    Some(text) => axioval_html::Template::parse(&text)?,
+    None => axioval_html::Template::default(), // DEFAULT_TEMPLATE
+};
+let options = axioval_html::Options {
+    external_id_scheme: Some("ifc-globalid".to_owned()),
+    ..axioval_html::Options::new("2026-09-26T10:00:00Z")
+};
+std::fs::write("report.html", axioval_html::render(&report, project, &template, &options))?;
+```
+
+**Templates are data.** A template is HTML with placeholders and nothing
+else: no conditions, loops, expressions or includes. Rendering copies the
+text and replaces each placeholder with its slot's content, so a template
+can reorder, wrap, restyle or leave out sections, but nothing in it runs,
+and the sink executes no code from a template or a rule package.
+
+| Placeholder | Content |
+|---|---|
+| `{{title}}`, `{{date}}` | `Options::title` and `Options::date`, escaped; may repeat |
+| `{{style}}` | the built-in style sheet (`DEFAULT_STYLE`), for inside `<style>`; may repeat |
+| `{{cover}}` | title, date, overall status (not passed, incomplete or passed, as the CLI's exit status) and the sources |
+| `{{summary}}` | findings by severity, not-evaluated outcomes, rules, tables, decisions and stale decisions, counted |
+| `{{rules}}` | per rule: status (from `Report::rules` when recorded), objects checked, findings, not-evaluated outcomes, tables |
+| `{{categories}}` | findings counted per rule and category path |
+| `{{findings}}` | per rule, every finding: severity, object (scope, kind, alias), categories and message, related objects, storeys and spaces, decision with its thread |
+| `{{not-evaluated}}` | every not-evaluated outcome: rule, object, reason, message, location |
+| `{{stale-decisions}}` | decisions naming no finding of this run |
+| `{{tables}}` | every report table: units in the header, an exact value, an interval as both bounds (`2.999999 – 3.000001`), an unknown one as `not evaluated` |
+
+Spaces inside the braces are allowed (`{{ summary }}`). `Template::parse`
+refuses an unknown placeholder, a section placed twice, an unclosed `{{`,
+and a template without `{{summary}}` or `{{not-evaluated}}`
+(`TemplateError`), so no report hides that its run was incomplete.
+
+**Self-contained and print-ready.** The style is inline, and nothing
+outside the file is referenced: no script, stylesheet, font or image. Every
+text from the report or project is escaped. The built-in style lays the
+report out on A4 pages for print: the cover on its own page, each section
+starting a page, table headers repeated and rows kept whole.
+
+**Numbers are never rounded.** Each is written with its shortest exact
+representation, so an interval's two bounds never print as one value.
+
+**Deterministic.** The caller supplies the date; nothing reads the clock.
+Findings follow report order within each rule, rules and categories are
+sorted, so identical input renders identical bytes.
+
+**PDF** is printing this HTML, outside the engine: a browser's print
+dialog, or a headless browser (`chromium --headless --print-to-pdf=report.pdf
+report.html`). The sink writes no PDF and depends on no browser.

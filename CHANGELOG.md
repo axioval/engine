@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **HTML reports of a check run, from templates.** (Refs #178)
+  The new sink `axioval-html` (facade feature `html`) renders a report as
+  one self-contained HTML file: a cover with the overall status, the
+  summary, rules, categories, findings with their objects, locations and
+  decisions, not-evaluated outcomes, stale decisions and report tables,
+  with inline print-ready style (A4 pages, repeated table headers) and no
+  external resource or script. Templates are data: HTML with placeholders
+  (`{{summary}}`, `{{tables}}`, ...) and nothing else, so a custom
+  template reorders, restyles or leaves out sections but runs nothing; one
+  that leaves out `{{summary}}` or `{{not-evaluated}}` is refused. Numbers
+  are never rounded, so an interval shows both bounds. `axioval check` and
+  `compare` write it with `--html FILE`, `--html-template FILE` and
+  `--html-title TEXT`, dated `SOURCE_DATE_EPOCH` when set. PDF is left to
+  printing the HTML in a browser.
+
 - **Spreadsheet output for findings and takeoff tables.** (Closes #177)
   The new sink `axioval-xlsx` (facade feature `xlsx`) writes a report as
   an `.xlsx` workbook through `rust_xlsxwriter`: a `Findings` sheet with

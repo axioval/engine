@@ -19,6 +19,7 @@ EXPECTED = {
     "axioval-cli",
     "axioval-engine",
     "axioval-export",
+    "axioval-html",
     "axioval-icdd",
     "axioval-ids",
     "axioval-java-stream",

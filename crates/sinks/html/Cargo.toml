@@ -1,0 +1,20 @@
+[package]
+name = "axioval-html"
+description = "Self-contained HTML reports of Axioval validation runs, from templates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# An output sink reads the report contract only: never the engine, never a
+# source adapter. Templates are substituted by this crate itself, with no
+# template engine: a template is data and can run nothing.
+[dependencies]
+axioval-ir.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

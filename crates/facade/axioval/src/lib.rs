@@ -4,8 +4,8 @@
 //! contracts and engine are always present, and each source adapter appears
 //! under a module named for the format or library it adapts, behind a feature
 //! of the same name. Output sinks follow the same rule (`bcf`, `bcf_api`
-//! for BCF API servers, `bcf_snapshot` for viewpoint images, and `xlsx`
-//! for spreadsheet workbooks).
+//! for BCF API servers, `bcf_snapshot` for viewpoint images, `xlsx` for
+//! spreadsheet workbooks, and `html` for HTML reports).
 #![forbid(unsafe_code)]
 
 pub use axioval_engine as engine;
@@ -20,6 +20,8 @@ pub use axioval_bcf as bcf;
 pub use axioval_bcf_api as bcf_api;
 #[cfg(feature = "bcf-snapshot")]
 pub use axioval_bcf_snapshot as bcf_snapshot;
+#[cfg(feature = "html")]
+pub use axioval_html as html;
 #[cfg(feature = "icdd")]
 pub use axioval_icdd as icdd;
 #[cfg(feature = "ifc")]

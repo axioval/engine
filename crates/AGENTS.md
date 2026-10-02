@@ -53,6 +53,8 @@ an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
   source or kernel types.
 - `xlsx` (`axioval-xlsx`) — spreadsheet workbooks of findings,
   not-evaluated outcomes and report tables, through `rust_xlsxwriter`.
+- `html` (`axioval-html`) — self-contained HTML reports from templates
+  that are data (placeholders only); PDF is the host's print step.
 
 ## packages/
 
@@ -83,7 +85,7 @@ gate with no exemption. See `codecs/AGENTS.md`.
 
 - `axioval` — feature-gated facade. One feature per source adapter or sink,
   named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`,
-  `bcf-api`, `bcf-snapshot`, `xlsx`).
+  `bcf-api`, `bcf-snapshot`, `xlsx`, `html`).
 - `cli` (`axioval-cli`) — command-line frontend.
 
 ## Adding a source adapter or sink

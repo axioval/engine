@@ -44,6 +44,7 @@ axioval-bcf = { path = "crates/sinks/bcf", version = "0.3.0" }
 axioval-bcf-api = { path = "crates/sinks/bcf-api", version = "0.3.0" }
 axioval-bcf-snapshot = { path = "crates/sinks/bcf-snapshot", version = "0.3.0" }
 axioval-xlsx = { path = "crates/sinks/xlsx", version = "0.3.0" }
+axioval-html = { path = "crates/sinks/html", version = "0.3.0" }
 axioval-ids = { path = "crates/packages/ids", version = "0.3.0" }
 axioval-export = { path = "crates/packages/export", version = "0.3.0" }
 axioval-java-stream = { path = "crates/codecs/java-stream", version = "0.3.0" }

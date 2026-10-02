@@ -14,15 +14,21 @@ use axioval::axiolid::{
     AxiolidFreeSpaceService, AxiolidGeometry, AxiolidPlanSpanService, AxiolidVerticalExtentService,
 };
 use axioval::engine::{
-    CapabilityEvaluation, CompiledRule, CompleteRelationshipSelection, FreeSpaceServiceHandle,
-    MetricDirection, MetricFrame, MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService,
-    ObjectFrameServiceHandle, ObjectFront, PlanSpanServiceHandle, RelationshipQuery,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
-    RelationshipSelectionServiceHandle, RuleCapability, RuleContext, ServiceRegistry,
-    SourceSnapshot, TraversalDirection, VerticalExtentServiceHandle,
+    CapabilityEvaluation, CompiledRule, CompletePropertyAbsenceEvidence,
+    CompleteRelationshipSelection, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
+    MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
+    ObjectFront, PlanSpanServiceHandle, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, ResolvedProperty,
+    RuleCapability, RuleContext, ServiceRegistry, SourceSnapshot, TraversalDirection,
+    VerticalExtentServiceHandle,
 };
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
-use axioval::ir::{Evidence, NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
+use axioval::ir::{
+    Evidence, NotEvaluatedReason, Object, ObjectId, Project, Property, PropertyValue,
+    QuantityDimension, RuleId, SourceId,
+};
 use axioval::rules::ComponentClearance;
 
 const IN_SPACE: &str = "in-space";
@@ -82,6 +88,8 @@ struct Scene {
     right: [f64; 3],
     front: ObjectFront,
     edges: Vec<(ObjectId, ObjectId)>,
+    /// The WC's stated `Door.ClearWidth`, standing in for a door's.
+    clear_width: Option<PropertyValue>,
 }
 
 impl Scene {
@@ -93,6 +101,7 @@ impl Scene {
             right: [1.0, 0.0, 0.0],
             front: ObjectFront::NotStated,
             edges: vec![(id("wc"), id("room"))],
+            clear_width: None,
         }
         .body("room", "space", cuboid([0.0, 0.0, 0.0], [3.0, 3.0, 2.5]))
         .body("wc", "wc", cuboid([1.0, 0.0, 0.0], [1.4, 0.7, 0.4]))
@@ -182,6 +191,9 @@ impl Scene {
             .register(ObjectFrameServiceHandle::new(semantic.clone()))
             .unwrap();
         services
+            .register(PropertyResolutionServiceHandle::new(semantic.clone()))
+            .unwrap();
+        services
             .register(RelationshipSelectionServiceHandle::new(semantic))
             .unwrap();
         ComponentClearance.evaluate(
@@ -214,6 +226,31 @@ impl ObjectFrameService for Scene {
             self.front,
             Evidence::exact(source(), format!("placement:{}", object.local_id)),
         )
+    }
+}
+
+impl PropertyResolutionService for Scene {
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        match (&self.clear_width, request.property()) {
+            (Some(value), "ClearWidth") => {
+                let property = Property::new("Door", "ClearWidth", value.clone())
+                    .unwrap()
+                    .with_evidence(Evidence::exact(source(), "Door.ClearWidth"));
+                Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                    request.clone(),
+                    property,
+                )?))
+            }
+            _ => Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(
+                    request.clone(),
+                    Evidence::exact(source(), "absent"),
+                )?,
+            )),
+        }
     }
 }
 
@@ -1022,4 +1059,128 @@ fn the_new_declarations_fail_closed() {
         ("depth_slide_from", metres(-0.1)),
         ("depth_slide_to", metres(0.1)),
     ]);
+}
+
+/// The WC stands in for a door 0.7 m deep (y 0 to 0.7) whose clear width
+/// it states; a cupboard stands 1.25 m in front of it (y 1.95 to 2.2).
+fn door_with_width(width: PropertyValue) -> CapabilityEvaluation {
+    let mut scene = Scene::wc().body(
+        "cupboard",
+        "cupboard",
+        cuboid([1.0, 1.95, 0.0], [1.4, 2.2, 1.0]),
+    );
+    scene.clear_width = Some(width);
+    scene.check(&[
+        ("side", text("front")),
+        ("align", text("centre")),
+        ("width", metres(0.4)),
+        ("depth", metres(1.5)),
+        ("depth_mode", text("less_clear_width")),
+        ("depth_minimum", metres(1.2)),
+        (
+            "clear_width_property",
+            ParameterValue::PropertyReference {
+                property: "ClearWidth".into(),
+                property_set: Some("Door".into()),
+            },
+        ),
+    ])
+}
+
+fn width(value: f64) -> PropertyValue {
+    PropertyValue::Quantity {
+        value,
+        dimension: QuantityDimension::Length,
+    }
+}
+
+fn width_between(lower: f64, upper: f64) -> PropertyValue {
+    PropertyValue::Measured {
+        lower,
+        upper,
+        dimension: QuantityDimension::Length,
+    }
+}
+
+/// The area in front of a door is `max(1.2 m, 1.5 m - clear width)` deep:
+/// a 0.9 m door needs 1.2 m, clear of the cupboard; a 0.2 m door needs
+/// 1.3 m, which the cupboard obstructs.
+#[test]
+fn the_depth_in_front_of_a_door_shrinks_as_the_door_widens() {
+    assert!(clean(&door_with_width(width(0.9))));
+    let narrow = door_with_width(width(0.2));
+    let found = findings(&narrow);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].0.contains("1.3 m deep") && found[0].0.contains("cupboard"),
+        "{found:?}"
+    );
+    assert!(
+        found[0].0.ends_with(
+            "; the depth is 1.5 m less the clear width (Door.ClearWidth) 0.2 m, at least 1.2 m"
+        ),
+        "{found:?}"
+    );
+    assert!(
+        narrow.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "Door.ClearWidth")
+    );
+}
+
+/// A clear width known only as an interval gives a depth interval: decided
+/// where every depth agrees, not evaluated where the verdict depends on it.
+#[test]
+fn a_clear_width_interval_decides_only_where_both_depths_agree() {
+    // 0.85 to 0.9 m: depths of 1.2 to 1.25 m, all clear.
+    assert!(clean(&door_with_width(width_between(0.85, 0.9))));
+    // 0.1 to 0.2 m: depths of 1.3 to 1.4 m, all obstructed.
+    assert_eq!(findings(&door_with_width(width_between(0.1, 0.2))).len(), 1);
+    // 0.2 to 0.9 m: 1.2 m is clear, 1.3 m is not.
+    let open = door_with_width(width_between(0.2, 0.9));
+    assert!(open.findings().is_empty());
+    let undecided = unevaluated(&open);
+    assert_eq!(undecided.len(), 1, "{undecided:?}");
+    assert!(
+        undecided[0]
+            .1
+            .contains("the clear width (Door.ClearWidth) between 0.2 m and 0.9 m"),
+        "{undecided:?}"
+    );
+}
+
+/// A depth from the clear width needs a source for it, an unreadable
+/// stated width is not evaluated, and the sources are refused elsewhere.
+#[test]
+fn a_depth_from_the_clear_width_fails_closed() {
+    let unreadable = door_with_width(PropertyValue::String("wide".into()));
+    assert_eq!(unevaluated(&unreadable).len(), 1);
+    assert!(
+        unevaluated(&unreadable)[0]
+            .1
+            .contains("needs the clear width")
+    );
+    let mut scene = Scene::wc();
+    scene.clear_width = Some(width(0.9));
+    let missing = scene.check(&[
+        ("side", text("front")),
+        ("depth", metres(1.5)),
+        ("depth_mode", text("less_clear_width")),
+    ]);
+    assert_eq!(
+        unevaluated(&missing)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
+    let stray = Scene::wc().check(&[(
+        "clear_width_property",
+        ParameterValue::PropertyReference {
+            property: "ClearWidth".into(),
+            property_set: None,
+        },
+    )]);
+    assert_eq!(
+        unevaluated(&stray)[0].0,
+        NotEvaluatedReason::InvalidDeclaration
+    );
 }

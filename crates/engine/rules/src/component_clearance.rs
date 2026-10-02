@@ -19,6 +19,7 @@ use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
 use crate::body_extent::{extent_error, frame_error};
 use crate::door_swing;
+use crate::keyed_limit::{CLEAR_WIDTH_SOURCES, DoorClearWidth, difference as rounded};
 use crate::level_spacing::{extent, metres, shown};
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
@@ -51,7 +52,12 @@ use crate::wall_sides::Walls;
 /// `fixed` (the default), or sized from the component (`*_mode`
 /// `component_plus`: its own dimension plus the stated one, or
 /// `component_clamped`: that, clamped between `*_minimum` and
-/// `*_maximum`). Along the side it starts at the component's outermost
+/// `*_maximum`). For a door, `depth_mode` `less_clear_width` makes the
+/// depth `max(depth_minimum, depth - clear width)`, the clear width read
+/// as `keyed-limit` reads it (`clear_width_property`,
+/// `clear_width_from_leaves`, `overall_width`, `width_deduction`); one
+/// known only as an interval gives a depth interval, judged like any
+/// measured position. Along the side it starts at the component's outermost
 /// point (`depth_from` `face`, the default) or its midline (`midline`)
 /// plus `offset`; across it, it is centred on the component or flush with
 /// its left or right edge (`align`, as seen looking out of that side),
@@ -262,16 +268,42 @@ enum Sizing {
         minimum: Option<f64>,
         maximum: Option<f64>,
     },
+    /// A total less the door's clear width, clamped between a minimum and
+    /// a maximum: `max(minimum, total - clear width)`.
+    LessClearWidth {
+        total: f64,
+        minimum: Option<f64>,
+        maximum: Option<f64>,
+    },
 }
 
 impl Sizing {
     /// The length as an interval, from the component's dimension (asked
-    /// only when the sizing needs it).
+    /// only when the sizing needs it) or the door's clear width.
     fn resolve(
         self,
         component: impl FnOnce() -> Result<(f64, f64), Unavailable>,
+        clear: Option<(f64, f64)>,
     ) -> Result<(f64, f64), Unavailable> {
         match self {
+            Self::LessClearWidth {
+                total,
+                minimum,
+                maximum,
+            } => {
+                let (narrow, wide) =
+                    clear.ok_or_else(|| invalid("the door's clear width was not read"))?;
+                // Decreasing in the clear width, and clamping is monotone:
+                // the widest door gives the least depth.
+                let clamp = |value: f64| {
+                    let value = minimum.map_or(value, |minimum| value.max(minimum));
+                    maximum.map_or(value, |maximum| value.min(maximum))
+                };
+                Ok((
+                    clamp(rounded(total, wide).0),
+                    clamp(rounded(total, narrow).1),
+                ))
+            }
             Self::Fixed(length) => Ok((length, length)),
             Self::Plus(add) => {
                 let (low, high) = component()?;
@@ -501,9 +533,29 @@ struct Config<'a> {
     walls: Option<(&'a Selector, f64, f64)>,
     /// What must hold the volume's base, and how far from it vertically.
     support: Option<(&'a Selector, f64)>,
+    /// With `depth_mode` `less_clear_width`: where the door's clear width
+    /// comes from, and the total, minimum and maximum it sizes the depth by.
+    clear_width: Option<DoorClearWidth<'a>>,
 }
 
 impl Config<'_> {
+    /// The depth taken from the door's clear width: its total, minimum and
+    /// maximum.
+    fn less_clear_width(&self) -> Option<(f64, Option<f64>, Option<f64>)> {
+        match self.declared {
+            Declared::Box {
+                depth:
+                    Sizing::LessClearWidth {
+                        total,
+                        minimum,
+                        maximum,
+                    },
+                ..
+            } => Some((total, minimum, maximum)),
+            _ => None,
+        }
+    }
+
     fn floats(&self) -> bool {
         self.slide.is_some() || self.depth_slide.is_some()
     }
@@ -546,6 +598,23 @@ fn sizing(
     let sizing = match parameters.string(&format!("{dimension}_mode"))? {
         None | Some("fixed") => positive(parameters, dimension)?.map(Sizing::Fixed),
         Some("component_plus") => Some(Sizing::Plus(length(parameters, dimension)?.unwrap_or(0.0))),
+        Some("less_clear_width") if dimension == "depth" => {
+            if let (Some(minimum), Some(maximum)) = (minimum, maximum)
+                && minimum > maximum
+            {
+                return Err(invalid("`depth_minimum` exceeds `depth_maximum`"));
+            }
+            Some(Sizing::LessClearWidth {
+                total: positive(parameters, dimension)?.ok_or_else(|| {
+                    invalid(
+                        "`depth_mode` `less_clear_width` needs `depth`, the total the clear \
+                         width is taken from",
+                    )
+                })?,
+                minimum,
+                maximum,
+            })
+        }
         Some("component_clamped") => {
             if let (Some(minimum), Some(maximum)) = (minimum, maximum) {
                 if minimum > maximum {
@@ -569,14 +638,19 @@ fn sizing(
         Some(other) => {
             return Err(invalid(format!(
                 "{dimension}_mode `{other}` is unsupported; use `fixed`, `component_plus` or \
-                 `component_clamped`"
+                 `component_clamped` (or, for the depth, `less_clear_width`)"
             )));
         }
     };
-    if clamps && !matches!(sizing, Some(Sizing::Clamped { .. })) {
+    if clamps
+        && !matches!(
+            sizing,
+            Some(Sizing::Clamped { .. } | Sizing::LessClearWidth { .. })
+        )
+    {
         return Err(invalid(format!(
             "`{dimension}_minimum` and `{dimension}_maximum` apply only to `{dimension}_mode` \
-             `component_clamped`"
+             `component_clamped` or `less_clear_width`"
         )));
     }
     if required && sizing.is_none() {
@@ -810,6 +884,7 @@ impl<'a> Config<'a> {
             }
             _ => {}
         }
+        let clear_width = clear_width(&parameters, declared)?;
         Ok(Self {
             sides,
             quantifier,
@@ -833,7 +908,34 @@ impl<'a> Config<'a> {
             spaces,
             walls,
             support,
+            clear_width,
         })
+    }
+}
+
+/// Where the door's clear width comes from, declared exactly when the
+/// depth is sized from it.
+fn clear_width<'a>(
+    parameters: &Parameters<'a>,
+    declared: Declared,
+) -> Result<Option<DoorClearWidth<'a>>, Unavailable> {
+    let clear_width = DoorClearWidth::parse(parameters, "clear_width_property")?;
+    let sized = matches!(
+        declared,
+        Declared::Box {
+            depth: Sizing::LessClearWidth { .. },
+            ..
+        }
+    );
+    match (sized, &clear_width) {
+        (true, None) => Err(invalid(
+            "`depth_mode` `less_clear_width` needs `clear_width_property`, \
+             `clear_width_from_leaves`, or `overall_width` with `width_deduction`",
+        )),
+        (false, Some(_)) => Err(invalid(
+            "the clear width parameters apply only to `depth_mode` `less_clear_width`",
+        )),
+        _ => Ok(clear_width),
     }
 }
 
@@ -945,6 +1047,10 @@ impl RuleCapability for ComponentClearance {
             ParameterDescriptor::optional("wall_inset", ParameterType::Quantity),
             ParameterDescriptor::optional("support_selector", ParameterType::Selector),
             ParameterDescriptor::optional("support_tolerance", ParameterType::Quantity),
+            ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[0], ParameterType::String),
+            ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[1], ParameterType::PropertyReference),
+            ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[2], ParameterType::Quantity),
         ]
     }
 
@@ -1214,21 +1320,27 @@ fn check(
     obstacles: &Obstacles,
     object: &Object,
 ) -> Vec<(Side, Judged)> {
+    let every = |error: Unavailable| {
+        config
+            .sides
+            .iter()
+            .map(|side| (*side, Err(error.clone())))
+            .collect()
+    };
     let placed = match Placement::of(context, config, services, object) {
         Ok(placed) => placed,
-        Err(error) => {
-            return config
-                .sides
-                .iter()
-                .map(|side| (*side, Err(error.clone())))
-                .collect();
-        }
+        Err(error) => return every(error),
     };
+    let sized = match ClearDepth::of(context, config, object) {
+        Ok(sized) => sized,
+        Err(error) => return every(error),
+    };
+    let clear = sized.as_ref().map(|sized| sized.width);
     let mut results = Vec::new();
     for side in &config.sides {
         let faces = placed
             .faces(config, services, object, *side)
-            .and_then(|faces| Ok((faces.size(config, &placed)?, faces)));
+            .and_then(|faces| Ok((faces.size(config, &placed, clear)?, faces)));
         let (declared, faces) = match faces {
             Ok(found) => found,
             Err(error) => {
@@ -1290,7 +1402,73 @@ fn check(
             ));
         }
     }
-    results
+    match sized {
+        None => results,
+        Some(sized) => results
+            .into_iter()
+            .map(|(side, judged)| (side, sized.annotate(judged)))
+            .collect(),
+    }
+}
+
+/// A depth sized from the door's clear width: the width as an interval,
+/// how a message words the depth, and the evidence it rests on.
+struct ClearDepth {
+    width: (f64, f64),
+    words: String,
+    evidence: Vec<Evidence>,
+}
+
+impl ClearDepth {
+    /// The door's clear width where the depth is sized from it.
+    fn of(
+        context: &RuleContext<'_>,
+        config: &Config<'_>,
+        object: &Object,
+    ) -> Result<Option<Self>, Unavailable> {
+        let (Some((total, minimum, maximum)), Some(reader)) =
+            (config.less_clear_width(), config.clear_width.as_ref())
+        else {
+            return Ok(None);
+        };
+        let ((low, high), what, evidence) = reader
+            .measure(context, object)
+            .map_err(|(reason, why)| (reason, format!("the depth needs the clear width: {why}")))?;
+        let words = format!(
+            "the depth is {} less the {what} {}{}{}",
+            metres(total),
+            shown(low, high),
+            minimum.map_or_else(String::new, |minimum| format!(
+                ", at least {}",
+                metres(minimum)
+            )),
+            maximum.map_or_else(String::new, |maximum| format!(
+                ", at most {}",
+                metres(maximum)
+            )),
+        );
+        Ok(Some(Self {
+            width: (low, high),
+            words,
+            evidence,
+        }))
+    }
+
+    /// One side's result, naming where its depth came from.
+    fn annotate(&self, judged: Judged) -> Judged {
+        match judged {
+            Ok(None) => Ok(None),
+            Ok(Some((message, mut evidence, related))) => {
+                evidence.extend(self.evidence.iter().cloned());
+                Ok(Some((
+                    format!("{message}; {}", self.words),
+                    evidence,
+                    related,
+                )))
+            }
+            Err((reason, message)) => Err((reason, format!("{message}; {}", self.words))),
+        }
+    }
 }
 
 /// How far a derived front may be turned from the true one: the volume is
@@ -1631,19 +1809,27 @@ fn midpoint(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
 impl Faces {
     /// The declared size on this side, sized from the component where the
     /// rule says so.
-    fn size(&self, config: &Config<'_>, placed: &Placement) -> Result<Size, Unavailable> {
+    fn size(
+        &self,
+        config: &Config<'_>,
+        placed: &Placement,
+        clear: Option<(f64, f64)>,
+    ) -> Result<Size, Unavailable> {
         let height = |declared: Option<Sizing>| -> Result<Height, Unavailable> {
             match declared {
                 None => Ok(Height::ToTop(0.0)),
                 Some(sizing) => sizing
-                    .resolve(|| {
-                        placed.height.ok_or_else(|| {
-                            (
-                                NotEvaluatedReason::InvalidEvidence,
-                                "the component's height was not measured".into(),
-                            )
-                        })
-                    })
+                    .resolve(
+                        || {
+                            placed.height.ok_or_else(|| {
+                                (
+                                    NotEvaluatedReason::InvalidEvidence,
+                                    "the component's height was not measured".into(),
+                                )
+                            })
+                        },
+                        None,
+                    )
                     .map(Height::Of),
             }
         };
@@ -1654,8 +1840,8 @@ impl Faces {
                 height: tall,
             } => Ok(Size {
                 shape: Shape::Box {
-                    width: width.resolve(|| Ok(difference(self.high, self.low)))?,
-                    depth: depth.resolve(|| Ok(difference(self.face, self.back)))?,
+                    width: width.resolve(|| Ok(difference(self.high, self.low)), None)?,
+                    depth: depth.resolve(|| Ok(difference(self.face, self.back)), clear)?,
                 },
                 height: height(tall)?,
             }),

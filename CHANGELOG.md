@@ -173,6 +173,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`boolean`), `clear_width_property` and `overall_width`
   (`propertyReference`), `clear_width_from_leaves` (`string`) and
   `width_deduction` (`quantity`).
+- **Clear area in front of a door sized by its clear width.** (Closes #151)
+  `component-clearance` gains `depth_mode` `less_clear_width`: the depth
+  is `max(depth_minimum, depth - clear width)` (at most `depth_maximum`),
+  so with a 1.50 m total and a 1.20 m minimum a 0.90 m door needs 1.20 m
+  and a 0.20 m door 1.30 m. The clear width is read as `keyed-limit`'s
+  `clear-width` reads it (`clear_width_property`, `clear_width_from_leaves`,
+  `overall_width`, `width_deduction`). A width known only as an interval
+  gives a depth interval, decided only where the deepest and the
+  shallowest area agree; an unreadable width is not evaluated, and every
+  outcome names where the depth came from. `keyed-limit`'s `clear-width`
+  and the entrance widths of `local-circulation` also accept a stated
+  clear width given as a measured interval of lengths, judged only where
+  every width in it agrees.
+  **Breaking:** definitions bound to `component-clearance` must declare the
+  optional parameters `clear_width_property` and `overall_width`
+  (`propertyReference`), `clear_width_from_leaves` (`string`) and
+  `width_deduction` (`quantity`).
 - **Default door dimensions per door type.** (Refs #150) `keyed-limit`
   gains `door_type_defaults`, a table of defaults per door type: a row
   applies by the operation type the door's leaves state (`operation`, a

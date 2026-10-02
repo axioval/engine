@@ -10285,6 +10285,54 @@ fn with_geometry_door_clearances_follow_the_swing_side_and_the_handle() {
     }
 }
 
+/// The area on the swing side of door #30 is `max(0.2 m, total - clear
+/// width)` deep, the clear width 0.76 m from its lining and leaf: a 1 m
+/// total leaves 0.24 m, short of the column, a 1.2 m total 0.44 m, which
+/// the column obstructs.
+#[test]
+fn with_geometry_a_door_clearance_depth_follows_the_clear_width() {
+    let case = Case::new("geometry-door-clearance-depth");
+    let check = |total: f64| {
+        case.geometry_rule(
+            &door_with_a_column_by_its_handle(),
+            &[("door", "IfcDoor"), ("column", "IfcColumn")],
+            "axioval:capability.component-clearance",
+            &registry_signature("axioval:capability.component-clearance"),
+            entity("door"),
+            json!({
+                "side": {"type": "string", "value": "front"},
+                "front_axis": {"type": "string", "value": "swing"},
+                "width": {"type": "quantity", "value": 0.5, "unit": "m"},
+                "depth": {"type": "quantity", "value": total, "unit": "m"},
+                "depth_mode": {"type": "string", "value": "less_clear_width"},
+                "depth_minimum": {"type": "quantity", "value": 0.2, "unit": "m"},
+                "clear_width_from_leaves": {"type": "string", "value": "passage"},
+                "height": {"type": "quantity", "value": 2, "unit": "m"},
+                "align": {"type": "string", "value": "handle"},
+                "height_reference": {"type": "string", "value": "bottom"},
+                "obstacles": {"type": "selector", "value": entity("column")},
+            }),
+        )
+    };
+    let (_, result) = check(1.0);
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    let (output, result) = check(1.2);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    let [(door, message)] = &findings[..] else {
+        panic!("one finding: {result:#}")
+    };
+    assert_eq!(door, "#30");
+    assert!(
+        message.starts_with("front clearance (0.5 m wide, 0.44 m deep, 2 m high) is obstructed")
+            && message.ends_with(
+                "; the depth is 1.2 m less the clear width (overall width 0.9 m less 2 × 0.05 m \
+                 lining and 0.04 m of open leaf, as the door states them) 0.76 m, at least 0.2 m"
+            ),
+        "{message}"
+    );
+}
+
 /// Office #19 (x -1..4, y 0..4) north of corridor #29 (y -2..0), both
 /// 3 m high, bounding doors #50 and #80 in the line between them: #50,
 /// hinged at the origin, swings north into the office; #80, hinged at

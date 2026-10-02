@@ -194,11 +194,11 @@ impl<'a> ClearWidth<'a> {
     fn measure(&self, context: &RuleContext<'_>, object: &Object) -> Result<Measured, Unavailable> {
         let mut evidence = Vec::new();
         if let Some(stated) = self.stated {
-            if let Some(width) = LightArea::length(context, object, stated, &mut evidence)? {
-                evidence.push(Self::record(&object.id, "stated", true));
+            if let Some((lower, upper)) = stated_width(context, object, stated, &mut evidence)? {
+                evidence.push(Self::record(&object.id, "stated", upper <= lower));
                 return Ok(Measured {
-                    lower: width,
-                    upper: width,
+                    lower,
+                    upper,
                     unit: " m".into(),
                     what: format!("clear width ({stated})"),
                     evidence,
@@ -356,6 +356,36 @@ impl<'a> ClearWidth<'a> {
     }
 }
 
+/// A clear width `object` states: `None` when absent, a positive length,
+/// or a measured interval of positive lengths (known only that closely);
+/// anything else, null included, leaves the object not evaluated.
+fn stated_width(
+    context: &RuleContext<'_>,
+    object: &Object,
+    property: PropertyRef<'_>,
+    evidence: &mut Vec<Evidence>,
+) -> Result<Option<(f64, f64)>, Unavailable> {
+    let resolved = resolve(context, object, property)?;
+    if let Some(PropertyValue::Measured {
+        lower,
+        upper,
+        dimension: QuantityDimension::Length,
+    }) = resolved.value()
+        && lower.is_finite()
+        && upper.is_finite()
+        && *lower > 0.0
+        && lower <= upper
+    {
+        evidence.extend(resolved.evidence());
+        return Ok(Some((*lower, *upper)));
+    }
+    Ok(LightArea::length(context, object, property, evidence)?.map(|width| (width, width)))
+}
+
+/// A clear width as an interval, how a message words it, and its
+/// evidence.
+pub(crate) type MeasuredWidth = ((f64, f64), String, Vec<Evidence>);
+
 /// A door's clear width read as the `clear-width` quantity reads it, from
 /// the same steps under the same parameter names, the stated width from a
 /// parameter the caller names. Shared with `local-circulation`, which
@@ -384,6 +414,21 @@ impl<'a> DoorClearWidth<'a> {
         }
         ClearWidth::declared(stated, leaves, overall, deduction, None)
             .map(|steps| Some(Self(steps)))
+    }
+
+    /// The clear width of `door` as an interval sure to hold it, how a
+    /// message words it (`clear width (…)`) and the evidence.
+    pub(crate) fn measure(
+        &self,
+        context: &RuleContext<'_>,
+        door: &Object,
+    ) -> Result<MeasuredWidth, Unavailable> {
+        let measured = self.0.measure(context, door)?;
+        Ok((
+            (measured.lower, measured.upper),
+            measured.what,
+            measured.evidence,
+        ))
     }
 
     /// Judges the clear width of `door` against `minimum`, read as the
@@ -1682,7 +1727,7 @@ fn check(
 
 /// `minuend - subtrahend` as an interval sure to hold the exact difference: the
 /// rounded difference, widened by one step where rounding moved it.
-fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
+pub(crate) fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
     let rounded = minuend - subtrahend;
     // Two-sum: the exact difference is `rounded + error`.
     let back = rounded - minuend;

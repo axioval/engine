@@ -2062,3 +2062,31 @@ fn door_type_defaults_are_checked() {
     assert!(unevaluated(&evaluation).is_empty());
     assert!(findings(&evaluation).is_empty());
 }
+
+/// A clear width stated only as a measured interval is judged where every
+/// width it may be agrees, and cited as inexact.
+#[test]
+fn a_clear_width_known_as_an_interval_decides_only_where_it_agrees() {
+    let between = |lower: f64, upper: f64| PropertyValue::Measured {
+        lower,
+        upper,
+        dimension: QuantityDimension::Length,
+    };
+    let model = doors(&[
+        ("d1", "SINGLE_SWING_LEFT", None, Some(between(0.7, 0.8))),
+        ("d2", "SINGLE_SWING_LEFT", None, Some(between(0.85, 0.95))),
+        ("d3", "SINGLE_SWING_LEFT", None, Some(between(0.95, 1.0))),
+    ]);
+    let evaluation = clear(model, door_keys(None));
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d2".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator.ends_with("d1:step=stated") && !evidence.exact)
+    );
+}

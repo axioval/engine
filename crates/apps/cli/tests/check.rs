@@ -15014,3 +15014,99 @@ fn bcf_snapshots_show_a_clash_and_are_marked_illustrative() {
         stderr(&output)
     );
 }
+
+/// A round column #19 (radius 0.2 m, axis at x 5, y 3, from z 0.5 to 3.5,
+/// placed turned a quarter about z) and a wall #29 whose face stands at
+/// y 4: 0.8 m from the column's surface.
+fn round_column_beside_a_wall() -> String {
+    model_with(&format!(
+        "#10=IFCCARTESIANPOINT((5.,3.,0.5));\n\
+         #11=IFCDIRECTION((0.,1.,0.));\n\
+         #12=IFCAXIS2PLACEMENT3D(#10,#4,#11);\n\
+         #13=IFCLOCALPLACEMENT($,#12);\n\
+         #14=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.2);\n\
+         #15=IFCEXTRUDEDAREASOLID(#14,#2,#4,3.);\n\
+         #16=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#15));\n\
+         #17=IFCPRODUCTDEFINITIONSHAPE($,$,(#16));\n\
+         #19=IFCCOLUMN('0000000000000000000019',$,$,$,$,#13,#17,$,$);\n\
+         {}",
+        placed_box(
+            20,
+            [5.0, 4.1, 0.0],
+            [4.0, 0.2, 4.0],
+            "IFCWALL('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+    ))
+}
+
+/// The column's distance to the wall against a 0.79999 m minimum, with
+/// further `check` arguments.
+///
+/// The column's mesh faces the wall with a chord about 0.96 mm inside the
+/// circle, and the bridge declares 1 mm, so the mesh alone measures between
+/// about 0.79996 m and 0.80196 m: a minimum just under the true 0.8 m is
+/// what only the certified distance can decide.
+fn round_column_distance(case: &Case, args: &[&str]) -> (Output, Value) {
+    case.write("model.ifc", &round_column_beside_a_wall());
+    case.geometry_rule_with(
+        &["model.ifc"],
+        &[("column", "IfcColumn"), ("wall", "IfcWall")],
+        (
+            "axioval:capability.distance",
+            &registry_signature("axioval:capability.distance"),
+        ),
+        entity("column"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("wall")},
+            "mode": {"type": "string", "value": "none_closer_than"},
+            "minimum_metres": {"type": "number", "value": 0.79999},
+        }),
+        &json!({}),
+        args,
+    )
+}
+
+#[test]
+fn with_geometry_a_round_columns_distance_to_a_wall_is_certified() {
+    // The column's mesh is a tessellation within 1 mm, so on its own it
+    // leaves the minimum open.
+    let case = Case::new("geometry-certified-column");
+    let (output, result) = round_column_distance(&case, &["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
+    assert_eq!(
+        result["geometry"].get("exact_boundaries"),
+        None,
+        "{result:#}"
+    );
+    assert_eq!(
+        result["report"]["not_evaluated"][0]["object_id"]["local_id"],
+        json!("#19"),
+        "{result:#}"
+    );
+
+    // By default both bodies also get their exact boundaries, built from
+    // the same extrusions, and the certified distance clears the minimum.
+    let (output, result) = round_column_distance(&case, &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    assert!(
+        stderr(&output).contains("2 with an exact boundary"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn exact_boundaries_are_a_geometry_option() {
+    let case = Case::new("exact-boundaries-need-geometry");
+    let output = case.check(&model_with(""), true, &["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+}

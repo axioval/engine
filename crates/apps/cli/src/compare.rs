@@ -132,7 +132,9 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     records.extend(integrity(&revised)?);
 
     let (base, revised, meshed) = if args.geometry {
-        let keep = args.output.bcf_view.snapshots;
+        // A comparison measures each object against its own revision, never
+        // a pair of curved bodies, so exact boundaries would go unused.
+        let keep = geometry::Options::meshes(args.output.bcf_view.snapshots);
         let (base, before) = geometry::attach(base, &base_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
         let (revised, after) = geometry::attach(revised, &revised_bytes, keep)
@@ -150,6 +152,7 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
             exact: before.exact + after.exact,
             tessellated: before.tessellated + after.tessellated,
             no_body: before.no_body + after.no_body,
+            exact_boundaries: 0,
             unmeasured,
         };
         (base, revised, Some((record, bodies)))

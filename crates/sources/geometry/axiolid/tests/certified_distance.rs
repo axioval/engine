@@ -250,3 +250,90 @@ fn a_boundary_that_misses_its_mesh_refuses() {
         .with_exact_boundary(id("wall"), exact_wall());
     assert_eq!(distance(geometry), Err(ProximityError::InvalidMeasurement));
 }
+
+/// `profile` extruded `HEIGHT` up from the ground and placed at `at`, as a
+/// host lowers an extruded body.
+fn graph_boundary(
+    profile: axiolid_profile::Profile,
+    at: [f64; 2],
+) -> Result<axioval_axiolid::ExactBoundary, String> {
+    use axiolid_core::{Transform3, Vec3};
+    use axiolid_model::{GeometryGraphBuilder, GeometryNode, Instance, SolidOperation};
+
+    let mut builder = GeometryGraphBuilder::new();
+    let profile = builder.push(GeometryNode::Profile(profile)).unwrap();
+    let extrusion = builder
+        .push(GeometryNode::SolidOperation(SolidOperation::Extrusion {
+            profile,
+            direction: Vec3::Z,
+            depth: HEIGHT,
+        }))
+        .unwrap();
+    let root = builder
+        .push(GeometryNode::Instance(Instance {
+            source: extrusion,
+            transform: Transform3::from_translation(Vec3::new(at[0], at[1], 0.0)),
+        }))
+        .unwrap();
+    let graph = builder.finish(vec![root]).unwrap();
+    axioval_axiolid::exact_boundary(&graph, root)
+}
+
+fn round(radius: f64) -> axiolid_profile::Profile {
+    axiolid_profile::Profile::Circle(axiolid_profile::CircleProfile {
+        radius,
+        thickness: None,
+    })
+}
+
+fn wall_profile() -> axiolid_profile::Profile {
+    axiolid_profile::Profile::Rectangle(axiolid_profile::RectangleProfile {
+        x: 0.2,
+        y: 4.0,
+        thickness: None,
+        outer_radius: None,
+        inner_radius: None,
+    })
+}
+
+#[test]
+fn boundaries_built_from_the_meshed_graph_certify_the_pair() {
+    let column = graph_boundary(round(RADIUS), [0.0, 0.0]).unwrap();
+    let wall = graph_boundary(wall_profile(), [1.1, 0.0]).unwrap();
+    let geometry = meshes();
+    geometry
+        .check_exact_boundary(&id("column"), &column)
+        .unwrap();
+    geometry.check_exact_boundary(&id("wall"), &wall).unwrap();
+    let geometry = geometry
+        .with_exact_boundary(id("column"), column.into_brep())
+        .with_exact_boundary(id("wall"), wall.into_brep());
+    let (lower, upper) = distance(geometry).unwrap();
+    assert!(lower <= DISTANCE && DISTANCE <= upper, "[{lower}, {upper}]");
+    assert!(lower > 0.799, "[{lower}, {upper}]");
+}
+
+#[test]
+fn a_boundary_that_does_not_match_its_mesh_fails_the_check() {
+    let geometry = meshes();
+    // Placed a metre away, and a column a little too wide.
+    let moved = graph_boundary(round(RADIUS), [-1.0, 0.0]).unwrap();
+    assert!(
+        geometry
+            .check_exact_boundary(&id("column"), &moved)
+            .is_err()
+    );
+    let wider = graph_boundary(round(RADIUS + 0.01), [0.0, 0.0]).unwrap();
+    assert!(
+        geometry
+            .check_exact_boundary(&id("column"), &wider)
+            .is_err()
+    );
+    // Nothing to compare against.
+    let column = graph_boundary(round(RADIUS), [0.0, 0.0]).unwrap();
+    assert!(
+        geometry
+            .check_exact_boundary(&id("nothing"), &column)
+            .is_err()
+    );
+}

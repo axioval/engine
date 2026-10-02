@@ -330,6 +330,25 @@ leaves that within about 4 mm, the certified distance within a
 micrometre, so a bound of 0.799 m or 0.8005 m is judged instead of left
 open. An exact pair is already a point and is not certified.
 
+**Exact boundaries from IFC bodies.** A host that meshes an Axiolid
+geometry graph can have the same graph node's exact solid built with
+`axioval_axiolid::exact_boundary`, so boundary and mesh share one placement.
+It is built only where the construction is exact: an extrusion whose
+placement keeps the profile plane horizontal and the extrusion vertical
+(any turn about the vertical, mirroring and mapped items included), of a
+rectangle (sharp, rounded or hollow), circle (filled or hollow), structural
+section or contour of lines and arcs, with at most one void. The placement
+is pushed onto the profile exactly, so a circle stays a circle, and the
+vertical prism is the kernel's exact arc-prism boolean. Everything else
+keeps its mesh alone: ellipses, revolutions, swept disks and directrix
+sweeps, tilted or horizontal extrusions, booleans (openings, clippings) and
+bodies of several items (axiolid/kernel#223 asks for rigid placements of
+exact solids, exact revolutions and swept disks).
+`AxiolidGeometry::check_exact_boundary` compares the solid's extent, arc
+extremes included, with the mesh's within its chord deviation and
+rounding; a boundary that fails is never registered. `axioval check
+--geometry` does all this by default (see [CLI](./cli.md)).
+
 **Certified plan relations.** The same pairs are certified in plan by
 `axiolid-measure`'s plan measurements, the same branch and bound with every
 gap, direction and enclosing disc horizontal. A solid's shadow on the XY

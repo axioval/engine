@@ -32,6 +32,17 @@
 //! A group (a zone) has no body, but its plan footprint is the union of its
 //! members', so the bridge also declares every group's membership.
 //!
+//! With [`Options::exact_boundaries`], a body whose lowered graph has an
+//! exact construction (a vertically placed extrusion, see
+//! `axioval::axiolid::exact_boundary`) also gets its exact boundary
+//! registered beside the mesh, built from the same graph the mesh is compiled
+//! from, so placement and mirroring are the mesh's own. The proximity service
+//! then certifies distances between curved bodies the chord deviation would
+//! leave open. A boundary is registered only when its extent agrees with the
+//! mesh's within the chord deviation, and only when some tessellated body
+//! has one: two exact meshes are never certified, so boundaries of planar
+//! bodies alone would be built for nothing.
+//!
 //! Relationships derived from geometry (`axioval:derived.*`) need to know
 //! which objects are spaces and which are doors, windows or openings. An
 //! opening occupies no material, so its void is meshed separately and handed
@@ -55,6 +66,7 @@ use axioval::axiolid::{
     AxiolidMetricRoutingService, AxiolidPlanAreaService, AxiolidPlanSpanService,
     AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
+    ExactBoundary,
 };
 use axioval::engine::{
     BoundaryCoverageServiceHandle, ContactServiceHandle, CoordinateSystemServiceHandle,
@@ -107,11 +119,42 @@ pub struct GeometryReport {
     pub exact: usize,
     pub tessellated: usize,
     pub no_body: usize,
+    /// Meshed objects registered with their exact boundary as well.
+    pub exact_boundaries: usize,
     /// Physical objects that could not be meshed, with the reason.
     pub unmeasured: Vec<(ObjectId, String)>,
     /// Every meshed object's triangles, kept only when asked for, to draw
     /// BCF snapshots from.
     pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
+}
+
+/// How [`attach`] meshes the model.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Options {
+    /// Keep every meshed object's triangles in [`GeometryReport::meshes`],
+    /// for BCF snapshots.
+    pub keep_meshes: bool,
+    /// Build and register exact boundaries where the construction is exact.
+    pub exact_boundaries: bool,
+}
+
+impl Options {
+    /// Meshes only, keeping them when `keep` is set.
+    pub fn meshes(keep: bool) -> Self {
+        Self {
+            keep_meshes: keep,
+            exact_boundaries: false,
+        }
+    }
+
+    /// The same, with exact boundaries when `exact` is set.
+    #[must_use]
+    pub fn with_exact_boundaries(self, exact: bool) -> Self {
+        Self {
+            exact_boundaries: exact,
+            ..self
+        }
+    }
 }
 
 /// Each source's model bytes, keyed by the source the session imported them as.
@@ -205,8 +248,8 @@ fn parse(
 /// `session`, bound to all its snapshots.
 ///
 /// `models` holds each source's bytes, keyed by the source the session
-/// imported them as. With `keep_meshes`, every meshed object's triangles are
-/// also kept in [`GeometryReport::meshes`], for BCF snapshots. Policy choices IFC does not state, such as which
+/// imported them as. `options` says whether meshes are kept and exact
+/// boundaries registered. Policy choices IFC does not state, such as which
 /// surfaces are walkable or which spaces bound the envelope, are the rules'
 /// own selections, carried in each request; the bridge declares none of them.
 ///
@@ -221,7 +264,7 @@ fn parse(
 pub fn attach(
     session: EvidenceSession,
     models: &ModelBytes,
-    keep_meshes: bool,
+    options: Options,
 ) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error>> {
     let snapshots: Vec<SourceSnapshot> = session.snapshots().cloned().collect();
     let Some(first) = snapshots.first() else {
@@ -252,6 +295,8 @@ pub fn attach(
     let mut geometry = AxiolidGeometry::new();
     let mut report = GeometryReport::default();
     let mut voids: Vec<(ObjectId, Void)> = Vec::new();
+    // Each built boundary, and whether its object's mesh is tessellated.
+    let mut boundaries: Vec<(ObjectId, ExactBoundary, bool)> = Vec::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
@@ -268,8 +313,12 @@ pub fn attach(
             } else if is_a(&id, "IfcOpeningElement") {
                 let void = entity_id(&id)
                     .ok_or_else(|| "not a STEP instance id".to_owned())
-                    .and_then(|entity| mesh(&backend, model, units, entity))
-                    .and_then(|meshed| meshed.ok_or_else(|| "no body representation".into()));
+                    .and_then(|entity| mesh(&backend, model, units, entity, false))
+                    .and_then(|meshed| {
+                        meshed
+                            .map(|body| (body.mesh, body.exact))
+                            .ok_or_else(|| "no body representation".into())
+                    });
                 voids.push((id.clone(), void));
             }
             geometry = geometry.with_no_body(id);
@@ -288,18 +337,20 @@ pub fn attach(
             geometry = geometry.with_unmeasured(id, "not a STEP instance id");
             continue;
         };
-        match keep(
-            &mut report,
-            keep_meshes.then_some(&id),
-            mesh(&backend, model, units, entity),
-        ) {
-            Ok(Some((mesh, true))) => {
-                geometry = geometry.with_mesh(id, mesh);
-                report.exact += 1;
-            }
-            Ok(Some((mesh, false))) => {
-                geometry = geometry.with_tessellated_mesh(id, mesh, CHORD_DEVIATION_METRES);
-                report.tessellated += 1;
+        let meshed = mesh(&backend, model, units, entity, options.exact_boundaries);
+        match keep(&mut report, options.keep_meshes.then_some(&id), meshed) {
+            Ok(Some(body)) => {
+                if let Some(boundary) = body.boundary {
+                    boundaries.push((id.clone(), boundary, !body.exact));
+                }
+                if body.exact {
+                    geometry = geometry.with_mesh(id, body.mesh);
+                    report.exact += 1;
+                } else {
+                    geometry =
+                        geometry.with_tessellated_mesh(id, body.mesh, CHORD_DEVIATION_METRES);
+                    report.tessellated += 1;
+                }
             }
             // A space without a body is still no material; it cannot be
             // measured itself, but it obstructs nothing.
@@ -318,6 +369,8 @@ pub fn attach(
             }
         }
     }
+
+    geometry = with_boundaries(geometry, boundaries, &mut report);
 
     let relationships = session.service::<RelationshipSelectionServiceHandle>();
     for (group, members) in groups(relationships, &kinds, &is_a) {
@@ -343,6 +396,27 @@ pub fn attach(
             &snapshots,
         )?;
     Ok((session, report))
+}
+
+/// Registers the boundaries that agree with their meshes, when one of them
+/// is a tessellated body's: only a tessellated pair is ever certified.
+fn with_boundaries(
+    mut geometry: AxiolidGeometry,
+    boundaries: Vec<(ObjectId, ExactBoundary, bool)>,
+    report: &mut GeometryReport,
+) -> AxiolidGeometry {
+    let agreeing: Vec<(ObjectId, ExactBoundary, bool)> = boundaries
+        .into_iter()
+        .filter(|(id, boundary, _)| geometry.check_exact_boundary(id, boundary).is_ok())
+        .collect();
+    if !agreeing.iter().any(|(_, _, tessellated)| *tessellated) {
+        return geometry;
+    }
+    for (id, boundary, _) in agreeing {
+        geometry = geometry.with_exact_boundary(id, boundary.into_brep());
+        report.exact_boundaries += 1;
+    }
+    geometry
 }
 
 /// Registers every geometry service over `geometry`, bound to `snapshots`.
@@ -897,16 +971,26 @@ fn space_frame(
 
 /// `meshed`, its triangles kept in `report` under `id` when given.
 fn keep(report: &mut GeometryReport, id: Option<&ObjectId>, meshed: Meshed) -> Meshed {
-    if let (Some(id), Ok(Some((mesh, _)))) = (id, &meshed)
-        && let Some(kept) = snapshot_mesh(mesh)
+    if let (Some(id), Ok(Some(body))) = (id, &meshed)
+        && let Some(kept) = snapshot_mesh(&body.mesh)
     {
         report.meshes.insert(id.clone(), kept);
     }
     meshed
 }
 
-/// One product's body and whether it is exact, as [`mesh`] returns it.
-type Meshed = Result<Option<(axiolid_mesh::TriMesh, bool)>, String>;
+/// One product's meshed body.
+struct Body {
+    mesh: axiolid_mesh::TriMesh,
+    /// Every face planar: the mesh is the shape.
+    exact: bool,
+    /// The exact boundary built from the same graph, when asked for and
+    /// exactly constructible.
+    boundary: Option<ExactBoundary>,
+}
+
+/// One product's body, as [`mesh`] returns it.
+type Meshed = Result<Option<Body>, String>;
 
 /// A mesh as the snapshot renderer takes it: positions and triangles.
 fn snapshot_mesh(mesh: &axiolid_mesh::TriMesh) -> Option<bcf_snapshot::Mesh> {
@@ -920,13 +1004,15 @@ fn entity_id(id: &ObjectId) -> Option<EntityId> {
     id.local_id.strip_prefix('#')?.parse().ok().map(EntityId)
 }
 
-/// One product's net body (openings subtracted) and whether it is exact.
+/// One product's net body (openings subtracted), whether it is exact, and
+/// with `boundary` its exact boundary where the lowered graph has one.
 fn mesh(
     backend: &impl MeshCompiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
     product: EntityId,
-) -> Result<Option<(axiolid_mesh::TriMesh, bool)>, String> {
+    boundary: bool,
+) -> Meshed {
     let mut session = LoweringSession::new(model, units);
     let Some(net) = lower_product_net(&mut session, product).map_err(|e| e.to_string())? else {
         return Ok(None);
@@ -943,7 +1029,17 @@ fn mesh(
     if mesh.triangle_count() == 0 {
         return Err("mesh compilation produced no triangles".into());
     }
-    Ok(Some((mesh, exact)))
+    // Built from the graph the mesh was compiled from, so it carries the
+    // same placement; anything without an exact construction keeps its
+    // mesh alone.
+    let boundary = boundary
+        .then(|| axioval::axiolid::exact_boundary(&lowered.graph, lowered.root).ok())
+        .flatten();
+    Ok(Some(Body {
+        mesh,
+        exact,
+        boundary,
+    }))
 }
 
 /// Whether every face under `id` is planar, so its mesh is its exact shape.
@@ -1244,7 +1340,7 @@ mod tests {
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
             .collect();
-        let (session, report) = attach(session, &models, false).unwrap();
+        let (session, report) = attach(session, &models, super::Options::default()).unwrap();
         assert_eq!(report.exact, 3, "{report:?}");
         let id = |local: &str| ObjectId {
             source: session.snapshots().next().unwrap().source().clone(),

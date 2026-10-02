@@ -307,9 +307,19 @@ pub struct GeometryRecord {
     pub tessellated: usize,
     /// Occupying no material, e.g. storeys, zones, openings.
     pub no_body: usize,
+    /// Meshed objects whose exact boundary was registered too, so
+    /// distances between curved ones are certified. Additive: absent in
+    /// results saved before it existed, and when none was registered.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub exact_boundaries: usize,
     /// Physical objects that could not be meshed. Geometric measurements
     /// they could affect are not evaluated.
     pub unmeasured: Vec<Unmeasured>,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's signature
+fn is_zero(count: &usize) -> bool {
+    *count == 0
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -739,6 +749,8 @@ pub struct GeometryCounts {
     pub tessellated: usize,
     pub no_body: usize,
     pub unmeasured: usize,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub exact_boundaries: usize,
 }
 
 /// A bounded digest of a result.
@@ -1256,6 +1268,7 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             tessellated: g.tessellated,
             no_body: g.no_body,
             unmeasured: g.unmeasured.len(),
+            exact_boundaries: g.exact_boundaries,
         }),
         comparison: output.comparison.as_ref().map(|c| ComparisonDigest {
             base: c.base.clone(),
@@ -1394,11 +1407,15 @@ pub fn render_summary(summary: &Summary) -> String {
         summary.status, summary.findings, summary.not_evaluated, summary.integrity
     );
     if let Some(geometry) = &summary.geometry {
-        let _ = writeln!(
+        let _ = write!(
             out,
             "geometry: {} exact · {} tessellated · {} without body · {} unmeasured",
             geometry.exact, geometry.tessellated, geometry.no_body, geometry.unmeasured
         );
+        if geometry.exact_boundaries > 0 {
+            let _ = write!(out, " · {} exact boundaries", geometry.exact_boundaries);
+        }
+        let _ = writeln!(out);
     }
     if let Some(rules) = &summary.rules {
         let counts: Vec<String> = ["failed", "not evaluated", "nothing selected", "passed"]

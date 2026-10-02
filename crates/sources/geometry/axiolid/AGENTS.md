@@ -4,6 +4,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 
 - `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
   by every service here.
+- `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
+  geometry graph a host meshes (`exact_boundary`), and
+  `AxiolidGeometry::check_exact_boundary` compares its extent with the
+  registered mesh. Only a vertical prism is built: instance placements
+  composed down to an extrusion whose profile plane stays horizontal and
+  extrusion vertical exactly (no tolerance), the placement pushed onto the
+  profile with `lower_derived`, the solid from `boolean_arc_prisms_exact`
+  (the one exact constructor at any height; the polygon `Prism` path
+  must start at z = 0). Every other node refuses with the reason; never
+  approximate a placement, an ellipse or a sweep (axiolid/kernel#223 asks
+  for rigid placements, revolutions and swept disks). The extent includes
+  arc extremes; keep it computed from the section the kernel is given.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
@@ -412,8 +424,8 @@ Depend only on what the registry publishes. The workspace pins `axiolid-*`
 0.3.0, except `axiolid-measure` 0.3.5 with the `exact` feature (certified
 `boundary_distance`, and the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.1 for
-the `ExactBRep` hosts register; tests build exact solids with
-`axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
+the `ExactBRep` hosts register, built by `exact_boundary` with
+`axiolid-construct` 0.3.5, `axiolid-model` and `axiolid-profile`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
 soups, features within the caller's tolerance snapped before the exact
 arrangement), `axiolid-route`

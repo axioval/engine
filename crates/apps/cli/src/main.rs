@@ -169,6 +169,13 @@ struct CheckArgs {
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
     geometry: bool,
+    /// With `--geometry`, mesh only: build no exact boundaries. By default a
+    /// body whose construction is exact (a vertically placed extrusion of a
+    /// rectangle, circle, section or line-and-arc profile) also gets its
+    /// exact boundary, so distances between curved bodies are certified
+    /// instead of widened by the chord deviation.
+    #[arg(long, requires = "geometry")]
+    no_exact_boundaries: bool,
     /// Locate every finding and not-evaluated outcome by storey and space:
     /// `storeys` climbs the spatial containment to storeys, `containers` to
     /// storeys and spaces, `geometry` takes spaces from the bodies that
@@ -801,6 +808,21 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// What `--geometry` measured, as the result records it.
+fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
+    digest::GeometryRecord {
+        exact: report.exact,
+        tessellated: report.tessellated,
+        no_body: report.no_body,
+        exact_boundaries: report.exact_boundaries,
+        unmeasured: report
+            .unmeasured
+            .into_iter()
+            .map(|(object, reason)| digest::Unmeasured { object, reason })
+            .collect(),
+    }
+}
+
 fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     args.output.prepare()?;
     let translated = args
@@ -837,7 +859,9 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .fold(DisciplineMap::new(), DisciplineMap::with),
     );
     let (session, mut meshed) = if args.geometry {
-        let (session, report) = geometry::attach(session, &bytes, args.output.bcf_view.snapshots)
+        let options = geometry::Options::meshes(args.output.bcf_view.snapshots)
+            .with_exact_boundaries(!args.no_exact_boundaries);
+        let (session, report) = geometry::attach(session, &bytes, options)
             .map_err(|error| format!("geometry: {error}"))?;
         (session, Some(report))
     } else {
@@ -873,16 +897,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let bodies = meshed
         .as_mut()
         .map(|report| std::mem::take(&mut report.meshes));
-    let geometry = meshed.map(|report| digest::GeometryRecord {
-        exact: report.exact,
-        tessellated: report.tessellated,
-        no_body: report.no_body,
-        unmeasured: report
-            .unmeasured
-            .into_iter()
-            .map(|(object, reason)| digest::Unmeasured { object, reason })
-            .collect(),
-    });
+    let geometry = meshed.map(geometry_record);
     let mut output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session))
         .with_relation_files(relation_files)
@@ -1296,11 +1311,13 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
         }
         if let Some(geometry) = &output.geometry {
             eprintln!(
-                "geometry: {} exact, {} tessellated, {} without body, {} unmeasured",
+                "geometry: {} exact, {} tessellated, {} without body, {} unmeasured, \
+                 {} with an exact boundary",
                 geometry.exact,
                 geometry.tessellated,
                 geometry.no_body,
-                geometry.unmeasured.len()
+                geometry.unmeasured.len(),
+                geometry.exact_boundaries
             );
             for unmeasured in &geometry.unmeasured {
                 eprintln!(

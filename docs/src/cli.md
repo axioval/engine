@@ -30,7 +30,8 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
    | --ids rules.ids [--ids-filter selector.json]) \
   [--relations RELATION=FILE[#SHEET] ...] \
-  [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
+  [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
+  [--rule-status] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
@@ -176,6 +177,25 @@ are not evaluated rather than measured in the wrong place. Check such a
 model alone, or fix its georeference; a `coordinate-consistency` rule
 reports the difference as a finding (see [Coordinate
 consistency](./capabilities.md#coordinate-consistency)).
+
+With `--geometry`, a body whose construction is exact also gets its exact
+boundary, built from the graph its mesh is compiled from: a vertically
+placed extrusion of a rectangle, circle, section or line-and-arc profile,
+without openings or clippings. A boundary is registered only when its
+extent agrees with the mesh's within the chord deviation, and only when
+some curved body has one (two planar bodies are measured exactly anyway).
+Distances between such bodies are then certified to a micrometre instead
+of being widened by the 1 mm chord deviation: a round column 0.8 m from a
+wall clears a 0.79999 m minimum that its mesh alone leaves open. The
+result's `geometry.exact_boundaries` counts them (left out when zero), as
+do the stderr line and the summary.
+Building them is cheap; certifying costs time per pair of curved bodies
+near each other, as the kernel's branch and bound refines each certified
+distance to a micrometre. On the buildingSMART example models a check takes
+under 0.05 s either way; on a 29 MB model with 56 curved bodies, 50 of them
+with boundaries, a column-to-wall distance rule took about twice as long
+(unoptimised build). `--no-exact-boundaries` meshes only, for a quick first
+pass. `axioval compare` never builds them.
 
 Each model's file name is stated as its source's `fileName` metadata, beside the application and project the IFC adapter reads, for `source` selectors (see
 [Source selectors](./capabilities.md#source-selectors)).
